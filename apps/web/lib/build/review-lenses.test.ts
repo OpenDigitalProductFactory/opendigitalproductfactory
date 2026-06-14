@@ -361,3 +361,82 @@ describe("deriveReviewLenses — composition", () => {
     ]);
   });
 });
+
+describe("deriveReviewLenses — per-reviewer graduation", () => {
+  const reviewers = [
+    {
+      source: "reviewer-1" as const,
+      label: "Primary review",
+      role: "reviewer" as const,
+      decision: "pass" as const,
+      issueCounts: { critical: 0, important: 0, minor: 0 },
+    },
+    {
+      source: "reviewer-2" as const,
+      label: "Independent review",
+      role: "reviewer" as const,
+      decision: "fail" as const,
+      issueCounts: { critical: 1, important: 0, minor: 1 },
+    },
+    {
+      source: "architect" as const,
+      label: "Architecture",
+      role: "architect" as const,
+      decision: "pass" as const,
+      issueCounts: { critical: 0, important: 2, minor: 0 },
+    },
+  ];
+
+  it("expands the merged checklist chip into one chip per named reviewer", () => {
+    const keys = deriveReviewLenses(build({ planReview: review({ reviewers }) })).map((l) => l.key);
+    expect(keys).toEqual([
+      "reviewer:reviewer-1",
+      "reviewer:reviewer-2",
+      "reviewer:architect",
+      "verification",
+    ]);
+    // The merged checklist + architectureAdvisory lenses are replaced, not added.
+    expect(keys).not.toContain("checklist");
+    expect(keys).not.toContain("architecture");
+  });
+
+  it("maps reviewer decision + severity to chip state and detail", () => {
+    const lenses = deriveReviewLenses(build({ planReview: review({ reviewers }) }));
+    expect(lensByKey(lenses, "reviewer:reviewer-1")).toMatchObject({ state: "pass", detail: "cleared" });
+    expect(lensByKey(lenses, "reviewer:reviewer-2")).toMatchObject({
+      state: "fail",
+      detail: "1 critical · 1 minor",
+    });
+    // architect role is always advisory, never gating, regardless of decision
+    expect(lensByKey(lenses, "reviewer:architect")).toMatchObject({ state: "advisory", detail: "2 notes" });
+  });
+
+  it("shows 'review unavailable' for a parse-error reviewer verdict", () => {
+    const l = lensByKey(
+      deriveReviewLenses(
+        build({
+          planReview: review({
+            reviewers: [
+              {
+                source: "reviewer-1",
+                label: "Primary review",
+                role: "reviewer",
+                decision: "fail",
+                issueCounts: { critical: 0, important: 0, minor: 0 },
+                parseError: true,
+              },
+            ],
+          }),
+        }),
+      ),
+      "reviewer:reviewer-1",
+    );
+    expect(l).toMatchObject({ state: "pending", detail: "review unavailable" });
+  });
+
+  it("falls back to the merged checklist lens when reviewers[] is absent (older rows)", () => {
+    const keys = deriveReviewLenses(build({ planReview: review({ decision: "pass" }) })).map((l) => l.key);
+    expect(keys).toContain("checklist");
+    expect(keys).not.toContain("reviewer:reviewer-1");
+  });
+});

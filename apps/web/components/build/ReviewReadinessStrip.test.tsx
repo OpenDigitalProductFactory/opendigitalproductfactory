@@ -104,6 +104,30 @@ describe("ReviewReadinessStrip chips", () => {
     expect(html).toContain('aria-label="Architecture: advisory — 1 note"');
   });
 
+  it("renders named reviewer chips when per-reviewer verdicts are persisted", () => {
+    const html = renderToStaticMarkup(
+      <ReviewReadinessStrip
+        build={build({
+          planReview: review({
+            decision: "fail",
+            reviewers: [
+              { source: "reviewer-1", label: "Primary review", role: "reviewer", decision: "pass", issueCounts: { critical: 0, important: 0, minor: 0 } },
+              { source: "reviewer-2", label: "Independent review", role: "reviewer", decision: "fail", issueCounts: { critical: 1, important: 0, minor: 0 } },
+              { source: "architect", label: "Architecture", role: "architect", decision: "pass", issueCounts: { critical: 0, important: 0, minor: 0 } },
+            ],
+          }),
+        })}
+        phase="review"
+      />,
+    );
+    expect(html).toContain('data-lens-key="reviewer:reviewer-1"');
+    expect(html).toContain('aria-label="Primary review: pass — cleared"');
+    expect(html).toContain('aria-label="Independent review: fail — 1 critical"');
+    expect(html).toContain('aria-label="Architecture: advisory — aligned"');
+    // The merged checklist chip is replaced by the per-reviewer chips.
+    expect(html).not.toContain('data-lens-key="checklist"');
+  });
+
   it("renders no raw hex literals (DPF token invariant)", () => {
     const html = renderToStaticMarkup(
       <ReviewReadinessStrip
