@@ -8,7 +8,7 @@ vi.mock("nodemailer", () => ({
   },
 }));
 
-import { sendEmail, composeInvoiceEmail } from "./email";
+import { sendEmail, composeInvoiceEmail, isEmailConfigured } from "./email";
 
 describe("composeInvoiceEmail", () => {
   const params = {
@@ -53,6 +53,31 @@ describe("composeInvoiceEmail", () => {
     const result = composeInvoiceEmail(params);
     expect(result.html).toContain("360.00");
     expect(result.html).toContain("20 April 2026");
+  });
+});
+
+describe("isEmailConfigured", () => {
+  it("returns true when SMTP_HOST is set", () => {
+    const saved = process.env.SMTP_HOST;
+    process.env.SMTP_HOST = "smtp.test.example";
+    expect(isEmailConfigured()).toBe(true);
+    if (saved === undefined) delete process.env.SMTP_HOST;
+    else process.env.SMTP_HOST = saved;
+  });
+
+  it("returns false when SMTP_HOST is unset (cold-start fresh install)", () => {
+    const saved = process.env.SMTP_HOST;
+    delete process.env.SMTP_HOST;
+    expect(isEmailConfigured()).toBe(false);
+    if (saved !== undefined) process.env.SMTP_HOST = saved;
+  });
+
+  it("returns false when SMTP_HOST is empty", () => {
+    const saved = process.env.SMTP_HOST;
+    process.env.SMTP_HOST = "";
+    expect(isEmailConfigured()).toBe(false);
+    if (saved === undefined) delete process.env.SMTP_HOST;
+    else process.env.SMTP_HOST = saved;
   });
 });
 

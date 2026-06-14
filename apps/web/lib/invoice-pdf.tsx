@@ -35,6 +35,12 @@ export type InvoiceForPdf = {
   amountDue: number | { toString(): string };
   paymentTerms: string | null;
   notes: string | null;
+  // Present on the countersigned copy sent after the customer signs (Phase 1 e-sign).
+  signature?: {
+    signedByName: string;
+    signedByEmail?: string | null;
+    signedAt: Date | string;
+  } | null;
   account: { name: string };
   contact: { firstName: string | null; lastName: string | null; email: string } | null;
   lineItems: Array<{
@@ -408,6 +414,18 @@ function InvoiceDocument({ invoice }: { invoice: InvoiceForPdf }) {
                 <Text style={styles.footerText}>{invoice.notes}</Text>
               </>
             ) : null}
+          </View>
+        ) : null}
+
+        {/* Signature (countersigned copy) */}
+        {invoice.signature ? (
+          <View style={styles.footer}>
+            <Text style={styles.footerLabel}>SIGNED</Text>
+            <Text style={styles.footerText}>
+              Signed by {invoice.signature.signedByName}
+              {invoice.signature.signedByEmail ? ` (${invoice.signature.signedByEmail})` : ""} on{" "}
+              {fmtDate(invoice.signature.signedAt)}
+            </Text>
           </View>
         ) : null}
       </Page>
