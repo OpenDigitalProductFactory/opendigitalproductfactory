@@ -11,8 +11,8 @@ function makeProfile(
     profileType: "standard",
     modules: modules as ActivationProfile["modules"],
     seededServiceCategories: serviceCategories,
-    billingReadinessMode: "off",
-    customerGraph: "simple",
+    billingReadinessMode: "none",
+    customerGraph: "none",
     seededConfigurationItemTypes: [],
   };
 }
