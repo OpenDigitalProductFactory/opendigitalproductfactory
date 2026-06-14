@@ -58,33 +58,40 @@ Counselling archetype uses a full calendar booking UX: date picker → hourly ti
 
 ## Archetype 2: `legal-practice`
 
-**Install name:** *(set during wizard)*  
-**Currency:** GBP  
-**VAT:** No VAT
+**Install name:** Blackstone Legal Services  
+**Slug:** `/s/blackstone-legal-services`  
+**Currency:** GBP · **VAT:** No VAT
 
 ### Phase P — Operator Setup
 
 | Step | Action | Result |
 |------|--------|--------|
-| P1 | Setup wizard | |
-| P2 | Service / matter setup | |
-| P3 | Supplier setup | |
+| P1 | Setup wizard — archetype=Legal Services, GBP, No VAT | ✅ Completed |
+| P2 | Services seeded | ✅ 6 services: Free Initial Consultation (Free), Contract Review, Employment Law Advice, Property Conveyancing (POA), Business Formation, Litigation Support (POA) |
+| P3 | Nav vocabulary | ✅ "Client Portal", "Services", "Team", "Enquiries" — legal-specific labels |
+
+**P-ls-1 — "Our Solicitors" section and "Client Portal" vocabulary (positive)**  
+Section named "Our Solicitors" (not generic "Team"), portal labelled "Client Portal", inbox labelled "Enquiries" with British English spelling. Strong domain alignment.
 
 ### Phase B5 — Public Storefront
 
 | Step | Action | Result |
 |------|--------|--------|
-| B5-1 | Storefront loads | |
-| B5-2 | Service listing | |
-| B5-3 | Inquiry / consultation booking | |
+| B5-1 | Storefront loads | ✅ 6 services rendered, "Enquire" CTAs (not Buy/Book) |
+| B5-2 | POA labels | ✅ Property Conveyancing and Litigation Support correctly show "POA" |
+| B5-3 | Enquiry form | ✅ Name, Email, Phone, "Type of legal matter" dropdown (Employment/Property/Business/Family/Litigation/Other), description |
+| B5-4 | Enquiry submitted | ✅ INQ-FOUFXKOO confirmed |
+
+**B5-ls-1 — "Type of legal matter" dropdown (positive)**  
+Enquiry form includes a categorisation dropdown with 6 legal matter types. Enables triage routing without operator manual re-classification.
 
 ### Phase G — Financials
 
 | Step | Action | Result |
 |------|--------|--------|
-| G1 | Customer account | |
-| G2 | Expense entry | |
-| G3 | Invoice creation | |
+| G1 | Customer account | ✅ Test Client R7b created |
+| G2 | Invoice creation | ✅ INV-2026-0001: £250.00, Employment Law Advice, 0% tax, GBP — draft saved |
+| G3 | R6-004 carry-over | ⚠️ Invoice TAX % defaulted to 20% on GBP No-VAT install — manually set to 0% |
 
 ---
 
@@ -165,3 +172,5 @@ Counselling archetype uses a full calendar booking UX: date picker → hourly ti
 
 - **B5-cw-1**: Calendar booking flow — full date→slot→form→confirmation UX appropriate for session-based services
 - **P-cw-1**: Archetype-tailored navigation: "Patient Portal", "Services", "Practitioners", "Appointments"
+- **P-ls-1**: Legal-specific vocabulary — "Client Portal", "Enquiries", "Our Solicitors" section, British English spelling throughout
+- **B5-ls-1**: "Type of legal matter" dropdown on enquiry form with 6 legal matter categories — enables structured triage
