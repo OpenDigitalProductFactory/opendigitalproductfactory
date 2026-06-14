@@ -4,11 +4,13 @@ import Link from "next/link";
 import { CreateIncidentForm } from "@/components/compliance/CreateIncidentForm";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { StatusBadge } from "@/components/ui/report-kit";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 
-type Props = { searchParams: Promise<{ severity?: string; status?: string; regulatoryNotifiable?: string }> };
+type Props = { searchParams: Promise<{ severity?: string; status?: string; regulatoryNotifiable?: string; view?: string }> };
 
 export default async function IncidentsPage({ searchParams }: Props) {
   const sp = await searchParams;
+  const view = parseSurfaceView(sp.view);
   const filters = {
     ...(sp.severity && { severity: sp.severity }),
     ...(sp.status && { status: sp.status }),
@@ -65,7 +67,9 @@ export default async function IncidentsPage({ searchParams }: Props) {
         )}
       </form>
 
-      {incidents.length === 0 ? (
+      <PlatformGridSection entityType="compliance_incident" view={view} />
+
+      {!view && (incidents.length === 0 ? (
         <p className="text-sm text-[var(--dpf-muted)]">No incidents match the current filters.</p>
       ) : (
         <div className="space-y-2">
@@ -103,7 +107,7 @@ export default async function IncidentsPage({ searchParams }: Props) {
             );
           })}
         </div>
-      )}
+      ))}
     </div>
   );
 }

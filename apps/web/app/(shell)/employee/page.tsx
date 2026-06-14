@@ -13,6 +13,7 @@ import { loadWorkforceRoster } from "@/lib/workforce/workforce-roster";
 import { TimesheetGrid } from "@/components/employee/TimesheetGrid";
 import { TimesheetApprovalPanel } from "@/components/employee/TimesheetApprovalPanel";
 import { MyPoliciesView } from "@/components/employee/MyPoliciesView";
+import { SurfacePlatformGrid } from "@/components/workbooks/SurfacePlatformGrid";
 import {
   getEmployeeDirectoryRows,
   getEmployeeLifecycleEvents,
@@ -173,7 +174,9 @@ export default async function EmployeePage({ searchParams }: Props) {
       <div className="mt-8">
         <EmployeeTabNav />
 
-        {view === "workforce" && workforceRoster ? (
+        {view === "grid" ? (
+          <SurfacePlatformGrid entityType="employee_profile" view="grid" />
+        ) : view === "workforce" && workforceRoster ? (
           <WorkforceRosterPanel roster={workforceRoster} />
         ) : view === "timesheets" ? (
           <div className="space-y-4">
