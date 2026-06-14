@@ -10,7 +10,29 @@
 
 ## Executive Summary
 
-*(populated after all 4 archetypes complete)*
+**4 archetypes audited · 3 new defects · 8 positive findings**
+
+| Archetype | P | B5 | G | Net verdict |
+|-----------|---|----|---|-------------|
+| `counselling-wellness` — Serenity Counselling Practice | ✅ | ⚠️ (R7-001) | ⚠️ (R6-004) | Functional; calendar booking works; Confirm button broken |
+| `legal-practice` — Blackstone Legal Services | ✅ | ✅ | ⚠️ (R6-004) | Functional; strongest inquiry form; domain vocabulary excellent |
+| `accountancy` — Clearwater Accountancy Ltd | ✅ | ✅ | ⚠️ (R6-004) | Functional; business-size triage dropdown |
+| `it-managed-services` — Apex IT Consulting | ✅ | ⚠️ (R7-003/SYS-4) | ⚠️ (R6-004, SYS-4) | Functional; richest capabilities; currency bleed on budget dropdown |
+
+**Recurring defect confirmed across all 4 archetypes:**
+- **R6-004**: Invoice tax rate defaults to 20% regardless of "No VAT" wizard selection (BI-E12B8B01)
+
+**New defects (Run 7):**
+- **R7-001**: Booking Confirm/Cancel buttons non-functional on counselling-wellness
+- **R7-003**: SYS-4 extends to IT enquiry form budget range (£ shown on USD install)
+
+**Positive findings (6 new):**
+- Calendar booking flow on counselling-wellness (full date→slot→form→confirm)
+- Archetype-tailored nav labels across all 4 archetypes (Patient Portal / Client Portal / Enquiries)
+- Legal: "Type of legal matter" categorisation dropdown on enquiry
+- Accountancy: "Business size" triage dropdown on enquiry
+- IT: Partner portal option at archetype setup (only archetype to offer this)
+- IT: Company size + Budget range dropdowns — richest sales-qualification form tested
 
 ---
 
@@ -130,35 +152,47 @@ Enquiry form includes a business size categorisation (Sole trader → Ltd medium
 
 ---
 
-## Archetype 4: `it-consultancy`
+## Archetype 4: `it-managed-services`
 
-**Install name:** *(set during wizard)*  
-**Currency:** USD  
-**VAT:** No VAT
+**Install name:** Apex IT Consulting  
+**Slug:** `/s/apex-it-consulting`  
+**Currency:** USD · **VAT:** No VAT
 
 ### Phase P — Operator Setup
 
 | Step | Action | Result |
 |------|--------|--------|
-| P1 | Setup wizard | |
-| P2 | Service / engagement setup | |
-| P3 | Supplier setup | |
+| P1 | Setup wizard — archetype=IT Managed Services, USD, No VAT | ✅ Completed |
+| P2 | Services seeded | ✅ 6 services: Managed IT Support, Cybersecurity Assessment, Cloud Migration (POA), Backup & DR, Network Infrastructure (POA), Microsoft 365 Setup |
+| P3 | Nav + capabilities | ✅ "Client Portal", "Enquiries"; preview showed 12 required capabilities + partner portal option |
+
+**P-it-1 — Partner portal option at archetype setup (positive)**  
+IT Managed Services archetype setup includes a "Do you sell through partners or resellers?" toggle offering channel portal, deal registration, and partner tiers. Only archetype to offer this at setup time.
+
+**P-it-2 — 12 required capabilities seeded (positive)**  
+Preview listed: Customer Estate, Edge Node Customer Deployment, Service Agreements, Backup And Restore Posture, Cybersecurity Posture, Billing Readiness, Recurring Agreement Billing, Customer Sites — most capability-dense archetype tested.
 
 ### Phase B5 — Public Storefront
 
 | Step | Action | Result |
 |------|--------|--------|
-| B5-1 | Storefront loads | |
-| B5-2 | Service listing | |
-| B5-3 | Inquiry / project brief flow | |
+| B5-1 | Storefront loads | ✅ 6 services, "Enquire" CTAs, POA on Cloud Migration + Network Infrastructure |
+| B5-2 | Enquiry form | ✅ Company name, Company size (1–10/11–50/51–200/201–500/500+), Budget range, "Current situation" textarea |
+| B5-3 | SYS-4 on budget range | ⚠️ R7-003: Budget range dropdown shows £ values (Under £1k … £100k+) on USD install — SYS-4 extends to IT enquiry form |
+| B5-4 | Enquiry submitted | ✅ INQ-QC43BZOZ confirmed |
+
+**B5-it-1 — Company size + Budget range dropdowns (positive)**  
+IT enquiry form includes headcount segmentation (5 tiers) and budget band — richest sales-qualification form of the 4 archetypes tested in Run 7.
 
 ### Phase G — Financials
 
 | Step | Action | Result |
 |------|--------|--------|
-| G1 | Customer account | |
-| G2 | Expense entry | |
-| G3 | Invoice creation | |
+| G1 | Customer account | ✅ Audit Corp Inc created |
+| G2 | SYS-4 on customer page | ⚠️ Customer pipeline shows £0 on USD install |
+| G3 | Invoice creation | ✅ INV-2026-0001: $1,500.00 USD, 0% tax, draft saved |
+| G4 | R6-004 carry-over | ⚠️ Invoice TAX % defaulted to 20% on USD No-VAT install |
+| G5 | R6-007 variant | ⚠️ Invoice form currency field shows "GBP" on USD install — saved record correctly shows USD ($1,500.00) |
 
 ---
 
@@ -166,15 +200,20 @@ Enquiry form includes a business size categorisation (Sole trader → Ltd medium
 
 | ID | Phase | Severity | Description | BI |
 |----|-------|----------|-------------|-----|
-| R7-001 | B5 | Important | Booking Confirm/Cancel buttons non-functional — status stays "pending"; API 404 on `/api/v1/bookings/:id/confirm` | — |
-| R7-002 | G3 | Minor | Carry-over R6-004: Invoice TAX % defaults to 20% on GBP No-VAT install (counselling-wellness) | BI-E12B8B01 |
+| R7-001 | B5 | Important | Booking Confirm/Cancel buttons non-functional on counselling-wellness — status stays "pending"; API 404 on `/api/v1/bookings/:id/confirm` | — |
+| R7-002 | G3 | Minor | Carry-over R6-004 (all 4 archetypes): Invoice TAX % defaults to 20% on No-VAT installs | BI-E12B8B01 |
+| R7-003 | B5 | Minor | SYS-4 extends to IT enquiry form budget range — £ values (Under £1k … £100k+) shown on USD install | — |
+| R7-004 | G3 | Minor | R6-007 variant on USD install — invoice form currency field shows "GBP"; saved record correctly shows USD | — |
 
 ---
 
 ## Positive Findings
 
 - **B5-cw-1**: Calendar booking flow — full date→slot→form→confirmation UX appropriate for session-based services
-- **P-cw-1**: Archetype-tailored navigation: "Patient Portal", "Services", "Practitioners", "Appointments"
-- **P-ls-1**: Legal-specific vocabulary — "Client Portal", "Enquiries", "Our Solicitors" section, British English spelling throughout
-- **B5-ls-1**: "Type of legal matter" dropdown on enquiry form with 6 legal matter categories — enables structured triage
-- **B5-ac-1**: "Business size" dropdown on accountancy enquiry form (Sole trader → Ltd medium+) — enables fee-tier triage
+- **P-cw-1**: Archetype-tailored nav: "Patient Portal"/"Services"/"Practitioners"/"Appointments" (counselling-wellness)
+- **P-ls-1**: Legal-specific vocabulary — "Client Portal", "Enquiries", "Our Solicitors", British English spelling
+- **B5-ls-1**: "Type of legal matter" dropdown with 6 legal categories — enables structured triage
+- **B5-ac-1**: "Business size" dropdown on accountancy enquiry (Sole trader → Ltd medium+)
+- **P-it-1**: Partner portal option at IT Managed Services setup — only archetype to offer channel programme at wizard
+- **P-it-2**: 12 required capabilities seeded for IT Managed Services — most capability-dense archetype tested
+- **B5-it-1**: Company size + Budget range dropdowns on IT enquiry — richest sales-qualification form across Run 7
