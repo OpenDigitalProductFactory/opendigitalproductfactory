@@ -2563,6 +2563,31 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
     buildPhases: ["ship"],
   },
+  // ─── Email setup (PBI-INV-04 Phase 2) ──────────────────────────────────
+  // Lets the onboarding/COO coworker walk a non-technical operator through
+  // configuring their OWN outbound email (SMTP). Operator-only
+  // (manage_provider_connections) + the `email_config` agent grant.
+  {
+    name: "setup_email",
+    description:
+      "Help the operator set up their OWN outbound email (SMTP) so the platform can send invoices, payment links, dunning, and approvals. Three actions: action='detect' identifies the provider from the organization's domain and returns the one credential the operator must obtain (e.g. a Google App Password); action='save' persists the SMTP settings the operator provides; action='test' sends a test email to confirm delivery. DPF never relays email on the operator's behalf — their own provider sends. Walk the operator through getting the credential in plain language before calling 'save'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["detect", "save", "test"], description: "detect | save | test" },
+        host: { type: "string", description: "SMTP host (save) — e.g. smtp.gmail.com" },
+        port: { type: "number", description: "SMTP port (save) — default 587 (STARTTLS) or 465 (implicit TLS)" },
+        secure: { type: "boolean", description: "Implicit TLS on port 465 (save)" },
+        user: { type: "string", description: "SMTP username (save) — usually the full email address" },
+        from: { type: "string", description: "From address (save) — e.g. 'Acme <billing@acme.com>'" },
+        pass: { type: "string", description: "SMTP password / app password / API key (save). Leave blank to keep the existing one." },
+        to: { type: "string", description: "Recipient for the test email (test)" },
+      },
+      required: ["action"],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
   // ─── Admin Coworker Tools (TAK-ADMIN-001) ──────────────────────────────
   // These tools are available on the /admin route for platform administration.
   // Tier 1 = read-only, Tier 2 = reversible, Tier 3 = destructive (sideEffect: true).
@@ -15072,6 +15097,27 @@ export async function executeTool(
           hasChanges,
           changes: { itemsAdded, itemsRemoved, itemsDeactivated, categoriesUsed, sectionsAdded, sectionsHidden },
         },
+      };
+    }
+
+    // ─── Email setup (PBI-INV-04 Phase 2) ───────────────────────────────
+    case "setup_email": {
+      const { runEmailSetupTool } = await import("./shared/email-setup-tool");
+      const result = await runEmailSetupTool({
+        action: String(params.action ?? "") as "detect" | "save" | "test",
+        host: typeof params.host === "string" ? params.host : undefined,
+        port: typeof params.port === "number" ? params.port : undefined,
+        secure: typeof params.secure === "boolean" ? params.secure : undefined,
+        user: typeof params.user === "string" ? params.user : undefined,
+        from: typeof params.from === "string" ? params.from : undefined,
+        pass: typeof params.pass === "string" ? params.pass : undefined,
+        to: typeof params.to === "string" ? params.to : undefined,
+      });
+      return {
+        success: result.ok,
+        message: result.message,
+        ...(result.error ? { error: result.error } : {}),
+        data: result.data,
       };
     }
 

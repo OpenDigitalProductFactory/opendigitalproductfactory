@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Field Dispatch — Mobile Field-App Contract &amp; Warranty Service</title>
+<meta name="dpf:status" content="Draft for review" />
+<meta name="dpf:date" content="2026-06-14" />
+<meta name="dpf:format" content="HTML + SysML v2" />
+<style>
+  :root {
+    --fg: #1a1d21; --muted: #5a6470; --bg: #ffffff; --surface: #f6f8fa;
+    --border: #d8dee4; --accent: #2f6feb; --ok: #1a7f37; --warn: #9a6700; --danger: #cf222e;
+    --sysml-bg: #f0f4fb; --sysml-border: #2f6feb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: #e6edf3; --muted: #9aa7b4; --bg: #0d1117; --surface: #161b22;
+      --border: #30363d; --accent: #6ea8ff; --ok: #3fb950; --warn: #d29922; --danger: #f85149;
+      --sysml-bg: #11192b; --sysml-border: #6ea8ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--fg); background: var(--bg); margin: 0 auto; padding: 2.2rem clamp(1rem, 4vw, 4rem); max-width: 64rem;
+  }
+  h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .3rem; }
+  h2 { font-size: 1.3rem; margin: 2.4rem 0 .7rem; padding-top: .6rem; border-top: 2px solid var(--border); }
+  h3 { font-size: 1.06rem; margin: 1.4rem 0 .4rem; color: var(--accent); }
+  .muted { color: var(--muted); }
+  code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace; font-size: .9em; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .42rem .6rem; text-align: left; vertical-align: top; }
+  th { background: var(--surface); font-weight: 600; }
+  .meta td:first-child { font-weight: 600; width: 12rem; background: var(--surface); }
+  pre.sysml {
+    background: var(--sysml-bg); border: 1px solid var(--border); border-left: 4px solid var(--sysml-border);
+    border-radius: 6px; padding: .9rem 1rem; overflow-x: auto; font-size: .85rem; line-height: 1.5;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace; color: var(--fg);
+  }
+  pre.sysml .kw { color: var(--accent); font-weight: 600; }
+  pre.sysml .cm { color: var(--muted); font-style: italic; }
+  .note { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: .7rem 1rem; margin: 1rem 0; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<h1>Field Dispatch — Mobile Field-App Contract &amp; Warranty Service</h1>
+<p class="muted">What the field-dispatch capability needs from the mobile app, and the warranty nuance of field service.</p>
+
+<table class="meta">
+  <tr><td>Status</td><td>Draft for review</td></tr>
+  <tr><td>Date</td><td>2026-06-14</td></tr>
+  <tr><td>Author</td><td>Agent (with Mark Bodman direction)</td></tr>
+  <tr><td>Format</td><td><strong>HTML + SysML v2</strong> — per the spec-format migration (<a href="2026-06-14-sysml-architecture-substrate-design.md">SysML Architecture Substrate</a>).</td></tr>
+  <tr><td>Purpose</td><td><strong>Cross-thread convergence contract.</strong> The native mobile archetype apps are being built on a <em>separate</em> thread (origin/main PR&nbsp;#1886). This spec defines, from the <em>dispatch</em> side, what that app must provide so the two converge. <strong>This thread does not edit the mobile spec</strong> (it is the other thread's to own); the mobile spec should <em>reference</em> this contract.</td></tr>
+  <tr><td>Anchors</td><td><a href="2026-06-13-field-dispatch-capability-design.md">Field Dispatch capability</a>, <a href="2026-06-14-coworker-simulation-eval-harness-design.html">Simulation &amp; Eval Harness</a> (the <code>MobileFieldSignal</code> contract), the native mobile archetype apps design (other thread).</td></tr>
+  <tr><td>Built &amp; verified</td><td><code>@dpf/validators</code> <code>field-dispatch-warranty.ts</code> (warranty assessment + invoice classification, 35/35 validators tests); <code>@dpf/coworker-sim-harness</code> <code>mobile-signals.ts</code> (the geo signal contract).</td></tr>
+</table>
+
+<h2 id="purpose">1. Purpose</h2>
+<p>
+  The dispatcher is only as good as its field signals and its field actions. In production those originate on the
+  technician's <strong>mobile app</strong>: GPS location, routing, the customer/site detail the tech needs on arrival,
+  the field-captured invoice, and the door payment. The operator named the full surface — <em>"geo-location,
+  communication, routing and customer/location details… formulate an invoice with field input easily… collect
+  payments… warranty service aspects."</em> This spec turns that into a typed contract the mobile thread implements
+  and the dispatcher consumes, and it adds the one genuinely new domain nuance: <strong>warranty-aware service</strong>.
+</p>
+
+<h2 id="contract">2. The mobile field-app contract</h2>
+<p>Six surfaces. Each is something the mobile app provides and the dispatch runtime consumes.</p>
+<table>
+  <tr><th>Surface</th><th>Dispatcher need</th><th>Mobile provides</th></tr>
+  <tr><td><strong>Geo-location</strong></td><td>technician position, departure/arrival (geofence), live ETA — to fire on-my-way and detect running-late</td><td><code>MobileFieldSignal</code> stream (<code>location | departed | arrived | eta</code>) — already the harness contract</td></tr>
+  <tr><td><strong>Communication</strong></td><td>reach the customer with confirm / on-my-way / running-late / complete on a verified channel</td><td>surfaces the dispatcher's proposed message + delivery state; can be the trigger ("I'm leaving") and a fallback channel</td></tr>
+  <tr><td><strong>Routing</strong></td><td>travel time + navigation to the next site (geo-temporal model in test, real routing in prod)</td><td>turn-by-turn navigation; reports ETA back as an <code>eta</code> signal</td></tr>
+  <tr><td><strong>Customer / location detail</strong></td><td>the tech must arrive knowing who, where, access notes, the equipment on site, and prior service</td><td>read-only customer + site + equipment record + service history for the assigned job</td></tr>
+  <tr><td><strong>Field invoice</strong></td><td>turn field work into a billable, warranty-classified invoice without a desk</td><td>quick/voice capture of labor + parts → a draft DPF invoice (→ QuickBooks, F12), with warranty lines pre-classified (§3)</td></tr>
+  <tr><td><strong>Payment collection</strong></td><td>collect at completion to compress the cash cycle</td><td>payment link / tap-to-pay at the door; records the payment against the invoice</td></tr>
+</table>
+<p class="note">
+  Surfaces 1–3 are the routing/communication loop the harness already simulates via <code>MobileFieldSignal</code> +
+  the geo-temporal model. Surfaces 4–6 (detail, invoice, payment) are the on-site action loop. The customer-facing
+  channel reality still applies: the platform comms layer has WhatsApp/email/in-app but <strong>no SMS/voice yet</strong>
+  (field-dispatch deferred-decision&nbsp;#6) — the mobile app may itself become a customer-reachable channel.
+</p>
+
+<h2 id="warranty">3. Warranty-aware service (the field-service nuance)</h2>
+<p>
+  Installed equipment carries warranty terms that differ <strong>by component</strong> and <strong>by coverage type</strong>.
+  The canonical example: an AC <strong>compressor commonly has a 10-year parts warranty but no labor coverage</strong>. A
+  compressor failure in year 7 means the <em>part</em> is free to the customer (the contractor may reclaim its cost from
+  the manufacturer separately) while the <em>labor</em> is billed. The dispatcher and the field tech need this at
+  quote/invoice time, and the field invoice must classify each line as covered vs. billable.
+</p>
+<p><strong>Built &amp; verified</strong> in <code>@dpf/validators/field-dispatch-warranty.ts</code>:</p>
+<ul>
+  <li><code>assessWarranty(equipment, component, atDate)</code> → parts/labor coverage from install date + per-component terms.</li>
+  <li><code>classifyServiceLines(equipment, lines, atDate)</code> → each invoice line marked covered (billed $0) or billable, with a reason.</li>
+  <li>The compressor case proves out: a $1,400 compressor part bills $0 in year 7; the $520 labor bills; an unknown component bills.</li>
+</ul>
+<p>
+  Warranty data lives on the <strong>equipment record</strong> (a <code>CustomerConfigurationItem</code> HVAC sidecar per the
+  capability spec) — install date + per-component <code>{partsWarrantyMonths, laborWarrantyMonths, source}</code>. The
+  classified lines feed the DPF invoice (F12) and the mobile field-invoice surface shows the tech what is covered.
+  A manufacturer-warranty <em>claim</em> (the contractor reclaiming the part cost) is a distinct downstream flow, not
+  the customer invoice.
+</p>
+
+<h2 id="model">4. SysML model</h2>
+<pre class="sysml"><code><span class="kw">package</span> FieldDispatchMobileContract {
+
+  <span class="kw">requirement def</span> RM1_GeoLocation        { <span class="kw">doc</span> <span class="cm">/* mobile emits position, departed/arrived (geofence), ETA */</span> }
+  <span class="kw">requirement def</span> RM2_CustomerComms       { <span class="kw">doc</span> <span class="cm">/* mobile surfaces/triggers confirm/on-my-way/running-late/complete + delivery state */</span> }
+  <span class="kw">requirement def</span> RM3_RoutingNavigation   { <span class="kw">doc</span> <span class="cm">/* mobile provides navigation + reports ETA to the next site */</span> }
+  <span class="kw">requirement def</span> RM4_CustomerLocationDetail { <span class="kw">doc</span> <span class="cm">/* mobile shows customer, site/access, on-site equipment, service history */</span> }
+  <span class="kw">requirement def</span> RM5_FieldInvoice        { <span class="kw">doc</span> <span class="cm">/* mobile captures labor+parts -> warranty-classified draft invoice (-> QuickBooks) */</span> }
+  <span class="kw">requirement def</span> RM6_PaymentCollection   { <span class="kw">doc</span> <span class="cm">/* mobile collects payment at the door against the invoice */</span> }
+  <span class="kw">requirement def</span> RW1_WarrantyAwareService{ <span class="kw">doc</span> <span class="cm">/* per-component parts/labor coverage from install+failure date drives invoice line classification */</span> }
+
+  <span class="kw">port def</span> MobileFieldDevicePort  { <span class="cm">// MobileFieldSignal: location|departed|arrived|eta|status (harness §6.5)</span> }
+  <span class="kw">port def</span> CustomerContextPort   { <span class="cm">// read: customer, site/access, equipment record + warranty, service history</span> }
+  <span class="kw">port def</span> FieldInvoicePort      { <span class="cm">// capture ServiceLine[] -> classifyServiceLines -> draft DPF Invoice (F12)</span> }
+  <span class="kw">port def</span> PaymentPort           { <span class="cm">// collect payment (link / tap-to-pay) -> record against invoice</span> }
+  <span class="kw">port def</span> WarrantyPort          { <span class="cm">// assessWarranty / classifyServiceLines over the equipment record</span> }
+
+  <span class="kw">part def</span> MobileFieldApp {
+    <span class="cm">// the native archetype app (separate thread, PR #1886) IMPLEMENTS these ports</span>
+    <span class="kw">port</span> device   : MobileFieldDevicePort;
+    <span class="kw">port</span> context  : CustomerContextPort;
+    <span class="kw">port</span> invoice  : FieldInvoicePort;
+    <span class="kw">port</span> payment  : PaymentPort;
+  }
+  <span class="kw">part def</span> EquipmentRecord { <span class="cm">// CustomerConfigurationItem + warranty sidecar: installDate + per-component terms</span> }
+  <span class="kw">part def</span> WarrantyPolicy  { <span class="kw">port</span> warranty : WarrantyPort; <span class="ref part">ref part</span> equipment : EquipmentRecord; }
+
+  <span class="kw">allocation</span> m1 <span class="kw">allocate</span> MobileFieldApp        <span class="kw">to</span> nativeArchetypeApps;            <span class="cm">// other thread (#1886)</span>
+  <span class="kw">allocation</span> m2 <span class="kw">allocate</span> WarrantyPort          <span class="kw">to</span> validators.fieldDispatchWarranty; <span class="cm">// built + verified</span>
+  <span class="kw">allocation</span> m3 <span class="kw">allocate</span> FieldInvoicePort      <span class="kw">to</span> fieldDispatch.F12_quickbooksInvoice;
+  <span class="kw">allocation</span> m4 <span class="kw">allocate</span> MobileFieldDevicePort <span class="kw">to</span> harness.mobileSignals;          <span class="cm">// convergence schema</span>
+
+  <span class="kw">satisfy</span> RM1 <span class="kw">by</span> MobileFieldDevicePort;  <span class="kw">satisfy</span> RM4 <span class="kw">by</span> CustomerContextPort;
+  <span class="kw">satisfy</span> RM5 <span class="kw">by</span> FieldInvoicePort;       <span class="kw">satisfy</span> RM6 <span class="kw">by</span> PaymentPort;
+  <span class="kw">satisfy</span> RW1 <span class="kw">by</span> WarrantyPolicy;
+
+  <span class="kw">verification case def</span> VC_Warranty {
+    <span class="kw">subject</span> e : EquipmentRecord;
+    <span class="kw">objective</span> <span class="cm">/* compressor 10yr-parts/0-labor: part covered + labor billed in yr 7;
+                 classifyServiceLines bills the right total (35/35 validators tests) */</span>
+  }
+  <span class="kw">verification case def</span> VC_SignalParity {
+    <span class="kw">objective</span> <span class="cm">/* the mobile device port emits the MobileFieldSignal schema the harness asserts */</span>
+  }
+  <span class="kw">verify</span> RW1 <span class="kw">by</span> VC_Warranty;  <span class="kw">verify</span> RM1 <span class="kw">by</span> VC_SignalParity;
+}</code></pre>
+
+<h2 id="convergence">5. Convergence with the mobile thread</h2>
+<p>
+  The native mobile archetype apps thread owns the app and its spec. This document is the <strong>dispatch-side
+  contract</strong> it converges on:
+</p>
+<ul>
+  <li>The app <strong>implements</strong> <code>MobileFieldDevicePort</code> (emitting the <code>MobileFieldSignal</code> schema the
+  harness already verifies), <code>CustomerContextPort</code>, <code>FieldInvoicePort</code>, and <code>PaymentPort</code>.</li>
+  <li>The dispatcher <strong>consumes</strong> those signals/actions and proposes notifications, assignments, and invoices.</li>
+  <li>Warranty classification is <strong>shared logic</strong> (<code>@dpf/validators/field-dispatch-warranty</code>) — the mobile
+  field-invoice surface and the back-office invoice both call it, so a covered part is $0 everywhere.</li>
+</ul>
+<p class="note">
+  <strong>Recommended handoff:</strong> the mobile spec adds a "Field Dispatch contract" reference to this document and
+  its port list, rather than re-specifying the signal/invoice/warranty shapes. That keeps one source of truth for the
+  seam and avoids the two threads drifting. (Filed as a cross-thread note, not a direct edit to the mobile spec.)
+</p>
+
+<h2 id="sysml-note">6. SysML Architecture Note</h2>
+<table>
+  <tr><td class="muted" style="width:16rem">Scope</td><td>The dispatch↔mobile interface contract + warranty-aware service. No new Prisma table (warranty rides the equipment record / CustomerConfigurationItem sidecar).</td></tr>
+  <tr><td class="muted">Changed requirements/constraints</td><td>Adds RM1–RM6 (mobile surfaces) and RW1 (warranty). Field-dispatch capability gains a warranty dimension affecting equipment records + the invoice flow.</td></tr>
+  <tr><td class="muted">Changed interfaces/ports</td><td>New ports: <code>MobileFieldDevicePort</code> (reused), <code>CustomerContextPort</code>, <code>FieldInvoicePort</code>, <code>PaymentPort</code>, <code>WarrantyPort</code>. Implemented by the native mobile app.</td></tr>
+  <tr><td class="muted">Allocations</td><td>m1→native mobile apps (other thread); m2→<code>@dpf/validators</code> warranty (built); m3→F12 QuickBooks invoice; m4→harness mobile-signals (convergence schema).</td></tr>
+  <tr><td class="muted">Verification cases</td><td>VC_Warranty (assess + classify, 35/35 tests), VC_SignalParity (mobile emits the harness signal schema).</td></tr>
+  <tr><td class="muted">Data authority impact</td><td>Equipment warranty terms live on the equipment record (CustomerConfigurationItem sidecar); the invoice is the DPF Invoice (F12). No new authority.</td></tr>
+  <tr><td class="muted">EA/current-state catch-up</td><td>Cross-link the dispatch↔mobile contract under the AI agent authority + value-stream views once the SysML EA substrate (PR&nbsp;#1864) is in-branch.</td></tr>
+  <tr><td class="muted">Open architecture risks</td><td>(1) Manufacturer warranty-claim flow (contractor reclaims part cost) is out of scope here — its own design. (2) Payment provider choice (QB Payments vs Stripe link vs tap-to-pay) is deferred to F-payment with the conduit model.</td></tr>
+</table>
+
+<h2 id="next">7. Recommended next step</h2>
+<p>
+  Hand this contract to the mobile thread to reference. On the dispatch side, the warranty logic is built and verified;
+  next it wires into the F12 QuickBooks invoice draft (covered parts → $0 customer lines) and the equipment-record
+  warranty sidecar. The mobile surfaces (geo, invoice, payment) bind to these ports as the native app implements them.
+</p>
+
+</body>
+</html>

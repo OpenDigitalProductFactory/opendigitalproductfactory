@@ -31,6 +31,7 @@ export async function seedOnboardingAgent(): Promise<void> {
   //   analyze_brand_document, analyze_public_website_branding → file_read, web_search
   //   prefill_onboarding_wizard → data_governance_validate
   //   list_products / read references → registry_read, backlog_read, portfolio_read
+  //   setup_email (PBI-INV-04 Phase 2) → email_config
   // Without grants, every tool call is silently denied — the COO then claims
   // success on operations that never happened.
   const grants = [
@@ -40,6 +41,7 @@ export async function seedOnboardingAgent(): Promise<void> {
     "registry_read",
     "backlog_read",
     "portfolio_read",
+    "email_config",
   ];
   for (const grantKey of grants) {
     await prisma.agentToolGrant.upsert({
