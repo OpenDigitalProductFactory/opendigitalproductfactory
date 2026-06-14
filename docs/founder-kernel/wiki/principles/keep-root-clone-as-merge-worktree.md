@@ -5,7 +5,7 @@ status: published
 abstract: Treat the root clone as read-only for active feature work. Topic worktrees go alongside.
 principleTier: contextual
 principleDirection: Reserve the root clone for merges and releases; do feature work in dedicated worktrees.
-principleDimensionVector: {"blast_radius": 0.5, "long_term_maintainability": 0.3, "governance_compliance": 0.3}
+principleDimensionVector: {"blast_radius": -0.5, "long_term_maintainability": 0.3, "governance_compliance": 0.3}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -41,7 +41,7 @@ When starting a new piece of feature work, create a worktree: `git worktree add 
 
 ## Decision Dimensions
 
-- `blast_radius: 0.5` — keeping the root clean prevents cross-task contamination at the canonical clone.
+- `blast_radius: -0.5` — keeping the root clean prevents cross-task contamination at the canonical clone.
 - `long_term_maintainability: 0.3` — discipline compounds: a year of clean-root habit makes every merge / release / inspection cheaper.
 - `governance_compliance: 0.3` — release scripts that target the root clone work reliably when the root is in a known state.
 

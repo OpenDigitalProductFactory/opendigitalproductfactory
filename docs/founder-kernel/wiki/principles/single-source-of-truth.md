@@ -5,7 +5,7 @@ status: published
 abstract: Each rule, fact, or decision lives in exactly one place. Pointers, not copies.
 principleTier: commandment
 principleDirection: Author each rule, fact, or decision in exactly one place; reference everywhere else via pointer.
-principleDimensionVector: {"long_term_maintainability": 1.0, "schema_grounding": 0.7, "blast_radius": 0.5}
+principleDimensionVector: {"long_term_maintainability": 1.0, "schema_grounding": 0.7, "blast_radius": -0.5}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -39,7 +39,7 @@ When you find yourself about to write the same rule in a second location, stop. 
 
 - `long_term_maintainability: 1.0` — duplication-prevention is the single biggest lever on long-term maintainability. Maximum weight.
 - `schema_grounding: 0.7` — canonical sources can be linted, versioned, and migrated; scattered duplicates cannot.
-- `blast_radius: 0.5` — when rules drift across duplicates, every downstream consumer is at risk; the principle keeps the blast radius bounded.
+- `blast_radius: -0.5` — when rules drift across duplicates, every downstream consumer is at risk; the principle keeps the blast radius bounded.
 
 ## Examples
 

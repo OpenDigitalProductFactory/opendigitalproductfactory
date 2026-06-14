@@ -5,7 +5,7 @@ status: published
 abstract: Local-only commits are invisible to CI and to other agents. Push every commit so the work exists.
 principleTier: contextual
 principleDirection: Push after every commit; never leave work as local-only.
-principleDimensionVector: {"evidence_density": 0.5, "governance_compliance": 0.4, "blast_radius": 0.3}
+principleDimensionVector: {"evidence_density": 0.5, "governance_compliance": 0.4, "blast_radius": -0.3}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -41,7 +41,7 @@ After `git commit`, run `git push` (or `git push -u origin <branch>` for the fir
 
 - `evidence_density: 0.5` — pushed commits are verifiable evidence; local-only commits are author-claimed evidence only.
 - `governance_compliance: 0.4` — CI / DCO / branch protection only fire on pushed commits.
-- `blast_radius: 0.3` — local-only commits aren't shared, so their loss doesn't propagate; the principle is about preventing the loss, not containing it.
+- `blast_radius: -0.3` — an unpushed commit is one machine failure away from gone; pushing shrinks the blast radius of that loss by replicating the work off the single local disk.
 
 ## Examples
 

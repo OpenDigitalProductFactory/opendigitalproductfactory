@@ -5,7 +5,7 @@ status: published
 abstract: Each release passes the 15-phase QA plan at tests/e2e/platform-qa-plan.md. next build and unit tests do not replace UX exercise.
 principleTier: core
 principleDirection: Run the affected QA phases as part of the definition of done; never substitute build success for UX evidence.
-principleDimensionVector: {"evidence_density": 0.8, "governance_compliance": 0.6, "blast_radius": 0.5}
+principleDimensionVector: {"evidence_density": 0.8, "governance_compliance": 0.6, "blast_radius": -0.5}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -41,7 +41,7 @@ For feature work, identify which of the 15 QA phases the change touches and run 
 
 - `evidence_density: 0.8` — UX-exercise evidence is the densest evidence release governance has; unit-test results don't replace it.
 - `governance_compliance: 0.6` — the QA plan is the structured contract between release engineering and the wider platform.
-- `blast_radius: 0.5` — releases that ship UX regressions reach every adopter; the QA plan contains that blast radius.
+- `blast_radius: -0.5` — releases that ship UX regressions reach every adopter; the QA plan contains that blast radius.
 
 ## Examples
 

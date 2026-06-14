@@ -6,7 +6,7 @@ status: published
 abstract: DPF delivers software through three interchangeable delivery surfaces — Claude Code, Codex CLI, embedded Build Studio. They are peers, not a hierarchy. All three advance the same evidence-gated lifecycle; a gate reads only its required evidence and never branches on which surface produced it.
 principleTier: core
 principleDirection: Run all three delivery surfaces through the one governed lifecycle (ideate → plan → build → review → ship) advanced by evidence at each gate; never privilege one surface, and never let work depend on any single surface being healthy.
-principleDimensionVector: {"long_term_maintainability": 0.9, "governance_compliance": 0.7, "blast_radius": 0.6, "reusability": 0.6}
+principleDimensionVector: {"long_term_maintainability": 0.9, "governance_compliance": 0.7, "blast_radius": -0.6, "reusability": 0.6}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -41,7 +41,7 @@ The interactive surfaces (Claude/Codex) produce evidence and call the gate direc
 
 - `long_term_maintainability: 0.9` — one lifecycle to maintain instead of three divergent ones.
 - `governance_compliance: 0.7` — every delivery passes the same evidence gates.
-- `blast_radius: 0.6` — no single surface outage can stall delivery.
+- `blast_radius: -0.6` — no single surface outage can stall delivery.
 - `reusability: 0.6` — the same gate/evidence contract serves any future surface.
 
 ## Related
