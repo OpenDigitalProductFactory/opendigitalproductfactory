@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { SecureStorage } from "@/src/repositories/SecureStorage";
+import { getServerUrl } from "@/src/lib/serverConfig";
 
 export interface QueuedMutation {
   id: string;
@@ -12,7 +13,6 @@ export interface QueuedMutation {
 }
 
 const MAX_RETRIES = 3;
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
 
 export interface OfflineQueueState {
   queue: QueuedMutation[];
@@ -71,7 +71,7 @@ export const useOfflineQueueStore = create<OfflineQueueState>((set, get) => ({
         };
         if (token) headers["Authorization"] = `Bearer ${token}`;
 
-        const response = await fetch(`${API_BASE_URL}${mutation.endpoint}`, {
+        const response = await fetch(`${getServerUrl()}${mutation.endpoint}`, {
           method: mutation.method,
           headers,
           body: mutation.method !== "DELETE" ? mutation.body : undefined,

@@ -4,6 +4,7 @@ import * as Notifications from "expo-notifications";
 import type { MeResponse } from "@dpf/types";
 import { api } from "@/src/lib/apiClient";
 import { SecureStorage } from "@/src/repositories/SecureStorage";
+import { loadAndApplyAppConfig } from "@/src/lib/appConfig";
 
 /**
  * Requests push-notification permissions and registers the device token
@@ -52,6 +53,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     // Register device for push notifications (best-effort, non-blocking)
     registerForPush();
+
+    // Absorb the install manifest — theme + capabilities (best-effort, non-blocking)
+    void loadAndApplyAppConfig();
   },
 
   logout: async () => {
