@@ -420,8 +420,115 @@ const FIXED_ASSET_TABLE: GenericTableConfig = {
   ],
 };
 
+// Storefront items — read-only; clean catalogue fields.
+const STOREFRONT_ITEM_TABLE: GenericTableConfig = {
+  entityType: "storefront_item",
+  prismaModel: "storefrontItem",
+  idField: "itemId",
+  labelField: "name",
+  orderBy: { field: "sortOrder", dir: "asc" },
+  columns: [
+    { field: "itemId", name: "ID", fieldType: "text", width: 140 },
+    { field: "name", name: "Name", fieldType: "text", width: 260 },
+    { field: "category", name: "Category", fieldType: "text", width: 150 },
+    { field: "priceAmount", name: "Price", fieldType: "number", width: 110 },
+    { field: "priceCurrency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "ctaType", name: "CTA", fieldType: "text", width: 120 },
+    { field: "isActive", name: "Active", fieldType: "checkbox", width: 80 },
+    { field: "sortOrder", name: "Order", fieldType: "number", width: 80 },
+  ],
+};
+
+// Inventory entities — read-only; discovery catalogue. No PII.
+const INVENTORY_ENTITY_TABLE: GenericTableConfig = {
+  entityType: "inventory_entity",
+  prismaModel: "inventoryEntity",
+  idField: "entityKey",
+  labelField: "name",
+  orderBy: { field: "lastSeenAt", dir: "desc" },
+  columns: [
+    { field: "entityKey", name: "Key", fieldType: "text", width: 160 },
+    { field: "name", name: "Name", fieldType: "text", width: 240 },
+    { field: "entityType", name: "Type", fieldType: "text", width: 140 },
+    { field: "manufacturer", name: "Manufacturer", fieldType: "text", width: 150 },
+    { field: "productModel", name: "Model", fieldType: "text", width: 150 },
+    { field: "supportStatus", name: "Support", fieldType: "text", width: 120 },
+    { field: "status", name: "Status", fieldType: "text", width: 110 },
+    { field: "lastSeenAt", name: "Last seen", fieldType: "datetime", width: 160 },
+  ],
+};
+
+// Rental agreements — read-only; PII OMITTED (customerEmail, customerPhone,
+// customerContactId excluded). customerName retained for operator context; gated by
+// view_customer. status keys per the schema enum comment → board grouping aligns.
+const RENTAL_AGREEMENT_TABLE: GenericTableConfig = {
+  entityType: "rental_agreement",
+  prismaModel: "rentalAgreement",
+  idField: "agreementRef",
+  labelField: "agreementRef",
+  orderBy: { field: "periodStart", dir: "desc" },
+  columns: [
+    { field: "agreementRef", name: "Ref", fieldType: "text", width: 150 },
+    { field: "customerName", name: "Customer", fieldType: "text", width: 200 },
+    {
+      field: "status",
+      name: "Status",
+      fieldType: "select",
+      width: 130,
+      groupable: true,
+      options: [
+        { key: "reserved", label: "Reserved" },
+        { key: "verified", label: "Verified" },
+        { key: "active", label: "Active" },
+        { key: "returned", label: "Returned" },
+        { key: "closed", label: "Closed" },
+        { key: "cancelled", label: "Cancelled" },
+      ],
+    },
+    { field: "pricingModel", name: "Pricing", fieldType: "text", width: 120 },
+    { field: "periodStart", name: "From", fieldType: "date", width: 120 },
+    { field: "periodEnd", name: "To", fieldType: "date", width: 120 },
+    { field: "rateAmount", name: "Rate", fieldType: "number", width: 110 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+  ],
+};
+
+// Fund budget lines — read-only; civic fund-accounting. fund keys per schema enum
+// comment. Uses the cuid PK as the row id (no semantic unique id on this model).
+const FUND_BUDGET_LINE_TABLE: GenericTableConfig = {
+  entityType: "fund_budget_line",
+  prismaModel: "fundBudgetLine",
+  idField: "id",
+  labelField: "accountCode",
+  orderBy: { field: "fiscalYear", dir: "desc" },
+  columns: [
+    { field: "fiscalYear", name: "FY", fieldType: "number", width: 90 },
+    {
+      field: "fund",
+      name: "Fund",
+      fieldType: "select",
+      width: 160,
+      groupable: true,
+      options: [
+        { key: "general", label: "General" },
+        { key: "special-revenue", label: "Special Revenue" },
+        { key: "enterprise", label: "Enterprise" },
+        { key: "capital-projects", label: "Capital Projects" },
+        { key: "debt-service", label: "Debt Service" },
+      ],
+    },
+    { field: "accountCode", name: "Account", fieldType: "text", width: 140 },
+    { field: "budgetedAmount", name: "Budgeted", fieldType: "number", width: 140 },
+    { field: "notes", name: "Notes", fieldType: "text", width: 280 },
+  ],
+};
+
 registerGenericReadTable(EPIC_TABLE);
 registerGenericReadTable(DIGITAL_PRODUCT_TABLE);
+registerGenericReadTable(STOREFRONT_ITEM_TABLE);
+registerGenericReadTable(INVENTORY_ENTITY_TABLE);
+registerGenericReadTable(RENTAL_AGREEMENT_TABLE);
+registerGenericReadTable(FUND_BUDGET_LINE_TABLE);
 registerGenericReadTable(COMPLIANCE_CONTROL_TABLE);
 registerGenericReadTable(COMPLIANCE_OBLIGATION_TABLE);
 registerGenericReadTable(COMPLIANCE_INCIDENT_TABLE);
@@ -550,6 +657,38 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     viewCapability: "view_finance",
     manageCapability: "view_finance", // read-only grid; adapter performs no writes
     homeSurface: { path: "/finance/assets", label: "Assets", board: false },
+  },
+  {
+    entityType: "storefront_item",
+    label: "Storefront items",
+    description: "Storefront catalogue items as a read-only grid — sort and filter.",
+    viewCapability: "view_storefront",
+    manageCapability: "view_storefront", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/storefront", label: "Storefront", board: false },
+  },
+  {
+    entityType: "inventory_entity",
+    label: "Inventory",
+    description: "Discovered inventory entities as a read-only grid — sort and filter.",
+    viewCapability: "view_inventory",
+    manageCapability: "view_inventory", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/inventory", label: "Inventory", board: false },
+  },
+  {
+    entityType: "rental_agreement",
+    label: "Rental agreements",
+    description: "Rental agreements as a read-only grid (no contact PII) — sort, filter, board by status.",
+    viewCapability: "view_customer",
+    manageCapability: "view_customer", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/rental", label: "Rental", board: true },
+  },
+  {
+    entityType: "fund_budget_line",
+    label: "Fund budgets",
+    description: "Fund budget lines as a read-only grid — sort, filter, and board by fund.",
+    viewCapability: "view_finance",
+    manageCapability: "view_finance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/finance/funds", label: "Funds", board: true },
   },
   {
     entityType: "epic",
