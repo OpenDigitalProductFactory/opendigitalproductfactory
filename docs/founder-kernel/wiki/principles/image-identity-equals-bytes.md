@@ -6,7 +6,7 @@ status: published
 abstract: A built image must carry the identity of its bytes — stamp == built HEAD == target, asserted pre-swap, DEPLOYED_SHA populated, fail loud on divergence. The live install advances only via the self-upgrade pipeline; no surface hand-advances the root clone or the running portal. Never trust a version label over the bytes.
 principleTier: core
 principleDirection: Assert stamp == built HEAD == target before any portal swap and populate DEPLOYED_SHA; advance the live install only through the governed self-upgrade pipeline, never by hand-advancing the root clone HEAD or rebuilding the portal to "update"; never trust a version label over the bytes.
-principleDimensionVector: {"governance_compliance": 0.8, "blast_radius": 0.7, "evidence_density": 0.7, "long_term_maintainability": 0.5}
+principleDimensionVector: {"governance_compliance": 0.8, "blast_radius": -0.7, "evidence_density": 0.7, "long_term_maintainability": 0.5}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -43,7 +43,7 @@ On 2026-06-05 the live install ran an image **stamped `e7ef3331` (June 5) but co
 ## Decision Dimensions
 
 - `governance_compliance: 0.8` — only the governed pipeline advances the live install.
-- `blast_radius: 0.7` — a mislabeled image deployed to the live install corrupts every downstream assumption.
+- `blast_radius: -0.7` — a mislabeled image deployed to the live install corrupts every downstream assumption.
 - `evidence_density: 0.7` — the deployed SHA and pre-swap assertion are the evidence that the bytes are the target.
 - `long_term_maintainability: 0.5` — one source-advance engine instead of competing ones.
 

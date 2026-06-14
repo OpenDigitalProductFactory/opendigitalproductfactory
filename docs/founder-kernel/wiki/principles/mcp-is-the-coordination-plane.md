@@ -6,7 +6,7 @@ status: published
 abstract: Work tracking and activity coordination live in the DPF MCP substrate — the executor-agnostic source of truth that every delivery surface writes to, regardless of Build Studio. If it isn't in the MCP plane, it didn't happen.
 principleTier: core
 principleDirection: Claim a capsule and record gate evidence through the DPF MCP plane for every unit of work, on every surface; a surface that works without claiming a capsule and recording evidence is invisible to coordination and cannot advance a gate.
-principleDimensionVector: {"governance_compliance": 0.9, "evidence_density": 0.8, "long_term_maintainability": 0.6, "blast_radius": 0.5}
+principleDimensionVector: {"governance_compliance": 0.9, "evidence_density": 0.8, "long_term_maintainability": 0.6, "blast_radius": -0.5}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -49,7 +49,7 @@ The sidecars that sessions spawn must be the **DPF MCP** (`/api/mcp/v1` via `DPF
 - `governance_compliance: 0.9` — coordination and audit both depend on every surface registering its work.
 - `evidence_density: 0.8` — gates advance on recorded evidence, not unrecorded local belief.
 - `long_term_maintainability: 0.6` — one substrate to query instead of three private states.
-- `blast_radius: 0.5` — unregistered work is the root of sprawl, orphans, and silent collisions.
+- `blast_radius: -0.5` — unregistered work is the root of sprawl, orphans, and silent collisions.
 
 ## Related
 

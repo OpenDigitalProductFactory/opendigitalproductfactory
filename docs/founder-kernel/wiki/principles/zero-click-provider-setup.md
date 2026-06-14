@@ -5,7 +5,7 @@ status: published
 abstract: OAuth sign-in (or API-key paste) is the only manual step for provider configuration. Everything else is automatic.
 principleTier: core
 principleDirection: After the one mandatory authentication step, every other provider-activation action (status, discovery, profiling, family enabling, routing availability) must be automatic. Test/Eval/Probe buttons are optimization, not prerequisites.
-principleDimensionVector: {"human_cognitive_load": 0.8, "speed_to_value": 0.7, "long_term_maintainability": 0.4, "evidence_density": -0.2}
+principleDimensionVector: {"human_cognitive_load": -0.8, "speed_to_value": 0.7, "long_term_maintainability": 0.4, "evidence_density": -0.2}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -44,7 +44,7 @@ In-platform coworkers building provider-admin UIs, external coding agents writin
 
 ## Decision Dimensions
 
-- `human_cognitive_load: 0.8` — the principle's purpose is to compress operator decision-load to one choice. Every additional button is a load increase.
+- `human_cognitive_load: -0.8` — the principle's purpose is to compress operator decision-load to one choice. Every additional button is a load increase.
 - `speed_to_value: 0.7` — fresh installs are functional within seconds of OAuth completion, not after a guided activation tour.
 - `long_term_maintainability: 0.4` — fewer manual paths means fewer regression points in future activation changes.
 - `evidence_density: -0.2` — slight negative. Skipping manual confirmation steps means slightly less explicit operator-recorded confirmation that activation worked; mitigated by the auto-activation flow logging its own steps.

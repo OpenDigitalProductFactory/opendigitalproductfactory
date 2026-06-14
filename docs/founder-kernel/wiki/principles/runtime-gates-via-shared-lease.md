@@ -6,7 +6,7 @@ status: published
 abstract: Runtime-bound verification goes through the shared local-integration-ci lease, always. Every shared singleton runtime — including the :3001 contributor preview — must be lease-gated. Per-branch CI images and unleased shared-mutable runtimes are prohibited.
 principleTier: contextual
 principleDirection: Route every runtime-bound gate through the shared local-integration-ci lease; lease-gate every shared singleton runtime (including :3001); never build per-branch CI images or silently re-bind an unleased shared-mutable resource.
-principleDimensionVector: {"governance_compliance": 0.8, "capacity_utilization": 0.7, "blast_radius": 0.6, "long_term_maintainability": 0.5}
+principleDimensionVector: {"governance_compliance": 0.8, "capacity_utilization": 0.7, "blast_radius": -0.6, "long_term_maintainability": 0.5}
 principleAppliesTo:
   - external_coding_agent
   - human
@@ -41,7 +41,7 @@ The shared lease is the same unleased-shared-mutable-resource discipline applied
 
 - `governance_compliance: 0.8` — one lease-gated runtime model, audited and serialized.
 - `capacity_utilization: 0.7` — kills the multi-GB per-branch image sprawl and reclaims disk.
-- `blast_radius: 0.6` — a leased shared runtime cannot silently mutate another thread's preview or production data.
+- `blast_radius: -0.6` — a leased shared runtime cannot silently mutate another thread's preview or production data.
 - `long_term_maintainability: 0.5` — one shared sandbox to maintain, not a per-branch image matrix.
 
 ## Related

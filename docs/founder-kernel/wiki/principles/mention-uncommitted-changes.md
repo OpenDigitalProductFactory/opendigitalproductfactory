@@ -5,7 +5,7 @@ status: published
 abstract: When the working tree has uncommitted changes, name them before starting something else.
 principleTier: contextual
 principleDirection: Disclose uncommitted state before pivoting; never silently leave work in limbo.
-principleDimensionVector: {"evidence_density": 0.4, "human_cognitive_load": -0.4, "blast_radius": 0.3}
+principleDimensionVector: {"evidence_density": 0.4, "human_cognitive_load": -0.4, "blast_radius": -0.3}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -41,7 +41,7 @@ Before starting a new task, run `git status --short`. If there are uncommitted c
 
 - `evidence_density: 0.4` — uncommitted state is durable but invisible; naming it makes it visible.
 - `human_cognitive_load: -0.4` — operators don't have to remember what the agent was doing before they pivoted.
-- `blast_radius: 0.3` — silent pivots compound; disclosure prevents the compounding.
+- `blast_radius: -0.3` — silent pivots compound; disclosure prevents the compounding.
 
 ## Examples
 
