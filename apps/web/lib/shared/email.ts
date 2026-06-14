@@ -8,6 +8,13 @@ type EmailOptions = {
   html: string;
   /** Resolved sender ("Name <email>"). Falls back to SMTP_FROM when unset. */
   from?: string;
+  /**
+   * Reply-To header. Usually left unset: when sending through a shared relay
+   * (source:"relay", rewriteFrom), sendEmail preserves the intended `from` as
+   * Reply-To automatically so replies still reach the business. An explicit
+   * value here always wins.
+   */
+  replyTo?: string;
   attachments?: Array<{
     filename: string;
     content: Buffer;
@@ -382,7 +389,6 @@ export async function sendEmail(options: EmailOptions): Promise<{ messageId: str
   const port = cfg.port;
   const user = cfg.user;
   const pass = cfg.pass;
-  const from = options.from || cfg.from || "noreply@example.com";
 
   // Without SMTP config: in production this is a hard failure — returning a
   // fake success would let callers record an email as "sent" that never went
@@ -402,6 +408,18 @@ export async function sendEmail(options: EmailOptions): Promise<{ messageId: str
     return { messageId: `dev-${Date.now()}` };
   }
 
+  // From/Reply-To resolution. The message's intended sender is options.from (the
+  // business identity), falling back to the transport's configured From. When
+  // sending through a shared relay (cfg.rewriteFrom), the relay's authenticated
+  // address MUST be the envelope/header From for SPF/DKIM alignment, so the
+  // intended sender is moved to Reply-To — replies still reach the business,
+  // deliverability stays intact. Operator-owned SMTP (db/env) sends as-is.
+  const intendedFrom = options.from || cfg.from || "noreply@example.com";
+  const from = cfg.rewriteFrom ? (cfg.from ?? intendedFrom) : intendedFrom;
+  const replyTo =
+    options.replyTo ??
+    (cfg.rewriteFrom && options.from && options.from !== from ? options.from : undefined);
+
   const transport = nodemailer.createTransport({
     host,
     port,
@@ -411,6 +429,7 @@ export async function sendEmail(options: EmailOptions): Promise<{ messageId: str
 
   const result = await transport.sendMail({
     from,
+    ...(replyTo ? { replyTo } : {}),
     to: options.to,
     subject: options.subject,
     text: options.text,
