@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Card } from "@/src/components/ui/Card";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { useTheme } from "@/src/lib/theme";
 import type { WidgetProps } from "./index";
 
 interface ChartItem {
@@ -14,12 +14,51 @@ interface ChartItem {
  * percentage of the maximum value. No chart library dependency.
  */
 export function BarChart({ definition, data }: WidgetProps) {
+  const { colors, spacing, borderRadius } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        card: { marginBottom: spacing.md },
+        title: {
+          color: colors.text,
+          fontSize: 16,
+          fontWeight: "600",
+          marginBottom: spacing.sm,
+        },
+        empty: {
+          color: colors.textMuted,
+          fontSize: 14,
+          textAlign: "center",
+          padding: spacing.md,
+        },
+        row: {
+          flexDirection: "row",
+          alignItems: "center",
+          marginBottom: spacing.sm,
+        },
+        rowLabel: { color: colors.text, fontSize: 13, width: 80 },
+        barTrack: {
+          flex: 1,
+          height: 16,
+          backgroundColor: colors.surface1,
+          borderRadius: borderRadius.sm,
+          overflow: "hidden",
+          marginHorizontal: spacing.sm,
+        },
+        barFill: { height: "100%", borderRadius: borderRadius.sm },
+        rowValue: {
+          color: colors.textMuted,
+          fontSize: 13,
+          width: 40,
+          textAlign: "right",
+        },
+      }),
+    [colors, spacing, borderRadius],
+  );
+
   const raw = data[definition.dataKey];
   const items: ChartItem[] = Array.isArray(raw) ? raw : [];
-  const maxValue = items.reduce(
-    (max, item) => Math.max(max, item.value),
-    1,
-  );
+  const maxValue = items.reduce((max, item) => Math.max(max, item.value), 1);
 
   return (
     <Card style={styles.card}>
@@ -38,8 +77,7 @@ export function BarChart({ definition, data }: WidgetProps) {
                     styles.barFill,
                     {
                       width: `${pct}%`,
-                      backgroundColor:
-                        definition.color ?? colors.primary,
+                      backgroundColor: definition.color ?? colors.primary,
                     },
                   ]}
                 />
@@ -52,49 +90,3 @@ export function BarChart({ definition, data }: WidgetProps) {
     </Card>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    marginBottom: spacing.md,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: spacing.sm,
-  },
-  empty: {
-    color: colors.textMuted,
-    fontSize: 14,
-    textAlign: "center",
-    padding: spacing.md,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: spacing.sm,
-  },
-  rowLabel: {
-    color: colors.text,
-    fontSize: 13,
-    width: 80,
-  },
-  barTrack: {
-    flex: 1,
-    height: 16,
-    backgroundColor: colors.surface1,
-    borderRadius: borderRadius.sm,
-    overflow: "hidden",
-    marginHorizontal: spacing.sm,
-  },
-  barFill: {
-    height: "100%",
-    borderRadius: borderRadius.sm,
-  },
-  rowValue: {
-    color: colors.textMuted,
-    fontSize: 13,
-    width: 40,
-    textAlign: "right",
-  },
-});
