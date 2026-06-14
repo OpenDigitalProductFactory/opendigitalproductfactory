@@ -586,6 +586,16 @@
       "implies": []
     },
     {
+      "key": "email_config",
+      "description": "Configure the organization's OWN outbound email (SMTP) — detect provider, save settings, send a test. Operator-gated (manage_provider_connections); DPF never relays mail on the operator's behalf.",
+      "category": "integrate",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "setup_email"
+      ],
+      "implies": []
+    },
+    {
       "key": "ea_graph_read",
       "description": "Read ea graph.",
       "category": "explore",
