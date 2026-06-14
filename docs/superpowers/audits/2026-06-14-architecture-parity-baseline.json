@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-06-14T13:58:23.887Z",
+  "spec": "docs/superpowers/specs/2026-06-14-design-implementation-parity-engine-design.md",
+  "seedsScanned": [
+    "packages/db/src/seed-ea-sysml-agent-authority.ts",
+    "packages/db/src/seed-ea-sysml-ai-cockpit.ts",
+    "packages/db/src/seed-ea-sysml-data-authority.ts"
+  ],
+  "deterministicSourceKeys": 40,
+  "errorCount": 0,
+  "warnCount": 0,
+  "findings": []
+}

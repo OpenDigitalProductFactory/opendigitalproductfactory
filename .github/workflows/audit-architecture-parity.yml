@@ -1,0 +1,72 @@
+name: Architecture Parity Audit
+
+# CodeQL actions/missing-workflow-permissions: least-privilege default.
+# Read-only audit; needs no write surface.
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/db/src/seed-ea-sysml-*.ts"
+      - "apps/web/lib/ea/architecture-parity.ts"
+      - "apps/web/scripts/audit-architecture-parity.ts"
+      - "docs/superpowers/audits/2026-06-14-architecture-parity-baseline.json"
+      - ".github/workflows/audit-architecture-parity.yml"
+  push:
+    branches: [main]
+
+concurrency:
+  group: audit-architecture-parity-${{ github.ref }}
+  cancel-in-progress: true
+
+# What this guard does
+# --------------------
+# Runs apps/web/scripts/audit-architecture-parity.ts (static — no DB) over the
+# SysML current-state view seeds (packages/db/src/seed-ea-sysml-*.ts). It verifies
+# every deterministic-provenance `sourceKey` an EA element claims still resolves to
+# real code (file + named symbol). A claim that no longer resolves is
+# design↔implementation drift. Compares against the baseline at
+# docs/superpowers/audits/2026-06-14-architecture-parity-baseline.json and fails
+# ONLY on NEW error-level findings.
+#
+# This is the first systemic increment of the Design–Implementation Parity Engine
+# (docs/superpowers/specs/2026-06-14-design-implementation-parity-engine-design.md):
+# it makes the architecture models self-policing so no human/AI has to manually
+# re-check them against the code — automation over vigilance.
+
+jobs:
+  audit:
+    name: Architecture Parity Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run architecture parity audit (with baseline)
+        run: |
+          pnpm --filter web exec tsx \
+            scripts/audit-architecture-parity.ts \
+            --baseline docs/superpowers/audits/2026-06-14-architecture-parity-baseline.json \
+            > parity-current.json
+        continue-on-error: false
+
+      - name: Upload parity report (always, for inspection)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: architecture-parity-audit
+          path: parity-current.json
+          retention-days: 14
