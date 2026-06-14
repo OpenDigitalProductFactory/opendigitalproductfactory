@@ -1516,7 +1516,7 @@ function tallyVariantCoverage(
   frontmatter: WikiPageFrontmatter,
   jurisdictionCoverage: Record<string, number>,
   competencyCoverage: Record<string, number>,
-): void {
+): { jurisdictions: string[]; competencyLevel: string } {
   const jurisdictions =
     frontmatter.professionJurisdiction && frontmatter.professionJurisdiction.length > 0
       ? frontmatter.professionJurisdiction
@@ -1549,6 +1549,12 @@ function tallyVariantCoverage(
     );
   }
   competencyCoverage[level] = (competencyCoverage[level] ?? 0) + 1;
+
+  // Return the normalized axes so the caller can persist them into
+  // WikiPage.metadata for runtime coverage queries (HRIS management surface,
+  // and the future gate↔material variant binding). The seed is the single
+  // place that has already validated these against the closed registries.
+  return { jurisdictions, competencyLevel: level };
 }
 
 /**
@@ -1612,9 +1618,22 @@ export async function seedProfessionCorpus(
     const slug = deriveCorpusSlug(file);
     const status = frontmatter.status ?? "published";
 
-    tallyVariantCoverage(slug, frontmatter, jurisdictionCoverage, competencyCoverage);
+    const { jurisdictions, competencyLevel } = tallyVariantCoverage(
+      slug,
+      frontmatter,
+      jurisdictionCoverage,
+      competencyCoverage,
+    );
 
     const principlePayload = extractPrinciplePayload(frontmatter);
+
+    // Persist the validated WSID variant axes into WikiPage.metadata so the
+    // HRIS coverage helper (and the future gate variant binding) can query
+    // jurisdiction/competency at runtime without re-parsing the corpus files.
+    const metadata = {
+      professionJurisdiction: jurisdictions,
+      professionCompetencyLevel: competencyLevel,
+    };
 
     const upserted = (await upsertWikiPage(prisma, {
       slug,
@@ -1625,6 +1644,7 @@ export async function seedProfessionCorpus(
       isKernel: false,
       kernelVersion: null,
       abstract: frontmatter.abstract ?? null,
+      metadata,
       ...principlePayload,
     })) as { id: string };
 

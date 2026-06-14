@@ -9043,6 +9043,11 @@ model WikiPage {
   overrides                WikiPage[]         @relation("WikiPageOverride")
   derivedFromKernelVersion String?
   abstract                 String?            @db.Text
+  // Free-form frontmatter bag (mirrors PromptTemplate.metadata = "all other
+  // frontmatter"). Profession-corpus pages carry the WSID variant axes here
+  // (professionJurisdiction / professionCompetencyLevel) so coverage is
+  // queryable at runtime without typed/indexed columns (variants spec §3).
+  metadata                 Json?
   lastReviewedAt           DateTime?
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
