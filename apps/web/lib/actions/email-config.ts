@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { encryptSecret } from "@/lib/govern/credential-crypto";
 import { sendEmail, isEmailConfigured } from "@/lib/email";
+import { suggestSmtpForDomain } from "@/lib/shared/smtp-config";
 
 // Admin → Settings → Email. Same guard the adjacent platform-key / social-auth
 // panels use (manage_provider_connections) — SMTP is an outbound-email provider
@@ -66,6 +67,45 @@ export async function saveEmailConfig(input: EmailConfigInput): Promise<{ ok: tr
 
   revalidatePath("/admin/settings");
   return { ok: true };
+}
+
+/**
+ * Suggest SMTP settings for the operator's OWN email provider, detected from the
+ * org's domain (email, falling back to website). Lets the Email panel / setup
+ * agent pre-fill host/port/secure and surface the one credential the operator
+ * must paste — the near-zero-config path (PBI-INV-04). Detection is best-effort
+ * and read-only; it never writes config.
+ */
+export type EmailProviderSuggestion = {
+  found: boolean;
+  /** Domain detection ran against (normalized), or null. */
+  domain: string | null;
+  /** How the provider was identified. */
+  via: "domain" | "mx" | "none";
+  preset: {
+    id: string;
+    label: string;
+    host: string;
+    port: number;
+    secure: boolean;
+    credentialHint: string;
+    docsUrl?: string;
+    sharedRelay?: boolean;
+  } | null;
+};
+
+export async function suggestEmailProvider(): Promise<EmailProviderSuggestion> {
+  await requireManageEmailConfig();
+  // Single org per install — the first row is the operator's organization.
+  const org = await prisma.organization.findFirst({ select: { email: true, website: true } });
+  const seed = org?.email || org?.website || null;
+  const s = await suggestSmtpForDomain(seed);
+  return {
+    found: Boolean(s.preset),
+    domain: s.domain,
+    via: s.via,
+    preset: s.preset ? { ...s.preset } : null,
+  };
 }
 
 const testEmailSchema = z.object({ to: z.string().trim().email() });
