@@ -144,6 +144,54 @@ The test of whether you applied this principle: after the change, is there
 *less* for a human or an AI to remember, or more? Removing a failure
 opportunity should shrink the vigilance surface, never grow it.
 
+## Interface surface is failure surface
+
+**Every interactive control is a failure opportunity.** A new button is a new
+path that can be taken at the wrong time; a new fillable field is a new way to
+enter an invalid, ambiguous, or malicious value — a new thing to validate, a
+new column to keep honest, and a new decision the operator must understand
+before acting. Interface surface is therefore *governed* surface: **any new or
+changed button or fillable field is subject to evaluation against this
+principle, and retiring one is, all else equal, the better move.**
+
+This is not "every new control is bad." It is "a new control must *earn its
+surface*" — the cost it adds (a thing to learn, validate, and maintain forever)
+has to be outweighed by the outcome it unlocks and the breadth of reuse it
+serves. Surface added without that justification is a failure opportunity taken
+on for nothing.
+
+### How a UI-surface change scores
+
+When a change touches interface surface, score it against the cost axes
+(`human_cognitive_load` above all) on this rubric — research and evidence are
+what move it up:
+
+- **No-op** — the change touches no button, field, form, or route. The
+  interface dimension does not apply and contributes nothing either way.
+- **High** — a **clarification interaction that produces a demonstrably better
+  outcome**, **reusable across multiple internal outcomes long-term**, backed by
+  research/evidence for why the surface is needed. A control that disambiguates
+  intent and pays back across many flows earns its surface; it *reduces* net
+  cognitive load even though it adds a control.
+- **Mid** — a well-thought-out, justified interface that serves a single or
+  narrow outcome with little reuse. Sound, but the surface is amortized thinly.
+- **Low** — new surface with **inadequate justification or research**. The cost
+  is real and the payback is unevidenced; this is surface bloat and scores
+  against the principle.
+- **Removal** — a change that *retires* surface (collapses two fields into one
+  derived value, replaces a button with an automatic step, deletes a route
+  nobody needs) scores most favorably: it is the cleanest way to shrink the
+  failure surface.
+
+The justification is the load-bearing input: the *same* new field scores
+**high** when research shows it clarifies a high-traffic decision and will be
+reused across archetypes, and **low** when there is no evidence it is needed —
+"we might want it" is not justification. Prefer making the wrong value
+unrepresentable over adding a field plus a validator
+([[principles/strongly-typed-string-enums]]); prefer one automatic step over a
+button the operator must remember to press
+([[principles/zero-click-provider-setup]]).
+
 ## Decision dimensions
 
 The signed `principleDimensionVector` (proposed; see the calibration note):
