@@ -1,9 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
-
-// task-requirements.ts imports the prisma client at module load; stub it so this
-// pure built-in-content assertion does not require a provisioned DB / generated client.
-vi.mock("@dpf/db", () => ({ prisma: {} }));
-
+import { describe, expect, it } from "vitest";
+// No module mocks. Importing the real @dpf/db is harmless here — reading
+// BUILT_IN_TASK_REQUIREMENTS (a const) triggers no DB query. A file-scoped
+// vi.mock("@dpf/db") can leak across files under the forks pool (it broke an
+// unrelated ollama-health test in CI shard 3/4), so this suite avoids it.
 import { BUILT_IN_TASK_REQUIREMENTS } from "./task-requirements";
 
 // SysML AI-cockpit model, Slice E1 (REQ-AIC-E1): inbound-email triage must route

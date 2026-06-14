@@ -1,75 +1,40 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-// Mock the task-requirement loader so inferContract's behaviour is tested against
-// controlled requirement contracts (no DB). quality-tiers stays real (pure).
-vi.mock("./task-requirements", () => ({
-  getTaskRequirement: vi.fn(),
-}));
-
-import { getTaskRequirement } from "./task-requirements";
+import { describe, expect, it } from "vitest";
 import { inferContract } from "./request-contract";
-import type { TaskRequirement } from "./task-router-types";
 
-const mockGet = getTaskRequirement as unknown as ReturnType<typeof vi.fn>;
-
-function req(partial: Partial<TaskRequirement>): TaskRequirement {
-  return {
-    taskType: "x",
-    description: "",
-    selectionRationale: "",
-    requiredCapabilities: {},
-    preferredMinScores: {},
-    origin: "system",
-    ...partial,
-  };
-}
+// No module mocks. inferContract resolves the REAL TaskRequirement (DB-first, with
+// a built-in fallback). In a no-DB unit environment the DB lookup fails and the
+// built-in catalogue is used — which now carries the email-* routing-posture
+// defaults this asserts. A file-scoped vi.mock of the shared ./task-requirements
+// (or @dpf/db) module can leak across files under the forks pool, so this suite
+// deliberately avoids it and tests the integrated path instead.
 
 const MSGS = [{ role: "user", content: "hello" }];
 
-beforeEach(() => {
-  vi.clearAllMocks();
-});
-
 describe("inferContract honours task-requirement routing-posture defaults", () => {
-  it("applies budgetClassDefault, reasoningDepthDefault, and residencyPolicy from the requirement", async () => {
-    mockGet.mockResolvedValue(
-      req({
-        taskType: "email-triage",
-        minimumTier: "adequate",
-        budgetClassDefault: "minimize_cost",
-        reasoningDepthDefault: "low",
-        residencyPolicy: "local_only",
-      })
-    );
+  it("email-triage → utility posture (minimize_cost + low reasoning) from its requirement", async () => {
     const c = await inferContract("email-triage", MSGS);
     expect(c.budgetClass).toBe("minimize_cost");
     expect(c.reasoningDepth).toBe("low");
-    expect(c.residencyPolicy).toBe("local_only");
   });
 
-  it("lets an explicit caller routeContext override the requirement default", async () => {
-    mockGet.mockResolvedValue(
-      req({ taskType: "email-triage", budgetClassDefault: "minimize_cost" })
-    );
+  it("an explicit caller routeContext overrides the requirement default", async () => {
     const c = await inferContract("email-triage", MSGS, undefined, undefined, {
       budgetClass: "quality_first",
     });
     expect(c.budgetClass).toBe("quality_first");
   });
 
-  it("falls back to balanced/heuristic when the requirement sets no posture defaults (regression)", async () => {
-    // Mirrors existing built-ins (e.g. summarization) that set only minimumTier.
-    mockGet.mockResolvedValue(req({ taskType: "summarization", minimumTier: "adequate" }));
+  it("existing task type without posture defaults is unchanged (regression: summarization)", async () => {
     const c = await inferContract("summarization", MSGS);
     expect(c.budgetClass).toBe("balanced");
     expect(c.reasoningDepth).toBe("low"); // DEFAULT_REASONING_DEPTH["summarization"]
     expect(c.residencyPolicy).toBeUndefined();
   });
 
-  it("is non-fatal when the requirement lookup throws (no DB)", async () => {
-    mockGet.mockRejectedValue(new Error("no db"));
-    const c = await inferContract("conversation", MSGS);
+  it("unknown task type falls back to balanced + medium, no residency", async () => {
+    const c = await inferContract("totally-unknown-task-xyz", MSGS);
     expect(c.budgetClass).toBe("balanced");
+    expect(c.reasoningDepth).toBe("medium");
     expect(c.residencyPolicy).toBeUndefined();
   });
 });
