@@ -12,14 +12,17 @@ import {
   computePortfolioCompleteness,
   type PortfolioCompletenessDb,
 } from "@/lib/portfolio/completeness";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 
 type Props = {
   params: Promise<{ slug?: string[] }>;
+  searchParams?: Promise<{ view?: string }>;
 };
 
-export default async function PortfolioPage({ params }: Props) {
+export default async function PortfolioPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const slugs = slug ?? [];
+  const view = parseSurfaceView((await searchParams)?.view);
   const [roots, agentCounts, budgets, ownerRoles, summary] = await Promise.all([
     getFullPortfolioTree(),
     getAgentCounts(),
@@ -32,7 +35,14 @@ export default async function PortfolioPage({ params }: Props) {
   // No single resolved root portfolio at this level -- the overview spans all
   // four portfolio roots. Per Task 7.2 spec, omit the strip silently.
   if (slugs.length === 0) {
-    return <PortfolioOverview roots={roots} agentCounts={agentCounts} budgets={budgets} summary={summary} />;
+    return (
+      <>
+        <PlatformGridSection entityType="digital_product" view={view} />
+        {!view && (
+          <PortfolioOverview roots={roots} agentCounts={agentCounts} budgets={budgets} summary={summary} />
+        )}
+      </>
+    );
   }
 
   // Node detail: /portfolio/[...slug]
