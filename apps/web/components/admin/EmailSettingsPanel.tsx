@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveEmailConfig, sendTestEmail } from "@/lib/actions/email-config";
+import {
+  saveEmailConfig,
+  sendTestEmail,
+  suggestEmailProvider,
+  type EmailProviderSuggestion,
+} from "@/lib/actions/email-config";
 
 type Props = {
   status: {
@@ -13,7 +18,7 @@ type Props = {
     from: string | null;
     secure: boolean;
     passConfigured: boolean;
-    source: "db" | "env" | "none";
+    source: "db" | "env" | "relay" | "none";
   };
 };
 
@@ -25,6 +30,7 @@ export function EmailSettingsPanel({ status }: Props) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
   const [testing, startTest] = useTransition();
+  const [detecting, startDetect] = useTransition();
   const [host, setHost] = useState(status.host ?? "");
   const [port, setPort] = useState(String(status.port || 587));
   const [user, setUser] = useState(status.user ?? "");
@@ -32,7 +38,38 @@ export function EmailSettingsPanel({ status }: Props) {
   const [secure, setSecure] = useState(status.secure);
   const [pass, setPass] = useState("");
   const [testTo, setTestTo] = useState("");
+  const [hint, setHint] = useState<EmailProviderSuggestion | null>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  // AI-assisted setup: detect the operator's own provider from the org domain
+  // and pre-fill host/port/secure so they only have to paste one credential.
+  const detect = () => {
+    setMsg(null);
+    startDetect(async () => {
+      try {
+        const s = await suggestEmailProvider();
+        setHint(s);
+        if (s.found && s.preset) {
+          setHost(s.preset.host);
+          setPort(String(s.preset.port));
+          setSecure(s.preset.secure);
+          setMsg({
+            kind: "ok",
+            text: `Detected ${s.preset.label}${s.domain ? ` for ${s.domain}` : ""}. Host filled in — add your username + password below.`,
+          });
+        } else {
+          setMsg({
+            kind: "err",
+            text: s.domain
+              ? `Couldn't match a known provider for ${s.domain}. Enter your SMTP settings below, or check your email provider's docs.`
+              : "No organization domain on file to detect from. Enter your SMTP settings below.",
+          });
+        }
+      } catch (e) {
+        setMsg({ kind: "err", text: e instanceof Error ? e.message : "Detection failed." });
+      }
+    });
+  };
 
   const save = () => {
     setMsg(null);
@@ -91,10 +128,56 @@ export function EmailSettingsPanel({ status }: Props) {
             }}
           >
             {status.configured
-              ? `Configured${status.source === "env" ? " (env vars)" : ""}`
+              ? `Configured${status.source === "env" ? " (env vars)" : status.source === "relay" ? " (bundled relay)" : ""}`
               : "Not configured"}
           </span>
         </div>
+
+        {status.source === "relay" && (
+          <p className="text-xs text-[var(--dpf-muted)] mb-3">
+            Outbound email is currently sent through the platform-bundled relay. Configure your own
+            SMTP below to send from your own domain (recommended for deliverability).
+          </p>
+        )}
+
+        {/* AI-assisted setup: detect the operator's own provider from their domain. */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <button
+            onClick={detect}
+            disabled={detecting}
+            className="px-3 py-1.5 text-xs font-semibold border border-[var(--dpf-border)] text-[var(--dpf-text)] rounded disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed hover:border-[var(--dpf-accent)]"
+          >
+            {detecting ? "Detecting…" : "Detect my email provider"}
+          </button>
+          <span className="text-[11px] text-[var(--dpf-muted)]">
+            Fills in the server settings for your domain&mdash;you just add your password.
+          </span>
+        </div>
+
+        {hint?.found && hint.preset && (
+          <div className="mb-4 p-3 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
+            <p className="text-xs font-semibold text-[var(--dpf-text)] mb-1">
+              {hint.preset.label}
+            </p>
+            <p className="text-[11px] text-[var(--dpf-muted)]">{hint.preset.credentialHint}</p>
+            {hint.preset.sharedRelay && (
+              <p className="text-[11px] text-[var(--dpf-muted)] mt-1">
+                This is a transactional email service&mdash;verify your sending domain (SPF/DKIM)
+                in its dashboard so messages reach the inbox.
+              </p>
+            )}
+            {hint.preset.docsUrl && (
+              <a
+                href={hint.preset.docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-[var(--dpf-accent)] underline mt-1 inline-block"
+              >
+                How to get the credential →
+              </a>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">

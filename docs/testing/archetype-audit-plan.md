@@ -703,6 +703,10 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
   - *non-professional-services archetypes:* with signature off, the existing pay flow is unchanged (no pad; Pay Now shown directly).
   - **DEFECT** if the default is wrong for the archetype, the pad does not gate Pay Now, signing does not persist, or admin shows no signature status.
 
+- [ ] **G-REG-4** `[C]` *(near-zero-config email setup — PBI-INV-04 / [#1888](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/1888))* The bundled-relay tier + AI-assisted own-provider setup. Evaluate once, in Run 0. Two parts:
+  - **G-REG-4a (provider auto-detect):** On a fresh install, go to **Admin → Settings → Email** and click **"Detect my email provider"**. *Expect:* the **Host/Port/TLS fields pre-fill** for the org's actual provider (detected from the org email/website domain via consumer-domain match or MX lookup), plus a credential hint telling the operator the one secret to paste (e.g. "Google Workspace → app password"). Add the password, **Send test** → the test email is delivered. **DEFECT** if detection silently does nothing for a known provider domain, or pre-fills the wrong transport. *(If the org domain has no recognized provider, record N/A — manual entry is the fallback.)*
+  - **G-REG-4b (bundled relay delivery):** On an install with the bundled relay configured at the infra layer (`DPF_EMAIL_RELAY_HOST`/`_FROM`/`_USER`/`_PASS`) and **no** operator SMTP, the Email panel status shows **"Configured (bundled relay)"** and **Send Invoice delivers** — with the message **From** = the relay's authenticated address and **Reply-To** = the business's own address (From-rewrite for SPF/DKIM alignment). **DEFECT** if a configured relay still 422s, or if the customer's reply would go to the relay instead of the business. *(With no relay configured — the default — G-REG-2's 422 is the correct behavior; record N/A here.)*
+
 ---
 
 ### Phase H — Responsive & Resilience Smoke (once per category — run on the first archetype in each group)
