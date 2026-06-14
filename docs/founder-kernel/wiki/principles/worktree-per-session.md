@@ -5,7 +5,7 @@ status: published
 abstract: Concurrent sessions need separate worktrees for source-control isolation — index, branch, staged files. Functional verification of runtime-bound behavior still happens against the canonical install; a worktree is not a runtime clone.
 principleTier: core
 principleDirection: Each concurrent agent or human session operates in its own git worktree on its own branch.
-principleDimensionVector: {"blast_radius": 0.7, "evidence_density": 0.4, "governance_compliance": 0.4}
+principleDimensionVector: {"blast_radius": -0.7, "evidence_density": 0.4, "governance_compliance": 0.4}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -39,7 +39,7 @@ When starting a new concurrent session, create a worktree: `git worktree add ../
 
 ## Decision Dimensions
 
-- `blast_radius: 0.7` — isolation contains failures to one session's worktree; shared trees propagate corruption silently.
+- `blast_radius: -0.7` — isolation contains failures to one session's worktree; shared trees propagate corruption silently.
 - `evidence_density: 0.4` — each worktree's git history is a clean evidence chain; cross-session mixing destroys that chain.
 - `governance_compliance: 0.4` — PR review and DCO sign-off both rely on a clean per-session history.
 

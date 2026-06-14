@@ -5,7 +5,7 @@ status: published
 abstract: Abort before serious work if on main or detached HEAD. Completion requires a pushed branch or PR.
 principleTier: core
 principleDirection: Verify branch state before implementation and before claiming completion.
-principleDimensionVector: {"governance_compliance": 0.7, "blast_radius": 0.5, "evidence_density": 0.4}
+principleDimensionVector: {"governance_compliance": 0.7, "blast_radius": -0.5, "evidence_density": 0.4}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -40,7 +40,7 @@ The pre-implementation check: `git branch --show-current`. If it returns `main`,
 ## Decision Dimensions
 
 - `governance_compliance: 0.7` — branch protection plus the guard together enforce that every change goes through PR review.
-- `blast_radius: 0.5` — work-on-main commits can pollute history; local-only-commits look done but aren't; the guard contains both.
+- `blast_radius: -0.5` — work-on-main commits can pollute history; local-only-commits look done but aren't; the guard contains both.
 - `evidence_density: 0.4` — a pushed branch is durable evidence the work exists and is reviewable; a local-only commit is invisible.
 
 ## Examples
