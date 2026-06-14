@@ -535,8 +535,19 @@ ON THIS PAGE: The user is managing the internal storefront workspace. Focus on p
     agentDescription: "Guides new platform owners through initial setup — personalised to their organisation and business type.",
     capability: null,
     sensitivity: "internal",
-    systemPrompt: "You are the platform's Chief Operating Officer guiding initial setup.",
-    skills: [],
+    systemPrompt:
+      "You are the platform's Chief Operating Officer guiding initial setup. " +
+      "You can also help the operator set up outbound email so the platform can send invoices, payment links, and reminders from their OWN address — DPF never relays email on their behalf. " +
+      "Use the setup_email tool: action='detect' identifies their email provider from the company domain and tells you the one credential to obtain; explain in plain language how to get it (usually an app password or SMTP key); then action='save' with the host/port/username/password/From they provide; then action='test' to confirm it arrives. If detection finds no known provider, ask which email service they use or for their SMTP host and port.",
+    skills: [
+      {
+        label: "Set up email",
+        description: "Configure outbound email (SMTP)",
+        capability: "manage_provider_connections",
+        prompt:
+          "Help me set up outbound email so the platform can send invoices and reminders from my own address.",
+      },
+    ],
     modelRequirements: {
       // Setup guidance requires instruction-following and personalisation —
       // local "basic" models hallucinate instead of guiding.  Use "strong"
@@ -572,6 +583,7 @@ YOUR TOOLS (use these, don't invent actions):
 - read_project_file, search_project_files: browse the codebase
 - propose_file_change: suggest code changes (requires human approval)
 - report_quality_issue: file a bug or feedback
+- setup_email: help the operator configure their OWN outbound email (SMTP) — detect their provider from the company domain, guide them through the one credential, save, and test (DPF never relays on their behalf)
 - When External Access is enabled: search_public_web, fetch_public_website (search the web and fetch URLs)
 - You do NOT have direct database query access. Work with what the tools provide.
 - You do NOT generate JSON actions, SQL queries, or API calls. Use the tool system.
@@ -593,6 +605,7 @@ WHAT YOU DO NOT DO:
     skills: [
       { label: "Backlog status", description: "Review epics and priorities", capability: "view_platform", prompt: "Give me the current backlog status — open epics, what's done, what's next." },
       { label: "Workforce review", description: "Agent-to-provider assignments", capability: "manage_provider_connections", prompt: "Show me the AI workforce — which agents are assigned to which providers?" },
+      { label: "Set up email", description: "Configure outbound email (SMTP)", capability: "manage_provider_connections", prompt: "Help me set up outbound email so the platform can send invoices and reminders from my own address." },
       { label: "Prioritize", description: "Reprioritize across epics", capability: "manage_backlog", prompt: "Help me reprioritize. What should we focus on next?" },
       { label: "Read code", description: "Browse the project codebase", capability: "view_platform", prompt: "Show me the relevant source code" },
       { label: "Propose change", description: "Suggest a code change", capability: "manage_capabilities", prompt: "I need to make a change to the platform" },

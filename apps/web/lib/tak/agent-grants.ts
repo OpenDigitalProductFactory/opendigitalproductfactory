@@ -426,6 +426,12 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   generate_custom_archetype:    ["marketing_write"],
   assess_archetype_refinement:  ["marketing_read"],
 
+  // Email setup (PBI-INV-04 Phase 2). Operator-only at the user-capability
+  // layer (the tool carries requiredCapability: "manage_provider_connections");
+  // this agent grant gates whether the coworker may surface + call it. Held by
+  // the onboarding-coo (setup wizard) and the workspace COO.
+  setup_email: ["email_config"],
+
   // Admin
   admin_view_logs:        ["admin_read"],
   admin_query_db:         ["admin_read"],
