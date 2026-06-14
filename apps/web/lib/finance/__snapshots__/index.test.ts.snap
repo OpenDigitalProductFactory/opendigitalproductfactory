@@ -66,6 +66,7 @@ exports[`finance barrel export > exports all public symbols 1`] = `
   "resolveFinancePeriod",
   "seedAiProviderFinanceBridge",
   "seedAiProviderFinanceBridgeSchema",
+  "signInvoiceSchema",
   "updateBillSchema",
   "updateExpenseClaimSchema",
   "updateInvoiceSchema",
