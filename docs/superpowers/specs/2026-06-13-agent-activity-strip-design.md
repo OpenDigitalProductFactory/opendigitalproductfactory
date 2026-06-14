@@ -164,7 +164,25 @@ Data: `FeatureBuildRow.taskResults` (done/failed, deduped by title — last resu
 | Verification | `verificationOut` (typecheck + tests) | pass · fail · pending |
 | Acceptance | `acceptanceMet[]` (omitted if none) | pass · partial |
 
-Checklist + Verification are the always-on spine (render even when pending); the other four are omitted entirely when their backing artifact is absent, so **no chip ever shows without evidence**. State is conveyed by colour **and** glyph **and** text (WCAG 1.4.1); each chip carries an `aria-label` of `"<lens>: <state> — <detail>"`. The section header shows an `N/M cleared · K blocking` roll-up. DPF token-only, zero new server plumbing.
+Checklist + Verification are the always-on spine (render even when pending); the other four are omitted entirely when their backing artifact is absent, so **no chip ever shows without evidence**. State is conveyed by colour **and** glyph **and** text (WCAG 1.4.1); each chip carries an `aria-label` of `"<lens>: <state> — <detail>"`. The section header shows an `N/M cleared · K blocking` roll-up. DPF token-only.
+
+#### §6.2a Graduation: per-reviewer verdicts — **Implemented** (server-side persistence)
+
+The "heavier alternative" flagged above shipped: individual reviewer verdicts are now **persisted**, so the merged Checklist chip graduates into **one chip per named reviewer**. Substrate verification ([build-reviewers.ts](../../../apps/web/lib/integrate/build-reviewers.ts), [mcp-tools.ts](../../../apps/web/lib/mcp-tools.ts) review tools) established the **complete, real roster** — there is no security/governance/accessibility reviewer as a distinct agent:
+
+| Reviewer (`source`) | Label | Role | Gates? |
+|---|---|---|---|
+| `reviewer-1` | Primary review | reviewer | yes (via merge) |
+| `reviewer-2` | Independent review (focus: security, edge cases, a11y / task completeness) | reviewer | yes (via merge) |
+| `architect` | Architecture | architect | no — advisory |
+
+Mechanism (no migration — JSON column, like `architectureAdvisory`):
+
+1. `collectReviewerVerdicts(r1, r2, archReview)` captures each reviewer's `{ source, label, role, decision, issueCounts, parseError? }` **before** `mergeReviews()` collapses them — the same `r1`/`r2`/`archReview` the deliberation trail already consumes, so verdicts and the deliberation branches name reviewers identically.
+2. The MCP `reviewDesignDoc` / `reviewBuildPlan` tools nest the array on `ReviewResult.reviewers` at the existing persist sites.
+3. `deriveReviewLenses` expands `reviewers[]` into per-reviewer chips when present (architect → always `advisory`; a `parseError` verdict → `pending`/"unavailable", never a false pass), and **falls back** to the merged Checklist + Architecture lenses for rows reviewed before this shipped.
+
+Verification of the full path (review runs → `reviewers[]` persisted → named chips render) is deferred to a live Build Studio install per the operator's standing constraint; unit coverage (`collectReviewerVerdicts`, graduation, fallback) is in place.
 
 ### §7. Animation
 

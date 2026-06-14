@@ -8,6 +8,11 @@ vi.mock("nodemailer", () => ({
   },
 }));
 
+// No in-portal SMTP config in these tests → resolveSmtpConfig falls back to env vars.
+vi.mock("@dpf/db", () => ({
+  prisma: { platformConfig: { findMany: vi.fn(() => Promise.resolve([])) } },
+}));
+
 import { sendEmail, composeInvoiceEmail, isEmailConfigured } from "./email";
 
 describe("composeInvoiceEmail", () => {
@@ -57,25 +62,25 @@ describe("composeInvoiceEmail", () => {
 });
 
 describe("isEmailConfigured", () => {
-  it("returns true when SMTP_HOST is set", () => {
+  it("returns true when SMTP_HOST is set (env fallback)", async () => {
     const saved = process.env.SMTP_HOST;
     process.env.SMTP_HOST = "smtp.test.example";
-    expect(isEmailConfigured()).toBe(true);
+    expect(await isEmailConfigured()).toBe(true);
     if (saved === undefined) delete process.env.SMTP_HOST;
     else process.env.SMTP_HOST = saved;
   });
 
-  it("returns false when SMTP_HOST is unset (cold-start fresh install)", () => {
+  it("returns false when SMTP_HOST is unset (cold-start fresh install)", async () => {
     const saved = process.env.SMTP_HOST;
     delete process.env.SMTP_HOST;
-    expect(isEmailConfigured()).toBe(false);
+    expect(await isEmailConfigured()).toBe(false);
     if (saved !== undefined) process.env.SMTP_HOST = saved;
   });
 
-  it("returns false when SMTP_HOST is empty", () => {
+  it("returns false when SMTP_HOST is empty", async () => {
     const saved = process.env.SMTP_HOST;
     process.env.SMTP_HOST = "";
-    expect(isEmailConfigured()).toBe(false);
+    expect(await isEmailConfigured()).toBe(false);
     if (saved === undefined) delete process.env.SMTP_HOST;
     else process.env.SMTP_HOST = saved;
   });

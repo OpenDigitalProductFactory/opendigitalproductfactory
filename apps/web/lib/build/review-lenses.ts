@@ -12,7 +12,7 @@
 //
 // No DB imports, no side effects — fully unit-testable in the node environment.
 
-import type { FeatureBuildRow, ReviewResult } from "@/lib/feature-build-types";
+import type { FeatureBuildRow, ReviewResult, ReviewerVerdict } from "@/lib/feature-build-types";
 
 export type ReviewLensState = "pass" | "fail" | "advisory" | "partial" | "pending";
 
@@ -36,6 +36,45 @@ function summarizeIssues(issues: ReviewResult["issues"]): string {
   if (counts.important) parts.push(`${counts.important} important`);
   if (counts.minor) parts.push(`${counts.minor} minor`);
   return parts.join(" · ");
+}
+
+/** Compact severity summary from pre-counted verdict tallies. */
+function summarizeCounts(counts: ReviewerVerdict["issueCounts"]): string {
+  const parts: string[] = [];
+  if (counts.critical) parts.push(`${counts.critical} critical`);
+  if (counts.important) parts.push(`${counts.important} important`);
+  if (counts.minor) parts.push(`${counts.minor} minor`);
+  return parts.join(" · ");
+}
+
+/** Graduation path: when per-reviewer verdicts were persisted (newer rows),
+ *  expand the single merged checklist chip into one chip per named reviewer
+ *  (Primary / Independent / Architecture). Returns null when no verdicts are
+ *  present, so the caller falls back to the merged checklist + architecture
+ *  lenses for older rows. */
+function reviewerLenses(review: ReviewResult | null): ReviewLens[] | null {
+  const reviewers = review?.reviewers;
+  if (!reviewers || reviewers.length === 0) return null;
+  return reviewers.map((v): ReviewLens => {
+    const key = `reviewer:${v.source}`;
+    if (v.parseError) {
+      return { key, label: v.label, state: "pending", detail: "review unavailable" };
+    }
+    if (v.role === "architect") {
+      const notes = v.issueCounts.critical + v.issueCounts.important + v.issueCounts.minor;
+      return {
+        key,
+        label: v.label,
+        state: "advisory",
+        detail: notes === 0 ? "aligned" : `${notes} note${notes === 1 ? "" : "s"}`,
+      };
+    }
+    const summary = summarizeCounts(v.issueCounts);
+    if (v.decision === "fail") {
+      return { key, label: v.label, state: "fail", detail: summary || "blocking issues" };
+    }
+    return { key, label: v.label, state: "pass", detail: summary ? `cleared · ${summary}` : "cleared" };
+  });
 }
 
 /** Append a "round N" / oscillating suffix when the review iterated. */
@@ -162,13 +201,19 @@ function acceptanceLens(acceptanceMet: FeatureBuildRow["acceptanceMet"]): Review
  */
 export function deriveReviewLenses(build: FeatureBuildRow): ReviewLens[] {
   const checklistReview = build.planReview ?? build.designReview ?? null;
-  const lenses: Array<ReviewLens | null> = [
-    checklistLens(checklistReview),
-    architectureLens(checklistReview),
+  // Graduation: when per-reviewer verdicts are persisted, expand the merged
+  // checklist + architecture chips into one chip per named reviewer. Older rows
+  // (no reviewers[]) fall back to the merged checklist + architecture lenses.
+  const head: Array<ReviewLens | null> =
+    reviewerLenses(checklistReview) ?? [
+      checklistLens(checklistReview),
+      architectureLens(checklistReview),
+    ];
+  const tail: Array<ReviewLens | null> = [
     codeReviewLens(build.taskResults),
     uxLens(build.uxTestResults),
     verificationLens(build.verificationOut),
     acceptanceLens(build.acceptanceMet),
   ];
-  return lenses.filter((lens): lens is ReviewLens => lens !== null);
+  return [...head, ...tail].filter((lens): lens is ReviewLens => lens !== null);
 }

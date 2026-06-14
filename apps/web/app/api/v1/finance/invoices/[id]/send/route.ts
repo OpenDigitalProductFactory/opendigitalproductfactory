@@ -20,10 +20,10 @@ export async function POST(
     // of marking the invoice sent and silently dropping the email (the cold-start
     // fresh-install failure from the Runs 6 & 7 audit). Checked before any state
     // mutation so a failed send never leaves the invoice falsely marked "sent".
-    if (!isEmailConfigured()) {
+    if (!(await isEmailConfigured())) {
       throw apiError(
         "EMAIL_NOT_CONFIGURED",
-        "Email delivery is not configured, so this invoice can't be emailed. Set the SMTP environment variables (SMTP_HOST, and SMTP_USER/SMTP_PASS if your server requires auth), then try again.",
+        "Email delivery is not configured, so this invoice can't be emailed. Set it up in Admin → Settings → Email (or via SMTP environment variables), then try again.",
         422,
       );
     }

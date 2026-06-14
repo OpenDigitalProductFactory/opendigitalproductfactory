@@ -4,6 +4,7 @@
 
 import type {
   ReviewResult,
+  ReviewerVerdict,
   ArchitectureAdvisory,
   BuildDesignDoc,
   BuildPlanDoc,
@@ -209,6 +210,12 @@ export const ARCHITECTURE_REVIEW_REFERENCES: ReadonlyArray<{
     path: "docs/superpowers/specs/2026-05-09-deployment-contracts.md",
     covers: "the canonical deployment contracts every substrate must wrap",
   },
+  {
+    label: "Archetype value streams",
+    path: "docs/architecture/archetype-business-value-streams.md",
+    covers:
+      "per-archetype operational value streams + load-bearing stages — the whole outcome each archetype design must serve; stage names stay stable across portal rebuilds, so this is the rebuild-surviving measure of whole-vs-local for storefront/archetype work",
+  },
 ];
 
 function formatArchitectureReferences(): string {
@@ -264,6 +271,7 @@ export function buildArchitectureReviewPrompt(
   const focus =
     input.kind === "design"
       ? `- Does this serve the end-to-end outcome / value stream it belongs to, rather than locally optimizing one step at the whole's expense? The design should name the broader objective it advances (Optimize for the Whole).
+- If the change touches an archetype/storefront surface, does it serve that archetype's LOAD-BEARING value-stream stage(s) (per docs/architecture/archetype-business-value-streams.md), not just a generic step? Strengthening a non-load-bearing stage while weakening the load-bearing one fails the whole — and those stage names stay stable across portal rebuilds, so they are the durable measure.
 - Does the data model EXTEND canonical models (Organization for identity, Principal/PrincipalAlias for identity-bearing entities) rather than create parallel tables?
 - Does the proposed approach respect single-source-of-truth (no rule/fact/decision duplicated)?
 - Does it choose the architecturally sound shape over a shortcut that creates debt?
@@ -311,6 +319,58 @@ export function architectureAdvisoryFromReview(
 ): ArchitectureAdvisory | null {
   if (!arch || arch.parseError) return null;
   return { summary: arch.summary, issues: arch.issues };
+}
+
+// ─── Per-reviewer verdicts ───────────────────────────────────────────────────
+
+/** The three reviewers a dual-review run produces, in deliberation-branch order.
+ *  Source ids match the branchNodeIds emitted to runBuildReviewDeliberation, so
+ *  the persisted verdicts and the deliberation trail name reviewers identically.
+ *  This is the COMPLETE roster — there is no security/accessibility/governance
+ *  reviewer as a distinct agent; those are focus areas inside reviewer-2. */
+const REVIEWER_VERDICT_META = [
+  { source: "reviewer-1", label: "Primary review", role: "reviewer" },
+  { source: "reviewer-2", label: "Independent review", role: "reviewer" },
+  { source: "architect", label: "Architecture", role: "architect" },
+] as const;
+
+function countIssuesBySeverity(
+  issues: ReviewResult["issues"],
+): ReviewerVerdict["issueCounts"] {
+  const counts = { critical: 0, important: 0, minor: 0 };
+  for (const issue of issues) counts[issue.severity]++;
+  return counts;
+}
+
+/**
+ * Capture the individual reviewer verdicts BEFORE mergeReviews() collapses them,
+ * so they can be nested on the persisted ReviewResult.reviewers for the UI.
+ *
+ * Inputs are the same r1 / r2 / archReview the deliberation trail consumes; a
+ * null input means that reviewer did not respond and is simply omitted (it never
+ * appears as a passing verdict). A parse-error review is preserved with its
+ * parseError flag so the UI can show "unavailable" rather than a false pass.
+ */
+export function collectReviewerVerdicts(
+  r1: ReviewResult | null,
+  r2: ReviewResult | null,
+  archReview: ReviewResult | null,
+): ReviewerVerdict[] {
+  const inputs = [r1, r2, archReview];
+  const verdicts: ReviewerVerdict[] = [];
+  REVIEWER_VERDICT_META.forEach((meta, i) => {
+    const review = inputs[i];
+    if (!review) return;
+    verdicts.push({
+      source: meta.source,
+      label: meta.label,
+      role: meta.role,
+      decision: review.decision,
+      issueCounts: countIssuesBySeverity(review.issues),
+      ...(review.parseError ? { parseError: true } : {}),
+    });
+  });
+  return verdicts;
 }
 
 // ─── Review Merging ──────────────────────────────────────────────────────────
