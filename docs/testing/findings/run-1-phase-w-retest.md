@@ -17,26 +17,26 @@
 | W-EDIT-BACKLOG | Platform table — backlog items | ✅ | — | Carried from Run-0 |
 | W-EDIT-INVOICE | Platform table — invoices | ✅ | — | Carried from Run-0 |
 | W-EDIT-RISK | Platform table — risk assessments | ✅ | — | Carried from Run-0 |
-| W-EDIT-SUPPLIER | Platform table — supplier | ⚠️ DEFECT | ⚠️ | Code gap; `customer_account`/`employee_profile`/`supplier` absent from PLATFORM_TABLES |
+| W-EDIT-SUPPLIER | Platform table — supplier | ⚠️ DEFECT | ✅ | Adapters present in rebuilt image (PR #1783); `/workbooks/system/supplier` → HTTP 200, grid renders |
 | W-VIEWS Board | Board / Kanban view | ✅ | — | Carried from Run-0 |
 | W-VIEWS Gallery | Gallery view | ❌ IMAGE STALE | ✅ | dpf-gallery-card rendered (2 cards for 2 rows) |
 | W-PROV | Provenance labels | ❌ IMAGE STALE | ✅ | "Your note" / "Calculated" labels confirmed |
 | W-FILTER | Column filter | ❌ IMAGE STALE | ✅ | "1 of 2" counter when filtering "Assessment" |
-| W-UNDO | Undo / Redo | ❌ IMAGE STALE | ⚠️ PARTIAL | Buttons visible; interactive test blocked by SSE/editor issue |
+| W-UNDO | Undo / Redo | ❌ IMAGE STALE | ✅ | Buttons visible; full round-trip confirmed: edit→commit→Undo reverts DB value; reload confirms "initial note" persists, not "changed value" |
 | W-CSV | Export CSV | ❌ IMAGE STALE | ✅ | blob: download URL generated on button click |
 | W-XLSX | Import .xlsx | ❌ IMAGE STALE | ✅ | "Import .xlsx" button + file input accept=".xlsx" present |
 | W-CONDFMT | Conditional formatting | ❌ IMAGE STALE | ✅ | Rule panel opens with column/operator selects + value input |
 | W-SUMMARY | Summary / aggregation | ❌ IMAGE STALE | ✅ | Group-by + aggregation selects + SVG chart present |
 | W-REF-1 | Reference picker — inline | ✅ | — | Carried from Run-0 |
 | W-REF-2 | Reference picker — typeahead | ✅ | — | Carried from Run-0 |
-| W-REF-4 | Reference — viewer restriction | NOT TESTED | NOT TESTED | Requires second user account |
+| W-REF-4 | Reference — viewer restriction | NOT TESTED | ✅ | HR-500 reference target list: only Epics + People; Digital products (view_portfolio) absent — no data leak possible |
 | W-FORMULA | Formula column evaluation | ❌ IMAGE STALE | ✅ | Total 300 (150×2) and 400 (80×5) confirmed |
 | W-LOOKUP | Lookup column | ❌ IMAGE STALE | ✅ | "PostgreSQL Database" appears in Product name lookup column |
 | W-CAL | Workspace calendar — Workbooks source | ❌ IMAGE STALE | ✅ | "Workbooks" filter button present; workbook event (Due=2026-06-13) appears in `/api/calendar/events` response with eventType:"workbook" |
 | W-MEDIA (Image) | Image column — upload + thumbnail | NEW | ✅ | dpf-grid-thumb renders; /api/media/ URL persists across reload |
 | W-MEDIA (Attachment) | Attachment column — upload + download chip | NEW | ✅ | dpf-grid-attachment chip renders filename+size; persists on reload; CSV exports filename |
 
-**Result: 19 ✅ confirmed · 1 ⚠️ partial · 1 NOT TESTED · 1 open DEFECT**
+**Result: 22 ✅ confirmed · 0 ⚠️ partial · 0 NOT TESTED · 0 open defects — Phase W COMPLETE**
 
 ---
 
@@ -69,12 +69,19 @@
 
 ---
 
-### ⚠️ W-UNDO (partial)
+### ✅ W-UNDO
 
 **Surface:** Workbook toolbar — Undo / Redo buttons  
-**Drove:** Confirmed "Undo" and "Redo" buttons present in DOM. Attempted dblclick via `MouseEvent('dblclick', ...)` to enter edit mode — editor opened but was empty (React grid requires native browser dblclick with coordinates). Attempted Enter key dispatch — no edit mode entered.  
-**Observed:** Buttons present and clickable; interactive edit→undo round-trip not completed due to SSE/persistent-connection blocking `executeScript`-dependent automation  
-**Verdict:** ⚠️ Partial — undo/redo wired to toolbar but interactive test not driven
+**Drove:**
+1. Typed "initial note" into Notes cell (dblclick via Chrome MCP `computer` native double_click) → committed with Enter → cell shows "initial note"
+2. Clicked Undo → cell reverted to empty; Undo disabled, Redo enabled ✅
+3. Clicked Redo → "initial note" restored; reload confirmed "initial note" persists (Redo was the last committed state) ✅
+4. Typed "changed value" into Notes cell → committed with Enter → cell shows "changed value"
+5. Clicked Undo (via `undoBtn.click()`) → cell reverted to "initial note"; Undo disabled, Redo enabled ✅
+6. Reloaded page — Notes cell shows "initial note", not "changed value" ✅
+
+**Observed:** Undo is a full server round-trip: clicking Undo after a committed cell edit writes the previous value back to the DB, not just a display revert. Redo re-applies forward. Both persist correctly across page reload.  
+**Verdict:** ✅ Undo/Redo fully operational — commits revert to DB, Redo re-applies, both survive reload
 
 ---
 
@@ -153,7 +160,6 @@
 
 ---
 
-<<<<<<< HEAD
 ### ✅ W-MEDIA — Attachment column
 
 **Surface:** Workbook toolbar → "+ Add column" → field type picker → "Attachment"  
@@ -175,38 +181,33 @@
 - CSV export: header "Docs", value "test-document.pdf" ✅
 
 **Verdict:** ✅ Attachment column: type picker wired, chip renders filename+size, persists on reload, filename in CSV export
-=======
-### ⚠️ W-MEDIA — Attachment column (BLOCKED)
-
-**Surface:** Workbook toolbar → "+ Add column" → field type picker  
-**Observed:** Column type picker lists: Text, Number, Date, Date & time, Checkbox, Single select, Reference, Lookup, Formula, URL, Email, Image — "Attachment" is absent  
-**Root cause:** PR #1836 (`feat(workbooks): attachment column type`) merged at commit `b6db7d01a`, which is 3 commits AFTER `e68d3c17` (the SHA used for this run's image rebuild). Attachment column code was not present in the built image.  
-**Action required:** Rebuild portal image from `origin/main` HEAD (post-#1836) and re-run W-MEDIA Attachment test
->>>>>>> origin/main
 
 ---
 
-## Open Defects Carried from Run-0
+## Defects Carried from Run-0 — Closed
 
-### ⚠️ W-EDIT-SUPPLIER — PLATFORM_TABLES code gap
+### ✅ W-EDIT-SUPPLIER — NOT a code gap (image-staleness artefact, closed)
 
-**Affected routes:** `/workbooks/new?entity=supplier`, `/workbooks/new?entity=customer_account`, `/workbooks/new?entity=employee_profile`  
-**Root cause:** `apps/web/lib/workbooks/platform-tables.ts` `PLATFORM_TABLES` array defines only 5 entity types: `backlog_item`, `invoice`, `risk_assessment`, `epic`, `digital_product`. Missing: `supplier`, `customer_account`, `employee_profile`  
-**Impact:** Operator-facing entity workbooks for these 3 types cannot be created  
-**BI required:** Add `supplier`, `customer_account`, `employee_profile` adapters to PLATFORM_TABLES
+**Root cause (revised):** Run-0 image was built 2 minutes before PR #1783 (`feat(workbooks): Phase 2-4`) merged. PR #1783 added `apps/web/lib/workbooks/people-supplier-configs.ts` with `CUSTOMER_ACCOUNT_TABLE`, `EMPLOYEE_PROFILE_TABLE`, and `SUPPLIER_TABLE`, all registered via `for (const cfg of PEOPLE_SUPPLIER_TABLES) registerGenericReadTable(cfg)`.  
+**Verified:** Rebuilt image (SHA `129b9342a`, post-#1783): `/workbooks/system/supplier` → HTTP 200, "Suppliers" grid renders with editable columns. `/workbooks/system/customer_account` → HTTP 200. `/workbooks/system/employee_profile` → HTTP 200.  
+**Status:** ✅ Closed — no BI required, no code change needed.
 
 ---
 
-## Required Actions Before Phase W Close
+### ✅ W-REF-4 — Reference viewer restriction
 
-<<<<<<< HEAD
-1. **Re-run W-UNDO** — with native browser interaction (not JS dispatch), drive: dblclick cell → edit value → Ctrl+Z → verify value reverts → reload confirms no stale persist
-2. **File BI** for PLATFORM_TABLES missing adapters (`supplier`, `customer_account`, `employee_profile`)
-3. **Investigate W-REF-4** (viewer-restricted reference) — requires second user account with `viewer` role
-=======
-1. **Rebuild portal image** from current `origin/main` (includes PR #1836 attachment column + PR #1838 reporting-phase plan)
-2. **Re-run W-MEDIA Attachment** — upload any file (PDF/docx) → download chip shows filename+size → reload → filter by filename → CSV contains filename
-3. **Re-run W-UNDO** — with native browser interaction (not JS dispatch), drive: dblclick cell → edit value → Ctrl+Z → verify value reverts → reload confirms no stale persist
-4. **File BI** for PLATFORM_TABLES missing adapters (`supplier`, `customer_account`, `employee_profile`)
-5. **Investigate W-REF-4** (viewer-restricted reference) — requires second user account with `viewer` role
->>>>>>> origin/main
+**Surface:** Workbook reference column type picker + reference search  
+**Setup:** Created `viewer@dpf.local` (HR-500 / Operations Manager) via Admin → Users & Roles  
+**Drove:**
+1. Signed in as HR-500 user
+2. Created blank workbook → "+ Add column" → selected type "Reference"
+3. Inspected the "reference target" dropdown
+
+**Observed:**
+- Reference target dropdown options for HR-500: `Epics` (`epic`, gated by `view_operations` ✅) and `People` (`employee_profile`, gated by `view_employee` ✅)
+- `Digital products` (`digital_product`, gated by `view_portfolio`) — **absent**; HR-500 lacks `view_portfolio`
+- `Customers`, `Suppliers`, `Backlog`, `Risk assessments` also absent (their respective view capabilities not held by HR-500)
+- HR-500 successfully created an "Epics" reference column — accessible targets work correctly
+
+**Restriction mechanism:** `listReferenceTargets(user)` filters by `can(user, target.viewCapability)` before returning targets. HR-500 cannot even create a reference column pointing to a restricted entity, let alone search it. Code-level: `searchPlatformReferences` → `requireTable` → throws `WorkbookError(403)` if called for `digital_product` by HR-500.  
+**Verdict:** ✅ Viewer restriction enforced at listing layer — restricted entity types absent from reference target picker; no data leak possible
