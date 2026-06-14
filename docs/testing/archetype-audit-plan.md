@@ -686,10 +686,11 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 > Regression guard for the three invoice gaps that Runs 6 & 7 surfaced. Run after Phase G. **G-REG-2** is a common platform mechanic `[C]` (evaluate once, in Run 0); **G-REG-1** and **G-REG-3** are archetype-conditional `[A]` — the expected value depends on the run's VAT status and archetype. Record evidence as **drove X → observed Y → signed off / DEFECT Z**, not screenshots.
 
-- [ ] **G-REG-1** `[A]` *(tax default — Gap 1)* On a fresh `/finance/invoices/new`, read the default **TAX %** on the first (empty) line item **before typing anything**, then add a second line and confirm it inherits the same default.
+- [ ] **G-REG-1** `[A]` *(tax default — Gap 1)* On a fresh `/finance/invoices/new` **and `/finance/recurring/new`** (both are customer/AR forms), read the default **TAX %** on the first (empty) line item **before typing anything**, then add a second line and confirm it inherits the same default.
   - *No-VAT org* (operator chose "No VAT" in setup → `OrganizationTaxProfile.taxModel = none`; most US installs and non-VAT archetypes): expect **0**.
   - *VAT-registered org* (`taxModel = vat` — e.g. legal-services, accounting, trades): expect the standard rate from the applied finance profile (e.g. **20** for UK professional services; **0** for VAT-exempt industries such as healthcare).
-  - **DEFECT** if a No-VAT org shows a hardcoded **20** (the original Runs 6 & 7 finding).
+  - *Accounts-payable forms* (`/finance/bills/new`, `/finance/purchase-orders/new`): expect a fixed **0** default regardless of VAT status (operator sets tax per line).
+  - **DEFECT** if any of the four forms shows a hardcoded **20** on a No-VAT org (the original Runs 6 & 7 finding; AR forms fixed in PR #1865, recurring/PO forms in the follow-up).
 
 - [ ] **G-REG-2** `[C]` *(Send Invoice with no SMTP — Gap 2)* On a saved invoice detail page with **no SMTP configured** (fresh-install default), click **Send Invoice**. *Expect:* an operator-visible inline error — "Email delivery is not configured…" (HTTP 422) — **and the invoice status stays draft/approved (NOT flipped to "sent")**. **DEFECT** if the click silently succeeds ("Sent!") with no email, or returns an opaque 500. *(If SMTP has been configured on the install, record N/A.)*
 
