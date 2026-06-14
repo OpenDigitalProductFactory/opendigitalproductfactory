@@ -13,6 +13,7 @@ function makeProfile(
     seededServiceCategories: serviceCategories,
     billingReadinessMode: "none",
     customerGraph: "none",
+    estateSeparation: "shared",
     seededConfigurationItemTypes: [],
   };
 }
