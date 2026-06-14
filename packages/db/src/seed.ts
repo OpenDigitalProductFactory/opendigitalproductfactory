@@ -11,6 +11,15 @@ import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
 import { seedEaCrossNotation } from "./seed-ea-cross-notation.js";
 import { seedEaReferenceModels } from "./seed-ea-reference-models.js";
 import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
+import { seedEaSysml2 } from "./seed-ea-sysml2.js";
+import { seedEaSysmlAiCockpit } from "./seed-ea-sysml-ai-cockpit.js";
+import { seedEaSysmlAgentAuthority } from "./seed-ea-sysml-agent-authority.js";
+import {
+  seedViewpointsForNotation,
+  ARCHIMATE_VIEWPOINTS,
+  BPMN_VIEWPOINTS,
+  SYSML_VIEWPOINTS,
+} from "./seed-ea-viewpoints.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
 import { seedWorkforceReferenceData } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
@@ -624,133 +633,13 @@ async function seedDefaultAdminUser(): Promise<void> {
 }
 
 async function seedEaViewpoints(): Promise<void> {
-  // Resolve the ArchiMate notation id (seeded in seedEaNotations)
-  const notation = await prisma.eaNotation.findUniqueOrThrow({
-    where: { slug: "archimate4" },
-    select: { id: true },
-  });
-  const nId = notation.id;
-
-  // Helper: look up element type slugs → throws if not found
-  async function resolveElementSlugs(slugs: string[]): Promise<string[]> {
-    for (const slug of slugs) {
-      await prisma.eaElementType.findUniqueOrThrow({
-        where: { notationId_slug: { notationId: nId, slug } },
-        select: { id: true },
-      });
-    }
-    return slugs;
-  }
-
-  // Helper: look up rel type slugs → throws if not found
-  async function resolveRelSlugs(slugs: string[]): Promise<string[]> {
-    for (const slug of slugs) {
-      await prisma.eaRelationshipType.findUniqueOrThrow({
-        where: { notationId_slug: { notationId: nId, slug } },
-        select: { id: true },
-      });
-    }
-    return slugs;
-  }
-
-  const viewpoints = [
-    {
-      name: "Application Architecture",
-      description: "Application components, services, data objects, and their relationships.",
-      elementSlugs: ["application_component", "application_service", "data_object", "technology_node", "technology_service", "system_software"],
-      relSlugs: ["realizes", "assigned_to", "composed_of", "associated_with"],
-    },
-    {
-      name: "Business Architecture",
-      description: "Business capabilities, roles, actors, and value streams.",
-      elementSlugs: ["business_capability", "business_role", "business_actor", "business_object", "value_stream", "value_stream_stage"],
-      relSlugs: ["realizes", "assigned_to", "influences", "composed_of", "associated_with"],
-    },
-    {
-      name: "Technology Architecture",
-      description: "Infrastructure nodes, services, and their deployment relationships.",
-      elementSlugs: ["technology_node", "technology_service", "system_software", "application_component"],
-      relSlugs: ["realizes", "assigned_to", "composed_of", "associated_with"],
-    },
-    {
-      name: "Capability Map",
-      description: "Business capability hierarchy.",
-      elementSlugs: ["business_capability"],
-      relSlugs: ["composed_of", "associated_with"],
-    },
-    {
-      // EP-DATA-ARCH: live ERD mirrored from the Prisma schema (data objects).
-      name: "Data Model",
-      description: "Logical data model mirrored from the Prisma schema as a live ERD.",
-      elementSlugs: ["data_object"],
-      relSlugs: ["associated_with"],
-    },
-  ];
-
-  for (const vp of viewpoints) {
-    const allowedElementTypeSlugs = await resolveElementSlugs(vp.elementSlugs);
-    const allowedRelTypeSlugs = await resolveRelSlugs(vp.relSlugs);
-    await prisma.viewpointDefinition.upsert({
-      where: { name: vp.name },
-      update: { description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
-      create: { name: vp.name, description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
-    });
-  }
-  console.log(`Seeded ${viewpoints.length} viewpoint definitions`);
-
-  // ── BPMN 2.0 viewpoints ───────────────────────────────────────────────
-  const bpmnNotation = await prisma.eaNotation.findUnique({
-    where: { slug: "bpmn20" },
-    select: { id: true },
-  });
-  if (bpmnNotation) {
-    const bpmnNId = bpmnNotation.id;
-    async function resolveBpmnElementSlugs(slugs: string[]): Promise<string[]> {
-      for (const slug of slugs) {
-        await prisma.eaElementType.findUniqueOrThrow({
-          where: { notationId_slug: { notationId: bpmnNId, slug } },
-          select: { id: true },
-        });
-      }
-      return slugs;
-    }
-    async function resolveBpmnRelSlugs(slugs: string[]): Promise<string[]> {
-      for (const slug of slugs) {
-        await prisma.eaRelationshipType.findUniqueOrThrow({
-          where: { notationId_slug: { notationId: bpmnNId, slug } },
-          select: { id: true },
-        });
-      }
-      return slugs;
-    }
-
-    const bpmnViewpoints = [
-      {
-        name: "Process Architecture",
-        description: "BPMN process flows with activities, gateways, events, and swimlanes. Shows who does what (AI coworker or human) and where decisions branch.",
-        elementSlugs: [
-          "bpmn_process", "bpmn_sub_process", "bpmn_service_task", "bpmn_user_task",
-          "bpmn_manual_task", "bpmn_script_task", "bpmn_business_rule_task",
-          "bpmn_exclusive_gateway", "bpmn_parallel_gateway", "bpmn_inclusive_gateway",
-          "bpmn_start_event", "bpmn_end_event", "bpmn_intermediate_throw_event", "bpmn_intermediate_catch_event",
-          "bpmn_pool", "bpmn_lane",
-          "bpmn_data_object", "bpmn_data_input", "bpmn_data_output",
-        ],
-        relSlugs: ["sequence_flow", "message_flow", "data_association", "conditional_flow", "default_flow", "association"],
-      },
-    ];
-
-    for (const vp of bpmnViewpoints) {
-      const allowedElementTypeSlugs = await resolveBpmnElementSlugs(vp.elementSlugs);
-      const allowedRelTypeSlugs = await resolveBpmnRelSlugs(vp.relSlugs);
-      await prisma.viewpointDefinition.upsert({
-        where: { name: vp.name },
-        update: { description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
-        create: { name: vp.name, description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
-      });
-    }
-    console.log("Seeded 1 BPMN viewpoint definition");
-  }
+  // Notation-aware viewpoint seeding lives in seed-ea-viewpoints.ts (2026-06-14
+  // SysML substrate spec §10 Phase 1 + §11 refactoring budget: one reusable helper
+  // instead of per-notation copy-paste). ArchiMate is required; BPMN and SysML are
+  // optional and skipped if their notation has not been seeded yet.
+  await seedViewpointsForNotation("archimate4", ARCHIMATE_VIEWPOINTS);
+  await seedViewpointsForNotation("bpmn20", BPMN_VIEWPOINTS, { optional: true });
+  await seedViewpointsForNotation("sysml2", SYSML_VIEWPOINTS, { optional: true });
 }
 
 async function seedEaViews(): Promise<void> {
@@ -2521,10 +2410,13 @@ async function main(): Promise<void> {
   await step("digitalProducts", () => seedDigitalProducts());
   await step("eaArchimate4", () => seedEaArchimate4());
   await step("eaBpmn20", () => seedEaBpmn20());
+  await step("eaSysml2", () => seedEaSysml2());
   await step("eaCrossNotation", () => seedEaCrossNotation());
   await step("eaStructureRules", () => seedEaStructureRules());
   await step("eaViewpoints", () => seedEaViewpoints());
   await step("eaViews", () => seedEaViews());
+  await step("eaSysmlAiCockpit", () => seedEaSysmlAiCockpit());
+  await step("eaSysmlAgentAuthority", () => seedEaSysmlAgentAuthority());
   await step("dpfSelfRegistration", () => seedDpfSelfRegistration());
   await step("defaultAdminUser", () => seedDefaultAdminUser());
   await step("discoveryTriageScheduledTask", () => ensureDiscoveryTriageScheduledTask(prisma));

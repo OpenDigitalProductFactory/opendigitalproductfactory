@@ -37,6 +37,26 @@ const CROSS_NOTATION_REL_TYPES: RelTypeDef[] = [
     neoType: "REALIZES_PROCESS",
     description: "ArchiMate application component realizes a BPMN automated task (e.g., application_component realizes_process bpmn_service_task)",
   },
+  // SysML v2 ↔ ArchiMate bridges (2026-06-14 SysML substrate spec §4): SysML carries
+  // the obligation semantics; ArchiMate carries the realizing structure/evidence.
+  {
+    slug: "sysml_allocates",
+    name: "SysML Allocates",
+    neoType: "SYSML_ALLOCATES",
+    description: "A SysML logical obligation is allocated to a realizing ArchiMate element (e.g., sysml part_definition allocates application_component)",
+  },
+  {
+    slug: "sysml_traces",
+    name: "SysML Traces",
+    neoType: "SYSML_TRACES",
+    description: "A SysML requirement traces to an ArchiMate motivation/capability element (e.g., sysml requirement traces business_capability)",
+  },
+  {
+    slug: "sysml_verifies",
+    name: "SysML Verifies",
+    neoType: "SYSML_VERIFIES",
+    description: "A SysML verification case is proven by an ArchiMate event/evidence record (e.g., sysml verification_case verifies event_evidence)",
+  },
 ];
 
 // ─── Cross-notation relationship rules ────────────────────────────────────────
@@ -69,6 +89,16 @@ const CROSS_RULES: CrossRuleDef[] = [
   { fromNotation: "archimate4", fromSlug: "application_component", toNotation: "bpmn20", toSlug: "bpmn_service_task",       relSlug: "realizes_process" },
   { fromNotation: "archimate4", fromSlug: "application_component", toNotation: "bpmn20", toSlug: "bpmn_script_task",        relSlug: "realizes_process" },
   { fromNotation: "archimate4", fromSlug: "application_component", toNotation: "bpmn20", toSlug: "bpmn_business_rule_task", relSlug: "realizes_process" },
+
+  // sysml_allocates: SysML logical obligation realized by an ArchiMate element
+  { fromNotation: "sysml2", fromSlug: "part_definition", toNotation: "archimate4", toSlug: "application_component", relSlug: "sysml_allocates" },
+  { fromNotation: "sysml2", fromSlug: "part_definition", toNotation: "archimate4", toSlug: "digital_product",      relSlug: "sysml_allocates" },
+  { fromNotation: "sysml2", fromSlug: "action",          toNotation: "archimate4", toSlug: "application_function", relSlug: "sysml_allocates" },
+  // sysml_traces: SysML requirement traces to ArchiMate motivation/capability
+  { fromNotation: "sysml2", fromSlug: "requirement",     toNotation: "archimate4", toSlug: "requirement",          relSlug: "sysml_traces" },
+  { fromNotation: "sysml2", fromSlug: "requirement",     toNotation: "archimate4", toSlug: "business_capability",  relSlug: "sysml_traces" },
+  // sysml_verifies: SysML verification case proven by ArchiMate event/evidence
+  { fromNotation: "sysml2", fromSlug: "verification_case", toNotation: "archimate4", toSlug: "event_evidence",     relSlug: "sysml_verifies" },
 ];
 
 // ─── Seed function ────────────────────────────────────────────────────────────

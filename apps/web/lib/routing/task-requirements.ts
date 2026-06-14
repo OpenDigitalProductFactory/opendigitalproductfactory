@@ -110,6 +110,52 @@ export const BUILT_IN_TASK_REQUIREMENTS: Record<string, TaskRequirement> = {
     preferCheap: false,
     origin: "system",
   },
+
+  // ── Inbound business-email processing (SysML AI-cockpit model, Slice E1) ────
+  // Email triage is high-volume, privacy-sensitive background utility work. Pin it
+  // to the utility tier (adequate, never frontier) and minimize_cost so it routes
+  // to cheap/local-preferred capacity — the DPF equivalent of Odysseus's dedicated
+  // "utility" email model role, made load-bearing through the task requirement
+  // rather than an ad-hoc call-site flag. residencyPolicy is intentionally left
+  // unset by default (so installs without local AI still work); an operator/org can
+  // set residencyPolicy="local_only" on the DB TaskRequirement row to harden
+  // privacy. Satisfies REQ-AIC-E1 in the AI-cockpit SysML model.
+  "email-triage": {
+    taskType: "email-triage",
+    description: "Classifying / triaging an inbound business email (intent, spam, urgency, routing).",
+    selectionRationale: "High-volume, privacy-sensitive background utility work — keep it cheap/local-preferred, never frontier.",
+    requiredCapabilities: {},
+    preferredMinScores: { instructionFollowing: 45 },
+    minimumTier: "adequate",
+    preferCheap: true,
+    budgetClassDefault: "minimize_cost",
+    reasoningDepthDefault: "low",
+    origin: "system",
+  },
+  "email-summarize": {
+    taskType: "email-summarize",
+    description: "Summarizing an inbound email or thread into a short brief.",
+    selectionRationale: "Low-risk summarization — cheap/local utility tier.",
+    requiredCapabilities: {},
+    preferredMinScores: { instructionFollowing: 50 },
+    minimumTier: "adequate",
+    preferCheap: true,
+    budgetClassDefault: "minimize_cost",
+    reasoningDepthDefault: "low",
+    origin: "system",
+  },
+  "email-extract": {
+    taskType: "email-extract",
+    description: "Extracting action items / entities (dates, asks, references) from an inbound email.",
+    selectionRationale: "Structured extraction from email — favour cheap/local; structured-output quality is preferred, not hard-required, so local models stay eligible.",
+    requiredCapabilities: {},
+    preferredMinScores: { structuredOutput: 55, instructionFollowing: 50 },
+    minimumTier: "adequate",
+    preferCheap: true,
+    budgetClassDefault: "minimize_cost",
+    reasoningDepthDefault: "medium",
+    origin: "system",
+  },
 };
 
 // ── Loader ────────────────────────────────────────────────────────────────────
