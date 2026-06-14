@@ -249,4 +249,65 @@ describe("archetype catalog", () => {
     // Custom builder includes service-operations for active subcontractor coordination.
     expect(chb?.activationProfile?.modules).toContain("service-operations");
   });
+
+  it("ships dispatch-native field-service leaves with onsite operating-model axes (Gap A)", () => {
+    // The Gap-A leaves (2026-06-13 field-dispatch archetype gap analysis) are
+    // businesses where a mobile resource travels to the customer's site / asset /
+    // person. The forthcoming horizontal Field Dispatch capability derives from
+    // form=services + delivery=physical + consumptionChannel=onsite-plus-portal,
+    // so every new dispatch leaf must carry that triple and compose under
+    // service-operations until the field-dispatch module ships.
+    const GAP_A_DISPATCH_LEAVES = [
+      "hvac-contractor", "pest-control", "appliance-repair", "pool-spa-service",
+      "pressure-washing", "roofing-gutters",
+      "home-health-care", "mobile-phlebotomy", "dme-delivery",
+      "mobile-pet-grooming", "mobile-vet",
+      "field-inspection", "land-surveying", "process-serving-notary",
+      "mobile-beauty", "meal-delivery-program", "furniture-delivery-install",
+    ];
+    for (const id of GAP_A_DISPATCH_LEAVES) {
+      const a = ALL_ARCHETYPES.find((x) => x.archetypeId === id);
+      expect(a, `${id} should exist`).toBeDefined();
+      expect(a?.activationProfile?.axes?.form, `${id} form`).toBe("services");
+      expect(a?.activationProfile?.axes?.delivery, `${id} delivery`).toBe("physical");
+      expect(a?.activationProfile?.axes?.consumptionChannel, `${id} channel`).toBe("onsite-plus-portal");
+      expect(a?.activationProfile?.modules, `${id} modules`).toContain("service-operations");
+    }
+  });
+
+  it("ships the three dispatch-native categories with correct axes (Gap B)", () => {
+    const auto = ALL_ARCHETYPES.filter((a) => a.category === "automotive-services");
+    const moving = ALL_ARCHETYPES.filter((a) => a.category === "moving-and-logistics");
+    const security = ALL_ARCHETYPES.filter((a) => a.category === "security-services");
+
+    expect(auto.map((a) => a.archetypeId).sort()).toEqual([
+      "auto-glass", "locksmith", "mobile-detailing", "mobile-mechanic", "mobile-tire", "roadside-assistance",
+    ]);
+    expect(moving.map((a) => a.archetypeId).sort()).toEqual([
+      "courier-delivery", "junk-removal", "last-mile-freight", "moving-company",
+    ]);
+    expect(security.map((a) => a.archetypeId).sort()).toEqual([
+      "alarm-cctv-install", "guard-patrol",
+    ]);
+
+    // Every leaf in the new categories derives field dispatch from its axes.
+    for (const a of [...auto, ...moving, ...security]) {
+      expect(a.activationProfile?.axes?.form, `${a.archetypeId} form`).toBe("services");
+      expect(a.activationProfile?.axes?.delivery, `${a.archetypeId} delivery`).toBe("physical");
+      expect(a.activationProfile?.axes?.consumptionChannel, `${a.archetypeId} channel`).toBe("onsite-plus-portal");
+      expect(a.activationProfile?.modules, `${a.archetypeId} modules`).toContain("service-operations");
+    }
+
+    // The windshield / auto-glass leaf is the capability spec's named example and
+    // carries the ADAS-calibration tag that anchors its compliance overlay.
+    const glass = auto.find((a) => a.archetypeId === "auto-glass");
+    expect(glass?.tags).toContain("adas");
+
+    // Capability derivation is reachable for a recurring-agreement new-category
+    // leaf: guard contracts require service agreements.
+    const guard = readActivationProfile(
+      security.find((a) => a.archetypeId === "guard-patrol")?.activationProfile,
+    );
+    expect(getCapabilityApplicability(guard, "service-agreements")).toBe("required");
+  });
 });

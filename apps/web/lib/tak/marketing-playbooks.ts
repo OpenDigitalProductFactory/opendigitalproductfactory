@@ -388,6 +388,78 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     ctaLanguage: ["Shop now", "Order today", "Browse collection", "Pre-order"],
     agentSkills: ["Product launch campaign", "Seasonal collection promotion", "Gift guide creation", "Loyalty programme ideas"],
   },
+
+  "automotive-services": {
+    primaryGoal: "Win same-day jobs and keep service vans full — fast quotes, local search visibility, and repeat/fleet relationships",
+    stakeholders: "Drivers, fleet managers, insurers, dealerships, local trade networks",
+    campaignTypes: [
+      "Fix-the-chip-before-it-cracks reminders",
+      "Seasonal service pushes (winter batteries and tires, summer A/C)",
+      "Fleet and dealership account acquisition",
+      "Insurance-claim assistance messaging (glass)",
+      "Mobile-convenience promotion (we come to you)",
+      "Review and referral drives",
+      "ADAS-calibration safety awareness",
+    ],
+    contentTone: "Reassuring and fast-response — safety first, honest pricing, no upsell pressure",
+    keyMetrics: [
+      "Same-day booking rate",
+      "Quote-to-job conversion",
+      "Fleet / account growth",
+      "Repeat and referral rate",
+      "Average response time",
+    ],
+    ctaLanguage: ["Get a quote", "Book mobile service", "Request help now", "Add your fleet"],
+    agentSkills: ["Seasonal service reminder", "Fleet outreach", "Review request", "Insurance-claim explainer"],
+  },
+
+  "moving-and-logistics": {
+    primaryGoal: "Fill the calendar in peak season and win recurring B2B routes — fast quotes and trust on careful handling",
+    stakeholders: "Households relocating, businesses, real-estate agents, property managers",
+    campaignTypes: [
+      "Peak-season pushes (summer and month-end)",
+      "Off-peak midweek discounts to smooth demand",
+      "Realtor and property-manager referral partnerships",
+      "Packing and storage add-on upsell",
+      "B2B route and account acquisition",
+      "Review and referral drives",
+      "Moving-checklist and how-to content",
+    ],
+    contentTone: "Reassuring, reliable, stress-reducing",
+    keyMetrics: [
+      "Quote-to-booking conversion",
+      "Calendar fill rate (peak vs off-peak)",
+      "B2B account growth",
+      "Average job value",
+      "Referral rate",
+    ],
+    ctaLanguage: ["Get a moving quote", "Book a pickup", "Open a business account", "Request a route"],
+    agentSkills: ["Peak-season campaign", "Realtor referral outreach", "Review request", "B2B account proposal"],
+  },
+
+  "security-services": {
+    primaryGoal: "Win and renew recurring contracts — built on credibility, a response track record, and compliance assurance",
+    stakeholders: "Businesses, property managers, event organizers, residents, insurers",
+    campaignTypes: [
+      "Contract-renewal nurture sequences",
+      "B2B proposal and RFP responses",
+      "Event-security seasonal outreach",
+      "Alarm and monitoring upsell to install customers",
+      "Compliance, licensing, and vetting trust content",
+      "Incident-response case studies",
+      "Residential security awareness",
+    ],
+    contentTone: "Credible, reassuring, professional — safety and trust, never fear-mongering",
+    keyMetrics: [
+      "Contract win rate",
+      "Renewal / retention rate",
+      "Monitoring-plan attach rate",
+      "Response-time SLA adherence",
+      "Proposal conversion",
+    ],
+    ctaLanguage: ["Request a proposal", "Get a security assessment", "Add monitoring", "Talk to us"],
+    agentSkills: ["Contract renewal nurture", "RFP / proposal draft", "Monitoring upsell campaign", "Incident-response case study"],
+  },
 };
 
 // ─── CTA-Based Fallback (for unknown categories) ───────────────────────────

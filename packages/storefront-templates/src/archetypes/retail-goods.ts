@@ -152,4 +152,57 @@ export const retailGoodsArchetypes: ArchetypeDefinition[] = [
       },
     },
   },
+  {
+    // White-glove last-mile: the operating model is a delivery + installation
+    // *service* (crew + truck to a property), not a goods sale — which is why it
+    // sets form=services and derives field dispatch. Composes as a secondary
+    // service line on a retail primary (Field Dispatch composition design §6).
+    archetypeId: "furniture-delivery-install",
+    name: "Furniture & Appliance Delivery & Install",
+    category: "retail-goods",
+    ctaType: "inquiry",
+    tags: ["delivery", "white glove", "furniture assembly", "appliance installation", "last mile", "haul away"],
+    itemTemplates: [
+      { name: "White-Glove Delivery", description: "Two-person delivery to the room of choice with packaging removed", priceType: "from", ctaType: "inquiry" },
+      { name: "Furniture Assembly", description: "On-site assembly of flat-pack and built furniture", priceType: "from", ctaType: "inquiry" },
+      { name: "Appliance Delivery & Install", description: "Deliver, connect, and test large appliances", priceType: "from", ctaType: "inquiry" },
+      { name: "TV & Wall Mounting", description: "Mount and set up televisions and shelving", priceType: "fixed", ctaType: "inquiry" },
+      { name: "Haul-Away of Old Item", description: "Remove and responsibly dispose of the item being replaced", priceType: "fixed", ctaType: "inquiry" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Delivery & Install Services", sortOrder: 1 },
+      { type: "about", title: "About Us", sortOrder: 2 },
+      { type: "testimonials", title: "Customer Reviews", sortOrder: 3 },
+      { type: "contact", title: "Request a Quote", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...CONTACT_FIELDS,
+      { name: "itemType", label: "What needs delivering or installing?", type: "select" as const, required: true, options: ["Furniture", "Large appliance", "TV / electronics", "Multiple items", "Other"] },
+      { name: "deliveryAddress", label: "Delivery address", type: "text" as const, required: true },
+      { name: "accessNotes", label: "Access notes (stairs, lift, parking)", type: "textarea" as const, required: false },
+    ],
+    activationProfile: {
+      profileType: "standard",
+      modules: ["service-operations"],
+      billingReadinessMode: "none",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "household",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "transactional",
+        provisioning: "account-with-billing",
+        platform: "no",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "primary", it4itStages: ["request-to-fulfill"] },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+    },
+  },
 ];
