@@ -6985,7 +6985,8 @@ model StorefrontArchetype {
   marketingSkillRules Json?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
-  storefronts         StorefrontConfig[]
+  storefronts          StorefrontConfig[]
+  compositionSlots     StorefrontArchetypeComposition[]
 
   @@index([category])
   @@index([isActive])
@@ -7008,20 +7009,44 @@ model StorefrontConfig {
   portfolioId         String?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
-  bookings            StorefrontBooking[]
-  archetype           StorefrontArchetype  @relation(fields: [archetypeId], references: [id])
-  organization        Organization         @relation(fields: [organizationId], references: [id])
-  donations           StorefrontDonation[]
-  inquiries           StorefrontInquiry[]
-  items               StorefrontItem[]
-  orders              StorefrontOrder[]
-  sections            StorefrontSection[]
-  providers           ServiceProvider[]
-  bookingHolds        BookingHold[]
-  marketingStrategies MarketingStrategy[]
-  rentableUnits       RentableUnit[]
-  rentalAgreements    RentalAgreement[]
-  adoptableAnimals    AdoptableAnimal[]
+  bookings               StorefrontBooking[]
+  archetype              StorefrontArchetype          @relation(fields: [archetypeId], references: [id])
+  organization           Organization                 @relation(fields: [organizationId], references: [id])
+  donations              StorefrontDonation[]
+  inquiries              StorefrontInquiry[]
+  items                  StorefrontItem[]
+  orders                 StorefrontOrder[]
+  sections               StorefrontSection[]
+  providers              ServiceProvider[]
+  bookingHolds           BookingHold[]
+  marketingStrategies    MarketingStrategy[]
+  rentableUnits          RentableUnit[]
+  rentalAgreements       RentalAgreement[]
+  adoptableAnimals       AdoptableAnimal[]
+  archetypeCompositions  StorefrontArchetypeComposition[]
+}
+
+// ── Multi-archetype composition (EP-ARCH-8D4F2A) ─────────────────────────────
+// One StorefrontConfig maps to one primary archetype + up to 2 secondaries.
+// StorefrontConfig.archetypeId remains the canonical primary FK (unchanged).
+// This join table is additive: single-archetype storefronts get one row here
+// (role=primary) written at setup completion; secondaries are added post-setup
+// via the "Add service line" admin action.
+model StorefrontArchetypeComposition {
+  id           String   @id @default(cuid())
+  storefrontId String
+  archetypeId  String
+  /// "primary" | "secondary"
+  role         String
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  storefront StorefrontConfig    @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  archetype  StorefrontArchetype @relation(fields: [archetypeId], references: [id])
+
+  @@unique([storefrontId, archetypeId])
+  @@index([storefrontId, role])
 }
 
 model MarketingStrategy {
