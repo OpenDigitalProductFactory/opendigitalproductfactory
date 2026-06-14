@@ -130,18 +130,22 @@ No other props needed — the component derives everything from `build` and the 
 
 ### §6. Follow-on Surfaces (shaped here, implemented as separate slices)
 
-#### §6.1 Fleet Density Bar
+#### §6.1 Fleet Density Bar — **Implemented** (`apps/web/components/build/FleetDensityBar.tsx`)
 
-Augment each fleet row's `PhaseMiniRail` with a mini density bar (5×5px cells) to the right:
+Augment each fleet row's `PhaseMiniRail` with a compact completion-density bar to the right:
 
 ```tsx
-// In BuildListItem.tsx, next to the existing PhaseMiniRail:
-{build.phase === "build" && build.taskResults && (
+// In BuildListItem.tsx, immediately after <PhaseMiniRail … />:
+{build.phase === "build" && (
   <FleetDensityBar taskResults={build.taskResults} buildPlan={build.buildPlan} />
 )}
 ```
 
-Data: `FeatureBuildRow.taskResults` (done count) vs `buildPlan.tasks.length` (total). No CustomEvent subscription needed — fleet rows poll on refetch cycle.
+**Divergence from the first draft ("5×5px cells"):** a literal per-task cell grid (20–50 cells) overflows the ≤32px fleet row. The implemented form is a fixed-width (44px) proportional bar that stays bounded regardless of task count while preserving the density-at-a-glance signal. Exact counts live in the tooltip + `aria-label` (`"Tasks: 12 of 47 done, 1 failed"`). The full per-task grid remains available in the main panel via `AgentActivityStrip`.
+
+**Segments:** done (`--dpf-success`) / failed (`--dpf-error`) / remaining (muted track). Fleet rows refresh on the list refetch cycle and do **not** subscribe to `build-progress-update` (subscribing every row would be wasteful), so "running" is not distinguished — it folds into "remaining". The component returns `null` unless `buildPlan.tasks.length > 0`, so the outer `phase === "build"` gate is the only call-site condition.
+
+Data: `FeatureBuildRow.taskResults` (done/failed, deduped by title — last result wins, matching `AgentActivityStrip`'s `resultByTitle` reduction) vs `buildPlan.tasks.length` (denominator, widened to `max(total, done+failed)` so segments never exceed 100%).
 
 #### §6.2 ReviewerStatusGrid
 
@@ -178,5 +182,5 @@ Applied to running cells via `style={{ animation: "dpf-cell-pulse 1.4s ease-in-o
 | 4 | `apps/web/components/build/AgentActivityStrip.test.tsx` | Unit tests: wave derivation, cell state priority, render gate |
 
 Follow-on (separate PRs):
-- `FleetDensityBar` in `BuildListItem.tsx`
+- ~~`FleetDensityBar` in `BuildListItem.tsx`~~ — **done** (§6.1): `FleetDensityBar.tsx` + `FleetDensityBar.test.tsx`, wired into the fleet row.
 - `ReviewerStatusGrid` in `WorkflowStageInspector.tsx`
