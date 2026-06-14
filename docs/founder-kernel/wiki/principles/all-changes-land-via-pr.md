@@ -5,7 +5,7 @@ status: published
 abstract: No direct pushes; every change lands via PR against main, and opening a PR means the branch is ready to merge.
 principleTier: commandment
 principleDirection: Land every change via PR review against main; never push directly; never open a PR before the branch is ready to merge.
-principleDimensionVector: {"governance_compliance": 1.0, "blast_radius": 0.6, "evidence_density": 0.5}
+principleDimensionVector: {"governance_compliance": 1.0, "blast_radius": -0.6, "evidence_density": 0.5}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -42,7 +42,7 @@ Create a topic branch named by intent: `feat/<slug>`, `fix/<slug>`, `chore/<slug
 ## Decision Dimensions
 
 - `governance_compliance: 1.0` — this principle IS the platform's primary governance gate. Maximum weight.
-- `blast_radius: 0.6` — PR review catches mistakes before they reach production; direct pushes have unbounded blast radius.
+- `blast_radius: -0.6` — PR review catches mistakes before they reach production; direct pushes have unbounded blast radius.
 - `evidence_density: 0.5` — every PR is durable evidence (description, discussion, CI run, diff) that makes the codebase auditable months later.
 
 ## Examples

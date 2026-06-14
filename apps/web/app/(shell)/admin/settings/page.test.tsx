@@ -17,6 +17,10 @@ vi.mock("@/components/admin/SocialAuthPanel", () => ({
   SocialAuthPanel: () => <div>social-auth-panel</div>,
 }));
 
+vi.mock("@/components/admin/EmailSettingsPanel", () => ({
+  EmailSettingsPanel: () => <div>email-settings-panel</div>,
+}));
+
 vi.mock("@/components/admin/PlatformKeysPanel", () => ({
   PLATFORM_KEY_CONFIGS: [
     {

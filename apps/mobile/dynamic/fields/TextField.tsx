@@ -1,9 +1,43 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, TextInput, StyleSheet } from "react-native";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { useTheme } from "@/src/lib/theme";
 import type { FieldProps } from "./index";
 
 export function TextField({ definition, value, onChange, error }: FieldProps) {
+  const { colors, spacing, borderRadius } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: { marginBottom: spacing.md },
+        label: {
+          color: colors.text,
+          fontSize: 14,
+          fontWeight: "500",
+          marginBottom: spacing.xs,
+        },
+        input: {
+          backgroundColor: colors.surface1,
+          borderWidth: 1,
+          borderColor: colors.border,
+          borderRadius: borderRadius.sm,
+          paddingVertical: spacing.sm + 4,
+          paddingHorizontal: spacing.md,
+          color: colors.text,
+          fontSize: 16,
+        },
+        multiline: { minHeight: 100, textAlignVertical: "top" },
+        inputError: { borderColor: colors.error },
+        counter: {
+          color: colors.textMuted,
+          fontSize: 12,
+          textAlign: "right",
+          marginTop: spacing.xs,
+        },
+        error: { color: colors.error, fontSize: 12, marginTop: spacing.xs },
+      }),
+    [colors, spacing, borderRadius],
+  );
+
   const isMultiline = definition.type === "textarea";
   const isNumeric = definition.type === "number";
   const textValue = value != null ? String(value) : "";
@@ -44,43 +78,3 @@ export function TextField({ definition, value, onChange, error }: FieldProps) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: spacing.xs,
-  },
-  input: {
-    backgroundColor: colors.surface1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.sm,
-    paddingVertical: spacing.sm + 4,
-    paddingHorizontal: spacing.md,
-    color: colors.text,
-    fontSize: 16,
-  },
-  multiline: {
-    minHeight: 100,
-    textAlignVertical: "top",
-  },
-  inputError: {
-    borderColor: colors.error,
-  },
-  counter: {
-    color: colors.textMuted,
-    fontSize: 12,
-    textAlign: "right",
-    marginTop: spacing.xs,
-  },
-  error: {
-    color: colors.error,
-    fontSize: 12,
-    marginTop: spacing.xs,
-  },
-});

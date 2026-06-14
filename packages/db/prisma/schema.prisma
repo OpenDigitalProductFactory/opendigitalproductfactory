@@ -7901,6 +7901,14 @@ model Invoice {
   erpSyncStatus  String?   @default("pending")
   erpRefId       String?
   payToken       String?   @unique
+  // E-signature (Phase 1): in-platform signature capture on the payment portal.
+  // signatureRequired gates the Pay Now flow; the signed* fields record the
+  // captured signature. Third-party e-sign (DocuSign/HelloSign) is a later phase.
+  signatureRequired Boolean   @default(false)
+  signedAt          DateTime?
+  signedByName      String?
+  signedByEmail     String?
+  signatureDataUrl  String?
   createdById    String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

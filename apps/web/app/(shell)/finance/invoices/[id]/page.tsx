@@ -5,6 +5,7 @@ import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InvoiceSendButton } from "@/components/finance/InvoiceSendButton";
+import { InvoiceSignatureToggle } from "@/components/finance/InvoiceSignatureToggle";
 import { LocalTime } from "@/components/ui/LocalTime";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -139,6 +140,54 @@ export default async function InvoiceDetailPage({ params }: Props) {
           </p>
         </div>
       </div>
+
+      {/* Signature status */}
+      <section className="mb-6">
+        <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
+          Signature
+        </h2>
+        <div className="rounded-lg border border-[var(--dpf-border)] p-4">
+          {invoice.signedAt ? (
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-[var(--dpf-text)]">
+                  Signed by{" "}
+                  <span className="font-semibold">
+                    {invoice.signedByName ?? invoice.signedByEmail ?? "—"}
+                  </span>
+                  {invoice.signedByEmail ? (
+                    <span className="text-[var(--dpf-muted)]"> ({invoice.signedByEmail})</span>
+                  ) : null}
+                </p>
+                <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
+                  <LocalTime value={invoice.signedAt} utc />
+                </p>
+              </div>
+              {invoice.signatureDataUrl ? (
+                // Captured signature is a data-URL PNG, so next/image can't optimise it.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={invoice.signatureDataUrl}
+                  alt="Customer signature"
+                  className="h-16 rounded border border-[var(--dpf-border)] bg-white"
+                />
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm text-[var(--dpf-muted)]">
+                {invoice.signatureRequired
+                  ? "Signature required — awaiting the customer's signature on the payment page."
+                  : "No signature required for this invoice."}
+              </p>
+              <InvoiceSignatureToggle
+                invoiceId={invoice.id}
+                signatureRequired={invoice.signatureRequired}
+              />
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Line items table */}
       <section className="mb-6">

@@ -5,7 +5,7 @@ status: published
 abstract: Different agents should think differently, not just have different tools.
 principleTier: core
 principleDirection: Define perspective, heuristics, and interpretive model for every agent role.
-principleDimensionVector: {"long_term_maintainability": 0.5, "evidence_density": 0.6, "blast_radius": 0.3}
+principleDimensionVector: {"long_term_maintainability": 0.5, "evidence_density": 0.6, "blast_radius": -0.3}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -38,7 +38,7 @@ For every new agent role, declare its perspective, heuristics, and success crite
 
 - `long_term_maintainability: 0.5` — diverse cognitive frames produce robust solutions that survive context shifts; monoculture solutions break under stress.
 - `evidence_density: 0.6` — multiple perspectives surface evidence a single perspective would miss; the combined output is information-richer per token.
-- `blast_radius: 0.3` — diversity adds review pressure; an over-optimized single perspective is more likely to ship a defect that the other perspective would have caught.
+- `blast_radius: -0.3` — diversity adds review pressure; an over-optimized single perspective is more likely to ship a defect that the other perspective would have caught.
 
 ## Examples
 

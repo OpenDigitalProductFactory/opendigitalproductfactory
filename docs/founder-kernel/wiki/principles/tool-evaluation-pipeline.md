@@ -5,7 +5,7 @@ status: published
 abstract: External MCP servers, npm packages, and APIs pass the six-agent Tool Evaluation Pipeline before adoption. Approved tools are version-pinned.
 principleTier: core
 principleDirection: Run external dependencies through the evaluation pipeline; pin the approved version; schedule re-evaluation.
-principleDimensionVector: {"governance_compliance": 0.8, "public_safety": 0.7, "blast_radius": 0.5}
+principleDimensionVector: {"governance_compliance": 0.8, "public_safety": 0.7, "blast_radius": -0.5}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -41,7 +41,7 @@ Before adding a dependency, run `/project:tool-evaluation` (slash command for th
 
 - `governance_compliance: 0.8` — the pipeline is the platform's primary dependency-governance gate.
 - `public_safety: 0.7` — vetted dependencies are safer for adopters to inherit through a fresh install.
-- `blast_radius: 0.5` — version-pinning + scheduled re-eval bounds the propagation window for a compromised upstream.
+- `blast_radius: -0.5` — version-pinning + scheduled re-eval bounds the propagation window for a compromised upstream.
 
 ## Examples
 

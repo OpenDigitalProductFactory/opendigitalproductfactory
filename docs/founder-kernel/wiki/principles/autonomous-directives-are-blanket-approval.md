@@ -6,7 +6,7 @@ status: published
 abstract: When the operator says "drive 100%", "keep going", or any equivalent autonomous directive — that IS the approval. Stop asking between steps.
 principleTier: core
 principleDirection: Treat an explicit autonomous directive as blanket approval for the named multi-step work; do not re-prompt for approval between steps inside that scope.
-principleDimensionVector: {"human_cognitive_load": 0.9, "speed_to_value": 0.7, "governance_compliance": 0.4, "evidence_density": 0.3}
+principleDimensionVector: {"human_cognitive_load": -0.9, "speed_to_value": 0.7, "governance_compliance": 0.4, "evidence_density": 0.3}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

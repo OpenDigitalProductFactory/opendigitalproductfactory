@@ -3,6 +3,7 @@ import { listAssets } from "@/lib/actions/assets";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 import Link from "next/link";
 
 const CATEGORY_COLOURS: Record<string, string> = {
@@ -23,7 +24,7 @@ const STATUS_COLOURS: Record<string, string> = {
 const ALL_STATUSES = ["active", "disposed", "written_off"];
 const ALL_CATEGORIES = ["equipment", "vehicle", "furniture", "IT", "property", "other"];
 
-type Props = { searchParams: Promise<{ status?: string; category?: string }> };
+type Props = { searchParams: Promise<{ status?: string; category?: string; view?: string }> };
 
 function DepreciationBar({ pct }: { pct: number }) {
   const colour = pct >= 80 ? "#ef4444" : pct >= 50 ? "#fbbf24" : "#4ade80";
@@ -43,7 +44,9 @@ function DepreciationBar({ pct }: { pct: number }) {
 }
 
 export default async function AssetsPage({ searchParams }: Props) {
-  const { status, category } = await searchParams;
+  const sp = await searchParams;
+  const { status, category } = sp;
+  const view = parseSurfaceView(sp.view);
 
   const [assets, orgSettings] = await Promise.all([
     listAssets({
@@ -81,6 +84,9 @@ export default async function AssetsPage({ searchParams }: Props) {
 
       <FinanceTabNav />
 
+      <PlatformGridSection entityType="fixed_asset" view={view} />
+
+      {!view && (<>
       {/* Status filter pills */}
       <div className="flex flex-wrap gap-2 mb-3">
         <Link
@@ -255,6 +261,7 @@ export default async function AssetsPage({ searchParams }: Props) {
           </table>
         </div>
       )}
+      </>)}
     </div>
   );
 }

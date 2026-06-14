@@ -25,6 +25,13 @@ vi.mock("./project-operational-value-stream", () => ({
   projectOperationalValueStreamForArchetype: mockProjectOvs,
 }));
 
+// Booking-seed is unit-tested in seed-booking-defaults.test.ts; mock it here so
+// the reset test asserts the call contract without re-exercising provider seeding.
+const { mockSeedBooking } = vi.hoisted(() => ({ mockSeedBooking: vi.fn() }));
+vi.mock("./seed-booking-defaults", () => ({
+  seedBookingScheduleDefaults: mockSeedBooking,
+}));
+
 import { resetStorefrontArchetype } from "./archetype-reset";
 
 function businessCapabilityProjectionStore() {
@@ -44,6 +51,8 @@ describe("resetStorefrontArchetype", () => {
     mockPrisma.$transaction.mockReset();
     mockProjectOvs.mockReset();
     mockProjectOvs.mockResolvedValue({ viewId: "view-ovs" });
+    mockSeedBooking.mockReset();
+    mockSeedBooking.mockResolvedValue(false);
     mockNanoid.mockReturnValue("abcd1234");
   });
 
@@ -173,6 +182,13 @@ describe("resetStorefrontArchetype", () => {
     expect(tx.storefrontItem.createMany).toHaveBeenCalled();
     expect(result.sectionsCreated).toBe(2);
     expect(result.itemsCreated).toBe(2);
+    // Reset seeds booking schedule defaults inside the transaction so a booking
+    // archetype gets a working calendar instead of an empty one (R9-RES-001).
+    expect(mockSeedBooking).toHaveBeenCalledWith(tx, {
+      storefrontId: "sf_1",
+      archetypeId: "software-platform",
+      providerName: "Bookings",
+    });
   });
 
   it("preserves manually managed contact fields and org slug", async () => {

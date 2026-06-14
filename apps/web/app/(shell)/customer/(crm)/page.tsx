@@ -6,8 +6,14 @@ import { RevenueCockpit } from "@/components/customer/RevenueCockpit";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
 import { buildRevenueCockpitSummary } from "@/lib/crm/revenue-cockpit";
 import { getAccountStatusMeta } from "@/lib/crm/presentation";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 
-export default async function CustomerPage() {
+export default async function CustomerPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ view?: string }>;
+}) {
+  const view = parseSurfaceView((await searchParams)?.view);
   const [
     accounts,
     engagementCounts,
@@ -104,6 +110,10 @@ export default async function CustomerPage() {
 
       <RevenueCockpit summary={revenueSummary} />
 
+      <PlatformGridSection entityType="customer_account" view={view} />
+
+      {!view && (
+        <>
       {/* Account list */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {accounts.map((a) => {
@@ -140,6 +150,8 @@ export default async function CustomerPage() {
 
       {accounts.length === 0 && (
         <p className="text-sm text-[var(--dpf-muted)]">No accounts registered yet.</p>
+      )}
+        </>
       )}
     </div>
   );

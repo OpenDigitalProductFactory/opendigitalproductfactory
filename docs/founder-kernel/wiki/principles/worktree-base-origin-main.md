@@ -6,7 +6,7 @@ status: published
 abstract: Always branch worktrees from `origin/main`, never from local `main` or `HEAD`. Local main drifts and sweeps unrelated commits or DCO failures into your PR.
 principleTier: core
 principleDirection: Pass `origin/main` explicitly as the base when running `git worktree add`; never branch from local main or HEAD because local drift sweeps into the PR.
-principleDimensionVector: {"governance_compliance": 0.8, "blast_radius": 0.6, "evidence_density": 0.5, "long_term_maintainability": 0.5}
+principleDimensionVector: {"governance_compliance": 0.8, "blast_radius": -0.6, "evidence_density": 0.5, "long_term_maintainability": 0.5}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
