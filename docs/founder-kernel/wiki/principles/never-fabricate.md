@@ -5,7 +5,7 @@ status: published
 abstract: Ground claims in code, specs, or DB state — never in training patterns.
 principleTier: commandment
 principleDirection: Ground every claim in queried state, code, or specs; never substitute training patterns.
-principleDimensionVector: {"evidence_density": 1.0, "governance_compliance": 0.5, "blast_radius": 0.4}
+principleDimensionVector: {"evidence_density": 1.0, "governance_compliance": 0.5, "blast_radius": -0.4}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -39,7 +39,7 @@ When uncertain, take one of three actions and never the fourth: (1) query the so
 
 - `evidence_density: 1.0` — this is THE evidence-density commandment. Maximum weight on grounding.
 - `governance_compliance: 0.5` — fabrication is a governance violation; refusing to fabricate is a governance affirmation.
-- `blast_radius: 0.4` — fabricated claims propagate further than admitting uncertainty; stopping the pattern contains downstream damage.
+- `blast_radius: -0.4` — fabricated claims propagate further than admitting uncertainty; stopping the pattern contains downstream damage.
 
 ## Examples
 

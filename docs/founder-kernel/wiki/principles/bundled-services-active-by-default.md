@@ -5,7 +5,7 @@ status: published
 abstract: Platform-bundled services seed as active. Reserve the "unconfigured" / detect-and-register flow for genuinely external add-ons.
 principleTier: core
 principleDirection: Anything the installer ships and the platform needs to function is seeded `status: active` and visible/usable immediately. Don't make the admin click Register to approve plumbing.
-principleDimensionVector: {"human_cognitive_load": 0.7, "speed_to_value": 0.6, "schema_grounding": 0.4, "long_term_maintainability": 0.3}
+principleDimensionVector: {"human_cognitive_load": -0.7, "speed_to_value": 0.6, "schema_grounding": 0.4, "long_term_maintainability": 0.3}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -44,7 +44,7 @@ In-platform coworkers managing seed data, external coding agents writing migrati
 
 ## Decision Dimensions
 
-- `human_cognitive_load: 0.7` — every Register click on bundled plumbing is friction the admin can't avoid and doesn't understand the purpose of.
+- `human_cognitive_load: -0.7` — every Register click on bundled plumbing is friction the admin can't avoid and doesn't understand the purpose of.
 - `speed_to_value: 0.6` — the install is functional the moment it boots, not after a five-click activation tour.
 - `schema_grounding: 0.4` — seeding bundled services correctly is a schema-fidelity question: the seed should describe the reality that the platform ships with them active.
 - `long_term_maintainability: 0.3` — fewer manual activation paths means fewer regression points in future installer changes.

@@ -10,7 +10,7 @@ import {
   type SeedablePage,
   type WikiPageFrontmatter,
 } from "./seed-wiki-kernel";
-import { isPrincipleDimension } from "./wiki-taxonomy";
+import { isPrincipleDimension, PRINCIPLE_COST_DIMENSIONS } from "./wiki-taxonomy";
 
 describe("seed-wiki-kernel: parseFrontmatter", () => {
   it("parses scalar fields", () => {
@@ -528,6 +528,44 @@ describe("founder-kernel principle: remove-avoidable-failure-opportunities", () 
     // Coherent consumer scoping: an agent-class archetype that must NOT pair
     // with `human` in principleAppliesTo (enforced by the seed coherence matrix).
     expect(frontmatter.principleConsumerArchetype).toBe("ai-coworker-universal");
+  });
+});
+
+describe("founder-kernel principle dimension-vector sign convention", () => {
+  // Cost axes (blast_radius, human_cognitive_load, vendor_lock_in) must carry
+  // NEGATIVE weights: a principle reduces a cost by pulling AGAINST that axis
+  // (AUTHORING.md §8A.3). Because option features are non-negative, a POSITIVE
+  // weight makes principle_decide reward the cost the principle exists to
+  // prevent (e.g. never-wipe-db with blast_radius: 1.0 once scored "wipe the
+  // db" as its top-aligned option). This guard removes that failure
+  // opportunity structurally.
+  // Audit: docs/superpowers/audits/2026-06-14-principle-dimension-sign-audit.md
+  it("never assigns a positive weight to a cost dimension", () => {
+    const principleDir = resolve(
+      process.cwd(),
+      "../../docs/founder-kernel/wiki/principles",
+    );
+    const offenders: string[] = [];
+
+    for (const fileName of readdirSync(principleDir)
+      .filter((file) => file.endsWith(".md"))
+      .sort()) {
+      const raw = readFileSync(resolve(principleDir, fileName), "utf8");
+      const { frontmatter } = parseFrontmatter<WikiPageFrontmatter>(raw);
+      const vector = frontmatter.principleDimensionVector;
+      if (!vector) continue;
+      for (const dim of PRINCIPLE_COST_DIMENSIONS) {
+        const weight = vector[dim];
+        if (typeof weight === "number" && weight > 0) {
+          offenders.push(
+            `${fileName}: ${dim} = ${weight} (cost axis must be <= 0; ` +
+              `a positive weight rewards the cost the principle opposes)`,
+          );
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
   });
 });
 

@@ -5,7 +5,7 @@ status: published
 abstract: Prefer one durable principle to an enumerated list of cases. Principles scale across the changing universe of nouns; lists lag and require maintenance.
 principleTier: core
 principleDirection: When drafting rules for AI coworkers or platform doctrine, write the principle that generalizes. Add specific examples only to prevent a known rationalization pattern — never as the rule itself.
-principleDimensionVector: {"long_term_maintainability": 0.9, "reusability": 0.8, "human_cognitive_load": 0.4, "speed_to_value": -0.2}
+principleDimensionVector: {"long_term_maintainability": 0.9, "reusability": 0.8, "human_cognitive_load": -0.4, "speed_to_value": -0.2}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -42,7 +42,7 @@ In-platform coworkers authoring prompts and rule docs, external coding agents up
 
 - `long_term_maintainability: 0.9` — the principle pays compounding dividends as the platform's surface grows; the enumerated list accumulates compounding maintenance cost.
 - `reusability: 0.8` — a principle written once applies across coworker prompts, kernel pages, and external developer docs; an enumerated list has to be re-curated for each surface.
-- `human_cognitive_load: 0.4` — principles are slightly harder to read than a checklist on first encounter, but they cover ten times the ground; net win for the reader who has to apply them to a new domain.
+- `human_cognitive_load: -0.4` — one principle replaces a sprawling enumerated checklist, so the reader carries less total rule-surface; the slight extra effort to parse a principle on first encounter is repaid the moment it covers a case the list never enumerated.
 - `speed_to_value: -0.2` — slight negative. Writing the principle takes more thought than dashing off a list of nouns. The investment is recovered the first time a new noun would have forced a list update.
 
 ## Examples
