@@ -61,7 +61,7 @@ export function SyncProvidersButton({ lastSyncAt }: Props) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
       <button onClick={handleClick} disabled={isPending} style={buttonStyle}>
-        {isPending ? "Updating…" : "Update Providers"}
+        {isPending ? "Syncing…" : "Sync Provider Registry"}
       </button>
       {result && (
         <span style={{ fontSize: 10, color: result.ok ? "var(--dpf-success)" : "var(--dpf-error)" }}>
