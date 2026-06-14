@@ -18,7 +18,7 @@
 |---|---|---|---|---|---|---|
 | PBI-INV-01 | SMTP configuration UI / onboarding prompt | important | [PR #1865](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1865) — Gap 2 follow-up | [#1875](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/1875) | — | open |
 | PBI-INV-02 | Phase 2 — third-party e-signature (DocuSign/HelloSign) for standalone documents | important | [PR #1865](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1865) — Gap 3 Phase 2 | [#1876](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/1876) | — | open |
-| PBI-INV-03 | Remove dead `InvoiceActions.tsx` (superseded by `InvoiceSendButton`) | minor | [PR #1865](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1865) cleanup | — (session task chip) | — | open |
+| PBI-INV-03 | Remove dead `InvoiceActions.tsx` (superseded by `InvoiceSendButton`) | minor | [PR #1865](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1865) cleanup | [#1871](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1871) | n/a — shipped | **done** |
 
 ## Details
 
@@ -37,5 +37,5 @@
 - **Suggested epic at filing:** new epic (professional-services e-signature).
 
 ### PBI-INV-03 — Remove dead `InvoiceActions.tsx`
-- **Severity:** minor · **Tracking:** session task chip (also recorded here for durability)
-- **Context:** `apps/web/app/(shell)/finance/invoices/[id]/InvoiceActions.tsx` is unreferenced dead code; the live send button is `apps/web/components/finance/InvoiceSendButton.tsx`. Safe deletion after confirming it is unimported.
+- **Severity:** minor · **Status: done** — shipped via [PR #1871](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1871) (merged to main).
+- **Context:** `apps/web/app/(shell)/finance/invoices/[id]/InvoiceActions.tsx` was unreferenced dead code; the live send button is `apps/web/components/finance/InvoiceSendButton.tsx`. Removed.
