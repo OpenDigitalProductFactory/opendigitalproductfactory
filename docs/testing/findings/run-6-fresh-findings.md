@@ -259,13 +259,13 @@ The hero section has no top-level action button (e.g. "Apply for Trade Account" 
 
 ## Defect Log
 
-| ID | Phase | Severity | Description |
-|----|-------|----------|-------------|
-| R6-001 | B5 | Important | No delivery address field on purchase order form — physical retail/goods cannot capture shipping address |
-| R6-002 | B5/P | Carry-over SYS-4 | £ symbol shown on all prices despite USD configured — currency symbol bleed |
-| R6-003 | P1 | Minor | Product edit modal opens with empty Name field — operator must re-type name on every edit |
-| R6-004 | G3 | Minor | Invoice tax rate defaults to 20% (UK VAT) on a USD-configured install — locale/currency mismatch in tax seed |
-| R6-005 | K1 | Important | Storefront inbox is read-only — no reply/send email/dispatch action; operator cannot send order confirmation or dispatch notification |
-| R6-006 | K3 | Important | No payment gateway setup (Stripe) visible — purchase CTA orders complete with no payment captured |
-| R6-007 | G3 | Minor | Invoice form currency field displays "USD" despite GBP org config — cosmetic; saved record is correct GBP |
-| R6-008 | B5 | Minor | Wholesale inquiry form volume dropdown shows £ thresholds despite USD config — SYS-4 extends to inquiry-form select values, not just prices |
+| ID | Phase | Severity | Description | BI |
+|----|-------|----------|-------------|-----|
+| R6-001 | B5 | Important | No delivery address field on purchase order form — physical retail/goods cannot capture shipping address | BI-46B1D0EE |
+| R6-002 | B5/P | Carry-over SYS-4 | £ symbol shown on all prices despite USD configured — currency symbol bleed | — |
+| R6-003 | P1 | Minor | Product edit modal opens with empty Name field — operator must re-type name on every edit | — |
+| R6-004 | G3 | Minor | Invoice tax rate defaults to 20% (UK VAT) on a USD-configured install — locale/currency mismatch in tax seed | BI-E12B8B01 |
+| R6-005 | K1 | Important | Storefront inbox is read-only — no reply/send email/dispatch action; operator cannot send order confirmation or dispatch notification | — |
+| R6-006 | K3 | Important | No payment gateway setup (Stripe) visible — purchase CTA orders complete with no payment captured | — |
+| R6-007 | G3 | Minor | Invoice form currency field displays "USD" despite GBP org config — cosmetic; saved record is correct GBP | — |
+| R6-008 | B5 | Minor | Wholesale inquiry form volume dropdown shows £ thresholds despite USD config — SYS-4 extends to inquiry-form select values, not just prices | — |
