@@ -1,12 +1,14 @@
 import { listControls } from "@/lib/actions/compliance";
 import { CreateControlForm } from "@/components/compliance/CreateControlForm";
 import { FilterBar, StatusBadge } from "@/components/ui/report-kit";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 import Link from "next/link";
 
-type Props = { searchParams: Promise<{ controlType?: string; implementationStatus?: string; effectiveness?: string }> };
+type Props = { searchParams: Promise<{ controlType?: string; implementationStatus?: string; effectiveness?: string; view?: string }> };
 
 export default async function ControlsPage({ searchParams }: Props) {
   const sp = await searchParams;
+  const view = parseSurfaceView(sp.view);
   const filters = {
     ...(sp.controlType && { controlType: sp.controlType }),
     ...(sp.implementationStatus && { implementationStatus: sp.implementationStatus }),
@@ -80,7 +82,9 @@ export default async function ControlsPage({ searchParams }: Props) {
         )}
       </div>
 
-      {controls.length === 0 ? (
+      <PlatformGridSection entityType="compliance_control" view={view} />
+
+      {!view && (controls.length === 0 ? (
         <p className="text-sm text-[var(--dpf-muted)]">No controls match the current filters.</p>
       ) : (
         <div className="space-y-2">
@@ -116,7 +120,7 @@ export default async function ControlsPage({ searchParams }: Props) {
             </Link>
           ))}
         </div>
-      )}
+      ))}
     </div>
   );
 }

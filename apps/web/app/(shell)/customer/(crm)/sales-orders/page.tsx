@@ -4,8 +4,10 @@ import { prisma } from "@dpf/db";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
 import { CRM_TONE_CLASSES, getSalesOrderStatusMeta } from "@/lib/crm/presentation";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 
-export default async function SalesOrdersPage() {
+export default async function SalesOrdersPage({ searchParams }: { searchParams?: Promise<{ view?: string }> }) {
+  const view = parseSurfaceView((await searchParams)?.view);
   const orders = await prisma.salesOrder.findMany({
     orderBy: { createdAt: "desc" },
     include: {
@@ -23,6 +25,9 @@ export default async function SalesOrdersPage() {
         </p>
       </div>
 
+      <PlatformGridSection entityType="sales_order" view={view} />
+
+      {!view && (<>
       <div className="space-y-2">
         {orders.map((o) => {
           const statusMeta = getSalesOrderStatusMeta(o.status);
@@ -68,6 +73,7 @@ export default async function SalesOrdersPage() {
       {orders.length === 0 && (
         <p className="text-sm text-[var(--dpf-muted)]">No sales orders yet.</p>
       )}
+      </>)}
     </div>
   );
 }

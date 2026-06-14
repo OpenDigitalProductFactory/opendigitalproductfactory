@@ -13,13 +13,16 @@ import {
 import { getStageAgeDays } from "@/lib/crm/pipeline-inspector";
 import { getPipelineInspectorView } from "@/lib/crm/pipeline-inspector-data";
 import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 
 type OpportunitiesPageProps = {
-  searchParams?: Promise<{ opportunity?: string }>;
+  searchParams?: Promise<{ opportunity?: string; view?: string }>;
 };
 
 export default async function OpportunitiesPage({ searchParams }: OpportunitiesPageProps) {
-  const requestedOpportunityId = (await searchParams)?.opportunity;
+  const sp = await searchParams;
+  const requestedOpportunityId = sp?.opportunity;
+  const view = parseSurfaceView(sp?.view);
   const opportunities = await prisma.opportunity.findMany({
     orderBy: { createdAt: "desc" },
     include: {
@@ -78,6 +81,9 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
         </div>
       </div>
 
+      <PlatformGridSection entityType="opportunity" view={view} />
+
+      {!view && (
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -198,6 +204,7 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
           )}
         </aside>
       </div>
+      )}
     </div>
   );
 }
