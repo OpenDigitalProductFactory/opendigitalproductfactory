@@ -1,13 +1,15 @@
 import { prisma } from "@dpf/db";
 import { CreateObligationForm } from "@/components/compliance/CreateObligationForm";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 import Link from "next/link";
 
 type Props = {
-  searchParams: Promise<{ regulation?: string; category?: string; status?: string }>;
+  searchParams: Promise<{ regulation?: string; category?: string; status?: string; view?: string }>;
 };
 
 export default async function ObligationsPage({ searchParams }: Props) {
   const filters = await searchParams;
+  const view = parseSurfaceView(filters.view);
 
   const [obligations, regulations, categories] = await Promise.all([
     prisma.obligation.findMany({
@@ -169,7 +171,9 @@ export default async function ObligationsPage({ searchParams }: Props) {
         )}
       </div>
 
-      {obligations.length === 0 ? (
+      <PlatformGridSection entityType="compliance_obligation" view={view} />
+
+      {!view && (obligations.length === 0 ? (
         <p className="text-sm text-[var(--dpf-muted)]">No obligations match the current filters.</p>
       ) : (
         <div className="space-y-2">
@@ -201,7 +205,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
             );
           })}
         </div>
-      )}
+      ))}
     </div>
   );
 }

@@ -1,0 +1,34 @@
+// apps/web/components/workbooks/PlatformGridSection.tsx
+//
+// The systematic surfacing block (EP-GRID-WORKBOOKS): one component that gives any
+// domain list surface the List/Grid/Board switcher + the embedded platform grid.
+// A page adds this once and wraps its existing list in `{!view && ...}` — turning
+// "the grid engine exists" into "this list is also an editable/exportable grid",
+// without re-implementing the switcher/grid wiring per page.
+//
+// Usage:
+//   const view = parseSurfaceView(sp?.view);
+//   <PlatformGridSection entityType="supplier" view={view} />
+//   {!view && (<the existing list UI/>)}
+
+import { SurfaceViewSwitcher } from "./SurfaceViewSwitcher";
+import { SurfacePlatformGrid } from "./SurfacePlatformGrid";
+
+// Re-export the pure helper so a page can import the section + parser together.
+export { parseSurfaceView } from "@/lib/workbooks/surface-view";
+
+export function PlatformGridSection({
+  entityType,
+  view,
+}: {
+  entityType: string;
+  /** the parsed view (parseSurfaceView); null = show the page's own list */
+  view: "grid" | "board" | null;
+}) {
+  return (
+    <>
+      <SurfaceViewSwitcher entityType={entityType} current={view ?? "list"} />
+      {view ? <SurfacePlatformGrid entityType={entityType} view={view} /> : null}
+    </>
+  );
+}
