@@ -15,9 +15,8 @@ import { getCompositeActivationProfile } from "@/lib/storefront/archetype-activa
 import {
   buildAppConfigManifest,
   activationToCapabilities,
-  type AppPersona,
-  type MobileAppConfigManifest,
 } from "@/lib/mobile/manifest";
+import type { AppPersona, AppConfigManifest } from "@dpf/types";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +61,7 @@ export async function GET(request: Request) {
       capabilities,
     });
 
-    return apiSuccess<MobileAppConfigManifest>(manifest);
+    return apiSuccess<AppConfigManifest>(manifest);
   } catch (e) {
     if (e instanceof ApiError) return e.toResponse();
     return NextResponse.json(
