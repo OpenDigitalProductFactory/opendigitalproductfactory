@@ -1,4 +1,5 @@
 import { useOfflineQueueStore } from "./offlineQueue";
+import type { QueueStorage } from "./queueStorage";
 
 /* ------------------------------------------------------------------ */
 /*  Mocks                                                              */
@@ -19,7 +20,7 @@ global.fetch = mockFetch;
 /* ------------------------------------------------------------------ */
 
 function resetStore() {
-  useOfflineQueueStore.setState({ queue: [] });
+  useOfflineQueueStore.setState({ queue: [], storage: null });
 }
 
 beforeEach(() => {
@@ -176,6 +177,75 @@ describe("offlineQueue", () => {
           body: undefined,
         }),
       );
+    });
+  });
+
+  describe("persistence", () => {
+    const mockStorage = { load: jest.fn(() => []), save: jest.fn() };
+
+    beforeEach(() => {
+      mockStorage.load.mockReturnValue([]);
+      mockStorage.save.mockClear();
+      useOfflineQueueStore
+        .getState()
+        .configureStorage(mockStorage as unknown as QueueStorage);
+    });
+
+    it("saves the queue on enqueue and dequeue", () => {
+      useOfflineQueueStore.getState().enqueue("/api/v1/items", "POST", { x: 1 });
+      expect(mockStorage.save).toHaveBeenCalled();
+
+      const id = useOfflineQueueStore.getState().queue[0].id;
+      mockStorage.save.mockClear();
+      useOfflineQueueStore.getState().dequeue(id);
+      expect(mockStorage.save).toHaveBeenCalledWith([]);
+    });
+
+    it("hydrate loads a persisted queue into memory", () => {
+      const saved = [
+        {
+          id: "oq_1",
+          endpoint: "/x",
+          method: "POST" as const,
+          body: "{}",
+          status: "pending" as const,
+          retries: 0,
+          createdAt: 1,
+        },
+      ];
+      mockStorage.load.mockReturnValue(saved as never);
+      useOfflineQueueStore.getState().hydrate();
+      expect(useOfflineQueueStore.getState().queue).toEqual(saved);
+    });
+
+    it("no-ops persistence when no storage is configured", () => {
+      useOfflineQueueStore.setState({ storage: null });
+      expect(() =>
+        useOfflineQueueStore.getState().enqueue("/x", "POST", {}),
+      ).not.toThrow();
+    });
+  });
+
+  describe("retryFailed", () => {
+    it("resets failed mutations to pending with retries cleared", () => {
+      useOfflineQueueStore.setState({
+        queue: [
+          {
+            id: "f1",
+            endpoint: "/x",
+            method: "POST",
+            body: "{}",
+            status: "failed",
+            retries: 3,
+            createdAt: 1,
+          },
+        ],
+      });
+      useOfflineQueueStore.getState().retryFailed();
+      expect(useOfflineQueueStore.getState().queue[0]).toMatchObject({
+        status: "pending",
+        retries: 0,
+      });
     });
   });
 });
