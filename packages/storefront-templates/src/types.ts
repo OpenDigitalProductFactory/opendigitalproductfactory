@@ -34,7 +34,23 @@ export type ArchetypeCategory =
    *  and custom builders (build-on-your-lot / BYOL). The defining value stream is
    *  design → permit → build → inspect → handover; subcontractors deliver most
    *  trade work under the builder's project management umbrella. */
-  | "real-estate-construction";
+  | "real-estate-construction"
+  /** Automotive field services: a technician travels to the customer's vehicle
+   *  (auto glass, mobile mechanic/detailing/tire, roadside/towing, locksmith).
+   *  Dispatch-native — the distinctive substrate is VIN→part resolution and the
+   *  ADAS calibration compliance overlay (a moat sibling to HVAC's EPA 608). See
+   *  docs/superpowers/research/2026-06-13-field-dispatch-archetype-gap-analysis.md §4 (B1). */
+  | "automotive-services"
+  /** Moving & last-mile logistics: a crew and truck travel to load, haul, and
+   *  deliver (moving, junk removal, courier, last-mile freight). Crew+truck
+   *  dispatch with a DOT hours-of-service overlay; distinct from
+   *  wholesale-distribution's B2B route delivery. Gap analysis §4 (B2). */
+  | "moving-and-logistics"
+  /** Physical security services: guard/patrol dispatch (post assignments, patrol
+   *  routes, incident response — a real-time dispatch variant) and alarm/CCTV
+   *  field installation with recurring monitoring. Guard (PSO) and low-voltage
+   *  licensing overlays. Gap analysis §4 (B3). */
+  | "security-services";
 
 export interface FormField {
   name: string;

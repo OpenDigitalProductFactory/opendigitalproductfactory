@@ -15,6 +15,9 @@ export const INDUSTRY_OPTIONS = [
   { value: "public-sector", label: "Public Sector & Local Government" },
   { value: "asset-rental", label: "Rental & Shared Assets" },
   { value: "real-estate-construction", label: "Home Building & Construction" },
+  { value: "automotive-services", label: "Automotive Services" },
+  { value: "moving-and-logistics", label: "Moving & Logistics" },
+  { value: "security-services", label: "Security Services" },
 ] as const;
 
 export type IndustrySlug = (typeof INDUSTRY_OPTIONS)[number]["value"];

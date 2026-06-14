@@ -154,7 +154,9 @@ These invariants keep this artefact useful to architecture, UX, testing, and bus
 
 ---
 
-## 6. Per-category value-stream profiles (all 53 archetypes)
+## 6. Per-category value-stream profiles (all 87 archetypes across 19 categories)
+
+> The field-dispatch leaves folded into existing categories on 2026-06-13 (e.g. `hvac-contractor`, `home-health-care`, `mobile-pet-grooming`) share their category's value-stream profile below and are catalogued — with their cross-category pattern — in §10.2. The three new dispatch-native categories are §6.16–6.18.
 
 Each profile gives: the **value the end customer receives** (job-to-be-done), the **commercial model** (Section 3 shape), the **load-bearing stage(s)**, the **distinctive stage** that the audit must scrutinise, and the **trust gate**. Per-archetype rows name only what diverges from the category. Service names and CTA labels are *expected from seed* — where prose and seed disagree, seed wins.
 
@@ -361,6 +363,50 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 
 ---
 
+### 6.16 Automotive Services (field-dispatch) — `auto-glass`, `mobile-mechanic`, `mobile-detailing`, `mobile-tire`, `roadside-assistance`, `locksmith`
+
+- **Value delivered:** a technician travels to the customer's **vehicle** (driveway, workplace, roadside) and restores it — glass, mechanical, cosmetic, mobility, or access. Field service on a VIN-identified asset.
+- **Commercial model:** **appointment-checkout** for scheduled mobile service (glass/mechanic/detailing/tire); **transactional**, per-incident for `roadside-assistance` and `locksmith`; primary consumer `individual`.
+- **Load-bearing stage:** **S3 Assign / S4 Deliver** — the dispatch and the on-site fix. For roadside it collapses to a real-time S2→S4: the call *is* the job.
+- **Distinctive stage:** **VIN→part resolution** at S2/S3 (glass SKU, key blank, tire size) and, for `auto-glass`, a post-install **ADAS calibration** that gates warranty — the category's moat overlay, a sibling to HVAC's EPA 608 that no FSM covers.
+- **Trust gate:** honest diagnosis / no-needless-work; ADAS calibration certified; DOT for towing operations; bonding for locksmith.
+- **Value-stream-critical assertions:** `onsite-plus-portal` axes derive field dispatch; `auto-glass` carries the `adas` tag anchoring its calibration overlay; roadside/locksmith are **emergency-reactive** (real-time), not scheduled appointments.
+
+| Archetype | Diverges by |
+|-----------|-------------|
+| `roadside-assistance` | Real-time, location-keyed (no VIN required); demand is emergency-reactive; the dispatch ETA *is* the product. |
+| `locksmith` | Spans **vehicle and property-site** serviced entities (auto + residential); bonding/licensing gate. |
+
+### 6.17 Moving & Logistics (field-dispatch) — `moving-company`, `junk-removal`, `courier-delivery`, `last-mile-freight`
+
+- **Value delivered:** a **crew and truck** travel to load, haul, and deliver goods — household possessions, junk, parcels, or freight.
+- **Commercial model:** **transactional** per-job for the household side (`moving-company`, `junk-removal`); **account-based-fees** for the B2B side (`courier-delivery`, `last-mile-freight`); consumer `household` vs `business`.
+- **Load-bearing stage:** **S4 Deliver** — the move/haul/run itself, bounded by crew-hours × route geography.
+- **Distinctive stage:** **route + load planning** at S3; the **DOT hours-of-service** overlay; chain-of-custody for medical/legal courier work.
+- **Trust gate:** careful handling; honest estimate; DOT driver hours; chain-of-custody (medical/legal courier).
+- **Value-stream-critical assertions:** `onsite-plus-portal` axes derive field dispatch; **distinct from `wholesale-distribution`** (which is B2B route delivery of a goods brand's *own* stock); the B2B leaves derive `customer-accounts`.
+
+| Archetype | Diverges by |
+|-----------|-------------|
+| `courier-delivery` / `last-mile-freight` | B2B account-based recurring routes rather than one-off household jobs; consolidated billing. |
+| `junk-removal` | Adds a disposal/manifest leg after the haul (S4→settle). |
+
+### 6.18 Security Services (field-dispatch) — `guard-patrol`, `alarm-cctv-install`
+
+- **Value delivered:** physical protection of people and property — manned/patrol coverage (`guard-patrol`) and field-installed alarm/CCTV with recurring monitoring (`alarm-cctv-install`).
+- **Commercial model:** **recurring-agreement** (guard contracts; monitoring plans); `business` consumer for guarding, `household` for residential alarm.
+- **Load-bearing stage:** for `guard-patrol`, **S4 Deliver** runs as a *real-time* post-assignment / patrol-route / incident-response loop — a dispatch variant; for `alarm-cctv-install`, S3/S4 is the install and **S6 Retain** carries the recurring-monitoring relationship.
+- **Distinctive stage:** post assignments + patrol routes + incident response (the real-time dispatch variant); the monitoring stream layered on the install.
+- **Trust gate:** licensed officers (PSO); documented incident response; low-voltage licensing (install); credible, never fear-mongering, marketing.
+- **Value-stream-critical assertions:** `onsite-plus-portal` axes derive field dispatch; `guard-patrol`'s recurring-agreement makes `service-agreements` **required**; install + monitoring compose into one relationship.
+
+| Archetype | Diverges by |
+|-----------|-------------|
+| `guard-patrol` | Real-time patrol/incident dispatch over managed B2B client sites (customer-estate). |
+| `alarm-cctv-install` | One-off field install plus a recurring monitoring retention stream; residential primary. |
+
+---
+
 ## 7. Demand–capacity dynamics at the load-bearing stage
 
 The load-bearing stage (Section 6) is not only where the main transaction interface between stakeholders sits — it is also **where demand meets finite capacity.** That is not a coincidence: a stage is load-bearing precisely because the business lives or dies on its ability to match demand against a scarce resource there. Managing that match — *neither starving demand nor paying for idle capacity* — is the operator's hardest recurring decision, and it is where a typical operator most needs the platform's help.
@@ -546,10 +592,39 @@ The new element is **S4b Return & Inspect** and the re-pool — there is no "ret
 
 **Disposition:** archetypes — **done** (`equipment-rental`, `self-storage`, `agricultural-cooperative`). The **rental/shared-asset value-stream pattern** and its **reusable-pooled-asset** capacity unit are now a recognized part of the model (this section is their canonical description). The asset-pool capacity engine is tracked as capacity-management work, not new-archetype work.
 
+### 10.2 The field-dispatch (mobile-resource-to-customer) loop (now modelled — Gap A leaves + Gap B categories, 2026-06-13)
+
+**Businesses:** any business where a **mobile resource travels to the customer's site, asset, or person** to perform the work, rather than the customer coming to a premises. This recurs across the catalog rather than living in one category:
+
+- **Folded into existing categories (Gap A leaves):** `hvac-contractor`, `pest-control`, `appliance-repair`, `pool-spa-service`, `pressure-washing`, `roofing-gutters` (trades); `home-health-care`, `mobile-phlebotomy`, `dme-delivery` (healthcare); `mobile-pet-grooming`, `mobile-vet` (pet); `field-inspection`, `land-surveying`, `process-serving-notary` (professional); `mobile-beauty` (beauty); `meal-delivery-program` (nonprofit); `furniture-delivery-install` (retail).
+- **New dispatch-native categories (Gap B):** `automotive-services` (§6.16), `moving-and-logistics` (§6.17), `security-services` (§6.18).
+
+**Why it's a recognized pattern — not just a set of leaves.** In every commercial model in Section 3 the **Deliver (S4)** stage happens at the *operator's* premises or in a booked slot there. In field dispatch S4 happens at the *customer's* location, which inserts coordination stages a premises-based stream never has — **assign (skill × proximity × availability), en-route (on-my-way + ETA), and on-site capture.** It is **derived, not flagged**: applicability is a pure function of the operating-model axes —
+
+```
+needsFieldDispatch(axes) := form="services" AND delivery∈{physical,hybrid}
+                            AND service performed at the customer's location or on the customer's asset
+```
+
+read from `consumptionChannel: onsite-plus-portal` (and `episode-of-care` provisioning for in-home care). The loop:
+
+```
+  S1 Attract → S2 Intake/Triage → S3 Schedule & Assign(skill×proximity×availability)
+            → Confirm → En-route (on-my-way + ETA) → S4 On-site (capture / compliance log)
+            → Close → S5 Settle (job → invoice → payment)
+```
+
+**The capacity dynamic (refines §7.1).** The capacity unit is **mobile labour + route capacity** — technician/crew/officer-hours × drive-time geography — already in the §7.1 taxonomy. Demand signatures vary: emergency-reactive (HVAC no-heat, roadside, lockout), seasonal (moving, pest), steady (guard coverage, monitoring).
+
+**Compliance overlays as job by-products — the moat.** Each vertical attaches a regulated artifact captured at job close: **EPA 608** (HVAC), **ADAS calibration** (auto-glass), **pesticide-applicator** logs (pest), **HIPAA/clinical** notes (home-health, phlebotomy, medical courier), **DOT** hours (moving, towing), **PSO / low-voltage** licensing (security). This is a pluggable overlay framework, not per-archetype code — and no field-service-management product in the market covers any of these.
+
+**Disposition:** archetypes — **done** (the 17 Gap-A leaves + 3 Gap-B categories above; all carry the `onsite-plus-portal` axes and compose under `service-operations` until the dispatch module ships). The **horizontal Field Dispatch capability** — the dispatch board (`map-dispatch` visual pattern), the dispatcher coworker, the skill/proximity/value-aware assignment engine, on-my-way/ETA, and the compliance-overlay framework — is built by a **parallel effort** and derives from these axes via `needsFieldDispatch()`; it is tracked as capability work, not new-archetype work. Source: the 2026-06-13 *Field Dispatch capability design* and its companion *archetype gap analysis*.
+
 ---
 
 ## 11. Changelog
 
+- **2026-06-13** — Folded the **field-dispatch archetypes** from the 2026-06-13 gap analysis into the catalog: 17 Gap-A leaves across 7 existing categories (trades, healthcare, pet, professional, beauty, nonprofit, retail) and 3 new dispatch-native categories — `automotive-services` (§6.16), `moving-and-logistics` (§6.17), `security-services` (§6.18). Added §10.2 recognizing the **field-dispatch (mobile-resource-to-customer) loop** as a value-stream pattern that spans categories and is derived from the operating-model axes (`onsite-plus-portal`). Seed count is now **87 archetypes across 19 categories**. Each leaf carries the axes that let the forthcoming horizontal Field Dispatch capability derive dispatch via `needsFieldDispatch()`; the capability itself is a parallel effort.
 - **2026-06-12** — Added **Implemented by** link to the platform implementation design (`2026-06-12-value-stream-architecture-platform-design.md`) and the WWWD consumer/§8.8 reference. Corrected §10.1: the rental / shared-asset gap was **built upstream** (asset-rental category + `equipment-rental`/`self-storage`/`agricultural-cooperative`, `rental` CTA, asset-pool capability types; seed now 56) — flipped from "not modelled" to "now modelled," retaining the pattern as canonical and narrowing the remaining work to the asset-pool capacity engine. (Sweep-main caught a worktree-stale gap claim.)
 - **2026-06-12** — Enterprise architecture / usability / business-analysis review: clarified decision authority, added reader contract, corrected the standards grounding so ArchiMate and Business Architecture Guild usage are aligned rather than conflated, added architecture/usability invariants, added BA acceptance evidence for demand-capacity capabilities, and split EA consumption into operator, evidence, and architecture/export presentation views.
 - **2026-06-11** — Initial draft. Derived from `archetype-audit-plan.md` (53 archetypes, 14 categories), the archetype seed (`packages/storefront-templates/src/archetypes/`), and the operating-model substrate (`types.ts`). Defined the universal six-stage operational value stream, the commercial-model variant table, the stage→surface→phase bridge, the substrate binding, and per-category profiles for all 53 archetypes.
