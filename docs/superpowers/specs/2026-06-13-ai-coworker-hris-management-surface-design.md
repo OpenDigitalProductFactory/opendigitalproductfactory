@@ -68,8 +68,10 @@ config is fragmented.
    matrix** the seed already computes — made legible to a human.
 4. **Refactor, not N+1** — consolidate the fragmented surfaces by deciding, per surface,
    merge / become-a-tab / stay-linked (§5). No parallel page that re-implements what exists.
-5. **Zero new substrate** — reuse the verified tables/types; the deliverable is a *view +
-   aggregator + IA*, not a migration (§4).
+5. **Minimal additive substrate** — reuse the verified tables/types; the deliverable is a
+   *view + aggregator + IA*. (Correction: implementation revealed two small additive
+   migrations were required — see §4.1 — not the originally-claimed zero. No table/relation
+   added; one nullable Json column + one CHECK-constraint realignment.)
 6. **Standards-grounded** — model the record on the NHI-governance + HRIS-worker-record
    research (§3), so the surface answers ownership, lifecycle, entitlement, competency, and
    decommission questions explicitly.
@@ -147,7 +149,24 @@ Sources: OWASP Non-Human Identities Top 10 (2025); Saviynt / Delinea / GitGuardi
 guidance; SCIM core schema; HR Open Standards worker model; SFIA competency bands (already
 the WSID competency frame).
 
-## 4. Substrate verification — reuse, zero new tables
+### 4.1 Substrate corrections (post-implementation, surfaced by CI seed)
+
+The architecture-review claim that `WikiPage` already had a `metadata` column was a misread
+(that column is on `PromptTemplate`). Two small **additive** migrations were therefore needed
+— no new table or relation:
+
+1. **`WikiPage.metadata Json?`** (`20260613120000`) — a nullable frontmatter bag (mirrors
+   `PromptTemplate.metadata`); profession-corpus pages persist the WSID variant axes here so
+   coverage is queryable at runtime. Nullable + additive, no backfill.
+2. **Widen `DecisionPerspectiveProfile_kind_check`** (`20260613130000`) — the original
+   2026-05-17 CHECK allowed only `platform|organization|customer|team`, so the later
+   `persona-*` kinds and the WSID `profession` kind **silently failed to seed** (caught as
+   SKIP) — i.e. WSID profession profiles never existed in any install. This realigns the DB
+   constraint with the canonical `DECISION_PROFILE_KINDS` registry (single-source-of-truth),
+   unblocking both this surface (profiles now resolve) and the EP-WSID epic itself. This is a
+   pre-existing EP-WSID seed bug fixed here because the HRIS surface is its first consumer.
+
+## 4. Substrate verification — reuse, no new tables/relations
 
 Verified against `packages/db/prisma/schema.prisma`, `apps/web/lib/*`, and the registries
 (2026-06-13). **Every facet already has substrate; V1 adds no table, enum, or migration.**
