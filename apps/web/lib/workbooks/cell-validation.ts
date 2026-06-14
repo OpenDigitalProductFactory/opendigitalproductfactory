@@ -217,15 +217,16 @@ export function validateCell(
           error: `Expected an array of select keys for ${column.name}`,
         };
       }
+      const keys = value as string[]; // guarded above: every element is a string
       const options = column.config?.options ?? [];
       if (options.length > 0) {
         const valid = new Set(options.map((o) => o.key));
-        const bad = value.find((v) => !valid.has(v));
+        const bad = keys.find((v) => !valid.has(v));
         if (bad !== undefined) {
           return { ok: false, error: `Unknown option "${bad}" for ${column.name}` };
         }
       }
-      storage.multiSelectValue = value;
+      storage.multiSelectValue = keys;
       return { ok: true, storage };
     }
 
@@ -254,6 +255,12 @@ export function validateCell(
     case "rollup": {
       // Computed columns are derived on read and never user-written.
       return { ok: false, error: `${column.name} is a computed column and cannot be set` };
+    }
+
+    case "link": {
+      // Links live in WorkbookCellLink, not in CellStorage — the adapter routes
+      // link columns to the join table (validateLinkValue), never through here.
+      return { ok: false, error: `${column.name} links are stored separately` };
     }
 
     default: {
@@ -308,6 +315,9 @@ export function storageToCellValue(
     case "lookup":
     case "rollup":
       // Computed on read — no stored value.
+      return null;
+    case "link":
+      // Loaded from WorkbookCellLink, not CellStorage.
       return null;
     default:
       return null;

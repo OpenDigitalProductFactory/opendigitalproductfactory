@@ -16,7 +16,13 @@ import type { GridRowData } from "./cell-editors";
 /** Render a cell value to the text a user would see, for substring matching. */
 export function cellSearchText(value: CellValue): string {
   if (value === null || value === undefined) return "";
-  if (Array.isArray(value)) return value.join(" ");
+  if (Array.isArray(value)) {
+    // link cell = array of references → search/export by their labels
+    if (value.length > 0 && typeof value[0] === "object" && value[0] !== null && "referenceId" in value[0]) {
+      return (value as ReferenceValue[]).map((r) => r.label ?? r.referenceId).join(" ");
+    }
+    return value.join(" ");
+  }
   if (typeof value === "object" && "referenceId" in value) {
     const ref = value as ReferenceValue;
     return ref.label ?? ref.referenceId;
