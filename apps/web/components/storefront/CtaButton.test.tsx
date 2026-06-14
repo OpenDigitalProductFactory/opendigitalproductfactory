@@ -89,3 +89,20 @@ describe("CtaButton price-less purchase guard (AUDIT-R3/R4)", () => {
     expect(hrefFor("inquiry", null)).toBe("/s/acme/inquire/item-1");
   });
 });
+
+describe("CtaButton custom label rendering (R9-CAT-001)", () => {
+  it("renders a stored inquiry label instead of the 'Enquire' default", () => {
+    // The defect report claimed inquiry CTAs ignore the stored label; they do
+    // not — a genuinely stored label must win over the default.
+    expect(labelFor({ ctaType: "inquiry", ctaLabel: "Get a quote" })).toBe("Get a quote");
+  });
+
+  it("falls back to 'Enquire' when an inquiry item has no stored label", () => {
+    expect(labelFor({ ctaType: "inquiry", ctaLabel: null })).toBe("Enquire");
+  });
+
+  it("leaves booking labels unaffected — stored label wins, default is 'Book Now'", () => {
+    expect(labelFor({ ctaType: "booking", ctaLabel: "Reserve a table" })).toBe("Reserve a table");
+    expect(labelFor({ ctaType: "booking", ctaLabel: null })).toBe("Book Now");
+  });
+});

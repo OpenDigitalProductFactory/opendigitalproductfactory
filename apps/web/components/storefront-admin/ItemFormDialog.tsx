@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
+import { DEFAULT_CTA_LABELS } from "@/lib/storefront/cta-labels";
 import { MediaUploader } from "./MediaUploader";
 
 export type ItemFormData = {
@@ -73,13 +74,6 @@ const PRICE_TYPES_BY_CTA: Record<string, Array<{ value: string; label: string }>
   donation: [
     { value: "donation", label: "Any amount" },
   ],
-};
-
-const CTA_LABEL_DEFAULTS: Record<string, string> = {
-  booking: "Book now",
-  purchase: "Order now",
-  inquiry: "Get a quote",
-  donation: "Donate now",
 };
 
 type Props = {
@@ -256,7 +250,7 @@ export function ItemFormDialog({
                   type="text"
                   value={form.ctaLabel}
                   onChange={(e) => set("ctaLabel", e.target.value)}
-                  placeholder={CTA_LABEL_DEFAULTS[form.ctaType] ?? ""}
+                  placeholder={DEFAULT_CTA_LABELS[form.ctaType] ?? ""}
                   className="w-full px-3 py-1.5 text-sm rounded-md bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
                 />
               </Field>
