@@ -5,6 +5,7 @@ import { useAuthStore } from "@/src/features/auth/auth.store";
 import { useDeepLink } from "@/src/hooks/useDeepLink";
 import { AgentFAB } from "@/src/components/AgentFAB";
 import { loadServerUrl } from "@/src/lib/serverConfig";
+import { loadAndApplyAppConfig } from "@/src/lib/appConfig";
 
 function useProtectedRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -31,10 +32,11 @@ export default function RootLayout() {
   const isLoading = useAuthStore((s) => s.isLoading);
 
   useEffect(() => {
-    // Hydrate the configured install URL before any network call, then auth.
+    // Hydrate install URL → authenticate → absorb the install manifest (theme + capabilities).
     void (async () => {
       await loadServerUrl();
       await initialize();
+      await loadAndApplyAppConfig();
     })();
   }, [initialize]);
 

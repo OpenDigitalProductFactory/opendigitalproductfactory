@@ -43,6 +43,11 @@ jest.mock("@/src/repositories/SecureStorage", () => ({
   },
 }));
 
+// Best-effort manifest absorb on login — stubbed so the auth unit test does no I/O.
+jest.mock("@/src/lib/appConfig", () => ({
+  loadAndApplyAppConfig: jest.fn(),
+}));
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
