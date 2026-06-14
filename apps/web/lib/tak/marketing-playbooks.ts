@@ -454,3 +454,52 @@ export function getPlaybookForCtaType(ctaType: string | null | undefined): Marke
 export function getPlaybook(category: string | null | undefined, ctaType: string | null | undefined): MarketingPlaybook {
   return CATEGORY_PLAYBOOKS[category ?? ""] ?? CTA_FALLBACKS[ctaType ?? "inquiry"] ?? CTA_FALLBACKS["inquiry"]!;
 }
+
+/**
+ * Composite playbook for multi-archetype storefronts.
+ *
+ * Primary drives identity (primaryGoal, stakeholders, contentTone,
+ * keyMetrics, ctaLanguage). Secondary categories contribute unique
+ * campaignTypes and agentSkills as supplemental context — so the AI
+ * coworker can suggest service-line-specific campaigns without losing the
+ * primary business's voice.
+ */
+export function getCompositePlaybook(
+  primaryCategory: string | null | undefined,
+  secondaryCategories: Array<string | null | undefined>,
+  primaryCtaType?: string | null,
+): MarketingPlaybook {
+  const primary = getPlaybook(primaryCategory, primaryCtaType);
+
+  if (secondaryCategories.length === 0) return primary;
+
+  const seenCampaigns = new Set(primary.campaignTypes);
+  const seenSkills = new Set(primary.agentSkills);
+
+  const addedCampaigns: string[] = [];
+  const addedSkills: string[] = [];
+
+  for (const cat of secondaryCategories) {
+    const secondary = getPlaybookForCategory(cat);
+    for (const c of secondary.campaignTypes) {
+      if (!seenCampaigns.has(c)) {
+        seenCampaigns.add(c);
+        addedCampaigns.push(c);
+      }
+    }
+    for (const s of secondary.agentSkills) {
+      if (!seenSkills.has(s)) {
+        seenSkills.add(s);
+        addedSkills.push(s);
+      }
+    }
+  }
+
+  if (addedCampaigns.length === 0 && addedSkills.length === 0) return primary;
+
+  return {
+    ...primary,
+    campaignTypes: [...primary.campaignTypes, ...addedCampaigns],
+    agentSkills: [...primary.agentSkills, ...addedSkills],
+  };
+}
