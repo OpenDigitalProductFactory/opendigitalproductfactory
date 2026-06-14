@@ -35,7 +35,7 @@ import {
 import { applyFilters, applySort, paginate } from "./grid-query";
 import { resolveReferenceLabels, referenceKey } from "./reference-resolver";
 import { computeDerivedCells } from "./formula/compute";
-import { validateLinkValue } from "./cell-links";
+import { validateLinkValue, conflictingLinks } from "./cell-links";
 import { genSemanticId } from "./ids";
 
 function asReference(value: unknown): ReferenceValue | null {
@@ -241,6 +241,18 @@ class CustomTableAdapter implements DataSourceAdapter {
       const value = meta.columnId in input ? input[meta.columnId] : null;
       if (meta.fieldType === "link") {
         const links = validateLinkValue(value, meta.config?.link);
+        // cardinality "one": reject targets already linked from any existing row.
+        if (meta.config?.link?.cardinality === "one" && links.length > 0) {
+          const refIds = links.map((l) => l.referenceId);
+          const others = await prisma.workbookCellLink.findMany({
+            where: { columnId: meta.internalId, referenceId: { in: refIds } },
+            select: { referenceId: true },
+          });
+          const clash = conflictingLinks(refIds, new Set(others.map((o) => o.referenceId)));
+          if (clash.length > 0) {
+            throw new Error(`Already linked from another row: ${clash.join(", ")}`);
+          }
+        }
         links.forEach((l, i) =>
           linkInserts.push({
             columnId: meta.internalId,
@@ -307,6 +319,19 @@ class CustomTableAdapter implements DataSourceAdapter {
         if (meta.fieldType === "link") {
           // Replace the cell's link set in WorkbookCellLink (validated, deduped).
           const links = validateLinkValue(value, meta.config?.link);
+          // cardinality "one" → a target may be linked by at most one row (1-M/1-1):
+          // reject targets already linked from a different row (checked in-transaction).
+          if (meta.config?.link?.cardinality === "one" && links.length > 0) {
+            const refIds = links.map((l) => l.referenceId);
+            const others = await tx.workbookCellLink.findMany({
+              where: { columnId: meta.internalId, rowId: { not: row.id }, referenceId: { in: refIds } },
+              select: { referenceId: true },
+            });
+            const clash = conflictingLinks(refIds, new Set(others.map((o) => o.referenceId)));
+            if (clash.length > 0) {
+              throw new Error(`Already linked from another row: ${clash.join(", ")}`);
+            }
+          }
           await tx.workbookCellLink.deleteMany({
             where: { rowId: row.id, columnId: meta.internalId },
           });
