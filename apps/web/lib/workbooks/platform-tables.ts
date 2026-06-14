@@ -197,7 +197,8 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Suppliers as an editable spreadsheet — edit safe fields inline; tax/bank details stay out.",
     viewCapability: "view_finance",
     manageCapability: "manage_finance", // validated raw-write tier (editableFields allow-list)
-    homeSurface: { path: "/finance", label: "Finance", board: true },
+    // The Suppliers list lives at /finance/suppliers, so the List/Grid tabs target it.
+    homeSurface: { path: "/finance/suppliers", label: "Suppliers", board: true },
   },
 ];
 
