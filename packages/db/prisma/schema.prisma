@@ -10503,6 +10503,7 @@ model WorkbookColumn {
   defaultValue String?
   width        Int? // pixel width for grid rendering
   cells        WorkbookCell[]
+  cellLinks    WorkbookCellLink[]
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
@@ -10518,6 +10519,7 @@ model WorkbookRow {
   createdById String?
   createdBy   User?          @relation("WorkbookRowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   cells       WorkbookCell[]
+  cellLinks   WorkbookCellLink[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -10546,6 +10548,28 @@ model WorkbookCell {
   @@index([columnId, textValue])
   @@index([columnId, numberValue])
   @@index([columnId, dateValue])
+}
+
+// A single link from a (row, column) cell to one target record — the "link-to-many"
+// substrate (EP-GRID-WORKBOOKS). Many rows per cell model 1-M / M-M; a `reference`
+// column stays single-valued on WorkbookCell. The target is a platform entity
+// (referenceType = "epic", … + referenceId) or another workbook row (referenceType
+// = a workbook table id + referenceId = WorkbookRow.rowId). First-class rows so
+// rollups can group/aggregate over links in SQL.
+model WorkbookCellLink {
+  id            String         @id @default(cuid())
+  rowId         String
+  row           WorkbookRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  columnId      String
+  column        WorkbookColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  referenceId   String // target record id (platform entity id or WorkbookRow.rowId)
+  referenceType String // target kind: "epic", "customer_account", … or a workbook table id
+  position      Int            @default(0)
+  createdAt     DateTime       @default(now())
+
+  @@unique([rowId, columnId, referenceId]) // no duplicate link within a cell
+  @@index([columnId, referenceId]) // reverse lookup + rollup groupBy
+  @@index([rowId, columnId]) // read a cell's links in one scan
 }
 
 model WorkbookView {

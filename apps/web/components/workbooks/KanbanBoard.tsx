@@ -52,6 +52,13 @@ function formatValue(col: ColumnDefinition | undefined, value: CellValue): strin
       return typeof value === "object" && value && !Array.isArray(value) && "url" in value
         ? value.name ?? value.url
         : String(value);
+    case "link":
+      return Array.isArray(value)
+        ? value
+            .filter((it) => it && typeof it === "object" && "referenceId" in it)
+            .map((it) => (it as { label?: string; referenceId: string }).label ?? (it as { referenceId: string }).referenceId)
+            .join(", ")
+        : String(value);
     default:
       return String(value);
   }

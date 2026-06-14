@@ -3,7 +3,7 @@
 // column. No React/DOM here so it is unit-testable; the board component renders
 // the result and wires drag-and-drop.
 
-import type { ColumnDefinition, GridRow, CellValue } from "./types";
+import type { ColumnDefinition, GridRow, CellValue, ReferenceValue } from "./types";
 
 export interface KanbanLane {
   key: string; // the group-by value ("" for unset)
@@ -16,7 +16,15 @@ const UNSET_LABEL = "(unset)";
 
 function cellKey(value: CellValue): string {
   if (value === null || value === undefined) return UNSET_KEY;
-  if (Array.isArray(value)) return value[0] ?? UNSET_KEY;
+  if (Array.isArray(value)) {
+    const first = value[0];
+    if (first === undefined) return UNSET_KEY;
+    // link cell = array of references (links aren't groupable, but stay type-safe)
+    if (typeof first === "object" && first !== null && "referenceId" in first) {
+      return (first as ReferenceValue).referenceId ?? UNSET_KEY;
+    }
+    return String(first);
+  }
   if (typeof value === "object") {
     if ("referenceId" in value) return value.referenceId ?? UNSET_KEY;
     if ("url" in value) return value.url ?? UNSET_KEY;

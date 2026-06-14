@@ -31,6 +31,7 @@ export const FIELD_TYPES = [
   "formula",
   "lookup",
   "rollup",
+  "link",
 ] as const;
 
 export type FieldType = (typeof FIELD_TYPES)[number];
@@ -60,6 +61,17 @@ export interface LookupConfig {
   targetFieldType?: FieldType;
 }
 
+/**
+ * Configuration for a `link` column: link to many target records of one kind.
+ * `cardinality: "one"` = single / enforced-unique (1-1, 1-M); `"many"` = M-M.
+ * `referenceType` is the target kind — a platform entity type ("epic", …) or a
+ * workbook table id (table↔table links). Targets are stored in WorkbookCellLink.
+ */
+export interface LinkConfig {
+  cardinality: "one" | "many";
+  referenceType: string;
+}
+
 /** Column-level configuration, persisted as WorkbookColumn.fieldConfig (JSON). */
 export interface FieldConfig {
   /** select / multi_select options */
@@ -76,6 +88,8 @@ export interface FieldConfig {
   resultType?: FieldType;
   /** lookup columns: where to pull the value from */
   lookup?: LookupConfig;
+  /** link columns: target kind + cardinality (links stored in WorkbookCellLink) */
+  link?: LinkConfig;
 }
 
 /**
@@ -136,6 +150,9 @@ export interface AttachmentValue {
   size?: number;
 }
 
+/** A link cell value: the ordered set of records a `link` column points at (persisted in WorkbookCellLink). */
+export type LinkValue = ReferenceValue[];
+
 /** The union of values a single cell can hold, keyed by field type at runtime. */
 export type CellValue =
   | string
@@ -144,6 +161,7 @@ export type CellValue =
   | string[]
   | ReferenceValue
   | AttachmentValue
+  | LinkValue
   | null;
 
 /** One row as the grid consumes it: a map of columnId -> value, plus the row id. */

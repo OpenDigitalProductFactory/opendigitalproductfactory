@@ -35,34 +35,50 @@ import {
 import { applyFilters, applySort, paginate } from "./grid-query";
 import { resolveReferenceLabels, referenceKey } from "./reference-resolver";
 import { computeDerivedCells } from "./formula/compute";
+import { validateLinkValue } from "./cell-links";
 import { genSemanticId } from "./ids";
 
-function asReference(value: CellValue): ReferenceValue | null {
+function asReference(value: unknown): ReferenceValue | null {
   if (value && typeof value === "object" && !Array.isArray(value) && "referenceId" in value) {
     return value as ReferenceValue;
   }
   return null;
 }
 
-/** Hydrate live display labels for every reference cell (labels are not persisted). */
+/**
+ * Hydrate live display labels for every reference cell — single `reference` cells
+ * and `link` cells (arrays of references). Labels are not persisted.
+ */
 async function hydrateReferenceLabels(rows: GridRow[]): Promise<void> {
   const refs: { referenceType: string; referenceId: string }[] = [];
+  const collect = (ref: ReferenceValue | null) => {
+    if (ref?.referenceId && ref.referenceType) {
+      refs.push({ referenceType: ref.referenceType, referenceId: ref.referenceId });
+    }
+  };
   for (const row of rows) {
     for (const value of Object.values(row.cells)) {
-      const ref = asReference(value);
-      if (ref?.referenceId && ref.referenceType) {
-        refs.push({ referenceType: ref.referenceType, referenceId: ref.referenceId });
-      }
+      if (Array.isArray(value)) value.forEach((it) => collect(asReference(it)));
+      else collect(asReference(value));
     }
   }
   if (refs.length === 0) return;
   const labels = await resolveReferenceLabels(refs);
+  const withLabel = (ref: ReferenceValue): ReferenceValue => {
+    const label = labels.get(referenceKey(ref.referenceType, ref.referenceId));
+    return label ? { ...ref, label } : ref;
+  };
   for (const row of rows) {
     for (const [colId, value] of Object.entries(row.cells)) {
-      const ref = asReference(value);
-      if (!ref?.referenceId || !ref.referenceType) continue;
-      const label = labels.get(referenceKey(ref.referenceType, ref.referenceId));
-      if (label) row.cells[colId] = { ...ref, label };
+      if (Array.isArray(value)) {
+        // link cell = array of references; multi_select = array of strings (skipped)
+        if (value.length > 0 && asReference(value[0])) {
+          row.cells[colId] = value.map((it) => withLabel(it as ReferenceValue));
+        }
+      } else {
+        const ref = asReference(value);
+        if (ref?.referenceId && ref.referenceType) row.cells[colId] = withLabel(ref);
+      }
     }
   }
 }
@@ -154,8 +170,10 @@ class CustomTableAdapter implements DataSourceAdapter {
     });
     const gridRows = rows.map((row) => {
       const cells: Record<string, CellValue> = {};
-      // default every column to null so the grid renders empty cells
-      for (const m of metas) cells[m.columnId] = m.fieldType === "multi_select" ? [] : null;
+      // default every column to null (multi_select / link render as empty arrays)
+      for (const m of metas) {
+        cells[m.columnId] = m.fieldType === "multi_select" || m.fieldType === "link" ? [] : null;
+      }
       for (const cell of row.cells) {
         const meta = byInternal.get(cell.columnId);
         if (!meta) continue;
@@ -163,6 +181,25 @@ class CustomTableAdapter implements DataSourceAdapter {
       }
       return { rowId: row.rowId, cells };
     });
+
+    // Link columns: pull targets from WorkbookCellLink and attach as ReferenceValue[].
+    if (metas.some((m) => m.fieldType === "link")) {
+      const gridByInternal = new Map(rows.map((r, i) => [r.id, gridRows[i]]));
+      const internalColToSemantic = new Map(metas.map((m) => [m.internalId, m.columnId]));
+      const links = await prisma.workbookCellLink.findMany({
+        where: { row: { tableId: internalTableId } },
+        orderBy: { position: "asc" },
+      });
+      for (const link of links) {
+        const gr = gridByInternal.get(link.rowId);
+        const semanticCol = internalColToSemantic.get(link.columnId);
+        if (!gr || !semanticCol) continue;
+        const arr = (gr.cells[semanticCol] as ReferenceValue[] | undefined) ?? [];
+        arr.push({ referenceId: link.referenceId, referenceType: link.referenceType });
+        gr.cells[semanticCol] = arr;
+      }
+    }
+
     await hydrateReferenceLabels(gridRows);
     await computeDerivedCells(metas, gridRows);
     return gridRows;
@@ -191,11 +228,29 @@ class CustomTableAdapter implements DataSourceAdapter {
     const metas = await loadColumnMeta(internalTableId);
 
     // Validate every column (required checks included, even if absent from input).
-    // Computed columns (formula/lookup) are derived on read — never stored.
+    // Computed columns are derived on read; link columns persist to WorkbookCellLink.
     const writes: { internalColumnId: string; storage: CellStorage }[] = [];
+    const linkInserts: {
+      columnId: string;
+      referenceId: string;
+      referenceType: string;
+      position: number;
+    }[] = [];
     for (const meta of metas) {
       if (isComputedFieldType(meta.fieldType)) continue;
       const value = meta.columnId in input ? input[meta.columnId] : null;
+      if (meta.fieldType === "link") {
+        const links = validateLinkValue(value, meta.config?.link);
+        links.forEach((l, i) =>
+          linkInserts.push({
+            columnId: meta.internalId,
+            referenceId: l.referenceId,
+            referenceType: l.referenceType,
+            position: i,
+          }),
+        );
+        continue;
+      }
       const result = validateCell(meta, value);
       if (!result.ok) throw new Error(result.error);
       writes.push({ internalColumnId: meta.internalId, storage: result.storage });
@@ -218,6 +273,9 @@ class CustomTableAdapter implements DataSourceAdapter {
             ...storagePayload(w.storage),
           })),
         },
+        ...(linkInserts.length > 0
+          ? { cellLinks: { create: linkInserts } }
+          : {}),
       },
     });
 
@@ -245,6 +303,25 @@ class CustomTableAdapter implements DataSourceAdapter {
         if (!meta) throw new Error(`Unknown column: ${semanticColId}`);
         if (isComputedFieldType(meta.fieldType)) {
           throw new Error(`${meta.name} is a computed column and cannot be edited`);
+        }
+        if (meta.fieldType === "link") {
+          // Replace the cell's link set in WorkbookCellLink (validated, deduped).
+          const links = validateLinkValue(value, meta.config?.link);
+          await tx.workbookCellLink.deleteMany({
+            where: { rowId: row.id, columnId: meta.internalId },
+          });
+          if (links.length > 0) {
+            await tx.workbookCellLink.createMany({
+              data: links.map((l, i) => ({
+                rowId: row.id,
+                columnId: meta.internalId,
+                referenceId: l.referenceId,
+                referenceType: l.referenceType,
+                position: i,
+              })),
+            });
+          }
+          continue;
         }
         const result = validateCell(meta, value);
         if (!result.ok) throw new Error(result.error);

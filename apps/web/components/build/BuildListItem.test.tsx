@@ -327,6 +327,65 @@ describe("BuildListItem fleet density", () => {
     expect(html).toContain("group-hover:flex");
   });
 
+  it("renders the FleetDensityBar during the build phase when a plan is attached", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild({
+          phase: "build",
+          buildPlan: {
+            fileStructure: [],
+            tasks: [
+              { title: "T1", testFirst: "", implement: "", verify: "" },
+              { title: "T2", testFirst: "", implement: "", verify: "" },
+              { title: "T3", testFirst: "", implement: "", verify: "" },
+              { title: "T4", testFirst: "", implement: "", verify: "" },
+            ],
+          },
+          taskResults: [
+            { taskIndex: 0, title: "T1", testResult: { passed: true, output: "" }, codeReview: { issues: [] } as never },
+          ],
+        })}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(html).toContain('data-testid="fleet-density-bar"');
+    expect(html).toContain('aria-label="Tasks: 1 of 4 done"');
+  });
+
+  it("does NOT render the FleetDensityBar outside the build phase", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild({
+          phase: "review",
+          buildPlan: {
+            fileStructure: [],
+            tasks: [
+              { title: "T1", testFirst: "", implement: "", verify: "" },
+              { title: "T2", testFirst: "", implement: "", verify: "" },
+            ],
+          },
+          taskResults: [
+            { taskIndex: 0, title: "T1", testResult: { passed: true, output: "" }, codeReview: { issues: [] } as never },
+          ],
+        })}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(html).not.toContain('data-testid="fleet-density-bar"');
+  });
+
   it("renders no hex literals at fleet density (DPF variable invariant)", () => {
     const html = renderToStaticMarkup(
       <BuildListItem

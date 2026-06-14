@@ -28,6 +28,7 @@ import {
   type ColumnDefinition,
   type GridRow,
   type CellValue,
+  type ReferenceValue,
   type GridCapabilities,
   type ProvenanceKind,
   PROVENANCE_LABELS,
@@ -49,7 +50,9 @@ import {
   renderDateCell,
   renderReferenceCell,
   renderComputedCell,
+  renderLinkCell,
   makeReferenceEditor,
+  makeLinkEditor,
 } from "./cell-editors";
 import {
   createRowAction,
@@ -203,6 +206,16 @@ function buildColumn(
     case "rollup":
       // Computed read-only columns (derived server-side). rollup = reverse-FK aggregate.
       return { ...base, renderCell: renderComputedCell };
+    case "link": {
+      // Link-to-many: chips per linked record + multi-select typeahead editor.
+      const linkConfig = col.config?.link;
+      return {
+        ...base,
+        renderCell: renderLinkCell,
+        renderEditCell: editable && linkConfig ? makeLinkEditor(linkConfig) : undefined,
+        editorOptions: { commitOnOutsideClick: false },
+      };
+    }
     default:
       return base;
   }
@@ -211,7 +224,13 @@ function buildColumn(
 function compareValues(a: CellValue, b: CellValue): number {
   const norm = (v: CellValue): string | number => {
     if (v === null || v === undefined) return "";
-    if (Array.isArray(v)) return v.join(",");
+    if (Array.isArray(v)) {
+      // link cell = array of references; sort by their labels/ids
+      if (v.length > 0 && typeof v[0] === "object" && v[0] !== null && "referenceId" in v[0]) {
+        return v.map((it) => (it as ReferenceValue).label ?? (it as ReferenceValue).referenceId).join(", ");
+      }
+      return v.join(",");
+    }
     if (typeof v === "object") {
       if ("referenceId" in v) return v.referenceId ?? "";
       if ("url" in v) return v.name ?? v.url;
