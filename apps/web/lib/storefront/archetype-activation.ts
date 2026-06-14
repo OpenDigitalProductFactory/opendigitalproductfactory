@@ -77,7 +77,7 @@ export async function getCompositeActivationProfile(
 
   const profiles = ordered
     .map((c) => readActivationProfile(c.archetype.activationProfile))
-    .filter((p): p is ActivationProfile => p !== null);
+    .filter((p): p is NormalizedActivationProfile => p !== null);
 
   if (profiles.length === 0) return null;
   return mergeActivationProfiles(profiles);
