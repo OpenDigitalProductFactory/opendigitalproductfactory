@@ -54,9 +54,32 @@ function stripBalanced(html, startMarker, tag) {
   return html.slice(0, start) + html.slice(end);
 }
 
+// Remove <script>…</script> blocks with plain string scanning (no regex).
+// Regex-based tag filtering is fragile and is exactly what CodeQL's
+// bad-tag-filter / incomplete-sanitization rules warn about; index scanning
+// removes each well-formed block and leaves anything without a close tag
+// (e.g. a "<script>" appearing inside a title="…" attribute) untouched.
+function stripScripts(html) {
+  const lo = html.toLowerCase();
+  let out = "", i = 0;
+  for (;;) {
+    const s = lo.indexOf("<script", i);
+    if (s === -1) { out += html.slice(i); break; }
+    const after = lo[s + 7]; // char following "<script"
+    const isTag = after === undefined || " \t\r\n>/".includes(after);
+    if (!isTag) { out += html.slice(i, s + 7); i = s + 7; continue; } // e.g. "<scripted"
+    const close = lo.indexOf("</script", s);
+    const gt = close === -1 ? -1 : lo.indexOf(">", close);
+    if (gt === -1) { out += html.slice(i); break; } // no closing tag — keep as-is
+    out += html.slice(i, s);
+    i = gt + 1;
+  }
+  return out;
+}
+
 function clean(raw) {
   let body = raw.slice(raw.indexOf("<body>") + "<body>".length);
-  body = body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+  body = stripScripts(body);
   body = body.replace(/<header id=head\b[^>]*>[\s\S]*?<\/header>/i, "");
   // TOC sidebar (one per page).
   const noToc = stripBalanced(body, "<ol class=toc>", "ol");
@@ -73,6 +96,11 @@ mkdirSync(OUT_DIR, { recursive: true });
 let total = 0;
 for (const [name, section] of Object.entries(SECTIONS)) {
   const url = `${BASE}/${name}.html`;
+  // Defence-in-depth: only ever fetch the hardcoded trusted upstream host.
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" || parsed.hostname !== "html.spec.whatwg.org") {
+    throw new Error(`refusing to fetch untrusted URL: ${url}`);
+  }
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} -> HTTP ${res.status}`);
   const raw = await res.text();
