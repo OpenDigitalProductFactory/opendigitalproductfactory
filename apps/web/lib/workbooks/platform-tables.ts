@@ -400,6 +400,26 @@ const EXPENSE_CLAIM_TABLE: GenericTableConfig = {
   ],
 };
 
+// Finance fixed assets — read-only; status free-form (text). assignee relation id omitted.
+const FIXED_ASSET_TABLE: GenericTableConfig = {
+  entityType: "fixed_asset",
+  prismaModel: "fixedAsset",
+  idField: "assetId",
+  labelField: "name",
+  orderBy: { field: "purchaseDate", dir: "desc" },
+  columns: [
+    { field: "assetId", name: "ID", fieldType: "text", width: 140 },
+    { field: "name", name: "Name", fieldType: "text", width: 260 },
+    { field: "category", name: "Category", fieldType: "text", width: 150 },
+    { field: "status", name: "Status", fieldType: "text", width: 110 },
+    { field: "purchaseDate", name: "Purchased", fieldType: "date", width: 120 },
+    { field: "purchaseCost", name: "Cost", fieldType: "number", width: 120 },
+    { field: "currentBookValue", name: "Book value", fieldType: "number", width: 130 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "location", name: "Location", fieldType: "text", width: 150 },
+  ],
+};
+
 registerGenericReadTable(EPIC_TABLE);
 registerGenericReadTable(DIGITAL_PRODUCT_TABLE);
 registerGenericReadTable(COMPLIANCE_CONTROL_TABLE);
@@ -412,6 +432,7 @@ registerGenericReadTable(ENGAGEMENT_TABLE);
 registerGenericReadTable(BILL_TABLE);
 registerGenericReadTable(BANK_ACCOUNT_TABLE);
 registerGenericReadTable(EXPENSE_CLAIM_TABLE);
+registerGenericReadTable(FIXED_ASSET_TABLE);
 // Customers, people (safe org-directory fields only), suppliers — explicit
 // allow-lists live in people-supplier-configs.ts (unit-tested for safe omission).
 for (const cfg of PEOPLE_SUPPLIER_TABLES) registerGenericReadTable(cfg);
@@ -521,6 +542,14 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     viewCapability: "view_finance",
     manageCapability: "view_finance", // read-only grid; adapter performs no writes
     homeSurface: { path: "/finance/expense-claims", label: "Expense claims", board: false },
+  },
+  {
+    entityType: "fixed_asset",
+    label: "Assets",
+    description: "Fixed assets as a read-only grid — sort and filter.",
+    viewCapability: "view_finance",
+    manageCapability: "view_finance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/finance/assets", label: "Assets", board: false },
   },
   {
     entityType: "epic",
