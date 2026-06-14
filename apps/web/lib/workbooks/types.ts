@@ -90,6 +90,13 @@ export interface FieldConfig {
   lookup?: LookupConfig;
   /** link columns: target kind + cardinality (links stored in WorkbookCellLink) */
   link?: LinkConfig;
+  /** rollup columns (custom tables): aggregate over a `link` column's targets */
+  rollup?: {
+    /** columnId of a `link` column on the same table */
+    linkColumnId: string;
+    /** aggregation — v1 supports count of linked records */
+    op: "count";
+  };
 }
 
 /**
