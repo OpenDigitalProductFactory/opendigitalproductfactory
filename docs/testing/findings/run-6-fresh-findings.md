@@ -136,7 +136,52 @@ The Custom Commission inquiry page includes a "Commission details" textarea alon
 
 ## Archetype 3: `florist` — Bloom & Wild Florals
 
-*Pending — DB reset required*
+**Persona:** Operator, floral studio owner  
+**CTA type:** purchase (flowers/bouquets) + inquiry (bespoke wedding, corporate)  
+**Install method:** DB-only reset from golden dump + full wizard run
+
+### Phase P — Setup
+
+| Step | Action | Result |
+|------|--------|--------|
+| P1 | Edit seeded items — Seasonal Bouquet (£38), Bespoke Arrangement (£45), Dried Flower Arrangement (£55) | ✅ Prices set; R6-003 name-empty-on-edit confirmed again |
+| P2 | Wedding Flowers seeded as Inquiry type with "POA" label | ✅ Quote CTA seeded correctly |
+| P3 | Add customer account "Test Buyer R6b" | ✅ Created (cmqd89ky500dx01qyb0fh6xib) |
+| P4 | Operating hours Mon–Sat 08:00–17:30 | ✅ 12 time inputs; Sunday closed |
+
+**Seeded items (actual):** Seasonal Bouquet, Bespoke Arrangement, Wedding Flowers (inquiry), Dried Flower Arrangement, Funeral Tribute (inquiry), Corporate Flowers (inquiry) — 6 items. Names differ slightly from plan (e.g. "Bespoke Arrangement" vs "Hand-Tied Arrangement") but archetypal fit is correct.
+
+### Phase B5 — Public Storefront Walkthrough
+
+**Surface:** `http://localhost:3000/s/bloom-wild-florals`
+
+| Check | Observed | Verdict |
+|-------|----------|---------|
+| Storefront renders | h1 "Bloom & Wild Florals", 7 items (6 seeded + 1 audit item) | ✅ |
+| CTA differentiation | Purchase items: "Buy"; Inquiry items: "Enquire"; Wedding Flowers: "POA" + "Enquire" | ✅ CTA types correctly applied per item |
+| Currency | All prices show £ — correct for GBP install | ✅ Not SYS-4 (GBP is the configured currency) |
+| Order: Audit — Seasonal Bouquet | Confirmation: "Order placed! Reference: ORD-T-JG58YZ" | ✅ |
+| Delivery address on order form | Email + quantity only; no delivery address | ⚠️ R6-001 confirmed — florist ships physical flowers, address needed |
+| Wedding Flowers inquiry form | Fields: Full name, Email, Phone, Notes, **Occasion** (dropdown), **Delivery date**, **Budget** (dropdown) | ✅ Florist-specific fields — rich, contextual inquiry form |
+| Inquiry submission | Reference: INQ-AZ_C_Q0M | ✅ |
+
+**B5-florist-1 — Inquiry form has florist-specific fields (Positive)**  
+The Wedding Flowers inquiry page includes Occasion type (Birthday/Anniversary/Wedding/Sympathy/Corporate/Other), Delivery date, and Budget range (Under £30 to £200+). This is substantially better than a generic notes field — operators receive pre-qualified budget and occasion context inline with the lead.
+
+### Phase G — Financials
+
+| Step | Action | Result |
+|------|--------|--------|
+| G1 | Supplier "Flower & Floral Wholesale Market" | ✅ Created |
+| G2 | Bill `BILL-2026-0001`: "Weekly fresh flower and foliage stock delivery", qty 1, £210.00 | ✅ Saved at 0% tax, GBP |
+| G3 | Invoice `INV-2026-0002`: Test Buyer R6b, "Audit — Seasonal Bouquet", qty 1, £38.00 | ✅ Saved; 20% tax applied → £45.60 total (R6-004 confirmed on GBP install) |
+| G4 | P&L | ✅ £0.00 (draft); notice: "DRAFT £210.00 across 1 bill not yet paid" |
+
+**G-florist-1 — Invoice currency displayed as USD in form but saved as GBP**  
+During invoice creation the Currency field showed "USD" despite the org being configured as GBP. On save, the invoice rendered with £ symbols correctly. The form-level display is a cosmetic bug — the saved record is correct.
+
+**G-florist-2 — R6-004 confirmed on GBP install**  
+Invoice tax rate defaulted to 20% on a GBP "No VAT" install — same pattern as USD installs. R6-004 is not currency-specific; the 20% default is seeded regardless of the VAT configuration selected during wizard.
 
 ---
 
@@ -156,3 +201,4 @@ The Custom Commission inquiry page includes a "Commission details" textarea alon
 | R6-004 | G3 | Minor | Invoice tax rate defaults to 20% (UK VAT) on a USD-configured install — locale/currency mismatch in tax seed |
 | R6-005 | K1 | Important | Storefront inbox is read-only — no reply/send email/dispatch action; operator cannot send order confirmation or dispatch notification |
 | R6-006 | K3 | Important | No payment gateway setup (Stripe) visible — purchase CTA orders complete with no payment captured |
+| R6-007 | G3 | Minor | Invoice form currency field displays "USD" despite GBP org config — cosmetic; saved record is correct GBP |
