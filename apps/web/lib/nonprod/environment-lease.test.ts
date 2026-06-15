@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   claimNonprodEnvironmentLease,
+  clampLeaseExpiry,
   listActiveNonprodEnvironmentLeases,
   releaseNonprodEnvironmentLease,
+  renewNonprodEnvironmentLease,
+  reapExpiredNonprodEnvironmentLeases,
+  MAX_LEASE_TTL_MS,
 } from "./environment-lease";
 
 function db() {
@@ -10,8 +14,10 @@ function db() {
     nonProductionEnvironmentLease: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn().mockResolvedValue(null),
+      findUnique: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ leaseId: "NPEL-1" }),
       update: vi.fn().mockResolvedValue({ leaseId: "NPEL-1", status: "released" }),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
   };
 }
@@ -90,6 +96,104 @@ describe("non-production environment leases", () => {
         status: "released",
         releasedAt: new Date("2026-05-26T19:00:00.000Z"),
       },
+    });
+  });
+});
+
+describe("nonprod lease anti-monopolization (BI-4043A64B)", () => {
+  const now = new Date("2026-06-15T12:00:00.000Z");
+
+  it("clamps a hold longer than the max window down to now + MAX_LEASE_TTL_MS", () => {
+    const requested = new Date(now.getTime() + 8 * 60 * 60_000); // 8h ask
+    const clamped = clampLeaseExpiry(now, requested);
+    expect(clamped.getTime()).toBe(now.getTime() + MAX_LEASE_TTL_MS);
+  });
+
+  it("leaves a within-window hold unchanged", () => {
+    const requested = new Date(now.getTime() + 5 * 60_000); // 5 min
+    expect(clampLeaseExpiry(now, requested).getTime()).toBe(requested.getTime());
+  });
+
+  it("caps the claimed expiry so one process cannot hold the instance for hours", async () => {
+    const mockDb = db();
+    await claimNonprodEnvironmentLease({
+      db: mockDb as never,
+      environmentKey: "active-candidate",
+      ownerProvider: "claude",
+      ownerSessionId: "s1",
+      purpose: "long job",
+      url: "http://localhost:3001",
+      ports: [3001],
+      expiresAt: new Date(now.getTime() + 8 * 60 * 60_000), // asks for 8h
+      now,
+    });
+    const data = mockDb.nonProductionEnvironmentLease.create.mock.calls[0][0].data;
+    expect(data.expiresAt.getTime()).toBe(now.getTime() + MAX_LEASE_TTL_MS);
+  });
+
+  it("renews an active, owned, unexpired lease (heartbeat extends the window)", async () => {
+    const mockDb = db();
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue({
+      leaseId: "NPEL-1",
+      status: "active",
+      ownerSessionId: "s1",
+      expiresAt: new Date(now.getTime() + 60_000),
+    });
+    mockDb.nonProductionEnvironmentLease.update.mockResolvedValue({ leaseId: "NPEL-1" });
+    const r = await renewNonprodEnvironmentLease({
+      db: mockDb as never,
+      leaseId: "NPEL-1",
+      ownerSessionId: "s1",
+      now,
+    });
+    expect(r.status).toBe("renewed");
+    const data = mockDb.nonProductionEnvironmentLease.update.mock.calls[0][0].data;
+    expect(data.expiresAt.getTime()).toBe(now.getTime() + MAX_LEASE_TTL_MS);
+  });
+
+  it("refuses to revive an already-expired lease (holder lost it → must re-claim)", async () => {
+    const mockDb = db();
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue({
+      leaseId: "NPEL-1",
+      status: "active",
+      ownerSessionId: "s1",
+      expiresAt: new Date(now.getTime() - 60_000), // already lapsed
+    });
+    const r = await renewNonprodEnvironmentLease({
+      db: mockDb as never,
+      leaseId: "NPEL-1",
+      ownerSessionId: "s1",
+      now,
+    });
+    expect(r).toEqual({ status: "lost", reason: "expired" });
+    expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses renewal from a non-owner session", async () => {
+    const mockDb = db();
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue({
+      leaseId: "NPEL-1",
+      status: "active",
+      ownerSessionId: "s1",
+      expiresAt: new Date(now.getTime() + 60_000),
+    });
+    const r = await renewNonprodEnvironmentLease({
+      db: mockDb as never,
+      leaseId: "NPEL-1",
+      ownerSessionId: "intruder",
+      now,
+    });
+    expect(r).toEqual({ status: "lost", reason: "not-owner" });
+  });
+
+  it("reaps active-but-expired leases (frees the instance for the next waiter)", async () => {
+    const mockDb = db();
+    mockDb.nonProductionEnvironmentLease.updateMany.mockResolvedValue({ count: 3 });
+    const r = await reapExpiredNonprodEnvironmentLeases({ db: mockDb as never, now });
+    expect(r).toEqual({ reaped: 3 });
+    expect(mockDb.nonProductionEnvironmentLease.updateMany).toHaveBeenCalledWith({
+      where: { status: "active", expiresAt: { lt: now }, releasedAt: null },
+      data: { status: "expired", releasedAt: now },
     });
   });
 });

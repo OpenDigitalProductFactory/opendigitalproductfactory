@@ -68,8 +68,13 @@ export type SelfUpgradeConfig = {
    * bind-mount — no docker-compose change needed) and is git-ignored.
    * Resolves BI-A8A7CCFD / BI-888435E5 / BI-57E77CB4: contributor installs
    * whose install clone doubles as a dirty dev tree no longer collide with
-   * the upgrade merge. Defaults to true; can be disabled per-install via
-   * PlatformConfig for fallback to the legacy direct-merge behavior.
+   * the upgrade merge.
+   *
+   * BI-4043A64B: ALWAYS true. The legacy direct-merge fallback this once
+   * toggled is retired — it mutated the host clone's working tree and corrupted
+   * it. `parseSelfUpgradeConfig` forces this true regardless of stored value,
+   * and `prepareUpgradeSource` refuses an upstream merge without a workspace.
+   * The field is retained (not removed) for callers and forward-compat.
    */
   useIsolatedWorkspace: boolean;
   /**
@@ -201,10 +206,11 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
       typeof cfg.installBranch === "string" && cfg.installBranch.trim().length > 0
         ? cfg.installBranch.trim()
         : DEFAULTS.installBranch,
-    useIsolatedWorkspace:
-      typeof cfg.useIsolatedWorkspace === "boolean"
-        ? cfg.useIsolatedWorkspace
-        : DEFAULTS.useIsolatedWorkspace,
+    // BI-4043A64B — isolation is FORCED on. A stored `false` is no longer
+    // honored: the legacy direct-merge it selected mutated the host clone's
+    // working tree and corrupted it (721 files lost, 2026-06-15). prepare-source
+    // refuses an upstream merge without a workspace, so this must stay true.
+    useIsolatedWorkspace: true,
   };
   for (const key of [
     "hostInstallPath",
