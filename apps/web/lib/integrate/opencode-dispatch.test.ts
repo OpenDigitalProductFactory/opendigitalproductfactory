@@ -101,6 +101,21 @@ describe("pickDefaultCodingModel", () => {
     expect(pickDefaultCodingModel(["whisper-base", "gemma3:latest"])).toBe("gemma3:latest");
   });
 
+  it("excludes minilm, gte, and e5 models", () => {
+    expect(pickDefaultCodingModel(["all-minilm:latest", "gemma3:latest"])).toBe("gemma3:latest");
+    expect(pickDefaultCodingModel(["gte-large", "qwen3:8b"])).toBe("qwen3:8b");
+    expect(pickDefaultCodingModel(["e5-large", "gemma3:latest"])).toBe("gemma3:latest");
+    expect(pickDefaultCodingModel(["all-minilm:latest", "gte-large", "e5-large", "qwen3:8b"])).toBe("qwen3:8b");
+  });
+
+  it("excludes all-minilm:latest even when it's the only model", () => {
+    expect(pickDefaultCodingModel(["all-minilm:latest"])).toBeNull();
+  });
+
+  it("excludes all-minilm:latest when paired with other coding models", () => {
+    expect(pickDefaultCodingModel(["all-minilm:latest", "qwen3:8b", "gemma3:latest"])).toBe("qwen3:8b");
+  });
+
   it("prefers a coder model over a plain chat model", () => {
     expect(pickDefaultCodingModel(["gemma3", "qwen3-coder", "qwen3"])).toBe("qwen3-coder");
   });
@@ -110,7 +125,7 @@ describe("pickDefaultCodingModel", () => {
   });
 
   it("returns null when only non-chat models are served", () => {
-    expect(pickDefaultCodingModel(["nomic-embed-text", "bge-reranker"])).toBeNull();
+    expect(pickDefaultCodingModel(["nomic-embed-text", "bge-reranker", "all-minilm:latest", "gte-large"])).toBeNull();
   });
 
   it("enforces the context floor only when the endpoint reports it", async () => {
