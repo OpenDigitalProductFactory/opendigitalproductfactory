@@ -342,6 +342,20 @@ export function groupTestFilesByPackage(files: string[]): Map<string, string[]> 
   return grouped;
 }
 
+/**
+ * True when vitest output indicates at least one failed test. Strips ANSI color
+ * codes FIRST: vitest colorizes its summary, and a color code's trailing "m"
+ * (e.g. the "m" in `\x1b[31m`) sits directly against the count digit, which
+ * defeats the `\b` word boundary in `\b[1-9]…` so a colored "3 failed" never
+ * matches. (Found running scoped tests against the live install — the raw-ANSI
+ * path silently passed a build whose feature tests were red.)
+ */
+export function outputIndicatesTestFailure(output: string): boolean {
+  // eslint-disable-next-line no-control-regex -- ANSI color strip
+  const clean = output.replace(/\x1b\[[0-9;]*m/g, "");
+  return /\b[1-9]\d*\s+failed/i.test(clean) || /^\s*FAIL\b/m.test(clean);
+}
+
 export async function runSandboxTests(
   containerId: string,
   opts?: { changedFiles?: string[] },
@@ -397,7 +411,9 @@ export async function runSandboxTests(
       sections.push(`# ${pkg}\n${out}`);
       // vitest omits the "failed" segment entirely when zero, so any "N failed"
       // with N>=1 (or a FAIL marker) means the feature's own tests are red.
-      if (/\b[1-9]\d*\s+failed/i.test(out) || /^\s*FAIL\b/m.test(out)) {
+      // outputIndicatesTestFailure strips ANSI first — a colored digit otherwise
+      // defeats the count regex.
+      if (outputIndicatesTestFailure(out)) {
         anyFailed = true;
       }
     }

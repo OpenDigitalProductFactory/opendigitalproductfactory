@@ -1327,6 +1327,23 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["ideate", "plan", "build", "review", "ship"],
   },
   {
+    name: "renew_nonprod_environment_lease",
+    description: "Heartbeat an active shared nonproduction environment lease to extend its hold window so a still-active session keeps it. Only the owning session can renew, and a lapsed lease is NOT revivable (re-claim instead). The window is capped — long-running work should run on an isolated runtime, not hold the single shared lease.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        leaseId: { type: "string" },
+        ownerSessionId: { type: "string" },
+        ttlMinutes: { type: "number", description: "Optional renewal window in minutes; clamped to the max hold window." },
+      },
+      required: ["leaseId", "ownerSessionId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+  },
+  {
     name: "record_local_integration_result",
     description: "Record the result of a local merged-code integration gate before push or PR. Captures candidate branch, mode, pass/fail/conflict status, and evidence.",
     inputSchema: {
@@ -6796,6 +6813,42 @@ export async function executeTool(
         entityId: lease.leaseId,
         message: `Released nonproduction environment lease ${lease.leaseId}.`,
         data: { lease },
+      };
+    }
+
+    case "renew_nonprod_environment_lease": {
+      const { renewNonprodEnvironmentLease } = await import("@/lib/nonprod/environment-lease");
+      const leaseId = typeof params["leaseId"] === "string" ? params["leaseId"].trim() : "";
+      const ownerSessionId = typeof params["ownerSessionId"] === "string" ? params["ownerSessionId"].trim() : "";
+      if (!leaseId || !ownerSessionId) {
+        return {
+          success: false,
+          error: "missing_required",
+          message: "leaseId and ownerSessionId are required",
+        };
+      }
+      const ttlMinutes =
+        typeof params["ttlMinutes"] === "number" && params["ttlMinutes"] > 0
+          ? params["ttlMinutes"]
+          : undefined;
+      const result = await renewNonprodEnvironmentLease({
+        leaseId,
+        ownerSessionId,
+        ttlMs: ttlMinutes ? ttlMinutes * 60_000 : undefined,
+      });
+      if (result.status === "lost") {
+        return {
+          success: false,
+          error: "lease_lost",
+          message: `Lease cannot be renewed (${result.reason}); re-claim if you still need the environment.`,
+          data: { reason: result.reason },
+        };
+      }
+      return {
+        success: true,
+        entityId: result.lease.leaseId,
+        message: `Renewed nonproduction environment lease ${result.lease.leaseId}.`,
+        data: { lease: result.lease },
       };
     }
 
