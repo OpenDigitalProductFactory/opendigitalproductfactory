@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildRevenueCockpitSummary, formatRevenueAmount } from "./revenue-cockpit";
 
 describe("revenue cockpit summary", () => {
-  it("formats revenue in GBP by default (matches Opportunity.currency default)", () => {
-    expect(formatRevenueAmount(12500)).toBe("£12,500");
+  it("formats revenue in USD by default", () => {
+    expect(formatRevenueAmount(12500)).toBe("$12,500");
   });
 
   it("respects a passed currency code", () => {
