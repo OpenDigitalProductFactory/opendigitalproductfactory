@@ -118,13 +118,29 @@ export async function syncPlatformVersionOnBoot(
  */
 export async function reconcileSelfUpgradeRunsOnBoot(
   logger: Pick<Console, "log" | "error"> = console,
+  opts: { staleAfterMs?: number; now?: () => Date } = {},
 ): Promise<{ succeeded: number; failed: number } | null> {
   try {
     const { prisma } = await import("@dpf/db");
     const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
     const { completeRun, failRun } = await import("@/lib/self-upgrade/run-store");
     const deployedSha = await getDeployedSha();
-    const running = await prisma.selfUpgradeRun.findMany({ where: { status: "running" } });
+    // staleAfterMs > 0 → PERIODIC mode (called in-process on an interval, not just
+    // on boot): only touch runs stuck "running" well past a normal upgrade (~7
+    // min), so an in-flight swap is never reconciled out from under itself.
+    // staleAfterMs = 0 (boot default) reconciles every "running" row, because a
+    // boot means the orchestrating process is already gone.
+    const staleAfterMs = opts.staleAfterMs ?? 0;
+    const now = opts.now?.() ?? new Date();
+    const running = await prisma.selfUpgradeRun.findMany({
+      where:
+        staleAfterMs > 0
+          ? {
+              status: "running",
+              startedAt: { lt: new Date(now.getTime() - staleAfterMs) },
+            }
+          : { status: "running" },
+    });
     let succeeded = 0;
     let failed = 0;
     for (const run of running) {
@@ -140,12 +156,41 @@ export async function reconcileSelfUpgradeRunsOnBoot(
       } else {
         await failRun(
           run.runId,
-          `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`,
+          staleAfterMs > 0
+            ? `Reconciled by watchdog (stuck "running" > ${Math.round(staleAfterMs / 60000)}m): orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`
+            : `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`,
         );
         failed++;
         logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (orphaned)`);
       }
     }
+
+    // In PERIODIC mode, also fail runs stuck "queued"/"pending" that never
+    // started — the dispatch event was dropped (e.g. the job engine was down),
+    // so they can never run, yet requestPortalSelfUpgradeAction silently no-ops
+    // on a queued/pending row and blocks every future upgrade. (SUR-B26DF3E4 had
+    // to be cleared by hand during the 2026-06-14 incident.) Boot mode leaves
+    // these alone — a freshly-queued run there may still be mid-dispatch.
+    if (staleAfterMs > 0) {
+      const staleQueued = await prisma.selfUpgradeRun.findMany({
+        where: {
+          status: { in: ["queued", "pending"] },
+          startedAt: null,
+          createdAt: { lt: new Date(now.getTime() - staleAfterMs) },
+        },
+      });
+      for (const run of staleQueued) {
+        await failRun(
+          run.runId,
+          `Reconciled by watchdog: dispatch never started (stuck "${run.status}" > ${Math.round(staleAfterMs / 60000)}m — the queue event was likely dropped). Re-invoke to retry.`,
+        );
+        failed++;
+        logger.log(
+          `[self-upgrade-reconcile] ${run.runId} -> failed (never-dispatched ${run.status})`,
+        );
+      }
+    }
+
     if (succeeded || failed) {
       logger.log(`[self-upgrade-reconcile] resolved ${succeeded} succeeded, ${failed} failed`);
     }
@@ -464,6 +509,20 @@ export async function register() {
     // (a real upgrade recreates this very container). Records succeeded when we
     // came up on the target SHA; fails orphans so triggers aren't blocked.
     void reconcileSelfUpgradeRunsOnBoot();
+
+    // Periodic safety net — cron-independent (the boot reconcile above and the
+    // Inngest cron can BOTH miss this). If a swap's orchestrator dies while the
+    // portal stays UP (no reboot), the SelfUpgradeRun sits "running" forever and
+    // every future trigger silently no-ops (requestPortalSelfUpgradeAction). The
+    // June-10 run sat "running" for 4 days until a manual restart — this re-runs
+    // the reconcile in-process so a stuck run self-heals within ~20 min instead.
+    // Staleness-guarded so a legitimately in-flight upgrade is never touched.
+    setInterval(
+      () => {
+        void reconcileSelfUpgradeRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
+      },
+      20 * 60 * 1000,
+    );
 
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
     // These run unconditionally — they are correctness reconcilers, not optional
