@@ -17,6 +17,17 @@
     "dpf"
   ],
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/lease-guard.mjs\""
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "hooks": [
