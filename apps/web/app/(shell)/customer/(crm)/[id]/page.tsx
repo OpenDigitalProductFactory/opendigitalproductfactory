@@ -15,6 +15,7 @@ import {
   readActivationProfile,
 } from "@/lib/storefront/archetype-activation";
 import { getAccountStatusMeta } from "@/lib/crm/presentation";
+import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
 import { LocalTime } from "@/components/ui/LocalTime";
 
 const ACTIVITY_ICONS: Record<string, string> = {
@@ -142,6 +143,7 @@ export default async function AccountDetailPage({
         stage: true,
         probability: true,
         expectedValue: true,
+        currency: true,
         isDormant: true,
       },
     }),
@@ -434,7 +436,7 @@ export default async function AccountDetailPage({
                       <span className="text-[9px] text-[var(--dpf-muted)]">{o.probability}%</span>
                       {o.expectedValue && (
                         <span className="text-[9px] font-mono text-[var(--dpf-text)]">
-                          £{Number(o.expectedValue).toLocaleString()}
+                          {formatRevenueAmount(Number(o.expectedValue), o.currency)}
                         </span>
                       )}
                     </div>

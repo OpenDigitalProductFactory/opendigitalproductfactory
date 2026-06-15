@@ -13,6 +13,7 @@ import {
 import { getStageAgeDays } from "@/lib/crm/pipeline-inspector";
 import { getPipelineInspectorView } from "@/lib/crm/pipeline-inspector-data";
 import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
+import { getOrgSettings } from "@/lib/actions/currency";
 import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 
 type OpportunitiesPageProps = {
@@ -23,14 +24,17 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
   const sp = await searchParams;
   const requestedOpportunityId = sp?.opportunity;
   const view = parseSurfaceView(sp?.view);
-  const opportunities = await prisma.opportunity.findMany({
+  const [opportunities, orgSettings] = await Promise.all([
+    prisma.opportunity.findMany({
     orderBy: { createdAt: "desc" },
     include: {
       account: { select: { id: true, accountId: true, name: true } },
       contact: { select: { id: true, firstName: true, lastName: true, email: true } },
       assignedTo: { select: { id: true, email: true } },
-    },
-  });
+    }),
+    getOrgSettings(),
+  ]);
+  const baseCurrency = orgSettings?.baseCurrency ?? "USD";
 
   const byStage: Record<string, typeof opportunities> = {};
   for (const stage of OPEN_OPPORTUNITY_STAGES) {
@@ -68,10 +72,10 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
             {openOpps.length} open opportunit{openOpps.length !== 1 ? "ies" : "y"}
           </span>
           <span className="text-[var(--dpf-accent)]">
-            {formatRevenueAmount(totalPipelineValue)} total
+            {formatRevenueAmount(totalPipelineValue, baseCurrency)} total
           </span>
           <span className="text-[var(--dpf-text)]">
-            {formatRevenueAmount(Math.round(weightedValue))} weighted
+            {formatRevenueAmount(Math.round(weightedValue), baseCurrency)} weighted
           </span>
           {dormantCount > 0 && (
             <span className="text-[var(--dpf-text)]">
@@ -108,7 +112,7 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
                       {meta.label}
                     </span>
                     <span className="text-[9px] text-[var(--dpf-muted)]">
-                      {opps.length} / {formatRevenueAmount(stageValue)}
+                      {opps.length} / {formatRevenueAmount(stageValue, baseCurrency)}
                     </span>
                   </div>
 
