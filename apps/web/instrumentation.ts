@@ -164,6 +164,33 @@ export async function reconcileSelfUpgradeRunsOnBoot(
         logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (orphaned)`);
       }
     }
+
+    // In PERIODIC mode, also fail runs stuck "queued"/"pending" that never
+    // started — the dispatch event was dropped (e.g. the job engine was down),
+    // so they can never run, yet requestPortalSelfUpgradeAction silently no-ops
+    // on a queued/pending row and blocks every future upgrade. (SUR-B26DF3E4 had
+    // to be cleared by hand during the 2026-06-14 incident.) Boot mode leaves
+    // these alone — a freshly-queued run there may still be mid-dispatch.
+    if (staleAfterMs > 0) {
+      const staleQueued = await prisma.selfUpgradeRun.findMany({
+        where: {
+          status: { in: ["queued", "pending"] },
+          startedAt: null,
+          createdAt: { lt: new Date(now.getTime() - staleAfterMs) },
+        },
+      });
+      for (const run of staleQueued) {
+        await failRun(
+          run.runId,
+          `Reconciled by watchdog: dispatch never started (stuck "${run.status}" > ${Math.round(staleAfterMs / 60000)}m — the queue event was likely dropped). Re-invoke to retry.`,
+        );
+        failed++;
+        logger.log(
+          `[self-upgrade-reconcile] ${run.runId} -> failed (never-dispatched ${run.status})`,
+        );
+      }
+    }
+
     if (succeeded || failed) {
       logger.log(`[self-upgrade-reconcile] resolved ${succeeded} succeeded, ${failed} failed`);
     }
