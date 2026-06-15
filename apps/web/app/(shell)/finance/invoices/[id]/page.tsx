@@ -98,7 +98,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
             >
               Download PDF
             </a>
-            <InvoiceSendButton invoiceId={invoice.id} status={invoice.status} />
+            <InvoiceSendButton invoiceId={invoice.id} status={invoice.status} customerAccountId={invoice.account.id} />
           </div>
         </div>
         <div className="text-right">
