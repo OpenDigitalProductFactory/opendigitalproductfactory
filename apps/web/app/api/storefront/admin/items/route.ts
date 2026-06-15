@@ -95,6 +95,8 @@ export async function POST(req: NextRequest) {
     };
   }
 
+  const orgSettingsRow = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
+
   const item = await prisma.storefrontItem.create({
     data: {
       itemId,
@@ -105,7 +107,7 @@ export async function POST(req: NextRequest) {
       ctaType: body.ctaType,
       priceType: body.priceType ?? null,
       priceAmount: body.priceAmount != null ? body.priceAmount : null,
-      priceCurrency: body.priceCurrency ?? "GBP",
+      priceCurrency: body.priceCurrency ?? orgSettingsRow?.baseCurrency ?? "USD",
       imageUrl: body.imageUrl ?? null,
       ctaLabel: body.ctaLabel ?? null,
       ...(bookingConfig && { bookingConfig }),
