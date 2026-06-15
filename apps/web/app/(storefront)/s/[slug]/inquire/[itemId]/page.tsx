@@ -16,9 +16,15 @@ export default async function ItemInquirePage({
 
   const formSchema = await resolveInquiryFormSchema(storefront.archetypeId);
 
+  const CTA_HEADINGS: Record<string, string> = {
+    rental: "Reserve",
+    inquiry: "Enquire about",
+  };
+  const headingVerb = item.ctaLabel ?? CTA_HEADINGS[item.ctaType] ?? "Enquire about";
+
   return (
     <div style={{ paddingTop: 40, maxWidth: 520 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Enquire about {item.name}</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>{headingVerb} {item.name}</h1>
       <p style={{ color: "var(--dpf-muted)", marginBottom: 24, fontSize: 14 }}>{item.description}</p>
       <InquiryForm orgSlug={slug} itemId={itemId} formSchema={formSchema} />
     </div>

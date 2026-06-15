@@ -31,8 +31,8 @@ export const hoaPropertyManagementArchetypes: ArchetypeDefinition[] = [
     ctaType: "inquiry",
     tags: ["hoa", "homeowners", "association", "property", "community", "residential"],
     itemTemplates: [
-      { name: "Annual Dues", description: "Annual homeowner association dues payment", priceType: "fixed", ctaType: "purchase" },
-      { name: "Special Assessment", description: "One-time assessment for community improvements", priceType: "fixed", ctaType: "purchase" },
+      { name: "Annual Dues", description: "Annual homeowner association dues payment", priceType: "fixed", priceAmount: 1200, ctaType: "purchase" },
+      { name: "Special Assessment", description: "One-time assessment for community improvements", priceType: "fixed", priceAmount: 500, ctaType: "purchase" },
       { name: "Amenity Reservation", description: "Reserve the clubhouse, pool, or common area for an event", priceType: "fixed", ctaType: "booking" },
       { name: "Architectural Review Request", description: "Submit plans for exterior modifications for board review", priceType: "free", ctaType: "inquiry" },
       { name: "Maintenance Request", description: "Report a common-area maintenance issue", priceType: "free", ctaType: "inquiry" },
@@ -57,8 +57,8 @@ export const hoaPropertyManagementArchetypes: ArchetypeDefinition[] = [
     ctaType: "inquiry",
     tags: ["condo", "condominium", "association", "property", "strata", "residential"],
     itemTemplates: [
-      { name: "Monthly Condo Fees", description: "Monthly condominium maintenance fees", priceType: "fixed", ctaType: "purchase" },
-      { name: "Special Assessment", description: "One-time levy for building repairs or improvements", priceType: "fixed", ctaType: "purchase" },
+      { name: "Monthly Condo Fees", description: "Monthly condominium maintenance fees", priceType: "fixed", priceAmount: 300, ctaType: "purchase" },
+      { name: "Special Assessment", description: "One-time levy for building repairs or improvements", priceType: "fixed", priceAmount: 800, ctaType: "purchase" },
       { name: "Parking Allocation", description: "Apply for or change your parking space assignment", priceType: "free", ctaType: "inquiry" },
       { name: "Common Area Booking", description: "Reserve a party room, rooftop, or meeting space", priceType: "fixed", ctaType: "booking" },
       { name: "Maintenance Request", description: "Report an issue in shared areas or building systems", priceType: "free", ctaType: "inquiry" },
