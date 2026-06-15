@@ -339,6 +339,69 @@ function parseDesignDoc(output: string): Record<string, unknown> | null {
 /**
  * Dispatch ideate research to the selected external CLI (Claude / Codex / Grok) inside the sandbox.
  */
+/** Derive a few distinctive search terms from the feature title + description,
+ *  splitting camelCase and dropping boilerplate stopwords. */
+export function deriveSearchTerms(title: string, description: string): string[] {
+  const STOP = new Set([
+    "add","with","unit","test","tests","the","and","for","into","that","this","from",
+    "helper","function","functions","value","values","new","build","studio","apps","web",
+    "lib","shared","existing","module","modules","return","returns","length","place",
+    "search","codebase","first","rather","than","creating","duplicate","only","create",
+    "file","files","cover","covering","acceptance","pure","string","stateless","reuse",
+  ]);
+  const normalized = `${title} ${description}`
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2") // split camelCase: truncateMiddle → truncate Middle
+    .toLowerCase();
+  const words = normalized.match(/[a-z][a-z0-9]{2,}/g) ?? [];
+  const seen = new Set<string>();
+  const terms: string[] = [];
+  for (const w of words) {
+    if (STOP.has(w) || seen.has(w)) continue;
+    seen.add(w);
+    terms.push(w);
+    if (terms.length >= 6) break;
+  }
+  return terms;
+}
+
+/**
+ * Real codebase research for the LOCAL (routeAndCall) ideate path. The frontier
+ * path searches /workspace via its in-sandbox CLI; locally we query the indexed
+ * code graph (searchCodeGraph) for each derived term and format the hits so the
+ * model grounds existingFunctionalityAudit on real symbols/paths instead of
+ * fabricating the search. Resilient: any failure or an unbuilt graph yields "".
+ */
+async function gatherCodeGraphContext(
+  terms: string[],
+  onProgress?: (message: string) => void,
+): Promise<string> {
+  if (terms.length === 0) return "";
+  try {
+    const { searchCodeGraph } = await import("@/lib/integrate/code-graph/graph-queries");
+    const blocks: string[] = [];
+    let anyAvailable = false;
+    for (const term of terms) {
+      const r = await searchCodeGraph({ query: term, limit: 6 });
+      if (!r.available) continue;
+      anyAvailable = true;
+      if (r.results.length > 0) {
+        const hits = r.results
+          .map((x) => `  - ${x.name} (${x.path}${x.startLine ? `:${x.startLine}` : ""})`)
+          .join("\n");
+        blocks.push(`Search "${term}" → ${r.results.length} hit(s):\n${hits}`);
+      }
+    }
+    if (!anyAvailable) return "";
+    onProgress?.(`Code graph searched: ${terms.join(", ")}`);
+    if (blocks.length === 0) {
+      return `\n\nCODE GRAPH SEARCH (authoritative — the indexed codebase was searched for you):\nNo indexed symbol or file matched the feature's key terms: ${terms.join(", ")}. For existingFunctionalityAudit, state that you searched these exact terms in the code graph and found no pre-existing implementation — do NOT invent file paths.`;
+    }
+    return `\n\nCODE GRAPH SEARCH RESULTS (authoritative — the indexed codebase was searched for you; ground existingFunctionalityAudit and reusePlan on THESE real symbols/paths, do not invent paths):\n${blocks.join("\n")}\n\nIf none of the above is genuinely related, say so explicitly and treat the feature as new.`;
+  } catch {
+    return "";
+  }
+}
+
 export async function dispatchIdeateResearch(params: {
   featureTitle: string;
   featureDescription: string;
@@ -366,7 +429,17 @@ export async function dispatchIdeateResearch(params: {
   if (dispatchEngine === "opencode") {
     const startMs = Date.now();
     try {
-      const prompt = buildResearchPrompt(params);
+      // The frontier ideate path dispatches a CLI into the sandbox that actually
+      // searches /workspace. The local routeAndCall path can't — so without help
+      // the model FABRICATES the "existingFunctionalityAudit" ("Searched for …")
+      // per the prompt template without searching anything. Wire the real code
+      // graph in: pre-fetch indexed symbols/files for the feature's terms and
+      // inject them as authoritative search results the model must ground on.
+      const codeGraphContext = await gatherCodeGraphContext(
+        deriveSearchTerms(params.featureTitle, params.featureDescription),
+        params.onProgress,
+      );
+      const prompt = buildResearchPrompt(params) + codeGraphContext;
       const { routeAndCall } = await import("@/lib/inference/routed-inference");
       const response = await routeAndCall(
         [{ role: "user" as const, content: prompt }],

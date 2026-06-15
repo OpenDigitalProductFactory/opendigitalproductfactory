@@ -1,5 +1,26 @@
 import { describe, it, expect } from "vitest";
-import { buildResearchPrompt } from "./ideate-dispatch";
+import { buildResearchPrompt, deriveSearchTerms } from "./ideate-dispatch";
+
+describe("deriveSearchTerms", () => {
+  it("splits camelCase and drops boilerplate stopwords", () => {
+    const terms = deriveSearchTerms("Add truncateMiddle string helper with unit tests", "A pure utility function");
+    expect(terms).toContain("truncate");
+    expect(terms).toContain("middle");
+    expect(terms).not.toContain("add");
+    expect(terms).not.toContain("helper");
+  });
+
+  it("keeps distinctive identifier terms and caps the list at 6 (title-priority)", () => {
+    const terms = deriveSearchTerms("Exclude minilm models", "harden the pickDefaultCodingModel selection regex");
+    expect(terms).toContain("minilm");
+    expect(terms).toContain("pick"); // camelCase split of pickDefaultCodingModel
+    expect(terms.length).toBeLessThanOrEqual(6);
+  });
+
+  it("returns an empty list for an all-stopword input", () => {
+    expect(deriveSearchTerms("Add a helper", "with unit tests")).toEqual([]);
+  });
+});
 
 describe("buildResearchPrompt", () => {
   const baseParams = {
