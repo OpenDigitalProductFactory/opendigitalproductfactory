@@ -18,6 +18,12 @@ vi.mock("@/lib/actions/crm", () => ({
   updateOpportunityStageFromForm: vi.fn(),
 }));
 
+// The page now resolves the workspace base currency for revenue formatting;
+// mock the action so the test doesn't hit prisma.orgSettings (undefined here).
+vi.mock("@/lib/actions/currency", () => ({
+  getOrgSettings: vi.fn().mockResolvedValue({ baseCurrency: "USD" }),
+}));
+
 vi.mock("@/lib/crm/pipeline-inspector-data", () => ({
   getPipelineInspectorView,
 }));
