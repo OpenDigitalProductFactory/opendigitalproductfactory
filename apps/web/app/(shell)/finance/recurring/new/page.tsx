@@ -3,11 +3,12 @@ import { prisma } from "@dpf/db";
 import Link from "next/link";
 import { CreateRecurringForm } from "@/components/finance/CreateRecurringForm";
 import { getInvoiceDefaultTaxRate } from "@/lib/actions/financial-setup";
+import { getOrgSettings } from "@/lib/actions/currency";
 
 export default async function NewRecurringPage() {
   // Recurring schedules generate customer invoices, so default tax the same way
   // a one-off invoice does — from the org's VAT selection, not a 20% hardcode.
-  const [customers, defaultTaxRate] = await Promise.all([
+  const [customers, defaultTaxRate, orgSettings] = await Promise.all([
     prisma.customerAccount.findMany({
       where: {
         status: { in: ["active", "prospect", "qualified", "onboarding"] },
@@ -21,6 +22,7 @@ export default async function NewRecurringPage() {
       },
     }),
     getInvoiceDefaultTaxRate(),
+    getOrgSettings(),
   ]);
 
   return (
@@ -54,7 +56,7 @@ export default async function NewRecurringPage() {
         </p>
       </div>
 
-      <CreateRecurringForm customers={customers} defaultTaxRate={defaultTaxRate} />
+      <CreateRecurringForm customers={customers} defaultTaxRate={defaultTaxRate} defaultCurrency={orgSettings.baseCurrency} />
     </div>
   );
 }

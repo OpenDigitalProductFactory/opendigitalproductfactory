@@ -82,10 +82,10 @@ export const foodHospitalityArchetypes: ArchetypeDefinition[] = [
     ctaType: "purchase",
     tags: ["bakery", "bread", "cakes", "food"],
     itemTemplates: [
-      { name: "Sourdough Loaf", description: "Freshly baked sourdough — available daily", priceType: "fixed", ctaType: "purchase" },
-      { name: "Birthday Cake", description: "Celebration cake with custom decoration", priceType: "from", ctaType: "purchase" },
+      { name: "Sourdough Loaf", description: "Freshly baked sourdough — available daily", priceType: "fixed", priceAmount: 4.50, ctaType: "purchase" },
+      { name: "Birthday Cake", description: "Celebration cake with custom decoration", priceType: "from", priceAmount: 35, ctaType: "purchase" },
       { name: "Custom Order", description: "Bespoke cake or baked goods for any occasion", priceType: "quote", ctaType: "inquiry" },
-      { name: "Seasonal Pastries", description: "Fresh pastries, croissants, and buns", priceType: "fixed", ctaType: "purchase" },
+      { name: "Seasonal Pastries", description: "Fresh pastries, croissants, and buns", priceType: "fixed", priceAmount: 2.50, ctaType: "purchase" },
       { name: "Wedding Cake", description: "Multi-tier wedding cake with consultation", priceType: "quote", ctaType: "inquiry" },
     ],
     sectionTemplates: [
