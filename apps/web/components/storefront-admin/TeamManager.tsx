@@ -63,10 +63,12 @@ export function TeamManager({
   providers: initial,
   storefrontId,
   items,
+  teamLabel = "Service Providers",
 }: {
   providers: Provider[];
   storefrontId: string;
   items: BookableItem[];
+  teamLabel?: string;
 }) {
   const [providers, setProviders] = useState<Provider[]>(initial);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -200,7 +202,7 @@ export function TeamManager({
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 15, fontWeight: 600 }}>Service Providers ({providers.length})</div>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>{teamLabel} ({providers.length})</div>
         <button
           onClick={() => setShowAddForm((v) => !v)}
           style={{ padding: "6px 14px", borderRadius: 5, border: "1px solid var(--dpf-border)", background: showAddForm ? "var(--dpf-accent)" : "none", color: showAddForm ? "#fff" : "inherit", cursor: "pointer", fontSize: 13 }}
