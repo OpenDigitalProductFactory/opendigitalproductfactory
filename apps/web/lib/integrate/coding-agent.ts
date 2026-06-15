@@ -297,9 +297,55 @@ export type SandboxTestResult = {
   typeCheckPassed: boolean;
   testOutput: string;
   typeCheckOutput: string;
+  /** "scoped" when we ran only the build's own feature tests, "full" otherwise. */
+  scope?: "scoped" | "full";
+  /** Number of feature test files run when scope === "scoped". */
+  scopedTestsRun?: number;
 };
 
-export async function runSandboxTests(containerId: string): Promise<SandboxTestResult> {
+/**
+ * Derive the vitest test files to run for a build, scoped to its changed files.
+ * Returns changed test files directly, plus sibling test candidates for changed
+ * source files. Candidates may not exist on disk — the runner filters to
+ * existing files before invoking vitest.
+ */
+export function deriveScopedTestFiles(changedFiles: string[]): string[] {
+  const tests = new Set<string>();
+  for (const raw of changedFiles) {
+    const f = raw.trim();
+    if (!f) continue;
+    if (/\.(test|spec)\.[tj]sx?$/.test(f)) {
+      tests.add(f);
+      continue;
+    }
+    if (/\.[tj]sx?$/.test(f)) {
+      const base = f.replace(/\.[tj]sx?$/, "");
+      tests.add(`${base}.test.ts`);
+      tests.add(`${base}.test.tsx`);
+      tests.add(`${base}.spec.ts`);
+    }
+  }
+  return [...tests];
+}
+
+/** Group test file paths by their workspace package (apps/* or packages/*). */
+export function groupTestFilesByPackage(files: string[]): Map<string, string[]> {
+  const grouped = new Map<string, string[]>();
+  for (const f of files) {
+    const match = f.match(/^(apps\/[^/]+|packages\/[^/]+)\/(.+)$/);
+    if (!match) continue;
+    const [, pkg, rel] = match;
+    const arr = grouped.get(pkg) ?? [];
+    arr.push(rel);
+    grouped.set(pkg, arr);
+  }
+  return grouped;
+}
+
+export async function runSandboxTests(
+  containerId: string,
+  opts?: { changedFiles?: string[] },
+): Promise<SandboxTestResult> {
   // Typecheck is the primary gate — catches real compilation errors in feature code.
   // Run it first via the web workspace's tsconfig (not bare `tsc` which prints help).
   let typeCheckOutput = "";
@@ -312,26 +358,70 @@ export async function runSandboxTests(containerId: string): Promise<SandboxTestR
     typeCheckOutput = e instanceof Error ? e.message : String(e);
   }
 
-  // Unit tests are informational — the sandbox contains the full platform codebase,
-  // so pre-existing test failures in unrelated modules must not block feature builds.
-  // Only feature-specific test failures (if any feature tests exist) should matter,
-  // but we don't have a way to scope vitest to just the feature's files yet.
-  // For now, record test output but gate only on typecheck.
+  // Scoped tests. Historically we gated on typecheck ONLY because "we don't have
+  // a way to scope vitest to just the feature's files yet" — so a build whose own
+  // feature tests failed still passed. When we know the build's changed files we
+  // now run ONLY the feature's test files: (a) the feature's tests actually GATE
+  // the build, and (b) the output stays small so a real failure is never
+  // truncated behind hundreds of unrelated monorepo tests. With no changed-file
+  // hint we fall back to the legacy full-suite run, recorded but typecheck-gated.
   let testOutput = "";
-  let testPassed = false;
-  try {
-    testOutput = await execInSandbox(containerId, "cd /workspace && pnpm test 2>&1 || true");
-    testPassed = testOutput.includes("Tests  ") && !testOutput.includes("FAIL");
-  } catch (e) {
-    testOutput = e instanceof Error ? e.message : String(e);
+  let testPassed = true;
+  let scope: "scoped" | "full" = "full";
+  let scopedTestsRun = 0;
+
+  const candidates = deriveScopedTestFiles(opts?.changedFiles ?? []);
+  let scopedTestFiles: string[] = [];
+  if (candidates.length > 0) {
+    const existence = await Promise.all(
+      candidates.map(async (p) => {
+        try {
+          const out = await execInSandbox(containerId, `test -f "/workspace/${p}" && echo __yes__ || echo __no__`);
+          return out.includes("__yes__") ? p : null;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    scopedTestFiles = existence.filter((p): p is string => p !== null);
+  }
+
+  if (scopedTestFiles.length > 0) {
+    scope = "scoped";
+    scopedTestsRun = scopedTestFiles.length;
+    const sections: string[] = [];
+    let anyFailed = false;
+    for (const [pkg, rel] of groupTestFilesByPackage(scopedTestFiles)) {
+      const fileArgs = rel.map((r) => `"${r}"`).join(" ");
+      const out = await execInSandbox(containerId, `cd /workspace/${pkg} && npx vitest run ${fileArgs} 2>&1 || true`);
+      sections.push(`# ${pkg}\n${out}`);
+      // vitest omits the "failed" segment entirely when zero, so any "N failed"
+      // with N>=1 (or a FAIL marker) means the feature's own tests are red.
+      if (/\b[1-9]\d*\s+failed/i.test(out) || /^\s*FAIL\b/m.test(out)) {
+        anyFailed = true;
+      }
+    }
+    testOutput = sections.join("\n\n");
+    testPassed = !anyFailed;
+  } else {
+    try {
+      testOutput = await execInSandbox(containerId, "cd /workspace && pnpm test 2>&1 || true");
+      testPassed = testOutput.includes("Tests  ") && !testOutput.includes("FAIL");
+    } catch (e) {
+      testOutput = e instanceof Error ? e.message : String(e);
+      testPassed = false;
+    }
   }
 
   return {
-    // Gate on typecheck only — unit tests are recorded but informational
-    passed: typeCheckPassed,
+    // Gate on typecheck AND — when feature tests were scoped and run — those
+    // tests. The legacy full-suite path stays typecheck-gated (informational).
+    passed: typeCheckPassed && (scope === "scoped" ? testPassed : true),
     typeCheckPassed,
     testOutput,
     typeCheckOutput,
+    scope,
+    scopedTestsRun,
   };
 }
 
