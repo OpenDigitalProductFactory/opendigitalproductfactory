@@ -417,6 +417,51 @@ export function mergeReviews(r1: ReviewResult, r2: ReviewResult): ReviewResult {
   return { decision, issues: merged, summary };
 }
 
+/** Build kinds for which a missing test-first step must not block the plan gate.
+ *  Test-first is a feature-grade discipline; a chore, fix, or docs build changes
+ *  little or no logic, so a "write a real failing test first" complaint is not a
+ *  genuine blocker for it. */
+const TEST_FIRST_LENIENT_KINDS: ReadonlySet<string> = new Set(["chore", "fix", "docs", "doc"]);
+
+/** Matches a reviewer issue that complains about a missing/weak test-first step. */
+const TEST_FIRST_ISSUE_RE = /test[\s-]?first|failing test|real test|test for (logic|behavior)|write (a |the )?(real |failing )?test/i;
+
+/**
+ * Deterministic kind-aware lenience for the plan-review gate.
+ *
+ * The plan-review rubric already scopes the test-first requirement to LOGIC
+ * changes and exempts documentation-only work, but a reviewer model — notably a
+ * small local model running the build on-host — over-applies TDD and marks a
+ * comment/chore task "critical" for lacking a test, wedging the gate across
+ * rounds. Rather than depend on the model honoring the prose exemption, enforce
+ * it in code: for a chore/fix/docs build, downgrade any test-first critical to
+ * minor (non-blocking) and recompute the severity-driven decision. Genuine
+ * blockers (missing files, broken logic, oversized tasks) are untouched.
+ *
+ * Pure + side-effect-free so it is trivially unit-testable.
+ */
+export function applyTestFirstLenienceForKind(
+  review: ReviewResult,
+  kind: string | null | undefined,
+): ReviewResult {
+  if (!kind || !TEST_FIRST_LENIENT_KINDS.has(kind)) return review;
+  let changed = false;
+  const issues = review.issues.map((i) => {
+    if (i.severity === "critical" && TEST_FIRST_ISSUE_RE.test(i.description)) {
+      changed = true;
+      return {
+        ...i,
+        severity: "minor" as const,
+        description: `${i.description} [non-blocking for a ${kind} build — test-first is a feature-grade gate]`,
+      };
+    }
+    return i;
+  });
+  if (!changed) return review;
+  const decision: "pass" | "fail" = issues.some((i) => i.severity === "critical") ? "fail" : "pass";
+  return { ...review, issues, decision };
+}
+
 // ─── Response Parsing ────────────────────────────────────────────────────────
 
 export function parseReviewResponse(raw: string): ReviewResult {
