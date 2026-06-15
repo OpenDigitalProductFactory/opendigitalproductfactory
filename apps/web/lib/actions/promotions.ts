@@ -10,6 +10,7 @@ import { generatePromotionId } from "@/lib/version-tracking";
 import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
+import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
 import { createRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
 import {
   isStoreOpen,
@@ -638,18 +639,29 @@ export async function listSelfUpgradeRuns(opts?: {
 export async function getSelfUpgradeStatus() {
   await requireOpsAccess();
 
-  const [config, latestRun, platformVersion, deployedSha, lastCheckedAt, quiescence, cooldownUntil] =
-    await Promise.all([
-      getSelfUpgradeConfig(),
-      getLatestRun(),
-      loadPlatformVersion(),
-      getDeployedSha(),
-      getLastCheckedAt(),
-      // Live drain activity (what's holding an upgrade) + the post-defer/fail
-      // backoff window, so the panel can explain "what's happening" truthfully.
-      getQuiescenceActivity(),
-      getCooldownUntil(),
-    ]);
+  const [
+    config,
+    latestRun,
+    platformVersion,
+    deployedSha,
+    lastCheckedAt,
+    quiescence,
+    cooldownUntil,
+    jobEngine,
+  ] = await Promise.all([
+    getSelfUpgradeConfig(),
+    getLatestRun(),
+    loadPlatformVersion(),
+    getDeployedSha(),
+    getLastCheckedAt(),
+    // Live drain activity (what's holding an upgrade) + the post-defer/fail
+    // backoff window, so the panel can explain "what's happening" truthfully.
+    getQuiescenceActivity(),
+    getCooldownUntil(),
+    // Background-job-engine (Inngest) registration health — a self-upgrade
+    // can't dispatch without it, so the panel must surface a dead job engine.
+    getJobEngineHealth(),
+  ]);
 
   // Upgrade timing follows the storefront's open/closed state (single source of
   // truth: operating hours). inMaintenanceWindow = "upgrades may run now" =
@@ -711,6 +723,7 @@ export async function getSelfUpgradeStatus() {
     // quiescence blockers already captured above (no extra query).
     admission: buildAdmissionSnapshot(readBuildPipelineLimit(), quiescence.blockers),
     cooldownUntil: cooldownUntil?.toISOString() ?? null,
+    jobEngine,
     platformVersion: {
       version: platformVersion.version,
       publishedAt: platformVersion.publishedAt.toISOString(),

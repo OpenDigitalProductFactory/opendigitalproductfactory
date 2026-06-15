@@ -85,6 +85,11 @@ type Props = {
   quiescence?: QuiescenceActivity | null;
   admission?: AdmissionSnapshot | null;
   cooldownUntil?: string | null;
+  jobEngine?: {
+    status: "healthy" | "degraded" | "unknown";
+    detail: string | null;
+    checkedAt: string | null;
+  };
   history?: LatestRun[];
   historyNextCursor?: string | null;
   platformVersion: {
@@ -198,6 +203,7 @@ export default function SelfUpgradeClient({
   quiescence,
   admission,
   cooldownUntil,
+  jobEngine,
   history,
   historyNextCursor,
   platformVersion,
@@ -324,6 +330,23 @@ export default function SelfUpgradeClient({
 
   return (
     <div className="space-y-4">
+      {jobEngine?.status === "degraded" && (
+        <div
+          className="p-3 rounded-lg bg-[var(--dpf-warning)]/15 border border-[var(--dpf-warning)]/40 text-sm"
+          role="alert"
+          data-job-engine-health="degraded"
+        >
+          <div className="font-medium text-[var(--dpf-warning)]">
+            ⚠ Background job engine isn’t dispatching
+          </div>
+          <div className="mt-1 text-[var(--dpf-muted)]">
+            The portal couldn’t register its jobs with Inngest, so background work
+            — self-upgrade, evals, backups, watchdogs — won’t run until this is
+            fixed.{jobEngine.detail ? ` (${jobEngine.detail})` : ""} Restart the
+            portal or check the Inngest service.
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span
