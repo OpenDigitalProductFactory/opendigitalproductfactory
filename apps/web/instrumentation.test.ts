@@ -179,6 +179,66 @@ describe("reconcileSelfUpgradeRunsOnBoot", () => {
       expect.stringContaining("deployed=actual-sha expected=expected-sha target=upstream-sha"),
     );
   });
+
+  it("on boot (no staleAfterMs) reconciles every running row with no startedAt filter", async () => {
+    getDeployedShaMock.mockResolvedValueOnce("sha");
+    selfUpgradeRunFindManyMock.mockResolvedValueOnce([]);
+
+    await reconcileSelfUpgradeRunsOnBoot({ log: vi.fn(), error: vi.fn() });
+
+    expect(selfUpgradeRunFindManyMock.mock.calls[0][0].where).toEqual({ status: "running" });
+  });
+
+  it("in periodic mode (staleAfterMs > 0) only touches runs stuck past the window, labelled watchdog-reaped", async () => {
+    getDeployedShaMock.mockResolvedValueOnce("actual-sha");
+    selfUpgradeRunFindManyMock
+      .mockResolvedValueOnce([
+        { runId: "SUR-STUCK", deployedSha: "expected-sha", targetSha: "upstream-sha" },
+      ])
+      .mockResolvedValueOnce([]); // 2nd query: no stale queued/pending runs
+    failRunMock.mockResolvedValueOnce({});
+    const now = () => new Date("2026-06-14T01:00:00.000Z");
+
+    const result = await reconcileSelfUpgradeRunsOnBoot(
+      { log: vi.fn(), error: vi.fn() },
+      { staleAfterMs: 30 * 60 * 1000, now },
+    );
+
+    expect(result).toEqual({ succeeded: 0, failed: 1 });
+    // Scoped so an in-flight upgrade (started < 30m ago) is never reconciled.
+    const where = selfUpgradeRunFindManyMock.mock.calls[0][0].where;
+    expect(where.status).toBe("running");
+    expect(where.startedAt.lt.getTime()).toBe(now().getTime() - 30 * 60 * 1000);
+    expect(failRunMock).toHaveBeenCalledWith(
+      "SUR-STUCK",
+      expect.stringContaining('watchdog (stuck "running" > 30m)'),
+    );
+  });
+
+  it("in periodic mode also fails never-dispatched runs stuck queued/pending", async () => {
+    getDeployedShaMock.mockResolvedValueOnce("sha");
+    selfUpgradeRunFindManyMock
+      .mockResolvedValueOnce([]) // no stuck "running"
+      .mockResolvedValueOnce([{ runId: "SUR-QUEUED", status: "queued" }]);
+    failRunMock.mockResolvedValueOnce({});
+    const now = () => new Date("2026-06-14T01:00:00.000Z");
+
+    const result = await reconcileSelfUpgradeRunsOnBoot(
+      { log: vi.fn(), error: vi.fn() },
+      { staleAfterMs: 30 * 60 * 1000, now },
+    );
+
+    expect(result).toEqual({ succeeded: 0, failed: 1 });
+    // 2nd query targets never-started queued/pending rows older than the window.
+    const where = selfUpgradeRunFindManyMock.mock.calls[1][0].where;
+    expect(where.status).toEqual({ in: ["queued", "pending"] });
+    expect(where.startedAt).toBeNull();
+    expect(where.createdAt.lt.getTime()).toBe(now().getTime() - 30 * 60 * 1000);
+    expect(failRunMock).toHaveBeenCalledWith(
+      "SUR-QUEUED",
+      expect.stringContaining("dispatch never started"),
+    );
+  });
 });
 
 describe("isStartupModelRevalidationEnabled", () => {
