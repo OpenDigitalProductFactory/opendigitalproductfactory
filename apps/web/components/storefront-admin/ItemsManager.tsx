@@ -35,6 +35,7 @@ const CTA_BADGES: Record<string, { color: string; label: string }> = {
   purchase: { color: "var(--dpf-success)", label: "Purchase" },
   inquiry: { color: "#fb923c", label: "Inquiry" },
   donation: { color: "#f472b6", label: "Donation" },
+  rental: { color: "#a78bfa", label: "Rental" },
 };
 
 export function ItemsManager({ storefrontId, items: initial, vocabulary, categorySuggestions, defaultCtaType, defaultCurrency }: Props) {
