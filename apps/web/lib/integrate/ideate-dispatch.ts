@@ -355,6 +355,47 @@ export async function dispatchIdeateResearch(params: {
   const providerId = params.providerId || "";
   const model = params.model ?? "";
 
+  // Local-model engine (opencode): Ideate research runs through portal-side
+  // routing — the SAME routeAndCall path the Plan phase uses — not a vendor CLI.
+  // The configured local model (e.g. qwen3-coder via Docker Model Runner)
+  // generates the design doc with no credential and no egress. This is the last
+  // piece that lets the full Build Studio pipeline (ideate → plan → build) run
+  // end-to-end off a local LLM: Plan already uses routeAndCall, Build dispatches
+  // to the opencode runner, and now Ideate uses routing too instead of falling
+  // through to the `codex exec` branch below. (BI-01D6A51B)
+  if (dispatchEngine === "opencode") {
+    const startMs = Date.now();
+    try {
+      const prompt = buildResearchPrompt(params);
+      const { routeAndCall } = await import("@/lib/inference/routed-inference");
+      const response = await routeAndCall(
+        [{ role: "user" as const, content: prompt }],
+        "You are a senior software architect producing a structured design document. Respond with the design document content only — no preamble.",
+        "internal",
+        { budgetClass: "quality_first" },
+      );
+      const rawOutput = (response.content ?? "").trim();
+      const designDoc = parseDesignDoc(rawOutput);
+      return {
+        designDoc,
+        rawOutput,
+        success: !!designDoc,
+        durationMs: Date.now() - startMs,
+        error: designDoc
+          ? undefined
+          : "Local-model ideate output could not be parsed into a design document.",
+      };
+    } catch (err) {
+      return {
+        designDoc: null,
+        rawOutput: "",
+        success: false,
+        durationMs: Date.now() - startMs,
+        error: `Local-model ideate failed: ${(err as Error).message}`,
+      };
+    }
+  }
+
   // Auth
   if (!providerId) {
     return {
