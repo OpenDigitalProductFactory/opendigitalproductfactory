@@ -662,21 +662,43 @@ export function parseQAVerification(qaContent: string): QAVerification {
     return { typecheckPassed: false, testsPassed: 0, testsFailed: 0, parseConfidence: "low" };
   }
 
-  const lower = qaContent.toLowerCase();
+  // Strip ANSI color codes. A real `pnpm -r test` run is colorized, and the
+  // escape sequences otherwise wedge between digits and keywords and corrupt
+  // the count regexes below.
+  // eslint-disable-next-line no-control-regex -- ANSI color strip
+  const clean = qaContent.replace(/\x1b\[[0-9;]*m/g, "");
+  const lower = clean.toLowerCase();
 
   // Typecheck: explicit fail indicators mean failure; absence alone is not a pass
-  const hasTypecheckFail = /typecheck[\s:]*fail/i.test(qaContent)
-    || /type\s*error/i.test(qaContent)
-    || /tsc.*error/i.test(qaContent);
-  const hasTypecheckPass = /typecheck[\s:]*pass/i.test(qaContent)
-    || /typecheck[\s:]*(?:ok|success)/i.test(qaContent)
+  const hasTypecheckFail = /typecheck[\s:]*fail/i.test(clean)
+    || /type\s*error/i.test(clean)
+    || /tsc.*error/i.test(clean);
+  const hasTypecheckPass = /typecheck[\s:]*pass/i.test(clean)
+    || /typecheck[\s:]*(?:ok|success)/i.test(clean)
     || lower.includes("no type errors");
 
-  // Broader test count regexes to handle: "12 pass", "12 passing", "12 tests passed"
-  const passMatch = qaContent.match(/(\d+)\s*(?:tests?\s+)?pass(?:ing|ed)?/i);
-  const failMatch = qaContent.match(/(\d+)\s*(?:tests?\s+)?fail(?:ing|ed|ures?)?/i);
+  // Test counts. A monorepo `pnpm -r test` run prints one vitest summary PER
+  // package, so a single .match() captures only the FIRST package's numbers and
+  // silently drops failures in later packages (e.g. apps/web). That let builds
+  // whose own feature tests fail slip past the build→review gate with
+  // testsFailed:0 — the model wrote broken tests, but the pipeline reported
+  // green. Aggregate every count across the whole output instead: for gate
+  // purposes an over-count of failures is safe (it errs toward blocking the
+  // advance), an under-count is not. Legacy single-summary inputs sum to the
+  // same single value, so existing behavior is preserved.
+  let testsPassed = 0;
+  let testsFailed = 0;
+  let sawCount = false;
+  for (const m of clean.matchAll(/(\d+)\s*(?:tests?\s+)?pass(?:ing|ed)?/gi)) {
+    testsPassed += parseInt(m[1]!);
+    sawCount = true;
+  }
+  for (const m of clean.matchAll(/(\d+)\s*(?:tests?\s+)?fail(?:ing|ed|ures?)?/gi)) {
+    testsFailed += parseInt(m[1]!);
+    sawCount = true;
+  }
 
-  const hasTestResults = !!(passMatch || failMatch);
+  const hasTestResults = sawCount;
   const hasTypecheckSignal = hasTypecheckFail || hasTypecheckPass;
 
   if (!hasTestResults && !hasTypecheckSignal) {
@@ -685,8 +707,8 @@ export function parseQAVerification(qaContent: string): QAVerification {
 
   return {
     typecheckPassed: hasTypecheckPass || (!hasTypecheckFail && hasTestResults),
-    testsPassed: passMatch ? parseInt(passMatch[1]!) : 0,
-    testsFailed: failMatch ? parseInt(failMatch[1]!) : 0,
+    testsPassed,
+    testsFailed,
     parseConfidence: "high",
   };
 }
