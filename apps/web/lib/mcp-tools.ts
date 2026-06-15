@@ -9397,7 +9397,19 @@ export async function executeTool(
       const autoFix = params.auto_fix === true;
       const MAX_FIX_ATTEMPTS = 3;
 
-      let results = await runSandboxTests(rstSandboxId);
+      // Scope verification to the build's changed files so the feature's OWN
+      // tests gate the build (not just typecheck) and their output isn't
+      // truncated behind the full monorepo suite.
+      let rstChangedFiles: string[] = [];
+      try {
+        const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
+        const rstState = await getSandboxStateForBuild(buildId);
+        rstChangedFiles = rstState?.sourceDiffstat.map((entry) => entry.path) ?? [];
+      } catch (err) {
+        console.warn("[run_sandbox_tests] could not resolve changed files for scoping:", (err as Error)?.message);
+      }
+
+      let results = await runSandboxTests(rstSandboxId, { changedFiles: rstChangedFiles });
       let fixAttempts = 0;
 
       // Auto-fix loop: diagnose failures, apply fixes via LLM, re-test
@@ -9554,8 +9566,8 @@ export async function executeTool(
             break; // LLM call failed — stop retrying
           }
 
-          // Re-run tests
-          results = await runSandboxTests(rstSandboxId);
+          // Re-run tests (same scoping as the initial run)
+          results = await runSandboxTests(rstSandboxId, { changedFiles: rstChangedFiles });
         }
       }
 

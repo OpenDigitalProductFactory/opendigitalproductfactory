@@ -57,3 +57,48 @@ describe("buildCodeGenPrompt", () => {
     expect(() => buildCodeGenPrompt(null, { fileStructure: [], tasks: [] })).not.toThrow();
   });
 });
+
+const { deriveScopedTestFiles, groupTestFilesByPackage } = await import("./coding-agent");
+
+describe("deriveScopedTestFiles", () => {
+  it("includes changed test files directly", () => {
+    expect(deriveScopedTestFiles(["apps/web/lib/utils/string-helpers.test.ts"]))
+      .toContain("apps/web/lib/utils/string-helpers.test.ts");
+  });
+
+  it("derives sibling test candidates for a changed source file", () => {
+    const result = deriveScopedTestFiles(["apps/web/lib/utils/string-helpers.ts"]);
+    expect(result).toContain("apps/web/lib/utils/string-helpers.test.ts");
+    expect(result).toContain("apps/web/lib/utils/string-helpers.test.tsx");
+  });
+
+  it("returns an empty list when nothing testable changed", () => {
+    expect(deriveScopedTestFiles(["README.md", "package.json", ""])).toEqual([]);
+  });
+
+  it("does not duplicate when both source and its test changed", () => {
+    const result = deriveScopedTestFiles([
+      "apps/web/lib/utils/string-helpers.ts",
+      "apps/web/lib/utils/string-helpers.test.ts",
+    ]);
+    const occurrences = result.filter((p) => p === "apps/web/lib/utils/string-helpers.test.ts");
+    expect(occurrences).toHaveLength(1);
+  });
+});
+
+describe("groupTestFilesByPackage", () => {
+  it("groups files by their apps/* or packages/* workspace root", () => {
+    const grouped = groupTestFilesByPackage([
+      "apps/web/lib/a.test.ts",
+      "apps/web/lib/b.test.ts",
+      "packages/db/src/c.test.ts",
+    ]);
+    expect(grouped.get("apps/web")).toEqual(["lib/a.test.ts", "lib/b.test.ts"]);
+    expect(grouped.get("packages/db")).toEqual(["src/c.test.ts"]);
+  });
+
+  it("ignores paths outside a workspace package", () => {
+    const grouped = groupTestFilesByPackage(["scripts/x.test.ts", "foo.test.ts"]);
+    expect(grouped.size).toBe(0);
+  });
+});
