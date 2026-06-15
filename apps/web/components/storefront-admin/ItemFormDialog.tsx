@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { DEFAULT_CTA_LABELS } from "@/lib/storefront/cta-labels";
 import { MediaUploader } from "./MediaUploader";
@@ -115,6 +115,26 @@ export function ItemFormDialog({
     ...initial,
   }));
   const [saving, setSaving] = useState(false);
+
+  // Reset form when dialog opens so stale values from a previous item don't bleed
+  // through (R6-003: edit modal opened with empty Name / wrong values on second open).
+  const prevOpenRef = useRef(false);
+  const initialRef = useRef(initial);
+  initialRef.current = initial;
+  const defaultCtaTypeRef = useRef(defaultCtaType);
+  defaultCtaTypeRef.current = defaultCtaType;
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      const ct = defaultCtaTypeRef.current ?? "booking";
+      setForm({
+        ...EMPTY_FORM,
+        ctaType: ct,
+        priceType: PRICE_TYPES_BY_CTA[ct]?.[0]?.value ?? "",
+        ...initialRef.current,
+      });
+    }
+    prevOpenRef.current = open;
+  }, [open]);
 
   if (!open) return null;
 
