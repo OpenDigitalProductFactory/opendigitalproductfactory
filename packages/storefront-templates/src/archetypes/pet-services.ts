@@ -102,7 +102,7 @@ export const petServicesArchetypes: ArchetypeDefinition[] = [
       { name: "60-Minute Walk", description: "Solo or group walk — 1 hour", priceType: "fixed", bookingDurationMinutes: 60 },
       { name: "Solo Walk", description: "One-on-one walk for your dog", priceType: "from", bookingDurationMinutes: 60 },
       { name: "Puppy Visit", description: "Home visit and short walk for puppies", priceType: "fixed", bookingDurationMinutes: 30 },
-      { name: "Weekly Package", description: "5 walks per week at a discounted rate", priceType: "fixed", ctaType: "purchase" },
+      { name: "Weekly Package", description: "5 walks per week at a discounted rate", priceType: "fixed", priceAmount: 60, ctaType: "purchase" },
     ],
     sectionTemplates: [
       { type: "hero", title: "Hero", sortOrder: 0 },

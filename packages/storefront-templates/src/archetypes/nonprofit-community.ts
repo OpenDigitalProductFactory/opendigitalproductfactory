@@ -112,11 +112,11 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
     ctaType: "purchase",
     tags: ["sports", "club", "membership", "community"],
     itemTemplates: [
-      { name: "Annual Membership", description: "Full club membership for one year", priceType: "fixed", ctaType: "purchase" },
-      { name: "Family Membership", description: "Membership for up to 2 adults and 3 children", priceType: "fixed", ctaType: "purchase" },
-      { name: "Junior Membership", description: "Membership for under-18s", priceType: "fixed", ctaType: "purchase" },
-      { name: "Match Day Ticket", description: "Single match admission ticket", priceType: "fixed", ctaType: "purchase" },
-      { name: "Social Membership", description: "Non-playing social membership", priceType: "fixed", ctaType: "purchase" },
+      { name: "Annual Membership", description: "Full club membership for one year", priceType: "fixed", priceAmount: 150, ctaType: "purchase" },
+      { name: "Family Membership", description: "Membership for up to 2 adults and 3 children", priceType: "fixed", priceAmount: 350, ctaType: "purchase" },
+      { name: "Junior Membership", description: "Membership for under-18s", priceType: "fixed", priceAmount: 60, ctaType: "purchase" },
+      { name: "Match Day Ticket", description: "Single match admission ticket", priceType: "fixed", priceAmount: 15, ctaType: "purchase" },
+      { name: "Social Membership", description: "Non-playing social membership", priceType: "fixed", priceAmount: 75, ctaType: "purchase" },
     ],
     sectionTemplates: [
       { type: "hero", title: "Hero", sortOrder: 0 },
@@ -142,7 +142,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
     ctaType: "inquiry",
     tags: ["cooperative", "co-op", "member-owned", "patronage", "worker-coop", "food-coop", "housing-coop", "agricultural"],
     itemTemplates: [
-      { name: "Membership Share", description: "Purchase a membership share to become a member-owner of the cooperative", priceType: "fixed", ctaType: "purchase" },
+      { name: "Membership Share", description: "Purchase a membership share to become a member-owner of the cooperative", priceType: "fixed", priceAmount: 100, ctaType: "purchase" },
       { name: "Membership Application", description: "Apply to join the cooperative as a member-owner", priceType: "free", ctaType: "inquiry" },
       { name: "Member Account Question", description: "Ask about your member account, statements, or services", priceType: "free", ctaType: "inquiry" },
       { name: "Patronage & Equity Inquiry", description: "Ask about your patronage allocation, capital credits, or equity retirement", priceType: "free", ctaType: "inquiry" },
