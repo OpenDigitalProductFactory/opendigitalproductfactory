@@ -81,6 +81,19 @@ export function errorLooksLikeConfigGap(error: string | null): boolean {
   return error !== null && CONFIG_ERROR_PATTERNS.some((re) => re.test(error));
 }
 
+/**
+ * Whole-endpoint failure: an error that will recur identically on EVERY test of
+ * this endpoint because it describes the endpoint/setup, not the model output —
+ * infrastructure (timeout / network / runner down) OR a config gap (missing or
+ * rotated key, OAuth not connected). When the first probe matches, the eval
+ * cycle short-circuits the remaining tests and dimensions: re-running them only
+ * reproduces the same failure, burning wall-clock and flooding the logs.
+ * Neither cause retires the model — both are fixable without touching it.
+ */
+export function errorEndsEvalCycle(error: string | null): boolean {
+  return errorLooksLikeInfrastructure(error) || errorLooksLikeConfigGap(error);
+}
+
 // ── Score Computation ────────────────────────────────────────────────────────
 
 /** Compute new dimension score from eval result and previous score. */
@@ -248,6 +261,7 @@ async function evalDimension(
   const tests = getTestsForDimension(dimension);
   const testResults: TestResult[] = [];
 
+  let endpointAborted = false;
   for (let i = 0; i < tests.length; i++) {
     if (i > 0) {
       // 500 ms between tests to avoid triggering burst rate limits
@@ -255,11 +269,26 @@ async function evalDimension(
     }
     const result = await runGoldenTest(endpointId, modelId, tests[i]!);
     testResults.push(result);
+
+    // Whole-endpoint short-circuit: once a probe fails for an endpoint/setup
+    // reason — infrastructure (timeout, network, runner down) OR a config gap
+    // (missing/rotated key) — every remaining test in this dimension fails
+    // identically. Each can burn up to 60s plus a log line. Stop now; the
+    // dimension is inconclusive regardless. Turns ~30 duplicate error lines
+    // (and minutes of wasted wall-clock) into one.
+    if (errorEndsEvalCycle(result.error ?? null)) {
+      console.warn(
+        `[eval-runner] ${endpointId}/${modelId}: endpoint/setup error on ${dimension} — skipping remaining tests this cycle: ${result.error}`,
+      );
+      endpointAborted = true;
+      break;
+    }
   }
 
-  // Check if inconclusive (>50% errors)
+  // Inconclusive when we aborted early on an endpoint/setup failure, or when
+  // >50% of the tests that ran errored. Either way scores are preserved.
   const errorCount = testResults.filter((r) => r.error).length;
-  const inconclusive = errorCount > tests.length / 2;
+  const inconclusive = endpointAborted || errorCount > tests.length / 2;
 
   if (inconclusive) {
     return {
@@ -362,6 +391,23 @@ export async function runDimensionEval(
     const previousScore = (modelProfile as Record<string, unknown>)[dbField] as number ?? 50;
     const result = await evalDimension(providerId, modelId, dim, previousScore, currentEvalCount);
     dimensions.push(result);
+
+    // Per-model short-circuit: if this dimension was abandoned for an
+    // endpoint/setup reason (infrastructure OR config gap — e.g. a rotated key
+    // that passed the existence pre-filter but fails at call time), the
+    // remaining dimensions fail identically. Stop rather than burn another ~7
+    // dimensions × up-to-60s timeouts. Skipped dimensions keep their previous
+    // scores (they were never re-scored), and the all-inconclusive verdict below
+    // still correctly avoids retiring the model.
+    const endpointUnusable =
+      result.inconclusive &&
+      result.testResults.some((t) => errorEndsEvalCycle(t.error ?? null));
+    if (endpointUnusable) {
+      console.warn(
+        `[eval-runner] ${providerId}/${modelId}: endpoint unusable this cycle — skipping remaining dimensions`,
+      );
+      break;
+    }
   }
 
   // Update ModelProfile with new scores (skip inconclusive dimensions)

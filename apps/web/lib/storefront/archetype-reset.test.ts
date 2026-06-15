@@ -58,6 +58,9 @@ describe("resetStorefrontArchetype", () => {
 
   it("re-syncs Organization.industry and BusinessContext.industry from the new archetype", async () => {
     const tx = {
+      orgSettings: {
+        findFirst: vi.fn().mockResolvedValue({ baseCurrency: "USD" }),
+      },
       organization: {
         findUnique: vi.fn().mockResolvedValue({ id: "org_1", slug: "managing-digital", email: "ops@example.com", phone: "123" }),
         update: vi.fn().mockResolvedValue({}),
@@ -123,6 +126,9 @@ describe("resetStorefrontArchetype", () => {
 
   it("replaces seeded items and sections when reset is run in replace mode", async () => {
     const tx = {
+      orgSettings: {
+        findFirst: vi.fn().mockResolvedValue({ baseCurrency: "USD" }),
+      },
       organization: {
         findUnique: vi.fn().mockResolvedValue({ id: "org_1", slug: "old-slug", email: null, phone: null }),
         update: vi.fn().mockResolvedValue({}),
@@ -193,6 +199,9 @@ describe("resetStorefrontArchetype", () => {
 
   it("preserves manually managed contact fields and org slug", async () => {
     const tx = {
+      orgSettings: {
+        findFirst: vi.fn().mockResolvedValue({ baseCurrency: "USD" }),
+      },
       organization: {
         findUnique: vi.fn().mockResolvedValue({ id: "org_1", slug: "open-digital-product-factory", email: "ops@dpf.local", phone: "555-1234" }),
         update: vi.fn().mockResolvedValue({}),

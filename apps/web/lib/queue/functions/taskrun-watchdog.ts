@@ -30,6 +30,76 @@ import { isStallWatchdogEnabled } from "@/lib/shared/feature-flags";
 // creating a deadlock: a crashed coordinator would never be reaped.
 // Same rationale exempts selfUpgradeScheduled + selfUpgradeManual.
 
+/**
+ * BI-QUIESCE-007 (early-return fix, 2026-06-15): reap quiescence coordinators
+ * whose heartbeat went stale. A coordinator that crashes mid-protocol leaves its
+ * QuiescenceRun row non-terminal and the PlatformConfig.portal.quiescence level
+ * stuck 'draining'/'swapping', which permanently gates the entire Inngest queue
+ * (every gated cron skips; every gateBetweenSteps suspends). This forces the
+ * level back to normal and emits platform.quiescence-cleared so suspended
+ * functions wake up.
+ *
+ * Runs on EVERY watchdog tick. It previously lived inline AFTER the
+ * `decisions.length === 0` early-return, so it almost never ran — a crashed
+ * coordinator could hold the platform draining for days (root cause of the
+ * 2026-06-14 Inngest outage, only cleared by a portal reboot).
+ *
+ * Spec: docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md §5.7
+ */
+export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<number> {
+  const { prisma } = await import("@dpf/db");
+  const STUCK_COORDINATOR_TIMEOUT_MS = 2 * 60 * 1000;
+  const stuckCutoff = new Date(now.getTime() - STUCK_COORDINATOR_TIMEOUT_MS);
+  const stuckCoordinators = await prisma.quiescenceRun.findMany({
+    where: {
+      status: { notIn: ["completed", "deferred", "aborted", "failed"] },
+      OR: [
+        { lastHeartbeatAt: { lt: stuckCutoff } },
+        { AND: [{ lastHeartbeatAt: null }, { startedAt: { lt: stuckCutoff } }] },
+      ],
+    },
+    select: { runId: true, status: true, lastHeartbeatAt: true, startedAt: true },
+    take: 10,
+  });
+  if (stuckCoordinators.length === 0) return 0;
+
+  const { transitionState, setQuiescenceLevel } = await import(
+    "@/lib/self-upgrade/quiescence"
+  );
+  let recovered = 0;
+  for (const sc of stuckCoordinators) {
+    try {
+      await transitionState(sc.runId, "failed", {
+        outcome: "failed",
+        completionSource: "watchdog",
+        outcomeNotes: `Watchdog reaped stuck coordinator (status=${sc.status}, lastHeartbeat=${sc.lastHeartbeatAt?.toISOString() ?? "never"})`,
+        completedAt: now,
+      });
+      await setQuiescenceLevel("normal", null);
+      await inngest.send({
+        name: "platform.quiescence-cleared",
+        data: {
+          runId: sc.runId,
+          outcome: "failed",
+          triggerRefId: null,
+          deferSurface: null,
+          reason: "watchdog-reaped",
+        },
+      });
+      recovered += 1;
+      console.warn(
+        `[taskrun-watchdog] quiescence-recovery: reaped stuck coordinator ${sc.runId} (was ${sc.status})`,
+      );
+    } catch (err) {
+      console.warn(
+        `[taskrun-watchdog] failed to reap quiescence coordinator ${sc.runId}:`,
+        err,
+      );
+    }
+  }
+  return recovered;
+}
+
 export const taskrunWatchdog = inngest.createFunction(
   {
     id: "ops/taskrun-watchdog",
@@ -38,15 +108,22 @@ export const taskrunWatchdog = inngest.createFunction(
     triggers: [cron("* * * * *")],
   },
   async () => {
+    // Reap crashed quiescence coordinators FIRST, on every tick — before any
+    // early-return. This is platform-safety, not a stall-detection feature, so
+    // it must run even when the stall watchdog is flag-off, no thresholds are
+    // seeded, or no build is stalled. (It previously sat after all three of
+    // those returns and so almost never ran — the 4-day Inngest outage.)
+    const quiescenceRecovered = await recoverStuckQuiescenceCoordinators(new Date());
+
     if (!(await isStallWatchdogEnabled())) {
-      return { skipped: true, reason: "flag-off" };
+      return { skipped: true, reason: "flag-off", quiescenceRecovered };
     }
 
     const { prisma } = await import("@dpf/db");
 
     const thresholds = await prisma.buildStudioStallThreshold.findMany();
     if (thresholds.length === 0) {
-      return { skipped: true, reason: "no-thresholds-seeded" };
+      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered };
     }
 
     // Coarse SQL filter using the smallest applicable thresholds across all
@@ -96,7 +173,7 @@ export const taskrunWatchdog = inngest.createFunction(
     }
 
     if (decisions.length === 0) {
-      return { processed: 0 };
+      return { processed: 0, quiescenceRecovered };
     }
 
     // Batch id-resolution: business taskRunId → cuid id for FK writes.
@@ -191,75 +268,6 @@ export const taskrunWatchdog = inngest.createFunction(
       }
 
       processed += 1;
-    }
-
-    // ─── BI-QUIESCE-007: stuck quiescence coordinator detection ──────────
-    //
-    // The QuiescenceRun coordinator function writes lastHeartbeatAt every
-    // ~5s during its wait loop. If a coordinator crashes between ticks the
-    // row sits in a non-terminal state forever; without intervention the
-    // PlatformConfig.portal.quiescence level would stay 'draining' /
-    // 'swapping' and the Inngest queue would be permanently blocked
-    // (every gated cron skips; every gateBetweenSteps suspends).
-    //
-    // Detection: row in non-terminal status with lastHeartbeatAt older
-    // than 2 minutes (or null + startedAt older than 2 minutes — covers
-    // rows that crashed before their first tick).
-    //
-    // Action: transition to failed (completionSource='watchdog'), force
-    // level back to normal, emit platform.quiescence-cleared so suspended
-    // Inngest functions wake up.
-    //
-    // Spec: docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md §5.7
-    const STUCK_COORDINATOR_TIMEOUT_MS = 2 * 60 * 1000;
-    const stuckCutoff = new Date(now.getTime() - STUCK_COORDINATOR_TIMEOUT_MS);
-    const stuckCoordinators = await prisma.quiescenceRun.findMany({
-      where: {
-        status: { notIn: ["completed", "deferred", "aborted", "failed"] },
-        OR: [
-          { lastHeartbeatAt: { lt: stuckCutoff } },
-          { AND: [{ lastHeartbeatAt: null }, { startedAt: { lt: stuckCutoff } }] },
-        ],
-      },
-      select: { runId: true, status: true, lastHeartbeatAt: true, startedAt: true },
-      take: 10,
-    });
-
-    let quiescenceRecovered = 0;
-    if (stuckCoordinators.length > 0) {
-      const { transitionState, setQuiescenceLevel } = await import(
-        "@/lib/self-upgrade/quiescence"
-      );
-      for (const sc of stuckCoordinators) {
-        try {
-          await transitionState(sc.runId, "failed", {
-            outcome: "failed",
-            completionSource: "watchdog",
-            outcomeNotes: `Watchdog reaped stuck coordinator (status=${sc.status}, lastHeartbeat=${sc.lastHeartbeatAt?.toISOString() ?? "never"})`,
-            completedAt: now,
-          });
-          await setQuiescenceLevel("normal", null);
-          await inngest.send({
-            name: "platform.quiescence-cleared",
-            data: {
-              runId: sc.runId,
-              outcome: "failed",
-              triggerRefId: null,
-              deferSurface: null,
-              reason: "watchdog-reaped",
-            },
-          });
-          quiescenceRecovered += 1;
-          console.warn(
-            `[taskrun-watchdog] quiescence-recovery: reaped stuck coordinator ${sc.runId} (was ${sc.status})`,
-          );
-        } catch (err) {
-          console.warn(
-            `[taskrun-watchdog] failed to reap quiescence coordinator ${sc.runId}:`,
-            err,
-          );
-        }
-      }
     }
 
     return { processed, quiescenceRecovered };
