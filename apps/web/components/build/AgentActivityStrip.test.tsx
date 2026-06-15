@@ -71,6 +71,24 @@ describe("AgentActivityStrip render gate", () => {
     render(<AgentActivityStrip build={makeRow()} />);
     expect(screen.getByTestId("agent-activity-strip")).toBeTruthy();
   });
+
+  it("does not throw when taskResults is a non-array JSON object (agentic single-shot summary)", () => {
+    // Regression: the /build detail page crashed because the orchestrator
+    // persists taskResults as an object, not a TaskResult[]. `{} ?? []`
+    // returns the object, so `.forEach` threw. FleetDensityBar was fixed in
+    // #1978; AgentActivityStrip (the detail center pane) had the same bug.
+    const agenticSummary = {
+      modelId: "qwen3-coder",
+      providerId: "opencode",
+      filesChanged: ["apps/web/lib/ollama-url.ts"],
+      toolsExecuted: 3,
+      ranTests: true,
+    } as unknown as FeatureBuildRow["taskResults"];
+    render(<AgentActivityStrip build={makeRow({ taskResults: agenticSummary })} />);
+    // No per-task results → every cell is queued, strip still renders.
+    expect(screen.getByTestId("agent-activity-strip")).toBeTruthy();
+    expect(screen.getAllByRole("img", { name: /: queued/i }).length).toBe(5);
+  });
 });
 
 describe("AgentActivityStrip cell state priority", () => {

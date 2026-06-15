@@ -102,9 +102,14 @@ export function AgentActivityStrip({ build }: Props) {
       build.buildPlan.tasks,
     );
 
-    // Build lookup of completed task results: title → passed
+    // Build lookup of completed task results: title → passed.
+    // taskResults is typed TaskResult[] but the orchestrator persists a
+    // non-array JSON shape (an empty `{}`, the per-task `{ tasks, ... }`
+    // object, or the agentic single-shot `{ modelId, filesChanged, ... }`
+    // summary). `{} ?? []` returns `{}`, so iterating the raw value throws.
+    // Guard with Array.isArray — mirrors the FleetDensityBar fix (#1978).
     const resultByTitle = new Map<string, boolean>();
-    (build.taskResults ?? []).forEach((r) => {
+    (Array.isArray(build.taskResults) ? build.taskResults : []).forEach((r) => {
       resultByTitle.set(r.title, r.testResult?.passed ?? true);
     });
 
