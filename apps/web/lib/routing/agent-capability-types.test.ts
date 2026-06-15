@@ -42,6 +42,19 @@ describe("satisfiesMinimumCapabilities", () => {
     expect(result).toEqual({ satisfied: true });
   });
 
+  it("fails audioInput floor when capabilities.audioInput is falsy", () => {
+    const result = satisfiesMinimumCapabilities(ep({ capabilities: {} as never }), { audioInput: true });
+    expect(result).toEqual({ satisfied: false, missingCapability: "audioInput" });
+  });
+
+  it("passes audioInput floor when capabilities.audioInput is true", () => {
+    const result = satisfiesMinimumCapabilities(
+      ep({ capabilities: { audioInput: true } as never }),
+      { audioInput: true },
+    );
+    expect(result).toEqual({ satisfied: true });
+  });
+
   it("fails on first missing capability in multi-cap floor", () => {
     const result = satisfiesMinimumCapabilities(
       ep({ supportsToolUse: true, capabilities: {} as never }),

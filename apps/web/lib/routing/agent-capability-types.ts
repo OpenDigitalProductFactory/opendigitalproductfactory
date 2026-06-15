@@ -11,6 +11,7 @@ import type { EndpointManifest } from "./types";
 export interface AgentMinimumCapabilities {
   toolUse?: boolean;
   imageInput?: boolean;
+  audioInput?: boolean;
   pdfInput?: boolean;
   codeExecution?: boolean;
   computerUse?: boolean;
@@ -47,6 +48,9 @@ export function satisfiesMinimumCapabilities(
   const caps = endpoint.capabilities as unknown as Record<string, unknown> | null | undefined;
   if (floor.imageInput && !caps?.imageInput) {
     return { satisfied: false, missingCapability: "imageInput" };
+  }
+  if (floor.audioInput && !caps?.audioInput) {
+    return { satisfied: false, missingCapability: "audioInput" };
   }
   if (floor.pdfInput && !caps?.pdfInput) {
     return { satisfied: false, missingCapability: "pdfInput" };

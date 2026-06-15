@@ -27,6 +27,7 @@ export interface ModelCardCapabilities {
   webSearch: boolean | null;
   computerUse: boolean | null;
   imageInput: boolean | null;
+  audioInput: boolean | null;
   pdfInput: boolean | null;
   thinking: boolean | null;
   adaptiveThinking: boolean | null;
@@ -117,6 +118,7 @@ export const EMPTY_CAPABILITIES: ModelCardCapabilities = {
   webSearch: null,
   computerUse: null,
   imageInput: null,
+  audioInput: null,
   pdfInput: null,
   thinking: null,
   adaptiveThinking: null,
