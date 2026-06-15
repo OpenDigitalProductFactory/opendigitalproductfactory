@@ -11,6 +11,10 @@ vi.mock("@/lib/actions/platform-dev-config", () => ({
   getPlatformDevConfig: vi.fn(),
 }));
 
+vi.mock("@/lib/self-upgrade/impact", () => ({
+  loadPersistedImpactSummary: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock("@/components/ops/OpsTabNav", () => ({
   OpsTabNav: () => <div data-testid="ops-tab-nav" />,
 }));
