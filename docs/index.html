@@ -724,6 +724,11 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
     </p>
     <div class="pillars" style="margin-top:18px;">
       <div class="pillar">
+        <div class="tag">Develops itself on local AI</div>
+        <strong>Build Studio writes code on your own local LLM.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A dedicated dispatch engine, <strong>opencode</strong>, runs the bundled Docker Model Runner model (e.g. <code>qwen3-coder</code>) as a coding agent inside the sandbox &mdash; no vendor credential, zero token cost, air-gappable. It parses the local model&rsquo;s native tool-call format itself, so the platform can ideate, plan, and build a change end-to-end without a cloud API. Architecture: <a href="/architecture/local-llm-build-engine">local-llm-build-engine</a>.</p>
+      </div>
+      <div class="pillar">
         <div class="tag">Design-time decomposition</div>
         <strong>Oversized builds split before Plan churn.</strong>
         <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">The Dale HVAC dogfood run exposed a real cliff: a feature can be directionally correct but too large for one Build Studio plan. The new design-time decomposition work keeps one parent design contract and creates smaller child builds before plan review oscillates.</p>
