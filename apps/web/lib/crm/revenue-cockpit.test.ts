@@ -52,7 +52,7 @@ describe("revenue cockpit summary", () => {
         id: "pipeline",
         label: "Pipeline",
         value: "3",
-        detail: "£6,000 open",
+        detail: "$6,000 open",
         href: "/customer/opportunities",
         tone: "accent",
       },

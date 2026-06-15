@@ -38,6 +38,8 @@ export type RevenueCockpitInput = {
   opportunityCounts: CountByStage[];
   quoteCounts: CountByStatus[];
   orderCounts: CountByStatus[];
+  /** Workspace base currency (from OrgSettings). Defaults to "USD" when not passed. */
+  currency?: string;
   staleOpportunityCount: number;
   marketingWork: {
     campaignBriefsOpen: number;
@@ -64,6 +66,7 @@ function countWhere(items: CountByStatus[], statuses: string[]): number {
 }
 
 export function buildRevenueCockpitSummary(input: RevenueCockpitInput): RevenueCockpitSummary {
+  const currency = input.currency ?? "USD";
   const engagementTotal = input.engagementCounts.reduce((sum, item) => sum + item.count, 0);
   const newEngagements = countWhere(input.engagementCounts, ["new"]);
   const openOpportunities = input.opportunityCounts.filter((item) => isOpenOpportunityStage(item.stage));
@@ -111,7 +114,7 @@ export function buildRevenueCockpitSummary(input: RevenueCockpitInput): RevenueC
         id: "pipeline",
         label: "Pipeline",
         value: String(pipelineCount),
-        detail: `${formatRevenueAmount(pipelineValue)} open`,
+        detail: `${formatRevenueAmount(pipelineValue, currency)} open`,
         href: "/customer/opportunities",
         tone: "accent",
       },

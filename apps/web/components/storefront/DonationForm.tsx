@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 const PRESET_AMOUNTS = [5, 10, 25, 50, 100];
 
-export function DonationForm({ orgSlug }: { orgSlug: string }) {
+export function DonationForm({ orgSlug, currencySymbol = "£" }: { orgSlug: string; currencySymbol?: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,12 +58,12 @@ export function DonationForm({ orgSlug }: { orgSlug: string }) {
                 color: selected === amt ? "var(--dpf-text)" : "var(--dpf-text)",
                 border: "none",
               }}>
-              £{amt}
+              {currencySymbol}{amt}
             </button>
           ))}
         </div>
         <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 14, color: "var(--dpf-muted)" }}>Custom: £</span>
+          <span style={{ fontSize: 14, color: "var(--dpf-muted)" }}>Custom: {currencySymbol}</span>
           <input type="number" min="1" step="0.01" value={custom}
             onChange={(e) => { setCustom(e.target.value); setSelected(null); }}
             placeholder="Other amount"

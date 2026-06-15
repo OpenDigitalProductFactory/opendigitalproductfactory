@@ -1,6 +1,7 @@
 "use client";
 import { useState, useCallback } from "react";
 import { ItemFormDialog, type ItemFormData } from "./ItemFormDialog";
+import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
 
 type Item = {
@@ -26,6 +27,7 @@ type Props = {
   vocabulary: ArchetypeVocabulary;
   categorySuggestions: string[];
   defaultCtaType: string;
+  defaultCurrency?: string;
 };
 
 const CTA_BADGES: Record<string, { color: string; label: string }> = {
@@ -33,9 +35,10 @@ const CTA_BADGES: Record<string, { color: string; label: string }> = {
   purchase: { color: "var(--dpf-success)", label: "Purchase" },
   inquiry: { color: "#fb923c", label: "Inquiry" },
   donation: { color: "#f472b6", label: "Donation" },
+  rental: { color: "#a78bfa", label: "Rental" },
 };
 
-export function ItemsManager({ storefrontId, items: initial, vocabulary, categorySuggestions, defaultCtaType }: Props) {
+export function ItemsManager({ storefrontId, items: initial, vocabulary, categorySuggestions, defaultCtaType, defaultCurrency }: Props) {
   const [items, setItems] = useState(initial);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -300,8 +303,9 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
         </p>
       )}
 
-      {/* Form dialog */}
+      {/* Form dialog — key forces remount when editing item changes so useState initializer re-runs */}
       <ItemFormDialog
+        key={editingItem?.id ?? "new"}
         open={dialogOpen}
         onClose={() => { setDialogOpen(false); setEditingItem(null); }}
         onSave={handleSave}
@@ -309,6 +313,7 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
         vocabulary={vocabulary}
         categorySuggestions={categorySuggestions}
         defaultCtaType={defaultCtaType}
+        defaultPriceCurrency={defaultCurrency}
         isEditing={!!editingItem}
         editingItemId={editingItem?.id}
       />
@@ -319,7 +324,7 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatPrice(amount: string | null, currency: string, priceType: string | null): string {
-  const symbol = currency === "GBP" ? "\u00a3" : currency === "USD" ? "$" : currency === "EUR" ? "\u20ac" : currency + " ";
+  const symbol = getCurrencySymbol(currency);
 
   if (!priceType) return "\u2014";
 
