@@ -248,6 +248,7 @@ async function evalDimension(
   const tests = getTestsForDimension(dimension);
   const testResults: TestResult[] = [];
 
+  let infraAborted = false;
   for (let i = 0; i < tests.length; i++) {
     if (i > 0) {
       // 500 ms between tests to avoid triggering burst rate limits
@@ -255,11 +256,25 @@ async function evalDimension(
     }
     const result = await runGoldenTest(endpointId, modelId, tests[i]!);
     testResults.push(result);
+
+    // Infrastructure short-circuit: once the probe path itself is broken
+    // (timeout, network, runner down), every remaining test in this dimension
+    // fails identically — and each local timeout burns up to 60s plus a log
+    // line. Stop now; the dimension is inconclusive regardless. Turns ~30
+    // duplicate error lines (and minutes of wasted wall-clock) into one.
+    if (errorLooksLikeInfrastructure(result.error ?? null)) {
+      console.warn(
+        `[eval-runner] ${endpointId}/${modelId}: infrastructure error on ${dimension} — skipping remaining tests this cycle: ${result.error}`,
+      );
+      infraAborted = true;
+      break;
+    }
   }
 
-  // Check if inconclusive (>50% errors)
+  // Inconclusive when we aborted early on infrastructure (probe path broken), or
+  // when >50% of the tests that ran errored. Either way scores are preserved.
   const errorCount = testResults.filter((r) => r.error).length;
-  const inconclusive = errorCount > tests.length / 2;
+  const inconclusive = infraAborted || errorCount > tests.length / 2;
 
   if (inconclusive) {
     return {
@@ -362,6 +377,22 @@ export async function runDimensionEval(
     const previousScore = (modelProfile as Record<string, unknown>)[dbField] as number ?? 50;
     const result = await evalDimension(providerId, modelId, dim, previousScore, currentEvalCount);
     dimensions.push(result);
+
+    // Per-model infrastructure short-circuit: if this dimension was abandoned
+    // because the endpoint's probe path is broken (timeout/network/runner down),
+    // the remaining dimensions fail identically. Stop rather than burn another
+    // ~7 dimensions × up-to-60s timeouts. Skipped dimensions keep their previous
+    // scores (they were never re-scored), and the all-inconclusive verdict below
+    // still correctly avoids retiring the model.
+    const endpointUnreachable =
+      result.inconclusive &&
+      result.testResults.some((t) => errorLooksLikeInfrastructure(t.error ?? null));
+    if (endpointUnreachable) {
+      console.warn(
+        `[eval-runner] ${providerId}/${modelId}: endpoint unreachable this cycle — skipping remaining dimensions`,
+      );
+      break;
+    }
   }
 
   // Update ModelProfile with new scores (skip inconclusive dimensions)

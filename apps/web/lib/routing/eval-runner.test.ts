@@ -1,9 +1,57 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Mocks for the runDimensionEval integration test. The pure-function tests in
+// this file don't touch either module, so the mocks are inert for them.
+const evalState = vi.hoisted(() => ({
+  profileUpdates: [] as Array<Record<string, unknown>>,
+  callCount: 0,
+}));
+
+vi.mock("@/lib/ai-inference", () => {
+  class InferenceError extends Error {
+    code: string;
+    constructor(message: string, code: string) {
+      super(message);
+      this.code = code;
+    }
+  }
+  return {
+    InferenceError,
+    callProvider: vi.fn(async () => {
+      evalState.callCount++;
+      throw new InferenceError(
+        "The operation was aborted due to timeout",
+        "network",
+      );
+    }),
+  };
+});
+
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    modelProfile: {
+      findUnique: vi.fn(async () => ({ evalCount: 0, modelStatus: "active" })),
+      update: vi.fn(async (args: { data: Record<string, unknown> }) => {
+        evalState.profileUpdates.push(args.data);
+        return {};
+      }),
+    },
+    modelProvider: {
+      findUnique: vi.fn(async () => ({ authMethod: "none", name: "Local" })),
+    },
+    endpointTestRun: {
+      create: vi.fn(async () => ({})),
+      update: vi.fn(async () => ({})),
+    },
+  },
+}));
+
 import {
   computeNewScore,
   detectDrift,
   errorLooksLikeInfrastructure,
   errorLooksLikeConfigGap,
+  runDimensionEval,
   type DriftResult,
 } from "./eval-runner";
 
@@ -136,5 +184,32 @@ describe("errorLooksLikeConfigGap (credential/setup circuit breaker)", () => {
   });
   it("is case-insensitive", () => {
     expect(errorLooksLikeConfigGap("NO CREDENTIAL CONFIGURED")).toBe(true);
+  });
+});
+
+describe("runDimensionEval — infrastructure short-circuit", () => {
+  beforeEach(() => {
+    evalState.profileUpdates.length = 0;
+    evalState.callCount = 0;
+  });
+
+  it("stops after the first timed-out probe instead of grinding every test", async () => {
+    await runDimensionEval("local", "docker.io/ai/qwen3-coder:latest", "test");
+
+    // A single failing probe ends the whole run — not ~30 sequential 60s
+    // timeouts across every dimension. This is the wall-clock + log-flood fix
+    // for an unreachable/slow local Docker Model Runner.
+    expect(evalState.callCount).toBe(1);
+  });
+
+  it("does NOT retire the model on an infrastructure timeout", async () => {
+    await runDimensionEval("local", "docker.io/ai/qwen3-coder:latest", "test");
+
+    // A timeout is a broken probe path, not a model-quality failure — retiring
+    // would strand a working-but-slow model.
+    const retired = evalState.profileUpdates.some(
+      (u) => u.modelStatus === "retired",
+    );
+    expect(retired).toBe(false);
   });
 });
