@@ -20,7 +20,7 @@ function getToday(): string {
   return new Date().toISOString().split("T")[0]!;
 }
 
-export function CreateAssetForm() {
+export function CreateAssetForm({ defaultCurrency = "USD" }: { defaultCurrency?: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +29,7 @@ export function CreateAssetForm() {
   const [category, setCategory] = useState<typeof CATEGORIES[number]>("equipment");
   const [purchaseDate, setPurchaseDate] = useState(getToday());
   const [purchaseCost, setPurchaseCost] = useState("");
-  const [currency, setCurrency] = useState("GBP");
+  const [currency, setCurrency] = useState(defaultCurrency);
   const [depreciationMethod, setDepreciationMethod] = useState<"straight_line" | "reducing_balance">("straight_line");
   const [usefulLifeMonths, setUsefulLifeMonths] = useState("");
   const [residualValue, setResidualValue] = useState("0");

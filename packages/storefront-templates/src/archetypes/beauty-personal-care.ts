@@ -202,7 +202,7 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
     itemTemplates: [
       { name: "Initial Assessment", description: "Full fitness assessment and goal-setting session", priceType: "free", bookingDurationMinutes: 60 },
       { name: "1-Hour PT Session", description: "One-to-one personal training session", priceType: "per-session", bookingDurationMinutes: 60 },
-      { name: "Block of 10 Sessions", description: "10 PT sessions at a discounted rate", priceType: "fixed", ctaType: "purchase" },
+      { name: "Block of 10 Sessions", description: "10 PT sessions at a discounted rate", priceType: "fixed", priceAmount: 350, ctaType: "purchase" },
       { name: "Online Coaching", description: "Remote coaching with custom programme delivery", priceType: "per-session" },
       { name: "Group Bootcamp", description: "Small group outdoor training session", priceType: "per-session", bookingDurationMinutes: 45 },
     ],
