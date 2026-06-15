@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 496,
+  "routeCount": 498,
   "routes": [
     {
       "routePath": "/",
@@ -1394,6 +1394,36 @@
         "id"
       ],
       "file": "apps/web/app/api/storefront/admin/units/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/bookings/[id]/cancel",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "bookings",
+        "[id]",
+        "cancel"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/storefront/bookings/[id]/cancel/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/bookings/[id]/confirm",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "bookings",
+        "[id]",
+        "confirm"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/storefront/bookings/[id]/confirm/route.ts"
     },
     {
       "routePath": "/api/storefront/sign-up",

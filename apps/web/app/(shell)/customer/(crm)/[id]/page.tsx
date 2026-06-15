@@ -15,9 +15,8 @@ import {
   readActivationProfile,
 } from "@/lib/storefront/archetype-activation";
 import { getAccountStatusMeta } from "@/lib/crm/presentation";
+import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
 import { LocalTime } from "@/components/ui/LocalTime";
-import { getOrgSettings } from "@/lib/actions/currency";
-import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝",
@@ -51,7 +50,7 @@ export default async function AccountDetailPage({
 }) {
   const { id } = await params;
 
-  const [account, activities, opportunities, engagements, estateSummary, storefrontConfig, orgSettings] = await Promise.all([
+  const [account, activities, opportunities, engagements, estateSummary, storefrontConfig] = await Promise.all([
     prisma.customerAccount.findUnique({
       where: { id },
       include: {
@@ -144,6 +143,7 @@ export default async function AccountDetailPage({
         stage: true,
         probability: true,
         expectedValue: true,
+        currency: true,
         isDormant: true,
       },
     }),
@@ -162,10 +162,7 @@ export default async function AccountDetailPage({
         },
       },
     }),
-    getOrgSettings(),
   ]);
-
-  const currencySymbol = getCurrencySymbol(orgSettings.baseCurrency);
 
   if (!account) notFound();
 
@@ -439,7 +436,7 @@ export default async function AccountDetailPage({
                       <span className="text-[9px] text-[var(--dpf-muted)]">{o.probability}%</span>
                       {o.expectedValue && (
                         <span className="text-[9px] font-mono text-[var(--dpf-text)]">
-                          {currencySymbol}{Number(o.expectedValue).toLocaleString()}
+                          {formatRevenueAmount(Number(o.expectedValue), o.currency)}
                         </span>
                       )}
                     </div>
