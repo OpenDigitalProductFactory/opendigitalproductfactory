@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { DEFAULT_CTA_LABELS } from "@/lib/storefront/cta-labels";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
@@ -35,7 +35,7 @@ const EMPTY_FORM: ItemFormData = {
   ctaType: "booking",
   priceType: "",
   priceAmount: "",
-  priceCurrency: "GBP",
+  priceCurrency: "USD",
   imageUrl: "",
   ctaLabel: "",
   durationMinutes: "60",
@@ -51,6 +51,7 @@ const EMPTY_FORM: ItemFormData = {
 const CTA_TYPES = [
   { value: "booking", label: "Booking" },
   { value: "purchase", label: "Purchase" },
+  { value: "rental", label: "Rental" },
   { value: "inquiry", label: "Inquiry" },
   { value: "donation", label: "Donation" },
 ];
@@ -65,6 +66,13 @@ const PRICE_TYPES_BY_CTA: Record<string, Array<{ value: string; label: string }>
   purchase: [
     { value: "fixed", label: "Fixed price" },
     { value: "from", label: "From (minimum)" },
+  ],
+  rental: [
+    { value: "per-session", label: "Per rental period" },
+    { value: "per-hour", label: "Per hour" },
+    { value: "fixed", label: "Fixed price" },
+    { value: "from", label: "From (minimum)" },
+    { value: "free", label: "Free" },
   ],
   inquiry: [
     { value: "quote", label: "Request a quote" },
@@ -112,6 +120,26 @@ export function ItemFormDialog({
     ...initial,
   }));
   const [saving, setSaving] = useState(false);
+
+  // Reset form when dialog opens so stale values from a previous item don't bleed
+  // through (R6-003: edit modal opened with empty Name / wrong values on second open).
+  const prevOpenRef = useRef(false);
+  const initialRef = useRef(initial);
+  initialRef.current = initial;
+  const defaultCtaTypeRef = useRef(defaultCtaType);
+  defaultCtaTypeRef.current = defaultCtaType;
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      const ct = defaultCtaTypeRef.current ?? "booking";
+      setForm({
+        ...EMPTY_FORM,
+        ctaType: ct,
+        priceType: PRICE_TYPES_BY_CTA[ct]?.[0]?.value ?? "",
+        ...initialRef.current,
+      });
+    }
+    prevOpenRef.current = open;
+  }, [open]);
 
   if (!open) return null;
 
