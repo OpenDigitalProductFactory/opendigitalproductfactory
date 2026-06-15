@@ -48,8 +48,7 @@ export type RevenueCockpitInput = {
   };
 };
 
-// Default currency mirrors Opportunity.currency and Quote.currency Prisma defaults.
-export function formatRevenueAmount(value: number, currency: string = "GBP"): string {
+export function formatRevenueAmount(value: number, currency: string = "USD"): string {
   const locale = currency === "GBP" ? "en-GB" : "en-US";
 
   return new Intl.NumberFormat(locale, {

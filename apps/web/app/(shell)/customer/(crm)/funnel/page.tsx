@@ -21,10 +21,13 @@ export default async function FunnelPage() {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  // Load archetype for CTA-aware labelling
-  const config = await prisma.storefrontConfig.findFirst({
-    include: { archetype: { select: { name: true, ctaType: true, category: true } } },
-  });
+  const [config, orgSettings] = await Promise.all([
+    prisma.storefrontConfig.findFirst({
+      include: { archetype: { select: { name: true, ctaType: true, category: true } } },
+    }),
+    prisma.orgSettings.findFirst({ select: { baseCurrency: true } }),
+  ]);
+  const baseCurrency = orgSettings?.baseCurrency ?? "USD";
 
   // Storefront interaction counts (top of funnel)
   const [bookings, inquiries, orders, donations] = await Promise.all([
@@ -96,7 +99,7 @@ export default async function FunnelPage() {
     {
       label: "Closed Won",
       count: closedWon,
-      detail: wonValue > 0 ? `Value: ${formatRevenueAmount(wonValue)}` : "no revenue yet",
+      detail: wonValue > 0 ? `Value: ${formatRevenueAmount(wonValue, baseCurrency)}` : "no revenue yet",
       convLabel: winRate ? `${winRate}% win rate` : null,
       tone: "success" as CrmTone,
       width: totalInteractions > 0 ? Math.max(5, (closedWon / Math.max(totalInteractions, 1)) * 100) : 5,
@@ -187,7 +190,7 @@ export default async function FunnelPage() {
                 <p className="text-lg font-bold text-[var(--dpf-text)]">{o._count}</p>
                 {value > 0 && (
                   <p className={["text-[10px]", toneClasses.text].join(" ")}>
-                    {formatRevenueAmount(value)}
+                    {formatRevenueAmount(value, baseCurrency)}
                   </p>
                 )}
               </div>
