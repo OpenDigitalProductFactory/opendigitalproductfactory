@@ -172,6 +172,15 @@ describe("formatMessagesForProvider", () => {
       const formatted = formatMessageForOpenAI({ role: "user", content });
       expect(formatted).toEqual({ role: "user", content });
     });
+
+    it("passes an audio (input_audio) user message through as the OpenAI wire format", () => {
+      const content: ChatMessage["content"] = [
+        { type: "text", text: "Transcribe this" },
+        { type: "input_audio", input_audio: { data: "QUJD", format: "wav" } },
+      ];
+      const formatted = formatMessageForOpenAI({ role: "user", content });
+      expect(formatted).toEqual({ role: "user", content });
+    });
   });
 
   describe("Responses API", () => {

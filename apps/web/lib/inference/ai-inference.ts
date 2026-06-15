@@ -50,14 +50,32 @@ export type ContentBlock =
    * models (e.g. local Gemma 4 via Docker Model Runner) to receive screenshots.
    */
   | { type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } }
+  /**
+   * Audio input for multimodal models (ASR / diarization / audio understanding).
+   * OpenAI Chat Completions wire form (`input_audio` with base64 data + format).
+   * Verified on-machine (2026-06-15): local Gemma 4 12B transcribes a wav via
+   * Docker Model Runner through this exact block. Anthropic has no audio-input
+   * block, so this is OpenAI-compatible only — routing sends audio to an
+   * audio-capable endpoint via the `audioInput` floor, never to Anthropic.
+   */
+  | { type: "input_audio"; input_audio: { data: string; format: "wav" | "mp3" } }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; content: string };
 
-/** True when a message's content array carries only model-facing input blocks
- *  (text / image) that can be passed through to a chat API as-is. The formatters
- *  rely on ContentBlock discriminated-union narrowing for per-block typing. */
+/** True when content carries only text/image blocks — the subset both the OpenAI
+ *  AND Anthropic formatters can pass through (Anthropic has no audio block). */
 function isMultimodalInputContent(content: ContentBlock[]): boolean {
   return content.length > 0 && content.every((b) => b.type === "text" || b.type === "image_url");
+}
+
+/** True when content carries only model-facing input blocks the OpenAI Chat
+ *  Completions API accepts natively (text / image / audio). Superset of the
+ *  Anthropic predicate — used only by the OpenAI formatter passthrough. */
+function isOpenAIInputContent(content: ContentBlock[]): boolean {
+  return (
+    content.length > 0 &&
+    content.every((b) => b.type === "text" || b.type === "image_url" || b.type === "input_audio")
+  );
 }
 
 /** Convert an OpenAI-style image_url (data: URL) to an Anthropic image source block. */
@@ -361,9 +379,9 @@ export function formatMessageForOpenAI(msg: ChatMessage): Record<string, unknown
       })),
     };
   }
-  // Multimodal user input (text + image_url blocks) → pass through as-is; this is
-  // already the OpenAI Chat Completions vision wire format.
-  if (Array.isArray(msg.content) && isMultimodalInputContent(msg.content)) {
+  // Multimodal user input (text + image_url + input_audio blocks) → pass through
+  // as-is; this is already the OpenAI Chat Completions multimodal wire format.
+  if (Array.isArray(msg.content) && isOpenAIInputContent(msg.content)) {
     return { role: msg.role, content: msg.content };
   }
   // Plain messages — pass through with string content

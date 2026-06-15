@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveLocalModelCapabilityPrior,
+  detectLocalModelAudio,
   detectLocalModelFamily,
   detectLocalModelVision,
+  localInputModalities,
   normalizeLocalModelId,
 } from "../src/local-model-capabilities";
 
@@ -91,6 +93,38 @@ describe("deriveLocalModelCapabilityPrior", () => {
 
   it("never marks an embedding model vision-capable", () => {
     expect(deriveLocalModelCapabilityPrior("docker.io/ai/nomic-embed-text-v1.5:latest").supportsVision).toBe(false);
+  });
+
+  it("flags audio-capable models (drives audioInput floor) — verified on-machine for Gemma 4", () => {
+    expect(deriveLocalModelCapabilityPrior("ai/gemma4:12B").supportsAudio).toBe(true);
+    expect(deriveLocalModelCapabilityPrior("ai/qwen3-omni:latest").supportsAudio).toBe(true);
+  });
+
+  it("does not flag text-only / embedding models as audio-capable", () => {
+    expect(deriveLocalModelCapabilityPrior("ai/qwen3-coder:latest").supportsAudio).toBe(false);
+    expect(deriveLocalModelCapabilityPrior("ai/gemma3:latest").supportsAudio).toBe(false);
+    expect(deriveLocalModelCapabilityPrior("docker.io/ai/nomic-embed-text-v1.5:latest").supportsAudio).toBe(false);
+  });
+
+  it("derives input modalities from the prior (text + image + audio for Gemma 4)", () => {
+    expect(localInputModalities(deriveLocalModelCapabilityPrior("ai/gemma4:12B"))).toEqual([
+      "text", "image", "audio",
+    ]);
+    expect(localInputModalities(deriveLocalModelCapabilityPrior("ai/qwen3-coder:latest"))).toEqual(["text"]);
+    expect(localInputModalities(deriveLocalModelCapabilityPrior("ai/nomic-embed-text-v1.5:latest"))).toEqual(["text"]);
+  });
+});
+
+describe("detectLocalModelAudio", () => {
+  it("detects audio-input families", () => {
+    for (const id of ["ai/gemma4:12B", "docker.io/ai/gemma3n:latest", "ai/whisper-large:latest", "ai/qwen2.5-omni:7b", "ai/ultravox:latest"]) {
+      expect(detectLocalModelAudio(id)).toBe(true);
+    }
+  });
+  it("returns false for text-only and embedding models", () => {
+    for (const id of ["ai/qwen3-coder:latest", "ai/gemma3:latest", "ai/llama3.3:latest", "docker.io/ai/nomic-embed-text-v1.5:latest"]) {
+      expect(detectLocalModelAudio(id)).toBe(false);
+    }
   });
 });
 

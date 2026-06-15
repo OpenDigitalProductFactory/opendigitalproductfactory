@@ -58,7 +58,7 @@ import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
 import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
 import { toModelProfileSeedCreateData } from "./model-profile-seed.js";
-import { deriveLocalModelCapabilityPrior } from "./local-model-capabilities.js";
+import { deriveLocalModelCapabilityPrior, localInputModalities } from "./local-model-capabilities.js";
 import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
@@ -1681,17 +1681,18 @@ async function seedLocalModels(): Promise<void> {
           instructionFollowingScore: prior.instructionFollowingScore,
           structuredOutputScore: prior.structuredOutputScore,
           conversational: prior.conversational, contextRetention: prior.contextRetention,
-          // imageInput drives the `imageInput` routing floor so vision tasks can
-          // select a multimodal local model (e.g. Gemma 4) with no provider pin.
+          // imageInput/audioInput drive the routing floors so vision/audio tasks
+          // can select a multimodal local model (e.g. Gemma 4) with no provider pin.
           capabilities: {
             streaming: true,
             embedding: prior.isEmbedding,
             ...(prior.supportsVision ? { imageInput: true } : {}),
+            ...(prior.supportsAudio ? { audioInput: true } : {}),
           } as any,
-          inputModalities: prior.supportsVision ? ["text", "image"] : ["text"],
+          inputModalities: localInputModalities(prior),
           outputModalities: ["text"],
           supportedModalities: {
-            input: prior.supportsVision ? ["text", "image"] : ["text"],
+            input: localInputModalities(prior),
             output: ["text"],
           },
         },

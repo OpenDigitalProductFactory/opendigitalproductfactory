@@ -30,6 +30,13 @@ export interface LocalModelCapabilityPrior {
    * Bootstrap prior only — the activation eval still calibrates.
    */
   supportsVision: boolean;
+  /**
+   * True for multimodal-IN models that accept audio content (Gemma 4, Gemma 3n,
+   * Qwen-Omni, Whisper-family, ...). Drives ModelProfile capabilities.audioInput
+   * so the `audioInput` routing floor can select it. Verified on-machine
+   * (2026-06-15): ai/gemma4:12B transcribes a wav via DMR. Bootstrap prior only.
+   */
+  supportsAudio: boolean;
   capabilityCategory: string;
   supportsToolUse: boolean;
   reasoning: number;
@@ -99,6 +106,34 @@ export function detectLocalModelVision(modelId: string): boolean {
 }
 
 /**
+ * Best-effort detection of audio-input local models (ASR / audio understanding),
+ * orthogonal to the text/tool family. Drives ModelProfile.capabilities.audioInput
+ * so the `audioInput` floor can select an audio-capable model with no pin.
+ * Verified on-machine 2026-06-15: Gemma 4 12B (ai/gemma4:12B) transcribes a wav
+ * via OpenAI-compatible input_audio content on Docker Model Runner. Prior only —
+ * the activation eval still measures and can correct it.
+ */
+export function detectLocalModelAudio(modelId: string): boolean {
+  const id = normalizeLocalModelId(modelId);
+  if (/embed|nomic|bge|e5-|gte-/.test(id)) return false;
+  return /gemma4|gemma-4|gemma3n|gemma-3n|whisper|qwen.*omni|omni|[-/]audio\b|voxtral|ultravox/.test(
+    id,
+  );
+}
+
+/**
+ * Input modalities a local model accepts, derived from its capability prior.
+ * Always includes "text"; adds "image"/"audio" for multimodal-IN models. Used by
+ * the seed to populate ModelProfile.inputModalities/supportedModalities.
+ */
+export function localInputModalities(prior: LocalModelCapabilityPrior): string[] {
+  const mods = ["text"];
+  if (prior.supportsVision) mods.push("image");
+  if (prior.supportsAudio) mods.push("audio");
+  return mods;
+}
+
+/**
  * Derive a capability prior for a local model id. Pure — no DB, no network.
  * The numbers are deliberately coarse: they only need to be *good enough to
  * route* until the deterministic eval measures the real model.
@@ -107,14 +142,15 @@ export function deriveLocalModelCapabilityPrior(modelId: string): LocalModelCapa
   const base = derivePriorBase(modelId);
   return {
     ...base,
-    // Vision is orthogonal to the text/tool family; embedding models are never
-    // vision-routable. Bootstrap prior — the activation eval still calibrates.
+    // Vision/audio are orthogonal to the text/tool family; embedding models are
+    // never multimodal-routable. Bootstrap priors — the activation eval calibrates.
     supportsVision: base.isEmbedding ? false : detectLocalModelVision(modelId),
+    supportsAudio: base.isEmbedding ? false : detectLocalModelAudio(modelId),
   };
 }
 
-/** Family-keyed text/tool capability base (vision added by the wrapper above). */
-function derivePriorBase(modelId: string): Omit<LocalModelCapabilityPrior, "supportsVision"> {
+/** Family-keyed text/tool capability base (vision/audio added by the wrapper above). */
+function derivePriorBase(modelId: string): Omit<LocalModelCapabilityPrior, "supportsVision" | "supportsAudio"> {
   const family = detectLocalModelFamily(modelId);
   switch (family) {
     case "embedding":
