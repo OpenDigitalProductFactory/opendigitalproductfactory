@@ -18,11 +18,8 @@
 //             tree has uncommitted changes).
 
 import {
-  buildFetchCommand,
-  buildRemoteHeadCommand,
   buildHeadShaCommand,
   buildDirtyCheckCommand,
-  buildMergeCommand,
   deriveDeployedStamp,
 } from "./version";
 import type { UpgradeSourceMode } from "./config";
@@ -83,22 +80,6 @@ function trim(s: string): string {
   return s.trim();
 }
 
-/**
- * Repo-relative paths of TRACKED modifications (staged or unstaged) from
- * `git status --porcelain`, or [] when none. Untracked entries ("??") are
- * excluded: they don't block a merge the way modified tracked files do, and
- * counting them would trip on benign artifacts. Note: do NOT trim the whole
- * porcelain blob first — that would strip the leading status space of the first
- * line and corrupt the `slice(3)` path extraction.
- */
-function dirtyFiles(porcelain: string): string[] {
-  return porcelain
-    .split("\n")
-    .filter((l) => l.trim().length > 0 && !l.startsWith("??"))
-    .map((l) => l.slice(3).trim()) // strip the 2-char status + 1 space prefix
-    .filter(Boolean);
-}
-
 async function readHeadStamp(run: GitRunner, hostSourcePath: string): Promise<string> {
   const head = await run(buildHeadShaCommand(hostSourcePath).slice(1));
   const dirty = await run(buildDirtyCheckCommand(hostSourcePath).slice(1));
@@ -139,75 +120,21 @@ export async function prepareUpgradeSource(
     );
   }
 
-  // ── upstream (legacy: direct merge against the install clone) ─────────────
-  try {
-    // Refuse FAST on an uncommitted working tree. The merge below would abort
-    // with "local changes would be overwritten" — git reports that as exit 1
-    // with NO conflict markers, so the generic merge path would surface an
-    // empty, misleading "merge-conflict". This design preserves *committed*
-    // local delta (on the install branch); uncommitted changes are unmergeable
-    // and must be committed to the install branch or stashed first. Detecting
-    // them up front (before any checkout) keeps the clone untouched and gives
-    // the operator an actionable message.
-    const preDirty = await run(buildDirtyCheckCommand(hostSourcePath).slice(1));
-    const pending = dirtyFiles(preDirty.stdout);
-    if (pending.length > 0) {
-      const sample = pending.slice(0, 5).join(", ");
-      const more = pending.length > 5 ? `, +${pending.length - 5} more` : "";
-      return {
-        ok: false,
-        reason: "dirty-tree",
-        message: `the install clone has ${pending.length} uncommitted change(s) (${sample}${more}); commit them to ${installBranch} or stash before upgrading`,
-      };
-    }
-
-    const fetch = await run(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
-    if (fetch.code !== 0) {
-      return { ok: false, reason: "prep-error", message: `fetch failed: ${trim(fetch.stderr) || fetch.code}` };
-    }
-
-    const head = await run(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
-    const upstreamSha = trim(head.stdout);
-    if (head.code !== 0 || !upstreamSha) {
-      return { ok: false, reason: "no-target", message: `cannot resolve ${remote}/${branch}` };
-    }
-
-    // Move the clone onto the durable install branch WITHOUT discarding its
-    // local commits: check it out if it exists, otherwise create it from the
-    // current HEAD. (`-B` is deliberately avoided — it would reset an existing
-    // install branch to HEAD and destroy the local delta this whole design
-    // exists to preserve.)
-    const exists = await run(["-C", hostSourcePath, "rev-parse", "--verify", "--quiet", installBranch]);
-    const checkout =
-      exists.code === 0
-        ? await run(["-C", hostSourcePath, "checkout", installBranch])
-        : await run(["-C", hostSourcePath, "checkout", "-b", installBranch]);
-    if (checkout.code !== 0) {
-      return { ok: false, reason: "prep-error", message: `checkout ${installBranch} failed: ${trim(checkout.stderr) || checkout.code}` };
-    }
-
-    const merge = await run(buildMergeCommand({ hostSourcePath, remote, branch }).slice(1));
-    if (merge.code !== 0) {
-      // Collect the conflicting files, then abort so the clone is never left
-      // mid-merge. The operator resolves in the Upgrade Center; until then the
-      // current build keeps running.
-      const conflicts = await run(["-C", hostSourcePath, "diff", "--name-only", "--diff-filter=U"]);
-      const conflictFiles = trim(conflicts.stdout).split("\n").map(trim).filter(Boolean);
-      await run(["-C", hostSourcePath, "merge", "--abort"]);
-      return {
-        ok: false,
-        reason: "merge-conflict",
-        conflictFiles,
-        upstreamSha,
-        message: `upstream merge conflicts in ${conflictFiles.length} file(s)`,
-      };
-    }
-
-    const stamp = await readHeadStamp(run, hostSourcePath);
-    return { ok: true, mode: "upstream", stamp, upstreamSha };
-  } catch (err) {
-    return { ok: false, reason: "prep-error", message: errMsg(err) };
-  }
+  // ── upstream WITHOUT an isolated workspace: RETIRED (BI-4043A64B) ──────────
+  // The legacy path ran `git checkout <installBranch>` + `git merge` directly
+  // against the host clone's WORKING TREE (`/host-dpf`). An interrupted or
+  // partial run corrupted the operator's tree — observed 2026-06-15 as 721
+  // deleted `packages/` files + files rewritten to main. Source-prep must never
+  // mutate the host working tree, so an isolated workspace (BI-A8A7CCFD) is now
+  // mandatory for upstream merges. `useIsolatedWorkspace` defaults true (and is
+  // forced true in config parsing), so a workspacePath is always derived;
+  // reaching here means it was explicitly disabled — refuse rather than corrupt.
+  return {
+    ok: false,
+    reason: "prep-error",
+    message:
+      "upstream upgrade requires an isolated workspace — the legacy direct-merge against the host clone is retired (it mutated the operator working tree; BI-4043A64B). Leave useIsolatedWorkspace enabled (the default) so the merge runs in .upgrade-workspace.",
+  };
 }
 
 function errMsg(err: unknown): string {
