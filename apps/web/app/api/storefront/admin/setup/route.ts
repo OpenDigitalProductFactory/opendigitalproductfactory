@@ -73,7 +73,8 @@ export async function POST(req: NextRequest) {
           title: s.title,
           sortOrder: s.sortOrder,
           content: {},
-          isVisible: true,
+          // Content-dependent sections start hidden until operator adds content (R10-SECT-001).
+          isVisible: !["team", "gallery", "testimonials"].includes(s.type),
         })),
       },
       items: {
