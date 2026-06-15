@@ -32,6 +32,7 @@ import {
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
 import {
   createSelfUpgradeRecoveryPoint,
+  summarizeRecoveryPointDegradation,
   summarizeRecoveryPointFailure,
 } from "@/lib/self-upgrade/recovery-point";
 import {
@@ -434,6 +435,13 @@ export async function runSelfUpgrade(
     dryRun: params.dryRun,
   });
   await recordRunRecoveryPoint(run.runId, recoveryPoint);
+  if (recoveryPoint.status === "degraded") {
+    // A best-effort (derived-store) backup failed — neo4j (code/knowledge
+    // graph) and qdrant (vectors) rebuild from source, so this does NOT block
+    // the upgrade. Record it loudly for the operator audit trail and proceed.
+    const note = summarizeRecoveryPointDegradation(recoveryPoint);
+    if (note) console.warn(`[self-upgrade] ${run.runId}: ${note}`);
+  }
   if (recoveryPoint.status === "failed") {
     const reason = summarizeRecoveryPointFailure(recoveryPoint);
     if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, reason);

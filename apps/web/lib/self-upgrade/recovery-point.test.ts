@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  classifyRecoveryPointStatus,
   createSelfUpgradeRecoveryPoint,
+  resolveRequiredRecoveryTargets,
+  summarizeRecoveryPointDegradation,
   summarizeRecoveryPointFailure,
+  type SelfUpgradeRecoveryPointMember,
 } from "./recovery-point";
 
 describe("self-upgrade recovery point", () => {
@@ -47,7 +51,7 @@ describe("self-upgrade recovery point", () => {
     });
   });
 
-  it("fails the recovery point when a backup runner reports failed", async () => {
+  it("degrades — not fails — when only a best-effort (derived-store) backup fails", async () => {
     const point = await createSelfUpgradeRecoveryPoint({
       runId: "SUR-TEST",
       runners: {
@@ -57,9 +61,28 @@ describe("self-upgrade recovery point", () => {
       },
     });
 
+    // neo4j (code/knowledge graph) is rebuilt from source, so a failed backup
+    // of it must NOT block the upgrade — the recovery point is degraded, not
+    // failed, and the orchestrator only aborts on "failed".
+    expect(point.status).toBe("degraded");
+    expect(summarizeRecoveryPointDegradation(point)).toBe(
+      "recovery-point-degraded (best-effort backup failed, upgrade proceeding): neo4j",
+    );
+  });
+
+  it("fails the recovery point only when the required postgres backup fails", async () => {
+    const point = await createSelfUpgradeRecoveryPoint({
+      runId: "SUR-TEST",
+      runners: {
+        postgres: vi.fn().mockResolvedValue({ runId: "BR-PG", status: "failed" }),
+        neo4j: vi.fn().mockResolvedValue({ runId: "BR-N4J", status: "ok" }),
+        qdrant: vi.fn().mockResolvedValue({ runId: "BR-QD", status: "ok" }),
+      },
+    });
+
     expect(point.status).toBe("failed");
     expect(summarizeRecoveryPointFailure(point)).toBe(
-      "recovery-point-failed: neo4j BR-N4J",
+      "recovery-point-failed: postgres BR-PG",
     );
   });
 
@@ -99,5 +122,41 @@ describe("self-upgrade recovery point", () => {
       members: [],
     });
     expect(postgres).not.toHaveBeenCalled();
+  });
+
+  it("classifies status by required vs best-effort targets", () => {
+    const members: SelfUpgradeRecoveryPointMember[] = [
+      { target: "postgres", runId: "BR-PG", status: "ok" },
+      { target: "neo4j", runId: "BR-N4J", status: "failed" },
+      { target: "qdrant", runId: "BR-QD", status: "ok" },
+    ];
+    // Default: postgres required, neo4j/qdrant best-effort → degraded.
+    expect(classifyRecoveryPointStatus(members, new Set(["postgres"]))).toBe("degraded");
+    // Operator widens the required set to include neo4j → now it blocks.
+    expect(classifyRecoveryPointStatus(members, new Set(["postgres", "neo4j"]))).toBe(
+      "failed",
+    );
+    // Everything ok → ok.
+    expect(
+      classifyRecoveryPointStatus(
+        members.map((member) => ({ ...member, status: "ok" as const })),
+        new Set(["postgres"]),
+      ),
+    ).toBe("ok");
+  });
+
+  it("resolveRequiredRecoveryTargets defaults to postgres and honors the env override", () => {
+    expect([...resolveRequiredRecoveryTargets({})]).toEqual(["postgres"]);
+    expect(
+      [
+        ...resolveRequiredRecoveryTargets({
+          DPF_RECOVERY_POINT_REQUIRED_TARGETS: "postgres,neo4j",
+        }),
+      ].sort(),
+    ).toEqual(["neo4j", "postgres"]);
+    // Unknown values are ignored, falling back to the postgres-only default.
+    expect([
+      ...resolveRequiredRecoveryTargets({ DPF_RECOVERY_POINT_REQUIRED_TARGETS: "bogus" }),
+    ]).toEqual(["postgres"]);
   });
 });

@@ -24,7 +24,7 @@ interface RecoveryPointRunners {
   qdrant: QdrantBackupRunner;
 }
 
-export type SelfUpgradeRecoveryPointStatus = "ok" | "failed" | "skipped";
+export type SelfUpgradeRecoveryPointStatus = "ok" | "degraded" | "failed" | "skipped";
 
 export interface SelfUpgradeRecoveryPointMember {
   target: BackupTarget;
@@ -102,12 +102,64 @@ export async function createSelfUpgradeRecoveryPoint(
 
   return {
     schemaVersion: 1,
-    status: members.every((member) => member.status === "ok") ? "ok" : "failed",
+    status: classifyRecoveryPointStatus(members),
     trigger: RECOVERY_TRIGGER,
     selfUpgradeRunId: args.runId,
     createdAt,
     members,
   };
+}
+
+/**
+ * Targets whose backup MUST succeed before an upgrade may proceed. Only the
+ * primary data store — postgres (epics, backlog, config, credentials) — is
+ * irreplaceable. neo4j (code + knowledge graph) and qdrant (vector index) are
+ * DERIVED stores, rebuilt from source by the code-graph bootstrap, so a failed
+ * or skipped backup of them must NOT block an upgrade — gating on a backup of
+ * regenerable data turns a transient backup-tooling fault into an upgrade
+ * outage (observed 2026-06-14: a neo4j backup volume-mismatch blocked every
+ * self-upgrade). Operators who want stricter gating can widen the set via
+ * DPF_RECOVERY_POINT_REQUIRED_TARGETS (comma-separated targets).
+ */
+export const DEFAULT_REQUIRED_RECOVERY_TARGETS: readonly BackupTarget[] = ["postgres"];
+
+const ALL_BACKUP_TARGETS: ReadonlySet<BackupTarget> = new Set([
+  "postgres",
+  "neo4j",
+  "qdrant",
+]);
+
+export function resolveRequiredRecoveryTargets(
+  env: Record<string, string | undefined> = process.env,
+): Set<BackupTarget> {
+  const raw = env.DPF_RECOVERY_POINT_REQUIRED_TARGETS;
+  if (raw && raw.trim()) {
+    const parsed = raw
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t): t is BackupTarget => ALL_BACKUP_TARGETS.has(t as BackupTarget));
+    if (parsed.length > 0) return new Set(parsed);
+  }
+  return new Set(DEFAULT_REQUIRED_RECOVERY_TARGETS);
+}
+
+/**
+ * Classify a recovery point from its members:
+ *   - "failed"   — a REQUIRED target's backup failed → the upgrade must abort.
+ *   - "degraded" — only best-effort (derived-store) backups failed → the
+ *                  upgrade proceeds, but the gap is recorded for the operator.
+ *   - "ok"       — every backup succeeded.
+ */
+export function classifyRecoveryPointStatus(
+  members: SelfUpgradeRecoveryPointMember[],
+  required: Set<BackupTarget> = resolveRequiredRecoveryTargets(),
+): SelfUpgradeRecoveryPointStatus {
+  const requiredFailed = members.some(
+    (member) => required.has(member.target) && member.status === "failed",
+  );
+  if (requiredFailed) return "failed";
+  const anyFailed = members.some((member) => member.status === "failed");
+  return anyFailed ? "degraded" : "ok";
 }
 
 async function resolveRecoveryPointRunners(
@@ -168,4 +220,22 @@ export function summarizeRecoveryPointFailure(point: SelfUpgradeRecoveryPoint): 
     return `${member.target}${runId}${suffix}`;
   });
   return `recovery-point-failed: ${parts.join("; ")}`;
+}
+
+/**
+ * Human-readable note naming the best-effort (derived-store) backups that
+ * failed on a "degraded" recovery point. Returns null when nothing failed.
+ * The upgrade proceeds regardless; this is for the operator audit trail.
+ */
+export function summarizeRecoveryPointDegradation(
+  point: SelfUpgradeRecoveryPoint,
+): string | null {
+  const failed = point.members.filter((member) => member.status === "failed");
+  if (failed.length === 0) return null;
+
+  const parts = failed.map((member) => {
+    const suffix = member.error ? `: ${member.error}` : "";
+    return `${member.target}${suffix}`;
+  });
+  return `recovery-point-degraded (best-effort backup failed, upgrade proceeding): ${parts.join("; ")}`;
 }
