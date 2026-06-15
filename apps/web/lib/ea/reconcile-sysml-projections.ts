@@ -1,10 +1,11 @@
 // apps/web/lib/ea/reconcile-sysml-projections.ts
 //
-// Combined reconcile for all auto-extracted SysML projections (Parity Engine).
+// Combined reconcile for all auto-extracted SysML/EA projections (Parity Engine).
 // Runs each domain reconcile (MCP tool authority, AI coworker workforce, IT4IT value
-// streams, Next.js route tree, source-code structure) so a single scheduled/on-demand
-// pass keeps every live projection current. Each reconcile re-derives from its source
-// registry/manifest/graph, so the projections cannot drift.
+// streams, Next.js route tree, source-code structure, platform process models) so a
+// single scheduled/on-demand pass keeps every live projection current. Each reconcile
+// re-derives from its source registry/manifest/graph/transition-table, so the
+// projections cannot drift.
 //
 // Thin orchestrator over the per-domain reconciles; db injected for tests. The
 // code-structure reconcile additionally reads the Neo4j code graph, so its graph deps
@@ -16,6 +17,7 @@ import { reconcileCoworkerAuthority } from "./reconcile-coworker-authority";
 import { reconcileValueStreams } from "./reconcile-value-streams";
 import { reconcileRoutes } from "./reconcile-routes";
 import { reconcileCodeStructure, type CodeStructureReconcileOpts } from "./reconcile-code-structure";
+import { reconcileProcessModels } from "./reconcile-process";
 import type { SysmlSeedResult } from "./sysml-model-seed";
 
 export interface SysmlProjectionsResult {
@@ -24,6 +26,7 @@ export interface SysmlProjectionsResult {
   valueStreams: SysmlSeedResult;
   routes: SysmlSeedResult;
   codeStructure: SysmlSeedResult;
+  processModels: SysmlSeedResult;
 }
 
 export async function reconcileSysmlProjections(
@@ -34,5 +37,6 @@ export async function reconcileSysmlProjections(
   const valueStreams = await reconcileValueStreams({ db: opts.db });
   const routes = await reconcileRoutes({ db: opts.db });
   const codeStructure = await reconcileCodeStructure({ db: opts.db, ...opts.codeGraph });
-  return { mcpAuthority, coworkerAuthority, valueStreams, routes, codeStructure };
+  const processModels = await reconcileProcessModels({ db: opts.db });
+  return { mcpAuthority, coworkerAuthority, valueStreams, routes, codeStructure, processModels };
 }
