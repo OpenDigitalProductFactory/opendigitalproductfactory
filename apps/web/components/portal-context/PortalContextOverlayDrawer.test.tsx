@@ -29,6 +29,27 @@ describe("PortalContextOverlayDrawer", () => {
     expect(screen.getByText("WC-123")).toBeTruthy();
   });
 
+  it("docks beside the AI coworker panel instead of underneath it", () => {
+    // Regression guard: the coworker panel is z-50 and reserves the
+    // --agent-panel-reserved-width gutter on the right. The drawer must offset
+    // its right edge by that gutter (so the two sit side by side) and sit above
+    // the coworker tier (so it is never hidden behind a floating coworker on a
+    // narrow viewport). See the comment in PortalContextOverlayDrawer.tsx.
+    // Assert against the rendered markup rather than element.style — jsdom's
+    // CSS parser drops var() values on the `right` longhand.
+    const html = renderToStaticMarkup(
+      <PortalContextOverlayDrawer envelope={makeEnvelope()} open={true} onClose={() => {}} />,
+    );
+
+    // Offsets by the coworker's reserved-width gutter (side by side, not under).
+    expect(html).toContain("--agent-panel-reserved-width");
+    // Sits above the coworker tier (z-50)...
+    expect(html).toContain("z-[60]");
+    // ...and no longer below it / pinned to the raw viewport edge.
+    expect(html).not.toContain("z-40");
+    expect(html).not.toContain("right-0");
+  });
+
   it("renders empty hive and evidence states without hardcoded colors", () => {
     const envelope = makeEnvelope({ coworkers: [], evidence: [] });
     render(<PortalContextOverlayDrawer envelope={envelope} open={true} onClose={vi.fn()} />);
