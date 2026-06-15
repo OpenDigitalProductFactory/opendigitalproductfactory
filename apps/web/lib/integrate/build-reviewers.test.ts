@@ -7,6 +7,7 @@ import {
   architectureAdvisoryFromReview,
   ARCHITECTURE_REVIEW_REFERENCES,
   parseReviewResponse,
+  applyTestFirstLenienceForKind,
   extractClaimsFromReview,
   buildReviewBranchArtifacts,
   collectReviewerVerdicts,
@@ -131,6 +132,52 @@ describe("buildPlanReviewPrompt", () => {
     });
     expect(prompt).toContain("DOCUMENTATION-ONLY changes");
     expect(prompt).toContain("require NO test-first step");
+  });
+});
+
+describe("applyTestFirstLenienceForKind", () => {
+  const testFirstCritical = {
+    decision: "fail" as const,
+    issues: [
+      { severity: "critical" as const, description: "Task 2 does not specify a real failing test to write first for the header comment addition." },
+      { severity: "important" as const, description: "Task 1 omits the expected function signature." },
+    ],
+    summary: "two issues",
+  };
+
+  it("downgrades a test-first critical to non-blocking for a chore build → decision flips to pass", () => {
+    const out = applyTestFirstLenienceForKind(testFirstCritical, "chore");
+    expect(out.decision).toBe("pass");
+    expect(out.issues.find((i) => i.description.includes("test to write first"))?.severity).toBe("minor");
+    // the unrelated important issue is preserved as-is
+    expect(out.issues.find((i) => i.description.includes("function signature"))?.severity).toBe("important");
+  });
+
+  it("applies to fix and docs kinds too", () => {
+    expect(applyTestFirstLenienceForKind(testFirstCritical, "fix").decision).toBe("pass");
+    expect(applyTestFirstLenienceForKind(testFirstCritical, "docs").decision).toBe("pass");
+  });
+
+  it("does NOT touch a feature build — test-first stays critical and blocking", () => {
+    const out = applyTestFirstLenienceForKind(testFirstCritical, "feature");
+    expect(out.decision).toBe("fail");
+    expect(out.issues[0].severity).toBe("critical");
+  });
+
+  it("leaves a genuine (non-test-first) critical blocking even for a chore", () => {
+    const realBlocker = {
+      decision: "fail" as const,
+      issues: [{ severity: "critical" as const, description: "Plan refers to a missing modify target: lib/gone.ts" }],
+      summary: "missing file",
+    };
+    const out = applyTestFirstLenienceForKind(realBlocker, "chore");
+    expect(out.decision).toBe("fail");
+    expect(out.issues[0].severity).toBe("critical");
+  });
+
+  it("is a no-op when kind is null/undefined", () => {
+    expect(applyTestFirstLenienceForKind(testFirstCritical, null).decision).toBe("fail");
+    expect(applyTestFirstLenienceForKind(testFirstCritical, undefined).decision).toBe("fail");
   });
 
   it("includes task count for reviewer context", () => {
