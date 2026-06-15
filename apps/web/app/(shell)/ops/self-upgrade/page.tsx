@@ -1,5 +1,6 @@
 import { getSelfUpgradeStatus, listSelfUpgradeRuns } from "@/lib/actions/promotions";
 import { getPlatformDevConfig } from "@/lib/actions/platform-dev-config";
+import { loadPersistedImpactSummary } from "@/lib/self-upgrade/impact";
 import SelfUpgradeClient from "@/components/ops/SelfUpgradeClient";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { PlatformUpdateApplyPanel } from "@/components/admin/PlatformUpdateApplyPanel";
@@ -16,8 +17,19 @@ export default async function SelfUpgradePage() {
     getPlatformDevConfig(),
   ]);
 
+  // Rehydrate the "What's in this update?" panel from the durable store so a
+  // previously-generated summary survives refresh (and the post-upgrade
+  // restart) without re-running the git walk / LLM. Read-only — null when none
+  // is persisted yet. Reuses the target the status load already resolved.
+  const initialImpactSummary = await loadPersistedImpactSummary(status.targetSha);
+
   const clientProps = JSON.parse(
-    JSON.stringify({ ...status, history: runs, historyNextCursor: nextCursor }),
+    JSON.stringify({
+      ...status,
+      history: runs,
+      historyNextCursor: nextCursor,
+      initialImpactSummary,
+    }),
   );
 
   return (

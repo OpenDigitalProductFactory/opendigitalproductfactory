@@ -12,6 +12,7 @@ import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
 import { createRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
+import { getCurrentImpactSummaryId } from "@/lib/self-upgrade/impact";
 import {
   isStoreOpen,
   isUpgradeWindowOpen,
@@ -595,6 +596,7 @@ export type SelfUpgradeRunDto = {
   currentSha: string | null;    // schema: currentSha (was: fromVersion)
   targetSha: string | null;     // schema: targetSha (was: toVersion)
   deployedSha: string | null;   // schema: deployedSha (was: absent — adding for completeness)
+  reason: string | null;        // why a run was skipped (audit + operator-facing explanation)
   completionEvidence?: Prisma.JsonValue | null;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -622,6 +624,7 @@ export async function listSelfUpgradeRuns(opts?: {
       currentSha: true,
       targetSha: true,
       deployedSha: true,
+      reason: true,
       completionEvidence: true,
       startedAt: true,
       completedAt: true,
@@ -758,8 +761,14 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
     return { queued: false, reason: "already-queued", runId: latestRun.runId } as const;
   }
 
+  // Attach the "What's in this update?" summary the operator just reviewed (if
+  // any) so the run records the changes it carried. Best effort — the upgrade
+  // proceeds whether or not a summary was generated.
+  const impactSummaryId = await getCurrentImpactSummaryId();
+
   const run = await createRun({
     triggeredBy,
+    impactSummaryId,
   });
 
   try {
