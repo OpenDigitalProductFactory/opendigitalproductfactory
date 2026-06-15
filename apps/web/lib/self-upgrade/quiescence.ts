@@ -18,6 +18,7 @@
  * BI-QUIESCE-002.
  */
 import { prisma } from "@dpf/db";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 
 // ─── Quiescence level — runtime state, hot-read by middleware + gates ────
 
@@ -456,7 +457,7 @@ async function withSwapSignalRetry(
     } catch (err) {
       lastErr = err;
       console.warn(
-        `[quiescence] ${label} attempt ${i + 1}/${attempts} failed: ${err instanceof Error ? err.message : String(err)}`,
+        `[quiescence] ${sanitizeForLog(label)} attempt ${i + 1}/${attempts} failed: ${sanitizeForLog(err instanceof Error ? err.message : String(err))}`,
       );
       if (i < attempts - 1) await sleep(500 * (i + 1));
     }
