@@ -497,6 +497,17 @@ export async function register() {
       20 * 60 * 1000,
     );
 
+    // Same boot + periodic safety net for BackupRun rows stuck "running": a
+    // backup runner that dies mid-dump leaves a false "in progress" row forever
+    // (no other recovery), polluting the backup-health card + corruption alerts.
+    void (async () => {
+      const { reconcileStuckBackupRuns } = await import(
+        "@/lib/operate/backups/reconcile-stuck-runs"
+      );
+      await reconcileStuckBackupRuns();
+      setInterval(() => void reconcileStuckBackupRuns(), 20 * 60 * 1000);
+    })();
+
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
     // These run unconditionally — they are correctness reconcilers, not optional
     // maintenance — and FIX 1 runs before FIX 2 so contradictory checkpoints are
