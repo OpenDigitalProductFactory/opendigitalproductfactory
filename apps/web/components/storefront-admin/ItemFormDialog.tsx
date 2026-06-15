@@ -50,6 +50,7 @@ const EMPTY_FORM: ItemFormData = {
 const CTA_TYPES = [
   { value: "booking", label: "Booking" },
   { value: "purchase", label: "Purchase" },
+  { value: "rental", label: "Rental" },
   { value: "inquiry", label: "Inquiry" },
   { value: "donation", label: "Donation" },
 ];
@@ -62,6 +63,12 @@ const PRICE_TYPES_BY_CTA: Record<string, Array<{ value: string; label: string }>
     { value: "free", label: "Free" },
   ],
   purchase: [
+    { value: "fixed", label: "Fixed price" },
+    { value: "from", label: "From (minimum)" },
+  ],
+  rental: [
+    { value: "per-session", label: "Per rental period" },
+    { value: "per-hour", label: "Per hour" },
     { value: "fixed", label: "Fixed price" },
     { value: "from", label: "From (minimum)" },
   ],
