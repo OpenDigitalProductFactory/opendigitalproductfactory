@@ -3,6 +3,7 @@ import { prisma } from "@dpf/db";
 import type { FormField } from "@dpf/storefront-templates";
 import { resolveOperatingHoursTimezone } from "@/lib/operating-hours-types";
 import { listOwnerMedia, mediaAssetUrl } from "@/lib/media";
+import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import type {
   PublicStorefrontConfig,
   PublicItem,
@@ -98,19 +99,36 @@ export async function resolveInquiryFormSchema(
   archetypeId: string,
 ): Promise<FormField[]> {
   if (!archetypeId) return DEFAULT_INQUIRY_SCHEMA;
-  const archetype = await prisma.storefrontArchetype.findUnique({
-    where: { archetypeId },
-    select: { formSchema: true },
-  });
+  const [archetype, orgSettings] = await Promise.all([
+    prisma.storefrontArchetype.findUnique({
+      where: { archetypeId },
+      select: { formSchema: true },
+    }),
+    prisma.orgSettings.findFirst({ select: { baseCurrency: true } }),
+  ]);
   const schema = archetype?.formSchema;
+  let fields: FormField[] = DEFAULT_INQUIRY_SCHEMA;
   if (Array.isArray(schema)) {
     // Cast through unknown[] so the isFormField type guard narrows to
     // FormField[]; Prisma's JsonValue does not satisfy the filter overload's
     // `S extends T` constraint directly.
-    const fields = (schema as unknown[]).filter(isFormField);
-    if (fields.length > 0) return fields;
+    const validated = (schema as unknown[]).filter(isFormField);
+    if (validated.length > 0) fields = validated;
   }
-  return DEFAULT_INQUIRY_SCHEMA;
+  // Substitute the GBP symbol seeded into form option labels with the
+  // workspace base currency symbol so a USD install doesn't show £ in
+  // budget-range / donation-amount dropdowns.
+  const baseCurrency = orgSettings?.baseCurrency ?? "USD";
+  if (baseCurrency !== "GBP") {
+    const sym = getCurrencySymbol(baseCurrency);
+    fields = fields.map((f) => ({
+      ...f,
+      label: f.label.replace(/£/g, sym),
+      placeholder: f.placeholder?.replace(/£/g, sym),
+      options: f.options?.map((o) => o.replace(/£/g, sym)),
+    }));
+  }
+  return fields;
 }
 
 export const getPublicStorefront = cache(async function getPublicStorefront(
