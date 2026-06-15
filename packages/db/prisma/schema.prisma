@@ -7569,6 +7569,8 @@ model StorefrontOrder {
   storefrontId      String
   customerContactId String?
   customerEmail     String
+  customerName      String?
+  deliveryAddress   Json?
   items             Json
   totalAmount       Decimal
   currency          String           @default("GBP")
