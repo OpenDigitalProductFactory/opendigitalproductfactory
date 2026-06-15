@@ -102,3 +102,30 @@ describe("groupTestFilesByPackage", () => {
     expect(grouped.size).toBe(0);
   });
 });
+
+const { outputIndicatesTestFailure } = await import("./coding-agent");
+
+describe("outputIndicatesTestFailure", () => {
+  it("detects failures in ANSI-colored vitest output (regression: color code defeats \\b)", () => {
+    // The real bug: `\x1b[31m` ends in "m" (a word char) directly before the
+    // digit, so `\b[1-9]` never matches a colored "3 failed". This exact string
+    // returned false before the ANSI strip.
+    const ansi = " Tests \x1b[22m \x1b[1m\x1b[31m3 failed\x1b[39m\x1b[2m | \x1b[22m\x1b[1m\x1b[32m2 passed\x1b[39m (5)";
+    expect(outputIndicatesTestFailure(ansi)).toBe(true);
+  });
+
+  it("returns false for an all-passing ANSI summary", () => {
+    const ansi = " Tests \x1b[1m\x1b[32m5 passed\x1b[39m (5)";
+    expect(outputIndicatesTestFailure(ansi)).toBe(false);
+  });
+
+  it("detects an ANSI FAIL marker line", () => {
+    const ansi = "\x1b[41m\x1b[1m FAIL \x1b[22m\x1b[49m lib/utils/string-helpers.test.ts";
+    expect(outputIndicatesTestFailure(ansi)).toBe(true);
+  });
+
+  it("works on plain (non-colored) output too", () => {
+    expect(outputIndicatesTestFailure("Tests  3 failed | 2 passed")).toBe(true);
+    expect(outputIndicatesTestFailure("Tests  5 passed (5)")).toBe(false);
+  });
+});
