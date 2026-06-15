@@ -303,8 +303,9 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
         </p>
       )}
 
-      {/* Form dialog */}
+      {/* Form dialog — key forces remount when editing item changes so useState initializer re-runs */}
       <ItemFormDialog
+        key={editingItem?.id ?? "new"}
         open={dialogOpen}
         onClose={() => { setDialogOpen(false); setEditingItem(null); }}
         onSave={handleSave}
