@@ -16,6 +16,7 @@ import {
   type ToolDefinition,
   type ToolResult,
 } from "./mcp-tools";
+import { coerceMcpToolArgs } from "./mcp-arg-coercion";
 import { deriveAuditClassForTool, deriveCapabilityId } from "./tool-audit-helpers";
 
 export type GovernedExecuteSource =
@@ -376,6 +377,19 @@ export async function governedExecuteTool(
       governance: { rejected: "unknown_tool" },
     };
   }
+
+  // Re-hydrate any tool args a client serialized as JSON strings — the whole
+  // arguments object, or individual array/object-typed fields — before the
+  // governance hooks, audit, and tool switch see them. Schema-driven so
+  // string-typed params are never parsed. This is the single funnel for all
+  // MCP wire transports (REST /api/mcp/call, JSON-RPC /api/mcp/v1, internal
+  // MCP session), which is exactly where client-side JSON-string framing
+  // happens; in-process executeTool() callers pass native objects and are
+  // unaffected. BI-16A80690.
+  args = {
+    ...args,
+    rawParams: coerceMcpToolArgs(args.rawParams, tool.inputSchema),
+  };
 
   // Capability check — user must have the platform role required by the tool.
   if (tool.requiredCapability) {
