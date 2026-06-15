@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  capabilityNeedOriginId,
+  capabilityNeedToWorkType,
   linkNeedToBacklogItem,
   listCoworkerCapabilityNeeds,
   resolveCapabilityNeed,
@@ -22,6 +24,9 @@ function makeDeps() {
       listNeeds: vi.fn(async () => []),
       updateNeed: vi.fn(async (needId, data) => ({ needId, ...data })),
     },
+    fileBacklogItem: vi.fn(
+      async (n: { needId: string }): Promise<{ itemId: string } | null> => ({ itemId: `BI-${n.needId}` }),
+    ),
   };
 }
 
@@ -95,6 +100,92 @@ describe("submitCoworkerSelfAssessment", () => {
         status: "submitted",
       }),
     );
+  });
+
+  it("auto-files each need to the backlog and links it back", async () => {
+    const deps = makeDeps();
+
+    const result = await submitCoworkerSelfAssessment(
+      {
+        agentId: "marketing-strategist",
+        trigger: "tool-call",
+        routeContext: "/customer/marketing",
+        verdict: "gaps",
+        confidence: "medium",
+        rawPayload: {},
+        needs: [
+          {
+            kind: "tool",
+            severity: "important",
+            need: "Create publish-ready proof assets.",
+            blocks: "Cannot turn recommendations into assets.",
+          },
+        ],
+      },
+      deps,
+    );
+
+    // Filed through the front door with coworker + kind context.
+    expect(deps.fileBacklogItem).toHaveBeenCalledWith(
+      expect.objectContaining({ needId: "CWN-000001", agentId: "marketing-strategist", kind: "tool" }),
+    );
+    // Linked back + marked filed (no manual link step needed).
+    expect(deps.db.updateNeed).toHaveBeenCalledWith("CWN-000001", {
+      linkedBacklogItemId: "BI-CWN-000001",
+      status: "backlog-filed",
+    });
+    expect(result.backlogItemIds).toEqual(["BI-CWN-000001"]);
+  });
+
+  it("records the need even when the backlog projection fails (non-fatal)", async () => {
+    const deps = makeDeps();
+    deps.fileBacklogItem.mockResolvedValueOnce(null);
+
+    const result = await submitCoworkerSelfAssessment(
+      {
+        agentId: "ops-coordinator",
+        trigger: "tool-call",
+        routeContext: "/ops",
+        verdict: "gaps",
+        confidence: "low",
+        rawPayload: {},
+        needs: [{ kind: "skill", severity: "minor", need: "Need X.", blocks: "Blocks Y." }],
+      },
+      deps,
+    );
+
+    expect(deps.db.createNeed).toHaveBeenCalledOnce();
+    expect(deps.db.updateNeed).not.toHaveBeenCalled(); // no link when filing failed
+    expect(result.needIds).toEqual(["CWN-000001"]);
+    expect(result.backlogItemIds).toEqual([]);
+  });
+});
+
+describe("capabilityNeedToWorkType", () => {
+  it("carries the precise kinds through", () => {
+    expect(capabilityNeedToWorkType("tool")).toBe("tool");
+    expect(capabilityNeedToWorkType("skill")).toBe("skill");
+  });
+  it("maps prompt/convention to doc and grant/model/boundary to chore", () => {
+    expect(capabilityNeedToWorkType("prompt")).toBe("doc");
+    expect(capabilityNeedToWorkType("convention")).toBe("doc");
+    expect(capabilityNeedToWorkType("grant")).toBe("chore");
+    expect(capabilityNeedToWorkType("model")).toBe("chore");
+    expect(capabilityNeedToWorkType("boundary")).toBe("chore");
+  });
+  it("defaults the rest to feature", () => {
+    expect(capabilityNeedToWorkType("data")).toBe("feature");
+    expect(capabilityNeedToWorkType("ui_surface")).toBe("feature");
+    expect(capabilityNeedToWorkType("other")).toBe("feature");
+  });
+});
+
+describe("capabilityNeedOriginId", () => {
+  it("is stable across whitespace/case so re-surfaced gaps dedup to one item", () => {
+    const a = capabilityNeedOriginId("agent-1", "tool", "  Need   PUBLISH tools.  ");
+    const b = capabilityNeedOriginId("agent-1", "tool", "need publish tools.");
+    expect(a).toBe(b);
+    expect(a).toBe("agent-1:tool:need publish tools.");
   });
 });
 

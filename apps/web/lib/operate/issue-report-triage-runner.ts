@@ -1,0 +1,120 @@
+// Shared runner that wires the prisma (and optional LLM) dependencies for
+// triageIssueReports. Used by BOTH the 15-minute safety-net cron
+// (queue/functions/issue-report-triage.ts) and the per-report immediate
+// projection event (queue/functions/issue-report-project.ts), so the two paths
+// project identically.
+//
+// EP-INTAKE-UNIFY Phase 4 / BI-EDFBE081.
+
+import { prisma } from "@dpf/db";
+
+import { ISSUE_REPORT_STATUS } from "@/lib/quality/issue-report-status";
+
+import { triageIssueReports } from "./issue-report-triage";
+
+/**
+ * Project OPEN issue reports into the backlog. With no `reportId` this is the
+ * batch sweep (up to 100, the cron's behavior). With a `reportId` it projects
+ * just that report (the immediate event path) — idempotent: if the report is no
+ * longer OPEN (already projected) nothing is selected and it is a no-op.
+ */
+export async function runIssueReportTriage(opts: { reportId?: string } = {}) {
+  // Try a cheap LLM for enhanced triage — local model preferred. Falls back to
+  // deterministic logic when no model is available.
+  let callLlm:
+    | ((messages: Array<{ role: string; content: string }>, systemPrompt: string) => Promise<{ content: string }>)
+    | undefined;
+  try {
+    const { routeAndCall } = await import("@/lib/inference/routed-inference");
+    callLlm = async (messages, systemPrompt) => {
+      const result = await routeAndCall(
+        messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+        systemPrompt,
+        "internal",
+        { taskType: "triage", budgetClass: "minimize_cost", effort: "low", persistDecision: false },
+      );
+      return { content: result.content };
+    };
+  } catch {
+    console.log("[issue-report-triage] No LLM available, using deterministic triage");
+  }
+
+  return triageIssueReports({
+    getOpenReports: () =>
+      prisma.platformIssueReport.findMany({
+        where: {
+          status: ISSUE_REPORT_STATUS.OPEN,
+          ...(opts.reportId ? { reportId: opts.reportId } : {}),
+        },
+        orderBy: { createdAt: "asc" },
+        take: opts.reportId ? 1 : 100,
+        select: {
+          id: true,
+          reportId: true,
+          type: true,
+          severity: true,
+          title: true,
+          description: true,
+          routeContext: true,
+          errorStack: true,
+          source: true,
+          errorDigest: true,
+        },
+      }),
+
+    getExistingTitles: async () => {
+      // Dedup pool = every bug-class BI regardless of intake origin.
+      const items = await prisma.backlogItem.findMany({
+        where: { workType: "bug" },
+        select: { title: true },
+      });
+      return items.map((i) => i.title);
+    },
+
+    createBacklogItem: async (data) => {
+      await prisma.backlogItem.create({ data });
+    },
+
+    incrementOccurrence: async (title) => {
+      const existing = await prisma.backlogItem.findFirst({
+        where: { title: { contains: title, mode: "insensitive" }, workType: "bug" },
+      });
+      if (existing) {
+        await prisma.backlogItem.update({
+          where: { id: existing.id },
+          data: { occurrenceCount: { increment: 1 }, lastSeenAt: new Date() },
+        });
+      }
+    },
+
+    acknowledgeReport: async (id) => {
+      await prisma.platformIssueReport.update({
+        where: { id },
+        data: { status: ISSUE_REPORT_STATUS.TRIAGED_LOCAL },
+      });
+    },
+
+    // BI-B4F401B3: find an existing crash BI that already captured this digest.
+    // buildCrashBoundaryItem writes `Error digest: <digest>` into the body, so a
+    // body match folds repeat crashes (same real error, any route) into one item.
+    findCrashItemTitleByDigest: async (digest) => {
+      const existing = await prisma.backlogItem.findFirst({
+        where: { workType: "bug", body: { contains: `Error digest: ${digest}` } },
+        select: { title: true },
+      });
+      return existing?.title ?? null;
+    },
+
+    resolveTaxonomyNodeByPath: async (path) => {
+      const node = await prisma.taxonomyNode.findFirst({
+        where: {
+          OR: [{ nodeId: path }, { nodeId: { endsWith: `/${path.split("/").pop()}` } }],
+        },
+        select: { id: true },
+      });
+      return node?.id ?? null;
+    },
+
+    callLlm,
+  });
+}

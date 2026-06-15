@@ -31,7 +31,18 @@
 
 set -eu
 
-log() { printf '[backup-trace] %s\n' "$*"; }
+# Emit each trace line to stdout (captured by the TS orchestrator's console)
+# AND mirror it into $LOG_FILE so the admin "View log" drawer has meaningful
+# content. Without the file mirror, log.txt only ever held pg_dump's stderr —
+# which is empty on a successful dump, leaving the operator with a blank log.
+# LOG_FILE is set later; the guard tolerates the early prereq window before it
+# exists, and `|| true` keeps `set -e` from tripping on the mirror write.
+log() {
+  printf '[backup-trace] %s\n' "$*"
+  if [ -n "${LOG_FILE:-}" ]; then
+    printf '[backup-trace] %s\n' "$*" >> "$LOG_FILE" 2>/dev/null || true
+  fi
+}
 fail() {
   log "failed: $1"
   exit "${2:-1}"
@@ -67,13 +78,31 @@ log "pg_version=$PG_VERSION"
 # Run pg_dump inside the postgres container; stream output to a host file.
 # Custom format (-Fc) is compressed, supports selective restore, and is what
 # the existing promoter script uses (scripts/promote.sh:157).
-if docker exec "$DB_CONTAINER" pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > "$DUMP_FILE" 2> "$LOG_FILE"; then
+# Append (2>>) rather than truncate so the [backup-trace] lines already mirrored
+# into log.txt survive; pg_dump's stderr (empty on success) is added after them.
+if docker exec "$DB_CONTAINER" pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > "$DUMP_FILE" 2>> "$LOG_FILE"; then
   log "pg_dump succeeded size=$(wc -c < "$DUMP_FILE")"
 else
   EXIT=$?
   log "pg_dump exit=$EXIT — tail of log:"
   tail -n 20 "$LOG_FILE" >&2 || true
   fail "pg_dump failed (exit=$EXIT)" 3
+fi
+
+# Structural validation: pg_restore --list exercises the custom-format header
+# and TOC catalog without performing a full restore. This catches silent
+# stream truncation caused by Docker socket proxy resets — the host-side
+# redirect commits partial bytes silently and pg_dump may exit 0 inside the
+# container while the dump is already corrupt. SHA256 cannot detect this
+# because it is computed on whatever bytes were written.
+# postgresql16-client is installed in the runner image (Dockerfile:apk add).
+if pg_restore --list "$DUMP_FILE" > /dev/null 2>> "$LOG_FILE"; then
+  log "structural validation passed (pg_restore --list ok)"
+else
+  VALID_EXIT=$?
+  log "structural validation failed exit=$VALID_EXIT — dump is truncated or corrupt, deleting"
+  rm -f "$DUMP_FILE"
+  fail "corrupt dump detected by structural validation (pg_restore --list exit=$VALID_EXIT)" 3
 fi
 
 # sha256 checksum so the admin UX can verify integrity without re-reading the

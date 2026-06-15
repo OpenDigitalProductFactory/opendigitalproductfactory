@@ -10,6 +10,13 @@ import { retailGoodsArchetypes } from "./retail-goods";
 import { fitnessRecreationArchetypes } from "./fitness-recreation";
 import { nonprofitCommunityArchetypes } from "./nonprofit-community";
 import { hoaPropertyManagementArchetypes } from "./hoa-property-management";
+import { bankingFinancialServicesArchetypes } from "./banking-financial-services";
+import { publicSectorArchetypes } from "./public-sector";
+import { assetRentalArchetypes } from "./asset-rental";
+import { realEstateConstructionArchetypes } from "./real-estate-construction";
+import { automotiveServicesArchetypes } from "./automotive-services";
+import { movingAndLogisticsArchetypes } from "./moving-and-logistics";
+import { securityServicesArchetypes } from "./security-services";
 
 export const ALL_ARCHETYPES = [
   ...healthcareWellnessArchetypes,
@@ -24,4 +31,11 @@ export const ALL_ARCHETYPES = [
   ...fitnessRecreationArchetypes,
   ...nonprofitCommunityArchetypes,
   ...hoaPropertyManagementArchetypes,
+  ...bankingFinancialServicesArchetypes,
+  ...publicSectorArchetypes,
+  ...assetRentalArchetypes,
+  ...realEstateConstructionArchetypes,
+  ...automotiveServicesArchetypes,
+  ...movingAndLogisticsArchetypes,
+  ...securityServicesArchetypes,
 ];

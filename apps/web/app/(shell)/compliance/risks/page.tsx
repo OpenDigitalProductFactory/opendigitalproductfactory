@@ -3,11 +3,14 @@ import { RISK_LEVELS } from "@/lib/compliance-types";
 import Link from "next/link";
 import { CreateRiskAssessmentForm } from "@/components/compliance/CreateRiskAssessmentForm";
 import { StatusBadge } from "@/components/ui/report-kit";
+import { SurfaceViewSwitcher } from "@/components/workbooks/SurfaceViewSwitcher";
+import { SurfacePlatformGrid } from "@/components/workbooks/SurfacePlatformGrid";
 
-type Props = { searchParams: Promise<{ inherentRisk?: string; status?: string }> };
+type Props = { searchParams: Promise<{ inherentRisk?: string; status?: string; view?: string }> };
 
 export default async function RisksPage({ searchParams }: Props) {
   const sp = await searchParams;
+  const view = sp.view === "grid" || sp.view === "board" ? sp.view : null;
   const filters = {
     ...(sp.inherentRisk && { inherentRisk: sp.inherentRisk }),
     ...(sp.status && { status: sp.status }),
@@ -24,6 +27,12 @@ export default async function RisksPage({ searchParams }: Props) {
         <CreateRiskAssessmentForm />
       </div>
 
+      <SurfaceViewSwitcher entityType="risk_assessment" current={view ?? "list"} />
+
+      {view ? (
+        <SurfacePlatformGrid entityType="risk_assessment" view={view} />
+      ) : (
+        <>
       {/* Filter bar */}
       <form className="flex flex-wrap gap-3 mb-6">
         <select name="inherentRisk" defaultValue={sp.inherentRisk ?? ""}
@@ -80,6 +89,8 @@ export default async function RisksPage({ searchParams }: Props) {
             </Link>
           ))}
         </div>
+      )}
+        </>
       )}
     </div>
   );

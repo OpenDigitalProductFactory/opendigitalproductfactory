@@ -2,10 +2,13 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { saveBuildStudioConfig } from "@/lib/actions/build-studio";
+import { saveBuildStudioConfig, checkLocalEndpoint } from "@/lib/actions/build-studio";
 import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
+import type { LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
 import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
+import { engineReadinessBadgeContent, ENGINE_READINESS_TONE_COLOR } from "./engine-readiness-badge";
+import { ProvisionEngineButton } from "./ProvisionEngineButton";
 import { ContributorMcpReadinessCard } from "./ContributorMcpReadinessCard";
 
 type ProviderOption = {
@@ -16,11 +19,21 @@ type ProviderOption = {
   costNotes: string | null;
 };
 
+type EngineReadinessBadge = {
+  present: boolean | null;
+  version: string | null;
+  lastProbedAt: string | null;
+};
+
 type Props = {
   config: BuildStudioDispatchConfig;
   claudeProviders: ProviderOption[];
   codexProviders: ProviderOption[];
+  grokProviders: ProviderOption[];
+  opencodeProviders: ProviderOption[];
   contributorMcpReadiness: ContributorMcpReadiness;
+  /** Per-engine sandbox readiness (engineId → last probe), keyed "claude"|"codex"|"grok". */
+  engineReadiness?: Record<string, EngineReadinessBadge>;
   baseUrl: string;
   canWrite: boolean;
 };
@@ -63,21 +76,51 @@ export function BuildStudioConfigForm({
   config,
   claudeProviders,
   codexProviders,
+  grokProviders,
+  opencodeProviders,
   contributorMcpReadiness,
+  engineReadiness,
   baseUrl,
   canWrite,
 }: Props) {
   const [provider, setProvider] = useState(config.provider);
   const [claudeProviderId, setClaudeProviderId] = useState(config.claudeProviderId);
   const [codexProviderId, setCodexProviderId] = useState(config.codexProviderId);
+  const [grokProviderId, setGrokProviderId] = useState(config.grokProviderId);
   const [claudeModel, setClaudeModel] = useState(config.claudeModel);
   const [codexModel, setCodexModel] = useState(config.codexModel);
+  const [grokModel, setGrokModel] = useState(config.grokModel);
+  // opencode = local model via the install's own OpenAI-compatible endpoint.
+  // No credential to pick; the operator chooses which local provider (usually
+  // one) and optionally a model, then preflights the endpoint here.
+  const [opencodeProviderId, setOpencodeProviderId] = useState(
+    config.opencodeProviderId || opencodeProviders[0]?.providerId || "",
+  );
+  const [opencodeModel, setOpencodeModel] = useState(config.opencodeModel);
+  const [endpointCheck, setEndpointCheck] = useState<LocalEndpointPreflight | null>(null);
+  const [checkingEndpoint, setCheckingEndpoint] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const hasClaudeCreds = claudeProviders.some(p => isConfigured(p.status));
   const hasCodexCreds = codexProviders.some(p => isConfigured(p.status));
+  const hasGrokCreds = grokProviders.some(p => isConfigured(p.status));
+  const hasOpencodeProvider = opencodeProviders.length > 0;
+
+  function runEndpointCheck() {
+    setCheckingEndpoint(true);
+    setEndpointCheck(null);
+    startTransition(async () => {
+      try {
+        setEndpointCheck(await checkLocalEndpoint(opencodeModel));
+      } catch (err) {
+        setEndpointCheck({ ok: false, resolvedModel: null, models: [], contextOk: false, reason: (err as Error).message });
+      } finally {
+        setCheckingEndpoint(false);
+      }
+    });
+  }
 
   function handleSave() {
     setSaved(false);
@@ -88,8 +131,12 @@ export function BuildStudioConfigForm({
           provider,
           claudeProviderId,
           codexProviderId,
+          grokProviderId,
+          opencodeProviderId,
           claudeModel,
           codexModel,
+          grokModel,
+          opencodeModel,
         });
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
@@ -161,6 +208,8 @@ export function BuildStudioConfigForm({
             label="Claude Code CLI"
             desc="Anthropic models"
             unconfiguredMsg={!hasClaudeCreds ? "No Anthropic credentials found." : undefined}
+            readiness={engineReadiness?.claude}
+            canProvision={canWrite}
           />
           <ProviderRadio
             name="provider"
@@ -171,6 +220,32 @@ export function BuildStudioConfigForm({
             label="Codex CLI"
             desc="OpenAI models"
             unconfiguredMsg={!hasCodexCreds ? "No OpenAI credentials found." : undefined}
+            readiness={engineReadiness?.codex}
+            canProvision={canWrite}
+          />
+          <ProviderRadio
+            name="provider"
+            value="grok"
+            checked={provider === "grok"}
+            onChange={() => setProvider("grok")}
+            disabled={!canWrite || !hasGrokCreds}
+            label="Grok CLI (Preview)"
+            desc="xAI models · headless grok -p"
+            unconfiguredMsg={!hasGrokCreds ? "No xAI credentials found." : undefined}
+            readiness={engineReadiness?.grok}
+            canProvision={canWrite}
+          />
+          <ProviderRadio
+            name="provider"
+            value="opencode"
+            checked={provider === "opencode"}
+            onChange={() => setProvider("opencode")}
+            disabled={!canWrite || !hasOpencodeProvider}
+            label="Local model (OpenCode) (Preview)"
+            desc="Your own local LLM · no credential, runs offline"
+            unconfiguredMsg={!hasOpencodeProvider ? "No local model provider found." : undefined}
+            readiness={engineReadiness?.opencode}
+            canProvision={canWrite}
           />
           <ProviderRadio
             name="provider"
@@ -182,6 +257,13 @@ export function BuildStudioConfigForm({
             desc="Built-in tool-calling loop"
           />
         </div>
+        {(provider === "claude" || provider === "codex" || provider === "grok" || provider === "opencode") &&
+          engineReadiness?.[provider]?.present === false && (
+            <div role="status" style={{ marginTop: 10, fontSize: 11, color: "var(--dpf-warning)" }}>
+              ⚠ {provider.charAt(0).toUpperCase() + provider.slice(1)} is selected but not installed in the sandbox —
+              builds dispatched to it will fail until you provision it (use the “Provision … in sandbox” button above).
+            </div>
+          )}
       </section>
 
       {/* Section 2: Provider Assignments */}
@@ -208,6 +290,14 @@ export function BuildStudioConfigForm({
             selectedId={codexProviderId}
             onSelect={setCodexProviderId}
             active={provider === "codex"}
+            canWrite={canWrite}
+          />
+          <CredentialCard
+            title="Grok"
+            providers={grokProviders}
+            selectedId={grokProviderId}
+            onSelect={setGrokProviderId}
+            active={provider === "grok"}
             canWrite={canWrite}
           />
         </div>
@@ -285,6 +375,126 @@ export function BuildStudioConfigForm({
               </label>
             </div>
           )}
+
+          {provider === "grok" && (
+            <div>
+              <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 4 }}>Grok model</p>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)", marginBottom: 6 }}>
+                <input
+                  type="radio"
+                  name="grokModel"
+                  value=""
+                  checked={grokModel === ""}
+                  onChange={() => setGrokModel("")}
+                  disabled={!canWrite}
+                />
+                Server default (assigned by xAI)
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)" }}>
+                <input
+                  type="radio"
+                  name="grokModel"
+                  value="custom"
+                  checked={grokModel !== ""}
+                  onChange={() => setGrokModel("grok-build-0.1")}
+                  disabled={!canWrite}
+                />
+                Custom:
+                <input
+                  type="text"
+                  value={grokModel}
+                  onChange={e => setGrokModel(e.target.value)}
+                  disabled={!canWrite || grokModel === ""}
+                  placeholder="grok-build-0.1"
+                  style={{
+                    width: 140,
+                    fontSize: 11,
+                    padding: "2px 6px",
+                    border: "1px solid var(--dpf-border)",
+                    borderRadius: 4,
+                    background: "var(--dpf-bg)",
+                    color: "var(--dpf-text)",
+                  }}
+                />
+              </label>
+            </div>
+          )}
+
+          {provider === "opencode" && (
+            <div>
+              <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 6 }}>
+                Runs the open-source OpenCode agent against your install&apos;s own local model
+                endpoint — no API key, nothing leaves your machine. Preview tier until eval
+                evidence on a real local model promotes it.
+              </p>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)", marginBottom: 8 }}>
+                Model:
+                <input
+                  type="text"
+                  value={opencodeModel}
+                  onChange={e => setOpencodeModel(e.target.value)}
+                  disabled={!canWrite}
+                  placeholder="auto (first served model)"
+                  style={{
+                    width: 200,
+                    fontSize: 11,
+                    padding: "2px 6px",
+                    border: "1px solid var(--dpf-border)",
+                    borderRadius: 4,
+                    background: "var(--dpf-bg)",
+                    color: "var(--dpf-text)",
+                  }}
+                />
+              </label>
+              <p style={{ fontSize: 10, color: "var(--dpf-muted)", marginBottom: 8 }}>
+                Leave blank to use the first model your local endpoint serves. A coding model
+                with ≥22k context (e.g. a qwen3-coder build) is recommended.
+              </p>
+              {canWrite && (
+                <button
+                  type="button"
+                  onClick={runEndpointCheck}
+                  disabled={checkingEndpoint}
+                  style={{
+                    padding: "4px 12px",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    background: "var(--dpf-surface-2)",
+                    color: "var(--dpf-text)",
+                    border: "1px solid var(--dpf-border)",
+                    borderRadius: 6,
+                    cursor: checkingEndpoint ? "wait" : "pointer",
+                  }}
+                >
+                  {checkingEndpoint ? "Checking…" : "Test local endpoint"}
+                </button>
+              )}
+              {endpointCheck && (
+                <div
+                  role="status"
+                  style={{
+                    marginTop: 8,
+                    fontSize: 11,
+                    color: endpointCheck.ok ? "var(--dpf-success)" : "var(--dpf-error)",
+                  }}
+                >
+                  {endpointCheck.ok ? (
+                    <>
+                      ✓ Endpoint reachable — will dispatch to{" "}
+                      <strong>{endpointCheck.resolvedModel}</strong>.
+                      {endpointCheck.models.length > 0 && (
+                        <span style={{ color: "var(--dpf-muted)" }}>
+                          {" "}Models served: {endpointCheck.models.join(", ")}.
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>⚠ {endpointCheck.reason}</>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
 
@@ -318,7 +528,28 @@ export function BuildStudioConfigForm({
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function ProviderRadio({ name, value, checked, onChange, disabled, label, desc, unconfiguredMsg }: {
+function EngineReadinessBadgeView({ readiness }: { readiness: EngineReadinessBadge }) {
+  const { icon, text, tone } = engineReadinessBadgeContent(readiness.present, readiness.version);
+  return (
+    <div
+      role="status"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        marginTop: 3,
+        fontSize: 10,
+        fontWeight: 600,
+        color: ENGINE_READINESS_TONE_COLOR[tone],
+      }}
+    >
+      <span aria-hidden="true">{icon}</span>
+      <span>{text}</span>
+    </div>
+  );
+}
+
+function ProviderRadio({ name, value, checked, onChange, disabled, label, desc, unconfiguredMsg, readiness, canProvision }: {
   name: string;
   value: string;
   checked: boolean;
@@ -327,6 +558,8 @@ function ProviderRadio({ name, value, checked, onChange, disabled, label, desc, 
   label: string;
   desc: string;
   unconfiguredMsg?: string;
+  readiness?: EngineReadinessBadge;
+  canProvision?: boolean;
 }) {
   return (
     <label style={{
@@ -344,6 +577,10 @@ function ProviderRadio({ name, value, checked, onChange, disabled, label, desc, 
       <div>
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-text)" }}>{label}</div>
         <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>{desc}</div>
+        {readiness && <EngineReadinessBadgeView readiness={readiness} />}
+        {canProvision && readiness?.present === false && (
+          <ProvisionEngineButton engineId={value} label={value.charAt(0).toUpperCase() + value.slice(1)} />
+        )}
         {unconfiguredMsg && (
           <div style={{ fontSize: 10, color: "var(--dpf-warning)", marginTop: 2 }}>
             {unconfiguredMsg}{" "}

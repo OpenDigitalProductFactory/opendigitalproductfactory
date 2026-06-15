@@ -1,0 +1,394 @@
+// Universal Grid & Workbooks — CustomTableAdapter (EP-GRID-WORKBOOKS)
+//
+// The dataSource="custom" adapter: reads/writes user-defined rows stored EAV-style
+// in WorkbookRow/WorkbookCell. All adapter methods operate on the internal
+// WorkbookTable.id (cuid); the server/API/MCP layers resolve semantic TBL-* ids
+// to internal ids before calling in. GridRow.cells are keyed by the semantic
+// columnId (COL-*) so the UI/API/MCP share one stable key.
+
+import { prisma } from "@dpf/db";
+import {
+  gridRegistry,
+  type DataSourceAdapter,
+  type AdapterContext,
+} from "./adapter";
+import {
+  type ColumnDefinition,
+  type GridRow,
+  type CellValue,
+  type FieldType,
+  type FieldConfig,
+  type ReferenceValue,
+  type DataSourceFilter,
+  type SortSpec,
+  type Pagination,
+  type PagedRows,
+  type GridCapabilities,
+  isComputedFieldType,
+  customColumnProvenance,
+} from "./types";
+import {
+  validateCell,
+  storageToCellValue,
+  type CellStorage,
+} from "./cell-validation";
+import { applyFilters, applySort, paginate } from "./grid-query";
+import { resolveReferenceLabels, referenceKey } from "./reference-resolver";
+import { computeDerivedCells } from "./formula/compute";
+import { validateLinkValue, conflictingLinks } from "./cell-links";
+import { genSemanticId } from "./ids";
+
+function asReference(value: unknown): ReferenceValue | null {
+  if (value && typeof value === "object" && !Array.isArray(value) && "referenceId" in value) {
+    return value as ReferenceValue;
+  }
+  return null;
+}
+
+/**
+ * Hydrate live display labels for every reference cell — single `reference` cells
+ * and `link` cells (arrays of references). Labels are not persisted.
+ */
+async function hydrateReferenceLabels(rows: GridRow[]): Promise<void> {
+  const refs: { referenceType: string; referenceId: string }[] = [];
+  const collect = (ref: ReferenceValue | null) => {
+    if (ref?.referenceId && ref.referenceType) {
+      refs.push({ referenceType: ref.referenceType, referenceId: ref.referenceId });
+    }
+  };
+  for (const row of rows) {
+    for (const value of Object.values(row.cells)) {
+      if (Array.isArray(value)) value.forEach((it) => collect(asReference(it)));
+      else collect(asReference(value));
+    }
+  }
+  if (refs.length === 0) return;
+  const labels = await resolveReferenceLabels(refs);
+  const withLabel = (ref: ReferenceValue): ReferenceValue => {
+    const label = labels.get(referenceKey(ref.referenceType, ref.referenceId));
+    return label ? { ...ref, label } : ref;
+  };
+  for (const row of rows) {
+    for (const [colId, value] of Object.entries(row.cells)) {
+      if (Array.isArray(value)) {
+        // link cell = array of references; multi_select = array of strings (skipped)
+        if (value.length > 0 && asReference(value[0])) {
+          row.cells[colId] = value.map((it) => withLabel(it as ReferenceValue));
+        }
+      } else {
+        const ref = asReference(value);
+        if (ref?.referenceId && ref.referenceType) row.cells[colId] = withLabel(ref);
+      }
+    }
+  }
+}
+
+interface ColumnMeta {
+  internalId: string;
+  columnId: string; // semantic COL-*
+  name: string;
+  fieldType: FieldType;
+  required: boolean;
+  config: FieldConfig | undefined;
+}
+
+async function loadColumnMeta(internalTableId: string): Promise<ColumnMeta[]> {
+  const cols = await prisma.workbookColumn.findMany({
+    where: { tableId: internalTableId },
+    orderBy: { position: "asc" },
+  });
+  return cols.map((c) => ({
+    internalId: c.id,
+    columnId: c.columnId,
+    name: c.name,
+    fieldType: c.fieldType as FieldType,
+    required: c.required,
+    config: (c.fieldConfig as FieldConfig | null) ?? undefined,
+  }));
+}
+
+function toColumnDefinition(meta: ColumnMeta, position: number, width: number | null): ColumnDefinition {
+  return {
+    columnId: meta.columnId,
+    name: meta.name,
+    fieldType: meta.fieldType,
+    position,
+    required: meta.required,
+    width: width ?? undefined,
+    config: meta.config,
+    editable: !isComputedFieldType(meta.fieldType),
+    groupable: meta.fieldType === "select",
+    provenanceKind: customColumnProvenance(meta.fieldType),
+  };
+}
+
+/** Storage object -> the Prisma update/create payload (only cell scalar fields). */
+function storagePayload(storage: CellStorage) {
+  return {
+    textValue: storage.textValue,
+    numberValue: storage.numberValue,
+    dateValue: storage.dateValue,
+    boolValue: storage.boolValue,
+    selectValue: storage.selectValue,
+    multiSelectValue: storage.multiSelectValue,
+    referenceId: storage.referenceId,
+    referenceType: storage.referenceType,
+  };
+}
+
+class CustomTableAdapter implements DataSourceAdapter {
+  readonly entityType = "custom";
+
+  async getColumns(internalTableId: string): Promise<ColumnDefinition[]> {
+    const cols = await prisma.workbookColumn.findMany({
+      where: { tableId: internalTableId },
+      orderBy: { position: "asc" },
+    });
+    return cols.map((c, i) =>
+      toColumnDefinition(
+        {
+          internalId: c.id,
+          columnId: c.columnId,
+          name: c.name,
+          fieldType: c.fieldType as FieldType,
+          required: c.required,
+          config: (c.fieldConfig as FieldConfig | null) ?? undefined,
+        },
+        c.position ?? i,
+        c.width,
+      ),
+    );
+  }
+
+  private async materializeRows(internalTableId: string): Promise<GridRow[]> {
+    const metas = await loadColumnMeta(internalTableId);
+    const byInternal = new Map(metas.map((m) => [m.internalId, m]));
+    const rows = await prisma.workbookRow.findMany({
+      where: { tableId: internalTableId },
+      orderBy: { position: "asc" },
+      include: { cells: true },
+    });
+    const gridRows = rows.map((row) => {
+      const cells: Record<string, CellValue> = {};
+      // default every column to null (multi_select / link render as empty arrays)
+      for (const m of metas) {
+        cells[m.columnId] = m.fieldType === "multi_select" || m.fieldType === "link" ? [] : null;
+      }
+      for (const cell of row.cells) {
+        const meta = byInternal.get(cell.columnId);
+        if (!meta) continue;
+        cells[meta.columnId] = storageToCellValue(meta.fieldType, cell);
+      }
+      return { rowId: row.rowId, cells };
+    });
+
+    // Link columns: pull targets from WorkbookCellLink and attach as ReferenceValue[].
+    if (metas.some((m) => m.fieldType === "link")) {
+      const gridByInternal = new Map(rows.map((r, i) => [r.id, gridRows[i]]));
+      const internalColToSemantic = new Map(metas.map((m) => [m.internalId, m.columnId]));
+      const links = await prisma.workbookCellLink.findMany({
+        where: { row: { tableId: internalTableId } },
+        orderBy: { position: "asc" },
+      });
+      for (const link of links) {
+        const gr = gridByInternal.get(link.rowId);
+        const semanticCol = internalColToSemantic.get(link.columnId);
+        if (!gr || !semanticCol) continue;
+        const arr = (gr.cells[semanticCol] as ReferenceValue[] | undefined) ?? [];
+        arr.push({ referenceId: link.referenceId, referenceType: link.referenceType });
+        gr.cells[semanticCol] = arr;
+      }
+    }
+
+    await hydrateReferenceLabels(gridRows);
+    await computeDerivedCells(metas, gridRows);
+    return gridRows;
+  }
+
+  async queryRows(
+    internalTableId: string,
+    opts: { filters: DataSourceFilter; sort: SortSpec[]; pagination: Pagination },
+  ): Promise<PagedRows> {
+    const all = await this.materializeRows(internalTableId);
+    const filtered = applyFilters(all, opts.filters);
+    const sorted = applySort(filtered, opts.sort);
+    return paginate(sorted, opts.pagination.cursor, opts.pagination.limit);
+  }
+
+  async getRow(internalTableId: string, rowId: string): Promise<GridRow | null> {
+    const all = await this.materializeRows(internalTableId);
+    return all.find((r) => r.rowId === rowId) ?? null;
+  }
+
+  async createRow(
+    internalTableId: string,
+    input: Record<string, CellValue>,
+    ctx: AdapterContext,
+  ): Promise<GridRow> {
+    const metas = await loadColumnMeta(internalTableId);
+
+    // Validate every column (required checks included, even if absent from input).
+    // Computed columns are derived on read; link columns persist to WorkbookCellLink.
+    const writes: { internalColumnId: string; storage: CellStorage }[] = [];
+    const linkInserts: {
+      columnId: string;
+      referenceId: string;
+      referenceType: string;
+      position: number;
+    }[] = [];
+    for (const meta of metas) {
+      if (isComputedFieldType(meta.fieldType)) continue;
+      const value = meta.columnId in input ? input[meta.columnId] : null;
+      if (meta.fieldType === "link") {
+        const links = validateLinkValue(value, meta.config?.link);
+        // cardinality "one": reject targets already linked from any existing row.
+        if (meta.config?.link?.cardinality === "one" && links.length > 0) {
+          const refIds = links.map((l) => l.referenceId);
+          const others = await prisma.workbookCellLink.findMany({
+            where: { columnId: meta.internalId, referenceId: { in: refIds } },
+            select: { referenceId: true },
+          });
+          const clash = conflictingLinks(refIds, new Set(others.map((o) => o.referenceId)));
+          if (clash.length > 0) {
+            throw new Error(`Already linked from another row: ${clash.join(", ")}`);
+          }
+        }
+        links.forEach((l, i) =>
+          linkInserts.push({
+            columnId: meta.internalId,
+            referenceId: l.referenceId,
+            referenceType: l.referenceType,
+            position: i,
+          }),
+        );
+        continue;
+      }
+      const result = validateCell(meta, value);
+      if (!result.ok) throw new Error(result.error);
+      writes.push({ internalColumnId: meta.internalId, storage: result.storage });
+    }
+
+    const maxPos = await prisma.workbookRow.aggregate({
+      where: { tableId: internalTableId },
+      _max: { position: true },
+    });
+
+    const row = await prisma.workbookRow.create({
+      data: {
+        rowId: genSemanticId("ROW"),
+        tableId: internalTableId,
+        position: (maxPos._max.position ?? -1) + 1,
+        createdById: ctx.userId,
+        cells: {
+          create: writes.map((w) => ({
+            columnId: w.internalColumnId,
+            ...storagePayload(w.storage),
+          })),
+        },
+        ...(linkInserts.length > 0
+          ? { cellLinks: { create: linkInserts } }
+          : {}),
+      },
+    });
+
+    const created = await this.getRow(internalTableId, row.rowId);
+    if (!created) throw new Error("Row created but could not be read back");
+    return created;
+  }
+
+  async updateCells(
+    internalTableId: string,
+    rowId: string,
+    changes: Record<string, CellValue>,
+    _ctx: AdapterContext,
+  ): Promise<GridRow> {
+    const metas = await loadColumnMeta(internalTableId);
+    const bySemantic = new Map(metas.map((m) => [m.columnId, m]));
+    const row = await prisma.workbookRow.findUnique({ where: { rowId } });
+    if (!row || row.tableId !== internalTableId) {
+      throw new Error("Row not found");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      for (const [semanticColId, value] of Object.entries(changes)) {
+        const meta = bySemantic.get(semanticColId);
+        if (!meta) throw new Error(`Unknown column: ${semanticColId}`);
+        if (isComputedFieldType(meta.fieldType)) {
+          throw new Error(`${meta.name} is a computed column and cannot be edited`);
+        }
+        if (meta.fieldType === "link") {
+          // Replace the cell's link set in WorkbookCellLink (validated, deduped).
+          const links = validateLinkValue(value, meta.config?.link);
+          // cardinality "one" → a target may be linked by at most one row (1-M/1-1):
+          // reject targets already linked from a different row (checked in-transaction).
+          if (meta.config?.link?.cardinality === "one" && links.length > 0) {
+            const refIds = links.map((l) => l.referenceId);
+            const others = await tx.workbookCellLink.findMany({
+              where: { columnId: meta.internalId, rowId: { not: row.id }, referenceId: { in: refIds } },
+              select: { referenceId: true },
+            });
+            const clash = conflictingLinks(refIds, new Set(others.map((o) => o.referenceId)));
+            if (clash.length > 0) {
+              throw new Error(`Already linked from another row: ${clash.join(", ")}`);
+            }
+          }
+          await tx.workbookCellLink.deleteMany({
+            where: { rowId: row.id, columnId: meta.internalId },
+          });
+          if (links.length > 0) {
+            await tx.workbookCellLink.createMany({
+              data: links.map((l, i) => ({
+                rowId: row.id,
+                columnId: meta.internalId,
+                referenceId: l.referenceId,
+                referenceType: l.referenceType,
+                position: i,
+              })),
+            });
+          }
+          continue;
+        }
+        const result = validateCell(meta, value);
+        if (!result.ok) throw new Error(result.error);
+        await tx.workbookCell.upsert({
+          where: { rowId_columnId: { rowId: row.id, columnId: meta.internalId } },
+          create: {
+            rowId: row.id,
+            columnId: meta.internalId,
+            ...storagePayload(result.storage),
+          },
+          update: storagePayload(result.storage),
+        });
+      }
+      await tx.workbookRow.update({
+        where: { id: row.id },
+        data: { updatedAt: new Date() },
+      });
+    });
+
+    const updated = await this.getRow(internalTableId, rowId);
+    if (!updated) throw new Error("Row updated but could not be read back");
+    return updated;
+  }
+
+  async deleteRow(internalTableId: string, rowId: string, _ctx: AdapterContext): Promise<void> {
+    const row = await prisma.workbookRow.findUnique({ where: { rowId } });
+    if (!row || row.tableId !== internalTableId) throw new Error("Row not found");
+    await prisma.workbookRow.delete({ where: { id: row.id } });
+  }
+
+  getCapabilities(ctx: AdapterContext): GridCapabilities {
+    const canWrite = ctx.workbookRole === "owner" || ctx.workbookRole === "editor";
+    return {
+      canAddRow: canWrite,
+      canAddColumn: canWrite,
+      canEditCell: canWrite,
+      canDeleteRow: canWrite,
+    };
+  }
+}
+
+export const customTableAdapter = new CustomTableAdapter();
+
+// Self-register on module load.
+gridRegistry.register(customTableAdapter);

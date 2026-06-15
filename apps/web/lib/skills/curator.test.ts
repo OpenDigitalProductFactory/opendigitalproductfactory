@@ -108,7 +108,7 @@ describe("runSkillCurator — happy path", () => {
       createdAt: new Date("2026-05-01"),
     });
 
-    const report = await runSkillCurator({ invokedByUserId: "system" });
+    const report = await runSkillCurator({ invokedByUserId: "usr_owner" });
 
     // The stale skill produced a finding and a signal.
     expect(report.findings.find((f) => f.skillId === "stale-skill")?.toState).toBe("stale");
@@ -121,6 +121,13 @@ describe("runSkillCurator — happy path", () => {
     expect(
       (state.artifactsCreated[0]?.metadata as { kind?: string })?.kind,
     ).toBe(CURATOR_REPORT_KIND);
+
+    // The proactive TaskRun is owned by the resolved principal that was passed
+    // in — NOT a "system" sentinel. Regression guard for the FK violation
+    // (TaskRun_userId_fkey) caused by hardcoding a non-existent user id.
+    expect(state.taskRunsCreated).toHaveLength(1);
+    expect(state.taskRunsCreated[0]?.userId).toBe("usr_owner");
+    expect(state.taskRunsCreated[0]?.userId).not.toBe("system");
   });
 });
 
@@ -136,7 +143,7 @@ describe("runSkillCurator — pin protection invariant", () => {
     // would otherwise be a candidate to archive — but pin protection
     // overrides everything.
 
-    const report = await runSkillCurator({ invokedByUserId: "system" });
+    const report = await runSkillCurator({ invokedByUserId: "usr_owner" });
 
     // No skill update was made for the pinned skill.
     expect(state.skillUpdates).toHaveLength(0);
@@ -168,7 +175,7 @@ describe("runSkillCurator — pin protection invariant", () => {
       createdAt: new Date("2026-05-01"),
     });
 
-    const report = await runSkillCurator({ invokedByUserId: "system" });
+    const report = await runSkillCurator({ invokedByUserId: "usr_owner" });
     expect(state.skillUpdates).toHaveLength(0);
     expect(report.findings.find((f) => f.skillId === "q-skill")?.toState).toBe(
       "quarantined",
@@ -180,7 +187,7 @@ describe("runSkillCurator — no skillMdContent mutation", () => {
   it("only writes lifecycleState in any skill update", async () => {
     addSkill({ skillId: "stale-skill" });
 
-    await runSkillCurator({ invokedByUserId: "system" });
+    await runSkillCurator({ invokedByUserId: "usr_owner" });
 
     // The curator may or may not produce an update on any given skill,
     // but every update it DOES produce must touch only lifecycleState.
@@ -196,7 +203,7 @@ describe("runSkillCurator — dedupe", () => {
   it("re-running the curator over the same population produces the same signal sourceIds", async () => {
     addSkill({ skillId: "stale-skill" });
 
-    await runSkillCurator({ invokedByUserId: "system" });
+    await runSkillCurator({ invokedByUserId: "usr_owner" });
     const firstIds = state.signalsTouched.map((s) => s.sourceId);
 
     state.signalsTouched.length = 0;
@@ -204,7 +211,7 @@ describe("runSkillCurator — dedupe", () => {
     state.artifactsCreated.length = 0;
     state.taskRunsCreated.length = 0;
 
-    await runSkillCurator({ invokedByUserId: "system" });
+    await runSkillCurator({ invokedByUserId: "usr_owner" });
     const secondIds = state.signalsTouched.map((s) => s.sourceId);
 
     expect(secondIds).toEqual(firstIds);
@@ -217,7 +224,7 @@ describe("runSkillCurator — dedupe", () => {
 
 describe("runSkillCurator — empty population", () => {
   it("still writes a TaskRun + TaskArtifact with zero findings when no skills exist", async () => {
-    const report = await runSkillCurator({ invokedByUserId: "system" });
+    const report = await runSkillCurator({ invokedByUserId: "usr_owner" });
     expect(report.findings).toEqual([]);
     expect(state.taskRunsCreated).toHaveLength(1);
     expect(state.artifactsCreated).toHaveLength(1);

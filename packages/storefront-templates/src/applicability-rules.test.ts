@@ -218,6 +218,189 @@ describe("derivePartnerProgramProfile", () => {
   });
 });
 
+const creditUnionAxes: OperatingModelAxes = {
+  form: "services",
+  delivery: "hybrid",
+  primaryConsumer: "member",
+  consumptionChannel: "multi-channel",
+  commercialModel: "account-based-fees",
+  provisioning: "account-with-kyc",
+  platform: "no",
+  governance: "member-owned",
+};
+
+const cooperativeAxes: OperatingModelAxes = {
+  form: "services",
+  delivery: "physical",
+  primaryConsumer: "member",
+  consumptionChannel: "physical",
+  commercialModel: "transactional",
+  provisioning: "account-with-billing",
+  platform: "no",
+  governance: "member-owned",
+};
+
+const townAxes: OperatingModelAxes = {
+  form: "services",
+  delivery: "physical",
+  primaryConsumer: "resident",
+  consumptionChannel: "onsite-plus-portal",
+  commercialModel: "statutory-fees-and-levies",
+  provisioning: "account-with-billing",
+  platform: "no",
+  governance: "public-body",
+};
+
+const utilityAxes: OperatingModelAxes = {
+  ...townAxes,
+  commercialModel: "usage-based",
+};
+
+const policeAxes: OperatingModelAxes = {
+  ...townAxes,
+  provisioning: "none",
+};
+
+const communityBankAxes: OperatingModelAxes = {
+  form: "services",
+  delivery: "hybrid",
+  primaryConsumer: "individual",
+  consumptionChannel: "multi-channel",
+  commercialModel: "account-based-fees",
+  provisioning: "account-with-kyc",
+  platform: "no",
+  governance: "investor-owned",
+};
+
+const civicPortfolios: PortfolioDecomposition = {
+  foundational: { scope: "minimal" },
+  manufactureAndDeliver: { scope: "standard", it4itStages: ["request-to-fulfill"] },
+  forEmployees: { scope: "standard" },
+  productsAndServicesSold: { scope: "primary" },
+};
+
+const CIVIC_CAPABILITY_KEYS = [
+  "member-governance",
+  "membership-eligibility",
+  "member-equity",
+  "public-body-governance",
+  "records-request",
+  "service-request-311",
+] as const;
+
+describe("civic & member-governed capability derivation", () => {
+  it("derives member governance, eligibility intake, and equity for member-owned axes (credit union)", () => {
+    const capabilities = deriveCapabilityApplicability(creditUnionAxes, civicPortfolios);
+
+    expect(getCapability(capabilities, "member-governance")).toMatchObject({
+      applicability: "required",
+      ownershipScopes: ["organization"],
+      isolation: "organization-scope",
+    });
+    expect(getCapability(capabilities, "membership-eligibility").applicability).toBe("required");
+    expect(getCapability(capabilities, "member-equity").applicability).toBe("recommended");
+    expect(getCapability(capabilities, "customer-accounts")).toMatchObject({
+      applicability: "required",
+      isolation: "organization-scope",
+    });
+    expect(getCapability(capabilities, "public-body-governance").applicability).toBe("not-applicable");
+    expect(getCapability(capabilities, "service-request-311").applicability).toBe("not-applicable");
+  });
+
+  it("derives the same member machinery for a cooperative from axes alone", () => {
+    const capabilities = deriveCapabilityApplicability(cooperativeAxes, civicPortfolios);
+
+    expect(getCapability(capabilities, "member-governance").applicability).toBe("required");
+    expect(getCapability(capabilities, "membership-eligibility").applicability).toBe("required");
+    expect(getCapability(capabilities, "member-equity").applicability).toBe("recommended");
+  });
+
+  it("derives public-body governance, records requests, and 311 for a town", () => {
+    const capabilities = deriveCapabilityApplicability(townAxes, civicPortfolios);
+
+    expect(getCapability(capabilities, "public-body-governance")).toMatchObject({
+      applicability: "required",
+      ownershipScopes: ["organization"],
+      isolation: "organization-scope",
+    });
+    expect(getCapability(capabilities, "records-request").applicability).toBe("required");
+    expect(getCapability(capabilities, "service-request-311").applicability).toBe("required");
+    expect(getCapability(capabilities, "customer-accounts")).toMatchObject({
+      applicability: "required",
+      isolation: "organization-scope",
+    });
+    expect(getCapability(capabilities, "member-governance").applicability).toBe("not-applicable");
+  });
+
+  it("derives the public-body set for utility and police specializations from the same rules", () => {
+    const utilityCapabilities = deriveCapabilityApplicability(utilityAxes, civicPortfolios);
+    const policeCapabilities = deriveCapabilityApplicability(policeAxes, civicPortfolios);
+
+    for (const capabilities of [utilityCapabilities, policeCapabilities]) {
+      expect(getCapability(capabilities, "public-body-governance").applicability).toBe("required");
+      expect(getCapability(capabilities, "records-request").applicability).toBe("required");
+      expect(getCapability(capabilities, "service-request-311").applicability).toBe("required");
+    }
+  });
+
+  it("activates no civic machinery for investor-owned axes, explicit or absent", () => {
+    const bankCapabilities = deriveCapabilityApplicability(communityBankAxes, civicPortfolios);
+    const salonCapabilities = deriveCapabilityApplicability(salonAxes, salonPortfolios);
+
+    for (const key of CIVIC_CAPABILITY_KEYS) {
+      expect(getCapability(bankCapabilities, key).applicability).toBe("not-applicable");
+      expect(getCapability(salonCapabilities, key).applicability).toBe("not-applicable");
+    }
+  });
+});
+
+const rentalAxes: OperatingModelAxes = {
+  form: "services",
+  delivery: "physical",
+  primaryConsumer: "business",
+  consumptionChannel: "onsite-plus-portal",
+  commercialModel: "usage-based",
+  provisioning: "reservation-and-return",
+  platform: "no",
+};
+
+describe("rental / shared-asset capability derivation", () => {
+  it("derives the rental-fleet / rental-agreements / asset-pool set from reservation-and-return provisioning", () => {
+    const capabilities = deriveCapabilityApplicability(rentalAxes, salonPortfolios);
+
+    expect(getCapability(capabilities, "rental-fleet").applicability).toBe("required");
+    expect(getCapability(capabilities, "rental-agreements").applicability).toBe("required");
+    expect(getCapability(capabilities, "asset-pool").applicability).toBe("required");
+  });
+
+  it("does not derive rental capabilities for a usage-based archetype that is not reservation-and-return (e.g. a utility)", () => {
+    const utilityLikeAxes: OperatingModelAxes = { ...rentalAxes, provisioning: "account-with-billing", primaryConsumer: "resident", governance: "public-body" };
+    const capabilities = deriveCapabilityApplicability(utilityLikeAxes, salonPortfolios);
+
+    expect(getCapability(capabilities, "rental-fleet").applicability).toBe("not-applicable");
+    expect(getCapability(capabilities, "rental-agreements").applicability).toBe("not-applicable");
+    expect(getCapability(capabilities, "asset-pool").applicability).toBe("not-applicable");
+  });
+});
+
+describe("statutory and usage-based billing derivation", () => {
+  it("derives obligation-driven invoicing for statutory fees and levies", () => {
+    expect(deriveBillingPatternProfile(townAxes)).toMatchObject({
+      primaryPaymentPattern: "ad-hoc-invoice",
+      supportedPaymentPatterns: ["ad-hoc-invoice", "recurring-agreement"],
+      invoiceExecutionMode: "prepared-not-prescribed",
+      recurringBillingApplicability: "optional",
+    });
+  });
+
+  it("keeps usage-based billing for utility axes", () => {
+    expect(deriveBillingPatternProfile(utilityAxes)).toMatchObject({
+      primaryPaymentPattern: "usage-based",
+      recurringBillingApplicability: "recommended",
+    });
+  });
+});
+
 describe("partner-program capability derivation", () => {
   it("requires the partner program when selling through channel partners", () => {
     const capabilities = deriveCapabilityApplicability(channelPartnerAxes, mspPortfolios);

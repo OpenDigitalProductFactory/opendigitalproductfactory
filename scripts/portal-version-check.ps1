@@ -61,7 +61,7 @@ Write-Host "[version-check] Portal image version: $($response.version)"
 Write-Host "[version-check] Local origin/main   : $expected"
 
 if ($response.source -ne "git-sha") {
-  Write-Host "[version-check] Image was built without DPF_VERSION (content-hash fallback) - cannot compare to a SHA. Rebuild/redeploy with scripts\redeploy-portal.ps1 to stamp a git SHA."
+  Write-Host "[version-check] Image was built without DPF_VERSION (content-hash fallback) - cannot compare to a SHA. Advance the live install via the governed self-upgrade path (/ops/self-upgrade) to restamp a git SHA. Do NOT redeploy-portal directly for feature verification (AGENTS.md S5)."
   exit 2
 }
 
@@ -71,5 +71,5 @@ if ($response.version.ToLower() -eq $expected.ToLower()) {
 }
 
 Write-Host "[version-check] DRIFT - portal is NOT serving origin/main."
-Write-Host "[version-check] Rebuild/redeploy with: scripts\redeploy-portal.ps1"
+Write-Host "[version-check] Advance via the governed self-upgrade path (/ops/self-upgrade) - the only sanctioned feature-verification advance (AGENTS.md S5). Direct redeploy-portal/compose rebuilds are reserved for install/bootstrap/recovery."
 exit 1

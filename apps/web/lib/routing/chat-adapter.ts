@@ -27,6 +27,19 @@ import { isAnthropic } from "./provider-utils";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
 
+// ─── Inference HTTP timeouts ──────────────────────────────────────────────────
+// A hung local Docker Model Runner endpoint must fail fast so callWithFallbackChain
+// can advance to a cloud endpoint (or surface a clear error) instead of leaving the
+// coworker on a "still working" spinner for three minutes — the failure observed in
+// the fresh-install audit (R1-*-O-001). Cloud providers keep the longer ceiling.
+// Both are env-overridable for operators on slow local hardware / cold model loads.
+const DEFAULT_INFERENCE_TIMEOUT_MS = Number(process.env.DPF_INFERENCE_TIMEOUT_MS) || 180_000;
+const LOCAL_INFERENCE_TIMEOUT_MS = Number(process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS) || 60_000;
+
+function resolveInferenceTimeoutMs(providerId: string): number {
+  return providerId === "local" ? LOCAL_INFERENCE_TIMEOUT_MS : DEFAULT_INFERENCE_TIMEOUT_MS;
+}
+
 // ─── Gemini part types ───────────────────────────────────────────────────────
 
 interface GeminiPart {
@@ -318,7 +331,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
         method: "POST",
         headers,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(180_000),
+        signal: AbortSignal.timeout(resolveInferenceTimeoutMs(providerId)),
       });
     } catch (e) {
       throw new InferenceError(

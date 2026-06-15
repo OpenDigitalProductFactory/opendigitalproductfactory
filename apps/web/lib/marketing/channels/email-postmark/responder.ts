@@ -156,6 +156,12 @@ Respond with ONLY the classification token, no preamble.`,
       ],
       "You are a focused email classifier. Return exactly one token from the four-class list.",
       "internal",
+      // SysML AI-cockpit model, Slice E1: route inbound-email triage through the
+      // "email-triage" task requirement so it pins to the utility tier
+      // (cheap/local-preferred, never frontier) + minimize_cost, as a background
+      // (non-streaming) task. Previously this passed no taskType and could land on
+      // a frontier model.
+      { taskType: "email-triage", interactionMode: "background" },
     );
     const raw = (result?.content ?? "").trim().toLowerCase();
     if (raw.includes("qualified")) return "qualified-inquiry";

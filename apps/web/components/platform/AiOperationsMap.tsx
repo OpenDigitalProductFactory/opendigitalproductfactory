@@ -38,6 +38,17 @@ import {
 import { StalledTaskRecoveryActions } from "./StalledTaskRecoveryActions";
 import { A2aInteractionsPanel } from "./A2aInteractionsPanel";
 import { DeliberationLensPanel } from "./DeliberationLensPanel";
+import { OperationsTopologyCanvas } from "./OperationsTopologyCanvas";
+import {
+  applyRoutingControlFilters,
+  applyA2aControlFilters,
+  providerMatchesTypeFilter,
+  markerMatchesRouteFilter,
+  type RoutingRouteFilter,
+  type RoutingProviderTypeFilter,
+  type RoutingControlCriteria,
+  type A2aControlCriteria,
+} from "./operations-control-filters";
 
 type SelectedItem =
   | { kind: "station"; id: string }
@@ -87,7 +98,6 @@ const ROUTE_STATE_LABEL: Record<OperationsMapRoutingRouteState, string> = {
   historical: "Historical route",
 };
 
-type RoutingRouteFilter = "all" | OperationsMapRoutingRouteState;
 type RoutingTopologyRoute = OperationsMapRoutingTopology["routes"][number];
 type RoutingTopologyMarker = OperationsMapRoutingTopology["markers"][number];
 type RoutingTopologyProvider = OperationsMapRoutingTopology["providers"][number];
@@ -100,7 +110,6 @@ type DisplayRoutingRoute = RoutingTopologyRoute & {
   eventCount: number;
   sourceRouteIds: string[];
 };
-type RoutingProviderTypeFilter = "llm" | "mcp" | "all";
 
 const ROUTE_FILTER_OPTIONS: Array<{ id: RoutingRouteFilter; label: string }> = [
   { id: "all", label: "All" },
@@ -260,6 +269,47 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
     [],
   );
 
+  // Stage D temporary preview switch: render the unified OperationsTopologyCanvas
+  // ABOVE the legacy panels so operators can verify parity side-by-side against
+  // the canonical runtime before Stage E cutover. Default OFF; the legacy panels
+  // remain the authoritative surface and the replay source. This toggle is
+  // explicitly temporary and is removed at cutover (spec §7 Stage D/E).
+  const [canvasPreview, setCanvasPreview] = useState(false);
+
+  // Stage D1: the legacy panels own the filter UI and publish their resolved
+  // control criteria up (mirroring onReplayChange) so the preview canvas honours
+  // exactly what the operator selects. Defaults are permissive; each panel
+  // publishes its real criteria on mount, so the canvas converges within a tick.
+  // These same pure helpers back the unified control rail at Stage E.
+  const [routingControl, setRoutingControl] = useState<RoutingControlCriteria>({
+    routeFilter: "all",
+    providerTypeFilter: "llm",
+    providerFilter: "all",
+  });
+  const [a2aControl, setA2aControl] = useState<A2aControlCriteria>({
+    types: ["a2a-delegation", "a2a-handoff", "a2a-task-lineage", "a2a-deliberation"],
+    states: ["active", "completed", "failed", "blocked"],
+    actorId: "all",
+    actorRole: "either",
+    authority: "all",
+  });
+  const handleRoutingControlChange = useCallback(
+    (criteria: RoutingControlCriteria) => setRoutingControl(criteria),
+    [],
+  );
+  const handleA2aControlChange = useCallback(
+    (criteria: A2aControlCriteria) => setA2aControl(criteria),
+    [],
+  );
+
+  // Topology fed to the preview canvas: control-filtered routes/providers/markers
+  // and A2A edges. The canvas layers the shared replay window on top.
+  const canvasTopology = useMemo(() => {
+    const { routes, providers, markers } = applyRoutingControlFilters(routingTopology, routingControl);
+    const a2aEdges = applyA2aControlFilters(routingTopology.a2aEdges, a2aControl);
+    return { ...routingTopology, routes, providers, markers, a2aEdges };
+  }, [routingTopology, routingControl, a2aControl]);
+
   const selectedStation = selected.kind === "station"
     ? template.stations.find((station) => station.id === selected.id) ?? null
     : null;
@@ -301,10 +351,51 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
           </p>
         </header>
 
-        <DimensionToggle dimension={dimension} onChange={setDimension} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <DimensionToggle dimension={dimension} onChange={setDimension} />
+          <button
+            type="button"
+            data-canvas-preview-toggle
+            aria-pressed={canvasPreview}
+            onClick={() => setCanvasPreview((value) => !value)}
+            className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] ${
+              canvasPreview
+                ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent)]/10 text-[var(--dpf-text)]"
+                : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`h-1.5 w-1.5 rounded-full ${canvasPreview ? "bg-[var(--dpf-accent)]" : "bg-[var(--dpf-muted)]"}`}
+            />
+            {canvasPreview ? "Unified canvas: on" : "Unified canvas (preview)"}
+          </button>
+        </div>
+
+        {canvasPreview ? (
+          <section
+            data-canvas-preview
+            aria-label="Unified operations topology (preview)"
+            className="space-y-2 rounded-lg border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-3"
+          >
+            <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
+              Unified canvas · preview — verifying parity against the panels below
+            </p>
+            <OperationsTopologyCanvas
+              topology={canvasTopology}
+              dimension={dimension}
+              replayTime={sharedReplay?.time ?? null}
+              replayRange={sharedReplay?.range ?? null}
+            />
+          </section>
+        ) : null}
 
         {showProvider ? (
-          <RoutingTopologyPanel routingTopology={routingTopology} onReplayChange={handleReplayChange} />
+          <RoutingTopologyPanel
+            routingTopology={routingTopology}
+            onReplayChange={handleReplayChange}
+            onControlFilterChange={handleRoutingControlChange}
+          />
         ) : null}
 
         {showA2a ? (
@@ -315,6 +406,7 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
               a2aLegend={routingTopology.a2aLegend}
               replayTime={showProvider ? sharedReplay?.time ?? null : null}
               replayRange={showProvider ? sharedReplay?.range ?? null : null}
+              onFilterChange={handleA2aControlChange}
             />
 
             <DeliberationLensPanel deliberations={routingTopology.deliberations} />
@@ -515,9 +607,11 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
 function RoutingTopologyPanel({
   routingTopology,
   onReplayChange,
+  onControlFilterChange,
 }: {
   routingTopology: OperationsMapRoutingTopology;
   onReplayChange?: (selectedTime: number, range: RoutingTimelineRange) => void;
+  onControlFilterChange?: (criteria: RoutingControlCriteria) => void;
 }) {
   const mapShellRef = useRef<HTMLDivElement>(null);
   const pinnedMarkerRef = useRef<string | null>(null);
@@ -548,6 +642,12 @@ function RoutingTopologyPanel({
   useEffect(() => {
     onReplayChange?.(selectedReplayTime, timelineRange);
   }, [onReplayChange, selectedReplayTime, timelineRange]);
+
+  // Publish the resolved provider-side control filters so the preview canvas
+  // (Stage D) mirrors this panel exactly. Stable parent handler (useCallback).
+  useEffect(() => {
+    onControlFilterChange?.({ routeFilter, providerTypeFilter, providerFilter });
+  }, [onControlFilterChange, routeFilter, providerTypeFilter, providerFilter]);
 
   const providersById = useMemo(
     () => new Map(routingTopology.providers.map((provider) => [provider.providerId, provider])),
@@ -2106,21 +2206,6 @@ function summarizeVisibleRouting(routes: DisplayRoutingRoute[], providers: Routi
     totalCostUsd: providers.reduce((total, provider) => total + provider.costUsd, 0),
     totalTokens: providers.reduce((total, provider) => total + provider.tokenTotal, 0),
   };
-}
-
-function providerMatchesTypeFilter(
-  provider: RoutingTopologyProvider | undefined,
-  filter: RoutingProviderTypeFilter,
-): boolean {
-  if (!provider) return false;
-  return filter === "all" || provider.providerType === filter;
-}
-
-function markerMatchesRouteFilter(marker: RoutingTopologyMarker, filter: RoutingRouteFilter): boolean {
-  if (filter === "all") return true;
-  if (filter === "scheduled") return marker.type === "scheduled";
-  if (filter === "failover") return marker.type === "failover" || marker.type === "error";
-  return false;
 }
 
 function routeSymbolCaption(marker: RoutingTopologyMarker, coworkerLabel: string): string {

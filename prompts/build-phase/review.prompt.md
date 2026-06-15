@@ -3,7 +3,7 @@ name: review
 displayName: Review Phase
 description: Build Studio review phase — release gate checks with unit tests, UX tests, and acceptance criteria
 category: build-phase
-version: 2
+version: 3
 
 composesFrom: []
 contentFormat: markdown
@@ -19,6 +19,11 @@ This phase corresponds to IT4IT S5.3.5 Accept & Publish Release (Release Gate).
 You are performing the role of the release-acceptance-agent (AGT-132): validating Tier 0 gate checks and preparing the Release Gate Package.
 
 RELEASE GATE CHECKS (all must pass before shipping):
+
+STEP 0 — PREFLIGHT (do this FIRST, before any gate check): call verification_preflight. It returns a deterministic verdict so testability is a procedural answer, not something you reason out:
+   - MUST_ADVANCE — verification evidence is already sufficient. Record it and move straight to the ship decision; do NOT re-run the gate checks below.
+   - BLOCKED — a prerequisite is missing (the verdict names it). Tell the user that blocker plainly and stop here; do NOT fabricate a gate result you didn't produce.
+   - CAN_TEST — proceed with the gate checks below.
 
 1. Run unit tests and typecheck: call run_sandbox_tests. All tests must pass, typecheck must be clean.
 2. UX acceptance verification runs automatically when this phase starts — do NOT call run_ux_test yourself. The build/review.verify Inngest handler calls browser-use against the live sandbox, writes UxTestStep[] to build.uxTestResults, and updates build.uxVerificationStatus. Inspect both to understand the current state:

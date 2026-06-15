@@ -3,7 +3,7 @@ name: plan
 displayName: Plan Phase
 description: Build Studio plan phase — implementation planning with codebase research, file structure, and task decomposition
 category: build-phase
-version: 1
+version: 2
 
 composesFrom:
   - context/project-context
@@ -45,9 +45,10 @@ STEP 2 — SAVE THE PLAN:
       ...more files — list ALL files that will be created or modified
     ],
     "tasks": [
-      { "title": "Add Complaint model to schema", "testFirst": "validate_schema", "implement": "edit schema.prisma + add inverse relations to User model at line 62", "verify": "prisma migrate" },
-      { "title": "Create API routes", "testFirst": "tsc --noEmit", "implement": "write route handlers using auth() pattern from existing routes", "verify": "tsc --noEmit" },
-      ...more tasks — one per logical unit of work
+      { "title": "Add Complaint model to schema", "testFirst": "validate_schema (assert the new model + inverse relations resolve)", "implement": "edit schema.prisma + add inverse relations to User model at line 62", "verify": "prisma migrate" },
+      { "title": "Add createComplaint server action", "testFirst": "unit test createComplaint: happy path persists, plus the unauthorized + invalid-input + not-found error cases (write the test FIRST, expect red)", "implement": "server action using requireAccess() pattern from invoices action", "verify": "vitest createComplaint.test.ts green" },
+      { "title": "Add POST /api/complaints route", "testFirst": "integration test the route: 401 when unauthenticated, 403 without permission, 400 on bad body, 200 on success (write FIRST, expect red)", "implement": "route handler delegating to the server action, auth() pattern from invoices route", "verify": "vitest route.test.ts green" },
+      ...more tasks — one per logical unit of work, each with a REAL test-first step
     ]
   }
   CRITICAL FORMAT RULES:
@@ -56,6 +57,15 @@ STEP 2 — SAVE THE PLAN:
   - The build orchestrator reads these arrays to dispatch specialist agents (data architect, software engineer, etc.).
   - If the format is wrong, saveBuildEvidence will REJECT it and tell you to fix the format.
   - Each task's "implement" field should reference specific patterns from your research (e.g. "use auth() like invoices route").
+  - FORMAT BOUNDARY: this buildPlan is a machine-to-machine interface contract — the orchestrator parses it to dispatch agents — so it STAYS JSON. Do not reformat it as HTML or prose. The opt-in HTML-artifact convention ([`docs/superpowers/html-artifacts-guide.md`](../../docs/superpowers/html-artifacts-guide.md)) applies only to a human-readable plan WRITE-UP — the document an operator opens and reads — never to this evidence JSON. (JSON = interface; HTML = human-AND-AI-readable documentation; see the three-tier model in the guide.)
+
+PLAN QUALITY STANDARD — meet this bar BEFORE you call reviewBuildPlan. The reviewer checks this EXACT list, so a plan that meets it passes on the first pass. You are the engineer here: the user told you WHAT they want, not HOW — applying this standard is your job, never theirs.
+  - REAL TEST-FIRST: every task that adds or changes LOGIC (a server action, an API route handler, a data transform, a permission/auth check) MUST name a real failing test to write FIRST — a unit test for action/transform logic (happy path PLUS the error and permission/denied cases), an integration test for an API route (unauthenticated, unauthorized, invalid input, success + status codes). `tsc --noEmit`, "manual: read the schema", or "validate types" are compile/type checks, NOT tests — never use them as the test-first step for a logic task. (Schema-only tasks may use validate_schema; pure presentational tasks may use a component/interaction test.)
+  - BITE-SIZED: each task is ~2-5 minutes / one responsibility. If a task bundles >~5 sub-steps (e.g. auth + fetch + validate + transform + persist + revalidate), SPLIT it into separate tasks now — do not wait for the reviewer to say so.
+  - ERROR PATHS: for each logic task, state what happens on each failure (throw, return {ok:false}, or handle) — not only the happy path.
+  - EXPLICIT DEPENDENCIES: state task ordering dependencies (e.g. "needs the type from Task 2").
+  - VERIFIED REFERENCES: only reference functions/patterns you actually confirmed exist in STEP 1 research.
+  - SCALE TO SCOPE: match ceremony to the change. A one-file presentational tweak needs one small interaction test; a feature touching a server action + API + UI needs a test for EACH of those surfaces. Do not pad a trivial change, and never ship a logic change with no real test.
 
 STEP 3: Call reviewBuildPlan to review it.
   - If the review PASSES: proceed to step 4.

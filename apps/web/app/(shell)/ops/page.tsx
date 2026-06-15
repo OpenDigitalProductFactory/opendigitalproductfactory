@@ -2,15 +2,19 @@
 import { getBacklogItems, getDigitalProductsForSelect, getTaxonomyNodesFlat, getEpics, getPortfoliosForSelect } from "@/lib/backlog-data";
 import { OpsClient } from "@/components/ops/OpsClient";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
+import { SurfaceViewSwitcher } from "@/components/workbooks/SurfaceViewSwitcher";
+import { SurfacePlatformGrid } from "@/components/workbooks/SurfacePlatformGrid";
 
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams?: Promise<{ itemId?: string }>;
+  searchParams?: Promise<{ itemId?: string; view?: string }>;
 };
 
 export default async function OpsPage({ searchParams }: Props) {
   const sp = await searchParams;
+  const rawView = sp?.view;
+  const view = rawView === "grid" || rawView === "board" ? rawView : null;
   const [items, digitalProducts, taxonomyNodes, epics, portfolios] = await Promise.all([
     getBacklogItems(),
     getDigitalProductsForSelect(),
@@ -30,14 +34,20 @@ export default async function OpsPage({ searchParams }: Props) {
 
       <OpsTabNav />
 
-      <OpsClient
-        items={items}
-        digitalProducts={digitalProducts}
-        taxonomyNodes={taxonomyNodes}
-        epics={epics}
-        portfolios={portfolios}
-        focusedItemId={sp?.itemId}
-      />
+      <SurfaceViewSwitcher entityType="backlog_item" current={view ?? "list"} />
+
+      {view ? (
+        <SurfacePlatformGrid entityType="backlog_item" view={view} />
+      ) : (
+        <OpsClient
+          items={items}
+          digitalProducts={digitalProducts}
+          taxonomyNodes={taxonomyNodes}
+          epics={epics}
+          portfolios={portfolios}
+          focusedItemId={sp?.itemId}
+        />
+      )}
     </div>
   );
 }

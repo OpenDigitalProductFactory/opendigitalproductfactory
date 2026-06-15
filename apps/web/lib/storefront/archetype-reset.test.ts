@@ -18,6 +18,20 @@ vi.mock("nanoid", () => ({
   nanoid: mockNanoid,
 }));
 
+// The OVSM projection is covered by its own tests; mock it here so the reset
+// test does not load the Prisma-client chain, and assert reset invokes it.
+const { mockProjectOvs } = vi.hoisted(() => ({ mockProjectOvs: vi.fn() }));
+vi.mock("./project-operational-value-stream", () => ({
+  projectOperationalValueStreamForArchetype: mockProjectOvs,
+}));
+
+// Booking-seed is unit-tested in seed-booking-defaults.test.ts; mock it here so
+// the reset test asserts the call contract without re-exercising provider seeding.
+const { mockSeedBooking } = vi.hoisted(() => ({ mockSeedBooking: vi.fn() }));
+vi.mock("./seed-booking-defaults", () => ({
+  seedBookingScheduleDefaults: mockSeedBooking,
+}));
+
 import { resetStorefrontArchetype } from "./archetype-reset";
 
 function businessCapabilityProjectionStore() {
@@ -35,11 +49,18 @@ describe("resetStorefrontArchetype", () => {
   beforeEach(() => {
     mockNanoid.mockReset();
     mockPrisma.$transaction.mockReset();
+    mockProjectOvs.mockReset();
+    mockProjectOvs.mockResolvedValue({ viewId: "view-ovs" });
+    mockSeedBooking.mockReset();
+    mockSeedBooking.mockResolvedValue(false);
     mockNanoid.mockReturnValue("abcd1234");
   });
 
   it("re-syncs Organization.industry and BusinessContext.industry from the new archetype", async () => {
     const tx = {
+      orgSettings: {
+        findFirst: vi.fn().mockResolvedValue({ baseCurrency: "USD" }),
+      },
       organization: {
         findUnique: vi.fn().mockResolvedValue({ id: "org_1", slug: "managing-digital", email: "ops@example.com", phone: "123" }),
         update: vi.fn().mockResolvedValue({}),
@@ -95,10 +116,19 @@ describe("resetStorefrontArchetype", () => {
       where: { organizationId: "org_1" },
       data: { industry: "software-platform", ctaType: "inquiry" },
     });
+    // Reset regenerates the operational value stream inside the transaction.
+    expect(mockProjectOvs).toHaveBeenCalledWith({
+      db: tx,
+      organizationId: "org_1",
+      archetypeId: "software-platform",
+    });
   });
 
   it("replaces seeded items and sections when reset is run in replace mode", async () => {
     const tx = {
+      orgSettings: {
+        findFirst: vi.fn().mockResolvedValue({ baseCurrency: "USD" }),
+      },
       organization: {
         findUnique: vi.fn().mockResolvedValue({ id: "org_1", slug: "old-slug", email: null, phone: null }),
         update: vi.fn().mockResolvedValue({}),
@@ -158,10 +188,20 @@ describe("resetStorefrontArchetype", () => {
     expect(tx.storefrontItem.createMany).toHaveBeenCalled();
     expect(result.sectionsCreated).toBe(2);
     expect(result.itemsCreated).toBe(2);
+    // Reset seeds booking schedule defaults inside the transaction so a booking
+    // archetype gets a working calendar instead of an empty one (R9-RES-001).
+    expect(mockSeedBooking).toHaveBeenCalledWith(tx, {
+      storefrontId: "sf_1",
+      archetypeId: "software-platform",
+      providerName: "Bookings",
+    });
   });
 
   it("preserves manually managed contact fields and org slug", async () => {
     const tx = {
+      orgSettings: {
+        findFirst: vi.fn().mockResolvedValue({ baseCurrency: "USD" }),
+      },
       organization: {
         findUnique: vi.fn().mockResolvedValue({ id: "org_1", slug: "open-digital-product-factory", email: "ops@dpf.local", phone: "555-1234" }),
         update: vi.fn().mockResolvedValue({}),

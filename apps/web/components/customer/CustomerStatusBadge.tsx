@@ -1,5 +1,6 @@
 import type { CrmTone } from "@/lib/crm/presentation";
-import { CRM_TONE_CLASSES } from "@/lib/crm/presentation";
+import { StatusBadge } from "@/components/ui/report-kit";
+import { CRM_TONE_INTENT } from "./crmToneIntent";
 
 type CustomerStatusBadgeProps = {
   label: string;
@@ -13,16 +14,11 @@ export function CustomerStatusBadge({
   className = "",
 }: CustomerStatusBadgeProps) {
   return (
-    <span
-      className={[
-        "shrink-0 rounded-full border px-1.5 py-0.5 text-[9px]",
-        CRM_TONE_CLASSES[tone].badge,
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      {label}
-    </span>
+    <StatusBadge
+      intent={CRM_TONE_INTENT[tone]}
+      label={label}
+      uppercase={false}
+      className={["shrink-0", className].filter(Boolean).join(" ")}
+    />
   );
 }

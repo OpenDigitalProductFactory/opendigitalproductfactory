@@ -81,6 +81,89 @@ export async function getIssueReports(filters?: {
   return { items, total, page, pageSize };
 }
 
+// BI-5FE8656F (EP-FULL-OBS Tier 2): the data source for the System Health
+// "Log Issues" panel. Returns unresolved log_signature reports the scanner
+// filed. Auth-gated (defense in depth — the System Health tab is already
+// admin-scoped) so a client component can call it directly.
+export async function getLogSignatureIssues(): Promise<{
+  authorized: boolean;
+  items: {
+    reportId: string;
+    title: string;
+    severity: string;
+    status: string;
+    description: string | null;
+    dedupeKey: string | null;
+    createdAt: string;
+  }[];
+}> {
+  const session = await auth();
+  const user = session?.user;
+  if (
+    !user ||
+    !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_platform")
+  ) {
+    return { authorized: false, items: [] };
+  }
+
+  const rows = await prisma.platformIssueReport.findMany({
+    where: {
+      type: "log_signature",
+      status: { notIn: ["resolved_locally", "resolved_upstream", "suppressed"] },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: {
+      reportId: true,
+      title: true,
+      severity: true,
+      status: true,
+      description: true,
+      dedupeKey: true,
+      createdAt: true,
+    },
+  });
+
+  return {
+    authorized: true,
+    items: rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })),
+  };
+}
+
+/**
+ * Resolve each report to its projected BacklogItem (EP-INTAKE-UNIFY Phase 6).
+ * PlatformIssueReport has no FK to the BI; the projection embeds the public
+ * reportId in the BI body ("Source report: PIR-XXXXX"). One query over the
+ * bug-class items that mention any of the given reportIds, mapped back by
+ * substring. Returns reportId → BacklogItem.itemId.
+ */
+export async function getBacklogLinksForReports(
+  reportIds: string[],
+): Promise<Record<string, string>> {
+  const ids = Array.from(new Set(reportIds.filter((id) => typeof id === "string" && id.length > 0)));
+  if (ids.length === 0) return {};
+
+  const candidates = await prisma.backlogItem.findMany({
+    where: {
+      workType: "bug",
+      OR: ids.map((id) => ({ body: { contains: id } })),
+    },
+    select: { itemId: true, body: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const links: Record<string, string> = {};
+  for (const item of candidates) {
+    const body = item.body ?? "";
+    for (const id of ids) {
+      // First (oldest) BI that references the report wins — that's the canonical
+      // projection; later same-title reports dedupe into it.
+      if (!links[id] && body.includes(id)) links[id] = item.itemId;
+    }
+  }
+  return links;
+}
+
 export async function updateIssueReportStatus(
   reportId: string,
   status: IssueReportStatus | LegacyIssueReportStatus,

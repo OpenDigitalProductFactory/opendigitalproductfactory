@@ -8,6 +8,8 @@ import { revalidatePath } from "next/cache";
 import { sendEmail, composeApprovalEmail } from "@/lib/email";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { resolveAppBaseUrl } from "@/lib/app-url";
+import { recordPayment } from "@/lib/actions/finance";
+import { PAYMENT_METHODS } from "@/lib/finance/finance-validation";
 import type { CreateSupplierInput, CreateBillInput, CreatePOInput, CreatePaymentRunInput } from "@/lib/ap-validation";
 
 // ─── Auth guard ───────────────────────────────────────────────────────────────
@@ -196,6 +198,58 @@ export async function getBill(id: string) {
   });
 }
 
+// ─── recordBillPayment ──────────────────────────────────────────────────────────
+// Server-side guard in front of recordPayment for the supplier-bill (AP) path. The
+// bill detail UI routes through here rather than calling recordPayment directly so
+// the status + outstanding-balance invariants are enforced on the server, not just
+// in the client form: a payment may only be recorded against an approved or
+// partially-paid bill, and never for more than the amount still due. Currency is
+// derived from the bill so the client cannot record a payment in the wrong currency.
+
+export type RecordBillPaymentInput = {
+  billId: string;
+  amount: number;
+  method: (typeof PAYMENT_METHODS)[number];
+  reference?: string;
+  receivedAt?: string;
+};
+
+export async function recordBillPayment(input: RecordBillPaymentInput) {
+  await requireManageFinance();
+
+  const bill = await prisma.bill.findUnique({
+    where: { id: input.billId },
+    select: { id: true, status: true, currency: true, amountDue: true },
+  });
+  if (!bill) throw new Error("Bill not found");
+  if (bill.status !== "approved" && bill.status !== "partially_paid") {
+    throw new Error(
+      `Cannot record a payment on a bill in "${bill.status.replace(/_/g, " ")}" status`,
+    );
+  }
+
+  const due = Number(bill.amountDue);
+  if (!(input.amount > 0)) throw new Error("Payment amount must be greater than zero");
+  // Tolerance covers floating-point rounding on the outstanding balance.
+  if (input.amount > due + 0.005) {
+    throw new Error(`Payment amount exceeds the outstanding balance of ${due.toFixed(2)}`);
+  }
+
+  await recordPayment({
+    direction: "outbound",
+    method: input.method,
+    amount: input.amount,
+    currency: bill.currency,
+    reference: input.reference,
+    receivedAt: input.receivedAt,
+    billId: bill.id,
+  });
+
+  revalidatePath(`/finance/bills/${bill.id}`);
+  revalidatePath("/finance/bills");
+  revalidatePath("/finance/reports/profit-loss");
+}
+
 // ─── listBills ────────────────────────────────────────────────────────────────
 
 interface ListBillsFilters {
@@ -245,6 +299,18 @@ export async function submitBillForApproval(billId: string): Promise<void> {
       approver: { select: { id: true, email: true } },
     },
   });
+
+  if (rules.length === 0) {
+    await prisma.bill.update({
+      where: { id: billId },
+      data: { status: "approved" },
+    });
+
+    revalidatePath("/finance/ap");
+    revalidatePath("/finance/ap/bills");
+    revalidatePath("/finance/bills");
+    return;
+  }
 
   // Create a BillApproval record per matching rule. The record (and its
   // in-portal approval queue) is always created; the email is only sent when a

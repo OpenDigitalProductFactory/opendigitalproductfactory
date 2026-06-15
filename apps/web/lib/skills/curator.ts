@@ -46,7 +46,12 @@ export type CuratorReport = {
 };
 
 export type RunSkillCuratorInput = {
-  /** Reviewer or system user attributed for the proactive TaskRun. */
+  /**
+   * Real `User.id` that OWNS the proactive TaskRun this run writes. Must be a
+   * resolved principal (the scheduled cron passes the bootstrap superuser via
+   * resolveScheduledOwnerUserId) — never a sentinel like "system", which has no
+   * `User` row and violates `TaskRun_userId_fkey`.
+   */
   invokedByUserId: string;
   /** Optional override for "now" — used in tests. */
   now?: Date;

@@ -11,6 +11,14 @@ export interface ResearchExecuteRunEvent {
   data: { proposalId: string; organizationId: string; topic: string; query: string };
 }
 
+/** EP-INTAKE-UNIFY Phase 4 / BI-EDFBE081: project a freshly-created OPEN
+ *  PlatformIssueReport into the backlog immediately (handled by
+ *  issue-report-project.ts). The 15-min triage cron is the safety net. */
+export interface IssueReportCreatedEvent {
+  name: "quality/issue-report.created";
+  data: { reportId: string };
+}
+
 export interface CwqItemCreatedEvent {
   name: "cwq/item.created";
   data: { workItemId: string; sourceType: string; urgency: string };
@@ -114,6 +122,18 @@ export interface BuildGitUpdateReceivedEvent {
   name: "build/git-update.received";
   data: {
     candidateId: string;
+  };
+}
+
+/** BI-89030C9B Phase 1 — durable build execution. Sent by autoExecuteBuild
+ *  when DPF_BUILD_DURABLE_EXECUTION_ENABLED is on; handled by
+ *  queue/functions/build-execute.ts. Sends carry a deterministic idempotency
+ *  id (buildExecuteSendId) so duplicate dispatches of the same logical
+ *  attempt collapse to one run. */
+export interface BuildExecuteRunEvent {
+  name: "build/execute.run";
+  data: {
+    buildId: string;
   };
 }
 

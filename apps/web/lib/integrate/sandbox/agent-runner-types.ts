@@ -6,10 +6,13 @@ import type {
 } from "./provider-types";
 import type { AssignedTask } from "../task-dependency-graph";
 
-export type BuildAgentId = "codex" | "claude" | "dpf-native";
+export type BuildAgentId = "codex" | "claude" | "grok" | "dpf-native" | "opencode";
 
 export type BuildAgentRunnerCapabilities = {
-  tier: "single-file-edit" | "multi-file-refactor" | "full-spec-implement";
+  // "preview" is the onboarding tier for a newly-admitted agent runner: it is
+  // wired and selectable but not yet promoted to a task tier until eval/probe
+  // evidence matches the established agents (see build-execution-provider-design).
+  tier: "preview" | "single-file-edit" | "multi-file-refactor" | "full-spec-implement";
   requiresPersistentSession: boolean;
   requiresCallbackPort?: number;
   requiresCredential: boolean;

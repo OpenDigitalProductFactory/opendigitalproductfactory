@@ -53,6 +53,87 @@ const MAX_TEXT_MESSAGE_CHARS = 4_000;
 const COMPLETION_CLAIM_PATTERN =
   /\b(built|deployed|shipped|created|implemented|saved|configured|tested|fixed|completed|installed|launched|starting up|initializing|applying|generating)\b|tests?\s+pass|plan(?:ning)?\s+(?:is\s+done|ready)|building\s+now|start\s+implementation/i;
 
+/**
+ * Build a plain-language, non-technical explanation when an agent turn fails
+ * because routing could not complete a tool-using call (BI-23E0714C).
+ *
+ * The old behavior lumped every tool-route failure into one message that told
+ * the operator to "Configure an active model that supports tools in
+ * Platform > AI > Model Assignment" — which is wrong and a dead end whenever a
+ * tool-capable provider IS already configured (the common case). This classifier
+ * distinguishes the real situations so we never send a non-technical operator to
+ * fix config that is already correct:
+ *
+ *  - REQUEST_TOO_LARGE  → context overflow; start a new thread.
+ *  - No credential for ANY non-local provider → permanent config gap; point to setup.
+ *    MUST be checked before the threshold branch: a threshold skip layered on top of
+ *    a credential gap matches the threshold pattern but the real fix is "connect a
+ *    provider", not "wait for a rate-limit to clear" (BI-AUDIT-003).
+ *  - local bypassed for tool count + paid providers transiently down → rate-limit;
+ *    nothing is misconfigured.
+ *  - genuinely no tool-capable endpoint active → point to the REAL surface.
+ *  - other endpoint failures → transient; retry shortly.
+ */
+export function describeToolRouteFailure(
+  errorMessage: string,
+  toolCount: number,
+): string {
+  const msg = errorMessage ?? "";
+
+  if (msg.startsWith("REQUEST_TOO_LARGE:")) {
+    return "Your conversation is too long for this AI provider. Please start a new thread to continue.";
+  }
+
+  // Permanent configuration gap: a non-local provider is in the chain but has no
+  // credential row. This is NOT transient — the operator must connect a provider.
+  // Check this BEFORE the threshold branch: when codex has no credential AND local
+  // is threshold-blocked, the threshold pattern matches but the user needs to
+  // configure a provider, not wait for a rate-limit.
+  if (/No credential for/i.test(msg)) {
+    return (
+      "No AI provider credentials are configured for this feature. " +
+      "Open Platform › AI Operations › Providers & Routing, connect a cloud provider " +
+      "(Claude, OpenAI, Google, or similar), then try again."
+    );
+  }
+
+  // Most common real cause: the bundled local model was bypassed because this
+  // coworker exposes more tools than a small local model can reliably handle,
+  // and no paid provider was available to take the work. This is NOT a
+  // misconfiguration, so do not point the operator at a settings page.
+  if (/exceeds threshold|skipped local fallback/i.test(msg)) {
+    // Prefer the exact count the router reported ("58 tools exceeds threshold");
+    // fall back to the tool count we were handed.
+    const reported = msg.match(/(\d+)\s+tools?\s+exceeds threshold/i);
+    const count = reported ? Number(reported[1]) : toolCount;
+    const tools = count > 0 ? `${count} of them` : "many";
+    return (
+      "Your paid AI providers (such as Claude or GPT) are briefly unavailable right now — " +
+      "usually a short rate-limit that clears within a minute — and this coworker uses too many " +
+      `tools (${tools}) for the bundled local model to run on its own. Nothing is misconfigured. ` +
+      "Please wait a moment and try again."
+    );
+  }
+
+  // Genuine config gap: routing found no active model that supports tools at all.
+  if (/No eligible endpoints/i.test(msg) && /toolUse/i.test(msg)) {
+    return (
+      "No AI model that supports tools is active right now. Open Platform > AI > " +
+      "Providers & Routing to activate a tool-capable provider, then try again."
+    );
+  }
+
+  // Endpoints exist but all transiently failed (rate-limit / overload / network).
+  if (/All endpoints failed/i.test(msg)) {
+    return (
+      "The AI providers are momentarily busy (usually rate-limited or overloaded). " +
+      "Please try again in about 30 seconds — no setup change is needed."
+    );
+  }
+
+  return "The AI provider is temporarily unavailable. Please try again in about 30 seconds.";
+}
+
 // Narration patterns: agent describes code or announces intent instead of calling tools.
 // Includes preamble narration ("Let me check", "I need to fix") and intent announcements
 // ("I'd like to generate...", "I would like to call...") that precede but do not replace tool use.
@@ -981,7 +1062,7 @@ export async function runAgenticLoop(params: {
   const executedTools: AgenticResult["executedTools"] = [];
   let lastResult: RoutedInferenceResult | null = null;
   let continuationNudges = 0;
-  let fabricationRetried = false;
+  let fabricationRetries = 0;
   let frustrationCount = 0;
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
@@ -1212,19 +1293,9 @@ export async function runAgenticLoop(params: {
     } catch (routeErr) {
       const msg = routeErr instanceof Error ? routeErr.message : String(routeErr);
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
-      const isTooLarge = msg.startsWith("REQUEST_TOO_LARGE:");
-      const isMissingToolUseCapacity =
-        /No eligible endpoints/i.test(msg) && /toolUse/i.test(msg);
-      const isToolUsingEndpointFailure =
-        Boolean(routeOptions.tools && routeOptions.tools.length > 0) &&
-        (/All endpoints failed/i.test(msg) || /tools exceeds threshold/i.test(msg));
       logTurnSummary("unknown", "unknown");
       return {
-        content: isTooLarge
-          ? "Your conversation is too long for this AI provider. Please start a new thread to continue."
-          : isMissingToolUseCapacity || isToolUsingEndpointFailure
-            ? "No tool-use-capable AI provider is available for this coworker. Configure an active model that supports tools in Platform > AI > Model Assignment, then retry this task."
-          : "The AI provider is temporarily unavailable. Please try again in about 30 seconds.",
+        content: describeToolRouteFailure(msg, routeOptions.tools?.length ?? 0),
         providerId: "unknown",
         modelId: "unknown",
         downgraded: false,
@@ -1464,10 +1535,18 @@ export async function runAgenticLoop(params: {
           };
         }
 
-        if (!fabricationRetried) {
-          fabricationRetried = true;
+        // BI-PIR-cc091267 — a build-route fabrication signal (completion claim
+        // with zero tool calls) is most often a TRANSIENT provider downgrade:
+        // the preferred provider 529s, a weaker backup confabulates "done"
+        // without emitting the required tool call. A single retry can't ride out
+        // a blip that self-clears in ~30s, so give build routes a few attempts —
+        // each re-dispatches and can re-route to the recovered preferred
+        // provider. Conversational routes keep a single retry (unchanged).
+        const maxFabricationRetries = isBuildRoute ? 3 : 1;
+        if (fabricationRetries < maxFabricationRetries) {
+          fabricationRetries++;
           console.warn(
-            "[agentic-loop] fabrication detected: claimed completion without the required tool-backed evidence. Retrying.",
+            `[agentic-loop] fabrication detected: claimed completion without the required tool-backed evidence. Retrying (${fabricationRetries}/${maxFabricationRetries}).`,
           );
           messages = [
             ...messages,

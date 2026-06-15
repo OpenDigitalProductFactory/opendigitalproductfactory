@@ -2,8 +2,8 @@
 title: "Connecting AI Providers"
 area: "ai-workforce"
 order: 2
-lastUpdated: "2026-04-24"
-updatedBy: "Codex"
+lastUpdated: "2026-06-11"
+updatedBy: "Claude"
 ---
 
 ## Overview
@@ -16,13 +16,19 @@ The platform connects to external AI providers to run inference for your AI work
 
 The standard method for providers with pay-per-token billing. Obtain a key from the provider's developer console and paste it into the provider detail page. The platform uses the key for every inference request.
 
-Supported providers: Anthropic (API), OpenAI, Gemini, Mistral, and most other hosted providers.
+Supported providers: Anthropic (API), OpenAI, Gemini, xAI / Grok, Mistral, and most other hosted providers.
 
 ### OAuth Sign-in
 
 Browser-based authentication using your existing subscription. No API key is required. The platform redirects you to the provider's login page; once you authenticate, a token is stored securely (encrypted in the database) and refreshed automatically.
 
 Supported providers: Claude / Anthropic (Max subscription), OpenAI Codex (ChatGPT Plus/Pro plan).
+
+### Device-Code Sign-in (xAI / Grok)
+
+A headless-friendly OAuth variant for providers whose CLI ships a device-code flow. Rather than a browser redirect back to the platform, the platform runs the provider CLI's `device-auth` flow in the build sandbox, shows you a verification URL and a short user code, and waits while you authorize in your browser. The captured credential is stored encrypted, injected into each build sandbox, and self-refreshed. This is the recommended path for Grok because obtaining an xAI API key from `console.x.ai` is awkward for non-technical operators. See [xAI / Grok](./provider-xai.md) for the full flow.
+
+Supported providers: xAI / Grok.
 
 ### None
 

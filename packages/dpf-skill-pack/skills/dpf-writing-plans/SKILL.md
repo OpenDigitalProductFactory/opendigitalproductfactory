@@ -59,7 +59,7 @@ The order is fixed: **BI first, then plan.** [`dpf-file-backlog-item`](../dpf-fi
 
 4. **Name the risks and the rollback.** What could break (blast radius), and how to back out. A plan that only describes the happy path is half a plan.
 
-5. **Save it.** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`, cross-referencing the BI id. This path is where `search_specs_and_plans` and reviewers expect plans to live.
+5. **Save it.** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`, cross-referencing the BI id. This path is where `search_specs_and_plans` and reviewers expect plans to live. **Format is opt-in:** Markdown is the default and stays fully supported, but when the plan leans on a flow/state diagram, a multi-column table, or side-by-side option fan-out, an HTML artifact often reads better and keeps the operator in the loop — see [`html-artifacts-guide.md`](../../../../docs/superpowers/html-artifacts-guide.md) and the `_templates/spec.template.html` starting point. If you ship HTML-only, leave a short Markdown stub so `search_specs_and_plans` can still find it.
 
 ## Guardrails
 

@@ -6,6 +6,10 @@ import Link from "next/link";
 
 type Props = { searchParams: Promise<{ supplierId?: string }> };
 
+// New bill line items default to 0% tax. US installs do not charge UK VAT; an
+// operator who needs tax sets it per line. Fixed default, not derived at runtime.
+const DEFAULT_BILL_TAX_RATE = 0;
+
 export default async function NewBillPage({ searchParams }: Props) {
   const { supplierId } = await searchParams;
 
@@ -53,6 +57,7 @@ export default async function NewBillPage({ searchParams }: Props) {
           }))}
           {...(supplierId ? { defaultSupplierId: supplierId } : {})}
           defaultCurrency={orgSettings.baseCurrency}
+          defaultTaxRate={DEFAULT_BILL_TAX_RATE}
         />
       </div>
     </div>

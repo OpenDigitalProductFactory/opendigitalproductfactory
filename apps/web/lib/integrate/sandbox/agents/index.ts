@@ -1,11 +1,16 @@
 import type { BuildAgentId, BuildAgentRunner } from "../agent-runner-types";
 import { claudeAgentRunner } from "./claude-agent-runner";
 import { codexAgentRunner } from "./codex-agent-runner";
+import { grokAgentRunner } from "./grok-agent-runner";
+import { dpfNativeAgentRunner } from "./dpf-native-agent-runner";
+import { opencodeAgentRunner } from "./opencode-agent-runner";
 
 const runners: Record<BuildAgentId, BuildAgentRunner | null> = {
   codex: codexAgentRunner,
   claude: claudeAgentRunner,
-  "dpf-native": null,
+  grok: grokAgentRunner,
+  "dpf-native": dpfNativeAgentRunner,
+  opencode: opencodeAgentRunner,
 };
 
 export function getBuildAgentRunner(id: BuildAgentId = "codex"): BuildAgentRunner {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { submitInquiry } from "@/lib/storefront-actions";
 import { useRouter } from "next/navigation";
 
@@ -25,6 +25,14 @@ export function InquiryForm({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [calcSnapshot, setCalcSnapshot] = useState<Record<string, unknown> | null>(null);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("dpf_calc_snapshot");
+    if (raw) {
+      try { setCalcSnapshot(JSON.parse(raw)); } catch { /* ignore malformed */ }
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -35,7 +43,10 @@ export function InquiryForm({
     const email = fd.get("email") as string;
     const name = fd.get("name") as string;
     const phone = (fd.get("phone") as string | null) ?? undefined;
-    const message = (fd.get("message") as string | null) ?? undefined;
+    // Archetype schemas use a "notes" textarea for free-text; the generic schema
+    // uses "message". Treat either as the inquiry message.
+    const message =
+      ((fd.get("message") ?? fd.get("notes")) as string | null) ?? undefined;
 
     const formData: Record<string, unknown> = {};
     for (const field of formSchema) {
@@ -44,6 +55,8 @@ export function InquiryForm({
         if (val !== null) formData[field.name] = val;
       }
     }
+
+    if (calcSnapshot) formData.calculatorSnapshot = calcSnapshot;
 
     const result = await submitInquiry(orgSlug, {
       customerEmail: email,

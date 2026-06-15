@@ -5,8 +5,12 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { nanoid } from "nanoid";
-import type { CreateInvoiceInput, RecordPaymentInput } from "@/lib/finance-validation";
+import { signInvoiceSchema } from "@/lib/finance-validation";
+import type { CreateInvoiceInput, RecordPaymentInput, SignInvoiceInput } from "@/lib/finance-validation";
 import type { INVOICE_STATUSES } from "@/lib/finance-validation";
+import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
+import { getOrgIdentity } from "@/lib/org-identity";
+import { sendEmail, composeSignedConfirmationEmail, isEmailConfigured } from "@/lib/email";
 
 // ─── Auth guard ───────────────────────────────────────────────────────────────
 
@@ -124,6 +128,7 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<{ id: st
       paymentTerms: input.paymentTerms ?? null,
       notes: input.notes ?? null,
       internalNotes: input.internalNotes ?? null,
+      signatureRequired: input.signatureRequired ?? false,
       createdById: userId,
       lineItems: {
         create: lineItemsData,
@@ -220,8 +225,42 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{ id: st
     }
   }
 
+  if (input.billId) {
+    await prisma.paymentAllocation.create({
+      data: {
+        paymentId: payment.id,
+        billId: input.billId,
+        amount: input.amount,
+      },
+    });
+
+    const bill = await prisma.bill.findUnique({
+      where: { id: input.billId },
+      select: { totalAmount: true, amountPaid: true },
+    });
+
+    if (bill) {
+      const totalAmount = Number(bill.totalAmount);
+      const prevPaid = Number(bill.amountPaid);
+      const newAmountPaid = round2(prevPaid + input.amount);
+      const newAmountDue = round2(totalAmount - newAmountPaid);
+      const isPaid = newAmountDue <= 0;
+
+      await prisma.bill.update({
+        where: { id: input.billId },
+        data: {
+          amountPaid: newAmountPaid,
+          amountDue: newAmountDue,
+          status: isPaid ? "paid" : "partially_paid",
+        },
+      });
+    }
+  }
+
   revalidatePath("/finance");
   revalidatePath("/finance/invoices");
+  revalidatePath("/finance/bills");
+  revalidatePath("/finance/payments");
 
   return payment;
 }
@@ -398,6 +437,7 @@ export async function getInvoiceByPayToken(token: string) {
     include: {
       lineItems: { orderBy: { sortOrder: "asc" } },
       account: { select: { name: true } },
+      contact: { select: { email: true, firstName: true, lastName: true } },
     },
   });
 }
@@ -409,4 +449,121 @@ export async function markInvoiceViewed(invoiceId: string): Promise<void> {
     where: { id: invoiceId },
     data: { viewedAt: new Date(), status: "viewed" },
   });
+}
+
+// ─── signInvoice (public, authorized by payToken possession) ───────────────────
+//
+// Called from the public payment portal's signature pad — the signer is the
+// unauthenticated customer, authorized by holding the invoice's payToken (the
+// same model as getInvoiceByPayToken / markInvoiceViewed). Idempotent.
+
+export async function signInvoice(input: SignInvoiceInput): Promise<{ ok: true }> {
+  const parsed = signInvoiceSchema.parse(input);
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { payToken: parsed.token },
+    select: { id: true, signatureRequired: true, signedAt: true },
+  });
+  if (!invoice) throw new Error("Invoice not found");
+  if (!invoice.signatureRequired) {
+    throw new Error("This invoice does not require a signature");
+  }
+
+  // Idempotent: a duplicate submit after a successful sign is a no-op success.
+  if (!invoice.signedAt) {
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        signedAt: new Date(),
+        signedByName: parsed.signedByName,
+        signedByEmail: parsed.signedByEmail,
+        signatureDataUrl: parsed.signatureDataUrl,
+      },
+    });
+
+    // Best-effort countersigned confirmation. Never block signing on email.
+    await sendSignedConfirmation(invoice.id, parsed.token).catch((e) => {
+      console.error("[signInvoice] confirmation email failed", e);
+    });
+  }
+
+  revalidatePath(`/s/pay/${parsed.token}`);
+  return { ok: true };
+}
+
+async function sendSignedConfirmation(invoiceId: string, token: string): Promise<void> {
+  if (!(await isEmailConfigured())) return;
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    include: {
+      lineItems: { orderBy: { sortOrder: "asc" } },
+      account: { select: { name: true } },
+      contact: { select: { email: true, firstName: true, lastName: true } },
+    },
+  });
+  if (!invoice || !invoice.signedAt || !invoice.signedByEmail) return;
+
+  const issuer = await getOrgIdentity();
+  const signedByName = invoice.signedByName ?? invoice.signedByEmail;
+  const pdf = await generateInvoicePdf({
+    ...invoice,
+    issuer,
+    signature: {
+      signedByName,
+      signedByEmail: invoice.signedByEmail,
+      signedAt: invoice.signedAt,
+    },
+  });
+  const filename = getInvoicePdfFilename(invoice.invoiceRef, invoice.account.name);
+
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+  const email = composeSignedConfirmationEmail({
+    to: invoice.signedByEmail,
+    invoiceRef: invoice.invoiceRef,
+    accountName: invoice.account.name,
+    signedByName,
+    signedAt: invoice.signedAt.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }),
+    orgName: issuer?.name ?? null,
+    payUrl: `${baseUrl}/s/pay/${token}`,
+  });
+
+  await sendEmail({
+    ...email,
+    from: issuer?.email ? `${issuer.name} <${issuer.email}>` : undefined,
+    attachments: [{ filename, content: pdf, contentType: "application/pdf" }],
+  });
+}
+
+// ─── setInvoiceSignatureRequired (admin) ───────────────────────────────────────
+//
+// Lets an operator toggle the signature requirement on an invoice before it is
+// signed — e.g. enable it on a counselling/IT invoice (default off) or on an
+// invoice generated from a sales/storefront order.
+
+export async function setInvoiceSignatureRequired(
+  invoiceId: string,
+  required: boolean,
+): Promise<void> {
+  await requireManageFinance();
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { id: true, signedAt: true },
+  });
+  if (!invoice) throw new Error("Invoice not found");
+  if (invoice.signedAt) {
+    throw new Error("Cannot change the signature requirement after the invoice has been signed");
+  }
+
+  await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: { signatureRequired: required },
+  });
+
+  revalidatePath(`/finance/invoices/${invoiceId}`);
 }

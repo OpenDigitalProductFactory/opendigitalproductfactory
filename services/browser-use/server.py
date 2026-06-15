@@ -20,7 +20,12 @@ from fastapi.responses import JSONResponse
 
 # browser-use 0.12.x: Agent + BrowserSession live at top-level, ChatOpenAI is
 # shipped by the library (no langchain dependency).
-from browser_use import Agent, BrowserSession, ChatOpenAI
+from browser_use import Agent, BrowserSession, ChatOpenAI, ChatAnthropic
+
+# Pure URL navigation policy (SSRF guard + per-session target-domain allowlist).
+# EP-BROWSER-DRIVE Phase 2 — kept in a stdlib-only module so it is unit-testable
+# without the browser_use deps.
+from url_policy import check_navigation
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("browser-use-mcp")
@@ -31,6 +36,7 @@ PORT = int(os.environ.get("PORT", "8500"))
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://model-runner.docker.internal/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "not-needed-for-local")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 EVIDENCE_DIR = os.environ.get("EVIDENCE_DIR", "/evidence")
 SESSION_TIMEOUT_SECONDS = int(os.environ.get("SESSION_TIMEOUT_SECONDS", "600"))
 # The Dockerfile installs the system Chromium at /usr/bin/chromium. browser-use
@@ -39,8 +45,22 @@ SESSION_TIMEOUT_SECONDS = int(os.environ.get("SESSION_TIMEOUT_SECONDS", "600"))
 # "CDP client not initialized - browser may not be connected yet". Point it at
 # the installed binary explicitly. Overridable via CHROME_BIN.
 CHROME_BIN = os.environ.get("CHROME_BIN") or "/usr/bin/chromium"
+# Service-account Chromium profiles live here (EP-BROWSER-DRIVE, spec §8.9).
+# Sidecar-only volume; a requested profile_path must resolve inside it.
+PROFILES_DIR = os.environ.get("PROFILES_DIR", "/profiles")
 
 os.makedirs(EVIDENCE_DIR, exist_ok=True)
+
+
+def _is_safe_profile_path(profile_path: str) -> bool:
+    """True if profile_path resolves to a location inside PROFILES_DIR (no
+    traversal/symlink escape). Defense in depth around the secret profiles
+    volume."""
+    if not isinstance(profile_path, str) or not profile_path.strip():
+        return False
+    root = os.path.realpath(PROFILES_DIR)
+    target = os.path.realpath(profile_path)
+    return target == root or target.startswith(root + os.sep)
 
 
 # ── Session Manager ────────────────────────────────────────────────────────
@@ -65,6 +85,10 @@ class BrowserSessionWrapper:
     last_used: float = field(default_factory=time.time)
     actions: list[ActionRecord] = field(default_factory=list)
     url: str = ""
+    # EP-BROWSER-DRIVE Phase 2: per-session driving policy + persistence.
+    target_domains: list[str] | None = None
+    profile_path: str | None = None
+    evidence_subdir: str | None = None
 
     def touch(self):
         self.last_used = time.time()
@@ -97,7 +121,13 @@ class SessionManager:
                 logger.info("Auto-closing expired session %s", session.session_id)
                 await self._close_session(session)
 
-    async def open(self, url: str | None = None) -> BrowserSessionWrapper:
+    async def open(
+        self,
+        url: str | None = None,
+        profile_path: str | None = None,
+        target_domains: list[str] | None = None,
+        evidence_dir: str | None = None,
+    ) -> BrowserSessionWrapper:
         session_id = str(uuid.uuid4())[:8]
         # BrowserSession takes profile fields directly as kwargs in 0.12.x.
         # executable_path pins the installed system Chromium (no Playwright
@@ -105,20 +135,44 @@ class SessionManager:
         # container doesn't run as an unprivileged user with user-namespace
         # support; --disable-dev-shm-usage avoids crashes on the small default
         # /dev/shm in containers; --disable-gpu for headless servers.
-        browser = BrowserSession(
+        browser_kwargs: dict[str, Any] = dict(
             headless=True,
             executable_path=CHROME_BIN,
             chromium_sandbox=False,
             args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
         )
+        # Persisted service-account profile (EP-BROWSER-DRIVE §8.9): a Chromium
+        # user-data-dir whose cookie jar carries the account's logins. When
+        # omitted, the session is ephemeral (the existing QA behavior).
+        if profile_path:
+            browser_kwargs["user_data_dir"] = profile_path
+        browser = BrowserSession(**browser_kwargs)
         await browser.start()
-        session = BrowserSessionWrapper(session_id=session_id, browser=browser)
+
+        # Optional session-scoped evidence subdirectory.
+        evidence_subdir = None
+        if isinstance(evidence_dir, str) and evidence_dir.strip():
+            safe_name = os.path.basename(evidence_dir.strip())
+            if safe_name and safe_name == evidence_dir.strip():
+                evidence_subdir = os.path.join(EVIDENCE_DIR, safe_name)
+                os.makedirs(evidence_subdir, exist_ok=True)
+
+        session = BrowserSessionWrapper(
+            session_id=session_id,
+            browser=browser,
+            target_domains=target_domains or None,
+            profile_path=profile_path,
+            evidence_subdir=evidence_subdir,
+        )
 
         if url:
             session.url = url
 
         self._sessions[session_id] = session
-        logger.info("Opened session %s (url=%s)", session_id, url or "none")
+        logger.info(
+            "Opened session %s (url=%s profile=%s domains=%s)",
+            session_id, url or "none", bool(profile_path), target_domains or [],
+        )
         return session
 
     def get(self, session_id: str) -> BrowserSessionWrapper | None:
@@ -142,8 +196,19 @@ class SessionManager:
         self._sessions.pop(session.session_id, None)
 
 
-def _build_llm() -> ChatOpenAI:
-    """Build the LLM client for browser-use agents."""
+def _build_llm():
+    """Build the LLM client for browser-use agents.
+
+    Capable agentic browser-driving needs a strong model. When configured for
+    Anthropic (LLM_MODEL begins with "claude", or LLM_PROVIDER=anthropic), use
+    ChatAnthropic with the direct Anthropic API key. Otherwise fall back to the
+    OpenAI-compatible client (LLM_BASE_URL), which also covers local model
+    runners. (2026-06-07: the prior gpt-4o-against-local-runner config produced
+    empty agent histories / vacuous passes; operator chose Anthropic Claude.)
+    """
+    provider = os.environ.get("LLM_PROVIDER", "").lower()
+    if provider == "anthropic" or LLM_MODEL.startswith("claude"):
+        return ChatAnthropic(model=LLM_MODEL, api_key=ANTHROPIC_API_KEY)
     return ChatOpenAI(
         model=LLM_MODEL,
         base_url=LLM_BASE_URL,
@@ -159,7 +224,8 @@ async def _save_screenshot(session: BrowserSessionWrapper, label: str) -> str | 
             return None
         b64 = await page.screenshot()
         filename = f"{session.session_id}_{label}_{int(time.time())}.png"
-        filepath = os.path.join(EVIDENCE_DIR, filename)
+        target_dir = session.evidence_subdir or EVIDENCE_DIR
+        filepath = os.path.join(target_dir, filename)
         with open(filepath, "wb") as f:
             f.write(base64.b64decode(b64))
         return filepath
@@ -196,6 +262,30 @@ TOOLS = [
                 "url": {
                     "type": "string",
                     "description": "URL to navigate to on open. Optional.",
+                },
+                "profile_path": {
+                    "type": "string",
+                    "description": (
+                        "Absolute path to a persisted Chromium user-data-dir under "
+                        "/profiles (a service-account profile that holds the account's "
+                        "logins). Optional; omit for an ephemeral headless session."
+                    ),
+                },
+                "target_domains": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Navigation allowlist. The open URL and any later browse_act "
+                        "navigation that lands off these domains is blocked. SSRF "
+                        "targets (localhost, private/link-local IPs) are always blocked."
+                    ),
+                },
+                "evidence_dir": {
+                    "type": "string",
+                    "description": (
+                        "Optional subdirectory name under /evidence for this session's "
+                        "screenshots (segment name only, no path traversal)."
+                    ),
                 },
             },
         },
@@ -319,7 +409,26 @@ sessions = SessionManager()
 
 async def handle_browse_open(params: dict[str, Any]) -> dict[str, Any]:
     url = params.get("url")
-    session = await sessions.open(url)
+    profile_path = params.get("profile_path")
+    target_domains = params.get("target_domains")
+    evidence_dir = params.get("evidence_dir")
+
+    # A requested profile must resolve inside the secret profiles volume.
+    if profile_path is not None and not _is_safe_profile_path(profile_path):
+        return {"status": "blocked", "error": "profile_path must resolve under /profiles"}
+
+    # Pre-navigation SSRF + allowlist check on the open URL.
+    if url:
+        ok, reason = check_navigation(url, target_domains)
+        if not ok:
+            return {"status": "blocked", "error": reason, "url": url}
+
+    session = await sessions.open(
+        url,
+        profile_path=profile_path,
+        target_domains=target_domains,
+        evidence_dir=evidence_dir,
+    )
 
     result: dict[str, Any] = {"session_id": session.session_id}
 
@@ -369,6 +478,29 @@ async def handle_browse_act(params: dict[str, Any]) -> dict[str, Any]:
             browser=session.browser,
         )
         agent_result = await agent.run()
+
+        # Enforce the target-domain allowlist on the page the action landed on.
+        # The act loop drives adaptively, so this is the deterministic checkpoint:
+        # if the agent navigated off the allowlist, the action is reported blocked
+        # rather than its result being trusted (EP-BROWSER-DRIVE §8.10).
+        if session.target_domains:
+            try:
+                landed = await session.browser.get_current_page()
+                current_url = getattr(landed, "url", None) if landed else None
+                if current_url:
+                    ok, reason = check_navigation(current_url, session.target_domains)
+                    if not ok:
+                        session.actions.append(ActionRecord(
+                            timestamp=time.time(), action="act", detail=task, success=False,
+                        ))
+                        return {
+                            "session_id": session_id,
+                            "status": "blocked",
+                            "error": f"action left the target-domain allowlist: {reason}",
+                            "url": current_url,
+                        }
+            except Exception as e:
+                logger.warning("post-act allowlist check failed: %s", e)
 
         screenshot_path = await _save_screenshot(session, "act")
         session.actions.append(ActionRecord(

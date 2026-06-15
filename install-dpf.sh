@@ -352,6 +352,38 @@ step "Workspace dependencies"
 pnpm install
 ok "Dependencies installed"
 
+# Ensure the bundled "voice profile in the build" (founder seed voice for
+# mark-dpf-platform) is materialized in the final data/uploads tree *before*
+# we do docker compose up (which triggers the platform DB seed that creates
+# the VoiceProfile row + consent). The seedPlatformVoice does a best-effort
+# copy, but during install the path resolution or prior placeholder files can
+# cause it to skip. We force the real clip here (idempotent, best-effort).
+# This is the Unix equivalent of what the Mac TTS setup script also does for
+# the host sidecar. Windows uses its own .ps1 flow (untouched) + the seed.
+CLIP_SRC=""
+for cand in \
+  "$REPO_ROOT/packages/db/data/seed-voices/mark-dpf-platform/reference.webm" \
+  "$REPO_ROOT/packages/db/data/seed-voices/mark-dpf-platform/reference.webm"; do
+  if [ -f "$cand" ] && [ -s "$cand" ]; then CLIP_SRC="$cand"; break; fi
+done
+UPLOADS_DIR="$REPO_ROOT/data/uploads"
+if [ -n "$CLIP_SRC" ]; then
+  mkdir -p "$UPLOADS_DIR/voices/mark-dpf-platform"
+  dst="$UPLOADS_DIR/voices/mark-dpf-platform/reference.webm"
+  do_copy=0
+  if [ ! -f "$dst" ]; then
+    do_copy=1
+  else
+    src_sz=$(wc -c < "$CLIP_SRC" 2>/dev/null || echo 0)
+    dst_sz=$(wc -c < "$dst" 2>/dev/null || echo 0)
+    if [ "$dst_sz" -lt 20000 ] && [ "$src_sz" -gt 20000 ]; then do_copy=1; fi
+  fi
+  if [ "$do_copy" -eq 1 ]; then
+    cp -f "$CLIP_SRC" "$dst" || true
+    info "Platform founder voice clip placed in $dst (from build)"
+  fi
+fi
+
 # Contributor git hooks (contributor mode only). Mirrors scripts/setup.sh:
 # enables the in-repo .githooks/ (Prisma migration guard + secret scan).
 # Idempotent; customer installs skip it (they don't author commits here).
@@ -410,11 +442,28 @@ fi
 #    portal-init.
 step "Host hardware profile"
 DPF_SELECTED_MODEL=""
-if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec tsx scripts/detect-hardware-host.ts 2>/dev/null)"; then
+
+# Defensive nvm sourcing for pnpm (mirrors the earlier Node step). On macOS
+# with nvm-managed node (common for contributors and some customer setups),
+# pnpm lives in the nvm bin dir. Without this, the pnpm --filter call below
+# can fail with "command not found" even if the user had a working pnpm in
+# their interactive shell. This is Mac/Linux sh path only; Windows ps1 has
+# its own pnpm + hardware detection logic and is unaffected.
+if ! command -v pnpm >/dev/null 2>&1; then
+  _nvm_sh="${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+  if [ -s "$_nvm_sh" ]; then
+    # shellcheck source=/dev/null
+    . "$_nvm_sh" 2>/dev/null || true
+    nvm use default 2>/dev/null || nvm use node 2>/dev/null || true
+  fi
+fi
+
+if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec -- tsx "$REPO_ROOT/scripts/detect-hardware-host.ts" 2>/dev/null)"; then
   export DPF_HOST_PROFILE="$DPF_HOST_PROFILE_JSON"
   DPF_SELECTED_MODEL="$(printf '%s' "$DPF_HOST_PROFILE_JSON" | sed -nE 's/.*"selectedModel"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
   if [ -n "$DPF_SELECTED_MODEL" ]; then
-    ok "Hardware profile detected — selected AI model: $DPF_SELECTED_MODEL"
+    ok "Hardware profile detected — selected AI model (pull form): $DPF_SELECTED_MODEL"
+    info "  (Will register under short form for runtime references; normalized after pull.)"
   else
     ok "Hardware profile detected (will be passed to portal-init via DPF_HOST_PROFILE)"
   fi
@@ -455,17 +504,62 @@ if [ "$DPF_PLATFORM" = "darwin" ] && command -v docker >/dev/null 2>&1; then
       # `docker model list` prints rows like `qwen3:30B-A3B-Q4_K_M` (no
       # `ai/` prefix; tag with quant suffix preserved). Match the full
       # family:tag pair so 8B ≠ 14B ≠ 30B-A3B.
-      _selected_repo_tag="$(printf '%s' "$DPF_SELECTED_MODEL" | sed 's|^ai/||')"
-      if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_selected_repo_tag"; then
-        ok "Model $DPF_SELECTED_MODEL already on disk"
+      #
+      # Name accuracy note: we PULL using the `ai/...` form (Docker Hub repo
+      # path), but the model registers under the short form shown by
+      # `docker model list`. We capture the *listed* name and normalize
+      # DPF_HOST_PROFILE.selectedModel (and DPF_SELECTED_MODEL) to it so that
+      # portal discovery, /v1/models, and inference "get model by reference"
+      # calls use the exact string the model-runner knows. This prevents the
+      # "failed to get model: model not found" seen in inference.model-manager
+      # logs even when the pull command itself was issued.
+      _pull_name="$DPF_SELECTED_MODEL"
+      _runtime_model="$(printf '%s' "$_pull_name" | sed 's|^ai/||')"
+      if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_runtime_model"; then
+        ok "Model $_runtime_model already on disk"
+        DPF_SELECTED_MODEL="$_runtime_model"
       else
-        info "Pulling AI model $DPF_SELECTED_MODEL via Docker Model Runner..."
-        info "  This may take several minutes depending on your internet speed."
-        if docker model pull "$DPF_SELECTED_MODEL" 2>&1 | grep -v "^Downloaded"; then
-          ok "AI Coworker model ready: $DPF_SELECTED_MODEL"
-        else
-          warn "Model pull may have failed. You can retry later: docker model pull $DPF_SELECTED_MODEL"
+        # Print expected size upfront (user request for time estimation given
+        # internet speed). Uses cheap manifest inspect (no blob download).
+        _size_mb=0
+        if command -v python3 >/dev/null 2>&1; then
+          _size_mb=$(docker manifest inspect "$_pull_name" 2>/dev/null | python3 -c '
+import sys, json
+try:
+  d = json.load(sys.stdin)
+  t = 0
+  for l in d.get("layers", []): t += l.get("size", 0)
+  cfg = d.get("config") or {}
+  t += cfg.get("size", 0)
+  print(int(t / 1024 / 1024))
+except Exception:
+  print(0)
+' 2>/dev/null || echo 0)
         fi
+        if [ "$_size_mb" -gt 0 ]; then
+          info "  Expected download size: ~${_size_mb}MB. If you know your internet speed you can estimate how long the pull will take."
+        fi
+        info "Pulling AI model $_pull_name via Docker Model Runner..."
+        info "  This may take several minutes depending on your internet speed."
+        # Stream (filtered) pull output; || true so a pull hiccup does not
+        # abort the whole installer under set -euo pipefail. Ground truth for
+        # "actually ready" is the post-pull list check, not the pull exit or
+        # the old grep -v pipeline status (which could misclassify).
+        docker model pull "$_pull_name" 2>&1 | grep -v "^Downloaded" || true
+        if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_runtime_model"; then
+          ok "AI Coworker model ready: $_runtime_model"
+          DPF_SELECTED_MODEL="$_runtime_model"
+        else
+          warn "Model pull may have failed. You can retry later: docker model pull $_pull_name"
+        fi
+      fi
+      # Normalize the host profile JSON (passed via compose to portal-init
+      # and saved to PlatformConfig.host_profile) so its selectedModel is the
+      # *runtime* reference the model-runner exposes via /v1/models and
+      # accepts for inference. Using the ai/ form here was the source of
+      # "model not found" on get-by-reference even after pull.
+      if [ -n "${DPF_HOST_PROFILE:-}" ]; then
+        export DPF_HOST_PROFILE=$(printf '%s' "$DPF_HOST_PROFILE" | sed -E 's/("selectedModel"[[:space:]]*:[[:space:]]*")[^"]*"/\1'"$_runtime_model"'"/' )
       fi
     else
       warn "No model selected by hardware detection; skipping chat-model pull."
@@ -514,6 +608,28 @@ else
     printf 'DPF_BACKUPS_HOST_PATH=%s-backups\n' "$REPO_ROOT" >> .env
     info "Added DPF_BACKUPS_HOST_PATH=$REPO_ROOT-backups to existing .env"
   fi
+fi
+
+# Record the platform-correct compose chain for the self-upgrade promoter. The
+# orchestrator reads DPF_SELF_UPGRADE_COMPOSE_FILES and passes it to promote.sh as
+# PROMOTE_COMPOSE_FILES so the portal is recreated with THIS install's own
+# overlays (docker-compose.linux.yml / .macos.yml / .edge.yml). Without it the
+# promoter falls back to base-only and would force the wrong substrate's portal
+# env — e.g. the macOS TTS sidecar (mlx, :8771) on a Windows/Linux host, which
+# breaks voice; or drop the linux ollama LLM_BASE_URL. Mirrors composeFiles in
+# install-state.json (the array form) as the space-separated env form the portal
+# consumes. Re-run rewrites it so a platform/edge/mode change is always reflected.
+_self_upgrade_chain=""
+for _tok in "${DPF_COMPOSE_FILES[@]}"; do
+  [ "$_tok" = "-f" ] && continue
+  _self_upgrade_chain="${_self_upgrade_chain:+$_self_upgrade_chain }$_tok"
+done
+if grep -q "^DPF_SELF_UPGRADE_COMPOSE_FILES=" .env 2>/dev/null; then
+  dpf_sed_inplace "s|^DPF_SELF_UPGRADE_COMPOSE_FILES=.*|DPF_SELF_UPGRADE_COMPOSE_FILES=$_self_upgrade_chain|" .env
+else
+  printf '\n# Self-upgrade promoter compose chain — see install-dpf.sh for why this\n' >> .env
+  printf '# must match the install platform (prevents wrong-substrate portal env).\n' >> .env
+  printf 'DPF_SELF_UPGRADE_COMPOSE_FILES=%s\n' "$_self_upgrade_chain" >> .env
 fi
 
 # BI-0856A4CE Phase 1 — record DPF_DEV_WORKSPACE_PATH when the contributor
@@ -689,6 +805,33 @@ fi
 docker compose "${DPF_COMPOSE_FILES[@]}" up -d
 ok "docker compose up returned"
 
+# 10b. Voice / TTS sidecar (Linux hosts with an NVIDIA GPU).
+#      Spoken output uses the bundled dpf-tts container, but it's behind the
+#      `tts` compose profile (and carries an NVIDIA deploy reservation), so a
+#      plain `up` never starts it — leaving voice silent out of the box. Start
+#      it here so a fresh customer install speaks, per
+#      bundled-services-active-by-default. We only enable it when an NVIDIA GPU
+#      with >=6 GB VRAM is detected: the deploy reservation would fail on a
+#      GPU-less host, and the CPU tier is ~10-30x slower (no fast CPU path like
+#      the Mac's native MPS sidecar). Guarded + non-fatal so a missing
+#      nvidia-container runtime can't abort the install (set -euo pipefail).
+#      Skipped on macOS, which uses the native-host sidecar above.
+if [ "$DPF_PLATFORM" != "darwin" ]; then
+  _tts_vram="$(printf '%s' "${DPF_HOST_PROFILE:-}" | sed -nE 's/.*"vramGB"[[:space:]]*:[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/p')"
+  if [ -n "$_tts_vram" ] && awk "BEGIN{exit !(${_tts_vram} >= 6)}" 2>/dev/null; then
+    step "Voice / TTS sidecar (NVIDIA GPU)"
+    if docker compose "${DPF_COMPOSE_FILES[@]}" --profile tts up -d dpf-tts; then
+      ok "Voice TTS container started (dpf-tts) — spoken output works out of the box"
+    else
+      warn "dpf-tts failed to start (NVIDIA container runtime / GPU issue?); voice output will stay silent."
+      info "  Inspect: docker compose ${DPF_COMPOSE_FILES[*]} --profile tts logs dpf-tts"
+    fi
+  else
+    info "Voice TTS sidecar skipped (no NVIDIA GPU >=6 GB VRAM detected); STT still works."
+    info "  Enable later (CPU tier or managed API): see docs/install/linux.md → Voice."
+  fi
+fi
+
 # 11. Wait for /api/health (or DPF_HEALTH_TIMEOUT seconds, default 300).
 step "Health check"
 HEALTH_TIMEOUT="${DPF_HEALTH_TIMEOUT:-300}"
@@ -796,11 +939,58 @@ else
   info "Edge Node bundling skipped (--no-edge). Add Edge Nodes later from separate hosts via docker-compose.edge-standalone.yml."
 fi
 
-# 13. Persist successful install state.
+# 13. Voice / TTS sidecar (Apple Silicon only).
+#     Spoken output (text-to-speech) needs hardware-accelerated synthesis, but
+#     Docker Desktop on macOS can't reach the Apple Neural Engine — so on Apple
+#     Silicon the TTS engine runs as a native-host sidecar (port 8771) instead
+#     of in a container. The docker-compose.macos.yml overlay is already wired
+#     to talk to it (TTS_PROVIDER=mlx, DPF_TTS_URL=host.docker.internal:8771);
+#     we just provision the sidecar here so a fresh customer install speaks out
+#     of the box (zero-click-provider-setup / bundled-services-active-by-default)
+#     rather than transcribing silently until the user runs the script by hand.
+#     Mirrors the contributor path in scripts/setup.sh. Idempotent — safe to
+#     re-run. Failure is non-fatal: the rest of the install still completes and
+#     we point the operator at the manual command. Linux/Windows installs use
+#     the dpf-tts Docker container instead, so skip there.
+if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
+  step "Voice / TTS sidecar (Apple Silicon)"
+  # Invoke via `bash <script>` (never execute the .sh directly — Windows git
+  # drops the exec bit and the script's own shebang can't be relied on across
+  # clones). Stderr is intentionally NOT swallowed so a failure leaves a
+  # diagnosable trail, matching the Edge Node bootstrap above.
+  if bash "$REPO_ROOT/scripts/tts/setup-chatterbox-tts-macos.sh" \
+       --data-root "$REPO_ROOT/data/uploads"; then
+    # The script provisions the launchd sidecar; wire the matching .env values
+    # the portal container needs to reach it, only if not already present
+    # (idempotent — successive installer runs don't duplicate the keys).
+    if ! grep -qE "^TTS_PROVIDER=" .env 2>/dev/null; then
+      printf '\n# Voice / TTS (Apple Silicon — written by install-dpf.sh)\n' >> .env
+      printf 'TTS_PROVIDER=mlx\n' >> .env
+      printf 'DPF_TTS_URL=http://host.docker.internal:8771\n' >> .env
+      printf 'DPF_TTS_REFERENCE_HOST_ROOT=%s/data/uploads\n' "$REPO_ROOT" >> .env
+      # Keep UPLOAD_STORAGE_PATH in sync so the DB seed (seedPlatformVoice) and
+      # portal resolve the same final host-visible uploads root that the TTS
+      # sidecar was provisioned against. This ensures the "voice profile in the
+      # build" (the bundled founder clip for mark-dpf-platform) lands in the
+      # exact location the sidecar will read via DPF_TTS_REFERENCE_HOST_ROOT.
+      if ! grep -qE "^UPLOAD_STORAGE_PATH=" .env 2>/dev/null; then
+        printf 'UPLOAD_STORAGE_PATH=%s/data/uploads\n' "$REPO_ROOT" >> .env
+      fi
+    fi
+    ok "Voice TTS sidecar provisioned — spoken output works out of the box (port 8771)"
+  else
+    warn "TTS sidecar setup failed; coworkers will transcribe but stay silent until you run:"
+    info "  bash scripts/tts/setup-chatterbox-tts-macos.sh"
+  fi
+else
+  info "Voice TTS sidecar skipped (Linux/Windows uses the bundled dpf-tts Docker container)."
+fi
+
+# 14. Persist successful install state.
 dpf_state_write lastSuccessfulInstallVersion "$DPF_INSTALLER_VERSION" 2>/dev/null || true
 dpf_state_write lastHealthCheck "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null || true
 
-# 14. Autostart unit (LaunchAgent on macOS, systemd-user unit on Linux).
+# 15. Autostart unit (LaunchAgent on macOS, systemd-user unit on Linux).
 #     Gated by --no-autostart for operators who manage their own.
 if [ "$DPF_AUTOSTART" = "1" ]; then
   step "Autostart"

@@ -85,6 +85,14 @@ export async function createFeatureBuild(input: {
 
   if (!input.title.trim()) throw new Error("Title is required");
 
+  // WIP cap: don't let a new build start while too many are unfinished
+  // (all builds share one sandbox). Surfaces a plain-English message.
+  const { assertWipCapacity, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
+  const activeBuilds = await prisma.featureBuild.count({
+    where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
+  });
+  assertWipCapacity(activeBuilds);
+
   const buildId = generateBuildId();
 
   const result = await prisma.$transaction(async (tx) => {
@@ -715,8 +723,42 @@ export async function advanceBuildPhase(
   }
 }
 
-/** System-level build execution — delegates to checkpoint pipeline. */
-async function autoExecuteBuild(buildId: string): Promise<void> {
+/**
+ * System-level build execution — delegates to checkpoint pipeline.
+ *
+ * Exported so the boot reconciler (instrumentation.ts) can re-dispatch builds
+ * stranded by a portal restart. It carries no auth (it is the system executor,
+ * not a user-facing server action); the only callers are this module's own
+ * server actions (which authorize first) and the boot reconciler (which only
+ * invokes it for rows it has already confirmed are resumable in-flight builds).
+ */
+export async function autoExecuteBuild(buildId: string): Promise<void> {
+  // BI-89030C9B Phase 1 — durable path. When the flag is on, hand the run to
+  // the Inngest function (build/execute.run) instead of executing in-process:
+  // the engine's journal then owns crash recovery, so a portal recycle no
+  // longer strands the build. The send carries a deterministic idempotency id
+  // so the four call sites (and their retries) collapse duplicate dispatches
+  // of the same logical attempt into one durable run.
+  const { isBuildDurableExecutionEnabled, buildExecuteSendId } = await import(
+    "@/lib/integrate/build-execute-helpers"
+  );
+  if (isBuildDurableExecutionEnabled()) {
+    const current = await prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: { buildExecState: true },
+    });
+    const { inngest } = await import("@/lib/queue/inngest-client");
+    await inngest.send({
+      name: "build/execute.run",
+      data: { buildId },
+      id: buildExecuteSendId(
+        buildId,
+        current?.buildExecState as import("@/lib/build-exec-types").BuildExecutionState | null,
+      ),
+    });
+    return;
+  }
+
   const { agentEventBus } = await import("@/lib/agent-event-bus");
   const { runBuildPipeline } = await import("@/lib/build-pipeline");
 
@@ -952,20 +994,12 @@ export async function recordBuildAcceptance(
     throw new Error("Typecheck must be clean before acceptance can be recorded");
   }
 
-  const uxStatus = build.uxVerificationStatus;
-  if (uxStatus !== "complete" && uxStatus !== "skipped") {
-    throw new Error("UX verification must be complete before acceptance can be recorded");
-  }
-
-  const uxTestResults = Array.isArray(build.uxTestResults)
-    ? build.uxTestResults as Array<{ passed?: boolean }>
-    : [];
-  const failedUxSteps = uxTestResults.length > 0
-    ? uxTestResults.filter((step) => !step.passed)
-    : [];
-  if (failedUxSteps.length > 0) {
-    throw new Error("Fix the failed UX verification steps before recording acceptance");
-  }
+  // ADVISORY (operator decision 2026-06-07): UX verification is recorded for
+  // visibility but no longer hard-blocks recording acceptance — consistent with
+  // the uxVerification-not-blocking phase gate and the informational unit-test
+  // gate. browser-use UX results (incl. not-run / failed) are advisory and shown
+  // in the Review panel; the QUALITY of the UX check itself is tracked in
+  // BI-4BD81F3B. Typecheck (checked above) remains a hard gate.
 
   const brief = build.brief as { acceptanceCriteria?: string[] } | null;
   const designDoc = build.designDoc as { acceptanceCriteria?: string[] } | null;

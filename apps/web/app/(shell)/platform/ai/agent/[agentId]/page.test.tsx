@@ -7,6 +7,11 @@ vi.mock("@dpf/db", () => ({
     agentModelConfig: { findUnique: vi.fn().mockResolvedValue(null) },
     modelProvider: { findMany: vi.fn().mockResolvedValue([]) },
     $queryRaw: vi.fn().mockResolvedValue([]),
+    // loadCoworkerRecord facet queries (HRIS surface):
+    decisionPerspectiveProfile: { findUnique: vi.fn().mockResolvedValue(null) },
+    wikiPage: { findMany: vi.fn().mockResolvedValue([]) },
+    voiceProfile: { findUnique: vi.fn().mockResolvedValue(null) },
+    decisionInteraction: { groupBy: vi.fn().mockResolvedValue([]) },
   },
 }));
 
@@ -63,6 +68,8 @@ describe("AgentDetailPage", () => {
       degradationMappings: [],
       promptContext: null,
       governanceProfile: null,
+      coworkerAssessments: [],
+      ownerships: [],
     } as never);
     vi.mocked(getAgentGaidMap).mockResolvedValue(
       new Map([["hr-specialist", "gaid:priv:dpf.internal:hr-specialist"]]),

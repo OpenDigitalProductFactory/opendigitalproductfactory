@@ -12,6 +12,18 @@ function formatMoney(amount: number, currency: string): string {
   }
 }
 
+const inputStyle = {
+  padding: "8px 12px",
+  border: "1px solid var(--dpf-border)",
+  borderRadius: 6,
+  fontSize: 14,
+  background: "var(--dpf-surface-1)",
+  color: "var(--dpf-text)",
+} as const;
+
+const labelStyle = { fontSize: 13, fontWeight: 500, color: "var(--dpf-text)" } as const;
+const fieldStyle = { display: "flex", flexDirection: "column", gap: 4 } as const;
+
 export function OrderForm({
   orgSlug,
   itemId,
@@ -39,12 +51,27 @@ export function OrderForm({
 
     const fd = new FormData(e.currentTarget);
     const email = (fd.get("email") as string)?.trim();
+    const name = (fd.get("customerName") as string)?.trim() || undefined;
     const quantity = Math.max(1, Number(fd.get("quantity")) || 1);
+
+    const line1 = (fd.get("addrLine1") as string)?.trim();
+    const line2 = (fd.get("addrLine2") as string)?.trim() || undefined;
+    const city = (fd.get("addrCity") as string)?.trim();
+    const county = (fd.get("addrCounty") as string)?.trim() || undefined;
+    const postcode = (fd.get("addrPostcode") as string)?.trim();
+    const country = (fd.get("addrCountry") as string)?.trim() || "US";
+
+    const deliveryAddress =
+      line1 && city && postcode
+        ? { line1, line2, city, county, postcode, country }
+        : undefined;
 
     // totalAmount is recomputed and price-validated server-side in submitOrder;
     // we send the line for completeness only.
     const result = await submitOrder(orgSlug, {
       customerEmail: email,
+      customerName: name,
+      deliveryAddress,
       items: [{ itemId, name: itemName, qty: quantity, unitPrice }],
       totalAmount: unitPrice * quantity,
       currency,
@@ -63,18 +90,18 @@ export function OrderForm({
     <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 480 }}>
       {error && <div style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</div>}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <label style={{ fontSize: 13, fontWeight: 500, color: "var(--dpf-text)" }}>Email address *</label>
-        <input
-          type="email"
-          name="email"
-          required
-          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }}
-        />
+      <div style={fieldStyle}>
+        <label style={labelStyle}>Full name *</label>
+        <input type="text" name="customerName" required style={inputStyle} placeholder="Jane Smith" />
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <label style={{ fontSize: 13, fontWeight: 500, color: "var(--dpf-text)" }}>Quantity *</label>
+      <div style={fieldStyle}>
+        <label style={labelStyle}>Email address *</label>
+        <input type="email" name="email" required style={inputStyle} />
+      </div>
+
+      <div style={fieldStyle}>
+        <label style={labelStyle}>Quantity *</label>
         <input
           type="number"
           name="quantity"
@@ -83,9 +110,45 @@ export function OrderForm({
           value={qty}
           onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
           required
-          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14, maxWidth: 120 }}
+          style={{ ...inputStyle, maxWidth: 120 }}
         />
       </div>
+
+      <fieldset style={{ border: "1px solid var(--dpf-border)", borderRadius: 6, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+        <legend style={{ fontSize: 12, color: "var(--dpf-muted)", padding: "0 4px" }}>Delivery address</legend>
+
+        <div style={fieldStyle}>
+          <label style={labelStyle}>Address line 1 *</label>
+          <input type="text" name="addrLine1" required style={inputStyle} placeholder="123 Main St" />
+        </div>
+
+        <div style={fieldStyle}>
+          <label style={labelStyle}>Address line 2</label>
+          <input type="text" name="addrLine2" style={inputStyle} placeholder="Apt, suite, unit…" />
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={fieldStyle}>
+            <label style={labelStyle}>City *</label>
+            <input type="text" name="addrCity" required style={inputStyle} />
+          </div>
+          <div style={fieldStyle}>
+            <label style={labelStyle}>State / County</label>
+            <input type="text" name="addrCounty" style={inputStyle} />
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={fieldStyle}>
+            <label style={labelStyle}>ZIP / Postcode *</label>
+            <input type="text" name="addrPostcode" required style={inputStyle} />
+          </div>
+          <div style={fieldStyle}>
+            <label style={labelStyle}>Country</label>
+            <input type="text" name="addrCountry" defaultValue="US" style={inputStyle} />
+          </div>
+        </div>
+      </fieldset>
 
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--dpf-text)", borderTop: "1px solid var(--dpf-border)", paddingTop: 12 }}>
         <span style={{ color: "var(--dpf-muted)" }}>

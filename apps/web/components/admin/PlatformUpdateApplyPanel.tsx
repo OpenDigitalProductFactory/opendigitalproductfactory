@@ -186,6 +186,25 @@ export function ApplyResult({ result }: { result: ApplyPlatformUpdateResult }) {
           </ul>
         </div>
       );
+    case "engine-retired":
+      // BI-5B6C1C35: the /workspace merge engine is retired. Point the operator
+      // at the canonical Self-Upgrade pipeline (governed-upgrade spec §5.0)
+      // rather than presenting this as a failure.
+      return (
+        <div
+          role="status"
+          style={{
+            marginTop: 14,
+            padding: 10,
+            border: "1px solid color-mix(in srgb, var(--dpf-accent) 40%, transparent)",
+            borderRadius: 4,
+            background: "color-mix(in srgb, var(--dpf-accent) 8%, transparent)",
+            fontSize: 13,
+          }}
+        >
+          <strong>Use Self-Upgrade.</strong> {result.message}
+        </div>
+      );
     case "no-update-pending":
     case "invalid-version":
     case "error":

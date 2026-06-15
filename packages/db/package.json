@@ -6,9 +6,11 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./sysml-model-seed": "./src/sysml-model-seed.ts",
     "./ea-validation": "./src/ea-validation.ts",
     "./neo4j-sync": "./src/neo4j-sync.ts",
     "./reference-model-projection": "./src/reference-model-projection.ts",
+    "./archetype-value-stream-projection": "./src/archetype-value-stream-projection.ts",
     "./discovery-attribution": "./src/discovery-attribution.ts",
     "./discovery-triage": "./src/discovery-triage.ts",
     "./discovery-triage-enums": "./src/discovery-triage-enums.ts",
@@ -43,21 +45,22 @@
     "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
+    "fflate": "^0.8.3",
     "i18n-iso-countries": "^7.14.0",
-    "neo4j-driver": "^6.0.1",
+    "neo4j-driver": "^6.1.0",
     "net-snmp": "^3.26.3",
     "pg": "^8.21.0",
-    "read-excel-file": "9.0.10",
-    "undici": "^8.3.0"
+    "read-excel-file": "9.2.0",
+    "undici": "^8.4.1"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
     "@types/picomatch": "^4.0.2",
     "picomatch": "^4.0.2",
     "prisma": "^7.8.0",
-    "tsx": "^4.22.3",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "vite": "^8.0.14",
-    "vitest": "^4.1.7"
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8"
   }
 }

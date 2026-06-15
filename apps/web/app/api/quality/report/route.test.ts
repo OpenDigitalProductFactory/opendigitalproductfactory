@@ -53,6 +53,29 @@ describe("POST /api/quality/report", () => {
     );
   });
 
+  it("forwards crash-boundary diagnostics (errorDigest, deployedSha) — BI-B4F401B3", async () => {
+    await POST(makeReq({
+      type: "runtime_error",
+      title: "Boom",
+      source: "crash_boundary",
+      errorDigest: "abc123digest",
+      deployedSha: "f002cd496f1e2e696deefedb8319a1e57e12df11",
+    }));
+    expect(writerMock.createPlatformIssueReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorDigest: "abc123digest",
+        deployedSha: "f002cd496f1e2e696deefedb8319a1e57e12df11",
+      }),
+    );
+  });
+
+  it("coerces non-string diagnostics to null", async () => {
+    await POST(makeReq({ type: "runtime_error", title: "Boom", errorDigest: 42, deployedSha: false }));
+    const args = writerMock.createPlatformIssueReport.mock.calls[0]?.[0];
+    expect(args?.errorDigest).toBeNull();
+    expect(args?.deployedSha).toBeNull();
+  });
+
   it("defaults source to manual when not provided", async () => {
     await POST(makeReq({ type: "user_report", title: "Hi" }));
     const args = writerMock.createPlatformIssueReport.mock.calls[0]?.[0];

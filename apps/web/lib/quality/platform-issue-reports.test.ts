@@ -9,6 +9,9 @@ const prismaMock = vi.hoisted(() => ({
 
 vi.mock("@dpf/db", () => ({ prisma: prismaMock }));
 
+const inngestMock = vi.hoisted(() => ({ send: vi.fn() }));
+vi.mock("@/lib/queue/inngest-client", () => ({ inngest: inngestMock }));
+
 import { createPlatformIssueReport } from "./platform-issue-reports";
 import { ISSUE_REPORT_STATUS } from "./issue-report-status";
 
@@ -18,6 +21,8 @@ beforeEach(() => {
   prismaMock.digitalProduct.findUnique.mockReset();
   prismaMock.platformIssueReport.create.mockResolvedValue({});
   prismaMock.digitalProduct.findUnique.mockResolvedValue({ id: "dp-portal" });
+  inngestMock.send.mockReset();
+  inngestMock.send.mockResolvedValue(undefined);
 });
 
 describe("createPlatformIssueReport", () => {
@@ -95,6 +100,39 @@ describe("createPlatformIssueReport", () => {
     });
     const createArgs = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
     expect(createArgs?.data.errorStack.length).toBe(20000);
+  });
+
+  it("persists crash-boundary diagnostics (errorDigest, deployedSha) — BI-B4F401B3", async () => {
+    await createPlatformIssueReport({
+      type: "runtime_error",
+      title: "Test",
+      source: "crash_boundary",
+      errorDigest: "abc123digest",
+      deployedSha: "f002cd496f1e2e696deefedb8319a1e57e12df11",
+    });
+    const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+    expect(args?.data.errorDigest).toBe("abc123digest");
+    expect(args?.data.deployedSha).toBe("f002cd496f1e2e696deefedb8319a1e57e12df11");
+  });
+
+  it("defaults errorDigest / deployedSha to null when absent", async () => {
+    await createPlatformIssueReport({ type: "user_report", title: "Test", source: "manual" });
+    const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+    expect(args?.data.errorDigest).toBeNull();
+    expect(args?.data.deployedSha).toBeNull();
+  });
+
+  it("truncates errorDigest (191) and deployedSha (64)", async () => {
+    await createPlatformIssueReport({
+      type: "runtime_error",
+      title: "Test",
+      source: "crash_boundary",
+      errorDigest: "x".repeat(300),
+      deployedSha: "y".repeat(100),
+    });
+    const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+    expect(args?.data.errorDigest.length).toBe(191);
+    expect(args?.data.deployedSha.length).toBe(64);
   });
 
   it("truncates routeContext, userAgent, type, source, severity", async () => {
@@ -193,5 +231,39 @@ describe("createPlatformIssueReport", () => {
       source: "manual",
     });
     expect(result).toEqual({ reportId: expect.stringMatching(/^PIR-/) });
+  });
+
+  // EP-INTAKE-UNIFY Phase 4 (BI-EDFBE081): immediate projection event.
+  it("emits quality/issue-report.created for an OPEN report", async () => {
+    const { reportId } = await createPlatformIssueReport({
+      type: "user_report",
+      title: "Test",
+      source: "manual",
+    });
+    expect(inngestMock.send).toHaveBeenCalledWith({
+      name: "quality/issue-report.created",
+      data: { reportId },
+    });
+  });
+
+  it("does NOT emit for a support-flow report (status != open)", async () => {
+    await createPlatformIssueReport({
+      type: "user_report",
+      title: "Test",
+      source: "manual",
+      supportSessionId: "sess-1",
+      status: ISSUE_REPORT_STATUS.SUPPORT_TRIAGE,
+    });
+    expect(inngestMock.send).not.toHaveBeenCalled();
+  });
+
+  it("is non-fatal when the projection event fails to send", async () => {
+    inngestMock.send.mockRejectedValueOnce(new Error("inngest down"));
+    const result = await createPlatformIssueReport({
+      type: "runtime_error",
+      title: "Test",
+      source: "crash_boundary",
+    });
+    expect(result.reportId).toMatch(/^PIR-/);
   });
 });

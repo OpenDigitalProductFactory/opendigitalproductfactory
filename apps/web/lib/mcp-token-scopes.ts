@@ -209,6 +209,7 @@ const DEVELOPMENT_TEMPLATE_GRANTS = [
 ] as const;
 
 const EMPLOYEE_FINANCE_TEMPLATE_GRANTS = [
+  "browser_drive",
   "financial_report_create",
   "registry_read",
   "document_read",

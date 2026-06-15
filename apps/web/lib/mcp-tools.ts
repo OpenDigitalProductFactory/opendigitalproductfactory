@@ -8,7 +8,7 @@ import { loadEnforceablePrinciples } from "@/lib/kernel/load-enforceable-princip
 import { detectSessionClass } from "@/lib/kernel/session-class";
 import { kernelGateDecisionsTotal } from "@/lib/operate/metrics";
 import * as crypto from "crypto";
-import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
 import { BACKLOG_SOURCE_VALUES, BACKLOG_STATUS_VALUES, BACKLOG_WORK_TYPE_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
 import {
@@ -17,9 +17,11 @@ import {
   searchPublicWeb,
 } from "@/lib/public-web-tools";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
+import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
 import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
+import { escalateReportUpstream } from "@/lib/actions/feedback-escalation";
 import {
   MARKETING_CHANNELS,
   MARKETING_REVIEW_CADENCE,
@@ -671,6 +673,92 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   // ─── Work Capsule control harness (spec 2026-05-14) ────────────────────────
   {
+    name: "workbook_list_tables",
+    description: "List the Workbook tables the agent can access (grid/spreadsheet data). Read-only. Pass workbookId to scope to one workbook.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workbookId: { type: "string", description: "Optional semantic workbook id (WB-*) to scope to." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_workbooks",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "workbook_get_schema",
+    description: "Get a Workbook table's column definitions and the agent's capabilities on it. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+      },
+      required: ["tableId"],
+    },
+    requiredCapability: "view_workbooks",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "workbook_query_rows",
+    description: "Query rows from a Workbook table with optional sort/filter and cursor pagination. Read-only. Cells are keyed by columnId (COL-*).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+        limit: { type: "number", description: "Max rows (default 50, max 200)." },
+        cursor: { type: "string", description: "Pagination cursor (rowId of the last row from the previous page)." },
+        sort: {
+          type: "array",
+          description: "Sort specs.",
+          items: {
+            type: "object",
+            properties: {
+              columnId: { type: "string" },
+              direction: { type: "string", enum: ["asc", "desc"] },
+            },
+          },
+        },
+      },
+      required: ["tableId"],
+    },
+    requiredCapability: "view_workbooks",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "workbook_create_row",
+    description: "Insert a new row into a custom Workbook table. cells is a map of columnId (COL-*) to value; values are validated against each column's field type.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+        cells: { type: "object", description: "Map of columnId -> value.", additionalProperties: true },
+      },
+      required: ["tableId"],
+    },
+    requiredCapability: "manage_workbooks",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "workbook_update_cells",
+    description: "Update specific cells in a Workbook row. cells is a map of columnId (COL-*) to new value, validated against each column's field type.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+        rowId: { type: "string", description: "Semantic row id (ROW-*)." },
+        cells: { type: "object", description: "Map of columnId -> new value.", additionalProperties: true },
+      },
+      required: ["tableId", "rowId"],
+    },
+    requiredCapability: "manage_workbooks",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
     name: "list_work_capsules",
     description: "List Work Capsule coordination records for active portal, Build Studio, and external agent work. Read-only.",
     inputSchema: {
@@ -1108,6 +1196,25 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "verify_live_install_readiness",
+    description:
+      "Preflight a feature against the live install before driving its happy path. Returns the same deterministic verdict as `pnpm verify:preflight` — CAN-TEST (served bytes contain the feature commit), MUST-ADVANCE (behind/unprovable → advance via the governed self-upgrade path), or BLOCKED (no testable runtime → file a BI and stop) — plus one next action. Surface-agnostic: identical verdict logic for CLI and in-portal/Build Studio. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        featureSha: {
+          type: "string",
+          description:
+            "The commit the feature under test requires — a PR/BI merge SHA or a build's commit. Compared against the live install's served image identity.",
+        },
+      },
+      required: ["featureSha"],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
     name: "record_execution_evidence",
     description: "Attach an evidence record to a backlog item (test pass/fail, build pass/fail, ux verification, spec review, manual check, external link). Writes an evidence activity row; the cross-cutting audit lives in ToolExecution. Side-effecting.",
     inputSchema: {
@@ -1140,11 +1247,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "record_external_development_evidence",
-    description: "Record Claude/Codex or other external development handoff evidence with optional Build Studio build/task links. Use for branches, commits, changed files, verification results, local integration output, unresolved questions, and skills used.",
+    description: "Record Claude, Codex, Grok or other external development handoff evidence with optional Build Studio build/task links. Use for branches, commits, changed files, verification results, local integration output, unresolved questions, and skills used.",
     inputSchema: {
       type: "object",
       properties: {
-        provider: { type: "string", description: "External development provider, for example codex or claude" },
+        provider: { type: "string", description: "External development provider, for example claude, codex, or grok" },
         externalSessionId: { type: "string", description: "External thread/session/capsule identifier" },
         buildId: { type: "string", description: "Optional FB-* build id" },
         taskRunId: { type: "string", description: "Optional TaskRun id" },
@@ -1185,7 +1292,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       type: "object",
       properties: {
         environmentKey: { type: "string", enum: ["active-candidate", "local-integration-ci"] },
-        ownerProvider: { type: "string", enum: ["build-studio", "claude", "codex", "coworker"] },
+        ownerProvider: { type: "string", enum: ["build-studio", "claude", "codex", "grok", "coworker"] },
         ownerSessionId: { type: "string" },
         purpose: { type: "string" },
         url: { type: "string" },
@@ -1225,7 +1332,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        provider: { type: "string", enum: ["build-studio", "claude", "codex", "coworker"] },
+        provider: { type: "string", enum: ["build-studio", "claude", "codex", "grok", "coworker"] },
         externalSessionId: { type: "string" },
         routeContext: { type: "string" },
         buildId: { type: "string" },
@@ -1310,6 +1417,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
       },
       required: ["type", "title"],
+    },
+    requiredCapability: null,
+    sideEffect: true,
+  },
+  {
+    name: "escalate_feedback_upstream",
+    description:
+      "Send a previously-captured platform issue report to the upstream project team as a GitHub issue, if this install has opted in to upstream feedback. Use after a user asks to share their report/feedback with the platform maintainers. Submitted under the install's anonymous handle with machine names redacted; respects opt-in consent, fork_only, and the contributions pause. Idempotent per report.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reportId: { type: "string", description: "The PlatformIssueReport id (e.g. PIR-AB12C) to escalate." },
+      },
+      required: ["reportId"],
     },
     requiredCapability: null,
     sideEffect: true,
@@ -1661,6 +1782,31 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "drive_browser_task",
+    description:
+      "Drive an authenticated browser to perform a bounded task on an auth-walled site (supplier portal, Substack, ad dashboard) that has no usable API. Picks the means by a governed decision, runs against a provisioned service-account profile (or the operator's attended session), and audits every action. Outward irreversible actions (publish/submit/send/order/configure) are NOT executed directly — they return awaiting-approval with an envelope the human approves first. Returns needs-provisioning when the site has no service-account profile yet (set one up in Service Account Browser Setup).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "Natural-language task for the browser, e.g. 'fill the newsletter draft title and body'." },
+        siteKey: { type: "string", description: "Site identifier selecting the provisioned profile, e.g. 'substack'." },
+        accountKey: { type: "string", description: "Account within the site. Defaults to 'default'." },
+        targetDomains: { type: "array", items: { type: "string" }, description: "Navigation allowlist; the session may only drive these domains." },
+        targetUrl: { type: "string", description: "Optional URL to open at." },
+        kind: { type: "string", enum: ["read", "act"], description: "read = extract data only; act = drive (default)." },
+        mode: { type: "string", enum: ["service-account", "operator-live"], description: "service-account (autonomous, default) or operator-live (attended)." },
+        outwardAction: { type: "string", enum: ["publish", "submit", "send", "order", "configure"], description: "Set ONLY when the task takes an outward irreversible action — gates an approval envelope instead of acting." },
+        renderedArtifact: { type: "object", description: "The exact payload the human approves at the destructive boundary (rendered post/form)." },
+        rationale: { type: "string", description: "Why this action — recorded on the approval envelope." },
+      },
+      required: ["task", "siteKey", "targetDomains"],
+    },
+    requiredCapability: null,
+    requiresExternalAccess: true,
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
     name: "extract_brand_design_system",
     description: "Kick off a background brand extraction for the organization. Reads any combination of a public website URL, the platform codebase, and uploaded brand assets, merges them into a BrandDesignSystem (palette, typography, component inventory, tokens), and writes the result to Organization.designSystem. Returns a taskRunId immediately; progress is streamed through the agent panel and the coworker re-surfaces with a summary when done. Use when the user asks to refresh the brand, build a design system, or analyze an existing site.",
     inputSchema: {
@@ -1999,6 +2145,21 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     annotations: { readOnlyHint: true, idempotentHint: true },
   },
   {
+    name: "verification_preflight",
+    description: "Deterministic verify-phase preflight (EP-VERIFY-PROC). Returns MUST_ADVANCE (evidence already sufficient — do not re-test), BLOCKED (a prerequisite is missing — report it, do not fabricate a result), or CAN_TEST (proceed to functional verification). Call this BEFORE attempting verification so testability is a procedural verdict, not a judgment call.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["build", "review"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
     name: "get_build_sandbox_state",
     description: "Read the source-bounded sandbox/git state for a Build Studio build, including branch, head SHA, source diffstat, ignored generated/dependency paths, and expected plan files.",
     inputSchema: {
@@ -2158,6 +2319,59 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       destructiveHint: true,
       idempotentHint: false,
     },
+  },
+  {
+    name: "reconcile_build_engines",
+    description: "Re-provision build engines that were provisioned on demand and are now missing from the sandbox (e.g. after a sandbox rebuild). Idempotent and narrow: only restores engines with desired=present AND a prior successful provision that a fresh probe reports absent — a no-op for fresh or baked-only sandboxes. Side-effecting (may run installs). Also fires automatically when start_sandbox brings a recreated sandbox to ready. Returns { checked, restored[], skipped }.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        offline: {
+          type: "boolean",
+          description: "When true, only use no-egress (prestaged-binary) recipes. Default false.",
+        },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review"],
+  },
+  {
+    name: "provision_build_engine",
+    description: "Install a build-dispatch engine (claude, codex, grok, opencode) into the running sandbox from its registry recipe, then verify by re-probing. Idempotent — a no-op if the engine is already present. Side-effecting: runs the install command (e.g. `npm install -g`, the grok curl-installer, or the opencode prestaged-binary/tarball) inside the sandbox, so it requires sandbox_execute. Pass offline:true to use only no-egress (prestaged-binary) recipes for air-gapped installs. Returns { kind, version, recipe }.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        engineId: { type: "string", description: "Engine to provision: 'claude' | 'codex' | 'grok' | 'opencode'." },
+        offline: {
+          type: "boolean",
+          description: "When true, only run no-egress (prestaged-binary) recipes (air-gapped install). Default false.",
+        },
+      },
+      required: ["engineId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review"],
+  },
+  {
+    name: "get_build_engine_readiness",
+    description: "Report whether each build-dispatch engine (claude, codex, grok, opencode) is present and healthy in the build sandbox. Returns per-engine { present, version, lastProbedAt, bakeInDefault } from the last probe (BuildEngineState). Pass refresh:true to live re-probe each engine (docker exec <verifyCommand>) and persist the fresh result. Use this to see engine readiness before selecting a build dispatch engine — e.g. an engine that is selectable but shows present:false would fail at runtime with 'not found'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        refresh: {
+          type: "boolean",
+          description: "When true, live re-probe each engine in the sandbox and persist the result before returning. Default false (return last known state).",
+        },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review"],
   },
   {
     name: "check_sandbox",
@@ -2348,6 +2562,31 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
     buildPhases: ["ship"],
+  },
+  // ─── Email setup (PBI-INV-04 Phase 2) ──────────────────────────────────
+  // Lets the onboarding/COO coworker walk a non-technical operator through
+  // configuring their OWN outbound email (SMTP). Operator-only
+  // (manage_provider_connections) + the `email_config` agent grant.
+  {
+    name: "setup_email",
+    description:
+      "Help the operator set up their OWN outbound email (SMTP) so the platform can send invoices, payment links, dunning, and approvals. Three actions: action='detect' identifies the provider from the organization's domain and returns the one credential the operator must obtain (e.g. a Google App Password); action='save' persists the SMTP settings the operator provides; action='test' sends a test email to confirm delivery. DPF never relays email on the operator's behalf — their own provider sends. Walk the operator through getting the credential in plain language before calling 'save'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["detect", "save", "test"], description: "detect | save | test" },
+        host: { type: "string", description: "SMTP host (save) — e.g. smtp.gmail.com" },
+        port: { type: "number", description: "SMTP port (save) — default 587 (STARTTLS) or 465 (implicit TLS)" },
+        secure: { type: "boolean", description: "Implicit TLS on port 465 (save)" },
+        user: { type: "string", description: "SMTP username (save) — usually the full email address" },
+        from: { type: "string", description: "From address (save) — e.g. 'Acme <billing@acme.com>'" },
+        pass: { type: "string", description: "SMTP password / app password / API key (save). Leave blank to keep the existing one." },
+        to: { type: "string", description: "Recipient for the test email (test)" },
+      },
+      required: ["action"],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
   },
   // ─── Admin Coworker Tools (TAK-ADMIN-001) ──────────────────────────────
   // These tools are available on the /admin route for platform administration.
@@ -2963,6 +3202,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       },
       required: ["providerId", "category"],
     },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
+  {
+    name: "grok_signin_start",
+    description: "Begin Grok (xAI) device-code OAuth sign-in for the build sandbox — the 'sign in with Google' alternative to an xAI API key. Runs `grok login --device-auth` in the sandbox and returns a verification URL + user code. Relay these to a human to authorize in their browser (Google / X / Apple), then call grok_signin_status to detect completion.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
+  {
+    name: "grok_signin_status",
+    description: "Check whether the Grok device-code sign-in started by grok_signin_start has been authorized. Returns status 'ok' (credential captured + xAI provider activated), 'pending' (still waiting for the human to authorize), or 'failed'.",
+    inputSchema: { type: "object", properties: {} },
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
   },
@@ -4244,7 +4497,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "summon_coworker",
     description:
-      "Bring a NAMED coworker into the current conversation as a second/third-tier participant to address a request, emitting a VISIBLE summon. Typically invoked on the user's behalf.",
+      "Bring a NAMED coworker into the current conversation as a second/third-tier participant to address part of the work, emitting a VISIBLE summon the user sees inline. YOU (the active coworker) decide which peer to bring in and what to task them with — this is your responsibility, not the user's. Use when a request needs a peer's distinct capability alongside you in the conversation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -4608,7 +4861,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
 
 export async function getAvailableTools(
   userContext: UserContext,
-  options?: { externalAccessEnabled?: boolean; mode?: "advise" | "act"; unifiedMode?: boolean; agentId?: string },
+  options?: {
+    externalAccessEnabled?: boolean;
+    mode?: "advise" | "act";
+    unifiedMode?: boolean;
+    agentId?: string;
+    /**
+     * Extra grants to union with the agent's own grants before tool gating.
+     * Used by the coworker path to apply COWORKER_READ_BASELINE_GRANTS so every
+     * coworker can read its page data, docs, source, and the code graph
+     * (BI-FD7E4D72). Read-only by construction; the user-capability check above
+     * still bounds what the human operator may see.
+     */
+    additionalGrants?: readonly string[];
+  },
 ): Promise<ToolDefinition[]> {
   let platformTools = PLATFORM_TOOLS.filter(
     (tool) =>
@@ -4620,9 +4886,19 @@ export async function getAvailableTools(
   // Agent-scoped filtering: intersection of user capabilities and agent tool grants.
   // EP-AI-WORKFORCE-001: use the async DB-first resolver so grants written via
   // the DB (e.g. via seed or Admin UI) take precedence over the JSON fallback.
+  const { getAgentToolGrantsAsync, isToolAllowedByGrants, getToolGrantMapping } =
+    await import("./agent-grants");
+  let agentGrants: string[] = [];
   if (options?.agentId) {
-    const { getAgentToolGrantsAsync, isToolAllowedByGrants } = await import("./agent-grants");
-    const agentGrants = await getAgentToolGrantsAsync(options.agentId);
+    agentGrants = await getAgentToolGrantsAsync(options.agentId);
+    // Union the agent's own grants with any baseline read grants (the coworker
+    // path passes COWORKER_READ_BASELINE_GRANTS). Done here so the merged set is
+    // also used by the discovered-MCP-tool gating below. The merge only widens
+    // toward read-only tools; agents that hold no grants AND get no baseline are
+    // left ungated exactly as before (length-0 → no filtering).
+    if (options.additionalGrants?.length) {
+      agentGrants = Array.from(new Set([...agentGrants, ...options.additionalGrants]));
+    }
     if (agentGrants.length > 0) {
       platformTools = platformTools.filter((tool) => isToolAllowedByGrants(tool.name, agentGrants));
     }
@@ -4632,8 +4908,22 @@ export async function getAvailableTools(
     try {
       const { getMcpServerTools } = await import("./mcp-server-tools");
       const mcpTools = await getMcpServerTools();
-      const filtered = options?.mode === "advise" ? [] : mcpTools;
-      return [...platformTools, ...filtered];
+      const modeFiltered = options?.mode === "advise" ? [] : mcpTools;
+      // Grant-gate discovered MCP tools, closing the Verdict 5 authority gap
+      // (EP-BROWSER-DRIVE, spec 2026-06-05 §8.2). Previously every discovered
+      // MCP tool was appended ungated whenever External Access was on — so a
+      // side-effecting browser tool was ambiently callable. Now a discovered
+      // tool that carries a TOOL_TO_GRANTS entry (the namespaced browser-driving
+      // tools) is denied unless the agent holds the grant; this denies them even
+      // for an agent with no grants at all (empty agentGrants → false). Discovered
+      // tools WITHOUT a mapping retain prior behavior so other MCP servers are not
+      // regressed — tightening those to default-deny is tracked separately
+      // (architect review Slice 0 item 4, the discovered-tool policy overlay).
+      const grantMap = getToolGrantMapping();
+      const grantFiltered = modeFiltered.filter((tool) =>
+        grantMap[tool.name] ? isToolAllowedByGrants(tool.name, agentGrants) : true,
+      );
+      return [...platformTools, ...grantFiltered];
     } catch {
       // MCP server tools unavailable — return platform tools only
     }
@@ -5026,6 +5316,26 @@ export async function executeTool(
     case "deliberate_on": {
       return deliberateOnMcpHandler(params, userId, context);
     }
+    case "workbook_list_tables": {
+      const { workbookListTablesTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookListTablesTool(params, userId);
+    }
+    case "workbook_get_schema": {
+      const { workbookGetSchemaTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookGetSchemaTool(params, userId);
+    }
+    case "workbook_query_rows": {
+      const { workbookQueryRowsTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookQueryRowsTool(params, userId);
+    }
+    case "workbook_create_row": {
+      const { workbookCreateRowTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookCreateRowTool(params, userId);
+    }
+    case "workbook_update_cells": {
+      const { workbookUpdateCellsTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookUpdateCellsTool(params, userId);
+    }
     case "list_work_capsules": {
       const { listWorkCapsulesTool } = await import("@/lib/work-capsules/mcp-handlers");
       return listWorkCapsulesTool(params);
@@ -5223,6 +5533,7 @@ export async function executeTool(
             targetAgent,
             objective,
             tier: tierParam === 3 ? 3 : 2,
+            callerAgentId: context.agentId ?? null,
             routeContext: context.routeContext,
           },
           userId,
@@ -5238,107 +5549,54 @@ export async function executeTool(
       }
     }
     case "create_backlog_item": {
-      const itemId = typeof params["itemId"] === "string" && params["itemId"].trim()
-        ? params["itemId"].trim()
-        : `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const status = typeof params["status"] === "string" ? params["status"] : "triaging";
-      const triageOutcome = typeof params["triageOutcome"] === "string" ? params["triageOutcome"] : null;
-      // workType is required by the tool schema; default to "feature" defensively
-      // so a missing payload field surfaces as a Prisma validation error rather
-      // than a silent insert with workType=NULL.
-      const workType = typeof params["workType"] === "string" ? params["workType"] : null;
-      // source defaults to "user-request" (the MCP tool is human-driven by
-      // contract — agents calling it on behalf of an operator are forwarding a
-      // human request).
-      const source = typeof params["source"] === "string" ? params["source"] : "user-request";
-      const proposedOutcome = typeof params["proposedOutcome"] === "string" ? params["proposedOutcome"] : null;
-      const effortSize = typeof params["effortSize"] === "string" ? params["effortSize"] : null;
-      const priority = typeof params["priority"] === "number" ? params["priority"] : null;
+      // Converged onto the shared backlog-ingest front door (EP-INTAKE-UNIFY):
+      // one validation + create + semantic-index + epic-resolve path, shared
+      // with every detector/queue. This MCP boundary preserves its structured
+      // {success:false} contract by catching the front door's validation throws.
+      const ingestInput = {
+        title: String(params["title"] ?? "Untitled"),
+        // Historical default for the MCP tool is product (ownership axis).
+        type: params["type"] === "portfolio" ? "portfolio" : "product",
+        workType: typeof params["workType"] === "string" ? params["workType"] : "",
+        // The MCP tool is human-driven by contract; default origin = user-request.
+        source: typeof params["source"] === "string" ? params["source"] : "user-request",
+        status: typeof params["status"] === "string" ? params["status"] : "triaging",
+        triageOutcome: typeof params["triageOutcome"] === "string" ? params["triageOutcome"] : undefined,
+        proposedOutcome: typeof params["proposedOutcome"] === "string" ? params["proposedOutcome"] : undefined,
+        effortSize: typeof params["effortSize"] === "string" ? params["effortSize"] : undefined,
+        priority: typeof params["priority"] === "number" ? params["priority"] : undefined,
+        body: typeof params["body"] === "string" ? params["body"] : undefined,
+        itemId:
+          typeof params["itemId"] === "string" && params["itemId"].trim()
+            ? params["itemId"].trim()
+            : undefined,
+        epicId:
+          typeof params["epicId"] === "string" && params["epicId"].trim()
+            ? params["epicId"].trim()
+            : undefined,
+        submittedById: userId,
+        agentId: context?.agentId ?? null,
+      } as unknown as BacklogIngestInput;
 
-      if (!workType) {
-        return {
-          success: false,
-          error: "workType is required",
-          message: "workType is required (bug | feature | chore | doc | tool | skill | refactor).",
-        };
+      try {
+        const { ingestBacklogItem } = await import("@/lib/operate/backlog-ingest");
+        const result = await ingestBacklogItem(ingestInput);
+        if (context?.routeContext === "/build") {
+          await updateBuildHappyPathState(userId, {
+            intake: {
+              backlogItemId: result.itemId,
+              epicId: typeof params["epicId"] === "string" ? params["epicId"] : null,
+            },
+          });
+        }
+        return { success: true, entityId: result.itemId, message: `Created backlog item ${result.itemId}` };
+      } catch (err) {
+        const msg =
+          err instanceof Error
+            ? err.message.replace(/^\[backlog-ingest\]\s*/, "")
+            : "Failed to create backlog item";
+        return { success: false, error: msg, message: msg };
       }
-
-      // Validate the status / triageOutcome pairing rule from the tool description:
-      // "supply status+triageOutcome together only when explicitly skipping triage"
-      // Concretely: status=triaging requires no triageOutcome; any other status requires one.
-      if (status !== "triaging" && !triageOutcome) {
-        return {
-          success: false,
-          error: "triageOutcome is required when status is not 'triaging'",
-          message: "When skipping triage (status='open' or 'in-progress'), pass triageOutcome to record the decision. Otherwise omit status to default to 'triaging'.",
-        };
-      }
-      if (status === "triaging" && triageOutcome) {
-        return {
-          success: false,
-          error: "triageOutcome must not be set when status='triaging'",
-          message: "Items in triaging status have not been triaged yet. Use triage_backlog_item to set triageOutcome.",
-        };
-      }
-      // When triageOutcome=build, effortSize is required (matches triage_backlog_item rules
-      // so the ready-for-build pool is consistently sized).
-      if (triageOutcome === "build" && !effortSize) {
-        return {
-          success: false,
-          error: "effortSize is required when triageOutcome='build'",
-          message: "Build-bound items must declare effortSize ('small'|'medium'|'large'|'xlarge').",
-        };
-      }
-
-      // BacklogItem.epicId is a FK to Epic.id (cuid). Agents typically pass
-      // the semantic epicId ("EP-..."), so resolve to cuid before inserting.
-      let epicCuid: string | null = null;
-      if (typeof params["epicId"] === "string" && params["epicId"].trim()) {
-        const raw = params["epicId"].trim();
-        const epicRow = await prisma.epic.findFirst({
-          where: { OR: [{ epicId: raw }, { id: raw }] },
-          select: { id: true },
-        });
-        epicCuid = epicRow?.id ?? null;
-      }
-
-      const item = await prisma.backlogItem.create({
-        data: {
-          itemId,
-          title: String(params["title"] ?? "Untitled"),
-          type: String(params["type"] ?? "product"),
-          status,
-          submittedById: userId,
-          agentId: context?.agentId ?? null,
-          ...(status === "done" ? { completedAt: new Date() } : {}),
-          ...(typeof params["body"] === "string" ? { body: params["body"] } : {}),
-          ...(epicCuid ? { epicId: epicCuid } : {}),
-          workType,
-          source,
-          ...(triageOutcome ? { triageOutcome } : {}),
-          ...(proposedOutcome ? { proposedOutcome } : {}),
-          ...(effortSize ? { effortSize } : {}),
-          ...(priority !== null ? { priority } : {}),
-        },
-      });
-      // Index in platform knowledge for semantic search
-      import("@/lib/semantic-memory").then(({ storePlatformKnowledge }) =>
-        storePlatformKnowledge({
-          entityId: item.itemId,
-          entityType: "backlog",
-          title: String(params["title"] ?? ""),
-          content: String(params["body"] ?? ""),
-        })
-      ).catch(() => {});
-      if (context?.routeContext === "/build") {
-        await updateBuildHappyPathState(userId, {
-          intake: {
-            backlogItemId: item.itemId,
-            epicId: typeof params["epicId"] === "string" ? params["epicId"] : null,
-          },
-        });
-      }
-      return { success: true, entityId: item.itemId, message: `Created backlog item ${item.itemId}` };
     }
 
     case "triage_backlog_item": {
@@ -5523,6 +5781,20 @@ export async function executeTool(
         select: { governedBacklogEnabled: true },
       });
       const governedBacklogEnabled = governedConfig?.governedBacklogEnabled === true;
+
+      // WIP cap (shared with the createFeatureBuild start path): refuse to
+      // promote another build into Build Studio while too many are unfinished.
+      {
+        const { wipCapReached, BUILD_WIP_CAP, BuildWipCapError, TERMINAL_BUILD_PHASES } =
+          await import("@/lib/build/wip-cap");
+        const activeBuilds = await prisma.featureBuild.count({
+          where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
+        });
+        if (wipCapReached(activeBuilds)) {
+          const err = new BuildWipCapError(activeBuilds, BUILD_WIP_CAP);
+          return { success: false, error: "wip_cap_reached", message: err.message };
+        }
+      }
 
       const result = await prisma.$transaction(async (tx) => {
         return promoteBacklogItemToBuildDraft({
@@ -6290,6 +6562,23 @@ export async function executeTool(
       };
     }
 
+    case "verify_live_install_readiness": {
+      const featureSha = String(params["featureSha"] ?? "").trim();
+      if (!featureSha)
+        return {
+          success: false,
+          error: "missing_feature_sha",
+          message: "featureSha is required (a PR/BI merge SHA or a build's commit).",
+        };
+      const { resolveLiveInstallReadiness } = await import("@/lib/verify/preflight-service");
+      const verdict = await resolveLiveInstallReadiness({ featureSha });
+      return {
+        success: true,
+        message: `${verdict.verdict}: ${verdict.reason}`,
+        data: verdict,
+      };
+    }
+
     case "record_execution_evidence": {
       const itemIdRaw = String(params["itemId"] ?? "").trim();
       const kindRaw = String(params["kind"] ?? "");
@@ -6823,6 +7112,27 @@ export async function executeTool(
       return { success: true, entityId: reportId, message: `Filed report ${reportId}` };
     }
 
+    case "escalate_feedback_upstream": {
+      const reportId = String(params["reportId"] ?? "").trim();
+      if (!reportId) {
+        return { success: false, error: "reportId is required", message: "reportId is required" };
+      }
+      const result = await escalateReportUpstream({ reportId });
+      if (result.ok) {
+        return {
+          success: true,
+          ...(result.status === "filed" || result.status === "already-filed"
+            ? { entityId: String(result.issueNumber ?? reportId) }
+            : {}),
+          message:
+            result.status === "already-filed"
+              ? `Report ${reportId} was already sent to the project team${result.url ? ` (${result.url})` : ""}.`
+              : `Sent ${reportId} to the project team${result.url ? ` (${result.url})` : ""}.`,
+        };
+      }
+      return { success: false, error: result.reason, message: result.reason };
+    }
+
     case "search_public_web": {
       const query = String(params["query"] ?? "").trim();
       let results: Awaited<ReturnType<typeof searchPublicWeb>>;
@@ -6870,6 +7180,42 @@ export async function executeTool(
         success: true,
         message: `Fetched ${evidence.finalUrl}${evidence.title ? ` (${evidence.title})` : ""}.`,
         data: evidence,
+      };
+    }
+
+    case "drive_browser_task": {
+      // Dynamic import: drive → select-means → mcp-tools forms a static cycle;
+      // importing here breaks it (same pattern as agent-grants / mcp-server-tools).
+      const { driveBrowserTask } = await import("./browser-drive/drive");
+      const { isDestructiveBrowserAction } = await import("./browser-drive/envelope");
+      const outward = String(params["outwardAction"] ?? "");
+      const result = await driveBrowserTask({
+        task: String(params["task"] ?? ""),
+        siteKey: String(params["siteKey"] ?? ""),
+        accountKey: typeof params["accountKey"] === "string" ? (params["accountKey"] as string) : undefined,
+        targetDomains: Array.isArray(params["targetDomains"]) ? (params["targetDomains"] as unknown[]).map(String) : [],
+        targetUrl: typeof params["targetUrl"] === "string" ? (params["targetUrl"] as string) : undefined,
+        kind: params["kind"] === "read" ? "read" : "act",
+        mode: params["mode"] === "operator-live" ? "operator-live" : "service-account",
+        outwardAction: isDestructiveBrowserAction(outward) ? outward : undefined,
+        renderedArtifact: params["renderedArtifact"],
+        rationale: typeof params["rationale"] === "string" ? (params["rationale"] as string) : undefined,
+        agentId: context?.agentId?.trim() || "coworker",
+        threadId: context?.threadId?.trim() || "",
+        userId,
+      });
+      const messages: Record<string, string> = {
+        completed: "Browser task completed.",
+        "awaiting-approval": "Rendered the action for your approval — it will run once you approve the envelope.",
+        "needs-provisioning": `No service-account profile for "${String(params["siteKey"] ?? "")}" yet. Set one up in Service Account Browser Setup.`,
+        "needs-human": "The means selector wasn't confident — needs a human decision.",
+        blocked: "Blocked.",
+        error: "Browser task failed.",
+      };
+      return {
+        success: result.status === "completed" || result.status === "awaiting-approval",
+        message: messages[result.status] ?? result.status,
+        data: result,
       };
     }
 
@@ -7494,6 +7840,34 @@ export async function executeTool(
       };
     }
 
+    case "verification_preflight": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const build = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { phase: true, acceptanceMet: true, verificationOut: true, buildExecState: true },
+      });
+      if (!build) return { success: false, error: "Build not found", message: `Build ${buildId} was not found.` };
+      const { verificationPreflight, gatherPreflightSignals, preflightDirective } = await import(
+        "@/lib/build/verification-preflight"
+      );
+      // The portal serving this tool is up (installHealthy) and its DB is reachable
+      // (this row just loaded). Sandbox/quiescence probes are a follow-up refinement;
+      // for now they default healthy so the verdict turns on evidence + artifact.
+      const signals = gatherPreflightSignals(build, {
+        installHealthy: true,
+        requiredServicesHealthy: true,
+        explicitBlocker: null,
+      });
+      const result = verificationPreflight(signals);
+      return {
+        success: true,
+        entityId: buildId,
+        message: preflightDirective(result),
+        data: { verdict: result.verdict, reason: result.reason, blocker: result.blocker },
+      };
+    }
+
     case "get_build_sandbox_state": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
@@ -7909,7 +8283,7 @@ export async function executeTool(
       }
 
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
-      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
+      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
       const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
       // BI-CE49D82E — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
@@ -7997,7 +8371,11 @@ export async function executeTool(
       // have already seen the signal in passing.
       const { sizeDesignDoc } = await import("@/lib/build/size-design-doc");
       const sizeAssessment = sizeDesignDoc(build.designDoc as Parameters<typeof sizeDesignDoc>[0]);
-      const reviewWithSize = { ...review, sizeAssessment };
+      // Preserve the individual reviewer verdicts (pre-merge) so the Review-phase
+      // UI can show which named reviewer cleared vs flagged. Nested on the JSON
+      // column — no migration. Same r1/r2/archReview the deliberation trail uses.
+      const reviewers = collectReviewerVerdicts(r1, r2, archReview);
+      const reviewWithSize = { ...review, sizeAssessment, ...(reviewers.length > 0 ? { reviewers } : {}) };
       await prisma.featureBuild.update({ where: { buildId }, data: { designReview: reviewWithSize as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
@@ -8319,7 +8697,7 @@ export async function executeTool(
       // BI-4396EFEC (D38) — also load the prior planReview so we can pass
       // its issues to the reviewer prompt for delta-awareness and compute
       // the iteration trajectory for the operator-facing chip.
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true, planReview: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true, planReview: true, kind: true } });
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
       const priorPlanReview = (build.planReview ?? null) as
         | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
@@ -8354,7 +8732,7 @@ export async function executeTool(
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
-      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
+      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews, applyTestFirstLenienceForKind, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
       // BI-4396EFEC (D38) — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
       // ReviewResult.iteration on the output. Round is 1-based: first
@@ -8402,11 +8780,17 @@ export async function executeTool(
       const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
         ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the plan before building — they do not block this gate.`
         : "";
-      const mergedReview = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
+      const rawMergedReview = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
+      // Deterministic kind-aware lenience: a chore/fix/docs build must not be
+      // blocked by a reviewer's missing-test-first complaint (test-first is a
+      // feature-grade gate). Enforced in code so it does not depend on the
+      // reviewer model honoring the rubric's prose exemption — the local model
+      // in particular over-applies TDD to comment/chore tasks.
+      const mergedReview = applyTestFirstLenienceForKind(rawMergedReview, build.kind);
       // BI-4396EFEC (D38) — Compute the iteration delta against the prior
       // round and attach to the ReviewResult. computeReviewDelta + isOscillating
       // live in feature-build-types so they're independently unit-testable.
@@ -8429,7 +8813,10 @@ export async function executeTool(
       const review = architectureAdvisory
         ? { ...reviewWithIteration, architectureAdvisory }
         : reviewWithIteration;
-      await prisma.featureBuild.update({ where: { buildId }, data: { planReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+      // Preserve individual reviewer verdicts (pre-merge) for the Review-phase UI.
+      const reviewers = collectReviewerVerdicts(r1, r2, archReview);
+      const planReviewToPersist = reviewers.length > 0 ? { ...review, reviewers } : review;
+      await prisma.featureBuild.update({ where: { buildId }, data: { planReview: planReviewToPersist as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
       logBuildActivity(buildId, "reviewBuildPlan", `Plan review: ${review.decision}. ${review.summary}`);
@@ -8661,6 +9048,120 @@ export async function executeTool(
       });
     }
 
+    case "reconcile_build_engines": {
+      const offline = params["offline"] === true;
+      const { reconcileBuildEngines } = await import("@/lib/integrate/build-engine-reconcile");
+      const summary = await reconcileBuildEngines({ offline, actorUserId: userId });
+      return {
+        success: true,
+        message:
+          summary.restored.length === 0
+            ? `No engines needed restoring (checked ${summary.checked}, skipped ${summary.skipped}).`
+            : `Restored ${summary.restored.length} engine(s): ${summary.restored
+                .map((r) => `${r.engineId} (${r.outcome})`)
+                .join(", ")}.`,
+        data: summary,
+      };
+    }
+
+    case "provision_build_engine": {
+      const engineId = optionalString(params["engineId"]);
+      if (!engineId) {
+        return {
+          success: false,
+          error: "engineId is required.",
+          message: "Provide engineId — one of 'claude', 'codex', 'grok'.",
+        };
+      }
+      const offline = params["offline"] === true;
+      const { provisionBuildEngine } = await import("@/lib/integrate/build-engine-provision");
+      const outcome = await provisionBuildEngine(engineId, { offline, actorUserId: userId });
+      const ok = outcome.kind === "provisioned" || outcome.kind === "already-present";
+      const message =
+        outcome.kind === "provisioned"
+          ? `Provisioned ${engineId}${outcome.version ? ` v${outcome.version}` : ""} via ${outcome.recipe}; verified present in the sandbox.`
+          : outcome.kind === "already-present"
+            ? `${engineId} is already installed in the sandbox${outcome.version ? ` (v${outcome.version})` : ""}.`
+            : outcome.kind === "no-recipe"
+              ? `Cannot provision ${engineId}: ${outcome.reason}.`
+              : outcome.kind === "verify-failed"
+                ? `Ran the ${outcome.recipe} recipe for ${engineId} but it is still not present: ${outcome.error}`
+                : `Failed to provision ${engineId}: ${outcome.error}`;
+      return { success: ok, message, data: outcome };
+    }
+
+    case "get_build_engine_readiness": {
+      const refresh = params["refresh"] === true;
+      const engines = await prisma.buildEngine.findMany({
+        select: {
+          engineId: true,
+          binary: true,
+          verifyCommand: true,
+          versionRegex: true,
+          bakeInDefault: true,
+          state: { select: { present: true, version: true, lastProbedAt: true } },
+        },
+        orderBy: { engineId: "asc" },
+      });
+
+      type EngineReadinessRow = {
+        engineId: string;
+        binary: string;
+        bakeInDefault: boolean;
+        present: boolean | null;
+        version: string | null;
+        lastProbedAt: string | null;
+      };
+
+      let readiness: EngineReadinessRow[] = engines.map((e) => ({
+        engineId: e.engineId,
+        binary: e.binary,
+        bakeInDefault: e.bakeInDefault,
+        present: e.state?.present ?? null,
+        version: e.state?.version ?? null,
+        lastProbedAt: e.state?.lastProbedAt ? e.state.lastProbedAt.toISOString() : null,
+      }));
+
+      if (refresh) {
+        const { probeEngineReadiness } = await import(
+          "@/lib/routing/capability-probes/probe-engine-readiness"
+        );
+        const { persistEngineReadiness } = await import("@/lib/routing/persist-engine-readiness");
+        readiness = await Promise.all(
+          engines.map(async (e): Promise<EngineReadinessRow> => {
+            const r = await probeEngineReadiness({
+              engineId: e.engineId,
+              binary: e.binary,
+              verifyCommand: e.verifyCommand,
+              versionRegex: e.versionRegex,
+            });
+            await persistEngineReadiness(r).catch(() => undefined);
+            return {
+              engineId: e.engineId,
+              binary: e.binary,
+              bakeInDefault: e.bakeInDefault,
+              present: r.present,
+              version: r.version,
+              lastProbedAt: r.probedAt,
+            };
+          }),
+        );
+      }
+
+      const present = readiness.filter((r) => r.present === true).map((r) => r.engineId);
+      const absent = readiness.filter((r) => r.present === false).map((r) => r.engineId);
+      const unknown = readiness.filter((r) => r.present === null).map((r) => r.engineId);
+
+      return {
+        success: true,
+        message:
+          engines.length === 0
+            ? "No build engines registered yet. Run sync-engine-registry to populate the BuildEngine catalog from build-engines.json."
+            : `Build engines — present: ${present.join(", ") || "none"}; not installed: ${absent.join(", ") || "none"}; never probed: ${unknown.join(", ") || "none"}.${refresh ? " (live re-probe)" : " (last known state — pass refresh:true to re-probe)"}`,
+        data: { engines: readiness, refreshed: refresh },
+      };
+    }
+
     case "diagnose_sandbox": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
@@ -8771,6 +9272,13 @@ export async function executeTool(
           try {
             const { stdout } = await execAsync(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout: 3_000 });
             if (stdout.trim() === "running") {
+              // Auto-replay (EP-2D477458 Phase 3): a freshly (re)started sandbox
+              // may have lost any on-demand-provisioned engine. Restore desired,
+              // previously-provisioned, now-absent engines in the background —
+              // a no-op for fresh or baked-only sandboxes.
+              void import("@/lib/integrate/build-engine-reconcile")
+                .then((m) => m.reconcileBuildEngines({ actorUserId: userId }))
+                .catch(() => undefined);
               return { success: true, message: `Sandbox (${sandboxId}) started successfully and is ready.`, data: { status: "running" } };
             }
           } catch { /* keep waiting */ }
@@ -9332,7 +9840,7 @@ export async function executeTool(
           const { readFile } = lazyFsPromises();
           const root = process.env.PROJECT_ROOT
             ? resolve(process.env.PROJECT_ROOT)
-            : resolve(process.cwd(), "..", "..");
+            : resolve(getCwd(), "..", "..");
           return await readFile(resolve(root, "packages/db/prisma/schema.prisma"), "utf-8");
         } catch {
           return null;
@@ -11530,12 +12038,13 @@ export async function executeTool(
         }
       }
 
+      const category = String(params["category"] ?? "missing_feature");
       const proposal = await prisma.improvementProposal.create({
         data: {
           proposalId,
           title: String(params["title"] ?? "Untitled improvement"),
           description: String(params["description"] ?? ""),
-          category: String(params["category"] ?? "missing_feature"),
+          category,
           severity: String(params["severity"] ?? "medium"),
           observedFriction: typeof params["observedFriction"] === "string" ? params["observedFriction"] : null,
           conversationExcerpt,
@@ -11545,20 +12054,63 @@ export async function executeTool(
           threadId: context?.threadId ?? null,
         },
       });
+
+      // Consolidation (EP-INTAKE-UNIFY / BI-7541AB88): file the work into the
+      // backlog the moment the proposal exists, so it is visible and triageable
+      // without the old manual Review→Prioritize promotion that never happened.
+      // The proposal stays the evidence record; the BacklogItem is the work.
+      let backlogItemId: string | null = null;
+      try {
+        const { ingestBacklogItem, improvementCategoryToWorkType } = await import(
+          "@/lib/operate/backlog-ingest"
+        );
+        const ingest = await ingestBacklogItem({
+          title: proposal.title,
+          body: [
+            proposal.description,
+            proposal.observedFriction ? `Observed friction: ${proposal.observedFriction}` : null,
+            `Category: ${category} | Severity: ${proposal.severity}`,
+            `From improvement proposal ${proposal.proposalId}`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          workType: improvementCategoryToWorkType(category),
+          source: "automated-detection",
+          itemIdPrefix: "IMP",
+          submittedById: userId,
+          agentId: context?.agentId ?? null,
+          origin: { kind: "improvement", id: proposal.proposalId },
+        });
+        backlogItemId = ingest.itemId;
+        await prisma.improvementProposal.update({
+          where: { proposalId: proposal.proposalId },
+          data: { backlogItemId },
+        });
+      } catch (err) {
+        // Non-fatal: the proposal is still recorded even if the backlog projection fails.
+        console.error("[propose_improvement] backlog auto-file failed", err);
+      }
+
+      // Index the proposal in platform knowledge (was previously unreachable
+      // dead code after the return).
+      import("@/lib/semantic-memory")
+        .then(({ storePlatformKnowledge }) =>
+          storePlatformKnowledge({
+            entityId: proposal.proposalId,
+            entityType: "improvement",
+            title: proposal.title,
+            content: String(params["description"] ?? ""),
+          }),
+        )
+        .catch(() => {});
+
       return {
         success: true,
         entityId: proposal.proposalId,
-        message: `Improvement proposal ${proposal.proposalId} created: "${proposal.title}". It will be reviewed by a manager.`,
+        message: backlogItemId
+          ? `Improvement proposal ${proposal.proposalId} created and filed to the backlog as ${backlogItemId} for triage.`
+          : `Improvement proposal ${proposal.proposalId} created: "${proposal.title}".`,
       };
-      // Index in platform knowledge
-      import("@/lib/semantic-memory").then(({ storePlatformKnowledge }) =>
-        storePlatformKnowledge({
-          entityId: proposal.proposalId,
-          entityType: "improvement",
-          title: proposal.title,
-          content: String(params["description"] ?? ""),
-        })
-      ).catch(() => {});
     }
 
     case "propose_skill_improvement": {
@@ -11656,6 +12208,40 @@ export async function executeTool(
         entityId: providerId,
         message: `Provider "${provider.name}" category updated to "${category}".`,
       };
+    }
+
+    case "grok_signin_start": {
+      const { grokDeviceLoginStart } = await import("@/lib/integrate/grok-device-login-core");
+      const result = await grokDeviceLoginStart();
+      if ("error" in result) {
+        return { success: false, error: "device_login_failed", message: result.error };
+      }
+      return {
+        success: true,
+        message: `Grok sign-in started. Ask the operator to open ${result.verificationUrl}${result.userCode ? ` and confirm the code ${result.userCode}` : ""}, then call grok_signin_status to detect completion.`,
+        data: { verificationUrl: result.verificationUrl, userCode: result.userCode },
+      };
+    }
+
+    case "grok_signin_status": {
+      const { grokDeviceLoginComplete } = await import("@/lib/integrate/grok-device-login-core");
+      const result = await grokDeviceLoginComplete();
+      if (result.status === "ok") {
+        return {
+          success: true,
+          entityId: "xai",
+          message: "Grok is connected — the xAI credential was captured and the provider activated. Build Studio can now dispatch to the grok engine via OAuth.",
+          data: { status: "ok" },
+        };
+      }
+      if (result.status === "pending") {
+        return {
+          success: true,
+          message: "Still waiting for the operator to authorize the Grok sign-in. Poll grok_signin_status again shortly.",
+          data: { status: "pending" },
+        };
+      }
+      return { success: false, error: "device_login_failed", message: `Grok sign-in failed: ${result.detail}`, data: { status: "failed" } };
     }
 
     case "analyze_brand_document": {
@@ -12573,9 +13159,11 @@ export async function executeTool(
       // rather than pulling in the seed module.
       const kernelVersion = await (async () => {
         try {
-          const fs = await import("fs/promises");
-          const path = await import("path");
-          const manifestPath = path.join(process.cwd(), "docs", "founder-kernel", "manifest.json");
+          const fsId = "fs/promises";
+          const fs = await import(fsId);
+          const pathId = "path";
+          const path = await import(pathId);
+          const manifestPath = path.join(getCwd(), "docs", "founder-kernel", "manifest.json");
           const raw = await fs.readFile(manifestPath, "utf8");
           return (JSON.parse(raw) as { kernelVersion?: string }).kernelVersion ?? "0.0.0";
         } catch {
@@ -12688,10 +13276,12 @@ export async function executeTool(
       // Pull kernel version from the manifest for the audit row.
       const kernelVersion = await (async () => {
         try {
-          const fs = await import("fs/promises");
-          const path = await import("path");
+          const fsId = "fs/promises";
+          const fs = await import(fsId);
+          const pathId = "path";
+          const path = await import(pathId);
           const manifestPath = path.join(
-            process.cwd(),
+            getCwd(),
             "docs",
             "founder-kernel",
             "manifest.json",
@@ -13205,7 +13795,7 @@ export async function executeTool(
       return {
         success: true,
         entityId: result.assessmentId,
-        message: `Submitted ${result.needIds.length} capability need${result.needIds.length === 1 ? "" : "s"} for review.`,
+        message: `Submitted ${result.needIds.length} capability need${result.needIds.length === 1 ? "" : "s"} and filed ${result.backlogItemIds?.length ?? 0} to the backlog for triage.`,
         data: result,
       };
     }
@@ -13863,6 +14453,10 @@ export async function executeTool(
       const result = await applyPlatformUpdate();
 
       switch (result.kind) {
+        case "engine-retired":
+          // BI-5B6C1C35: the /workspace merge engine is retired; the install
+          // advances only via the Self-Upgrade pipeline (governed-upgrade §5.0).
+          return { success: false, message: result.message, error: "Engine retired — use Self-Upgrade" };
         case "no-update-pending":
           return { success: false, message: result.message, error: "No update pending" };
         case "invalid-version":
@@ -14512,6 +15106,27 @@ export async function executeTool(
       };
     }
 
+    // ─── Email setup (PBI-INV-04 Phase 2) ───────────────────────────────
+    case "setup_email": {
+      const { runEmailSetupTool } = await import("./shared/email-setup-tool");
+      const result = await runEmailSetupTool({
+        action: String(params.action ?? "") as "detect" | "save" | "test",
+        host: typeof params.host === "string" ? params.host : undefined,
+        port: typeof params.port === "number" ? params.port : undefined,
+        secure: typeof params.secure === "boolean" ? params.secure : undefined,
+        user: typeof params.user === "string" ? params.user : undefined,
+        from: typeof params.from === "string" ? params.from : undefined,
+        pass: typeof params.pass === "string" ? params.pass : undefined,
+        to: typeof params.to === "string" ? params.to : undefined,
+      });
+      return {
+        success: result.ok,
+        message: result.message,
+        ...(result.error ? { error: result.error } : {}),
+        data: result.data,
+      };
+    }
+
     // ─── Admin Coworker Tools (TAK-ADMIN-001) ────────────────────────────
     // All admin tools audit-log every call to AdminActivity.
 
@@ -14534,7 +15149,7 @@ export async function executeTool(
         return { success: true, message: `Last ${lines} lines from ${service}:`, data: { service, output: stdout.slice(0, 30000) } };
       } catch (err) {
         const msg = (err as Error).message?.slice(0, 500) ?? "Failed";
-        await logAdminActivity(userId, "admin_view_logs", { service, lines }, "success", 1, msg);
+        await logAdminActivity(userId, "admin_view_logs", { service, lines }, "error", 1, msg);
         return { success: true, message: `Logs from ${service}:`, data: { service, output: msg } };
       }
     }
@@ -14568,7 +15183,7 @@ export async function executeTool(
         return { success: true, message: `Query returned ${result.length} row(s).`, data: { sql, rows: result, rowCount: result.length } };
       } catch (err) {
         const msg = (err as Error).message?.slice(0, 500) ?? "Query failed";
-        await logAdminActivity(userId, "admin_query_db", { sql }, "success", 1, msg);
+        await logAdminActivity(userId, "admin_query_db", { sql }, "error", 1, msg);
         return { success: false, error: msg, message: `Query failed: ${msg}` };
       }
     }
@@ -14578,7 +15193,7 @@ export async function executeTool(
       if (!filePath) return { success: false, error: "path is required.", message: "Provide a file path." };
       const { resolve, join } = lazyPath();
       const { readFile } = lazyFsPromises();
-      const root = process.env.PROJECT_ROOT ? resolve(process.env.PROJECT_ROOT) : resolve(process.cwd(), "..", "..");
+      const root = process.env.PROJECT_ROOT ? resolve(process.env.PROJECT_ROOT) : resolve(getCwd(), "..", "..");
       const resolved = resolve(join(root, filePath));
       if (!resolved.startsWith(root)) {
         await logAdminActivity(userId, "admin_read_file", { path: filePath }, "blocked", 1, "Path traversal");

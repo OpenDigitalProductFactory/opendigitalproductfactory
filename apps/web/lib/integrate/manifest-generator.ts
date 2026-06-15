@@ -2,12 +2,12 @@
 // Generates the codebase manifest (SBOM) by merging a human-maintained base
 // template with auto-generated dependency, model, and statistics data.
 
-import { lazyFs, lazyPath } from "@/lib/shared/lazy-node";
+import { lazyFs, lazyPath, getCwd } from "@/lib/shared/lazy-node";
 import { isDevInstance } from "@/lib/codebase-tools";
 import { CANONICAL_PRIMITIVES, type CanonicalPrimitive } from "@/lib/canonical-primitives";
 
 function getProjectRoot(): string {
-  return lazyPath().resolve(process.cwd(), "..", "..");
+  return lazyPath().resolve(getCwd(), "..", "..");
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────

@@ -346,6 +346,22 @@ export function BackupsClient({
               </div>
             </div>
 
+            {/* BI-EA67A758: inline warning banner when last trial restore failed */}
+            {target === "postgres" && r.openCorruptionAlert && (
+              <div
+                className="mb-3 p-3 rounded text-sm"
+                style={{
+                  background: "rgba(248, 113, 113, 0.15)",
+                  color: "#f87171",
+                  border: "1px solid rgba(248, 113, 113, 0.3)",
+                }}
+              >
+                <strong>Critical:</strong> The last Postgres backup trial restore failed &mdash;{" "}
+                {r.openCorruptionAlert.message} Run a new backup and use &ldquo;Verify last
+                backup&rdquo; to confirm integrity.
+              </div>
+            )}
+
             {/* ─── Readiness card ──────────────────────────────────────── */}
             <div
               className="rounded p-4 grid gap-3 text-sm mb-3"
@@ -512,7 +528,12 @@ export function BackupsClient({
       {/* ─── Log drawer ──────────────────────────────────────────────────── */}
       {openLog && (
         <div
-          className="fixed inset-0 z-40 flex justify-end"
+          // z-[80] so the drawer sits ABOVE the persistent AI coworker rail
+          // (z-50). At z-40 the rail painted over the right ~380px of the
+          // 480px drawer, hiding the manifest + log entirely — the drawer
+          // opened but its content was unreadable. Matches the app's
+          // top-overlay convention (z-[80]/[85]/[90]).
+          className="fixed inset-0 z-[80] flex justify-end"
           onClick={() => setOpenLog(null)}
           style={{ background: "rgba(0, 0, 0, 0.5)" }}
         >
@@ -567,7 +588,9 @@ export function BackupsClient({
                     color: "var(--dpf-text)",
                   }}
                 >
-                  {openLog.data.logTail ?? "(log empty)"}
+                  {openLog.data.logTail && openLog.data.logTail.trim().length > 0
+                    ? openLog.data.logTail
+                    : "(log empty)"}
                 </pre>
               </>
             )}

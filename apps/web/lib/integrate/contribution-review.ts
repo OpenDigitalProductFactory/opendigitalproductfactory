@@ -97,6 +97,7 @@ const VERTICAL_CATEGORIES = [
   { value: "fitness-recreation", label: "Fitness & Recreation", keywords: ["fitness", "gym", "yoga", "pilates", "sports", "recreation", "membership", "class"] },
   { value: "nonprofit-community", label: "Nonprofit & Community", keywords: ["nonprofit", "charity", "donation", "volunteer", "community", "cause", "fundraising"] },
   { value: "hoa-property-management", label: "HOA & Property Management", keywords: ["hoa", "property", "tenant", "landlord", "rental", "lease", "building", "apartment"] },
+  { value: "banking-financial-services", label: "Banking & Financial Services", keywords: ["bank", "banking", "credit union", "deposit", "loan", "mortgage", "lending", "bian", "member", "branch", "underwriting"] },
 ];
 
 // CTA type to vertical affinity — features using booking, purchase, etc.

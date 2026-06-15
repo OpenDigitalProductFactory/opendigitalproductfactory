@@ -1,0 +1,84 @@
+{
+  "claude": {
+    "binary": "claude",
+    "verify": {
+      "command": "claude --version",
+      "versionRegex": "claude[- ]cli[/ ]([0-9.]+)"
+    },
+    "bakeInDefault": true,
+    "recipes": [
+      {
+        "method": "npm-global",
+        "package": "@anthropic-ai/claude-code",
+        "muslSafe": true,
+        "requiresEgress": true,
+        "priority": 10
+      }
+    ]
+  },
+  "codex": {
+    "binary": "codex",
+    "verify": {
+      "command": "codex --version",
+      "versionRegex": "([0-9.]+)"
+    },
+    "bakeInDefault": true,
+    "recipes": [
+      {
+        "method": "npm-global",
+        "package": "@openai/codex",
+        "muslSafe": true,
+        "requiresEgress": true,
+        "priority": 10
+      }
+    ]
+  },
+  "grok": {
+    "binary": "grok",
+    "verify": {
+      "command": "grok --version",
+      "versionRegex": "([0-9.]+)"
+    },
+    "bakeInDefault": false,
+    "recipes": [
+      {
+        "method": "curl-installer",
+        "command": "curl -fsSL https://x.ai/cli/install.sh | GROK_BIN_DIR=/usr/local/bin bash && install -m 0755 \"$(readlink -f /usr/local/bin/grok)\" /usr/local/bin/grok.bin && ln -sf /usr/local/bin/grok.bin /usr/local/bin/grok && rm -rf /root/.grok",
+        "muslSafe": true,
+        "requiresEgress": true,
+        "priority": 10
+      },
+      {
+        "method": "prestaged-binary",
+        "stagedPath": "/opt/dpf-engines/grok",
+        "muslSafe": true,
+        "requiresEgress": false,
+        "priority": 20
+      }
+    ]
+  },
+  "opencode": {
+    "binary": "opencode",
+    "verify": {
+      "command": "opencode --version",
+      "versionRegex": "([0-9.]+)"
+    },
+    "bakeInDefault": true,
+    "recipes": [
+      {
+        "method": "prestaged-binary",
+        "stagedPath": "/opt/dpf-engines/opencode",
+        "muslSafe": true,
+        "requiresEgress": false,
+        "priority": 10
+      },
+      {
+        "method": "curl-installer",
+        "command": "curl -fsSL -o /tmp/opencode.tar.gz https://github.com/anomalyco/opencode/releases/download/v1.17.4/opencode-linux-x64-baseline-musl.tar.gz && tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin && rm /tmp/opencode.tar.gz && chmod 755 /usr/local/bin/opencode",
+        "muslSafe": true,
+        "requiresEgress": true,
+        "priority": 20
+      }
+    ]
+  }
+}

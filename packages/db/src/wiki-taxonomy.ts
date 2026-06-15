@@ -161,6 +161,34 @@ export const PRINCIPLE_DIMENSIONS = [
 export type PrincipleDimension = (typeof PRINCIPLE_DIMENSIONS)[number];
 
 /**
+ * The subset of `PRINCIPLE_DIMENSIONS` that are *costs* — axes where a higher
+ * option-feature score (0..1, "how much does this option exhibit this axis")
+ * means the option exhibits MORE of a bad thing: more blast radius, more
+ * operator/agent cognitive load, more vendor lock-in.
+ *
+ * Sign convention (AUTHORING.md §8A.3): a negative weight means a principle
+ * "pulls against" the axis. Because option features are non-negative, the only
+ * way for `principle_decide` to express "this principle opposes the cost" is a
+ * NEGATIVE weight. A POSITIVE weight on a cost axis makes the scorer reward the
+ * very cost the principle exists to prevent — e.g. `never-wipe-db-for-code-fixes`
+ * with `blast_radius: 1.0` once scored "wipe the db" as its top-aligned option
+ * (see docs/superpowers/audits/2026-06-14-principle-dimension-sign-audit.md).
+ *
+ * Enforced by the dimension-vector sign-convention guard in
+ * `seed-wiki-kernel.test.ts`, so the inversion cannot silently return —
+ * `remove-avoidable-failure-opportunities` applied to the kernel's own
+ * calibration. All other dimensions are benefits (positive is the normal
+ * direction) or neutral trade-offs (e.g. `speed_to_value`, legitimately
+ * negative when a principle trades speed away).
+ */
+export const PRINCIPLE_COST_DIMENSIONS = [
+  "blast_radius",
+  "human_cognitive_load",
+  "vendor_lock_in",
+] as const satisfies readonly PrincipleDimension[];
+export type PrincipleCostDimension = (typeof PRINCIPLE_COST_DIMENSIONS)[number];
+
+/**
  * Default weight magnitude for each tier. A principle can override via
  * `principleWeight` + `principleWeightRationale`; lint warns on divergence.
  * Ratios chosen so one commandment outweighs ten contextual at peak alignment
@@ -214,6 +242,56 @@ export const PRINCIPLE_DECIDE_DEFAULTS = {
   contextualSimilarityThreshold: 0.75,
   semanticFallbackWarnRatio: 0.4,
 } as const;
+
+// ─── WSID profession-corpus variant axes (BI-871126F9, variant addendum) ────
+//
+// Two orthogonal axes that apply ONLY to profession-corpus pages (slug prefix
+// `professions/`). They are deliberately NOT principle columns: the variant
+// addendum (docs/superpowers/specs/2026-06-13-wsid-location-competency-variants-design.md)
+// keeps them as governed, validated frontmatter fields in V1 — no migration —
+// expressed through the slug, frontmatter, and a body section. A later
+// retrieval-wiring PR can lift them into the gate's filter once the WSID
+// profile↔corpus material binding lands. Until then the corpus seed validates
+// values against these registries (fail-fast, loud on typo) and logs coverage.
+
+/**
+ * Location / jurisdiction axis. A page omitting `professionJurisdiction` is
+ * jurisdiction-neutral (applies everywhere) — equivalent to `["global"]`.
+ * Jurisdiction-specific doctrine (US GAAP vs IFRS, CAN-SPAM vs GDPR consent,
+ * EEOC vs EU employment law) declares the jurisdictions it governs so a
+ * coworker serving a given org's jurisdiction can be served the right variant
+ * and shielded from the wrong one. Kept intentionally small; grow by PR review
+ * as real corpus demand appears (a customer in a new jurisdiction is the
+ * signal, not speculation).
+ */
+export const PROFESSION_JURISDICTIONS = [
+  "global",
+  "us",
+  "eu",
+  "uk",
+] as const;
+export type ProfessionJurisdiction = (typeof PROFESSION_JURISDICTIONS)[number];
+
+/**
+ * Competency-level axis — the depth of professional judgment a page encodes,
+ * loosely aligned to SFIA's responsibility bands and O*NET job zones (used as
+ * a coverage frame, never as ingested text):
+ *   - `foundational`  — non-negotiable basics every coworker in the family
+ *     must hold (SFIA ~1-2): debits=credits, never concatenate untrusted input.
+ *   - `practitioner`  — day-to-day working practice (SFIA ~3-4): month-end
+ *     close steps, conventional-commit format, RESTful status-code usage.
+ *   - `expert`        — nuanced trade-off judgment (SFIA ~5-7): IFRS/GAAP
+ *     divergence handling, ASVS L3 controls, API deprecation strategy.
+ * A coworker's configured competency selects how deep into the corpus the
+ * gate retrieves; omitting the field defaults a page to `practitioner`.
+ */
+export const PROFESSION_COMPETENCY_LEVELS = [
+  "foundational",
+  "practitioner",
+  "expert",
+] as const;
+export type ProfessionCompetencyLevel =
+  (typeof PROFESSION_COMPETENCY_LEVELS)[number];
 
 // ─── Type-narrowing predicates ──────────────────────────────────────────────
 
@@ -283,6 +361,32 @@ export function isPrincipleRingScope(
   return (
     typeof value === "string" &&
     (PRINCIPLE_RING_SCOPES as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Narrowing predicate for the WSID location axis. Gates `professionJurisdiction`
+ * frontmatter entries against the closed `PROFESSION_JURISDICTIONS` registry.
+ */
+export function isProfessionJurisdiction(
+  value: unknown,
+): value is ProfessionJurisdiction {
+  return (
+    typeof value === "string" &&
+    (PROFESSION_JURISDICTIONS as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Narrowing predicate for the WSID competency axis. Gates
+ * `professionCompetencyLevel` frontmatter against `PROFESSION_COMPETENCY_LEVELS`.
+ */
+export function isProfessionCompetencyLevel(
+  value: unknown,
+): value is ProfessionCompetencyLevel {
+  return (
+    typeof value === "string" &&
+    (PROFESSION_COMPETENCY_LEVELS as readonly string[]).includes(value)
   );
 }
 

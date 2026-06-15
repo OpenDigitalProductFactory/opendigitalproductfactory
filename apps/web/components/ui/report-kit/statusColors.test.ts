@@ -48,6 +48,7 @@ describe("statusColors", () => {
   it("maps known finance + complaint statuses to expected intents", () => {
     expect(resolveIntent("finance", "overdue")).toBe("danger");
     expect(resolveIntent("finance", "paid")).toBe("success");
+    expect(resolveIntent("aiFinanceWork", "browser_profile_needed")).toBe("warning");
     expect(resolveIntent("complaintSeverity", "critical")).toBe("danger");
     expect(resolveIntent("complaintStatus", "resolved")).toBe("success");
   });
@@ -57,5 +58,13 @@ describe("statusColors", () => {
     expect(resolveIntent("marketing", "pending-review")).toBe("warning");
     expect(resolveIntent("marketing", "approved")).toBe("success");
     expect(resolveIntent("marketing", "rejected")).toBe("danger");
+  });
+
+  it("maps self-upgrade run statuses to operational intents", () => {
+    expect(resolveIntent("selfUpgradeRun", "queued")).toBe("info");
+    expect(resolveIntent("selfUpgradeRun", "running")).toBe("accent");
+    expect(resolveIntent("selfUpgradeRun", "succeeded")).toBe("success");
+    expect(resolveIntent("selfUpgradeRun", "failed")).toBe("danger");
+    expect(resolveIntent("selfUpgradeRun", "skipped")).toBe("neutral");
   });
 });

@@ -1,0 +1,232 @@
+/* Universal Grid & Workbooks — theme bridge (EP-GRID-WORKBOOKS)
+ * Maps react-data-grid's --rdg-* variables onto DPF's --dpf-* design tokens so
+ * the grid honors light/dark mode and runtime branding (AGENTS.md §12). No
+ * hardcoded colors — every value resolves to a token. */
+
+.dpf-workbook-grid {
+  --rdg-color: var(--dpf-text);
+  --rdg-background-color: var(--dpf-surface-1);
+  --rdg-header-background-color: var(--dpf-surface-2);
+  --rdg-header-draggable-background-color: var(--dpf-surface-2);
+  --rdg-row-hover-background-color: var(--dpf-surface-2);
+  --rdg-row-selected-background-color: color-mix(in srgb, var(--dpf-accent) 18%, transparent);
+  --rdg-row-selected-hover-background-color: color-mix(in srgb, var(--dpf-accent) 26%, transparent);
+  --rdg-border-color: var(--dpf-border);
+  --rdg-summary-border-color: var(--dpf-border);
+  --rdg-selection-color: var(--dpf-accent);
+  --rdg-checkbox-focus-color: var(--dpf-accent);
+  --rdg-font-size: 0.875rem;
+
+  block-size: 100%;
+  border: 1px solid var(--dpf-border);
+  border-radius: 0.5rem;
+}
+
+/* Inline editors should adopt the surface + text tokens, not the browser default. */
+.dpf-workbook-grid input,
+.dpf-workbook-grid select {
+  background-color: var(--dpf-surface-1);
+  color: var(--dpf-text);
+}
+
+.dpf-workbook-grid .rdg-cell {
+  border-inline-end: 1px solid var(--dpf-border);
+  border-block-end: 1px solid var(--dpf-border);
+}
+
+/* Cell renderer helpers */
+.dpf-grid-thumb {
+  block-size: 1.75rem;
+  inline-size: auto;
+  max-inline-size: 4rem;
+  object-fit: cover;
+  border-radius: 0.25rem;
+  border: 1px solid var(--dpf-border);
+  vertical-align: middle;
+}
+
+.dpf-grid-editor-image {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  block-size: 100%;
+  padding-inline: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.dpf-grid-image-clear {
+  color: var(--dpf-muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.dpf-grid-attachment {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  max-inline-size: 100%;
+  color: var(--dpf-text);
+}
+
+.dpf-grid-attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: underline;
+}
+
+.dpf-grid-attachment-size {
+  flex: none;
+  color: var(--dpf-muted);
+  font-size: 0.7rem;
+}
+
+.dpf-grid-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  margin-inline-end: 0.25rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  background-color: var(--dpf-surface-2);
+  color: var(--dpf-text);
+  border: 1px solid var(--dpf-border);
+}
+
+/* link cell: a flex row of chips that wraps within the cell */
+.dpf-grid-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  align-items: center;
+}
+
+/* remove (×) button inside a link chip in the editor */
+.dpf-grid-chip-x {
+  margin-inline-start: 0.25rem;
+  border: none;
+  background: transparent;
+  color: var(--dpf-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+.dpf-grid-chip-x:hover {
+  color: var(--dpf-text);
+}
+
+.dpf-grid-link {
+  color: var(--dpf-accent);
+  text-decoration: underline;
+}
+
+.dpf-grid-formula-error {
+  color: var(--dpf-error);
+  font-size: 0.8125rem;
+}
+
+/* Provenance progressive disclosure — column header with a small source label. */
+.dpf-grid-header {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.dpf-grid-header-name {
+  font-weight: 600;
+}
+.dpf-prov {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.dpf-prov-system {
+  color: var(--dpf-accent);
+}
+.dpf-prov-source {
+  color: var(--dpf-warning, var(--dpf-accent));
+}
+.dpf-prov-derived {
+  color: var(--dpf-success, var(--dpf-accent));
+}
+.dpf-prov-manual {
+  color: var(--dpf-muted);
+}
+
+.dpf-grid-editor {
+  inline-size: 100%;
+  block-size: 100%;
+  padding-inline: 0.5rem;
+  border: none;
+  outline: 2px solid var(--dpf-accent);
+  outline-offset: -2px;
+  box-sizing: border-box;
+}
+
+/* Reference typeahead editor: fill the cell; let the floating result list overflow. */
+.dpf-grid-editor-reference {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.dpf-grid-editor-reference input {
+  block-size: 100%;
+  border: none;
+  border-radius: 0;
+  outline: 2px solid var(--dpf-accent);
+  outline-offset: -2px;
+}
+
+/* Conditional formatting — row tints (subtle, theme-token based). */
+.dpf-cf-red .rdg-cell {
+  background-color: color-mix(in srgb, var(--dpf-error) 16%, transparent);
+}
+.dpf-cf-amber .rdg-cell {
+  background-color: color-mix(in srgb, var(--dpf-warning, #b8860b) 18%, transparent);
+}
+.dpf-cf-green .rdg-cell {
+  background-color: color-mix(in srgb, var(--dpf-success, #2e7d32) 16%, transparent);
+}
+.dpf-cf-blue .rdg-cell {
+  background-color: color-mix(in srgb, var(--dpf-accent) 16%, transparent);
+}
+.dpf-cf-swatch {
+  display: inline-block;
+  inline-size: 1rem;
+  block-size: 1rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--dpf-border);
+}
+
+/* Group-by summary chart — simple CSS bars. */
+.dpf-summary-bar-track {
+  flex: 1 1 auto;
+  block-size: 0.75rem;
+  border-radius: 9999px;
+  background-color: var(--dpf-surface-1);
+  border: 1px solid var(--dpf-border);
+  overflow: hidden;
+}
+.dpf-summary-bar-fill {
+  display: block;
+  block-size: 100%;
+  min-inline-size: 2px;
+  background-color: var(--dpf-accent);
+}
+
+/* Gallery card conditional-format accent (scoped so it never restyles grid rows). */
+.dpf-gallery-card.dpf-cf-red {
+  border-inline-start: 3px solid var(--dpf-error);
+}
+.dpf-gallery-card.dpf-cf-amber {
+  border-inline-start: 3px solid var(--dpf-warning, #b8860b);
+}
+.dpf-gallery-card.dpf-cf-green {
+  border-inline-start: 3px solid var(--dpf-success, #2e7d32);
+}
+.dpf-gallery-card.dpf-cf-blue {
+  border-inline-start: 3px solid var(--dpf-accent);
+}

@@ -79,6 +79,49 @@ describe("seedStorefrontArchetypes", () => {
     });
   });
 
+  it("upserts the three BIAN banking archetypes with vocabulary overrides and regulated marketing rules (BI-5D9DCDE6)", async () => {
+    const upsert = vi.fn().mockResolvedValue(undefined);
+    const prisma = {
+      storefrontArchetype: {
+        upsert,
+      },
+    } as never;
+
+    await seedStorefrontArchetypes(prisma);
+
+    // Count assertion (silent-seed-skip guard): all three banking rows upsert.
+    const bankingCalls = upsert.mock.calls.filter(
+      ([args]) => args.create.category === "banking-financial-services",
+    );
+    expect(bankingCalls.map(([args]) => args.where.archetypeId).sort()).toEqual([
+      "community-bank",
+      "credit-union",
+      "mortgage-lending",
+    ]);
+
+    // Credit-union member vocabulary lands in customVocabulary on create AND update.
+    const cuCall = upsert.mock.calls.find(([args]) => args.where.archetypeId === "credit-union");
+    expect(cuCall?.[0].create.customVocabulary).toMatchObject({ stakeholderLabel: "Members" });
+    expect(cuCall?.[0].update.customVocabulary).toMatchObject({ stakeholderLabel: "Members" });
+
+    // Community bank carries no override: create writes null, update leaves
+    // customVocabulary untouched (operator edits preserved).
+    const bankCall = upsert.mock.calls.find(([args]) => args.where.archetypeId === "community-bank");
+    expect(bankCall?.[0].create.customVocabulary).toBeNull();
+    expect(bankCall?.[0].update).not.toHaveProperty("customVocabulary");
+
+    // Regulated-communication marketing rules attach per category.
+    expect(bankCall?.[0].create.marketingSkillRules).toMatchObject({
+      "competitive-analysis": { label: "Local Institution Positioning" },
+      "email-campaign-builder": { label: "Customer & Member Communication Builder" },
+    });
+
+    // KYC posture persists through the seed.
+    expect(bankCall?.[0].create.activationProfile).toMatchObject({
+      axes: { provisioning: "account-with-kyc", commercialModel: "account-based-fees" },
+    });
+  });
+
   it("upserts the software-platform archetype for DPF product installs", async () => {
     const upsert = vi.fn().mockResolvedValue(undefined);
     const prisma = {

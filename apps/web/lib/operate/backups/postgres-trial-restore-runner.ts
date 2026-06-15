@@ -15,8 +15,6 @@
  * BI:   BI-31C9FBDF (EP-DR-HARDENING-2026-05-23)
  */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -31,11 +29,10 @@ import {
   TRIAL_RESTORE_DEFAULT_ASSERT_TABLES,
   TRIAL_RESTORE_TRIGGER,
 } from "./constants";
-
-const execFileAsync = promisify(execFile);
+import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 
 const BACKUPS_ROOT = "/backups";
-const TRIAL_RESTORE_SCRIPT_PATH = "/workspace/scripts/postgres-trial-restore.sh";
+const TRIAL_RESTORE_SCRIPT_NAME = "postgres-trial-restore.sh";
 const RUNNER_TIMEOUT_MS = 10 * 60 * 1000; // 10-minute hard cap
 
 export interface RunPostgresTrialRestoreArgs {
@@ -79,22 +76,9 @@ async function defaultRunScript(
   scriptPath: string,
   env: NodeJS.ProcessEnv,
 ): Promise<ScriptOutcome> {
-  try {
-    const { stdout, stderr } = await execFileAsync(scriptPath, [], {
-      env,
-      timeout: RUNNER_TIMEOUT_MS,
-      maxBuffer: 8 * 1024 * 1024,
-    });
-    return { ok: true, stdout, stderr, exitCode: 0 };
-  } catch (err: unknown) {
-    const e = err as { stdout?: string; stderr?: string; code?: number | string; message?: string };
-    return {
-      ok: false,
-      stdout: e.stdout ?? "",
-      stderr: e.stderr ?? e.message ?? String(err),
-      exitCode: typeof e.code === "number" ? e.code : -1,
-    };
-  }
+  // Routes through the shared /bin/sh chokepoint so the script need not carry
+  // the executable bit (which git-on-Windows + the Docker COPY both strip).
+  return runManagedScript(scriptPath, { env, timeoutMs: RUNNER_TIMEOUT_MS });
 }
 
 /**
@@ -188,7 +172,7 @@ export async function runPostgresTrialRestore(
   const now = args.now ?? (() => new Date());
   const startedAt = now();
   const backupsRoot = args.backupsRoot ?? BACKUPS_ROOT;
-  const scriptPath = args.scriptPath ?? TRIAL_RESTORE_SCRIPT_PATH;
+  const scriptPath = args.scriptPath ?? resolveManagedScriptPath(TRIAL_RESTORE_SCRIPT_NAME);
   const assertTables = args.assertTables ?? TRIAL_RESTORE_DEFAULT_ASSERT_TABLES;
   const runScript = args.runScript ?? defaultRunScript;
   const prisma = args.prismaClient ?? (await import("@dpf/db")).prisma;
@@ -268,6 +252,30 @@ export async function runPostgresTrialRestore(
   postgresTrialRestoreDurationSeconds.observe(durationMs / 1000);
   if (finalStatus === "ok") {
     postgresTrialRestoreLastSuccessSeconds.set(Math.floor(finishedAt.getTime() / 1000));
+  }
+
+  // BI-EA67A758: proactive operator alerting via PlatformNotification.
+  // On failure: create a critical notification so the operator sees a banner
+  // without having to navigate to Admin > Backups. On success: resolve any
+  // open notification so the banner clears automatically.
+  if (finalStatus === "failed") {
+    await prisma.platformNotification
+      .create({
+        data: {
+          severity: "critical",
+          category: "backup-trial-restore-failed",
+          subjectId: "postgres",
+          message: `Postgres backup trial restore failed: ${errorMessage ?? "unknown error"}. Navigate to Admin → Backups to inspect the log and trigger a new backup.`,
+        },
+      })
+      .catch(() => {}); // never crash the runner on a notification write failure
+  } else {
+    await prisma.platformNotification
+      .updateMany({
+        where: { category: "backup-trial-restore-failed", subjectId: "postgres", resolvedAt: null },
+        data: { resolvedAt: finishedAt },
+      })
+      .catch(() => {});
   }
 
   await prisma.scheduledJob

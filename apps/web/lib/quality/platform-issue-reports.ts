@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { inngest } from "@/lib/queue/inngest-client";
 import { ISSUE_REPORT_STATUS, type IssueReportStatus } from "./issue-report-status";
 
 // Field length limits — matched to existing writers and Prisma schema column widths.
@@ -10,9 +11,12 @@ const LIMITS = {
   description: 10_000,
   routeContext: 500,
   errorStack: 20_000,
+  errorDigest: 191,
+  deployedSha: 64,
   userAgent: 500,
   triggerKind: 100,
   supportSessionId: 191,
+  dedupeKey: 191,
 } as const;
 
 // Same route → portfolio slug map used today by reportQualityIssue().
@@ -58,9 +62,15 @@ export interface CreatePlatformIssueReportInput {
   description?: string | null;
   routeContext?: string | null;
   errorStack?: string | null;
+  // BI-B4F401B3: crash-boundary diagnostics. errorDigest = Next.js server
+  // digest token; deployedSha = running image SHA at crash time.
+  errorDigest?: string | null;
+  deployedSha?: string | null;
   userAgent?: string | null;
   triggerKind?: string | null;
   supportSessionId?: string | null;
+  // BI-5FE8656F: stable idempotency key for automated producers (log scanner).
+  dedupeKey?: string | null;
 
   // Identity / linkage
   reportedById?: string | null;
@@ -133,9 +143,12 @@ export async function createPlatformIssueReport(
       description: trimTo(input.description ?? null, LIMITS.description),
       routeContext: trimTo(input.routeContext ?? null, LIMITS.routeContext),
       errorStack: trimTo(input.errorStack ?? null, LIMITS.errorStack),
+      errorDigest: trimTo(input.errorDigest ?? null, LIMITS.errorDigest),
+      deployedSha: trimTo(input.deployedSha ?? null, LIMITS.deployedSha),
       userAgent: trimTo(input.userAgent ?? null, LIMITS.userAgent),
       triggerKind: trimTo(input.triggerKind ?? null, LIMITS.triggerKind),
       supportSessionId: trimTo(input.supportSessionId ?? null, LIMITS.supportSessionId),
+      dedupeKey: trimTo(input.dedupeKey ?? null, LIMITS.dedupeKey),
       reportedById: input.reportedById ?? null,
       threadId: input.threadId ?? null,
       agentId: input.agentId ?? null,
@@ -147,6 +160,20 @@ export async function createPlatformIssueReport(
       ...(input.status !== undefined ? { status: input.status } : {}),
     },
   });
+
+  // EP-INTAKE-UNIFY Phase 4 (BI-EDFBE081): project OPEN reports into the backlog
+  // immediately via a durable event, instead of waiting up to 15 min for the
+  // triage cron. Support-flow reports (status !== open) are owned by the support
+  // pipeline and skipped. Best-effort — the cron remains the safety net, so a
+  // send failure never loses the projection.
+  const effectiveStatus = input.status ?? ISSUE_REPORT_STATUS.OPEN;
+  if (effectiveStatus === ISSUE_REPORT_STATUS.OPEN) {
+    try {
+      await inngest.send({ name: "quality/issue-report.created", data: { reportId } });
+    } catch (err) {
+      console.error("[platform-issue-reports] immediate-projection event send failed", err);
+    }
+  }
 
   return { reportId };
 }

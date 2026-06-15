@@ -53,6 +53,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
 $CodexConfigPath        = Join-Path $HOME ".codex\config.toml"
 $ClaudePluginsPath      = Join-Path $HOME ".claude\plugins\installed_plugins.json"
+$GrokConfigPath         = Join-Path $HOME ".grok\config.toml"  # platform-specific per README; macOS/Linux ~/.grok/config.toml , Windows %USERPROFILE%\.grok\config.toml or APPDATA\grok
 $KernelPrinciplesDir    = Join-Path $RepoRoot "docs\founder-kernel\wiki\principles"
 $ContributorMemoryDir   = Join-Path $HOME ".claude\projects"
 $ProjectSlug            = ($RepoRoot -replace '[:\\\/]+', '-').TrimStart('-')
@@ -68,6 +69,7 @@ $expectedVersion = (Get-Content -LiteralPath $SkillPackManifestPath -Raw | Conve
 # --- Detect CLIs + token ------------------------------------------------------
 $ClaudePresent = $null -ne (Get-Command claude -ErrorAction SilentlyContinue)
 $CodexPresent  = $null -ne (Get-Command codex  -ErrorAction SilentlyContinue)
+$GrokPresent   = $null -ne (Get-Command grok   -ErrorAction SilentlyContinue)
 $HasToken      = -not [string]::IsNullOrWhiteSpace($env:DPF_MCP_BEARER_TOKEN)
 
 Write-Host ""
@@ -75,6 +77,7 @@ Write-Host "-> DPF agent toolchain bootstrap" -ForegroundColor Yellow
 Write-Info "Repo root        : $RepoRoot"
 Write-Info "Claude CLI       : $(if ($ClaudePresent) { 'present' } else { 'missing' })"
 Write-Info "Codex CLI        : $(if ($CodexPresent)  { 'present' } else { 'missing' })"
+Write-Info "Grok CLI         : $(if ($GrokPresent)   { 'present' } else { 'missing' })"
 Write-Info "DPF MCP token    : $(if ($HasToken)      { 'present' } else { 'missing' })"
 Write-Info "Skill pack ver.  : $expectedVersion"
 
@@ -112,7 +115,7 @@ if ($HasToken -and $AutoMint -and -not $DryRun.IsPresent) {
             $HasToken = $false
         }
     } catch {
-        # Unreachable / ambiguous — fail safe, leave the present token untouched.
+        # Unreachable / ambiguous - fail safe, leave the present token untouched.
     }
 }
 
@@ -159,6 +162,7 @@ $nodeArgs = @(
     "--repo-root", $RepoRoot,
     "--codex-config", $CodexConfigPath,
     "--claude-plugins", $ClaudePluginsPath,
+    "--grok-config", $GrokConfigPath,
     "--kernel-principles", $KernelPrinciplesDir,
     "--contributor-memory", $ContributorMemoryDir,
     "--project-slug", $ProjectSlug,
@@ -167,12 +171,19 @@ $nodeArgs = @(
 )
 if ($ClaudePresent)        { $nodeArgs += "--claude-cli-present" }
 if ($CodexPresent)         { $nodeArgs += "--codex-cli-present" }
+if ($GrokPresent)          { $nodeArgs += "--grok-cli-present" }
 if ($HasToken)             { $nodeArgs += "--has-token" }
 if ($ReconcileStaleEntries.IsPresent) { $nodeArgs += "--reconcile-stale-entries" }
 
 $planJson = & pnpm @nodeArgs 2>$null
 if ($LASTEXITCODE -ne 0 -or -not $planJson) {
-    Write-Fail2 "compute-plan failed; cannot proceed with bootstrap."
+    Write-Warn2 "compute-plan failed; using standalone skill-pack updater fallback."
+    $fallback = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1"
+    if (Test-Path -LiteralPath $fallback) {
+        & $fallback -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpoint -DryRun:$DryRun
+        exit $LASTEXITCODE
+    }
+    Write-Fail2 "Standalone updater missing at $fallback; cannot proceed."
     exit 1
 }
 
@@ -182,6 +193,7 @@ Write-Info "Plan preview: $($plan.preview.readinessState)"
 # --- Apply plan ---------------------------------------------------------------
 $claudeWired = $false
 $codexWired  = $false
+$grokWired   = $false
 $memorySeededAt = $null
 
 # 1. Claude Code: run `claude plugin install` if a write is planned.
@@ -229,6 +241,17 @@ if ($plan.codex -and $plan.codex.writes.Count -gt 0) {
     }
     Write-Ok "Codex plugin wired."
     $codexWired = $true
+    # Report DPF-scoping convergence (generic-client disable + worktree trust)
+    # so drift is surfaced, not silently tolerated (spec S4.5).
+    if ($plan.codex.convergence -and @($plan.codex.convergence).Count -gt 0) {
+        foreach ($chg in $plan.codex.convergence) {
+            switch ($chg.kind) {
+                "plugin-disabled"     { Write-Info "Codex: disabled generic plugin '$($chg.key)' (DPF-scoped profile)." }
+                "mcp-server-disabled" { Write-Info "Codex: disabled generic MCP server '$($chg.key)' (orphaned-sidecar source)." }
+                "project-trusted"     { Write-Info "Codex: trusted worktree path '$($chg.key)'." }
+            }
+        }
+    }
 } elseif ($plan.codex) {
     if ($plan.codex.preservedUserIntent) {
         Write-Skip "Codex plugin manually disabled by user; preserving user intent."
@@ -239,6 +262,30 @@ if ($plan.codex -and $plan.codex.writes.Count -gt 0) {
     }
 } else {
     Write-Skip "Codex CLI not installed; skipping plugin wire."
+}
+
+# 2c. Grok CLI: dedicated config.toml wiring (like Codex) from grok config plan.
+# Writes the mcp_servers.dpf section (from grok.mcp.json) into the Grok TOML.
+# Generic MCP client config (above) covers .mcp.json side; this is the native Grok config.
+if ($plan.grok -and $plan.grok.config -and $plan.grok.config.writes.Count -gt 0) {
+    foreach ($write in $plan.grok.config.writes) {
+        if ($DryRun.IsPresent) {
+            Write-Info "DRY-RUN write Grok config -> $($write.path)"
+        } else {
+            $dir = Split-Path -Parent $write.path
+            if (-not (Test-Path -LiteralPath $dir)) {
+                New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            }
+            [System.IO.File]::WriteAllText($write.path, $write.content, [System.Text.Encoding]::UTF8)
+        }
+    }
+    Write-Ok "Grok config wired."
+    $grokWired = $true
+} elseif ($GrokPresent) {
+    $grokWired = $true
+    Write-Ok "Grok CLI detected (config already converged)."
+} else {
+    Write-Skip "Grok CLI not installed; skipping (will appear when `grok` is on PATH)."
 }
 
 # 2b. MCP client config (.mcp.json + .vscode/mcp.json) -- env-backed, no secret.
@@ -309,7 +356,7 @@ if (-not $DryRun.IsPresent) {
             $probeJson = & pnpm @probeArgs 2>$null
             if ($LASTEXITCODE -eq 0 -and $probeJson) {
                 $probeResult = $probeJson | ConvertFrom-Json
-                # ConvertFrom-Json returns PSCustomObject — re-serialize as
+                # ConvertFrom-Json returns PSCustomObject - re-serialize as
                 # nested hashtables so Set-DpfStateValue round-trips cleanly.
                 $mcpReadiness = $probeResult.mcpReadiness | ConvertTo-Json -Depth 6 -Compress | ConvertFrom-Json -AsHashtable
                 $smokeResult  = $probeResult.smokeTest    | ConvertTo-Json -Depth 6 -Compress | ConvertFrom-Json -AsHashtable
@@ -348,6 +395,7 @@ $state = [ordered]@{
     superpowersVersion  = $null
     claudeCodeWired     = $claudeWired
     codexWired          = $codexWired
+    grokWired           = $grokWired
     memorySeededAt      = $memorySeededAt
     mcpReadiness        = $mcpReadiness
     smokeTest           = $smokeResult
@@ -357,7 +405,7 @@ $state = [ordered]@{
 # Recompute readinessState from the applied facts + probe outcomes. Mirrors
 # computeReadinessState() in @dpf/bootstrap/readiness-state.ts: order-of-checks
 # is most-fundamental-first so the primary remediation is unambiguous.
-if (-not $claudeWired -and -not $codexWired) {
+if (-not $claudeWired -and -not $codexWired -and -not $grokWired) {
     $state.readinessState = "missing_cli"
 } elseif (-not $mcpReadiness.ok) {
     if ($mcpReadiness.reason -in @("no_token", "scope_insufficient")) {
@@ -369,7 +417,7 @@ if (-not $claudeWired -and -not $codexWired) {
     }
 } elseif ($smokeResult.result -eq "failed") {
     $state.readinessState = "failed_smoke"
-} elseif (-not $claudeWired -or -not $codexWired) {
+} elseif (-not $claudeWired -or -not $codexWired -or -not $grokWired) {
     $state.readinessState = "partial"
 } else {
     $state.readinessState = "ready"
@@ -411,6 +459,7 @@ if ($ShowSubstrate.IsPresent) {
     Write-Host "  Substrate detail (for debugging):" -ForegroundColor DarkGray
     Write-Host "    Claude plugin     : $($state.claudeCodeWired)" -ForegroundColor DarkGray
     Write-Host "    Codex plugin      : $($state.codexWired)" -ForegroundColor DarkGray
+    Write-Host "    Grok plugin       : $($state.grokWired)" -ForegroundColor DarkGray
     Write-Host "    Memory seeded at  : $($state.memorySeededAt)" -ForegroundColor DarkGray
     Write-Host "    DPF platform ver  : $($state.dpfPlatformVersion)" -ForegroundColor DarkGray
     Write-Host "    State file        : $(Get-DpfStatePath)" -ForegroundColor DarkGray

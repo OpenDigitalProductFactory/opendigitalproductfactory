@@ -36,6 +36,7 @@ const SOURCE_FILTER_CONFIG: Record<string, { label: string; matchFn: (e: { sourc
   "op-hours":      { label: "Hours",          matchFn: (e) => e.eventType === "operating-hours" },
   providers:       { label: "Providers",      matchFn: (e) => e.eventType === "provider-schedule" },
   "agent-tasks":   { label: "AI tasks",       matchFn: (e) => e.eventType === "agent-task" },
+  workbooks:       { label: "Workbooks",      matchFn: (e) => e.eventType === "workbook" },
 };
 
 /** Archetype categories where certain source filters are hidden by default. */
@@ -45,14 +46,24 @@ const ARCHETYPE_DEFAULT_HIDDEN: Record<string, string[]> = {
   "professional-services":   ["providers"],
   "nonprofit-community":     ["bookings", "providers"],
   "trades-maintenance":      ["providers"],
+  "public-sector":           ["bookings", "providers", "crm"],
 };
 
 type Props = {
   events: CalendarEventView[];
   archetypeCategory?: string | null;
+  /** Categories hidden on first load when no `hidden` URL param is set. */
+  defaultHiddenCategories?: string[];
+  /** Source filters hidden on first load when no `sourceHidden` URL param is set. */
+  defaultHiddenSources?: string[];
 };
 
-export function WorkspaceCalendar({ events: initialEvents, archetypeCategory }: Props) {
+export function WorkspaceCalendar({
+  events: initialEvents,
+  archetypeCategory,
+  defaultHiddenCategories,
+  defaultHiddenSources,
+}: Props) {
   const calendarRef = useRef<FullCalendar>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -61,18 +72,20 @@ export function WorkspaceCalendar({ events: initialEvents, archetypeCategory }: 
   // Restore hidden categories from URL on mount
   const hiddenCategories = useMemo(() => {
     const param = searchParams.get("hidden");
-    return param ? new Set(param.split(",")) : new Set<string>();
-  }, [searchParams]);
+    if (param) return new Set(param.split(","));
+    return defaultHiddenCategories ? new Set(defaultHiddenCategories) : new Set<string>();
+  }, [searchParams, defaultHiddenCategories]);
 
-  // Restore hidden source filters from URL — fall back to archetype defaults on first load
+  // Restore hidden source filters from URL — fall back to explicit defaults, then archetype defaults
   const hiddenSources = useMemo(() => {
     const param = searchParams.get("sourceHidden");
     if (param) return new Set(param.split(","));
+    if (defaultHiddenSources) return new Set(defaultHiddenSources);
     const defaults = archetypeCategory
       ? ARCHETYPE_DEFAULT_HIDDEN[archetypeCategory]
       : undefined;
     return defaults ? new Set(defaults) : new Set<string>();
-  }, [searchParams, archetypeCategory]);
+  }, [searchParams, archetypeCategory, defaultHiddenSources]);
 
   const [createPopover, setCreatePopover] = useState<{ date: string; endDate?: string } | null>(null);
   const [agentScheduler, setAgentScheduler] = useState<{ date: string } | null>(null);

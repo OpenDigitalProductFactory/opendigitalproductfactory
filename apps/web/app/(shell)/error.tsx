@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { UpstreamEscalation } from "@/components/feedback/UpstreamEscalation";
 
 export default function ShellError({
   error,
@@ -12,12 +13,28 @@ export default function ShellError({
   const [submitted, setSubmitted] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
 
+  // BI-B4F401B3: crash-boundary diagnostic prompt. The production error message
+  // is sanitized by Next.js — only the digest survives to the client. Rather
+  // than let downstream triage guess a (usually wrong) root cause, we hand the
+  // operator a copy-paste prompt for their AI client, which can read the server
+  // logs and resolve the real error. See apps/web/lib/operate/issue-report-triage.ts.
+  const [deployedSha, setDeployedSha] = useState<string | null>(null);
+  const [autoReportId, setAutoReportId] = useState<string | null>(null);
+  const [prepared, setPrepared] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
+  const [showDiagnostic, setShowDiagnostic] = useState(false);
+  // Stamp the crash time once, on mount, so the prompt is stable across renders.
+  const [crashTime] = useState(() => new Date().toISOString());
+
   const route = typeof window !== "undefined" ? window.location.pathname : "";
   const cleanError =
     error.message?.replace(/\s+/g, " ").trim().slice(0, 240) || "Unknown error";
   const [description, setDescription] = useState("");
 
-  // Auto-report on mount (fire-and-forget)
+  // Auto-report on mount. Resolve the deployed SHA first, then file the report
+  // (with digest + SHA) and capture its reportId so the diagnostic prompt can
+  // reference it. Fire-and-forget for the page, but we await internally so the
+  // prompt is populated.
   useEffect(() => {
     const body = {
       type: "runtime_error",
@@ -26,26 +43,86 @@ export default function ShellError({
       description: error.message,
       routeContext: typeof window !== "undefined" ? window.location.pathname : null,
       errorStack: error.stack?.slice(0, 20000),
+      errorDigest: error.digest ?? null,
       userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
       source: "crash_boundary",
     };
-    fetch("/api/quality/report", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }).catch(() => {
-      // Queue to localStorage if fetch fails
+
+    let cancelled = false;
+
+    (async () => {
+      // Resolve the running image SHA (best-effort).
+      let sha: string | null = null;
       try {
-        const key = "dpf-quality-queue";
-        const raw = localStorage.getItem(key);
-        const queue = raw ? JSON.parse(raw) : [];
-        if (Array.isArray(queue)) {
-          queue.push({ ...body, queuedAt: new Date().toISOString() });
-          localStorage.setItem(key, JSON.stringify(queue));
+        const vres = await fetch("/api/platform/version");
+        if (vres.ok) {
+          const v = (await vres.json()) as { gitSha?: unknown };
+          sha = typeof v.gitSha === "string" ? v.gitSha : null;
         }
-      } catch { /* silent */ }
-    });
+      } catch {
+        /* version unavailable — prompt shows a retrieval hint instead */
+      }
+      if (!cancelled && sha) setDeployedSha(sha);
+
+      try {
+        const res = await fetch("/api/quality/report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, deployedSha: sha }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { reportId?: string };
+          if (!cancelled && typeof data.reportId === "string") setAutoReportId(data.reportId);
+        }
+      } catch {
+        // Queue to localStorage if fetch fails
+        try {
+          const key = "dpf-quality-queue";
+          const raw = localStorage.getItem(key);
+          const queue = raw ? JSON.parse(raw) : [];
+          if (Array.isArray(queue)) {
+            queue.push({ ...body, deployedSha: sha, queuedAt: new Date().toISOString() });
+            localStorage.setItem(key, JSON.stringify(queue));
+          }
+        } catch { /* silent */ }
+      } finally {
+        if (!cancelled) setPrepared(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [error]);
+
+  // The copy-paste prompt the operator drops into Claude / Codex / Grok. It
+  // bundles everything the AI client needs to find the REAL error in the server
+  // logs and resolve it — exactly the path a human operator would take.
+  const diagnosticPrompt = [
+    "You are debugging a production crash in the DPF portal. Investigate it on the live install and resolve it.",
+    "",
+    `Route: ${route || "(unknown)"}`,
+    `Error digest: ${error.digest || "(none captured)"}`,
+    `Crash time: ${crashTime}`,
+    `Deployed SHA: ${deployedSha || "(unknown — retrieve with: git -C /app rev-parse HEAD in the portal container, or GET /api/platform/version)"}`,
+    `Report: ${autoReportId || "(auto-report not filed — the crash is still in the server logs)"}`,
+    "",
+    "The production error message is sanitized — the REAL error is only in the server logs. Do NOT guess the cause from this screen. Steps:",
+    "1. Find the real error: search the portal server logs for the digest above (e.g. docker logs dpf-portal-1 2>&1 | grep -i <digest>), or read the logs around the crash time on this route.",
+    "2. Check for unapplied DB migrations: docker exec dpf-portal-1 sh -c \"cd /app && pnpm --filter @dpf/db exec prisma migrate status\" — a Prisma P2022 ColumnNotFound almost always means a migration did not run.",
+    "3. Identify the actual root cause from the real error text, not from this sanitized message.",
+    "4. Propose and apply a fix, or file a specific, actionable bug containing the REAL error text and root cause.",
+  ].join("\n");
+
+  async function copyPrompt() {
+    try {
+      await navigator.clipboard.writeText(diagnosticPrompt);
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable — the visible block below is the fallback */
+    }
+  }
 
   async function handleSubmit() {
     const reportDescription = [
@@ -66,6 +143,8 @@ export default function ShellError({
           description: reportDescription,
           routeContext: typeof window !== "undefined" ? window.location.pathname : null,
           errorStack: error.stack?.slice(0, 20000),
+          errorDigest: error.digest ?? null,
+          deployedSha,
           source: "crash_boundary",
         }),
       });
@@ -76,6 +155,10 @@ export default function ShellError({
     } catch { /* silent */ }
     setSubmitted(true);
   }
+
+  // The report to surface in the escalation button — prefer the user's manual
+  // submission (has their description); fall back to the auto-filed crash report.
+  const escalationReportId = reportId ?? autoReportId;
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center px-4 py-10">
@@ -103,6 +186,55 @@ export default function ShellError({
             <dd className="break-words font-mono text-[var(--dpf-text)]">{cleanError}</dd>
           </div>
         </dl>
+
+        {/* BI-B4F401B3: diagnostic prompt — collapsed by default so the primary
+            CTA (add context + report to team) is the first thing a non-technical
+            user sees. Developers can expand to get the AI-ready prompt. */}
+        <div className="mb-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-left">
+          <button
+            type="button"
+            onClick={() => setShowDiagnostic((v) => !v)}
+            className="flex w-full items-center justify-between text-xs font-medium text-[var(--dpf-text)]"
+            aria-expanded={showDiagnostic}
+          >
+            <span>Developer diagnostic</span>
+            <span aria-hidden="true" className="text-[var(--dpf-muted)]">
+              {showDiagnostic ? "▲" : "▼"}
+            </span>
+          </button>
+          {showDiagnostic && (
+            <div className="mt-2">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs leading-5 text-[var(--dpf-muted)]">
+                  Paste this into Claude, Codex, or Grok — it can read the server logs and fix the real error.
+                </p>
+                <button
+                  type="button"
+                  onClick={copyPrompt}
+                  disabled={!prepared}
+                  aria-disabled={!prepared}
+                  aria-label={
+                    prepared
+                      ? "Copy AI diagnostic prompt to clipboard"
+                      : "Preparing diagnostic prompt, please wait"
+                  }
+                  className="shrink-0 rounded-md border border-[var(--dpf-accent)] px-3 py-1 text-xs font-medium text-[var(--dpf-accent)] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dpf-accent)]"
+                >
+                  {!prepared ? "Preparing…" : promptCopied ? "Copied!" : "Copy prompt"}
+                </button>
+              </div>
+              <pre
+                tabIndex={0}
+                className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 font-mono text-[11px] leading-5 text-[var(--dpf-text)]"
+              >
+                {diagnosticPrompt}
+              </pre>
+              <span role="status" aria-live="polite" className="sr-only">
+                {promptCopied ? "Diagnostic prompt copied to clipboard" : ""}
+              </span>
+            </div>
+          )}
+        </div>
 
         {!submitted ? (
           <div className="space-y-3 text-left">
@@ -133,12 +265,23 @@ export default function ShellError({
                 Try again
               </button>
             </div>
+            {/* Surface the escalation path even before the user submits their
+                description — the auto-report is already filed and the non-technical
+                user should be able to route it to GitHub immediately. */}
+            {autoReportId && !submitted && (
+              <div className="pt-1">
+                <UpstreamEscalation reportId={autoReportId} />
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-sm text-[var(--dpf-muted)]">
             {reportId
               ? `Thanks! Report ${reportId} filed.`
               : "Thanks for the feedback."}
+            {escalationReportId && (
+              <UpstreamEscalation reportId={escalationReportId} />
+            )}
             <button
               type="button"
               onClick={reset}

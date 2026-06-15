@@ -15,10 +15,18 @@ const mocks = vi.hoisted(() => ({
   startRun: vi.fn(),
   completeRun: vi.fn(),
   failRun: vi.fn(),
+  skipRun: vi.fn(),
+  updateRunPlan: vi.fn(),
   recordRunRecoveryPoint: vi.fn(),
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
   runPromoter: vi.fn(),
+  // Skip-before-drain guard: promoter image present by default in every setup.
+  isPromoterAvailable: vi.fn().mockResolvedValue(true),
+  // Cooldown backoff (this fix): no active cooldown by default.
+  getCooldownUntil: vi.fn().mockResolvedValue(null),
+  recordCooldown: vi.fn().mockResolvedValue(undefined),
+  clearCooldown: vi.fn().mockResolvedValue(undefined),
   emitUpgradeEvent: vi.fn(),
   createSelfUpgradeRecoveryPoint: vi.fn(),
   summarizeRecoveryPointFailure: vi.fn(),
@@ -27,6 +35,9 @@ const mocks = vi.hoisted(() => ({
   signalSwapStarting: vi.fn(),
   signalSwapComplete: vi.fn(),
   failQuiescenceSwap: vi.fn(),
+  // Activity precheck snapshot (BI-F36E7510). Default empty so existing tests
+  // proceed to the drain exactly as before; the new skip-path test overrides it.
+  captureActiveSessionBlockers: vi.fn().mockResolvedValue({ surfaces: [] }),
 }));
 
 vi.mock("@/lib/self-upgrade/config", () => ({
@@ -82,6 +93,8 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   startRun: mocks.startRun,
   completeRun: mocks.completeRun,
   failRun: mocks.failRun,
+  skipRun: mocks.skipRun,
+  updateRunPlan: mocks.updateRunPlan,
   recordRunRecoveryPoint: mocks.recordRunRecoveryPoint,
   getLatestRun: mocks.getLatestRun,
   getLatestSucceededRun: mocks.getLatestSucceededRun,
@@ -89,6 +102,17 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
 
 vi.mock("@/lib/self-upgrade/promoter", () => ({
   runPromoter: mocks.runPromoter,
+  isPromoterAvailable: mocks.isPromoterAvailable,
+}));
+
+vi.mock("@/lib/self-upgrade/cooldown", () => ({
+  getCooldownUntil: mocks.getCooldownUntil,
+  recordCooldown: mocks.recordCooldown,
+  clearCooldown: mocks.clearCooldown,
+  // Pure gate kept real so the orchestrator's cooldown logic is exercised.
+  isInCooldown: (until: Date | null, now: Date) =>
+    !!until && now.getTime() < until.getTime(),
+  DEFAULT_COOLDOWN_MINUTES: 30,
 }));
 
 vi.mock("@/lib/self-upgrade/notifications", () => ({
@@ -105,6 +129,7 @@ vi.mock("@/lib/self-upgrade/quiescence", () => ({
   signalSwapStarting: mocks.signalSwapStarting,
   signalSwapComplete: mocks.signalSwapComplete,
   failQuiescenceSwap: mocks.failQuiescenceSwap,
+  captureActiveSessionBlockers: mocks.captureActiveSessionBlockers,
 }));
 
 import type { SelfUpgradeRunEventData } from "./self-upgrade";
@@ -269,6 +294,13 @@ const ENABLED_CONFIG = {
 describe("success path", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Activity precheck default: no in-flight surfaces. mockReset (not just
+    // clearAllMocks, which leaves implementations and one-shot queues intact)
+    // clears any leftover mockResolvedValueOnce — the "force bypasses" test
+    // below queues a once-value that force never consumes, so without this it
+    // leaks into the next test and spuriously skips it with activity-in-flight.
+    mocks.captureActiveSessionBlockers.mockReset();
+    mocks.captureActiveSessionBlockers.mockResolvedValue({ surfaces: [] });
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.isUpgradeWindowOpen.mockReturnValue(true);
     mocks.getDeployedSha.mockResolvedValue("oldsha1");
@@ -287,6 +319,21 @@ describe("success path", () => {
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
     expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-AAAABBBB" });
     expect(mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
+  });
+
+  it("claims a pre-created queued run instead of creating a second run", async () => {
+    mocks.updateRunPlan.mockResolvedValue({ runId: "SUR-QUEUED1" });
+
+    const result = await runSelfUpgrade({ triggeredBy: "ops", runId: "SUR-QUEUED1" });
+
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(mocks.updateRunPlan).toHaveBeenCalledWith("SUR-QUEUED1", {
+      fromVersion: "oldsha1",
+      toVersion: "abc1234deadbeef",
+      expectedDeployedSha: "abc1234deadbeef",
+    });
+    expect(mocks.startRun).toHaveBeenCalledWith("SUR-QUEUED1");
+    expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-QUEUED1" });
   });
 
   it("creates and records a recovery point after quiescence and before swap starts", async () => {
@@ -353,6 +400,66 @@ describe("success path", () => {
     expect(result).toMatchObject({ skipped: true, reason: "up-to-date" });
     expect(mocks.prepareUpgradeSource).not.toHaveBeenCalled();
     expect(mocks.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it("skips BEFORE draining when activity is in flight — no drain/defer/cooldown cycle (BI-F36E7510)", async () => {
+    // Build Studio work in flight: the activity precheck must skip cleanly
+    // instead of flipping the portal to draining and burning the full budget
+    // waiting for a BuildPhaseRun that outlasts it (the periodic bad-state bug).
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
+      surfaces: [{ surface: "build-studio.phase.plan", kind: "hard" }],
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
+    // The whole point: no drain, no cooldown — the portal never refuses actions.
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+    expect(mocks.recordCooldown).not.toHaveBeenCalled();
+  });
+
+  it("force bypasses the activity precheck and proceeds to drain", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
+      surfaces: [{ surface: "build-studio.phase.plan", kind: "hard" }],
+    });
+    await runSelfUpgrade({ triggeredBy: "ops", force: true });
+    expect(mocks.startQuiescence).toHaveBeenCalled();
+  });
+
+  // BI-CC82B9A8 — a manual operator "Upgrade now" must not silently no-op on the
+  // operator's OWN session. Soft blockers (e.g. request.recent-tool-execution,
+  // which fires on the very clicks that drove this trigger) must NOT early-skip a
+  // manual trigger; it proceeds into the drain, which converges when no hard work
+  // is running. Without this, a routine deploy is un-runnable without Emergency
+  // override while the operator is driving the portal.
+  it("manual trigger does NOT early-skip on a soft blocker — proceeds to drain (BI-CC82B9A8)", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
+      surfaces: [{ surface: "request.recent-tool-execution", kind: "soft" }],
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).not.toMatchObject({ reason: "activity-in-flight" });
+    expect(mocks.startQuiescence).toHaveBeenCalled();
+  });
+
+  it("manual trigger STILL early-skips on a hard blocker (BI-F36E7510 preserved)", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
+      surfaces: [
+        { surface: "coworker.reasoning-loop", kind: "hard" },
+        { surface: "request.recent-tool-execution", kind: "soft" },
+      ],
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
+    // Only the hard surface is reported as the blocker; the soft one is filtered.
+    expect(result).toMatchObject({ surfaces: ["coworker.reasoning-loop"] });
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+  });
+
+  it("scheduled poll keeps the conservative 'any surface skips' behavior on a soft blocker (BI-F36E7510)", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
+      surfaces: [{ surface: "request.recent-tool-execution", kind: "soft" }],
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "cron", scheduled: true });
+    expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
   });
 
   it("runs the promoter with the host install path, backup, image, and health paths", async () => {
@@ -572,28 +679,38 @@ describe("failure path", () => {
     expect(result).toMatchObject({ ok: false, status: "failed", runId: "SUR-FAILTEST" });
   });
 
-  it("includes excerpt from stderr in return value", async () => {
+  // The failure excerpt now LEADS with a build-failure classification and
+  // PRESERVES the raw log beneath it (BI-E4CBC7C1), so the BLOCKED reason an
+  // agent reads downstream carries an actionable class, not a raw log.
+  it("includes the raw stderr in the classified excerpt and a class header", async () => {
     mocks.runPromoter.mockResolvedValue({ exitCode: 1, stdout: "some stdout", stderr: "fatal: deploy error" });
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ excerpt: "fatal: deploy error" });
+    expect(result).toMatchObject({
+      excerpt: expect.stringContaining("fatal: deploy error"),
+      failureClass: "unknown",
+    });
+    expect(result.excerpt).toMatch(/^\[build-failure-class\]/);
   });
 
-  it("falls back to stdout for excerpt when stderr is empty", async () => {
+  it("falls back to stdout for the raw log when stderr is empty", async () => {
     mocks.runPromoter.mockResolvedValue({ exitCode: 2, stdout: "stdout only output", stderr: "" });
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ excerpt: "stdout only output" });
+    expect(result).toMatchObject({ excerpt: expect.stringContaining("stdout only output") });
   });
 
-  it("uses unknown error as excerpt when both stderr and stdout are empty", async () => {
+  it("uses unknown error as the raw log when both stderr and stdout are empty", async () => {
     mocks.runPromoter.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "" });
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ excerpt: "unknown error" });
+    expect(result).toMatchObject({ excerpt: expect.stringContaining("unknown error") });
   });
 
-  it("calls failRun with runId and excerpt", async () => {
+  it("calls failRun with runId and the classified excerpt", async () => {
     mocks.runPromoter.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "promote script failed" });
     await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(mocks.failRun).toHaveBeenCalledWith("SUR-FAILTEST", "promote script failed");
+    expect(mocks.failRun).toHaveBeenCalledWith(
+      "SUR-FAILTEST",
+      expect.stringContaining("promote script failed"),
+    );
   });
 
   it("emits upgrade.failed notification on promoter failure", async () => {
@@ -615,7 +732,10 @@ describe("failure path", () => {
   it("signals failQuiescenceSwap on promoter failure (level returns to normal)", async () => {
     mocks.runPromoter.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "fatal" });
     await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(mocks.failQuiescenceSwap).toHaveBeenCalledWith("QR-2026-05-24-test1234", "fatal");
+    expect(mocks.failQuiescenceSwap).toHaveBeenCalledWith(
+      "QR-2026-05-24-test1234",
+      expect.stringContaining("fatal"),
+    );
     expect(mocks.signalSwapComplete).not.toHaveBeenCalled();
   });
 });
@@ -788,5 +908,194 @@ describe("quiescence-defer path (BI-QUIESCE-010)", () => {
       status: "deferred",
       reason: "aborted",
     });
+  });
+});
+
+// ── Skip-before-drain guards (this fix) ─────────────────────────────────────
+// The portal must NEVER enter `draining` when there's nothing to swap to or no
+// promoter to do the swap — those were the live runs with empty targetBundleHash
+// that cycled the portal unusable.
+describe("skip-before-drain guards", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    // clearAllMocks resets call history but NOT implementations, so re-assert
+    // the gate defaults each test (a prior describe can leave them flipped).
+    mocks.isCheckIntervalElapsed.mockReturnValue(true);
+    mocks.isPromoterAvailable.mockResolvedValue(true);
+    mocks.getCooldownUntil.mockResolvedValue(null);
+    mocks.recordCooldown.mockResolvedValue(undefined);
+    mocks.clearCooldown.mockResolvedValue(undefined);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
+    setupQuiescenceReady();
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-GUARD" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    mocks.completeRun.mockResolvedValue({});
+  });
+
+  it("skips with promoter-unavailable BEFORE draining when the image is absent", async () => {
+    mocks.isPromoterAvailable.mockResolvedValue(false);
+
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+
+    expect(result).toMatchObject({ skipped: true, reason: "promoter-unavailable" });
+    // Never drained, never prepared a source, never created a run.
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+    expect(mocks.prepareUpgradeSource).not.toHaveBeenCalled();
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    // A clean no-op sets no cooldown — the next tick re-checks immediately.
+    expect(mocks.recordCooldown).not.toHaveBeenCalled();
+  });
+
+  it("marks a pre-created queued run skipped when a pre-drain guard stops the attempt", async () => {
+    mocks.isPromoterAvailable.mockResolvedValue(false);
+
+    const result = await runSelfUpgrade({
+      triggeredBy: "manual:ops",
+      runId: "SUR-QUEUED1",
+    });
+
+    expect(result).toMatchObject({
+      skipped: true,
+      reason: "promoter-unavailable",
+      runId: "SUR-QUEUED1",
+    });
+    expect(mocks.skipRun).toHaveBeenCalledWith(
+      "SUR-QUEUED1",
+      "promoter-unavailable: dpf-promoter",
+    );
+    expect(mocks.recordCheckedAt).not.toHaveBeenCalled();
+    expect(mocks.createRun).not.toHaveBeenCalled();
+  });
+
+  it("checks promoter availability against the configured image", async () => {
+    await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+    expect(mocks.isPromoterAvailable).toHaveBeenCalledWith("dpf-promoter");
+  });
+
+  it("does NOT check the promoter on a dryRun (it never swaps)", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops", dryRun: true });
+    expect(mocks.isPromoterAvailable).not.toHaveBeenCalled();
+  });
+
+  it("skips with up-to-date (no drain) when the built stamp already matches the deployed SHA", async () => {
+    // Built identity equals the running runtime identity → nothing to swap.
+    mocks.getDeployedSha.mockResolvedValue("abc1234deadbeef");
+    setupSourceReady("abc1234deadbeef");
+
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+
+    expect(result).toMatchObject({ skipped: true, reason: "up-to-date" });
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(mocks.recordCooldown).not.toHaveBeenCalled();
+  });
+
+  it("force overrides the nothing-newer guard (operator asked to re-deploy)", async () => {
+    mocks.getDeployedSha.mockResolvedValue("abc1234deadbeef");
+    setupSourceReady("abc1234deadbeef");
+
+    const result = await runSelfUpgrade({ triggeredBy: "ops", force: true });
+
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.startQuiescence).toHaveBeenCalled();
+  });
+
+  it("stamps the QuiescenceRun with the real target identity (never empty)", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.startQuiescence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetVersion: "abc1234deadbeef",
+        targetBundleHash: "abc1234deadbeef",
+      }),
+    );
+  });
+});
+
+// ── Cooldown backoff (this fix) ─────────────────────────────────────────────
+// After a deferred/failed drain, the next attempt must wait — otherwise the
+// portal re-drains within seconds and refuses work in a tight loop.
+describe("cooldown backoff", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    // clearAllMocks resets call history but NOT implementations — re-assert the
+    // gate defaults so a prior describe's flipped value can't leak in.
+    mocks.isCheckIntervalElapsed.mockReturnValue(true);
+    mocks.isPromoterAvailable.mockResolvedValue(true);
+    mocks.getCooldownUntil.mockResolvedValue(null);
+    mocks.recordCooldown.mockResolvedValue(undefined);
+    mocks.clearCooldown.mockResolvedValue(undefined);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
+    setupQuiescenceReady();
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-COOL" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.failRun.mockResolvedValue({});
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    mocks.completeRun.mockResolvedValue({});
+  });
+
+  it("skips with reason=cooldown while a cooldown is active (no drain, no source prep)", async () => {
+    mocks.getCooldownUntil.mockResolvedValue(new Date(Date.now() + 20 * 60 * 1000));
+
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+
+    expect(result).toMatchObject({ skipped: true, reason: "cooldown" });
+    expect(mocks.isPromoterAvailable).not.toHaveBeenCalled();
+    expect(mocks.prepareUpgradeSource).not.toHaveBeenCalled();
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+  });
+
+  it("skips a manual event-triggered run too while cooling down (loop-stopper)", async () => {
+    mocks.getCooldownUntil.mockResolvedValue(new Date(Date.now() + 20 * 60 * 1000));
+    const result = await runSelfUpgrade({ triggeredBy: "manual:autonomous" }); // scheduled unset
+    expect(result).toMatchObject({ skipped: true, reason: "cooldown" });
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+  });
+
+  it("force bypasses an active cooldown (operator override)", async () => {
+    mocks.getCooldownUntil.mockResolvedValue(new Date(Date.now() + 20 * 60 * 1000));
+    const result = await runSelfUpgrade({ triggeredBy: "ops", force: true });
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.startQuiescence).toHaveBeenCalled();
+  });
+
+  it("records a cooldown when the coordinator defers", async () => {
+    mocks.startQuiescence.mockResolvedValue({
+      runId: "QR-DEFER",
+      awaitReady: () =>
+        Promise.resolve({
+          ok: false,
+          outcome: "deferred",
+          runId: "QR-DEFER",
+          deferSurface: "build-studio.phase.build",
+          finalSnapshot: null,
+        }),
+    });
+
+    await runSelfUpgrade({ triggeredBy: "scheduled" });
+
+    expect(mocks.recordCooldown).toHaveBeenCalledTimes(1);
+  });
+
+  it("records a cooldown when the promoter fails", async () => {
+    mocks.runPromoter.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "boom" });
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.recordCooldown).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the cooldown after a successful swap", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.clearCooldown).toHaveBeenCalledTimes(1);
+    expect(mocks.recordCooldown).not.toHaveBeenCalled();
   });
 });

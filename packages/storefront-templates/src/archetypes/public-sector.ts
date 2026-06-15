@@ -1,0 +1,216 @@
+import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
+
+// Park pavilion / community-room reservations are booked into daytime slots,
+// every day, well in advance. The archetype's top-level ctaType is "inquiry",
+// but the reservation item is ctaType:"booking" and needs schedulingDefaults or
+// its calendar ships empty (same root cause as AUDIT-R3/R4).
+const CIVIC_FACILITY_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "customer-choice",
+  defaultOperatingHours: [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, start: "08:00", end: "20:00" })),
+  defaultBeforeBuffer: 0,
+  defaultAfterBuffer: 30,
+  minimumNoticeHours: 48,
+  maxAdvanceDays: 180,
+};
+
+const RESIDENT_CONTACT_FIELDS = [
+  { name: "name", label: "Full name", type: "text" as const, required: true },
+  { name: "email", label: "Email", type: "email" as const, required: true },
+  { name: "phone", label: "Phone", type: "tel" as const, required: false },
+  { name: "address", label: "Street address", type: "text" as const, required: true },
+];
+
+export const publicSectorArchetypes: ArchetypeDefinition[] = [
+  {
+    archetypeId: "small-town-municipality",
+    name: "Small Town / Municipality",
+    category: "public-sector",
+    ctaType: "inquiry",
+    tags: ["town", "city", "municipality", "village", "township", "local-government", "public-sector", "civic"],
+    itemTemplates: [
+      { name: "Report an Issue (311)", description: "Report a pothole, streetlight outage, drainage problem, or other non-emergency issue", priceType: "free", ctaType: "inquiry" },
+      { name: "Building Permit Application", description: "Apply for a residential or commercial building permit", priceType: "fixed", ctaType: "inquiry" },
+      { name: "Business License", description: "Apply for or renew a business license to operate in town", priceType: "fixed", ctaType: "inquiry" },
+      { name: "Public Records Request", description: "Request copies of public records, meeting minutes, or town documents", priceType: "free", ctaType: "inquiry" },
+      { name: "Park Pavilion Reservation", description: "Reserve a pavilion, ball field, or community room for an event", priceType: "fixed", ctaType: "booking" },
+      { name: "Special Event Permit", description: "Apply to hold a parade, street fair, or public gathering", priceType: "fixed", ctaType: "inquiry" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "about", title: "About Our Town", sortOrder: 1 },
+      { type: "items", title: "Departments & Services", sortOrder: 2 },
+      { type: "team", title: "Council & Staff", sortOrder: 3 },
+      { type: "contact", title: "Town Hall", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...RESIDENT_CONTACT_FIELDS,
+      { name: "department", label: "Department", type: "select" as const, required: true, options: ["Clerk's Office", "Public Works", "Parks & Recreation", "Planning & Zoning", "Code Enforcement", "Finance / Utility Billing", "Other"] },
+      { name: "notes", label: "How can we help?", type: "textarea" as const, required: true },
+    ],
+    schedulingDefaults: CIVIC_FACILITY_SCHEDULING,
+    activationProfile: {
+      profileType: "standard",
+      modules: ["service-operations", "projects"],
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "resident",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "statutory-fees-and-levies",
+        provisioning: "account-with-billing",
+        platform: "no",
+        governance: "public-body",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "standard", it4itStages: ["request-to-fulfill"] },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+      seededServiceCategories: [
+        "Permits & Licenses",
+        "Public Works",
+        "Parks & Recreation",
+        "Clerk's Office",
+        "Code Enforcement",
+      ],
+    },
+  },
+  {
+    archetypeId: "municipal-utility",
+    name: "Municipal Utility (Water / Sewer / Electric / Gas)",
+    category: "public-sector",
+    ctaType: "inquiry",
+    tags: ["utility", "water", "sewer", "electric", "gas", "public-power", "special-district", "ratepayer", "public-sector"],
+    itemTemplates: [
+      { name: "Report a Leak or Outage", description: "Report a water leak, service outage, low pressure, or other urgent service issue", priceType: "free", ctaType: "inquiry" },
+      { name: "Start or Stop Service", description: "Open or close a utility account when moving in or out", priceType: "free", ctaType: "inquiry" },
+      { name: "Residential Service", description: "Monthly residential utility service billed on metered usage", priceType: "from", ctaType: "inquiry" },
+      { name: "Commercial Service", description: "Commercial utility service billed on metered usage by rate class", priceType: "from", ctaType: "inquiry" },
+      { name: "Irrigation Service", description: "Seasonal irrigation service on the irrigation rate schedule", priceType: "from", ctaType: "inquiry" },
+      { name: "Service Connection / Tap Fee", description: "Apply for a new service connection or tap to the system", priceType: "fixed", ctaType: "inquiry" },
+      { name: "Meter Re-Read Request", description: "Request a re-read if you believe your meter reading is incorrect", priceType: "free", ctaType: "inquiry" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "about", title: "About Our Utility", sortOrder: 1 },
+      { type: "items", title: "Rates & Services", sortOrder: 2 },
+      { type: "team", title: "Board & Staff", sortOrder: 3 },
+      { type: "contact", title: "Contact the Utility", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...RESIDENT_CONTACT_FIELDS,
+      { name: "requestType", label: "Request type", type: "select" as const, required: true, options: ["Leak", "Outage", "Low pressure", "Meter re-read", "Start service", "Stop service", "Billing question", "Other"] },
+      { name: "notes", label: "Details", type: "textarea" as const, required: true },
+    ],
+    // Ratepayer skin over the public-sector category vocabulary (civic spec §8).
+    vocabulary: {
+      itemsLabel: "Rates & Services",
+      portalLabel: "Ratepayer Portal",
+      stakeholderLabel: "Ratepayers",
+      inboxLabel: "Service Orders",
+      agentName: "Utility Services",
+    },
+    activationProfile: {
+      profileType: "standard",
+      modules: ["service-operations", "projects"],
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "resident",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "usage-based",
+        provisioning: "account-with-billing",
+        platform: "no",
+        governance: "public-body",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "standard", it4itStages: ["request-to-fulfill"] },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+      seededServiceCategories: [
+        "Residential",
+        "Commercial",
+        "Irrigation",
+        "Connection Fees",
+        "Service Orders",
+      ],
+    },
+  },
+  {
+    // Phase 1 is NO-CJI by design (civic spec §4.6/§13.6): agency operations
+    // around the incumbent RMS — POST training, policy attestation, equipment,
+    // and non-CJI citizen intake. Anything touching case/incident data is a
+    // separate future spec gated on CJIS Security Policy posture.
+    archetypeId: "law-enforcement-agency",
+    name: "Law Enforcement Agency (Police / Sheriff)",
+    category: "public-sector",
+    ctaType: "inquiry",
+    tags: ["police", "sheriff", "law-enforcement", "public-safety", "community", "no-cji", "public-sector"],
+    itemTemplates: [
+      { name: "Request a Records Copy", description: "Request a copy of a crash report, incident report, or other releasable public record (subject to law-enforcement exemptions)", priceType: "free", ctaType: "inquiry" },
+      { name: "File a Compliment or Complaint", description: "Submit a compliment or a complaint about an officer or service interaction", priceType: "free", ctaType: "inquiry" },
+      { name: "Alarm Permit Application", description: "Apply for or renew a residential or commercial alarm permit", priceType: "fixed", ctaType: "inquiry" },
+      { name: "Public Records Request", description: "Request agency records under the state public records law", priceType: "free", ctaType: "inquiry" },
+      { name: "Community Concern", description: "Report a non-emergency community concern or request extra patrol", priceType: "free", ctaType: "inquiry" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "about", title: "About the Department", sortOrder: 1 },
+      { type: "items", title: "Services & Programs", sortOrder: 2 },
+      { type: "team", title: "Command & Staff", sortOrder: 3 },
+      { type: "contact", title: "Contact Us", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...RESIDENT_CONTACT_FIELDS,
+      { name: "requestType", label: "Request type", type: "select" as const, required: true, options: ["Records copy", "Compliment", "Complaint", "Alarm permit", "Community concern", "Other"] },
+      { name: "notes", label: "Details", type: "textarea" as const, required: true },
+    ],
+    // Community skin over the public-sector category vocabulary (civic spec §8).
+    vocabulary: {
+      itemsLabel: "Services & Programs",
+      portalLabel: "Community Portal",
+      stakeholderLabel: "Community",
+      inboxLabel: "Requests & Reports",
+      agentName: "Community Liaison",
+    },
+    activationProfile: {
+      profileType: "standard",
+      modules: ["service-operations", "projects"],
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "resident",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "statutory-fees-and-levies",
+        provisioning: "none",
+        platform: "no",
+        governance: "public-body",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "standard", it4itStages: ["request-to-fulfill"] },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+      seededServiceCategories: [
+        "Records",
+        "Permits",
+        "Community Programs",
+        "Professional Standards",
+      ],
+    },
+  },
+];

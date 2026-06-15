@@ -34,6 +34,15 @@ export type ReferenceModelPortfolioRollup = {
   rows: ReferenceModelPortfolioRollupRow[];
 };
 
+export type ReferenceModelElementNode = {
+  id: string;
+  parentId: string | null;
+  kind: string;
+  name: string;
+  description: string | null;
+  properties: Record<string, unknown>;
+};
+
 export type ReferenceModelDetail = {
   id: string;
   slug: string;

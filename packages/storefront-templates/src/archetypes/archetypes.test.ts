@@ -26,6 +26,22 @@ describe("archetype catalog", () => {
     expect(unique.size).toBe(ids.length);
   });
 
+  it("personal-trainer shares the scheduling/operating-hours setup of the other beauty booking archetypes", () => {
+    // AUDIT-R2-PT-P-001 alleged the personal-trainer wizard skips the Operating
+    // Hours step. That step is driven by the shared scheduling/activation config,
+    // not archetype-specific code; this guards against personal-trainer silently
+    // diverging from its siblings.
+    const beautyBooking = ALL_ARCHETYPES.filter(
+      (a) => a.category === "beauty-personal-care" && a.ctaType === "booking",
+    );
+    expect(beautyBooking.length).toBeGreaterThan(1);
+    const pt = beautyBooking.find((a) => a.archetypeId === "personal-trainer");
+    expect(pt, "personal-trainer should be a beauty-personal-care booking archetype").toBeTruthy();
+    const reference = beautyBooking.find((a) => a.archetypeId !== "personal-trainer")!;
+    expect(pt!.schedulingDefaults).toEqual(reference.schedulingDefaults);
+    expect(pt!.activationProfile).toEqual(reference.activationProfile);
+  });
+
   it("hero section always comes first", () => {
     for (const a of ALL_ARCHETYPES) {
       const sorted = [...a.sectionTemplates].sort((x, y) => x.sortOrder - y.sortOrder);
@@ -33,10 +49,26 @@ describe("archetype catalog", () => {
     }
   });
 
-  it("all booking-type archetypes have schedulingDefaults", () => {
-    const bookingArchetypes = ALL_ARCHETYPES.filter((a) => a.ctaType === "booking");
+  it("every archetype with a booking item has schedulingDefaults", () => {
+    // The setup route (apps/web/app/api/storefront/admin/setup/route.ts) seeds
+    // the ServiceProvider, availability, and per-item bookingConfig only when the
+    // template carries schedulingDefaults, and it keys on *item-level* ctaType.
+    // An archetype whose top-level ctaType is not "booking" but which contains a
+    // booking item (gym, yoga-studio, dance-studio, driving-school,
+    // artisan-goods, the HOA/condo reservations, the municipal pavilion) still
+    // needs schedulingDefaults — without it the booking calendar ships empty
+    // (AUDIT-R3/R4). Guarding on item-level ctaType closes the gap where the old
+    // archetype-level check let these pass while broken.
+    const hasBookingItem = (a: (typeof ALL_ARCHETYPES)[number]) =>
+      a.ctaType === "booking" ||
+      a.itemTemplates.some((t) => (t.ctaType ?? a.ctaType) === "booking");
+    const bookingArchetypes = ALL_ARCHETYPES.filter(hasBookingItem);
+    expect(bookingArchetypes.length).toBeGreaterThan(0);
     for (const a of bookingArchetypes) {
-      expect(a.schedulingDefaults, `${a.archetypeId} missing schedulingDefaults`).toBeDefined();
+      expect(
+        a.schedulingDefaults,
+        `${a.archetypeId} has a booking item but no schedulingDefaults`,
+      ).toBeDefined();
     }
   });
 
@@ -124,10 +156,158 @@ describe("archetype catalog", () => {
     expect(getCapabilityApplicability(mspProfile, "partner-program")).toBe("recommended");
   });
 
+  it("ships BIAN-grounded banking archetypes with KYC provisioning and disclosures (BI-5D9DCDE6)", () => {
+    const banking = ALL_ARCHETYPES.filter((a) => a.category === "banking-financial-services");
+    expect(banking.map((a) => a.archetypeId).sort()).toEqual([
+      "community-bank",
+      "credit-union",
+      "mortgage-lending",
+    ]);
+
+    for (const a of banking) {
+      // Engagement-layer posture: KYC-gated provisioning, account-based fees,
+      // billing prepared-not-prescribed (spec §7).
+      expect(a.activationProfile?.axes?.provisioning, `${a.archetypeId} provisioning`).toBe("account-with-kyc");
+      expect(a.activationProfile?.axes?.commercialModel, `${a.archetypeId} commercialModel`).toBe("account-based-fees");
+      expect(a.activationProfile?.billingReadinessMode, `${a.archetypeId} billing`).toBe("prepared-not-prescribed");
+      // Regulated-industry display obligations render through the disclosures section (spec §9.3).
+      expect(
+        a.sectionTemplates.some((s) => s.type === "disclosures"),
+        `${a.archetypeId} needs a disclosures section`,
+      ).toBe(true);
+      // Service categories are kebab-case BIAN Business Domain names.
+      expect(a.activationProfile?.seededServiceCategories).toContain("loans-and-deposits");
+      expect(a.activationProfile?.seededServiceCategories).toContain("compliance");
+      // Branch appointments are bookable even though the archetype CTA is inquiry.
+      expect(
+        a.itemTemplates.some((i) => i.ctaType === "booking" && (i.bookingDurationMinutes ?? 0) > 0),
+        `${a.archetypeId} needs a bookable appointment item`,
+      ).toBe(true);
+      expect(a.schedulingDefaults, `${a.archetypeId} needs schedulingDefaults for its booking items`).toBeDefined();
+    }
+
+    // Credit-union member vocabulary is a leaf-level override (spec §7.4).
+    const cu = banking.find((a) => a.archetypeId === "credit-union");
+    expect(cu?.vocabulary?.stakeholderLabel).toBe("Members");
+    // Banks keep the category default — no override needed.
+    const bank = banking.find((a) => a.archetypeId === "community-bank");
+    expect(bank?.vocabulary).toBeUndefined();
+  });
+
   it("does not derive a partner program for direct-to-consumer archetypes", () => {
     const salon = ALL_ARCHETYPES.find((a) => a.archetypeId === "hair-salon");
     const salonProfile = readActivationProfile(salon?.activationProfile);
     expect(salonProfile?.partnerProgram.portalMode).toBe("none");
     expect(getCapabilityApplicability(salonProfile, "partner-program")).toBe("not-applicable");
+  });
+
+  it("ships home builder archetypes with booking items, scheduling defaults, and correct operating model (EP-GRID-BUILDER)", () => {
+    const builders = ALL_ARCHETYPES.filter((a) => a.category === "real-estate-construction");
+    expect(builders.map((a) => a.archetypeId).sort()).toEqual([
+      "custom-home-builder",
+      "new-home-builder",
+    ]);
+
+    for (const b of builders) {
+      // Both have a booking item — model home tour or design consultation.
+      const hasBookingItem =
+        b.ctaType === "booking" ||
+        b.itemTemplates.some((t) => (t.ctaType ?? b.ctaType) === "booking");
+      expect(hasBookingItem, `${b.archetypeId} should have a booking item`).toBe(true);
+      // Scheduling defaults are required when a booking item exists (AUDIT-R3/R4 rule).
+      expect(b.schedulingDefaults, `${b.archetypeId} needs schedulingDefaults`).toBeDefined();
+      // Builders sell physical goods to households.
+      expect(b.activationProfile?.axes?.form, `${b.archetypeId} form`).toBe("goods");
+      expect(b.activationProfile?.axes?.primaryConsumer, `${b.archetypeId} primaryConsumer`).toBe("household");
+      expect(b.activationProfile?.axes?.delivery, `${b.archetypeId} delivery`).toBe("physical");
+      // Milestone payments require billing-readiness prepared-not-prescribed.
+      expect(b.activationProfile?.modules, `${b.archetypeId} modules`).toContain("billing-readiness");
+      expect(b.activationProfile?.modules, `${b.archetypeId} modules`).toContain("projects");
+      expect(b.activationProfile?.billingReadinessMode, `${b.archetypeId} billing`).toBe("prepared-not-prescribed");
+    }
+
+    // Model homes are open 7 days — production builder must have Sunday hours.
+    const nhb = builders.find((b) => b.archetypeId === "new-home-builder");
+    const nhbSunday = nhb?.schedulingDefaults?.defaultOperatingHours.find((h) => h.day === 0);
+    expect(nhbSunday, "new-home-builder model homes open on Sundays").toBeDefined();
+
+    // Custom builder runs business-hours only — no weekend hours.
+    const chb = builders.find((b) => b.archetypeId === "custom-home-builder");
+    const chbSunday = chb?.schedulingDefaults?.defaultOperatingHours.find((h) => h.day === 0);
+    expect(chbSunday, "custom-home-builder should not have Sunday hours").toBeUndefined();
+    const chbSaturday = chb?.schedulingDefaults?.defaultOperatingHours.find((h) => h.day === 6);
+    expect(chbSaturday, "custom-home-builder should not have Saturday hours").toBeUndefined();
+
+    // Custom builder carries a leaf-level vocabulary override (Clients, Build Team).
+    expect(chb?.vocabulary?.stakeholderLabel).toBe("Clients");
+    expect(chb?.vocabulary?.teamLabel).toBe("Build Team");
+    expect(chb?.vocabulary?.agentName).toBe("Build Consultant");
+
+    // Production builder has no leaf vocabulary override — category default applies.
+    expect(nhb?.vocabulary).toBeUndefined();
+
+    // Custom builder includes service-operations for active subcontractor coordination.
+    expect(chb?.activationProfile?.modules).toContain("service-operations");
+  });
+
+  it("ships dispatch-native field-service leaves with onsite operating-model axes (Gap A)", () => {
+    // The Gap-A leaves (2026-06-13 field-dispatch archetype gap analysis) are
+    // businesses where a mobile resource travels to the customer's site / asset /
+    // person. The forthcoming horizontal Field Dispatch capability derives from
+    // form=services + delivery=physical + consumptionChannel=onsite-plus-portal,
+    // so every new dispatch leaf must carry that triple and compose under
+    // service-operations until the field-dispatch module ships.
+    const GAP_A_DISPATCH_LEAVES = [
+      "hvac-contractor", "pest-control", "appliance-repair", "pool-spa-service",
+      "pressure-washing", "roofing-gutters",
+      "home-health-care", "mobile-phlebotomy", "dme-delivery",
+      "mobile-pet-grooming", "mobile-vet",
+      "field-inspection", "land-surveying", "process-serving-notary",
+      "mobile-beauty", "meal-delivery-program", "furniture-delivery-install",
+    ];
+    for (const id of GAP_A_DISPATCH_LEAVES) {
+      const a = ALL_ARCHETYPES.find((x) => x.archetypeId === id);
+      expect(a, `${id} should exist`).toBeDefined();
+      expect(a?.activationProfile?.axes?.form, `${id} form`).toBe("services");
+      expect(a?.activationProfile?.axes?.delivery, `${id} delivery`).toBe("physical");
+      expect(a?.activationProfile?.axes?.consumptionChannel, `${id} channel`).toBe("onsite-plus-portal");
+      expect(a?.activationProfile?.modules, `${id} modules`).toContain("service-operations");
+    }
+  });
+
+  it("ships the three dispatch-native categories with correct axes (Gap B)", () => {
+    const auto = ALL_ARCHETYPES.filter((a) => a.category === "automotive-services");
+    const moving = ALL_ARCHETYPES.filter((a) => a.category === "moving-and-logistics");
+    const security = ALL_ARCHETYPES.filter((a) => a.category === "security-services");
+
+    expect(auto.map((a) => a.archetypeId).sort()).toEqual([
+      "auto-glass", "locksmith", "mobile-detailing", "mobile-mechanic", "mobile-tire", "roadside-assistance",
+    ]);
+    expect(moving.map((a) => a.archetypeId).sort()).toEqual([
+      "courier-delivery", "junk-removal", "last-mile-freight", "moving-company",
+    ]);
+    expect(security.map((a) => a.archetypeId).sort()).toEqual([
+      "alarm-cctv-install", "guard-patrol",
+    ]);
+
+    // Every leaf in the new categories derives field dispatch from its axes.
+    for (const a of [...auto, ...moving, ...security]) {
+      expect(a.activationProfile?.axes?.form, `${a.archetypeId} form`).toBe("services");
+      expect(a.activationProfile?.axes?.delivery, `${a.archetypeId} delivery`).toBe("physical");
+      expect(a.activationProfile?.axes?.consumptionChannel, `${a.archetypeId} channel`).toBe("onsite-plus-portal");
+      expect(a.activationProfile?.modules, `${a.archetypeId} modules`).toContain("service-operations");
+    }
+
+    // The windshield / auto-glass leaf is the capability spec's named example and
+    // carries the ADAS-calibration tag that anchors its compliance overlay.
+    const glass = auto.find((a) => a.archetypeId === "auto-glass");
+    expect(glass?.tags).toContain("adas");
+
+    // Capability derivation is reachable for a recurring-agreement new-category
+    // leaf: guard contracts require service agreements.
+    const guard = readActivationProfile(
+      security.find((a) => a.archetypeId === "guard-patrol")?.activationProfile,
+    );
+    expect(getCapabilityApplicability(guard, "service-agreements")).toBe("required");
   });
 });

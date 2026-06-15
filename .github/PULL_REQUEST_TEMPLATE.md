@@ -39,9 +39,21 @@
 
 <!-- Paste the exact canonical-runtime evidence: command, output snippet, screenshot link, MCP evidence record, or CI job URL. -->
 
-## Related issues
+## Related issues / Epic
 
 <!-- Link issues this PR closes or relates to. Use "Closes #123" to auto-close on merge. -->
+<!-- For large epics (e.g. EP-GROK-001), list the parent epic and the specific child BIs this PR covers. -->
+
+## Epic / Backlog linkage (for multi-BI work)
+
+<!-- Example for Grok epic:
+Parent: EP-GROK-001: First-class Grok support
+This PR covers: BI-GROK-006 (partial), ...
+-->
+
+## Overlap sweep
+
+<!-- `gh pr list --state open --limit 50` result + any coordination notes. -->
 
 ## Notes for the reviewer
 

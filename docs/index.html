@@ -461,7 +461,8 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         Expect 5&ndash;10 minutes for the platform itself, plus additional time for the initial AI model download. Login credentials are shown at the end of installation and saved to <code>.admin-credentials</code> in your install directory. After installation: <code>dpf-start</code> to start, <code>dpf-stop</code> to stop.
       </div>
       <div class="note" style="margin-top:14px;">
-        <strong>Other platforms (early access &mdash; pilots wanted):</strong> the macOS Apple Silicon, native Linux, and Cloud Single-VM (AWS / GCP / Azure, with Terraform modules) installers are code-complete on <code>main</code> with green CI. Real-hardware verification reports are what graduate them from Early Access to GA &mdash; see the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/README.md#quick-start">Quick Start table</a> and the dedicated install runbooks under <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/install">docs/install/</a>.
+        <strong>macOS Apple Silicon (GA):</strong> validated end-to-end on real Apple Silicon hardware (M-series, macOS 14+), including the voice STT + native-host TTS path &mdash; see the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/install/macos.md">macOS install guide</a>.<br>
+        <strong>Other platforms (early access &mdash; pilots wanted):</strong> the native Linux and Cloud Single-VM (AWS / GCP / Azure, with Terraform modules) installers are code-complete on <code>main</code> with green CI. Real-hardware verification reports are what graduate them from Early Access to GA &mdash; see the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/README.md#quick-start">Quick Start table</a> and the dedicated install runbooks under <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/install">docs/install/</a>.
       </div>
     </div>
   </section>
@@ -567,7 +568,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       <tbody>
         <tr><td>Portfolio Management</td><td>Organize digital products into portfolios with health metrics, investment tracking, and lifecycle management.</td></tr>
         <tr><td>HR &amp; Workforce</td><td>Manage employees, roles, reviews, timesheets, and organizational structure. The same role hierarchy (HR-000 through HR-500) drives platform access.</td></tr>
-        <tr><td>Customer Relationships</td><td>Track customer accounts, sales pipeline from lead to order, and engagement history.</td></tr>
+        <tr><td>Customer Relationships &amp; CRM</td><td>Track customer accounts and engagement history through a low-friction, Pipedrive-inspired visual pipeline with visible next actions &mdash; a customer-acquisition loop from lead to qualify to opportunity to quote/order/campaign.</td></tr>
         <tr><td>Compliance &amp; Regulatory</td><td>Onboard regulations and standards, map controls to obligations, collect evidence, track posture, and manage licensing readiness.</td></tr>
         <tr><td>Financial Management</td><td>Invoices, suppliers and bills, purchase orders, banking and reconciliation, AI-spend visibility.</td></tr>
         <tr><td>Enterprise Architecture</td><td>Model the application, technology, and business layers with ArchiMate notation; graph-backed via Neo4j.</td></tr>
@@ -577,6 +578,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr><td>Marketing execution loop</td><td>Draft &rarr; approve &rarr; publish &rarr; respond &rarr; measure for outbound marketing across LinkedIn posts, LinkedIn Ads, and email &mdash; with hard spend ceilings, per-send human approval, and a bounded autopilot scheduler. Every external publish is gated and audited.</td></tr>
         <tr><td>Coworker screen actions</td><td>Coworkers can read what a screen offers (via a screen manifest) and propose on-screen actions on your behalf. Destructive actions flow through a propose &rarr; approve &rarr; dispatch envelope so the coworker drives the real UI under the same human-in-the-loop gates as a button click.</td></tr>
         <tr><td>Organization knowledge corpus (WWWD)</td><td>A governed, org-scoped knowledge base built from onboarding context, uploaded business documents, Q&amp;A, and approved AI research. Everything enters draft-by-default with provenance and trust grading; reviewed material feeds the WWMD decision gate and coworker recall.</td></tr>
+        <tr><td>Profession corpus (WSID)</td><td>The third decision scope: a per-role professional body of knowledge (DAMA-DMBOK, GAAP, the marketing canon&hellip;) so each coworker&rsquo;s craft judgment is source-traced and audited rather than improvised by the underlying model.</td></tr>
         <tr><td>Build Studio</td><td>A guided five-phase pipeline (ideate, plan, build, review, ship) with AI coworkers, sandbox execution, code intelligence, impact reports, and promotion or PR handoff where configured. Active hardening is underway for oversized-build decomposition and safer portal upgrades.</td></tr>
         <tr><td>Operations &amp; Backlog</td><td>Manage delivery work with epics, items, priorities, and status tracking. Coworkers create, triage, size, and link items through governed MCP tools.</td></tr>
         <tr><td>AI Workforce</td><td>Provider configuration, dynamic model discovery, capability-tier routing, operations map, capacity continuity, capability-needs review, agent registry, and per-agent grants.</td></tr>
@@ -586,7 +588,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr><td>Identity &amp; Federation</td><td>LDAP, Active Directory, and Microsoft Entra federation for sign-in and directory bootstrap; the platform remains the source of truth for roles, route bundles, and coworker associations.</td></tr>
         <tr><td>Common Skills Library</td><td>A registry of reusable, role-bound AI skills (<code>.skill.md</code> files) declaring tools, triggers, risk band, and which coworkers can invoke them.</td></tr>
         <tr><td>Agent Interoperability</td><td>Internal coworker runtime structured around an A2A-aligned task envelope; MCP (Model Context Protocol) for tool and context interoperability.</td></tr>
-        <tr><td>Observability &amp; Evidence</td><td>Prometheus-based discovery and metrics, an append-only authorization decision log, and chain-of-custody traces linking principal, agent, tool call, approval, and outcome.</td></tr>
+        <tr><td>Observability &amp; Evidence</td><td>Full-stack monitoring &mdash; Prometheus metrics plus Loki/Alloy container-log aggregation with real-time error-storm and novel-signature detection. Every signal (metric, log, crash, user report) converges into one deduped issue inbox, auto-triaged to the backlog and reflected on a shell-nav health dot. Plus an append-only authorization decision log and chain-of-custody traces linking principal, agent, tool call, approval, and outcome.</td></tr>
         <tr><td>Hive Mind</td><td>Opt-in cross-install contribution: features built locally can be reviewed, parameterized, and shared so the next install gets them out of the box.</td></tr>
       </tbody>
     </table>
@@ -606,7 +608,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       <div class="pillar">
         <div class="tag">Archetypes</div>
         <strong>Pick a market archetype &mdash; the platform reshapes itself.</strong>
-        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Twelve market categories and 46 leaf archetype templates ship with the platform &mdash; including a B2B wholesale-distribution archetype that derives a partner/reseller program from its operating-model axes. Choosing one bootstraps the customer portal, vocabulary, booking and form rules, finance assumptions, marketing posture, and internal worker-home direction. The archetype is the single source of truth for industry; downstream surfaces read from it rather than from a separately editable string.</p>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Fifteen market categories and 56 leaf archetype templates ship with the platform &mdash; spanning small-business services through banking and credit unions, civic bodies (municipalities, utilities, law enforcement), and rental/shared-asset operators, plus a B2B wholesale-distribution archetype that derives a partner/reseller program from its operating-model axes. Choosing one bootstraps the customer portal, vocabulary, booking and form rules, finance assumptions, marketing posture, and internal worker-home direction. The archetype is the single source of truth for industry; downstream surfaces read from it rather than from a separately editable string.</p>
       </div>
       <div class="pillar">
         <div class="tag">Common Skills</div>
@@ -622,9 +624,9 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
   </section>
 
   <section id="archetypes">
-    <h2>Twelve market categories, 46 leaf archetypes</h2>
+    <h2>Fifteen market categories, 56 leaf archetypes</h2>
     <p class="sub">
-      Archetypes are the bootstrap mechanism that turns a fresh install into a working business setup. Each one carries storefront design, vocabulary, role emphasis, process defaults, finance assumptions, and marketing posture. The same archetype now also drives <strong>internal workspace homes</strong> &mdash; dispatch boards for trades, appointment-readiness boards for clinics, merchandising boards for retail, and equivalent daily boards for other categories. The workspace-home substrate (registry, resolver, projection service) has landed; the HVAC dispatcher board is the first vertical being implemented against it.
+      Archetypes are the bootstrap mechanism that turns a fresh install into a working business setup. Each one carries storefront design, vocabulary, role emphasis, process defaults, finance assumptions, and marketing posture. The same archetype now also drives <strong>internal workspace homes</strong> &mdash; dispatch boards for trades, appointment-readiness boards for clinics, merchandising boards for retail, and equivalent daily boards for other categories. The workspace-home substrate (registry, resolver, projection service) has landed; the HVAC dispatcher board is the first vertical being implemented against it. <strong>Detailed guide:</strong> <a href="/user-guide/market-archetypes">market-archetypes</a>.
     </p>
     <div class="grid">
       <div class="card"><h3>Healthcare &amp; Wellness</h3><p>Clinics, practitioners, wellness providers; appointment-centric flows.</p></div>
@@ -639,13 +641,16 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       <div class="card"><h3>Fitness &amp; Recreation</h3><p>Gyms, studios, leagues; memberships, classes, attendance.</p></div>
       <div class="card"><h3>Nonprofit &amp; Community</h3><p>Charities, associations, community groups; donations, programs, volunteers.</p></div>
       <div class="card"><h3>HOA &amp; Property Management</h3><p>Homeowners associations and property managers; residents, dues, violations.</p></div>
+      <div class="card"><h3>Banking &amp; Financial Services</h3><p>Community banks, credit unions, mortgage lending; BIAN-grounded, with jurisdiction-specific regulatory governance and member-equity for credit unions.</p></div>
+      <div class="card"><h3>Public Sector &amp; Civic</h3><p>Small-town municipalities, municipal utilities (water/electric), law enforcement; resident and ratepayer skins, open-meetings governance, records requests, and 311 service routing.</p></div>
+      <div class="card"><h3>Rental &amp; Shared Assets</h3><p>Equipment and tool rental, self-storage, and agricultural shared-machinery co-ops; the reserve &rarr; use &rarr; return &amp; inspect &rarr; re-pool value stream over a pooled asset.</p></div>
     </div>
   </section>
 
   <section id="coworkers">
     <h2>Meet the coworker workforce</h2>
     <p class="sub">
-      Coworkers are role-bound AI personas, each scoped to a value stream, each with its own grant set and skill library. They are the platform&rsquo;s primary surface for getting work done &mdash; you talk to the coworker who owns the area you&rsquo;re working in, and the platform routes you correctly based on the page, active archetype, and permissions in play.
+      Coworkers are role-bound AI personas, each scoped to a value stream, each with its own grant set and skill library. They are the platform&rsquo;s primary surface for getting work done &mdash; you talk to the coworker who owns the area you&rsquo;re working in, and the platform routes you correctly based on the page, active archetype, and permissions in play. The full registry holds <strong>63 agents</strong> (48 value-stream specialists, 9 orchestrators, 6 cross-cutting); the personas below are the ones an operator talks to directly. <strong>Detailed guide:</strong> <a href="/user-guide/getting-started/ai-coworker">getting-started/ai-coworker</a> and <a href="/user-guide/market-archetypes">market-archetypes</a>.
     </p>
     <div class="grid">
       <div class="card"><h3>onboarding-coo</h3><p>Hosts first-run setup. Introduces the platform, explains AI providers, walks through identity, branding, and finance configuration.</p></div>
@@ -653,23 +658,34 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       <div class="card"><h3>portfolio-advisor</h3><p>Digital products and portfolios &mdash; health, investment, lifecycle.</p></div>
       <div class="card"><h3>ea-architect</h3><p>Enterprise architecture &mdash; ArchiMate views, capability maps, dependencies.</p></div>
       <div class="card"><h3>build-specialist</h3><p>Drives Build Studio: design docs, sandbox builds, code intelligence, test-first decomposition, code review.</p></div>
-      <div class="card"><h3>compliance-officer</h3><p>Standards onboarding, licensing readiness, control mapping, evidence collection, posture tracking.</p></div>
+      <div class="card"><h3>licensing-specialist</h3><p>Archetype-aware licensing and permit readiness, control mapping, evidence collection, posture tracking. (aka compliance-licensing-specialist.)</p></div>
       <div class="card"><h3>hr-specialist</h3><p>Workforce, roles, reviews, timesheets, organizational structure.</p></div>
       <div class="card"><h3>customer-advisor</h3><p>Customer accounts, sales pipeline, engagement history.</p></div>
-      <div class="card"><h3>storefront-advisor</h3><p>Storefront content, archetype-driven sections, vocabulary, design system.</p></div>
-      <div class="card"><h3>inventory-specialist</h3><p>Items, stock, fulfillment, orders.</p></div>
-      <div class="card"><h3>marketing-specialist</h3><p>Brand voice, content, campaigns &mdash; reads from the same archetype that seeded the storefront.</p></div>
-      <div class="card"><h3>ops-coordinator</h3><p>Operations and backlog: epics, items, priorities, status, scheduling.</p></div>
+      <div class="card"><h3>finance-agent</h3><p>Budget, chargeback, P&amp;L attribution, AI-spend visibility, and financial reporting.</p></div>
+      <div class="card"><h3>inventory-specialist</h3><p>Items, stock, fulfillment, orders, product lifecycle and market fit. (aka estate-specialist.)</p></div>
+      <div class="card"><h3>marketing-specialist</h3><p>Brand voice, content, campaigns, storefront sections &mdash; reads from the same archetype that seeded the storefront.</p></div>
+      <div class="card"><h3>ops-coordinator</h3><p>Operations and backlog: epics, items, priorities, status, scheduling (Scrum Master for delivery flow and WIP limits).</p></div>
       <div class="card"><h3>platform-engineer</h3><p>Platform health: providers, model routing, agent registry, infrastructure observability.</p></div>
-      <div class="card"><h3>docs-specialist</h3><p>Documentation upkeep &mdash; architecture, user guide, in-product help.</p></div>
+      <div class="card"><h3>documentation-specialist</h3><p>Documentation upkeep and validated diagrams &mdash; architecture, user guide, in-product help.</p></div>
+      <div class="card"><h3>external-catalog-scout</h3><p>Scouts external coworker and archetype patterns from the hive mind. (aka hive-scout.)</p></div>
       <div class="card"><h3>admin-assistant</h3><p>Cross-cutting administrative work: scheduling, reminders, filing, follow-ups.</p></div>
+    </div>
+
+    <h3 style="margin-top:24px; font-size:16px;">Behind the personas: value-stream orchestrators and build sub-agents</h3>
+    <p class="sub" style="margin-top:0;">
+      The personas above front a deeper bench. Nine <strong>value-stream orchestrators</strong> (one per IT4IT value stream plus a coordinating COO orchestrator) sequence specialist work, and Build Studio fans a feature out to four <strong>build sub-agents</strong> who each own a slice of the implementation.
+    </p>
+    <div class="grid">
+      <div class="card"><h3>Value-stream orchestrators</h3><p>coo-orchestrator (Jiminy), then evaluate-, explore-, integrate-, deploy-, release-, consume-, operate-, and governance-orchestrator &mdash; each owns flow, prioritization, and gate enforcement within its value stream.</p></div>
+      <div class="card"><h3>Build sub-agents</h3><p>build-data-architect (schema, migrations), build-software-engineer (APIs, server actions), build-frontend-engineer (pages, components, WCAG), and build-qa-engineer (tests, typecheck) &mdash; the team a single build is decomposed across.</p></div>
+      <div class="card"><h3>WSID professional grounding</h3><p>Each coworker role now resolves against a profession corpus (WSID, in the Autonomy section below) so its craft judgment &mdash; data-architecture, finance, marketing &mdash; is sourced and audited, not LLM folklore.</p></div>
     </div>
   </section>
 
   <section id="build-studio">
     <h2>Build Studio: the five-phase pipeline</h2>
     <p class="sub">
-      Build Studio is how the platform extends itself. A user (or a coworker on a user&rsquo;s behalf) proposes a feature, and the request flows through five governed phases. Each phase has its own gate &mdash; nothing advances until the previous gate&rsquo;s artifacts are present and acceptable. Phase-to-phase dispatch is now automatic: once a build is approved to start, Ideate &rarr; Plan &rarr; Build &rarr; Review run without an operator clicking between them, and the deliberate human gate is the final diff review before anything ships. The lifecycle is also right-sized by work type and size, so a bug fix or doc change carries lighter ceremony than a net-new feature. End-to-end reliability hardening continues, so treat Build Studio as the governed evidence and development surface rather than a guarantee that every complex source change lands untouched.
+      Build Studio is how the platform extends itself. A user (or a coworker on a user&rsquo;s behalf) proposes a feature, and the request flows through five governed phases. Each phase has its own gate &mdash; nothing advances until the previous gate&rsquo;s artifacts are present and acceptable. Phase-to-phase dispatch is now automatic: once a build is approved to start, Ideate &rarr; Plan &rarr; Build &rarr; Review run without an operator clicking between them, and the deliberate human gate is the final diff review before anything ships. The lifecycle is also right-sized by work type and size, so a bug fix or doc change carries lighter ceremony than a net-new feature. End-to-end reliability hardening continues, so treat Build Studio as the governed evidence and development surface rather than a guarantee that every complex source change lands untouched. <strong>Detailed guide:</strong> <a href="/user-guide/build-studio/">user-guide/build-studio</a> (with <a href="/user-guide/build-studio/sandbox">sandbox</a> and <a href="/user-guide/build-studio/deployment">deployment</a> notes).
     </p>
     <table class="guide">
       <thead>
@@ -707,6 +723,11 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       Build Studio captures phase-by-phase evidence so the path from idea to ship is fully reconstructable &mdash; the same evidence trail the compliance module uses when it asks &ldquo;what changed and who authorized it?&rdquo;
     </p>
     <div class="pillars" style="margin-top:18px;">
+      <div class="pillar">
+        <div class="tag">Develops itself on local AI</div>
+        <strong>Build Studio writes code on your own local LLM.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A dedicated dispatch engine, <strong>opencode</strong>, runs the bundled Docker Model Runner model (e.g. <code>qwen3-coder</code>) as a coding agent inside the sandbox &mdash; no vendor credential, zero token cost, air-gappable. It parses the local model&rsquo;s native tool-call format itself, so the platform can ideate, plan, and build a change end-to-end without a cloud API. Architecture: <a href="/architecture/local-llm-build-engine">local-llm-build-engine</a>.</p>
+      </div>
       <div class="pillar">
         <div class="tag">Design-time decomposition</div>
         <strong>Oversized builds split before Plan churn.</strong>
@@ -753,7 +774,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
   <section id="ai-workforce">
     <h2>AI workforce: local-first, with optional cloud</h2>
     <p class="sub">
-      The AI workforce ships ready-to-run on your own hardware and grows as you connect external providers. Routing decisions are dynamic and capability-tier driven &mdash; never hard-pinned to a specific model in seed data &mdash; so the platform can pick the right LLM for each task type and sensitivity level without manual configuration.
+      The AI workforce ships ready-to-run on your own hardware and grows as you connect external providers. Routing decisions are dynamic and capability-tier driven &mdash; never hard-pinned to a specific model in seed data &mdash; so the platform can pick the right LLM for each task type and sensitivity level without manual configuration. <strong>Detailed guides:</strong> <a href="/user-guide/ai-workforce/">ai-workforce</a>, <a href="/user-guide/ai-workforce/connecting-providers">connecting-providers</a>, <a href="/user-guide/ai-workforce/model-routing-lifecycle">model-routing-lifecycle</a>, <a href="/user-guide/ai-workforce/ai-cost-governance">ai-cost-governance</a>, and <a href="/user-guide/ai-workforce/decision-perspective">decision-perspective</a> (WWMD / WSID + voice).
     </p>
     <div class="pillars">
       <div class="pillar">
@@ -763,8 +784,13 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       </div>
       <div class="pillar">
         <div class="tag">Optional cloud</div>
-        <strong>Connect Anthropic, OpenAI, and others.</strong>
-        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">External providers are an upgrade, not a prerequisite. Sensitivity clearance per provider decides which traffic each one is allowed to see; local stays the default for restricted data.</p>
+        <strong>Connect Anthropic, OpenAI, Grok, and others.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">External providers are an upgrade, not a prerequisite. Connect with an API key, a subscription OAuth sign-in (Claude Max, ChatGPT Codex), or a device-code sign-in (xAI / Grok). Sensitivity clearance per provider decides which traffic each one is allowed to see; local stays the default for restricted data.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">xAI / Grok</div>
+        <strong>First-class Grok support, signed in without an API key.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Grok is a direct provider alongside Anthropic and OpenAI, seeded with Grok&nbsp;4.3 (reasoning) and Grok&nbsp;Build&nbsp;0.1 (agentic coding). Because hunting for an xAI key is poor UX for a non-technical founder, the platform drives the Grok CLI&rsquo;s own <code>device-auth</code> OAuth: a coworker or the provider page starts the flow (<code>grok_signin_start</code>), you confirm a code in your browser (Google / X / Apple), and the captured credential is injected into each build sandbox and self-refreshed. See <a href="/user-guide/ai-workforce/provider-xai">provider-xai</a> and <a href="/user-guide/ai-workforce/connecting-providers">connecting-providers</a>.</p>
       </div>
       <div class="pillar">
         <div class="tag">Dynamic discovery</div>
@@ -794,7 +820,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       <div class="pillar">
         <div class="tag">Persona Voice Layer</div>
         <strong>Coworkers can speak, without gaining authority.</strong>
-        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A bundled speaches (faster-whisper) STT service handles voice input, and a founder seed voice now ships in the install seed (with a consent record) so spoken output works out of the box. TTS providers include Apple-Silicon-native sidecars (Chatterbox, MLX) with sentence-level streaming for low time-to-first-audio and per-profile speed/enthusiasm tuning. Voice never changes approval, confidence, or audit rules, and real-person voice requires consent.</p>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A bundled speaches (faster-whisper) STT service handles voice input, and a founder seed voice now ships in the install seed (with a consent record) so spoken output works out of the box. TTS defaults to <strong>self-hosted</strong> so audio stays on your hardware, and the backend is operating-system-dependent: a Chatterbox <code>dpf-tts</code> container on Linux/Windows with an NVIDIA GPU, or a native-host MLX sidecar on Apple Silicon (Docker Desktop on macOS has no GPU passthrough). Cloud TTS (Cartesia, Fish Audio, ElevenLabs) is an optional opt-in. Voice never changes approval, confidence, or audit rules, and real-person voice requires consent. See <a href="/user-guide/ai-workforce/decision-perspective">decision-perspective</a>.</p>
       </div>
       <div class="pillar">
         <div class="tag">Routing resilience</div>
@@ -906,12 +932,17 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
     <p class="sub" style="margin-top:0;">
       WWMD draws on the shared founder-kernel principles. WWWD &mdash; the organization knowledge corpus &mdash; is the org-specific complement: a governed, single-org knowledge base built from onboarding context, uploaded business documents, market Q&amp;A, and approved AI research. Every source &mdash; data entry, document upload, scheduled research, integrations, coverage-gap detection &mdash; flows through one enrichment contract that handles idempotency, provenance, and trust grading (first-party, derived, researched). Material lands <em>draft-by-default</em> regardless of source; human review promotes it to authoritative before it influences anything. Reviewed material projects into the decision profile that feeds the WWMD gate and coworker recall, and a freshness-governance layer supersedes stale material and re-enqueues research when coverage gaps appear.
     </p>
+
+    <h3 style="margin-top:24px; font-size:16px;">The profession corpus (WSID): what a competent professional in this role should do</h3>
+    <p class="sub" style="margin-top:0;">
+      WWMD answers <em>&ldquo;what would the founder/platform do?&rdquo;</em> and WWWD answers <em>&ldquo;what would this organization do?&rdquo;</em> &mdash; but a coworker doing a specialist&rsquo;s job also needs a governed source for <em>what a competent professional in that role should do</em>. WSID (&ldquo;What Should I Do?&rdquo;) is the third scope in the same family, reusing the same architecture &mdash; a versioned profile, a source-traced corpus, weighted retrieval, and an audited gate &mdash; but scoped to the <strong>profession</strong> rather than the founder or the org. Each coworker role family gets its own profile (<code>WSID-DATA-ARCHITECT</code>, <code>WSID-FINANCE</code>, <code>WSID-MARKETING</code>, &hellip;) backed by a corpus distilled from <em>fetched, verifiable sources</em> &mdash; DAMA-DMBOK and ANSI SQL and OWASP for a data architect, GAAP and SOX control concepts for finance, the AMA body of knowledge and CAN-SPAM / GDPR consent rules for marketing &mdash; never authored from model memory. When a coworker hits a craft question, the gate resolves against its profession profile first, then falls back through role &rarr; org WWWD &rarr; DPF doctrine &rarr; defer-with-gap-capture. The contract is full-roster: WSID is designed to scope <em>every</em> coworker on the platform, with data-architect, finance, and marketing as the pilot three that prove the pipeline.
+    </p>
   </section>
 
   <section id="data-layer">
     <h2>The data layer and sandbox containers</h2>
     <p class="sub">
-      The platform is a containerized stack with a small, deliberate set of stateful services. Knowing what lives where helps you reason about backups, sovereignty, and the boundary between safe iteration and production state.
+      The platform is a containerized stack with a small, deliberate set of stateful services. Knowing what lives where helps you reason about backups, sovereignty, and the boundary between safe iteration and production state. <strong>Detailed reference:</strong> <a href="/architecture/platform-overview">architecture/platform-overview</a>.
     </p>
     <table class="guide">
       <thead>
@@ -957,7 +988,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
   <section id="identity">
     <h2>Identity, federation, and agent interoperability</h2>
     <p class="sub">
-      The platform treats human and agent identity as one design surface. Humans sign in through your existing directory; agents carry their own durable identifiers and traceable claims; coworker-to-coworker work travels as a governed task, not as an implicit chat side-effect.
+      The platform treats human and agent identity as one design surface. Humans sign in through your existing directory; agents carry their own durable identifiers and traceable claims; coworker-to-coworker work travels as a governed task, not as an implicit chat side-effect. <strong>Detailed guides:</strong> <a href="/user-guide/platform/identity-and-access">platform/identity-and-access</a>; architecture: <a href="/architecture/GAID">GAID</a> and <a href="/architecture/trusted-ai-kernel">trusted-ai-kernel</a>.
     </p>
     <table class="guide">
       <thead>
@@ -991,9 +1022,19 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
   <section id="observability">
     <h2>Observability and evidence</h2>
     <p class="sub">
-      Governance is only worth the policy if you can see what happened. The platform ships with discovery, metrics, and an append-only audit ledger so every meaningful action by a human or an agent is reviewable end-to-end.
+      Governance is only worth the policy if you can see what happened &mdash; and the platform has to notice problems before you do. It ships with full-stack monitoring (metrics <em>and</em> container logs), proactive anomaly detection, a single deduped issue inbox that every signal converges into, and an append-only audit ledger, so anything that happens to a human or an agent is both <em>caught</em> and reviewable end-to-end. <strong>Detailed guides:</strong> <a href="/architecture/platform-overview#how-the-platform-handles-anything-that-happens">how the platform handles anything that happens</a>, <a href="/user-guide/platform/authority-and-audit">platform/authority-and-audit</a>, and <a href="/user-guide/operations/infrastructure-discovery">operations/infrastructure-discovery</a>.
     </p>
     <div class="pillars">
+      <div class="pillar">
+        <div class="tag">Log monitoring</div>
+        <strong>Full-stack logs, not just metrics.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Loki + Alloy tail every container&rsquo;s stdout/stderr &mdash; one config, cross-platform via the Docker socket, so the macOS/Windows installs that exporters can&rsquo;t cover are still watched. A Loki ruler catches error-rate spikes and storms in real time; a novel-signature scanner files an issue the first time an unseen error appears, even once. A per-stream rate cap keeps a flooding container from filling the disk.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">One issue inbox</div>
+        <strong>Every signal converges and is tracked.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Metric breaches, log storms, novel errors, in-process crashes, and user reports all land in one deduped inbox (<code>PlatformIssueReport</code> / <code>PortfolioQualityIssue</code>), auto-triage into the backlog, flip a shell-nav health dot visible on every page, and are tracked to resolution &mdash; no source gets its own parallel inbox, so the platform surfaces hidden problems without anyone watching Docker.</p>
+      </div>
       <div class="pillar">
         <div class="tag">Discovery</div>
         <strong>Prometheus-based estate inventory.</strong>
@@ -1025,7 +1066,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
   <section id="compliance">
     <h2>Compliance, evidence, and audit</h2>
     <p class="sub">
-      Compliance is treated as a first-class concern in the data model rather than a reporting layer bolted on top. Standards and regulations are first-class objects, controls map to obligations, evidence is collected against controls, and the audit ledger ties every governed action back to a principal, an authority, and an outcome.
+      Compliance is treated as a first-class concern in the data model rather than a reporting layer bolted on top. Standards and regulations are first-class objects, controls map to obligations, evidence is collected against controls, and the audit ledger ties every governed action back to a principal, an authority, and an outcome. <strong>Detailed guides:</strong> <a href="/user-guide/compliance/">compliance</a> &mdash; <a href="/user-guide/compliance/controls-and-evidence">controls &amp; evidence</a>, <a href="/user-guide/compliance/posture-and-gaps">posture &amp; gaps</a>, <a href="/user-guide/compliance/licensing-readiness">licensing readiness</a>.
     </p>
     <table class="guide">
       <thead>
@@ -1134,7 +1175,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
   <section id="mcp">
     <h2>The platform as a programmable surface (MCP)</h2>
     <p class="sub">
-      The Model Context Protocol (MCP) lets external clients drive the platform with the same tools, the same grants, and the same approval gates that the in-product coworkers face. That means you can connect the platform to your existing AI tooling without giving anything a back-door &mdash; every external call is authorized, audited, and traceable, just like a button click.
+      The Model Context Protocol (MCP) lets external clients drive the platform with the same tools, the same grants, and the same approval gates that the in-product coworkers face. That means you can connect the platform to your existing AI tooling without giving anything a back-door &mdash; every external call is authorized, audited, and traceable, just like a button click. <strong>Detailed guide:</strong> <a href="/user-guide/platform/tools-and-integrations">platform/tools-and-integrations</a>.
     </p>
     <div class="pillars">
       <div class="pillar">
@@ -1163,7 +1204,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
   <section id="roles">
     <h2>Roles and access</h2>
     <p class="sub">
-      The platform uses a two-tier role model so platform-wide governance is separated from product-specific operating structures. Tier 1 is six immutable roles aligned to IT4IT v3.0.1 value-stream authority. Tier 2 is per-product roles defined by the business model the product runs on (SaaS, Marketplace, IoT, etc.) &mdash; a user can hold different business-model roles on different products.
+      The platform uses a two-tier role model so platform-wide governance is separated from product-specific operating structures. Tier 1 is six immutable roles aligned to IT4IT v3.0.1 value-stream authority. Tier 2 is per-product roles defined by the business model the product runs on (SaaS, Marketplace, IoT, etc.) &mdash; a user can hold different business-model roles on different products. <strong>Detailed guides:</strong> <a href="/user-guide/getting-started/roles-and-access">getting-started/roles-and-access</a> and <a href="/user-guide/products/business-model-roles">products/business-model-roles</a>.
     </p>
     <table class="guide">
       <thead>
@@ -1415,7 +1456,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
           <td>Default-deny grants, route-scoped agent identity, immutable directive injection, audit log all live.</td>
         </tr>
         <tr>
-          <td>Archetypes (12 categories, 46 leaf templates)</td>
+          <td>Archetypes (15 categories, 56 leaf templates)</td>
           <td><strong>Production</strong></td>
           <td>Bootstrap on storefront setup; sections, vocabulary, finance profile, design system, marketing posture, and workspace-home direction seeded.</td>
         </tr>
@@ -1480,9 +1521,19 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
           <td>Anthropic cache telemetry, accurate per-model pricing, <code>BuildPhaseRun</code> + <code>ToolExecution</code> metering, <code>AgentBudgetEvent</code>, rolling thread compaction, phase-boundary summarization, and CLI-pool pre-dispatch rate-limit checks are live. Per-phase cost breakdown surfaces in Build Studio. Budget enforcement (hard stops vs. soft alerts) is the closing piece.</td>
         </tr>
         <tr>
-          <td>Decision Perspective Gate (WWMD) + Persona Voice Layer</td>
+          <td>Decision Perspective Gate (WWMD / WWWD / WSID) + Persona Voice Layer</td>
           <td><strong>Early access</strong></td>
           <td>WWMD is the canonical handler for open-question and ambiguity surfaces, returning <em>recommend</em> / <em>arbitrate</em> / <em>escalate</em> / <em>defer</em> with confidence and audit trail; also exposed as an MCP tool, and now backed by the org WWWD corpus for org-specific judgment. The Persona Voice Layer ships speaches-based STT, a seeded founder voice, Apple-Silicon-native TTS sidecars (Chatterbox, MLX) with sentence-level streaming, and per-profile voice tuning.</td>
+        </tr>
+        <tr>
+          <td>WSID profession corpus (third decision scope)</td>
+          <td><strong>Early access</strong></td>
+          <td>The third decision-perspective scope after WWMD (founder/platform) and WWWD (org): a per-role professional corpus so coworker craft judgment is source-traced and audited. Phase&nbsp;0 (profession profile kind + professional-practice domain class), Phase&nbsp;1 (Profession Source Registry + 23 family profiles + role resolver), and the data-architect corpus with provenance lint and seed wiring are merged; finance and marketing corpora and deeper gate-resolution wiring are the pilot-three completion work. Reuses the existing profile + corpus + retrieval + gate substrate &mdash; no new tables.</td>
+        </tr>
+        <tr>
+          <td>xAI / Grok provider support (EP-GROK-001)</td>
+          <td><strong>Early access</strong></td>
+          <td>Grok is a direct provider with seeded Grok&nbsp;4.3 and Grok&nbsp;Build&nbsp;0.1 models. API-key auth plus a device-code OAuth path (drives the Grok CLI&rsquo;s own <code>device-auth</code>, stores and self-refreshes the credential, injects it into build sandboxes) are merged across slices 1&ndash;4, with operator-page and coworker-driven (<code>grok_signin_start</code> / <code>grok_signin_status</code>) setup. End-to-end functional verification on a real sandbox with operator authorization is the closing step.</td>
         </tr>
         <tr>
           <td>Cloud Single-VM (AWS / GCP / Azure)</td>
@@ -1552,8 +1603,8 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         </tr>
         <tr>
           <td><strong>macOS workstation</strong></td>
-          <td>Early access</td>
-          <td>The macOS Apple Silicon installer is code-complete on <code>main</code> with Docker Desktop and Docker Model Runner support. Real Apple Silicon install reports are needed before GA.</td>
+          <td><strong>GA</strong></td>
+          <td>The macOS Apple Silicon installer is validated end-to-end on real Apple Silicon hardware (M-series, macOS 14+) with Docker Desktop and Docker Model Runner, including the voice STT + native-host TTS sidecar path. Verification reports on additional Mac models / macOS versions remain welcome to widen the tested matrix.</td>
         </tr>
         <tr>
           <td><strong>Cloud single-VM (AWS / GCP / Azure)</strong></td>
@@ -1659,7 +1710,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         </tr>
         <tr>
           <td><strong>IT service provider (MSP) archetype</strong></td>
-          <td>Adds a thirteenth archetype for managed-service providers &mdash; a frequent customer profile that doesn&rsquo;t fit the existing twelve cleanly.</td>
+          <td>Adds an archetype for managed-service providers &mdash; a frequent customer profile that doesn&rsquo;t fit the core service categories cleanly.</td>
         </tr>
         <tr>
           <td><strong>Local-LLM grading (incremental)</strong></td>
@@ -1738,7 +1789,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       </div>
       <div class="card">
         <h3>What does the install include?</h3>
-        <p>Portal, init container, Postgres, Neo4j, Qdrant, Inngest, Redis, the local model runner, and on-demand sandbox containers. Twelve market categories, 46 leaf archetype templates, purposed coworkers, the skill registry, and a seeded role hierarchy come pre-loaded.</p>
+        <p>Portal, init container, Postgres, Neo4j, Qdrant, Inngest, Redis, the local model runner, and on-demand sandbox containers. Fifteen market categories, 56 leaf archetype templates, purposed coworkers, the skill registry, and a seeded role hierarchy come pre-loaded.</p>
       </div>
       <div class="card">
         <h3>How do I uninstall?</h3>

@@ -84,6 +84,40 @@ const VOCABULARY: Record<string, ArchetypeVocabulary> = {
     portalLabel: "Community Portal", stakeholderLabel: "Homeowners",
     teamLabel: "Board & Contractors", inboxLabel: "Requests", agentName: "Community Manager",
   },
+  // BIAN-grounded banking category (BI-5D9DCDE6). Credit-union "Members" and
+  // mortgage "Borrowers" arrive as leaf-level customVocabulary overrides seeded
+  // from the archetype definition and merged by getVocabulary below.
+  "banking-financial-services": {
+    itemsLabel: "Products & Rates", singleItemLabel: "Product", addButtonLabel: "Add product",
+    categoryLabel: "Product Family", priceLabel: "Rate / Fee",
+    portalLabel: "Banking Portal", stakeholderLabel: "Customers",
+    teamLabel: "Bankers", inboxLabel: "Applications", agentName: "Relationship Manager",
+  },
+  // Towns, municipal utilities, law enforcement. Leaf overrides (Ratepayers /
+  // Community) ship with each archetype via customVocabulary; civic spec §8.
+  "public-sector": {
+    itemsLabel: "Services & Programs", singleItemLabel: "Service", addButtonLabel: "Add service",
+    categoryLabel: "Department", priceLabel: "Fee",
+    portalLabel: "Resident Portal", stakeholderLabel: "Residents",
+    teamLabel: "Staff", inboxLabel: "Service Requests", agentName: "Resident Services",
+  },
+  // Rental / shared assets. Per-leaf overrides (Tenants / Storage for self-storage)
+  // ship with the archetype via customVocabulary; this is the category default.
+  "asset-rental": {
+    itemsLabel: "Equipment & Rates", singleItemLabel: "Item", addButtonLabel: "Add item",
+    categoryLabel: "Category", priceLabel: "Rate",
+    portalLabel: "Rental Portal", stakeholderLabel: "Renters",
+    teamLabel: "Team", inboxLabel: "Reservations", agentName: "Rental Desk",
+  },
+  // Residential construction — production builders (communities + display homes) and
+  // custom builders (BYOL/BOYL). Per-leaf override for custom-home-builder ("Clients",
+  // "Build Team") ships with that archetype via customVocabulary.
+  "real-estate-construction": {
+    itemsLabel: "Homes & Communities", singleItemLabel: "Home", addButtonLabel: "Add home",
+    categoryLabel: "Community", priceLabel: "From",
+    portalLabel: "Buyer Portal", stakeholderLabel: "Home Buyers",
+    teamLabel: "Sales Team", inboxLabel: "Appointments", agentName: "New Homes Advisor",
+  },
 };
 
 const DEFAULT_VOCABULARY: ArchetypeVocabulary = {
@@ -182,8 +216,43 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
 
   // HOA
   "hoa-management": ["Assessments", "Maintenance", "Amenities"],
+
+  // Banking & Financial Services — product families per BIAN Loans and
+  // Deposits / Cards Business Domains
+  "community-bank": ["Checking", "Savings", "Certificates", "Loans", "Cards", "Business Banking"],
+  "credit-union": ["Share Accounts", "Certificates", "Auto Loans", "Home Loans", "Cards", "Membership"],
+  "mortgage-lending": ["Purchase", "Refinance", "HELOC", "Pre-Approval"],
+
+  // Public sector
+  "small-town-municipality": ["Permits & Licenses", "Public Works", "Parks & Recreation", "Clerk's Office", "Code Enforcement"],
+
+  // Cooperative (nonprofit-community)
+  "cooperative": ["Membership", "Member Services", "Patronage & Equity", "Governance"],
+  "municipal-utility": ["Residential", "Commercial", "Irrigation", "Connection Fees", "Service Orders"],
+  "law-enforcement-agency": ["Records", "Permits", "Community Programs", "Professional Standards"],
+  "agricultural-cooperative": ["Harvest Equipment", "Planting Equipment", "Application Equipment", "Membership & Patronage"],
+
+  // Rental & shared assets
+  "equipment-rental": ["Earthmoving", "Access & Lifting", "Power & Site", "Cleaning", "Events"],
+  "self-storage": ["Small Units", "Medium Units", "Large Units", "Climate-Controlled"],
+
+  // Real estate & construction
+  "new-home-builder": ["Single Storey", "Double Storey", "Townhouses & Duplexes", "Acreage Designs", "Granny Flats"],
+  "custom-home-builder": ["New Home Build", "Knockdown & Rebuild", "Renovation & Extension", "Dual Occupancy", "Acreage Builds"],
 };
 
 export function getCategorySuggestions(archetypeId: string | null | undefined): string[] {
   return CATEGORY_SUGGESTIONS[archetypeId ?? ""] ?? [];
+}
+
+/**
+ * Vocabulary for a storefront is always driven by the primary archetype.
+ * Thin wrapper over getVocabulary so call sites can use this named function
+ * without knowing that secondaries don't contribute vocabulary.
+ */
+export function getVocabularyForStorefront(
+  primaryCategory: string | null | undefined,
+  primaryCustomVocabulary?: Record<string, string> | null,
+): ArchetypeVocabulary {
+  return getVocabulary(primaryCategory, primaryCustomVocabulary);
 }

@@ -9,6 +9,7 @@ import { can } from "@/lib/permissions";
 import { inngest } from "@/lib/queue/inngest-client";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
+import { createRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
 import { getUpgradeVersionState, type UpgradeVersionState } from "@/lib/self-upgrade/version";
 
 async function requireSelfUpgradeOperator(
@@ -134,11 +135,34 @@ export async function getSelfUpgradeDashboardAction(): Promise<SelfUpgradeDashbo
 
 export async function requestPortalSelfUpgradeAction(): Promise<void> {
   const { userId } = await requireSelfUpgradeOperator("manage_provider_connections");
-  await inngest.send({
-    name: SELF_UPGRADE_EVENT,
-    data: {
-      triggeredBy: userId ?? "manual",
-    },
+  const triggeredBy = userId ? `manual:${userId}` : "manual";
+  const latestRun = await getLatestRun();
+
+  if (
+    latestRun?.status === "running" ||
+    latestRun?.status === "queued" ||
+    latestRun?.status === "pending"
+  ) {
+    revalidatePath("/ops/self-upgrade");
+    return;
+  }
+
+  const run = await createRun({
+    triggeredBy,
   });
+
+  try {
+    await inngest.send({
+      name: SELF_UPGRADE_EVENT,
+      data: {
+        runId: run.runId,
+        triggeredBy,
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await failRun(run.runId, `queue-dispatch-failed: ${message}`);
+  }
+
   revalidatePath("/ops/self-upgrade");
 }

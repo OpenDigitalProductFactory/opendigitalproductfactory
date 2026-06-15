@@ -3,13 +3,14 @@
 // Used by apps/web/lib/actions/mcp-tokens.ts (server action) and
 // apps/web/scripts/issue-mcp-token.ts (CLI).
 
-export type McpSnippetFormat = "claude-code" | "codex" | "vscode" | "raw";
+export type McpSnippetFormat = "claude-code" | "codex" | "grok" | "vscode" | "raw";
 
 export const MCP_BEARER_TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN";
 
 export type McpSetupSnippets = {
   claudeCode: string;
   codex: string;
+  grok: string;
   vscode: string;
   syncCommand: string;
   envPowerShell: string;
@@ -67,6 +68,19 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
     `url = "${url}"`,
     `bearer_token_env_var = "${MCP_BEARER_TOKEN_ENV_VAR}"`,
   ].join("\n");
+  // Grok: identical TOML shape to Codex (Grok CLI/desktop reads a config.toml).
+  // Cross-platform locations (Grok CLI behavior may evolve — these are the common patterns in 2026):
+  //   macOS/Linux: ~/.grok/config.toml or <project>/.grok/config.toml
+  //   Windows: %USERPROFILE%\.grok\config.toml  (or %APPDATA%\grok\config.toml — check `grok --help` or xAI docs)
+  // The TOML content itself is the same on all platforms.
+  const grok = [
+    "# Grok (xAI) MCP server configuration",
+    "# macOS/Linux: ~/.grok/config.toml  (or <project>/.grok/config.toml)",
+    "# Windows:     %USERPROFILE%\\.grok\\config.toml  (or %APPDATA%\\grok\\config.toml)",
+    "[mcp_servers.dpf]",
+    `url = "${url}"`,
+    `bearer_token_env_var = "${MCP_BEARER_TOKEN_ENV_VAR}"`,
+  ].join("\n");
   // VS Code: .vscode/mcp.json uses servers (not mcpServers)
   const vscode = JSON.stringify({ servers: { dpf: vscodeHttpEntry } }, null, 2);
   const syncCommand = ".\\scripts\\seed-worktree-mcp.ps1";
@@ -80,6 +94,7 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
   return {
     claudeCode,
     codex,
+    grok,
     vscode,
     syncCommand,
     envPowerShell,

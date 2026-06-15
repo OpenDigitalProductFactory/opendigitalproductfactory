@@ -12,6 +12,9 @@ const FINANCE_PROFILE_BY_ARCHETYPE_CATEGORY: Record<string, string> = {
   "fitness-recreation": "fitness_recreation",
   "nonprofit-community": "nonprofit",
   "hoa-property-management": "hoa_property_management",
+  "banking-financial-services": "banking_financial_services",
+  "public-sector": "fund_accounting",
+  "software-platform": "software_platform",
 };
 
 export function financeProfileSlugFromCategory(category: string | null | undefined): string {

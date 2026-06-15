@@ -1,4 +1,6 @@
-export type CtaType = "booking" | "purchase" | "inquiry" | "donation";
+import type { FieldDispatchProfileOverride } from "./field-dispatch";
+
+export type CtaType = "booking" | "purchase" | "inquiry" | "donation" | "rental";
 
 export type PriceType =
   | "fixed" | "from" | "per-hour" | "per-session"
@@ -7,7 +9,10 @@ export type PriceType =
 export type SectionType =
   | "hero" | "about" | "items" | "team" | "gallery"
   | "contact" | "testimonials" | "donate"
-  | "animals-available" | "custom";
+  | "animals-available" | "disclosures" | "custom"
+  // Banking-only interactive section: loan/mortgage payment calculator.
+  // Gated to banking-financial-services at seed time; not addable by other archetypes.
+  | "calculator";
 
 export type ArchetypeCategory =
   | "healthcare-wellness"
@@ -21,7 +26,36 @@ export type ArchetypeCategory =
   | "retail-goods"
   | "fitness-recreation"
   | "nonprofit-community"
-  | "hoa-property-management";
+  | "hoa-property-management"
+  | "banking-financial-services"
+  | "public-sector"
+  /** Rental of a reusable pooled asset — equipment/tool hire and self-storage.
+   *  The defining value stream is reserve → hand out → use → return → inspect →
+   *  re-pool (the S4b Return & Inspect stage); see
+   *  docs/architecture/archetype-business-value-streams.md §10.1 and
+   *  docs/superpowers/specs/2026-05-29-vehicle-equipment-rental-archetype-design.md. */
+  | "asset-rental"
+  /** Residential construction: production builders (communities and display homes)
+   *  and custom builders (build-on-your-lot / BYOL). The defining value stream is
+   *  design → permit → build → inspect → handover; subcontractors deliver most
+   *  trade work under the builder's project management umbrella. */
+  | "real-estate-construction"
+  /** Automotive field services: a technician travels to the customer's vehicle
+   *  (auto glass, mobile mechanic/detailing/tire, roadside/towing, locksmith).
+   *  Dispatch-native — the distinctive substrate is VIN→part resolution and the
+   *  ADAS calibration compliance overlay (a moat sibling to HVAC's EPA 608). See
+   *  docs/superpowers/research/2026-06-13-field-dispatch-archetype-gap-analysis.md §4 (B1). */
+  | "automotive-services"
+  /** Moving & last-mile logistics: a crew and truck travel to load, haul, and
+   *  deliver (moving, junk removal, courier, last-mile freight). Crew+truck
+   *  dispatch with a DOT hours-of-service overlay; distinct from
+   *  wholesale-distribution's B2B route delivery. Gap analysis §4 (B2). */
+  | "moving-and-logistics"
+  /** Physical security services: guard/patrol dispatch (post assignments, patrol
+   *  routes, incident response — a real-time dispatch variant) and alarm/CCTV
+   *  field installation with recurring monitoring. Guard (PSO) and low-voltage
+   *  licensing overlays. Gap analysis §4 (B3). */
+  | "security-services";
 
 export interface FormField {
   name: string;
@@ -38,13 +72,85 @@ export interface ItemTemplate {
   priceType: PriceType;
   ctaType?: CtaType;          // overrides archetype default if set
   ctaLabel?: string;
+  /**
+   * Optional seed price in the catalogue currency (the setup route seeds items
+   * in GBP). Set on `fixed`/`from` items — especially `purchase` items — so the
+   * storefront ships with a chargeable price out-of-the-box. A `purchase` item
+   * with no `priceAmount` would otherwise render a Buy CTA that 404s at checkout
+   * (the order route 404s on a null price); see {@link CtaButton}'s guard. Left
+   * unset for `quote`/`free`/`donation`/`per-hour`/`per-session` items, where the
+   * operator supplies the figure. Operator-overridable from the admin items
+   * manager.
+   */
+  priceAmount?: number;
   bookingDurationMinutes?: number;
+  /**
+   * Image affordance this item template expects. When set, the storefront editor
+   * surfaces an image/gallery slot for items seeded from this template (e.g. a
+   * retail product or a rentable excavator). Usually left unset — the
+   * archetype-level {@link MediaProfile} (derived in media-profile.ts) covers
+   * the common case; this is the per-item override.
+   */
+  mediaRole?: MediaRole;
+}
+
+/**
+ * A kind of image a business surface carries. Roles are how a {@link MediaSlot}
+ * and a `MediaAttachment` (DB) describe *what* an image is, independent of which
+ * entity holds it — so the storefront renderer and upload UI can treat a product
+ * gallery, an adoptable-animal gallery, and an equipment gallery uniformly.
+ */
+export type MediaRole =
+  | "logo"          // organization mark
+  | "hero"          // storefront hero/banner
+  | "gallery"       // general portfolio/work showcase
+  | "product"       // a sellable item's photos (retail, food, artisan)
+  | "equipment"     // a rentable unit's photos (asset-rental)
+  | "avatar"        // staff/provider/instructor headshot
+  | "animal"        // adoptable-animal photos (pet-rescue, animal-shelter)
+  | "before-after"  // transformation pairs (beauty, grooming, fitness)
+  | "facility"      // premises/space photos (storage, spa, clinic)
+  | "certificate";  // credential/qualification images
+
+/** Which entity a {@link MediaSlot}'s images attach to. */
+export type MediaOwner =
+  | "organization"
+  | "storefront"
+  | "item"
+  | "provider"
+  | "section"
+  | "animal"
+  | "rentable-unit";
+
+/**
+ * One declared image need for an archetype: a {@link MediaRole} on a
+ * {@link MediaOwner}, with how strongly it applies and whether it is a gallery.
+ * Derived from the archetype's sections/ctaType/category/axes by
+ * `deriveMediaProfile` (media-profile.ts), not hand-authored per archetype —
+ * mirroring how `BillingPatternProfile` is derived from `commercialModel`.
+ */
+export interface MediaSlot {
+  role: MediaRole;
+  owner: MediaOwner;
+  applicability: "required" | "recommended" | "optional";
+  /** True for an ordered gallery; false for a single image. */
+  multiple: boolean;
+  label: string;
+  /** Why this image matters — ties the slot to the customer journey. */
+  reason: string;
+}
+
+/** The full set of image affordances an archetype surfaces. */
+export interface MediaProfile {
+  slots: MediaSlot[];
 }
 
 export interface SectionTemplate {
   type: SectionType;
   title: string;
   sortOrder: number;
+  /** Seed content for sections that need defaults beyond an empty object (e.g. calculator). */
+  content?: Record<string, unknown>;
 }
 
 export interface SchedulingDefaults {
@@ -64,7 +170,18 @@ export type ArchetypeModule =
   | "service-operations"
   | "projects"
   | "lifecycle-signals"
-  | "integrations";
+  | "integrations"
+  | "rental-fleet"
+  | "rental-agreements"
+  /**
+   * Mobile-resource-to-customer-site coordination (dispatcher coworker +
+   * dispatch board). A *derived* module — `needsFieldDispatch(axes)` adds it
+   * during activation-profile normalization; it is never hand-authored into an
+   * archetype literal. Composes with `service-operations` (which stays the
+   * office-side service-work module). See field-dispatch.ts and
+   * docs/superpowers/specs/2026-06-13-field-dispatch-capability-design.md.
+   */
+  | "field-dispatch";
 
 export type ArchetypeProfileType = "standard" | "managed-service-provider";
 
@@ -86,7 +203,11 @@ export type PrimaryConsumer =
   | "business"
   | "patient-and-payer"
   | "channel-partner"
-  | "internal";
+  | "internal"
+  /** Owner-patron with governance rights (credit union, cooperative). */
+  | "member"
+  /** Served party defined by jurisdiction with statutory rights and a universal-service obligation (town, utility, police). */
+  | "resident";
 
 export type ConsumptionChannel =
   | "physical"
@@ -107,6 +228,8 @@ export type CommercialModel =
   | "encounter-based"
   | "appointment-checkout"
   | "point-of-sale"
+  /** Revenue arrives by levy/assessment/fee schedule set by ordinance or statute, not by sale. */
+  | "statutory-fees-and-levies"
   | "hybrid";
 
 export type ProvisioningModel =
@@ -115,9 +238,24 @@ export type ProvisioningModel =
   | "account-and-entitlement"
   | "account-with-kyc"
   | "device-bound"
-  | "episode-of-care";
+  | "episode-of-care"
+  /** The served party gets access by reserving a pooled asset, receiving it,
+   *  and returning it — the rental/shared-asset entitlement model. Distinct from
+   *  account-with-billing: the asset is re-pooled, not consumed. Gates the
+   *  rental-fleet / rental-agreements / asset-pool capabilities. */
+  | "reservation-and-return";
 
 export type PlatformEcosystem = "no" | "yes-marketplace" | "yes-developer";
+
+/**
+ * How the organization is governed — orthogonal to {@link PrimaryConsumer}
+ * (a community bank is investor-owned serving individuals/businesses; an
+ * electric co-op is member-owned serving member ratepayers; a municipal
+ * utility is a public body serving resident ratepayers). Gates the
+ * member-governance and public-body-governance capabilities; see
+ * docs/superpowers/specs/2026-06-09-civic-and-member-governed-archetypes-design.md §6.1.
+ */
+export type GovernanceModel = "investor-owned" | "member-owned" | "public-body";
 
 export interface OperatingModelAxes {
   form: OperatingModelForm;
@@ -127,6 +265,12 @@ export interface OperatingModelAxes {
   commercialModel: CommercialModel;
   provisioning: ProvisioningModel;
   platform: PlatformEcosystem;
+  /**
+   * Optional so the 45+ existing archetype literals stay valid; the
+   * normalizer defaults absent values to "investor-owned"
+   * (readActivationProfile survival rule — consumers never branch on absence).
+   */
+  governance?: GovernanceModel;
 }
 
 export type PortfolioRole =
@@ -370,6 +514,26 @@ export interface ActivationProfile {
   seededChargeModels?: SeededChargeModel[];
 }
 
+/**
+ * Leaf-level vocabulary override, seeded into `StorefrontArchetype.customVocabulary`
+ * and merged over the category vocabulary by `applyCustomVocabulary`
+ * (apps/web/lib/storefront/archetype-vocabulary.ts). Lets one leaf diverge from
+ * its category's labels — e.g. credit-union "Members" over the banking
+ * category's "Customers" — without a parallel resolution path.
+ */
+export interface ArchetypeVocabularyOverride {
+  itemsLabel?: string;
+  singleItemLabel?: string;
+  addButtonLabel?: string;
+  categoryLabel?: string;
+  priceLabel?: string;
+  portalLabel?: string;
+  stakeholderLabel?: string;
+  teamLabel?: string;
+  inboxLabel?: string;
+  agentName?: string;
+}
+
 export interface ArchetypeDefinition {
   archetypeId: string;
   name: string;
@@ -381,4 +545,30 @@ export interface ArchetypeDefinition {
   tags: string[];
   schedulingDefaults?: SchedulingDefaults;
   activationProfile?: ActivationProfile;
+  /**
+   * Per-leaf vocabulary overrides, seeded into
+   * `StorefrontArchetype.customVocabulary` and read by `getVocabulary()` —
+   * the mechanism the BIAN banking spec §7.4 decided (credit-union "Members"
+   * vs bank "Customers"); civic spec §8 uses it for Ratepayers/Community.
+   * Typed against the `ArchetypeVocabulary` fields so a misspelled key fails
+   * typecheck instead of being silently ignored at merge time.
+   */
+  vocabulary?: ArchetypeVocabularyOverride;
+  /**
+   * Optional override of the derived {@link MediaProfile}. Almost always left
+   * unset — `deriveMediaProfile` (media-profile.ts) produces a sensible profile
+   * from this archetype's sections/ctaType/category/axes. Set only if a leaf has
+   * a genuine image-affordance exception the derivation can't express.
+   */
+  mediaProfile?: MediaProfile;
+  /**
+   * Optional override of the derived field-dispatch profile. Left unset for the
+   * common case — `deriveFieldDispatchProfile` (field-dispatch.ts) derives
+   * applicability and a sensible profile from this archetype's axes. Set
+   * `fieldDispatch.enabled` to force dispatch on/off against the axis
+   * derivation, or supply partial fields to specialize the vertical (resource
+   * noun, compliance overlay, inventory model, vocabulary). See
+   * docs/superpowers/specs/2026-06-13-field-dispatch-capability-design.md ADR-4.
+   */
+  fieldDispatch?: FieldDispatchProfileOverride;
 }

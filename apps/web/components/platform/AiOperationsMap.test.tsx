@@ -219,4 +219,44 @@ describe("AiOperationsMap", () => {
     expect(source).toContain("replayTime={showProvider ? sharedReplay?.time ?? null : null}");
     expect(source).toContain("replayRange={showProvider ? sharedReplay?.range ?? null : null}");
   });
+
+  it("offers a temporary unified-canvas preview switch wired to shared dimension + replay (Stage D)", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    // Temporary toggle, default OFF, removed at Stage E cutover.
+    expect(source).toContain("const [canvasPreview, setCanvasPreview] = useState(false);");
+    expect(source).toContain("data-canvas-preview-toggle");
+    expect(source).toContain("aria-pressed={canvasPreview}");
+    expect(source).toContain("Unified canvas (preview)");
+    expect(source).toContain("Unified canvas: on");
+
+    // Canvas renders behind the switch, above the legacy panels, driven by the
+    // same shared dimension + replay state (no separate source of truth).
+    expect(source).toContain("{canvasPreview ? (");
+    expect(source).toContain("data-canvas-preview");
+    expect(source).toContain("<OperationsTopologyCanvas");
+    expect(source).toContain("topology={canvasTopology}");
+    expect(source).toContain("dimension={dimension}");
+    expect(source).toContain("replayTime={sharedReplay?.time ?? null}");
+    expect(source).toContain("replayRange={sharedReplay?.range ?? null}");
+
+    // Legacy panels remain the default authoritative surface + replay source.
+    expect(source).toContain("onReplayChange={handleReplayChange}");
+  });
+
+  it("feeds the preview canvas a control-filtered topology the panels publish up (Stage D1)", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    // Shared pure filter helpers (single source of truth for canvas + panels).
+    expect(source).toContain('from "./operations-control-filters"');
+    expect(source).toContain("applyRoutingControlFilters(routingTopology, routingControl)");
+    expect(source).toContain("applyA2aControlFilters(routingTopology.a2aEdges, a2aControl)");
+
+    // Panels publish their resolved criteria up (mirrors onReplayChange).
+    expect(source).toContain("onControlFilterChange={handleRoutingControlChange}");
+    expect(source).toContain("onFilterChange={handleA2aControlChange}");
+
+    // The canvas consumes the filtered topology, not the raw one.
+    expect(source).toContain("topology={canvasTopology}");
+  });
 });

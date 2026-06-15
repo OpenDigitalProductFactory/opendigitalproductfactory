@@ -1,10 +1,12 @@
 import { nanoid } from "nanoid";
 import { prisma, type Prisma } from "@dpf/db";
-import type {
-  ActivateAiProviderContractInput,
-  CreateContractUsageSnapshotInput,
-  CreateFinanceWorkItemInput,
-  SeedAiProviderFinanceBridgeInput,
+import {
+  recordAiProviderSubscriptionPaymentSchema,
+  type ActivateAiProviderContractInput,
+  type CreateContractUsageSnapshotInput,
+  type CreateFinanceWorkItemInput,
+  type RecordAiProviderSubscriptionPaymentInput,
+  type SeedAiProviderFinanceBridgeInput,
 } from "./ai-provider-finance-validation";
 
 function decimal(value: number | undefined | null): number | null {
@@ -28,6 +30,72 @@ function lastDayOfMonth(input: Date): Date {
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
+
+const aiContractInclude = {
+  allowances: {
+    orderBy: { sortOrder: "asc" },
+  },
+  usageSnapshots: {
+    orderBy: { snapshotDate: "desc" },
+    take: 1,
+  },
+  bills: {
+    orderBy: { issueDate: "desc" },
+    take: 6,
+    include: {
+      allocations: {
+        include: {
+          payment: {
+            select: {
+              id: true,
+              paymentRef: true,
+              amount: true,
+              currency: true,
+              method: true,
+              status: true,
+              receivedAt: true,
+              reference: true,
+            },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.SupplierContractInclude;
+
+type AiContractWithTraceability = Prisma.SupplierContractGetPayload<{
+  include: typeof aiContractInclude;
+}>;
+
+type AiProfileWithFinanceRows = Prisma.AiProviderFinanceProfileGetPayload<{
+  include: {
+    provider: { select: { providerId: true; name: true; status: true } };
+    supplier: { select: { id: true; supplierId: true; name: true } };
+    supplierContracts: { include: typeof aiContractInclude };
+    financeWorkItems: true;
+  };
+}>;
+
+type AiProviderFinanceDetailBase = Prisma.AiProviderFinanceProfileGetPayload<{
+  include: {
+    supplier: true;
+    supplierContracts: { include: typeof aiContractInclude };
+    financeWorkItems: true;
+  };
+}>;
+
+type AiSupplierFinanceDetailBase = Prisma.SupplierGetPayload<{
+  include: {
+    aiProviderProfiles: {
+      include: {
+        provider: true;
+        supplierContracts: { include: typeof aiContractInclude };
+        financeWorkItems: true;
+      };
+    };
+    supplierContracts: { include: typeof aiContractInclude };
+  };
+}>;
 
 type FinanceCommitmentKind = "ai_provider" | "domain" | "saas_subscription" | "one_time";
 
@@ -64,6 +132,90 @@ function humanizeWorkItemType(value: string): string {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+type ExistingAiProviderContractPlan = {
+  id?: string;
+  coveredProviderIds?: Prisma.JsonValue | null;
+  monthlyCommittedAmount?: number | Prisma.Decimal | null;
+  usageUnit?: string | null;
+  allowances?: Array<{
+    includedQuantity?: number | Prisma.Decimal | null;
+    usageUnit?: string | null;
+  }>;
+};
+
+type ContractWithCoverage = ExistingAiProviderContractPlan & {
+  id: string;
+  contractId?: string;
+  coveredProviderIds?: Prisma.JsonValue | null;
+};
+
+function hasKnownNumber(value: number | Prisma.Decimal | null | undefined): boolean {
+  return value !== undefined && value !== null;
+}
+
+function normalizeProviderIds(providerIds: string[]): string[] {
+  return [...new Set(providerIds.map((id) => id.trim()).filter(Boolean))].sort();
+}
+
+function providerIdsFromCoverage(value: Prisma.JsonValue | null | undefined): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
+}
+
+function contractCoversProvider(contract: ContractWithCoverage, providerId: string): boolean {
+  return providerIdsFromCoverage(contract.coveredProviderIds).includes(providerId);
+}
+
+function mergeAiContracts(
+  directContracts: AiContractWithTraceability[],
+  sharedContracts: AiContractWithTraceability[],
+): AiContractWithTraceability[] {
+  const contractMap = new Map(directContracts.map((contract) => [contract.id, contract]));
+  for (const contract of sharedContracts) {
+    contractMap.set(contract.id, contract);
+  }
+  return [...contractMap.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+function monthKey(date: Date): string {
+  return date.toISOString().slice(0, 7);
+}
+
+function nextBillingDateFromPaidAt(paidAt: Date, billingDayOfMonth: number): Date {
+  const nextMonth = paidAt.getUTCDate() >= billingDayOfMonth
+    ? paidAt.getUTCMonth() + 1
+    : paidAt.getUTCMonth();
+  const daysInTargetMonth = new Date(Date.UTC(paidAt.getUTCFullYear(), nextMonth + 1, 0)).getUTCDate();
+  const day = Math.min(billingDayOfMonth, daysInTargetMonth);
+  return new Date(Date.UTC(paidAt.getUTCFullYear(), nextMonth, day));
+}
+
+async function generatePaymentRef(): Promise<string> {
+  const year = new Date().getFullYear();
+  const count = await prisma.payment.count();
+  const seq = String(count + 1).padStart(4, "0");
+  return `PAY-${year}-${seq}`;
+}
+
+function getMissingAiProviderPlanFields(
+  input: SeedAiProviderFinanceBridgeInput,
+  existingContract?: ExistingAiProviderContractPlan | null,
+): string[] {
+  const existingAllowance = existingContract?.allowances?.find(
+    (allowance) => hasKnownNumber(allowance.includedQuantity) || Boolean(allowance.usageUnit),
+  );
+
+  return [
+    input.monthlyCommittedAmount === undefined && !hasKnownNumber(existingContract?.monthlyCommittedAmount)
+      ? "monthlyCommittedAmount"
+      : null,
+    input.includedQuantity === undefined && !hasKnownNumber(existingAllowance?.includedQuantity)
+      ? "includedQuantity"
+      : null,
+    !input.usageUnit && !existingContract?.usageUnit && !existingAllowance?.usageUnit ? "usageUnit" : null,
+  ].filter((field): field is string => Boolean(field));
 }
 
 async function ensureSupplier(input: SeedAiProviderFinanceBridgeInput) {
@@ -154,11 +306,51 @@ export async function seedAiProviderFinanceBridge(input: SeedAiProviderFinanceBr
 
   const existingContract = await prisma.supplierContract.findFirst({
     where: { profileId: profile.id, status: { in: ["draft", "active"] } },
-    select: { id: true, contractId: true },
+    select: {
+      id: true,
+      contractId: true,
+      coveredProviderIds: true,
+      monthlyCommittedAmount: true,
+      usageUnit: true,
+      allowances: {
+        orderBy: { sortOrder: "asc" },
+        take: 1,
+        select: {
+          includedQuantity: true,
+          usageUnit: true,
+        },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
 
-  const contract = existingContract ?? await prisma.supplierContract.create({
+  const sharedContract = existingContract
+    ? null
+    : (await prisma.supplierContract.findMany({
+        where: {
+          supplierId: supplier.id,
+          status: { in: ["draft", "active"] },
+          commitmentKind: { in: ["ai_provider", "saas_subscription"] },
+        },
+        select: {
+          id: true,
+          contractId: true,
+          coveredProviderIds: true,
+          monthlyCommittedAmount: true,
+          usageUnit: true,
+          allowances: {
+            orderBy: { sortOrder: "asc" },
+            take: 1,
+            select: {
+              includedQuantity: true,
+              usageUnit: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      })).find((contract) => contractCoversProvider(contract, input.providerId)) ?? null;
+
+  const contract = existingContract ?? sharedContract ?? (await prisma.supplierContract.create({
     data: {
       contractId: `AIC-${nanoid(8)}`,
       profileId: profile.id,
@@ -170,6 +362,7 @@ export async function seedAiProviderFinanceBridge(input: SeedAiProviderFinanceBr
       status: "draft",
       contractType: "subscription",
       billingCadence: "monthly",
+      coveredProviderIds: [input.providerId],
       currency: input.currency ?? "USD",
       monthlyCommittedAmount: decimal(input.monthlyCommittedAmount),
       budgetAmount: decimal(input.budgetAmount),
@@ -179,14 +372,24 @@ export async function seedAiProviderFinanceBridge(input: SeedAiProviderFinanceBr
       usageUrl: input.usageUrl ?? null,
       allowsOverage: false,
     },
-    select: { id: true, contractId: true },
-  });
+    select: {
+      id: true,
+      contractId: true,
+      coveredProviderIds: true,
+      monthlyCommittedAmount: true,
+      usageUnit: true,
+      allowances: {
+        orderBy: { sortOrder: "asc" },
+        take: 1,
+        select: {
+          includedQuantity: true,
+          usageUnit: true,
+        },
+      },
+    },
+  }));
 
-  const missingFields = [
-    input.monthlyCommittedAmount === undefined ? "monthlyCommittedAmount" : null,
-    input.includedQuantity === undefined ? "includedQuantity" : null,
-    !input.usageUnit ? "usageUnit" : null,
-  ].filter((field): field is string => Boolean(field));
+  const missingFields = getMissingAiProviderPlanFields(input, contract);
   const missingPlanDetails = missingFields.length > 0;
 
   const workItem = missingPlanDetails
@@ -314,6 +517,249 @@ export async function ensureFinanceCommitment(input: EnsureFinanceCommitmentInpu
     supplierId: supplier.id,
     contractId: contract.id,
     workItemId: workItem?.id ?? null,
+  };
+}
+
+export async function recordAiProviderSubscriptionPayment(input: RecordAiProviderSubscriptionPaymentInput) {
+  const parsed = recordAiProviderSubscriptionPaymentSchema.parse(input);
+  const providerIds = normalizeProviderIds(parsed.providerIds);
+  if (providerIds.length === 0) throw new Error("At least one provider is required");
+
+  const providers = await prisma.modelProvider.findMany({
+    where: { providerId: { in: providerIds } },
+    select: {
+      providerId: true,
+      name: true,
+      consoleUrl: true,
+      docsUrl: true,
+    },
+  });
+  const foundProviderIds = new Set(providers.map((provider) => provider.providerId));
+  const missingProviderIds = providerIds.filter((providerId) => !foundProviderIds.has(providerId));
+  if (missingProviderIds.length > 0) {
+    throw new Error(`Unknown AI provider: ${missingProviderIds.join(", ")}`);
+  }
+
+  const paidAt = new Date(parsed.paidAt);
+  if (Number.isNaN(paidAt.getTime())) {
+    throw new Error("Paid date is invalid");
+  }
+  const nextBillingDate = nextBillingDateFromPaidAt(paidAt, parsed.billingDayOfMonth);
+  const planName = parsed.planName?.trim() || `${parsed.supplierName} AI subscription`;
+  const supplier = await prisma.supplier.findFirst({
+    where: { name: parsed.supplierName },
+    select: { id: true, supplierId: true },
+  }) ?? await prisma.supplier.create({
+    data: {
+      supplierId: `SUP-${nanoid(8)}`,
+      name: parsed.supplierName,
+      paymentTerms: "Card on file",
+      defaultCurrency: parsed.currency ?? "USD",
+      notes: `AI subscription supplier for ${planName}.`,
+      status: "active",
+    },
+    select: { id: true, supplierId: true },
+  });
+
+  const profiles = [];
+  for (const provider of providers) {
+    profiles.push(await prisma.aiProviderFinanceProfile.upsert({
+      where: { providerId: provider.providerId },
+      create: {
+        providerId: provider.providerId,
+        supplierId: supplier.id,
+        status: "active",
+        reconciliationStrategy: "provider_portal",
+        valuationMethod: "commitment_first",
+        planCurrency: parsed.currency ?? "USD",
+        billingUrl: parsed.billingUrl ?? provider.consoleUrl ?? null,
+        usageUrl: provider.consoleUrl ?? provider.docsUrl ?? null,
+        monthlyBudget: decimal(parsed.amount),
+      },
+      update: {
+        supplierId: supplier.id,
+        status: "active",
+        reconciliationStrategy: "provider_portal",
+        valuationMethod: "commitment_first",
+        planCurrency: parsed.currency ?? "USD",
+        billingUrl: parsed.billingUrl ?? provider.consoleUrl ?? null,
+        usageUrl: provider.consoleUrl ?? provider.docsUrl ?? null,
+        monthlyBudget: decimal(parsed.amount),
+      },
+      select: { id: true, supplierId: true, providerId: true },
+    }));
+  }
+
+  const primaryProfile = profiles.find((profile) => profile.providerId === providerIds[0]) ?? profiles[0]!;
+  const externalReference = `ai-subscription:${supplier.id}:${providerIds.join("+")}`;
+  const coveredProviderIds = providerIds;
+
+  const contract = await prisma.supplierContract.upsert({
+    where: { externalReference },
+    create: {
+      contractId: `AIS-${nanoid(8)}`,
+      profileId: primaryProfile.id,
+      supplierId: supplier.id,
+      commitmentKind: "ai_provider",
+      commitmentSource: "owner_entered_subscription_payment",
+      externalReference,
+      status: "active",
+      contractType: "subscription",
+      billingCadence: parsed.billingCadence ?? "monthly",
+      billingDayOfMonth: parsed.billingDayOfMonth,
+      currency: parsed.currency ?? "USD",
+      monthlyCommittedAmount: decimal(parsed.amount),
+      budgetAmount: decimal(parsed.amount),
+      budgetWindow: parsed.billingCadence ?? "monthly",
+      usageUnit: "subscription_access",
+      paymentMethod: parsed.paymentMethod ?? "card",
+      paymentReference: parsed.paymentReference ?? null,
+      coveredProviderIds,
+      billingUrl: parsed.billingUrl ?? null,
+      renewalDate: nextBillingDate,
+      startDate: paidAt,
+      allowsOverage: false,
+      notes: planName,
+    },
+    update: {
+      profileId: primaryProfile.id,
+      supplierId: supplier.id,
+      commitmentKind: "ai_provider",
+      commitmentSource: "owner_entered_subscription_payment",
+      status: "active",
+      contractType: "subscription",
+      billingCadence: parsed.billingCadence ?? "monthly",
+      billingDayOfMonth: parsed.billingDayOfMonth,
+      currency: parsed.currency ?? "USD",
+      monthlyCommittedAmount: decimal(parsed.amount),
+      budgetAmount: decimal(parsed.amount),
+      budgetWindow: parsed.billingCadence ?? "monthly",
+      usageUnit: "subscription_access",
+      paymentMethod: parsed.paymentMethod ?? "card",
+      paymentReference: parsed.paymentReference ?? null,
+      coveredProviderIds,
+      billingUrl: parsed.billingUrl ?? null,
+      renewalDate: nextBillingDate,
+      startDate: paidAt,
+      allowsOverage: false,
+      notes: planName,
+    },
+    select: { id: true, contractId: true },
+  });
+
+  const billInvoiceRef = `${contract.contractId}-${monthKey(paidAt)}`;
+  const existingBill = await prisma.bill.findFirst({
+    where: {
+      supplierId: supplier.id,
+      supplierContractId: contract.id,
+      invoiceRef: billInvoiceRef,
+    },
+    select: {
+      id: true,
+      billRef: true,
+      allocations: {
+        take: 1,
+        include: {
+          payment: {
+            select: {
+              id: true,
+              paymentRef: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const bill = existingBill ?? await prisma.bill.create({
+    data: {
+      billRef: `BILL-${new Date().getUTCFullYear()}-${nanoid(6).toUpperCase()}`,
+      supplierId: supplier.id,
+      supplierContractId: contract.id,
+      status: "paid",
+      invoiceRef: billInvoiceRef,
+      issueDate: paidAt,
+      dueDate: paidAt,
+      currency: parsed.currency ?? "USD",
+      subtotal: parsed.amount,
+      taxAmount: 0,
+      totalAmount: parsed.amount,
+      amountPaid: parsed.amount,
+      amountDue: 0,
+      notes: [
+        parsed.notes,
+        parsed.evidenceUrl ? `Evidence: ${parsed.evidenceUrl}` : null,
+        `Covers: ${providers.map((provider) => provider.name).join(", ")}`,
+      ].filter(Boolean).join("\n") || null,
+      lineItems: {
+        create: [
+          {
+            description: planName,
+            quantity: 1,
+            unitPrice: parsed.amount,
+            taxRate: 0,
+            taxAmount: 0,
+            lineTotal: parsed.amount,
+            accountCode: null,
+            sortOrder: 0,
+          },
+        ],
+      },
+    },
+    select: { id: true, billRef: true, allocations: true },
+  });
+
+  const existingPayment = existingBill?.allocations[0]?.payment ?? null;
+  const payment = existingPayment ?? await prisma.payment.create({
+    data: {
+      paymentRef: await generatePaymentRef(),
+      direction: "outbound",
+      method: parsed.paymentMethod ?? "card",
+      status: "completed",
+      amount: parsed.amount,
+      currency: parsed.currency ?? "USD",
+      reference: parsed.paymentReference ?? null,
+      counterpartyId: supplier.id,
+      counterpartyType: "supplier",
+      receivedAt: paidAt,
+      processedAt: paidAt,
+      notes: parsed.evidenceUrl ? `Evidence: ${parsed.evidenceUrl}` : parsed.notes ?? null,
+    },
+    select: { id: true, paymentRef: true },
+  });
+
+  if (!existingPayment) {
+    await prisma.paymentAllocation.create({
+      data: {
+        paymentId: payment.id,
+        billId: bill.id,
+        amount: parsed.amount,
+      },
+    });
+  }
+
+  await prisma.financeWorkItem.updateMany({
+    where: {
+      status: { in: ["open", "in_progress"] },
+      type: { in: ["plan_details_needed", "commitment_details_needed", "browser_profile_needed"] },
+      OR: [
+        { contractId: contract.id },
+        { profileId: { in: profiles.map((profile) => profile.id) } },
+        { supplierId: supplier.id },
+      ],
+    },
+    data: {
+      status: "done",
+      resolvedAt: new Date(),
+    },
+  });
+
+  return {
+    supplierId: supplier.id,
+    contractId: contract.id,
+    billId: bill.id,
+    paymentId: payment.id,
+    coveredProviderIds,
   };
 }
 
@@ -567,87 +1013,112 @@ export async function listAiProviderFinanceProfiles() {
     ]),
   );
 
-  const profiles = await prisma.aiProviderFinanceProfile.findMany({
-    include: {
-      provider: {
-        select: {
-          providerId: true,
-          name: true,
-          status: true,
-        },
-      },
-      supplier: {
-        select: {
-          id: true,
-          supplierId: true,
-          name: true,
-        },
-      },
-      supplierContracts: {
-        include: {
-          allowances: {
-            orderBy: { sortOrder: "asc" },
-          },
-          usageSnapshots: {
-            orderBy: { snapshotDate: "desc" },
-            take: 1,
+  const [profiles, sharedContracts] = await Promise.all([
+    prisma.aiProviderFinanceProfile.findMany({
+      include: {
+        provider: {
+          select: {
+            providerId: true,
+            name: true,
+            status: true,
           },
         },
-        orderBy: { createdAt: "desc" },
+        supplier: {
+          select: {
+            id: true,
+            supplierId: true,
+            name: true,
+          },
+        },
+        supplierContracts: {
+          include: aiContractInclude,
+          orderBy: { createdAt: "desc" },
+        },
+        financeWorkItems: {
+          where: { status: { in: ["open", "in_progress"] } },
+          orderBy: { createdAt: "desc" },
+        },
       },
-      financeWorkItems: {
-        where: { status: { in: ["open", "in_progress"] } },
-        orderBy: { createdAt: "desc" },
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.supplierContract.findMany({
+      where: {
+        status: { in: ["draft", "active"] },
+        commitmentKind: { in: ["ai_provider", "saas_subscription"] },
       },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+      include: aiContractInclude,
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  const sharedContractsByProvider = new Map<string, AiContractWithTraceability[]>();
+  for (const contract of sharedContracts) {
+    for (const providerId of providerIdsFromCoverage(contract.coveredProviderIds)) {
+      const contracts = sharedContractsByProvider.get(providerId) ?? [];
+      contracts.push(contract);
+      sharedContractsByProvider.set(providerId, contracts);
+    }
+  }
 
   // Attach actual spend data to each profile row
-  return profiles.map((p) => ({
-    ...p,
-    actualSpendMtd: spendMap.get(p.providerId) ?? { costUsd: 0, calls: 0 },
-  }));
+  return profiles.map((p) => {
+    return {
+      ...p,
+      supplierContracts: mergeAiContracts(
+        p.supplierContracts,
+        sharedContractsByProvider.get(p.providerId) ?? [],
+      ),
+      actualSpendMtd: spendMap.get(p.providerId) ?? { costUsd: 0, calls: 0 },
+    };
+  }) satisfies Array<AiProfileWithFinanceRows & { actualSpendMtd: { costUsd: number; calls: number } }>;
 }
 
 export async function getAiProviderFinanceDetail(providerId: string) {
-  return prisma.aiProviderFinanceProfile.findUnique({
-    where: { providerId },
-    include: {
-      supplier: true,
-      supplierContracts: {
-        include: {
-          allowances: true,
-          usageSnapshots: {
-            orderBy: { snapshotDate: "desc" },
-            take: 10,
-          },
+  const [detail, sharedContracts] = await Promise.all([
+    prisma.aiProviderFinanceProfile.findUnique({
+      where: { providerId },
+      include: {
+        supplier: true,
+        supplierContracts: {
+          include: aiContractInclude,
+          orderBy: { createdAt: "desc" },
         },
-        orderBy: { createdAt: "desc" },
+        financeWorkItems: {
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        },
       },
-      financeWorkItems: {
-        orderBy: { createdAt: "desc" },
-        take: 10,
+    }),
+    prisma.supplierContract.findMany({
+      where: {
+        status: { in: ["draft", "active"] },
+        commitmentKind: { in: ["ai_provider", "saas_subscription"] },
       },
-    },
-  });
+      include: aiContractInclude,
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  if (!detail) return null;
+
+  return {
+    ...detail,
+    supplierContracts: mergeAiContracts(
+      detail.supplierContracts,
+      sharedContracts.filter((contract) => contractCoversProvider(contract, providerId)),
+    ),
+  } satisfies AiProviderFinanceDetailBase;
 }
 
 export async function getAiSupplierFinanceDetail(supplierId: string) {
-  return prisma.supplier.findUnique({
+  const supplier = await prisma.supplier.findUnique({
     where: { id: supplierId },
     include: {
       aiProviderProfiles: {
         include: {
           provider: true,
           supplierContracts: {
-            include: {
-              allowances: true,
-              usageSnapshots: {
-                orderBy: { snapshotDate: "desc" },
-                take: 5,
-              },
-            },
+            include: aiContractInclude,
             orderBy: { createdAt: "desc" },
           },
           financeWorkItems: {
@@ -655,9 +1126,36 @@ export async function getAiSupplierFinanceDetail(supplierId: string) {
             take: 10,
           },
         },
+        orderBy: { createdAt: "desc" },
+      },
+      supplierContracts: {
+        include: aiContractInclude,
+        orderBy: { createdAt: "desc" },
       },
     },
   });
+
+  if (!supplier) return null;
+
+  return {
+    ...supplier,
+    aiProviderProfiles: supplier.aiProviderProfiles.map((profile) => {
+      const sharedContracts = supplier.supplierContracts.filter((contract) =>
+        contractCoversProvider(contract, profile.providerId),
+      );
+      return {
+        ...profile,
+        supplierContracts: mergeAiContracts(profile.supplierContracts, sharedContracts),
+      };
+    }),
+  } satisfies AiSupplierFinanceDetailBase;
+}
+
+function billingDateForCycle(cycleDate: Date, billingDayOfMonth?: number | null): Date {
+  if (!billingDayOfMonth) return cycleDate;
+  const daysInMonth = new Date(Date.UTC(cycleDate.getUTCFullYear(), cycleDate.getUTCMonth() + 1, 0)).getUTCDate();
+  const day = Math.min(Math.max(billingDayOfMonth, 1), daysInMonth);
+  return new Date(Date.UTC(cycleDate.getUTCFullYear(), cycleDate.getUTCMonth(), day));
 }
 
 export async function maybeRunAiProviderFinanceDailyEvaluation(now = new Date()) {
@@ -751,11 +1249,13 @@ export async function generateDraftBillForAiContract(input: {
     currency: string;
     monthlyCommittedAmount: number | Prisma.Decimal | null;
     billingCadence: string;
+    billingDayOfMonth?: number | null;
   };
   cycleDate?: Date;
 }) {
   const cycleDate = input.cycleDate ?? new Date();
   const periodKey = cycleDate.toISOString().slice(0, 7);
+  const billingDate = billingDateForCycle(cycleDate, input.contract.billingDayOfMonth);
 
   const existing = await prisma.bill.findFirst({
     where: {
@@ -772,10 +1272,11 @@ export async function generateDraftBillForAiContract(input: {
     data: {
       billRef: `BILL-${new Date().getUTCFullYear()}-${nanoid(6).toUpperCase()}`,
       supplierId: input.contract.supplierId,
+      supplierContractId: input.contract.id,
       status: "draft",
       invoiceRef: `${input.contract.contractId}-${periodKey}`,
-      issueDate: cycleDate,
-      dueDate: new Date(cycleDate.getTime() + 30 * 86400000),
+      issueDate: billingDate,
+      dueDate: billingDate,
       currency: input.contract.currency,
       subtotal: totalAmount,
       taxAmount: 0,

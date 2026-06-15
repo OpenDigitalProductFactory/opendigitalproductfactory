@@ -28,18 +28,27 @@ COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
+COPY docs/professions/ ./docs/professions/
 COPY docker-entrypoint.sh ./
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
-# Node 24 Alpine + Turbopack can crash the separate build worker in Docker
-# with SIGSEGV/SIGTRAP while the same source build passes on the host. Keep the
-# production bundler path but run Turbopack in-process for image builds.
-RUN NODE_OPTIONS="--max-old-space-size=4096" NEXT_TELEMETRY_DISABLED=1 NEXT_TURBOPACK_USE_WORKER=0 pnpm --filter web build
+# Next.js 16.2.7 minify-webpack-plugin crashes with "_webpack.WebpackError is
+# not a constructor" when --webpack is forced. Use the default builder (Turbopack
+# in Next 16, gated in next.config.mjs) which does not trigger the broken plugin.
+# Re-evaluate --webpack on next version bump.
+RUN NODE_OPTIONS="--max-old-space-size=4096" NEXT_TELEMETRY_DISABLED=1 pnpm --filter web exec next build
 
 # ─── Stage 4: init (build source for migrations, seed, Prisma client) ─────────
 FROM deps AS init
 COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
 COPY scripts/set-hooks-path.mjs ./scripts/
+COPY scripts/backup-postgres.sh ./scripts/
+COPY scripts/backup-neo4j.sh ./scripts/
+COPY scripts/backup-qdrant.sh ./scripts/
+COPY scripts/restore-postgres.sh ./scripts/
+COPY scripts/restore-neo4j.sh ./scripts/
+COPY scripts/restore-qdrant.sh ./scripts/
+COPY scripts/postgres-trial-restore.sh ./scripts/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY prompts/ ./prompts/
@@ -61,6 +70,10 @@ COPY docs/user-guide/ ./docs/user-guide/
 # Trailing slash + glob-friendly path matches the founder-kernel layout
 # (docs/founder-kernel/{manifest.json,wiki/,raw-sources/,embeddings.jsonl,…}).
 COPY docs/founder-kernel/ ./docs/founder-kernel/
+# Profession registry — JSON data consumed at build time by
+# lib/decision-perspective/resolve-profession-profile.ts (WSID/EP-WSID corpus).
+# Without this COPY the Next.js build fails: "Cannot find module docs/professions/registry.json".
+COPY docs/professions/ ./docs/professions/
 # IT4IT functional criteria workbook is read at seed time by
 # seed-ea-reference-models.ts. The rest of docs/Reference/ is large
 # binary content not needed in the image.
@@ -77,7 +90,10 @@ LABEL org.opencontainers.image.description="Self-developing digital product mana
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.source="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory"
 WORKDIR /app
-RUN apk add --no-cache docker-cli docker-cli-compose postgresql16-client git curl
+# nmap powers the fast path of the arp_scan discovery collector. Without it the
+# collector falls back to a 254-host ping sweep; with it a /24 scans in seconds.
+# (See packages/db/src/discovery-collectors/arp-scan.ts — BI-4CA890B7.)
+RUN apk add --no-cache docker-cli docker-cli-compose postgresql16-client git curl nmap
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
@@ -96,6 +112,14 @@ COPY --from=init /app/packages ./packages
 COPY --from=init /app/node_modules ./node_modules
 COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore ./
 COPY --from=init /app/scripts ./scripts
+# Managed operational scripts (backup/restore/trial-restore) are invoked at
+# runtime by the backup runners. They are committed from a Windows checkout,
+# where git cannot store the Unix executable bit, so they land here as 0644.
+# The runners now invoke them via `/bin/sh <script>` (executable-bit
+# independent), but restore the bit anyway as defense in depth so any direct
+# exec — here or in a future call site — still works. chmod only touches the
+# mode, not file content, so the source-content-hash below is unaffected.
+RUN chmod +x ./scripts/*.sh
 COPY --from=init /app/docs/user-guide ./docs/user-guide
 COPY --from=init /app/docs/founder-kernel ./docs/founder-kernel
 COPY --from=init /app/prompts ./prompts
@@ -106,6 +130,11 @@ COPY --from=init /app/deliberation ./deliberation
 COPY --from=init /app/docs/Reference ./docs/Reference
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
+# BI-5322D025: the portal self-migrates on boot (see script header). Absolute
+# path so it is invoked directly, not shadowed by the Node base image's
+# /usr/local/bin/docker-entrypoint.sh passthrough.
+COPY scripts/portal-migrate-boot.sh /usr/local/bin/portal-migrate-boot.sh
+RUN chmod +x /usr/local/bin/portal-migrate-boot.sh
 
 # Source for Build Studio — copied to -src paths to avoid collision with standalone output
 # Note: /app/apps/web/ and /app/packages/ are occupied by the standalone NFT output.
@@ -176,4 +205,19 @@ COPY Dockerfile /promoter/portal.Dockerfile
 RUN chmod +x /promoter/promote.sh
 
 EXPOSE 3000
-CMD ["node", "apps/web/server.js"]
+# Self-upgrade image-identity guard (BI-5B6C1C35, spec §4.3): the running portal
+# must carry the identity of the bytes it contains. Compose resolves
+# `DEPLOYED_SHA: ${DEPLOYED_SHA:-${DPF_VERSION:-}}` from the SHELL env at
+# `up` time, which is empty on a normal install/restart (neither var is exported)
+# — leaving `printenv DEPLOYED_SHA` blank on the Live portal and silencing the
+# only env-level drift signal. The image already bakes its true identity into
+# /app/.dpf-image-version (the DPF_VERSION git SHA when promoted, else the source
+# content hash); seed DEPLOYED_SHA from that baked file whenever the env is unset
+# so the runtime always reports the identity of its own bytes regardless of how
+# it was started. An explicit DEPLOYED_SHA from the deploy pipeline still wins.
+# BI-5322D025: portal-migrate-boot.sh applies pending migrations from THIS
+# image's bytes before exec'ing the server, so a self-upgrade swap (or any
+# restart) can never leave the DB drifted. It is fail-closed: if migrations
+# can't apply, the portal does not start. portal-init is unaffected — it
+# overrides CMD with /docker-entrypoint.sh.
+CMD ["/usr/local/bin/portal-migrate-boot.sh", "sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]

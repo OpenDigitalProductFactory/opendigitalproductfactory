@@ -4,6 +4,11 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { useAuthStore } from "@/src/features/auth/auth.store";
 import { useDeepLink } from "@/src/hooks/useDeepLink";
 import { AgentFAB } from "@/src/components/AgentFAB";
+import { loadServerUrl } from "@/src/lib/serverConfig";
+import { loadAndApplyAppConfig } from "@/src/lib/appConfig";
+import { useOfflineQueueStore } from "@/src/stores/offlineQueue";
+import { sqliteQueueStorage } from "@/src/stores/queueStorage";
+import { useOfflineSync } from "@/src/hooks/useOfflineSync";
 
 function useProtectedRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -30,11 +35,25 @@ export default function RootLayout() {
   const isLoading = useAuthStore((s) => s.isLoading);
 
   useEffect(() => {
-    initialize();
+    // Hydrate install URL → authenticate → absorb the install manifest (theme + capabilities).
+    void (async () => {
+      await loadServerUrl();
+      await initialize();
+      await loadAndApplyAppConfig();
+    })();
   }, [initialize]);
+
+  useEffect(() => {
+    // Wire durable storage for the offline mutation queue and restore any
+    // pending mutations from a previous (offline) session.
+    const store = useOfflineQueueStore.getState();
+    store.configureStorage(sqliteQueueStorage);
+    store.hydrate();
+  }, []);
 
   useProtectedRoute();
   useDeepLink();
+  useOfflineSync();
 
   if (isLoading) {
     return (

@@ -106,6 +106,93 @@ export function classifyIssueReport(report: IssueReportQueueInput): IssueReportC
   };
 }
 
+/**
+ * Plain-language explanation of an issue report for a NON-TECHNICAL operator
+ * (BI-E42C0B7E). The raw title / stack trace are written for engineers; this
+ * turns each report into "what this means" + "what you can do" so a founder can
+ * act without reading a stack trace.
+ *
+ * High-signal patterns (tool-capability / provider outage / zero-tool-call) are
+ * matched first because those are the reports operators hit most and the ones
+ * the raw text explains worst.
+ */
+export type IssueReportExplanation = {
+  meaning: string;
+  whatToDo: string;
+};
+
+export function explainIssueReport(
+  report: IssueReportQueueInput & { description?: string | null },
+): IssueReportExplanation {
+  const category = detectCategory(report);
+  const haystack = `${report.title} ${report.description ?? ""}`.toLowerCase();
+
+  const mentionsTool = /tool/.test(haystack);
+  const isZeroToolCall = /zero-tool-call|no tool call|without (?:calling|using) (?:a |any )?tool/.test(haystack);
+  const isToolCapability =
+    /tool-use-capable|supports tools|exceeds threshold|skipped local fallback|tool-capable/.test(haystack);
+  const isProviderOutage =
+    /rate.?limit|overload|provider (?:unavailable|temporarily|status)|all endpoints failed|\b429\b|\b529\b/.test(
+      haystack,
+    );
+
+  if (isZeroToolCall || (category === "process_guard" && mentionsTool)) {
+    return {
+      meaning:
+        "A coworker was expected to use its tools to do real work but finished a turn without calling any. " +
+        "This usually means it was running on the small bundled local model — because your paid AI providers were " +
+        "briefly unavailable — and that model can't reliably drive a large set of tools.",
+      whatToDo:
+        "This normally clears itself once your paid AI providers (Claude / GPT) are available again. " +
+        "If it keeps happening, open Platform > AI > Providers & Routing and confirm a paid, tool-capable provider is active.",
+    };
+  }
+
+  if (isToolCapability || isProviderOutage) {
+    return {
+      meaning:
+        "The platform briefly had no powerful, tool-capable AI provider available — usually because your paid " +
+        "providers (Claude / GPT) were rate-limited for a short period, leaving only the small bundled local model.",
+      whatToDo:
+        "No setup change is usually needed; this clears on its own within a minute or two. " +
+        "If it persists, open Platform > AI > Providers & Routing to confirm a paid provider is connected and active.",
+    };
+  }
+
+  switch (category) {
+    case "warmup_noise":
+      return {
+        meaning: "A routine internal health check, not a real problem.",
+        whatToDo: "Safe to suppress — it's background noise from the platform checking itself.",
+      };
+    case "runtime":
+      return {
+        meaning:
+          "The app hit an unexpected error while a page or action was running. The technical detail below is for " +
+          "engineers; the key fact is that a screen or action failed.",
+        whatToDo:
+          'If you can reproduce it, note what you clicked. Use "Ask System Admin" to investigate, or ' +
+          '"Send to Build Studio as a fix" to queue a repair.',
+      };
+    case "user_feedback":
+      return {
+        meaning: "Feedback or a problem reported by a person using the platform.",
+        whatToDo: "Review the description and decide whether it needs a fix or a follow-up.",
+      };
+    case "process_guard":
+      return {
+        meaning:
+          "An automated guard noticed a coworker's work session behaved abnormally (for example, stalling or looping).",
+        whatToDo: 'Use "Ask System Admin" to investigate the cause, then triage.',
+      };
+    default:
+      return {
+        meaning: "An issue the platform recorded for review.",
+        whatToDo: 'Use "Ask System Admin" to investigate, then triage or resolve.',
+      };
+  }
+}
+
 export function summarizeIssueReportQueue(reports: IssueReportQueueInput[]): IssueReportQueueSummary {
   return reports.reduce<IssueReportQueueSummary>((summary, report) => {
     const classification = classifyIssueReport(report);

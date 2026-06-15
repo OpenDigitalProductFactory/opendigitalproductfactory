@@ -40,6 +40,31 @@ export function areOptionalStartupTasksEnabled(
   return envFlagEnabled(env, "DPF_OPTIONAL_STARTUP_TASKS_ENABLED");
 }
 
+export function scheduleInitialCodeGraphBootstrap(input: {
+  delayMs?: number;
+  logger?: Pick<Console, "log" | "error">;
+  setTimer?: (callback: () => void, delayMs: number) => unknown;
+  ensure?: () => Promise<void>;
+} = {}): void {
+  const logger = input.logger ?? console;
+  const setTimer = input.setTimer ?? setTimeout;
+
+  setTimer(() => {
+    void (async () => {
+      try {
+        const ensure = input.ensure ?? (async () => {
+          const { ensureCodeGraphInitialized } = await import("@/lib/integrate/code-graph-refresh");
+          await ensureCodeGraphInitialized();
+        });
+        await ensure();
+        logger.log("[code-graph] Initial graph bootstrap complete or already present");
+      } catch (err) {
+        logger.error("[code-graph] Initial graph bootstrap failed:", err);
+      }
+    })();
+  }, input.delayMs ?? 10_000);
+}
+
 /**
  * Enqueue background dimension evals for every active ModelProfile under the
  * given provider. Sends one `ai/eval.run` event per model so Inngest dispatches
@@ -93,13 +118,29 @@ export async function syncPlatformVersionOnBoot(
  */
 export async function reconcileSelfUpgradeRunsOnBoot(
   logger: Pick<Console, "log" | "error"> = console,
+  opts: { staleAfterMs?: number; now?: () => Date } = {},
 ): Promise<{ succeeded: number; failed: number } | null> {
   try {
     const { prisma } = await import("@dpf/db");
     const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
     const { completeRun, failRun } = await import("@/lib/self-upgrade/run-store");
     const deployedSha = await getDeployedSha();
-    const running = await prisma.selfUpgradeRun.findMany({ where: { status: "running" } });
+    // staleAfterMs > 0 → PERIODIC mode (called in-process on an interval, not just
+    // on boot): only touch runs stuck "running" well past a normal upgrade (~7
+    // min), so an in-flight swap is never reconciled out from under itself.
+    // staleAfterMs = 0 (boot default) reconciles every "running" row, because a
+    // boot means the orchestrating process is already gone.
+    const staleAfterMs = opts.staleAfterMs ?? 0;
+    const now = opts.now?.() ?? new Date();
+    const running = await prisma.selfUpgradeRun.findMany({
+      where:
+        staleAfterMs > 0
+          ? {
+              status: "running",
+              startedAt: { lt: new Date(now.getTime() - staleAfterMs) },
+            }
+          : { status: "running" },
+    });
     let succeeded = 0;
     let failed = 0;
     for (const run of running) {
@@ -115,12 +156,41 @@ export async function reconcileSelfUpgradeRunsOnBoot(
       } else {
         await failRun(
           run.runId,
-          `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`,
+          staleAfterMs > 0
+            ? `Reconciled by watchdog (stuck "running" > ${Math.round(staleAfterMs / 60000)}m): orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`
+            : `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`,
         );
         failed++;
         logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (orphaned)`);
       }
     }
+
+    // In PERIODIC mode, also fail runs stuck "queued"/"pending" that never
+    // started — the dispatch event was dropped (e.g. the job engine was down),
+    // so they can never run, yet requestPortalSelfUpgradeAction silently no-ops
+    // on a queued/pending row and blocks every future upgrade. (SUR-B26DF3E4 had
+    // to be cleared by hand during the 2026-06-14 incident.) Boot mode leaves
+    // these alone — a freshly-queued run there may still be mid-dispatch.
+    if (staleAfterMs > 0) {
+      const staleQueued = await prisma.selfUpgradeRun.findMany({
+        where: {
+          status: { in: ["queued", "pending"] },
+          startedAt: null,
+          createdAt: { lt: new Date(now.getTime() - staleAfterMs) },
+        },
+      });
+      for (const run of staleQueued) {
+        await failRun(
+          run.runId,
+          `Reconciled by watchdog: dispatch never started (stuck "${run.status}" > ${Math.round(staleAfterMs / 60000)}m — the queue event was likely dropped). Re-invoke to retry.`,
+        );
+        failed++;
+        logger.log(
+          `[self-upgrade-reconcile] ${run.runId} -> failed (never-dispatched ${run.status})`,
+        );
+      }
+    }
+
     if (succeeded || failed) {
       logger.log(`[self-upgrade-reconcile] resolved ${succeeded} succeeded, ${failed} failed`);
     }
@@ -162,6 +232,222 @@ export async function resetStuckQuiescenceLevelOnBoot(
   } catch (err) {
     logger.error("[quiescence-reset] failed (non-fatal):", err);
     return false;
+  }
+}
+
+/**
+ * FIX 1 (spec §3.1 engine-first / FB-78E967D4) — Contradictory-checkpoint
+ * auto-recovery. A portal restart or an older buggy pipeline pass can strand a
+ * build's `buildExecState` in one of three self-contradictory shapes that NO
+ * existing recovery path accepts, so "Reset Build" was the only escape:
+ *   • missing-step       — restart killed the pipeline before step 1
+ *   • error-without-fail — a non-`failed` step carrying an error/failedAt
+ *   • complete-no-verify — step=complete but verificationOut never populated
+ *
+ * This reconciler applies the same classification the UI uses
+ * (classifyContradictoryExecState) and the shared recovery plan
+ * (planExecStateRecovery) automatically, with no human:
+ *   • error-without-fail → coerce to `failed` so `retryBuildExecution`'s
+ *     machinery can resume from the failed step (container/port/diagnosis
+ *     preserved).
+ *   • missing-step / complete-no-verify → clear the checkpoint so the pipeline
+ *     restarts clean (its own self-heal re-runs setup idempotently).
+ *
+ * Idempotent: a healthy or already-`failed` row yields `action: "none"` and is
+ * skipped, so this is safe to run on every boot. Non-fatal. Exported for tests.
+ */
+export async function recoverContradictoryBuildExecStatesOnBoot(
+  logger: Pick<Console, "log" | "error"> = console,
+): Promise<{ recovered: number; cleared: number; failedCoerced: number } | null> {
+  try {
+    const { prisma, Prisma } = await import("@dpf/db");
+    const { planExecStateRecovery } = await import("@/lib/integrate/build-exec-types");
+    type ExecStateLike = import("@/lib/integrate/build-exec-types").ExecStateLike;
+    // Scan only rows still in the build phase; filter the null/contradictory
+    // discrimination in JS to avoid Prisma JSON-null filter subtleties.
+    const candidates = await prisma.featureBuild.findMany({
+      where: { phase: "build" },
+      select: { buildId: true, buildExecState: true, verificationOut: true },
+    });
+    let cleared = 0;
+    let failedCoerced = 0;
+    for (const build of candidates) {
+      const plan = planExecStateRecovery(
+        build.buildExecState as ExecStateLike | null,
+        build.verificationOut,
+      );
+      if (plan.action === "none") continue;
+      if (plan.action === "clear") {
+        await prisma.featureBuild.update({
+          where: { buildId: build.buildId },
+          // DbNull (SQL NULL) matches resetBuildExecution's clear semantics, so
+          // the UI reads `buildExecState == null` (not contradictory) afterwards.
+          data: { buildExecState: Prisma.DbNull },
+        });
+        cleared++;
+        logger.log(
+          `[build-exec-recover] ${build.buildId} -> cleared checkpoint (reason=${plan.reason}); pipeline will restart clean`,
+        );
+      } else {
+        await prisma.featureBuild.update({
+          where: { buildId: build.buildId },
+          data: {
+            buildExecState: plan.state as unknown as import("@dpf/db").Prisma.InputJsonValue,
+          },
+        });
+        failedCoerced++;
+        logger.log(
+          `[build-exec-recover] ${build.buildId} -> coerced to failed (reason=${plan.reason}); Retry can now resume from failedAt=${plan.state.failedAt ?? "?"}`,
+        );
+      }
+      await prisma.buildActivity
+        .create({
+          data: {
+            buildId: build.buildId,
+            tool: "recoverContradictoryBuildExecStatesOnBoot",
+            summary:
+              plan.action === "clear"
+                ? `Auto-recovered contradictory checkpoint on boot (reason=${plan.reason}): cleared for clean restart`
+                : `Auto-recovered contradictory checkpoint on boot (reason=${plan.reason}): coerced to failed for retry`,
+          },
+        })
+        .catch(() => {});
+    }
+    const recovered = cleared + failedCoerced;
+    if (recovered > 0) {
+      logger.log(
+        `[build-exec-recover] recovered ${recovered} contradictory checkpoint(s): ${cleared} cleared, ${failedCoerced} coerced to failed`,
+      );
+    }
+    return { recovered, cleared, failedCoerced };
+  } catch (err) {
+    logger.error("[build-exec-recover] failed (non-fatal):", err);
+    return null;
+  }
+}
+
+/**
+ * FIX 2 (spec §3.1 engine-first) — Restart-resume for stranded build rows. The
+ * pipeline is dispatched fire-and-forget (`autoExecuteBuild(...).catch(...)`),
+ * so a portal recycle silently kills it mid-flight, leaving a row in the `build`
+ * phase at a non-terminal step that nothing ever picks up again — the build just
+ * stops.
+ *
+ * This reconciler finds those rows and re-dispatches them. `autoExecuteBuild`
+ * reads the persisted `buildExecState` and `runBuildPipeline` resumes from
+ * `getResumeStep`, re-running the interrupted step idempotently — no work is
+ * lost and no duplicate sandbox is created.
+ *
+ * Liveness guard: only rows whose `updatedAt` is older than `staleAfterMs`
+ * (default 5 min — comfortably longer than the heartbeat-ticker cadence that
+ * touches `buildExecState` during a legitimately slow step) are resumed, so a
+ * genuinely in-flight build on a still-running portal is never double-dispatched.
+ * Contradictory shapes are left to recoverContradictoryBuildExecStatesOnBoot
+ * (which runs first); this only resumes internally-consistent, mid-step rows.
+ *
+ * Idempotent and safe to run every boot. Non-fatal. Exported for tests.
+ */
+export async function resumeStrandedBuildsOnBoot(
+  opts: { staleAfterMs?: number; dispatch?: (buildId: string) => void } = {},
+  logger: Pick<Console, "log" | "error"> = console,
+): Promise<{ resumed: number; flagged: number } | null> {
+  const staleAfterMs = opts.staleAfterMs ?? 5 * 60 * 1000;
+  try {
+    const { prisma } = await import("@dpf/db");
+    const { classifyContradictoryExecState } = await import(
+      "@/lib/integrate/build-exec-types"
+    );
+    type ExecStateLike = import("@/lib/integrate/build-exec-types").ExecStateLike;
+    const cutoff = new Date(Date.now() - staleAfterMs);
+    // BI-17377D05: cover ALL non-terminal pre-ship phases, not just `build`.
+    // Only the `build` phase has a resumable step-machine (buildExecState) that
+    // autoExecuteBuild can re-dispatch; ideate/plan/review are dispatch-driven
+    // with no resume, so a swap (or a dead dispatch) used to strand them
+    // SILENTLY. We still auto-resume `build`; for the pre-build phases we surface
+    // the strand as recoverable so it stops being a silent orphan.
+    const candidates = await prisma.featureBuild.findMany({
+      where: {
+        phase: { in: ["ideate", "plan", "build", "review"] },
+        updatedAt: { lt: cutoff },
+      },
+      select: { buildId: true, phase: true, buildExecState: true, verificationOut: true },
+    });
+
+    // Default dispatcher lazy-imports the system executor to avoid pulling the
+    // server-action module (and its auth wrappers) into the module graph until
+    // a resume is actually needed.
+    const dispatch =
+      opts.dispatch ??
+      ((buildId: string) => {
+        void (async () => {
+          const { autoExecuteBuild } = await import("@/lib/actions/build");
+          await autoExecuteBuild(buildId);
+        })().catch((err) =>
+          logger.error(
+            "[build-resume] re-dispatch failed for %s: %s",
+            JSON.stringify(buildId),
+            err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
+          ),
+        );
+      });
+
+    let resumed = 0;
+    let flagged = 0;
+    for (const build of candidates) {
+      // ── Pre-build phases (ideate/plan/review): no resumable step-machine.
+      // Surface as recoverable instead of auto-re-dispatching the fragile,
+      // unverified pre-build flow. Full auto-resume of these phases is the
+      // remaining BI-17377D05 / EP-BUILD-4DB1C0 work.
+      if (build.phase !== "build") {
+        logger.log(
+          `[build-resume] ${build.buildId} stranded in ${build.phase} phase after restart — flagged for recovery (pre-build phases have no auto-resume)`,
+        );
+        await prisma.buildActivity
+          .create({
+            data: {
+              buildId: build.buildId,
+              tool: "resumeStrandedBuildsOnBoot",
+              summary: `Stranded in ${build.phase} phase after a restart/swap — flagged for operator recovery; pre-build phases have no auto-resume yet (BI-17377D05).`,
+            },
+          })
+          .catch(() => {});
+        flagged++;
+        continue;
+      }
+
+      // ── Build phase: proven step-machine resume (unchanged behavior). ──
+      const state = build.buildExecState as ExecStateLike | null;
+      // Skip contradictory shapes — the contradictory-recovery reconciler owns
+      // those. Skip null/terminal steps — nothing to resume.
+      if (classifyContradictoryExecState(state, build.verificationOut) !== null) continue;
+      const step = state?.step;
+      if (step == null || step === "complete" || step === "failed") continue;
+
+      logger.log(
+        `[build-resume] ${build.buildId} stranded at step=${step} (no progress since updatedAt) — re-dispatching pipeline`,
+      );
+      await prisma.buildActivity
+        .create({
+          data: {
+            buildId: build.buildId,
+            tool: "resumeStrandedBuildsOnBoot",
+            summary: `Re-dispatched stranded build on boot (step=${step}); pipeline resumes from getResumeStep`,
+          },
+        })
+        .catch(() => {});
+      dispatch(build.buildId);
+      resumed++;
+    }
+    if (resumed > 0) {
+      logger.log(`[build-resume] re-dispatched ${resumed} stranded build(s)`);
+    }
+    if (flagged > 0) {
+      logger.log(`[build-resume] flagged ${flagged} pre-build-phase strand(s) for recovery`);
+    }
+    return { resumed, flagged };
+  } catch (err) {
+    logger.error("[build-resume] failed (non-fatal):", err);
+    return null;
   }
 }
 
@@ -224,6 +510,45 @@ export async function register() {
     // came up on the target SHA; fails orphans so triggers aren't blocked.
     void reconcileSelfUpgradeRunsOnBoot();
 
+    // Periodic safety net — cron-independent (the boot reconcile above and the
+    // Inngest cron can BOTH miss this). If a swap's orchestrator dies while the
+    // portal stays UP (no reboot), the SelfUpgradeRun sits "running" forever and
+    // every future trigger silently no-ops (requestPortalSelfUpgradeAction). The
+    // June-10 run sat "running" for 4 days until a manual restart — this re-runs
+    // the reconcile in-process so a stuck run self-heals within ~20 min instead.
+    // Staleness-guarded so a legitimately in-flight upgrade is never touched.
+    setInterval(
+      () => {
+        void reconcileSelfUpgradeRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
+      },
+      20 * 60 * 1000,
+    );
+
+    // Same boot + periodic safety net for BackupRun rows stuck "running": a
+    // backup runner that dies mid-dump leaves a false "in progress" row forever
+    // (no other recovery), polluting the backup-health card + corruption alerts.
+    void (async () => {
+      const { reconcileStuckBackupRuns } = await import(
+        "@/lib/operate/backups/reconcile-stuck-runs"
+      );
+      await reconcileStuckBackupRuns();
+      setInterval(() => void reconcileStuckBackupRuns(), 20 * 60 * 1000);
+    })();
+
+    // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
+    // These run unconditionally — they are correctness reconcilers, not optional
+    // maintenance — and FIX 1 runs before FIX 2 so contradictory checkpoints are
+    // coerced/cleared before the resume pass considers them.
+    //
+    // FIX 1: auto-recover builds whose buildExecState landed in a contradictory
+    // shape (was previously only escapable via the manual "Reset Build").
+    // FIX 2: re-dispatch builds whose fire-and-forget pipeline was killed by a
+    // portal recycle, leaving a row stranded mid-step that nothing resumes.
+    void (async () => {
+      await recoverContradictoryBuildExecStatesOnBoot();
+      await resumeStrandedBuildsOnBoot();
+    })();
+
     const optionalStartupTasksEnabled = areOptionalStartupTasksEnabled();
     if (!optionalStartupTasksEnabled) {
       console.log("[instrumentation] Optional startup maintenance skipped (disabled)");
@@ -236,6 +561,7 @@ export async function register() {
       registerScheduledJobs().catch((err) =>
         console.error("[instrumentation] Failed to register discovery jobs:", err),
       );
+      scheduleInitialCodeGraphBootstrap();
     }
 
     // Self-sync our function catalog with the Inngest server.
@@ -255,6 +581,10 @@ export async function register() {
             if (res.ok) {
               const body = await res.json().catch(() => ({}));
               console.log(`[inngest-sync] Registered with Inngest server: ${JSON.stringify(body)}`);
+              const { recordInngestRegistration } = await import(
+                "@/lib/queue/job-engine-health"
+              );
+              await recordInngestRegistration(true);
               return;
             }
             lastErr = `HTTP ${res.status}`;
@@ -267,9 +597,50 @@ export async function register() {
           `[inngest-sync] Failed to register with Inngest server after 6 attempts: ${String(lastErr)}. ` +
           `Background jobs (brand extract, evals, etc.) will not dispatch until this succeeds.`,
         );
+        // Persist the failure so the ops UI surfaces a dead job engine — the
+        // missing signal that let the 2026-06-14 outage hide for 4 days.
+        const { recordInngestRegistration } = await import(
+          "@/lib/queue/job-engine-health"
+        );
+        await recordInngestRegistration(
+          false,
+          `Inngest registration failed after 6 attempts: ${String(lastErr)}`,
+        );
       }, 3_000);
     } else if (process.env.INNGEST_BASE_URL) {
       console.log("[inngest-sync] Boot self-registration skipped (disabled)");
+    }
+
+    // Periodic re-sync (in-process, cron-independent): re-register every 5 min so
+    // the job engine self-heals WITHOUT a portal reboot if the boot sync failed
+    // or Inngest later restarts and forgets its registration (the 2026-06-14
+    // outage needed a reboot to re-register). Also keeps the ops.jobEngine health
+    // record fresh — it then reflects the CURRENT state, not just boot. The PUT is
+    // idempotent ("modified:false" when the catalog is unchanged).
+    if (process.env.INNGEST_BASE_URL && isInngestSelfSyncOnBootEnabled()) {
+      const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+      setInterval(
+        () => {
+          void (async () => {
+            const { recordInngestRegistration } = await import(
+              "@/lib/queue/job-engine-health"
+            );
+            try {
+              const res = await fetch(`${appUrl}/api/inngest`, { method: "PUT" });
+              await recordInngestRegistration(
+                res.ok,
+                res.ok ? null : `Inngest re-sync failed: HTTP ${res.status}`,
+              );
+            } catch (err) {
+              await recordInngestRegistration(
+                false,
+                `Inngest re-sync failed: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          })();
+        },
+        5 * 60 * 1000,
+      );
     }
 
     // ── Pin audit invariant ────────────────────────────────────────────────

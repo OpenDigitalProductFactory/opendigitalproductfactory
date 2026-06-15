@@ -24,7 +24,11 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
     href: "/platform",
     description: "Supervise platform operations from a small number of workflow hubs.",
     matchPrefixes: ["/platform"],
-    subItems: [{ label: "Platform Hub", href: "/platform" }],
+    subItems: [
+      { label: "Platform Hub", href: "/platform" },
+      { label: "Schedule", href: "/platform/schedule" },
+      { label: "Workbooks", href: "/workbooks" },
+    ],
   },
   {
     key: "identity",

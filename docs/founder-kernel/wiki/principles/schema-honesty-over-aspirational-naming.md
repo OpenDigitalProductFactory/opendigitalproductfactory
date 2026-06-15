@@ -6,7 +6,7 @@ status: published
 abstract: Name columns, types, and models for what they hold today. Defer aspirational names until the substrate actually carries the aspirational meaning. A misnamed schema misleads every reader and every consumer.
 principleTier: core
 principleDirection: Name columns, types, and models for what they hold today; defer aspirational names until the substrate actually carries the aspirational meaning.
-principleDimensionVector: {"schema_grounding": 0.9, "long_term_maintainability": 0.7, "evidence_density": 0.5, "human_cognitive_load": 0.3}
+principleDimensionVector: {"schema_grounding": 0.9, "long_term_maintainability": 0.7, "evidence_density": 0.5, "human_cognitive_load": -0.3}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

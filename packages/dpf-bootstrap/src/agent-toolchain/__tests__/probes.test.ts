@@ -180,15 +180,21 @@ describe("runSmokeProbe", () => {
     expect(result.result).toEqual({ result: "skipped", reason: "no_token" });
   });
 
-  it("returns skipped:claude_not_on_path when no CLI is on PATH", async () => {
+  it("returns skipped:grok_not_on_path when no CLI is on PATH", async () => {
     const result = await runSmokeProbe({
       hasToken: true,
-      // Force absolute path that won't exist on disk -> hasOnPath returns false.
-      cliPath: { claude: "/nonexistent/claude", codex: "/nonexistent/codex" },
+      // Force absolute paths that won't exist on disk -> hasOnPath returns false
+      // for all three clients. Grok is probed last, so it owns the terminal
+      // "no CLI on PATH" skip reason.
+      cliPath: {
+        claude: "/nonexistent/claude",
+        codex: "/nonexistent/codex",
+        grok: "/nonexistent/grok",
+      },
     });
     expect(result.result.result).toBe("skipped");
     if (result.result.result === "skipped") {
-      expect(result.result.reason).toBe("claude_not_on_path");
+      expect(result.result.reason).toBe("grok_not_on_path");
     }
   });
 });

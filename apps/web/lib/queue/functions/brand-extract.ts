@@ -163,6 +163,21 @@ export async function runBrandExtraction(input: RunBrandExtractionInput): Promis
     data: { designSystem: JSON.parse(JSON.stringify(ds)) },
   });
 
+  // Promote the extracted logo from a base64 blob inside designSystem to a real,
+  // served MediaAsset (sets Organization.logoUrl via role="logo"). Non-fatal:
+  // the design-system copy is already persisted as the fallback.
+  try {
+    const { ingestOrganizationLogo } = await import("@/lib/media");
+    await ingestOrganizationLogo({
+      organizationId: input.organizationId,
+      ref: ds.identity.logo.mark,
+      name: ds.identity.name,
+      createdById: input.userId,
+    });
+  } catch {
+    // Best-effort: logo promotion never blocks brand extraction.
+  }
+
   // Derive runtime theme tokens and upsert BrandingConfig so the
   // storefront/admin themers pick up the new brand automatically.
   let themeTokens: unknown = null;

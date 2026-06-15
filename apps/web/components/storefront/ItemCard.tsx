@@ -1,5 +1,7 @@
 import type { PublicItem } from "@/lib/storefront-types";
+import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import { CtaButton } from "./CtaButton";
+import { MediaImage } from "./MediaImage";
 
 // prefix: text before currency symbol; suffix: unit after amount
 const PRICE_PREFIX: Record<string, string> = { from: "From " };
@@ -12,15 +14,23 @@ function formatPrice(item: PublicItem): string | null {
   if (!item.priceAmount && item.priceType === "free") return "Free";
   if (!item.priceAmount && item.priceType === "quote") return "POA";
   if (!item.priceAmount && item.priceType === "donation") return "Donation";
+  if (!item.priceAmount && item.priceType === "from") return "From...";
+  if (!item.priceAmount && item.priceType === "per-hour") return "Per hour";
+  if (!item.priceAmount && item.priceType === "per-session") return "Per session";
   if (!item.priceAmount) return null;
   const prefix = PRICE_PREFIX[item.priceType ?? ""] ?? "";
   const suffix = PRICE_SUFFIX[item.priceType ?? ""] ?? "";
-  const currency = item.priceCurrency === "GBP" ? "£" : item.priceCurrency;
+  const currency = getCurrencySymbol(item.priceCurrency);
   return `${prefix}${currency}${item.priceAmount}${suffix}`;
 }
 
 export function ItemCard({ item, orgSlug }: { item: PublicItem; orgSlug: string }) {
   const priceDisplay = formatPrice(item);
+  // Show an image (or a generated placeholder) for catalogue-style items where a
+  // photo is expected; for booking/inquiry/donation items only when one exists,
+  // so we don't stamp a placeholder onto every "Make a donation" tile.
+  const showImage =
+    Boolean(item.imageUrl) || item.ctaType === "purchase" || item.ctaType === "rental";
 
   return (
     <div style={{
@@ -31,9 +41,7 @@ export function ItemCard({ item, orgSlug }: { item: PublicItem; orgSlug: string 
       flexDirection: "column",
       gap: 8,
     }}>
-      {item.imageUrl && (
-        <img src={item.imageUrl} alt={item.name} style={{ width: "100%", height: 160, objectFit: "cover", borderRadius: 4 }} />
-      )}
+      {showImage && <MediaImage src={item.imageUrl} alt={item.name} height={160} />}
       <div style={{ fontWeight: 600, fontSize: 16, color: "var(--dpf-text)" }}>{item.name}</div>
       {item.description && (
         <div style={{ fontSize: 13, color: "var(--dpf-muted)", lineHeight: 1.5 }}>{item.description}</div>
@@ -42,7 +50,7 @@ export function ItemCard({ item, orgSlug }: { item: PublicItem; orgSlug: string 
         <div style={{ fontSize: 15, fontWeight: 700, color: "var(--dpf-text)" }}>{priceDisplay}</div>
       )}
       <div style={{ marginTop: "auto", paddingTop: 8 }}>
-        <CtaButton ctaType={item.ctaType} ctaLabel={item.ctaLabel} orgSlug={orgSlug} itemId={item.itemId} />
+        <CtaButton ctaType={item.ctaType} ctaLabel={item.ctaLabel} orgSlug={orgSlug} itemId={item.itemId} priceAmount={item.priceAmount} />
       </div>
     </div>
   );

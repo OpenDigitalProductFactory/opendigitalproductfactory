@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { buildIssueBacklogItem, triageIssueReports, llmTriageReport, checkForSpike, _resetCache } from "./issue-report-triage";
 
+// General-path fixture. NOTE: source is "manual" (not "crash_boundary") because
+// crash_boundary reports take the dedicated honest-triage gate (BI-B4F401B3)
+// that skips the LLM — see the "crash_boundary gate" suite below for that path.
 const report = {
   id: "r1",
   reportId: "PIR-ABC12",
@@ -10,7 +13,7 @@ const report = {
   description: "Server component render error",
   routeContext: "/platform/ai/providers/ollama",
   errorStack: "Error: Something went wrong\n  at render (file.tsx:42)",
-  source: "crash_boundary",
+  source: "manual",
 };
 
 beforeEach(() => _resetCache());
@@ -179,6 +182,81 @@ describe("triageIssueReports", () => {
     const item = created[0] as { title: string; priority: number };
     expect(item.title).toBe("Page crash on /platform/ai/providers/ollama");
     expect(item.priority).toBe(1); // original critical → 1
+  });
+});
+
+describe("triageIssueReports — crash_boundary gate (BI-B4F401B3)", () => {
+  const crashReport = {
+    id: "rc1",
+    reportId: "PIR-CR001",
+    type: "runtime_error",
+    severity: "critical",
+    title: "Page crash",
+    description: "An error occurred in the Server Components render.",
+    routeContext: "/ops/self-upgrade",
+    errorStack: null,
+    source: "crash_boundary",
+    errorDigest: "1234567890",
+  };
+
+  it("skips the LLM and files an honest deterministic item (no guessed root cause)", async () => {
+    const created: unknown[] = [];
+    const mockLlm = vi.fn();
+
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [crashReport],
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+      callLlm: mockLlm,
+    }));
+
+    expect(mockLlm).not.toHaveBeenCalled(); // never feeds the sanitized message to the LLM
+    expect(result.llmEnhanced).toBe(0);
+    expect(result.created).toBe(1);
+    const item = created[0] as { title: string; body: string; workType: string };
+    expect(item.title).toBe("Crash: /ops/self-upgrade (PIR-CR001) — investigate via diagnostic prompt");
+    expect(item.body).toContain("Error digest: 1234567890");
+    expect(item.body).toContain("NOT a diagnosed root cause");
+    expect(item.workType).toBe("bug");
+  });
+
+  it("folds repeat crashes with the same digest into one item (cross-route incident dedup)", async () => {
+    const created: unknown[] = [];
+    const incremented: string[] = [];
+
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [crashReport],
+      findCrashItemTitleByDigest: async (digest: string) =>
+        digest === "1234567890" ? "Crash: /build (PIR-CR000) — investigate via diagnostic prompt" : null,
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+      incrementOccurrence: async (t: string) => { incremented.push(t); },
+    }));
+
+    expect(result.created).toBe(0);
+    expect(created).toHaveLength(0);
+    expect(incremented).toEqual(["Crash: /build (PIR-CR000) — investigate via diagnostic prompt"]);
+  });
+
+  it("creates a fresh item when no prior crash shares the digest", async () => {
+    const created: unknown[] = [];
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [crashReport],
+      findCrashItemTitleByDigest: async () => null,
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+    }));
+    expect(result.created).toBe(1);
+    expect(created).toHaveLength(1);
+  });
+
+  it("never title-dedups crash reports — only the digest folds them", async () => {
+    // Distinct real errors can share a sanitized title; title-matching must not
+    // fold them. A digest-less crash always files its own item.
+    const created: unknown[] = [];
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [{ ...crashReport, errorDigest: null }],
+      getExistingTitles: async () => ["Page crash"], // would match by title under the old path
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+    }));
+    expect(result.created).toBe(1);
   });
 });
 

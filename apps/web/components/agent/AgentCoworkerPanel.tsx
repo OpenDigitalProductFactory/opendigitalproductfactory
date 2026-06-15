@@ -14,8 +14,7 @@ import { AgentMessageInput } from "./AgentMessageInput";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
 import { CollaborationActivityPanel } from "./CollaborationActivityPanel";
 import type { CollaborationCard } from "./HandoffCard";
-import { CoworkerSummonPicker } from "./CoworkerSummonPicker";
-import { getConversationParticipants } from "@/lib/actions/coworker-summon";
+import { getConversationParticipants } from "@/lib/actions/conversation-participants-action";
 import type { ConversationParticipant } from "@/lib/tak/conversation-participants-core";
 import { isTaskInFlight } from "@/lib/tak/task-state-intent";
 import { CoworkerHealthStatus } from "@/components/monitoring/CoworkerHealthStatus";
@@ -158,8 +157,9 @@ export function AgentCoworkerPanel({
   const [activeSkill, setActiveSkill] = useState<{ skillId: string; label: string } | null>(null);
   const [marketingSkillRules, setMarketingSkillRules] = useState<Record<string, { visible?: boolean; label?: string; reframe?: string }> | null>(null);
   // EP-A2A multi-agent collaboration (2026-06-04 spec, Slice 1): the live
-  // participant roster + the inline handoff/summon cards the user sees when a
-  // coworker hands off to, or the user summons, another coworker.
+  // participant roster + the inline handoff/summon cards the user SEES when the
+  // active coworker hands off to, or brings in, another coworker. Visibility
+  // only — the human never picks or tasks peers; the active coworker does.
   const [participants, setParticipants] = useState<ConversationParticipant[]>([]);
   const [collaborationCards, setCollaborationCards] = useState<CollaborationCard[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -209,7 +209,9 @@ export function AgentCoworkerPanel({
       byId.set(`collab-${kind}-${p.threadId}`, {
         id: `collab-${kind}-${p.threadId}`,
         kind,
-        fromLabel: kind === "summon" ? "You" : ownerLabel,
+        // Both handoff and summon are coworker-initiated: the active coworker
+        // (owner) is the source, never "You" — the human does not task peers.
+        fromLabel: ownerLabel,
         toLabel: p.label,
         tier: p.tier === 3 ? 3 : 2,
         childThreadId: p.threadId,
@@ -365,7 +367,8 @@ export function AgentCoworkerPanel({
             card = {
               id: `collab-summon-${data.childThreadId}`,
               kind: "summon",
-              fromLabel: "You",
+              // The active coworker summoned the peer, not the human.
+              fromLabel: labelOf(data.fromAgentId, agent.agentName),
               toLabel: labelOf(data.summonedAgentId, "Coworker"),
               tier: data.tier === 3 ? 3 : 2,
               childThreadId: data.childThreadId,
@@ -773,9 +776,36 @@ export function AgentCoworkerPanel({
     setClearConfirmOpen(false);
 
     startClearing(async () => {
-      const result = await clearConversation({ threadId });
+      // BI-63906D5D — coworker panel wedge: useTransition keeps `isClearing`
+      // true until this async resolves, and `isClearing` disables the input
+      // (placeholder "Sending..."). clearConversation can hang server-side
+      // (observed after an aborted/ghost-called coworker turn left the thread
+      // mid-flight), which left the panel permanently wedged — surviving a
+      // page reload and a portal restart, with no operator recovery. Race the
+      // call against a timeout so the transition — and therefore the input —
+      // always recovers, then reset local state best-effort so the operator can
+      // keep working even if the server side never confirmed the clear.
+      const CLEAR_TIMEOUT_MS = 10_000;
+      let timedOut = false;
+      const result = await Promise.race([
+        clearConversation({ threadId }),
+        new Promise<{ error: string }>((resolve) =>
+          setTimeout(() => {
+            timedOut = true;
+            resolve({ error: "clearConversation timed out" });
+          }, CLEAR_TIMEOUT_MS),
+        ),
+      ]);
       if ("error" in result) {
         console.warn("clearConversation error:", result.error);
+        if (timedOut) {
+          // Best-effort local reset so a hung server action doesn't strand the
+          // operator. The input re-enables as soon as this async returns.
+          setMessages([]);
+          setBuildTasks(new Map());
+          setBuildProgress(null);
+          onConversationCleared?.();
+        }
         return;
       }
       setMessages([]);
@@ -858,32 +888,12 @@ export function AgentCoworkerPanel({
         />
       )}
 
-      {/* EP-A2A: collapsed/summarized sub-agent activity disclosure (quiet for 1-1) + summon affordance */}
+      {/* EP-A2A: collapsed/summarized sub-agent activity disclosure (quiet for
+          1-1). Visibility only — shows what the active coworker is tasking and
+          a summary of what each peer is doing. The human does NOT pick or task
+          coworkers; the active coworker decides that via request_coworker /
+          summon_coworker. */}
       <CollaborationActivityPanel participants={participants} cards={collaborationCardsToShow} />
-      {threadId ? (
-        <CoworkerSummonPicker
-          parentThreadId={threadId}
-          routeContext={effectiveRoute}
-          onSummoned={(info) => {
-            setCollaborationCards((prev) =>
-              prev.some((c) => c.id === `collab-summon-${info.childThreadId}`)
-                ? prev
-                : [
-                    ...prev,
-                    {
-                      id: `collab-summon-${info.childThreadId}`,
-                      kind: "summon",
-                      fromLabel: "You",
-                      toLabel: info.targetLabel,
-                      tier: 2,
-                      childThreadId: info.childThreadId,
-                    },
-                  ],
-            );
-            refreshParticipants();
-          }}
-        />
-      ) : null}
 
       <div
         style={{

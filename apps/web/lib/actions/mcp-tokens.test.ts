@@ -102,6 +102,7 @@ const FULL_GRANT_MAP: Record<string, string[]> = {
   t_aq: ["external_registry_search"],
   t_ar: ["data_governance_validate"],
   t_as: ["admin_write"],
+  t_at: ["browser_drive"],
 };
 
 const addScopesMock = addScopesToMcpApiToken as unknown as ReturnType<typeof vi.fn>;
@@ -385,7 +386,7 @@ describe("issueMyTemplateMcpToken", () => {
         scope: "write",
         capability: "write",
         name: "Finance coworker",
-        scopes: expect.arrayContaining(["financial_report_create", "registry_read"]),
+        scopes: expect.arrayContaining(["browser_drive", "financial_report_create", "registry_read"]),
       }),
     );
     const passed = issueMock.mock.calls[0]![0] as { scopes: string[] };

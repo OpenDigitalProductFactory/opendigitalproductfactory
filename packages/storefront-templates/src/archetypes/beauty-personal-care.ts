@@ -40,6 +40,43 @@ const BEAUTY_ACTIVATION_PROFILE: ArchetypeDefinition["activationProfile"] = {
   },
 };
 
+// Mobile beauty travels to the customer (home, hotel, or event) instead of the
+// client coming to a shop — so unlike the salon leaves above it qualifies for
+// field dispatch via consumptionChannel: "onsite-plus-portal". Events run on
+// weekends, hence the 7-day schedule with travel buffers.
+const MOBILE_BEAUTY_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "customer-choice",
+  defaultOperatingHours: [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, start: "07:00", end: "20:00" })),
+  defaultBeforeBuffer: 15,
+  defaultAfterBuffer: 30,
+  minimumNoticeHours: 24,
+  maxAdvanceDays: 180,
+};
+
+const MOBILE_BEAUTY_ACTIVATION: ArchetypeDefinition["activationProfile"] = {
+  profileType: "standard",
+  modules: ["service-operations", "integrations"],
+  billingReadinessMode: "none",
+  customerGraph: "none",
+  estateSeparation: "shared",
+  axes: {
+    form: "services",
+    delivery: "physical",
+    primaryConsumer: "individual",
+    consumptionChannel: "onsite-plus-portal",
+    commercialModel: "appointment-checkout",
+    provisioning: "account-with-billing",
+    platform: "no",
+  },
+  portfolios: {
+    foundational: { scope: "minimal" },
+    manufactureAndDeliver: { scope: "primary", it4itStages: ["request-to-fulfill"] },
+    forEmployees: { scope: "minimal" },
+    productsAndServicesSold: { scope: "primary" },
+  },
+};
+
 export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
   {
     archetypeId: "hair-salon",
@@ -165,7 +202,7 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
     itemTemplates: [
       { name: "Initial Assessment", description: "Full fitness assessment and goal-setting session", priceType: "free", bookingDurationMinutes: 60 },
       { name: "1-Hour PT Session", description: "One-to-one personal training session", priceType: "per-session", bookingDurationMinutes: 60 },
-      { name: "Block of 10 Sessions", description: "10 PT sessions at a discounted rate", priceType: "fixed", ctaType: "purchase" },
+      { name: "Block of 10 Sessions", description: "10 PT sessions at a discounted rate", priceType: "fixed", priceAmount: 350, ctaType: "purchase" },
       { name: "Online Coaching", description: "Remote coaching with custom programme delivery", priceType: "per-session" },
       { name: "Group Bootcamp", description: "Small group outdoor training session", priceType: "per-session", bookingDurationMinutes: 45 },
     ],
@@ -183,5 +220,36 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
     ],
     schedulingDefaults: BEAUTY_SCHEDULING,
     activationProfile: BEAUTY_ACTIVATION_PROFILE,
+  },
+  {
+    archetypeId: "mobile-beauty",
+    name: "Mobile Beauty & Glam",
+    category: "beauty-personal-care",
+    ctaType: "booking",
+    tags: ["mobile beauty", "bridal", "makeup artist", "mobile hair", "event glam", "on-location"],
+    itemTemplates: [
+      { name: "Bridal Hair & Makeup", description: "On-location bridal styling for the wedding party", priceType: "from", bookingDurationMinutes: 120 },
+      { name: "Event / Party Glam", description: "Hair and makeup at your home or venue for any occasion", priceType: "from", bookingDurationMinutes: 75 },
+      { name: "Mobile Haircut & Style", description: "A stylist comes to you for a cut and blow-dry", priceType: "from", bookingDurationMinutes: 60 },
+      { name: "Spray Tan", description: "Mobile sunless tanning at your door", priceType: "fixed", bookingDurationMinutes: 30 },
+      { name: "Lash & Brow", description: "Lash extensions, lifts, and brow shaping on location", priceType: "from", bookingDurationMinutes: 90 },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Services", sortOrder: 1 },
+      { type: "gallery", title: "Our Work", sortOrder: 2 },
+      { type: "about", title: "About Us", sortOrder: 3 },
+      { type: "testimonials", title: "Client Love", sortOrder: 4 },
+      { type: "contact", title: "Book Your Glam", sortOrder: 5 },
+    ],
+    formSchema: [
+      ...BOOKING_CONTACT_FIELDS,
+      { name: "occasion", label: "Occasion", type: "select" as const, required: false, options: ["Wedding", "Party / event", "Photoshoot", "Everyday", "Prom / formal", "Other"] },
+      { name: "serviceAddress", label: "Service address / venue", type: "text" as const, required: true },
+      { name: "eventDate", label: "Date required", type: "text" as const, required: false, placeholder: "DD/MM/YYYY" },
+      { name: "groupSize", label: "Number of people", type: "select" as const, required: false, options: ["Just me", "2–3", "4–6", "7+"] },
+    ],
+    schedulingDefaults: MOBILE_BEAUTY_SCHEDULING,
+    activationProfile: MOBILE_BEAUTY_ACTIVATION,
   },
 ];

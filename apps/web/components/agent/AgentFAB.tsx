@@ -7,20 +7,27 @@ type Props = {
 };
 
 const LS_KEY_FAB_Y = "agent-fab-y-pct";
+const DEFAULT_FAB_Y_PERCENT = 82;
+const MIN_FAB_Y_PERCENT = 72;
+const MAX_FAB_Y_PERCENT = 92;
+
+function clampYPercent(pct: number): number {
+  return Math.max(MIN_FAB_Y_PERCENT, Math.min(MAX_FAB_Y_PERCENT, pct));
+}
 
 function loadYPercent(): number {
   try {
     const raw = localStorage.getItem(LS_KEY_FAB_Y);
     if (raw) {
       const pct = parseFloat(raw);
-      if (!isNaN(pct) && pct >= 0 && pct <= 100) return pct;
+      if (!isNaN(pct) && pct >= 0 && pct <= 100) return clampYPercent(pct);
     }
   } catch { /* ignore */ }
-  return 50; // default: vertically centered
+  return DEFAULT_FAB_Y_PERCENT;
 }
 
 export function AgentFAB({ onClick }: Props) {
-  const [yPercent, setYPercent] = useState(50);
+  const [yPercent, setYPercent] = useState(DEFAULT_FAB_Y_PERCENT);
   const [hydrated, setHydrated] = useState(false);
   const yPercentRef = useRef(yPercent);
   const dragRef = useRef<{ startY: number; startPct: number } | null>(null);
@@ -52,11 +59,13 @@ export function AgentFAB({ onClick }: Props) {
       const dy = ev.clientY - dragRef.current.startY;
       const winH = window.innerHeight;
       const deltaPct = (dy / winH) * 100;
-      const newPct = Math.max(5, Math.min(95, dragRef.current.startPct + deltaPct));
+      const newPct = clampYPercent(dragRef.current.startPct + deltaPct);
       if (Math.abs(dy) > 3) didDrag.current = true;
       yPercentRef.current = newPct;
       setYPercent(newPct);
-      localStorage.setItem(LS_KEY_FAB_Y, String(newPct));
+      try {
+        localStorage.setItem(LS_KEY_FAB_Y, String(newPct));
+      } catch { /* ignore */ }
     }
 
     function onMouseUp() {
@@ -84,7 +93,8 @@ export function AgentFAB({ onClick }: Props) {
       data-agent-fab="true"
       onMouseDown={handleMouseDown}
       onClick={handleClick}
-      title="Open AI Co-worker"
+      aria-label="Open AI Coworker"
+      title="Open AI Coworker"
       style={{
         position: "fixed",
         right: 16,
@@ -100,7 +110,7 @@ export function AgentFAB({ onClick }: Props) {
         display: "flex",
         alignItems: "center",
         gap: 6,
-        boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
+        boxShadow: "0 4px 16px color-mix(in srgb, var(--dpf-bg) 30%, transparent)",
         zIndex: 50,
         transition: "opacity 0.15s",
         color: "var(--dpf-text)",

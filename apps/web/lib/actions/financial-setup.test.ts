@@ -10,6 +10,13 @@ vi.mock("@dpf/db", () => ({
     dunningSequence: {
       findFirst: vi.fn(),
     },
+    organization: {
+      findFirst: vi.fn(),
+    },
+    organizationTaxProfile: {
+      upsert: vi.fn(),
+      findFirst: vi.fn(),
+    },
   },
 }));
 
@@ -19,7 +26,11 @@ vi.mock("@/lib/actions/dunning", () => ({
 
 import { prisma } from "@dpf/db";
 import { seedDefaultDunningSequence } from "@/lib/actions/dunning";
-import { applyFinancialProfile, getFinancialSetupStatus } from "./financial-setup";
+import {
+  applyFinancialProfile,
+  getFinancialSetupStatus,
+  getInvoiceDefaultTaxRate,
+} from "./financial-setup";
 
 const mockPrisma = prisma as unknown as {
   orgSettings: {
@@ -28,6 +39,13 @@ const mockPrisma = prisma as unknown as {
     update: ReturnType<typeof vi.fn>;
   };
   dunningSequence: {
+    findFirst: ReturnType<typeof vi.fn>;
+  };
+  organization: {
+    findFirst: ReturnType<typeof vi.fn>;
+  };
+  organizationTaxProfile: {
+    upsert: ReturnType<typeof vi.fn>;
     findFirst: ReturnType<typeof vi.fn>;
   };
 };
@@ -42,11 +60,13 @@ const makeSettings = (overrides: Partial<{
   autoFetchRates: boolean;
   createdAt: Date;
   updatedAt: Date;
+  appliedProfileSlug: string | null;
 }> = {}) => ({
   id: "settings-1",
   baseCurrency: "USD",
   autoFetchRates: true,
   lastRateFetchAt: null,
+  appliedProfileSlug: null,
   createdAt: earlier,
   updatedAt: now,
   ...overrides,
@@ -55,6 +75,9 @@ const makeSettings = (overrides: Partial<{
 beforeEach(() => {
   vi.clearAllMocks();
   mockSeedDunning.mockResolvedValue({ id: "seq-1" });
+  // Default: no org row → OrganizationTaxProfile upsert is skipped
+  mockPrisma.organization.findFirst.mockResolvedValue(null);
+  mockPrisma.organizationTaxProfile.upsert.mockResolvedValue({});
 });
 
 // ─── applyFinancialProfile ─────────────────────────────────────────────────
@@ -144,9 +167,9 @@ describe("getFinancialSetupStatus", () => {
     expect(result.dunningActive).toBe(false);
   });
 
-  it("returns isConfigured=true when updatedAt > createdAt", async () => {
+  it("returns isConfigured=true when appliedProfileSlug is set", async () => {
     mockPrisma.orgSettings.findFirst.mockResolvedValue(
-      makeSettings({ createdAt: earlier, updatedAt: now }),
+      makeSettings({ appliedProfileSlug: "healthcare_wellness" }),
     );
     mockPrisma.dunningSequence.findFirst.mockResolvedValue({ id: "seq-1" });
 
@@ -156,10 +179,9 @@ describe("getFinancialSetupStatus", () => {
     expect(result.dunningActive).toBe(true);
   });
 
-  it("returns isConfigured=false when updatedAt equals createdAt (freshly created)", async () => {
-    const sameTime = new Date("2026-01-01T12:00:00Z");
+  it("returns isConfigured=false when appliedProfileSlug is null (freshly created)", async () => {
     mockPrisma.orgSettings.findFirst.mockResolvedValue(
-      makeSettings({ createdAt: sameTime, updatedAt: sameTime }),
+      makeSettings({ appliedProfileSlug: null }),
     );
     mockPrisma.dunningSequence.findFirst.mockResolvedValue(null);
 
@@ -178,5 +200,47 @@ describe("getFinancialSetupStatus", () => {
     const result = await getFinancialSetupStatus();
 
     expect(result.baseCurrency).toBe("EUR");
+  });
+});
+
+// ─── getInvoiceDefaultTaxRate ───────────────────────────────────────────────
+
+describe("getInvoiceDefaultTaxRate", () => {
+  it("uses the profile rate when the org tax model is 'vat'", async () => {
+    mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue({ taxModel: "vat" });
+    mockPrisma.orgSettings.findFirst.mockResolvedValue(
+      makeSettings({ appliedProfileSlug: "trades_construction" }), // VAT-registered, 20%
+    );
+    expect(await getInvoiceDefaultTaxRate()).toBe(20);
+  });
+
+  it("returns 0 when the org tax model is 'none' even if the profile is VAT-registered", async () => {
+    mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue({ taxModel: "none" });
+    mockPrisma.orgSettings.findFirst.mockResolvedValue(
+      makeSettings({ appliedProfileSlug: "trades_construction" }),
+    );
+    expect(await getInvoiceDefaultTaxRate()).toBe(0);
+  });
+
+  it("falls back to a VAT-registered applied profile when no tax-profile row exists", async () => {
+    mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue(null);
+    mockPrisma.orgSettings.findFirst.mockResolvedValue(
+      makeSettings({ appliedProfileSlug: "trades_construction" }),
+    );
+    expect(await getInvoiceDefaultTaxRate()).toBe(20);
+  });
+
+  it("falls back to a non-VAT applied profile (→ 0) when no tax-profile row exists", async () => {
+    mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue(null);
+    mockPrisma.orgSettings.findFirst.mockResolvedValue(
+      makeSettings({ appliedProfileSlug: "healthcare_wellness" }), // not VAT-registered, 0%
+    );
+    expect(await getInvoiceDefaultTaxRate()).toBe(0);
+  });
+
+  it("returns 0 when neither a tax profile nor an applied profile exists", async () => {
+    mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue(null);
+    mockPrisma.orgSettings.findFirst.mockResolvedValue(null);
+    expect(await getInvoiceDefaultTaxRate()).toBe(0);
   });
 });

@@ -123,6 +123,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 
 CODEX_CONFIG_PATH="$HOME/.codex/config.toml"
 CLAUDE_PLUGINS_PATH="$HOME/.claude/plugins/installed_plugins.json"
+GROK_CONFIG_PATH="$HOME/.grok/config.toml"
 KERNEL_PRINCIPLES_DIR="$REPO_ROOT/docs/founder-kernel/wiki/principles"
 CONTRIBUTOR_MEMORY_DIR="$HOME/.claude/projects"
 PROJECT_SLUG="$(printf '%s' "$REPO_ROOT" | sed -E 's:[/:]:-:g' | sed -E 's:^-+::')"
@@ -170,15 +171,30 @@ resolve_codex_bin() {
   return 1
 }
 
+resolve_grok_bin() {
+  if command -v grok >/dev/null 2>&1; then command -v grok; return 0; fi
+  for c in \
+    "$HOME/.grok/bin/grok" \
+    "/opt/homebrew/bin/grok" \
+    "/usr/local/bin/grok" \
+    "$HOME/.local/bin/grok"; do
+    [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+  done
+  return 1
+}
+
 CLAUDE_PRESENT=0
 CODEX_PRESENT=0
+GROK_PRESENT=0
 HAS_TOKEN=0
 CLAUDE_BIN="$(resolve_claude_bin || true)"
 CODEX_BIN="$(resolve_codex_bin || true)"
+GROK_BIN="$(resolve_grok_bin || true)"
 [ -n "$CLAUDE_BIN" ] && CLAUDE_PRESENT=1
 # Codex wiring is file-based (config.toml), so a present-but-not-on-PATH Codex
 # (or an existing Codex config dir) is still wirable.
 { [ -n "$CODEX_BIN" ] || [ -f "$CODEX_CONFIG_PATH" ]; } && CODEX_PRESENT=1
+[ -n "$GROK_BIN" ] && GROK_PRESENT=1
 if [ -n "${DPF_MCP_BEARER_TOKEN:-}" ]; then
   HAS_TOKEN=1
 fi
@@ -187,6 +203,10 @@ printf '\n-> DPF agent toolchain bootstrap\n'
 info "Repo root        : $REPO_ROOT"
 info "Claude CLI       : $([ $CLAUDE_PRESENT -eq 1 ] && echo present || echo missing)"
 info "Codex CLI        : $([ $CODEX_PRESENT  -eq 1 ] && echo present || echo missing)"
+info "Grok CLI         : $([ $GROK_PRESENT    -eq 1 ] && echo present || echo missing)"
+# Note: Host OS (this script is POSIX/mac/Linux) vs Windows PowerShell sibling only affects
+# local detection paths and config.toml location for direct `grok` CLI usage.
+# Build Studio Grok dispatch (grok-dispatch.ts) is containerized Linux execution and is identical.
 info "DPF MCP token    : $([ $HAS_TOKEN      -eq 1 ] && echo present || echo missing)"
 info "Skill pack ver.  : $EXPECTED_VERSION"
 
@@ -311,6 +331,7 @@ bridge_args=(
   --repo-root             "$REPO_ROOT"
   --codex-config          "$CODEX_CONFIG_PATH"
   --claude-plugins        "$CLAUDE_PLUGINS_PATH"
+  --grok-config           "$GROK_CONFIG_PATH"
   --kernel-principles     "$KERNEL_PRINCIPLES_DIR"
   --contributor-memory    "$CONTRIBUTOR_MEMORY_DIR"
   --project-slug          "$PROJECT_SLUG"
@@ -319,6 +340,7 @@ bridge_args=(
 )
 [ $CLAUDE_PRESENT  -eq 1 ] && bridge_args+=(--claude-cli-present)
 [ $CODEX_PRESENT   -eq 1 ] && bridge_args+=(--codex-cli-present)
+[ $GROK_PRESENT    -eq 1 ] && bridge_args+=(--grok-cli-present)
 [ $HAS_TOKEN       -eq 1 ] && bridge_args+=(--has-token)
 [ $RECONCILE_STALE -eq 1 ] && bridge_args+=(--reconcile-stale-entries)
 
@@ -328,8 +350,15 @@ bridge_args=(
 PLAN_TMP="$(mktemp)"
 trap 'rm -f "$PLAN_TMP"' EXIT
 if ! pnpm "${bridge_args[@]}" > "$PLAN_TMP" 2>&1; then
-  fail "compute-plan failed; cannot proceed with bootstrap."
+  warn "compute-plan failed; using standalone skill-pack updater fallback."
   cat "$PLAN_TMP" >&2
+  FALLBACK="$REPO_ROOT/packages/dpf-skill-pack/scripts/update-agent-toolchain.sh"
+  if [ -f "$FALLBACK" ]; then
+    fallback_args=(--mcp-url "$MCP_ENDPOINT")
+    [ "$DRY_RUN" -eq 1 ] && fallback_args+=(--dry-run)
+    exec bash "$FALLBACK" "${fallback_args[@]}"
+  fi
+  fail "Standalone updater missing at $FALLBACK; cannot proceed."
   exit 1
 fi
 if [ ! -s "$PLAN_TMP" ]; then
@@ -355,6 +384,7 @@ def shell_var(name, value):
 
 claude = plan.get("claude") or {}
 codex = plan.get("codex") or {}
+grok = plan.get("grok") or {}
 memory = plan.get("memory") or {}
 mcp_client = plan.get("mcpClientConfig") or {}
 
@@ -362,6 +392,21 @@ shell_var("CLAUDE_MODE", claude.get("mode", "skip") if claude else "skip")
 shell_var("CLAUDE_STALE_COUNT", len(claude.get("staleEntriesToReconcile", [])) if claude else 0)
 shell_var("CODEX_WRITES_COUNT", len(codex.get("writes", [])) if codex else 0)
 shell_var("CODEX_PRESERVED_USER_INTENT", "true" if codex.get("preservedUserIntent") else "false")
+# DPF-scoping convergence (generic-client disable + worktree trust), rendered
+# one change per line for the readiness banner (spec S4.5). Newline-joined so a
+# single shell var carries the whole list; the printf loop below splits on it.
+_conv_kind = {
+    "plugin-disabled": "disabled generic plugin",
+    "mcp-server-disabled": "disabled generic MCP server",
+    "project-trusted": "trusted worktree path",
+}
+_conv_lines = [
+    f"Codex: {_conv_kind.get(c.get('kind'), c.get('kind'))} '{c.get('key')}'."
+    for c in (codex.get("convergence", []) if codex else [])
+]
+shell_var("CODEX_CONVERGENCE_COUNT", len(_conv_lines))
+shell_var("CODEX_CONVERGENCE", "\n".join(_conv_lines))
+shell_var("GROK_WRITES_COUNT", len((grok.get("config") or {}).get("writes", [])) if grok else 0)
 shell_var("MCP_CLIENT_WRITES_COUNT", len(mcp_client.get("writes", [])))
 shell_var("MEMORY_WRITES_COUNT", len(memory.get("writes", [])))
 shell_var("PREVIEW_STATE", plan.get("preview", {}).get("readinessState", "missing_cli"))
@@ -375,6 +420,7 @@ info "Plan preview     : $PLAN_PREVIEW_STATE"
 
 CLAUDE_WIRED=0
 CODEX_WIRED=0
+GROK_WIRED=0
 MEMORY_SEEDED_AT=""
 
 # 1. Claude plugin install.
@@ -409,6 +455,13 @@ fi
 if [ "$DRY_RUN" -eq 1 ]; then
   if [ "${PLAN_CODEX_WRITES_COUNT:-0}" -gt 0 ]; then
     info "DRY-RUN: write Codex config (1 file)"
+    if [ "${PLAN_CODEX_CONVERGENCE_COUNT:-0}" -gt 0 ] && [ -n "${PLAN_CODEX_CONVERGENCE:-}" ]; then
+      while IFS= read -r _conv_line; do
+        [ -n "$_conv_line" ] && info "DRY-RUN: $_conv_line"
+      done <<EOF
+$PLAN_CODEX_CONVERGENCE
+EOF
+    fi
   fi
   if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
     info "DRY-RUN: write $PLAN_MCP_CLIENT_WRITES_COUNT MCP client config file(s) (.mcp.json / .vscode/mcp.json)"
@@ -438,6 +491,14 @@ for w in (plan.get("mcpClientConfig") or {}).get("writes", []):
     with open(w["path"], "wb") as f:
         f.write(w["content"].encode("utf-8"))
 
+# Grok config writes (TOML for ~/.grok/config.toml , from grok config plan).
+for w in (plan.get("grok") or {}).get("config", {}).get("writes", []):
+    if w.get("path"):
+        d = os.path.dirname(w["path"])
+        if d: os.makedirs(d, exist_ok=True)
+        with open(w["path"], "wb") as f:
+            f.write(w["content"].encode("utf-8"))
+
 # Memory writes (excluding preserve-user-edit).
 mem = plan.get("memory") or {}
 for w in mem.get("writes", []):
@@ -460,6 +521,15 @@ PY
   if [ "${PLAN_CODEX_WRITES_COUNT:-0}" -gt 0 ]; then
     ok "Codex plugin wired."
     CODEX_WIRED=1
+    # Report DPF-scoping convergence so drift is surfaced, not silently
+    # tolerated (spec S4.5). One [..] line per change.
+    if [ "${PLAN_CODEX_CONVERGENCE_COUNT:-0}" -gt 0 ] && [ -n "${PLAN_CODEX_CONVERGENCE:-}" ]; then
+      while IFS= read -r _conv_line; do
+        [ -n "$_conv_line" ] && info "$_conv_line"
+      done <<EOF
+$PLAN_CODEX_CONVERGENCE
+EOF
+    fi
   elif [ "$CODEX_PRESENT" -eq 1 ]; then
     if [ "$PLAN_CODEX_PRESERVED_USER_INTENT" = "true" ]; then
       skip "Codex plugin manually disabled by user; preserving user intent."
@@ -469,6 +539,17 @@ PY
     fi
   else
     skip "Codex CLI not installed; skipping plugin wire."
+  fi
+
+  # Grok wiring: config writes applied in the PY block above if PLAN_GROK_WRITES_COUNT >0 .
+  if [ "${PLAN_GROK_WRITES_COUNT:-0}" -gt 0 ]; then
+    ok "Grok config wired."
+    GROK_WIRED=1
+  elif [ "$GROK_PRESENT" -eq 1 ]; then
+    ok "Grok CLI detected (config already converged)."
+    GROK_WIRED=1
+  else
+    skip "Grok CLI not installed; skipping (will appear when 'grok' is on PATH)."
   fi
 
   if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
@@ -540,8 +621,8 @@ if [ -z "$MCP_READINESS" ]; then
 fi
 
 if [ -z "$SMOKE_TEST" ]; then
-  if [ $CLAUDE_PRESENT -eq 0 ] && [ $CODEX_PRESENT -eq 0 ]; then
-    SMOKE_TEST='{"result": "skipped", "reason": "claude_not_on_path"}'
+  if [ $CLAUDE_PRESENT -eq 0 ] && [ $CODEX_PRESENT -eq 0 ] && [ $GROK_PRESENT -eq 0 ]; then
+    SMOKE_TEST='{"result": "skipped", "reason": "no_cli_on_path"}'
   else
     SMOKE_TEST='{"result": "skipped", "reason": "no_token"}'
   fi
@@ -558,7 +639,7 @@ MCP_OK="$(printf '%s' "$MCP_READINESS" | python3 -c 'import json,sys; print(json
 MCP_REASON="$(printf '%s' "$MCP_READINESS" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("reason",""))')"
 SMOKE_RESULT="$(printf '%s' "$SMOKE_TEST" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"])')"
 
-if [ "$CLAUDE_WIRED" -eq 0 ] && [ "$CODEX_WIRED" -eq 0 ]; then
+if [ "$CLAUDE_WIRED" -eq 0 ] && [ "$CODEX_WIRED" -eq 0 ] && [ "$GROK_WIRED" -eq 0 ]; then
   FINAL_STATE="missing_cli"
 elif [ "$MCP_OK" != "True" ]; then
   case "$MCP_REASON" in
@@ -568,7 +649,7 @@ elif [ "$MCP_OK" != "True" ]; then
   esac
 elif [ "$SMOKE_RESULT" = "failed" ]; then
   FINAL_STATE="failed_smoke"
-elif [ "$CLAUDE_WIRED" -eq 0 ] || [ "$CODEX_WIRED" -eq 0 ]; then
+elif [ "$CLAUDE_WIRED" -eq 0 ] || [ "$CODEX_WIRED" -eq 0 ] || [ "$GROK_WIRED" -eq 0 ]; then
   FINAL_STATE="partial"
 else
   FINAL_STATE="ready"
@@ -585,6 +666,7 @@ AGENT_TOOLCHAIN_JSON="$(cat <<JSON
   "superpowersVersion": null,
   "claudeCodeWired": $([ $CLAUDE_WIRED -eq 1 ] && echo true || echo false),
   "codexWired": $([ $CODEX_WIRED -eq 1 ] && echo true || echo false),
+  "grokWired": $([ $GROK_WIRED -eq 1 ] && echo true || echo false),
   "memorySeededAt": $MEMORY_SEEDED_AT_JSON,
   "mcpReadiness": $MCP_READINESS,
   "smokeTest": $SMOKE_TEST,

@@ -1,89 +1,73 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { RosterRow, RosterFacets } from "@/lib/coworker-record/roster";
 
-vi.mock("@dpf/db", () => ({
-  prisma: {
-    agent: {
-      findMany: vi.fn(),
-    },
-    modelProvider: {
-      findMany: vi.fn(),
-    },
-    agentModelConfig: {
-      findMany: vi.fn(),
-    },
-  },
+// The roster page is now a workforce directory (HRIS surface §7): it delegates
+// data assembly to loadRoster and renders RosterView. Mock the aggregator and
+// assert the directory rendering + record links (the aggregator + filter
+// predicates have their own unit tests).
+vi.mock("@/lib/coworker-record/roster", () => ({
+  loadRoster: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: any }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock("@/components/ea/AgentGovernanceCard", () => ({
-  AgentGovernanceCard: ({ agent }: { agent: { name: string; agentId: string } }) => (
-    <div>
-      <span>{agent.name}</span>
-      <span>{agent.agentId}</span>
-    </div>
-  ),
-}));
+import { loadRoster } from "@/lib/coworker-record/roster";
 
-vi.mock("@/components/platform/AgentProviderSelect", () => ({
-  AgentProviderSelect: () => <div>provider-select</div>,
-}));
+function row(over: Partial<RosterRow> = {}): RosterRow {
+  return {
+    agentId: "hr-specialist",
+    slugId: "hr-specialist",
+    name: "HR Specialist",
+    tier: 2,
+    valueStream: "operate",
+    lifecycleStage: "production",
+    familyKey: "hr-people-ops",
+    familyLabel: "HR & People Ops",
+    coveragePct: 60,
+    jurisdictions: ["global"],
+    competencies: ["practitioner"],
+    profileBound: true,
+    emptyCorpus: false,
+    providerHealthy: true,
+    openBlockers: 0,
+    deferRate: 0,
+    unmapped: false,
+    ...over,
+  };
+}
 
-vi.mock("@/lib/agent-grants", () => ({
-  getAgentGrantSummaries: vi.fn(),
-}));
+const facets: RosterFacets = {
+  families: [{ key: "hr-people-ops", label: "HR & People Ops" }],
+  valueStreams: ["operate"],
+  jurisdictions: ["global"],
+  competencies: ["practitioner"],
+  lifecycleStages: ["production"],
+};
 
-vi.mock("@/lib/identity/principal-linking", () => ({
-  getAgentGaidMap: vi.fn(),
-}));
-
-import { prisma } from "@dpf/db";
-import { getAgentGrantSummaries } from "@/lib/agent-grants";
-import { getAgentGaidMap } from "@/lib/identity/principal-linking";
-
-describe("PlatformAiPage", () => {
-  it("shows GAID identity references for AI workforce cards", async () => {
-    vi.mocked(prisma.agent.findMany).mockResolvedValue([
-      {
-        id: "agent-db-1",
-        agentId: "hr-specialist",
-        slugId: "hr-specialist",
-        name: "HR Specialist",
-        tier: 2,
-        description: "HR help",
-        valueStream: "operate",
-        sensitivity: "restricted",
-        lifecycleStage: "production",
-        portfolio: null,
-        ownerships: [],
-        governanceProfile: null,
-        delegationGrants: [],
-        _count: {
-          skills: 1,
-          toolGrants: 2,
-          performanceProfiles: 0,
-          degradationMappings: 0,
-        },
-      },
-    ] as never);
-    vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.agentModelConfig.findMany).mockResolvedValue([] as never);
-    vi.mocked(getAgentGrantSummaries).mockResolvedValue([]);
-    vi.mocked(getAgentGaidMap).mockResolvedValue(
-      new Map([["hr-specialist", "gaid:priv:dpf.internal:hr-specialist"]]),
-    );
+describe("PlatformAiPage (workforce directory)", () => {
+  it("renders coworker rows linking to their records", async () => {
+    vi.mocked(loadRoster).mockResolvedValue({ rows: [row()], facets });
 
     const { default: PlatformAiPage } = await import("./page");
     const html = renderToStaticMarkup(await PlatformAiPage());
 
-    expect(html).toContain("AI Operations");
-    expect(html).toContain(
-      "Workforce overview for assignments, skills, providers, routing, and build runtime.",
-    );
     expect(html).toContain("HR Specialist");
-    expect(html).toContain("gaid:priv:dpf.internal:hr-specialist");
+    expect(html).toContain("HR &amp; People Ops");
+    expect(html).toContain("/platform/ai/agent/hr-specialist");
+  });
+
+  it("surfaces a coverage-gap banner for unmapped or empty-corpus coworkers", async () => {
+    vi.mocked(loadRoster).mockResolvedValue({
+      rows: [row({ unmapped: true, familyKey: null, familyLabel: null, coveragePct: null })],
+      facets,
+    });
+
+    const { default: PlatformAiPage } = await import("./page");
+    const html = renderToStaticMarkup(await PlatformAiPage());
+
+    expect(html).toContain("profession-coverage gap");
   });
 });

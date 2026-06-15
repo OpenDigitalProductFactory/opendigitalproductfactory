@@ -11,6 +11,10 @@ import {
   type NormalizedVerificationOutput,
 } from "@/lib/build/verification-output";
 import { derivePlanOscillationDecompositionAffordance } from "@/lib/build/plan-oscillation-decomposition";
+import {
+  isContradictoryExecState,
+  type ExecStateLike,
+} from "@/lib/integrate/build-exec-types";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type {
   BuildFailureAxis,
@@ -368,35 +372,16 @@ function hasContradictoryExecState(
   state: FeatureBuildRow["buildExecState"],
   verificationOut?: FeatureBuildRow["verificationOut"] | null,
 ): boolean {
-  if (!state) return false;
-  // Pipeline died before setting the first step (e.g. portal restart killed
-  // the fire-and-forget autoExecuteBuild call during stepCreateSandbox).
-  // The state object has content (sourceCurrency, ideateResearchRequested, etc.)
-  // but no `step` key — so no standard recovery path applies:
-  //   • retryBuildExecution requires step==="failed"
-  //   • resumeBuildImplementation requires a releasable diff
-  //   • advance-phase (review) is blocked without verificationOut
-  // Reset Build is the only viable restart path.
-  if (state.step == null) {
-    return true;
-  }
-  // `failed` is a legitimate terminal step that retryBuildExecution handles;
-  // every other step with an error/failedAt breadcrumb is contradictory.
-  if (state.step !== "failed" && (state.error != null || state.failedAt != null)) {
-    return true;
-  }
-  // Catch the "silent complete" case: the pipeline wrote step=complete but
-  // verificationOut was never populated (tests never ran). This happens when
-  // the portal restarts after stepComplete but before stepRunTests, or when
-  // the diff-capture succeeded but stepRunTests was skipped. The build is
-  // unreachable via resumeBuildImplementation (no releasable diff triggers
-  // the gate) and unreachable via advance-phase (verificationOut null blocks
-  // the review gate). Reset Build is the only recovery path.
-  // Acceptance criterion: design doc FB-78E967D4 §AC-2.
-  if (state.step === "complete" && verificationOut == null) {
-    return true;
-  }
-  return false;
+  // Delegates to the shared classifier in build-exec-types so the UI affordance
+  // and the boot auto-recovery (instrumentation.ts) agree on what "stuck" means.
+  // The three contradictory shapes:
+  //   • missing-step       — restart killed the pipeline before step 1
+  //   • error-without-fail — non-`failed` step with an error/failedAt breadcrumb
+  //   • complete-no-verify — step=complete but verificationOut never populated
+  return isContradictoryExecState(
+    state as ExecStateLike | null,
+    verificationOut ?? undefined,
+  );
 }
 
 function hasCompletedUxVerification(build: FeatureBuildRow): boolean {

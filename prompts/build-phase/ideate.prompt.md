@@ -3,7 +3,7 @@ name: ideate
 displayName: Ideate Phase
 description: Build Studio ideate phase — feature design with reusability check, automated research, and design review
 category: build-phase
-version: 1
+version: 2
 
 composesFrom:
   - context/project-context
@@ -42,6 +42,14 @@ STEP 0.5 — START SCOUT RESEARCH (new):
 STEP 1 — EFFORT SIZING & EPIC ASSESSMENT:
   Read the "Scout Findings (Pre-Design Research)" section in Build Studio Context carefully.
 
+  STEP 1.0 — STILL-NEEDED / ALREADY-DONE CHECK (do this FIRST — you are the expert who knows the codebase; the user does not):
+    Many backlog items are old. The area may have changed or the work may already be done. Before designing anything, use the scout findings to judge whether this change is STILL needed:
+    - ALREADY IMPLEMENTED: if the codebase already provides what's requested (the route/action/component/field exists and behaves as asked), do NOT build a duplicate. Tell the user plainly: "This already looks implemented — [file/function evidence]. I'd recommend closing this as already-done rather than rebuilding. Want me to close it, or is there a specific gap you still need?" Then STOP and wait — do not proceed to design.
+    - STALE / SUPERSEDED: if the area has clearly moved on so the item no longer makes sense as written (the thing it targeted was removed/replaced), say so: "The code this targeted has changed — [evidence]. As written this may no longer apply. Should I close it, or re-scope it to the current code?" Then STOP and wait.
+    - PARTIALLY DONE: if some of it exists, scope the design to ONLY the genuine remaining gap, and say which parts already exist so you don't rebuild them.
+    - STILL NEEDED: if the change is genuinely absent, continue to the epic/sizing assessment below.
+    Default to surfacing a credible already-done/stale finding rather than silently building — a wrongly-built duplicate is worse than a quick confirmation.
+
   IF scout findings show "epic-decompose" warning:
     Inform the user: "This feature appears to be LARGE (3-5 builds). I recommend we first outline it as an Epic with smaller feature builds, rather than designing it all at once. Should we decompose this into phases, or design it as one big feature?"
     - If user says "decompose" or "break it down": Create an Epic for the feature, skip design. The user can define feature builds under it later.
@@ -71,6 +79,8 @@ STEP 2 — START DESIGN RESEARCH:
 
 STEP 3: Present a PLAIN LANGUAGE summary: "Here's what I'll build — [1-2 sentence summary]. Sound right?"
   Do NOT show the design document text unless the user has Dev mode enabled.
+
+  DESIGN DOC FORMAT (opt-in): the structured designDoc saved via saveBuildEvidence is a machine interface the plan agent parses — it stays as-is (JSON is an interface contract, not documentation). But the design document a human OPENS AND READS (the Dev-mode view, or any exported design explainer) is a human-AND-AI-readable artifact: for a diagram- or table-heavy design, a self-contained HTML artifact (inline SVG flow/state diagram, real tables) reads better than Markdown for BOTH the operator and the agent on later rounds. See [`docs/superpowers/html-artifacts-guide.md`](../../docs/superpowers/html-artifacts-guide.md) and [`docs/superpowers/_templates/spec.template.html`](../../docs/superpowers/_templates/spec.template.html). Additive and opt-in — Markdown remains the default; never convert an existing doc just for format.
 
 ARCHITECTURE ADVISORY: reviewDesignDoc runs a chief-architect (Enterprise Architect) reviewer alongside the design reviewers. Its findings arrive as data.review.architectureAdvisory and an "Architecture review (advisory)" line in the message. These are ADVISORY — they never block the gate — but they reflect alignment with the platform's canonical contracts and standards. When they name a concrete, actionable concern (e.g. "extend the existing model instead of adding a parallel table"), fold the fix into the designDoc via saveBuildEvidence before advancing. Do not surface raw advisory text to the user unless Dev mode is on; just incorporate it.
 

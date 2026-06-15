@@ -1,5 +1,30 @@
 name: ${COMPOSE_PROJECT_NAME:-dpf}
 
+# Dev-profile workspace mount (BI-9C557535). The dev services bind-mount the
+# whole repo at /workspace, then overlay every node_modules directory with a
+# named volume. Overlaying ONLY the root node_modules is not enough: pnpm also
+# materialises package-local node_modules (symlink farms) under apps/* and
+# packages/*, which would be written straight onto the host bind mount —
+# polluting host worktrees with container-owned, Linux-style reparse points
+# that Windows/BuildKit cannot open. Named (not anonymous) volumes are required
+# so dev-init's install is visible to dev-portal at runtime.
+x-dev-workspace-volumes: &dev-workspace-volumes
+  - .:/workspace
+  - dev_node_modules:/workspace/node_modules
+  - dev_nm_apps_web:/workspace/apps/web/node_modules
+  - dev_nm_apps_mobile:/workspace/apps/mobile/node_modules
+  - dev_nm_api_client:/workspace/packages/api-client/node_modules
+  - dev_nm_db:/workspace/packages/db/node_modules
+  - dev_nm_dpf_bootstrap:/workspace/packages/dpf-bootstrap/node_modules
+  - dev_nm_finance_templates:/workspace/packages/finance-templates/node_modules
+  - dev_nm_integration_shared:/workspace/packages/integration-shared/node_modules
+  - dev_nm_storefront_templates:/workspace/packages/storefront-templates/node_modules
+  - dev_nm_types:/workspace/packages/types/node_modules
+  - dev_nm_validators:/workspace/packages/validators/node_modules
+  - dev_nm_svc_adp:/workspace/services/adp/node_modules
+  - dev_nm_svc_edge_node:/workspace/services/edge-node/node_modules
+  - dev_nm_svc_integration_test_harness:/workspace/services/integration-test-harness/node_modules
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -139,11 +164,16 @@ services:
       # docker-compose.linux.yml overlay instead (to http://ollama:11434).
       OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-http://host.docker.internal:11434}
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
-      # Git SHA of the running image — set by the deploy pipeline (or
-      # scripts/build-images.{ps1,sh}) to give /ops/self-upgrade a comparable
-      # identity. When unset, the portal falls back to /app/.dpf-image-version
-      # (baked at build time). See spec §4.1 of
-      # docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md.
+      # Git SHA of the running image. This compose interpolation only resolves
+      # to a value when DEPLOYED_SHA or DPF_VERSION is exported in the SHELL env
+      # at `docker compose up` time (true for the promoter, which exports
+      # DPF_VERSION; empty for a normal installer/restart `up`). To guarantee the
+      # running portal ALWAYS carries the identity of its own bytes — the
+      # BI-5B6C1C35 / spec §4.3 invariant — the runtime CMD (Dockerfile) seeds
+      # DEPLOYED_SHA from the baked /app/.dpf-image-version when this resolves
+      # empty, so `printenv DEPLOYED_SHA` is never blank on a built image. An
+      # explicit value here (deploy pipeline) still takes precedence. See spec
+      # §4.1 of docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md.
       DEPLOYED_SHA: ${DEPLOYED_SHA:-${DPF_VERSION:-}}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
@@ -170,6 +200,20 @@ services:
       # without it, published events are accepted but silently dropped and NO
       # background job (self-upgrade, evals, brand extract, builds) ever runs.
       DPF_INNGEST_SELF_SYNC_ON_BOOT_ENABLED: ${DPF_INNGEST_SELF_SYNC_ON_BOOT_ENABLED:-1}
+      # Installed compose runtimes need the scheduled function catalog too:
+      # code graph reconcile, watchdogs, backups, wiki lint, and other cron
+      # jobs are registered only when this flag is on. Library defaults stay
+      # off for tests and ad-hoc imports; compose is the deployment contract.
+      DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED: ${DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED:-1}
+      # Register ScheduledJob heartbeat rows and other low-risk boot hygiene
+      # for installed runtimes. Without this, first-run installs have no
+      # code-graph job row and status surfaces report missing background work.
+      DPF_OPTIONAL_STARTUP_TASKS_ENABLED: ${DPF_OPTIONAL_STARTUP_TASKS_ENABLED:-1}
+      # BI-89030C9B Phase 1 — durable build execution. When on, autoExecuteBuild
+      # hands the run to the build/execute Inngest function (journaled per-step,
+      # resumes across portal recycles) instead of the legacy in-process loop.
+      # Default OFF during the burn-in window; flip per-install via host .env.
+      DPF_BUILD_DURABLE_EXECUTION_ENABLED: ${DPF_BUILD_DURABLE_EXECUTION_ENABLED:-0}
       # Tell Inngest's serve() the externally-reachable URL for this app so
       # sync registrations announce the Docker-DNS hostname (not the Host
       # header of the /api/inngest PUT, which would be "localhost:3000"
@@ -198,6 +242,13 @@ services:
       DPF_TTS_REFERENCE_HOST_ROOT: ${DPF_TTS_REFERENCE_HOST_ROOT:-}
       DPF_TTS_MLX_MODEL: ${DPF_TTS_MLX_MODEL:-}
       DPF_TTS_MLX_VOICE: ${DPF_TTS_MLX_VOICE:-}
+      # Platform-correct compose chain (space-separated) the install was created
+      # with. install-dpf.sh writes this from the same set it records in
+      # install-state.json. The self-upgrade orchestrator reads it and passes it to
+      # the promoter as PROMOTE_COMPOSE_FILES so the portal is recreated with the
+      # install's OWN overlays — never the macOS overlay force-applied on a
+      # Windows/Linux host (the broken-TTS defect). Empty => promote.sh base-only.
+      DPF_SELF_UPGRADE_COMPOSE_FILES: ${DPF_SELF_UPGRADE_COMPOSE_FILES:-}
       UPLOAD_STORAGE_PATH: ${UPLOAD_STORAGE_PATH:-/host-dpf/data/uploads}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # ensures host reachable on all platforms
@@ -340,6 +391,10 @@ services:
       - "8500:8500"
     volumes:
       - browser_evidence:/evidence
+      # Service-account Chromium user-data-dirs at /profiles/<principalId>/<siteKey>/.
+      # Secret impersonation material — sidecar is the only writer; the portal
+      # never mounts this volume (EP-BROWSER-DRIVE, spec §8.9).
+      - browser_profiles:/profiles
     environment:
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       LLM_MODEL: ${BROWSER_USE_MODEL:-gpt-4o}
@@ -470,9 +525,7 @@ services:
       NEO4J_PASSWORD: dpf_dev_password
       PRODUCTION_NEO4J_URI: bolt://neo4j:7687
       DPF_ENVIRONMENT: dev
-    volumes:
-      - .:/workspace
-      - dev_node_modules:/workspace/node_modules
+    volumes: *dev-workspace-volumes
     depends_on:
       dev-postgres:
         condition: service_healthy
@@ -493,9 +546,7 @@ services:
     profiles: ["dev"]
     ports:
       - "3001:3000"
-    volumes:
-      - .:/workspace
-      - dev_node_modules:/workspace/node_modules
+    volumes: *dev-workspace-volumes
     environment:
       DATABASE_URL: postgresql://dpf:dpf_dev@dev-postgres:5432/dpf
       NEO4J_URI: bolt://dev-neo4j:7687
@@ -561,6 +612,53 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+
+  # ─── Log Aggregation (EP-FULL-OBS Tier 2) ─────────────────────────────────
+  # Owning spec: docs/superpowers/specs/2026-06-09-container-log-aggregation-and-proactive-issue-detection-design.md
+  #
+  # Loki (store) + Alloy (shipper). Default-on and CROSS-PLATFORM: Alloy reads
+  # the Docker log API via the socket — no host-path bind mounts — so unlike
+  # cadvisor/node-exporter below this pair runs on macOS/Windows Docker Desktop,
+  # which is exactly where the log-flood incident this spec addresses happened.
+  # Captures EVERY container's stdout/stderr with 14-day retention so errors
+  # stop scrolling out of the ephemeral Docker buffer unseen.
+  loki:
+    image: grafana/loki:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3100"   # localhost-only; portal + grafana reach it via dpf-network DNS
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      # Ruler rules: "fake" is the single-tenant id when auth_enabled: false.
+      - ./monitoring/loki/rules/dpf-log-alerts.yml:/loki/rules-config/fake/dpf-log-alerts.yml:ro
+      - loki_data:/loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    # No container healthcheck: grafana/loki 3.x is distroless — no shell,
+    # busybox, wget, or curl exists in the image, so every CMD/CMD-SHELL
+    # probe fails with "executable file not found" and the container sits
+    # permanently unhealthy, which blocked the whole install (alloy gates
+    # on it). Loki readiness is observed externally instead: Prometheus
+    # scrapes it and the portal's log-issues panel talks to its API.
+
+  alloy:
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # discovers + tails all containers
+      - alloy_data:/var/lib/alloy/data
+    command:
+      - "run"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "--storage.path=/var/lib/alloy/data"
+      - "/etc/alloy/config.alloy"
+    depends_on:
+      loki:
+        # service_started, not service_healthy: the loki image is distroless
+        # and cannot host a healthcheck (see loki service above). Alloy
+        # buffers and retries its Loki pushes internally, so it only needs
+        # the container up, not a readiness gate.
+        condition: service_started
 
   # cadvisor + node-exporter bind-mount Linux-only host paths (/proc, /sys,
   # /var/lib/docker, /). They cannot run on macOS or Windows Docker Desktop
@@ -631,12 +729,10 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9121/metrics"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+    # No container healthcheck: oliver006/redis_exporter is built FROM
+    # scratch — the exporter binary is the only file in the image, so no
+    # probe command can run. Nothing gates on this service; Prometheus
+    # scraping /metrics is the effective health signal.
 
   inngest:
     image: inngest/inngest:latest
@@ -686,9 +782,10 @@ services:
   # No profile gate — voice ships working on `docker compose up`.
   dpf-stt:
     # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest
-    # resolved on 2026-05-26. Bump deliberately; never reach for `:latest`
+    # resolved on 2026-06-05 (the prior de379f07… digest was deleted from the
+    # registry and now 404s). Bump deliberately; never reach for `:latest`
     # in shipped compose because it makes the install non-reproducible.
-    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:de379f0727e4c6b64bfb1be5c0c1c66bda215beb6a3e8e0c5d63061c73e9ec3b}
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:4e1d727c2d9a3d2e89e38a8f3fd21fcbdb2398ae2772b9f0fafec7fb662426d8}
     restart: unless-stopped
     environment:
       # `base` (~145 MB) is the smallest model with usable accuracy on English.
@@ -776,13 +873,35 @@ volumes:
   qdrant_data:
   dpf-source-code:
   browser_evidence:
+  # Service-account browser profiles (EP-BROWSER-DRIVE, spec §8.9). Holds
+  # Chromium user-data-dirs whose cookie jars are impersonation-capable —
+  # SECRET material, not ordinary evidence. Sidecar-only: never mounted into
+  # the portal (cf. browser_evidence, which the portal mounts read-only).
+  browser_profiles:
   dev_pgdata:
   dev_neo4jdata:
   dev_qdrant_data:
   dev_node_modules:
+  # Package-local node_modules overlays (BI-9C557535) — keep pnpm's per-package
+  # symlink farms off the host bind mount. One per workspace package.
+  dev_nm_apps_web:
+  dev_nm_apps_mobile:
+  dev_nm_api_client:
+  dev_nm_db:
+  dev_nm_dpf_bootstrap:
+  dev_nm_finance_templates:
+  dev_nm_integration_shared:
+  dev_nm_storefront_templates:
+  dev_nm_types:
+  dev_nm_validators:
+  dev_nm_svc_adp:
+  dev_nm_svc_edge_node:
+  dev_nm_svc_integration_test_harness:
   sandbox_pgdata:
   sandbox_workspace:
   dpf_tts_voices:
   prometheus_data:
   grafana_data:
+  loki_data:
+  alloy_data:
   dpf_stt_models:

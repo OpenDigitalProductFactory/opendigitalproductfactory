@@ -7,14 +7,11 @@ import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { revalidatePath } from "next/cache";
 import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
-import {
-  getSelfUpgradeConfig,
-  nextMaintenanceWindowStart,
-  resolveTargetSha,
-  isShaFresh,
-  getDeployedSha,
-  getLatestRun,
-} from "@/lib/self-upgrade";
+import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
+import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
+import { getDeployedSha } from "@/lib/self-upgrade/completion";
+import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
+import { createRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
 import {
   isStoreOpen,
   isUpgradeWindowOpen,
@@ -22,8 +19,16 @@ import {
 } from "@/lib/self-upgrade/window";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
+import {
+  getQuiescenceActivity,
+  abortQuiescence,
+  escalateQuiescenceToForced,
+} from "@/lib/self-upgrade/quiescence";
+import { getCooldownUntil } from "@/lib/self-upgrade/cooldown";
 import { loadPlatformVersion } from "@/lib/platform/version";
 import { inngest } from "@/lib/queue/inngest-client";
+import { readBuildPipelineLimit } from "@/lib/queue/admission";
+import { buildAdmissionSnapshot } from "@/lib/queue/admission-observability";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -634,12 +639,28 @@ export async function listSelfUpgradeRuns(opts?: {
 export async function getSelfUpgradeStatus() {
   await requireOpsAccess();
 
-  const [config, latestRun, platformVersion, deployedSha, lastCheckedAt] = await Promise.all([
+  const [
+    config,
+    latestRun,
+    platformVersion,
+    deployedSha,
+    lastCheckedAt,
+    quiescence,
+    cooldownUntil,
+    jobEngine,
+  ] = await Promise.all([
     getSelfUpgradeConfig(),
     getLatestRun(),
     loadPlatformVersion(),
     getDeployedSha(),
     getLastCheckedAt(),
+    // Live drain activity (what's holding an upgrade) + the post-defer/fail
+    // backoff window, so the panel can explain "what's happening" truthfully.
+    getQuiescenceActivity(),
+    getCooldownUntil(),
+    // Background-job-engine (Inngest) registration health — a self-upgrade
+    // can't dispatch without it, so the panel must surface a dead job engine.
+    getJobEngineHealth(),
   ]);
 
   // Upgrade timing follows the storefront's open/closed state (single source of
@@ -697,6 +718,12 @@ export async function getSelfUpgradeStatus() {
     targetSha,
     isFresh,
     latestRun,
+    quiescence,
+    // §4.5 admission observability — derived from the lane config + the
+    // quiescence blockers already captured above (no extra query).
+    admission: buildAdmissionSnapshot(readBuildPipelineLimit(), quiescence.blockers),
+    cooldownUntil: cooldownUntil?.toISOString() ?? null,
+    jobEngine,
     platformVersion: {
       version: platformVersion.version,
       publishedAt: platformVersion.publishedAt.toISOString(),
@@ -710,6 +737,7 @@ export async function getSelfUpgradeStatus() {
 
 export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: boolean }) {
   const userId = await requireOpsAccess();
+  const triggeredBy = `manual:${userId}`;
 
   if (!opts?.dryRun) {
     const config = await getSelfUpgradeConfig();
@@ -726,16 +754,63 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
   if (latestRun?.status === "running") {
     return { queued: false, reason: "already-running", runId: latestRun.runId } as const;
   }
+  if (latestRun?.status === "queued" || latestRun?.status === "pending") {
+    return { queued: false, reason: "already-queued", runId: latestRun.runId } as const;
+  }
 
-  await inngest.send({
-    name: SELF_UPGRADE_EVENT,
-    data: {
-      triggeredBy: `manual:${userId}`,
-      ...(opts?.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
-      ...(opts?.force ? { force: true } : {}),
-    },
+  const run = await createRun({
+    triggeredBy,
   });
-  return { queued: true } as const;
+
+  try {
+    await inngest.send({
+      name: SELF_UPGRADE_EVENT,
+      data: {
+        runId: run.runId,
+        triggeredBy,
+        ...(opts?.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
+        ...(opts?.force ? { force: true } : {}),
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await failRun(run.runId, `queue-dispatch-failed: ${message}`);
+    return { queued: false, reason: "queue-dispatch-failed", runId: run.runId } as const;
+  }
+
+  return { queued: true, runId: run.runId } as const;
+}
+
+/**
+ * BI-4F3B2FA9 — emergency "Force Now" on an ALREADY-RUNNING drain. Promotes the
+ * active QuiescenceRun to forced mode so the coordinator bypasses all hard
+ * blockers on its next tick (within ~5s) and proceeds to swap — no restart.
+ * The operator and timestamp are audit-recorded on the run's forcedSurfaces.
+ */
+export async function forceActiveRun(
+  runId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireOpsAccess();
+  const result = await escalateQuiescenceToForced(runId, userId);
+  if (!result.ok) return { ok: false, error: result.reason };
+  return { ok: true };
+}
+
+/**
+ * BI-4F3B2FA9 — abort an in-flight drain. Delegates to abortQuiescence, which
+ * sends the swap-complete event with outcome=aborted; the coordinator flips the
+ * level back to normal and the operator can immediately start a fresh run.
+ */
+export async function abortActiveRun(
+  runId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireOpsAccess();
+  try {
+    await abortQuiescence(runId, userId);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "abort failed" };
+  }
+  return { ok: true };
 }
 
 export async function rollbackSelfUpgrade(

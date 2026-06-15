@@ -2,20 +2,36 @@
 import { prisma } from "@dpf/db";
 import Link from "next/link";
 import { CreateInvoiceForm } from "@/components/finance/CreateInvoiceForm";
+import { getInvoiceDefaultTaxRate } from "@/lib/actions/financial-setup";
+import { defaultSignatureRequiredForArchetype } from "@/lib/finance/invoice-signature-default";
 
 export default async function NewInvoicePage() {
-  const customers = await prisma.customerAccount.findMany({
-    where: {
-      status: { in: ["active", "prospect", "qualified", "onboarding"] },
-    },
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      accountId: true,
-      name: true,
-      currency: true,
-    },
-  });
+  // Default the TAX % field from the org's wizard VAT selection, not a 20% hardcode
+  // (shared with the recurring-schedule form via getInvoiceDefaultTaxRate).
+  const [customers, storefront, defaultTaxRate, orgSettings] = await Promise.all([
+    prisma.customerAccount.findMany({
+      where: {
+        status: { in: ["active", "prospect", "qualified", "onboarding"] },
+      },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        accountId: true,
+        name: true,
+        currency: true,
+      },
+    }),
+    prisma.storefrontConfig.findFirst({
+      select: { archetype: { select: { archetypeId: true } } },
+    }),
+    getInvoiceDefaultTaxRate(),
+    prisma.orgSettings.findFirst({ select: { baseCurrency: true } }),
+  ]);
+
+  // Default "require signature" on for regulated archetypes (legal/accounting).
+  const defaultSignatureRequired = defaultSignatureRequiredForArchetype(
+    storefront?.archetype?.archetypeId ?? null,
+  );
 
   return (
     <div>
@@ -46,7 +62,12 @@ export default async function NewInvoicePage() {
         </p>
       </div>
 
-      <CreateInvoiceForm customers={customers} />
+      <CreateInvoiceForm
+        customers={customers}
+        defaultTaxRate={defaultTaxRate}
+        defaultSignatureRequired={defaultSignatureRequired}
+        defaultCurrency={orgSettings?.baseCurrency ?? "USD"}
+      />
     </div>
   );
 }

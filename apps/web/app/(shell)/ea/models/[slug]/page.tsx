@@ -2,11 +2,13 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { EaTabNav } from "@/components/ea/EaTabNav";
 import { ReferenceModelPortfolioTable } from "@/components/ea/ReferenceModelPortfolioTable";
+import { ReferenceModelElementTree } from "@/components/ea/ReferenceModelElementTree";
 import { ReferenceProjectionActions } from "@/components/ea/ReferenceProjectionActions";
 import { ReferenceProposalQueue } from "@/components/ea/ReferenceProposalQueue";
 import { projectReferenceModelValueStreams } from "@/lib/actions/ea";
 import {
   getReferenceModelDetail,
+  getReferenceModelElements,
   getReferenceModelPortfolioRollup,
 } from "@/lib/ea-data";
 
@@ -18,9 +20,10 @@ export default async function ReferenceModelPage({ params }: Props) {
   const { slug } = await params;
 
   try {
-    const [detail, rollup] = await Promise.all([
+    const [detail, rollup, elements] = await Promise.all([
       getReferenceModelDetail(slug),
       getReferenceModelPortfolioRollup(slug),
+      getReferenceModelElements(slug),
     ]);
 
     async function loadValueStreamProjection(formData: FormData) {
@@ -80,6 +83,8 @@ export default async function ReferenceModelPage({ params }: Props) {
             ))}
           </div>
         </section>
+
+        <ReferenceModelElementTree elements={elements} />
 
         <section className="mb-6">
           <div className="mb-3">

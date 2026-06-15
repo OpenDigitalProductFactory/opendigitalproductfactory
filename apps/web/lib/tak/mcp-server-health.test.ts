@@ -1,8 +1,15 @@
+import { EventEmitter } from "node:events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpConnectionConfig } from "./mcp-server-types";
 
-vi.mock("child_process", () => ({
-  spawn: vi.fn(),
+const { mockSpawn } = vi.hoisted(() => ({
+  mockSpawn: vi.fn(),
+}));
+
+vi.mock("@/lib/shared/lazy-node", () => ({
+  lazyChildProcess: () => ({
+    spawn: mockSpawn,
+  }),
 }));
 
 import { checkMcpServerHealth } from "./mcp-server-health";
@@ -97,26 +104,47 @@ describe("checkMcpServerHealth", () => {
 
     it("accepts a valid MCP runner basename even with absolute path", async () => {
       // The allowlist matches on basename, so a fully-qualified
-      // `/usr/local/bin/npx` is still accepted. We only assert that
-      // safeSpawn doesn't reject — the subsequent spawn is mocked
-      // upstream and won't actually run.
-      const { spawn } = await import("child_process");
-      vi.mocked(spawn).mockImplementation(
-        () =>
-          ({
-            stdout: { on: vi.fn() },
-            stdin: { write: vi.fn() },
-            on: vi.fn(),
-            kill: vi.fn(),
-          }) as unknown as ReturnType<typeof spawn>,
+      // `/usr/local/bin/npx` is still accepted (not rejected by safeSpawn).
+      // The mocked lazy-node spawn answers the initialize handshake immediately
+      // so the check resolves in milliseconds instead of waiting out the real
+      // 10s stdio timeout.
+      mockSpawn.mockImplementation(
+        () => {
+          const proc = new EventEmitter() as EventEmitter & {
+            stdout: EventEmitter;
+            stdin: { write: ReturnType<typeof vi.fn> };
+            kill: ReturnType<typeof vi.fn>;
+          };
+          proc.stdout = new EventEmitter();
+          proc.stdin = {
+            write: vi.fn(() => {
+              queueMicrotask(() => {
+                proc.stdout.emit(
+                  "data",
+                  Buffer.from(
+                    JSON.stringify({
+                      jsonrpc: "2.0",
+                      id: 1,
+                      result: { protocolVersion: "2024-11-05" },
+                    }) + "\n",
+                  ),
+                );
+              });
+            }),
+          };
+          proc.kill = vi.fn();
+          return proc as never;
+        },
       );
       const result = await checkMcpServerHealth({
         transport: "stdio",
         command: "/usr/local/bin/npx",
         args: ["-y", "some-server"],
       });
-      // Timeout because no protocolVersion response, but NOT an allowlist reject.
+      // The valid basename is accepted (no allowlist rejection) and the
+      // handshake completes.
       expect(result.error ?? "").not.toMatch(/allowlist/);
+      expect(result.healthy).toBe(true);
     });
   });
 });

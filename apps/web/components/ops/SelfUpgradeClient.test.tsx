@@ -15,6 +15,11 @@ vi.mock("react", async () => {
       if (initial === null) {
         return [shared.triggerResult as T, vi.fn()] as const;
       }
+      if (typeof initial === "function") {
+        // Handle lazy initializers (useState(() => ...)) so we don't return the initializer fn
+        // as state value (which can cause "Functions are not valid as a React child" when rendered).
+        return [initial(), vi.fn()] as const;
+      }
       return [initial, vi.fn()] as const;
     },
   };
@@ -150,6 +155,19 @@ describe("SelfUpgradeClient – enabled", () => {
 // ─── Running ──────────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeClient – running", () => {
+  it("shows queued state as accepted work instead of an idle trigger", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("queued", { startedAt: null, completedAt: null })}
+      />,
+    );
+    expect(html).toContain("Upgrade queued");
+    expect(html).toContain("waiting for the worker");
+    expect(html).toContain('data-run-status="queued"');
+    expect(html).not.toContain('aria-label="Upgrade now"');
+  });
+
   it("shows running badge in the latest run section", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient {...baseStatus} latestRun={makeRun("running")} />,
@@ -303,11 +321,42 @@ describe("SelfUpgradeClient – trigger control", () => {
     expect(html).not.toContain('disabled=""');
   });
 
-  it("button is disabled when latest run is currently running", () => {
+  // BI-4F3B2FA9: a running upgrade no longer leaves a dead-end disabled button.
+  it("shows an in-flight indicator (not a disabled trigger) when a run is running", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient {...baseStatus} latestRun={makeRun("running")} />,
     );
-    expect(html).toContain('disabled=""');
+    expect(html).toContain("Upgrade in progress…");
+    expect(html).not.toContain('aria-label="Upgrade now"');
+  });
+
+  it("surfaces Force now / Abort controls when the portal is draining (BI-4F3B2FA9)", () => {
+    const quiescence = {
+      level: "draining" as const,
+      runId: "QR-2026-06-10-test",
+      enteredAt: "2026-06-10T02:00:00.000Z",
+      run: {
+        runId: "QR-2026-06-10-test",
+        status: "draining",
+        trigger: "self-upgrade",
+        targetVersion: null,
+        targetBundleHash: null,
+        deferSurface: null,
+        deferReason: null,
+        budgetMs: 300000,
+        drainStartedAt: "2026-06-10T02:00:00.000Z",
+        lastHeartbeatAt: null,
+      },
+      blockersCapturedAt: null,
+      blockers: [],
+    };
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("running")} quiescence={quiescence} />,
+    );
+    expect(html).toContain("Force now");
+    expect(html).toContain("Abort");
+    // Descriptive aria-label names the run; not a dead-end disabled trigger.
+    expect(html).toContain("Force upgrade run QR-2026-06-10-test now");
   });
 });
 
@@ -333,6 +382,24 @@ describe("SelfUpgradeClient – loading", () => {
     shared.isPending = true;
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
     expect(html).toContain('aria-busy="true"');
+  });
+
+  it("shows the 'starting' hint while busy and no run is running yet", () => {
+    // The manual trigger only queues the upgrade; the worker takes a few seconds
+    // to flip the run to running. The hint reassures the operator so they don't
+    // re-click thinking it's broken.
+    shared.isPending = true;
+    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
+    expect(html).toContain('data-upgrade-starting="true"');
+    expect(html).toContain("No need to click again");
+  });
+
+  it("does not show the 'starting' hint once a run is already running", () => {
+    shared.isPending = false;
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("running")} />,
+    );
+    expect(html).not.toContain('data-upgrade-starting="true"');
   });
 });
 
@@ -635,5 +702,130 @@ describe("SelfUpgradeClient – failure detail", () => {
       <SelfUpgradeClient {...baseStatus} latestRun={makeRun("succeeded")} />,
     );
     expect(html).not.toContain("<details");
+  });
+});
+
+// ─── Upgrade activity (drain blockers + cooldown) ──────────────────────────
+
+function drainingActivity(overrides: Record<string, unknown> = {}) {
+  return {
+    level: "draining" as const,
+    runId: "QR-DRAIN",
+    enteredAt: "2026-06-06T01:44:00.000Z",
+    run: {
+      runId: "QR-DRAIN",
+      status: "draining",
+      trigger: "self-upgrade",
+      targetVersion: "abcdef0123456789",
+      targetBundleHash: "abcdef0123456789",
+      deferSurface: null,
+      deferReason: null,
+      budgetMs: 300000,
+      drainStartedAt: "2026-06-06T01:44:00.000Z",
+      lastHeartbeatAt: "2026-06-06T01:44:30.000Z",
+    },
+    blockersCapturedAt: "2026-06-06T01:44:30.000Z",
+    blockers: [
+      {
+        surface: "build-studio.phase.build",
+        label: "Build Studio — build phase",
+        kind: "hard" as const,
+        count: 1,
+        estimatedWaitMs: 1800000,
+      },
+      {
+        surface: "coworker.reasoning-loop",
+        label: "AI coworker working",
+        kind: "hard" as const,
+        count: 6,
+        estimatedWaitMs: 30000,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe("SelfUpgradeClient – upgrade activity", () => {
+  it("renders the activity panel while draining, listing what's holding the drain", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} quiescence={drainingActivity()} />,
+    );
+    expect(html).toContain("Upgrade activity");
+    expect(html).toContain('data-quiescence-level="draining"');
+    expect(html).toContain("Waiting on:");
+    expect(html).toContain("Build Studio — build phase");
+    expect(html).toContain("AI coworker working");
+    // count + worst-case wait surfaced
+    expect(html).toContain("×6");
+    // target build short hash
+    expect(html).toContain("abcdef012345");
+  });
+
+  it("does not render the activity panel when level is normal and nothing is cooling down", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        quiescence={{
+          level: "normal",
+          runId: null,
+          enteredAt: "2026-06-06T00:00:00.000Z",
+          run: null,
+          blockersCapturedAt: null,
+          blockers: [],
+        }}
+      />,
+    );
+    expect(html).not.toContain("Upgrade activity");
+  });
+
+  it("explains a deferred attempt and the cooldown window without claiming work was interrupted", () => {
+    const future = new Date(Date.now() + 25 * 60 * 1000).toISOString();
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        cooldownUntil={future}
+        quiescence={{
+          level: "normal",
+          runId: null,
+          enteredAt: "2026-06-06T00:00:00.000Z",
+          run: {
+            runId: "QR-DEFER",
+            status: "deferred",
+            trigger: "self-upgrade",
+            targetVersion: "abcdef0123456789",
+            targetBundleHash: "abcdef0123456789",
+            deferSurface: "build-studio.phase.build",
+            deferReason: "quiescence-deferred",
+            budgetMs: 300000,
+            drainStartedAt: "2026-06-06T01:40:00.000Z",
+            lastHeartbeatAt: "2026-06-06T01:44:00.000Z",
+          },
+          blockersCapturedAt: "2026-06-06T01:44:00.000Z",
+          blockers: [
+            {
+              surface: "build-studio.phase.build",
+              label: "Build Studio — build phase",
+              kind: "hard",
+              count: 1,
+              estimatedWaitMs: 1800000,
+            },
+          ],
+        }}
+      />,
+    );
+    expect(html).toContain("Upgrade activity");
+    expect(html).toContain("Last upgrade attempt deferred");
+    expect(html).toContain("Build Studio — build phase");
+    expect(html).toContain("never interrupted");
+    expect(html).toContain("Automatic upgrades paused until");
+    expect(html).toContain('data-cooldown="active"');
+  });
+
+  it("renders the cooldown notice even with no quiescence run when a cooldown is active", () => {
+    const future = new Date(Date.now() + 25 * 60 * 1000).toISOString();
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} cooldownUntil={future} quiescence={null} />,
+    );
+    expect(html).toContain("Automatic upgrades paused until");
   });
 });

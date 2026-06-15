@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-06-06 reconciliation status:** Do not execute this plan task-by-task from the unchecked boxes below. `origin/main` already contains the Slice 1 substrate and follow-on customer CRM/marketing surfaces: CRM presentation metadata, `RevenueCockpit`, `CustomerMetricTile`, `CustomerStatusBadge`, pipeline inspector, acquisition signal routing, real marketing Campaigns/Funnel/Automation subroutes, and guided coworker launch boundaries. The current reconciliation artifact is `docs/superpowers/audits/2026-06-06-customer-crm-marketing-ux-reconciliation.md`. Remaining product work is tracked as `BI-D8E00326` (CRM marketing Slice 5: agentic sales and marketing operations).
+
 **Goal:** Build the first Pipedrive-inspired CRM and marketing operations slice: a scan-first revenue cockpit on `/customer`, theme-aware CRM presentation metadata, shared summary components, and a cleaned marketing tab nav with no phase-locked placeholders.
 
 **Architecture:** Keep the first slice on existing CRM and marketing models. Extract pure CRM presentation and summary logic into small tested modules, render reusable customer summary components from server pages, and hide marketing subroutes until real read-only routes are implemented in a later slice. Do not add database tables or external integration writes in this slice.
@@ -16,9 +18,9 @@ This plan implements Slice 1 from `docs/superpowers/specs/2026-05-26-pipedrive-i
 
 It must also respect the binding UX-governance rules in `docs/superpowers/specs/2026-04-25-customer-marketing-coworker-led-ux-correction.md`: no card-as-send-button, no surprise prompts to the coworker. Slice 1 only adds navigation links and metric tiles to `/customer`; coworker-launching surfaces stay inside `AgentWorkLauncher` and are out of scope here.
 
-It must also pass the portal UX simplification fit gate before code edits. The feature belongs to Business > Customer and must not add global AppRail entries, Workspace cards, Platform nav entries, or vendor-branded user-facing language. "Pipedrive-inspired" is research language only; visible product copy should use DPF-native labels such as "Today in revenue", "Pipeline", "Engagements", "Quotes", "Orders", and "Marketing".
+It must also pass `dpf-ux-fit-review` before code edits. The feature belongs to Business > Customer and must not add global AppRail entries, Workspace cards, Platform nav entries, or vendor-branded user-facing language. "Pipedrive-inspired" is research language only; visible product copy should use DPF-native labels such as "Today in revenue", "Pipeline", "Engagements", "Quotes", "Orders", and "Marketing".
 
-PR strategy: Slice 1 is theme-aware refactor + dead-code removal + shared-helper extraction. It qualifies as a Claude-led maintenance PR per the `feedback_no_manual_prs` rule and does NOT need to flow through Build Studio. Slices 2–5 from the design spec are feature work and must be filed as backlog items, promoted, and run through Build Studio.
+PR strategy: Slice 1 was theme-aware refactor + dead-code removal + shared-helper extraction. It qualified as a Claude-led maintenance PR per the `feedback_no_manual_prs` rule and did NOT need to flow through Build Studio. Follow-on feature slices are no longer represented by this historical checklist; use current backlog state and `BI-D8E00326` for Slice 5.
 
 Included:
 
@@ -30,24 +32,24 @@ Included:
 - removal of visible "Phase 2" / "Phase 3" marketing tabs
 - focused unit/component tests
 
-Excluded:
+Historical exclusions at Slice 1 start:
 
 - new Prisma models
 - drag-and-drop opportunity movement
 - signal-to-engagement creation
 - external publish/send/schedule actions
-- real `/customer/marketing/campaigns`, `/customer/marketing/funnel`, or `/customer/marketing/automation` routes
+- real `/customer/marketing/campaigns`, `/customer/marketing/funnel`, or `/customer/marketing/automation` routes, which have since landed
 - PR creation before verification
 
 Implementation must happen in a new git worktree branched from `origin/main` (see Task 0). The doc branch `doc/pipedrive-crm-marketing` remains the research and planning branch.
 
-Files left as known refactor debt after Slice 1 (deferred to Slice 1b — file a tracked backlog item before Slice 2 starts):
+Files originally left as known refactor debt after Slice 1 (now reconciled on `origin/main`):
 
 - `apps/web/app/(shell)/customer/(crm)/[id]/page.tsx` — STATUS_COLOURS
 - `apps/web/app/(shell)/customer/(crm)/quotes/page.tsx` — STATUS_COLOURS
 - `apps/web/app/(shell)/customer/(crm)/sales-orders/page.tsx` — STATUS_COLOURS
 
-These three are intentionally out of Slice 1 to keep the touched-file surface small, but the shared `presentation.ts` helper this slice introduces is what they will consume.
+These three now consume shared Customer CRM status presentation via `CustomerStatusBadge` and `apps/web/lib/crm/presentation.ts`.
 
 ## File Structure
 
@@ -117,9 +119,9 @@ Run the project sync script from the root clone after the worktree is created:
 
 Expected: `.mcp.json` and `.vscode/mcp.json` are hardlinked or copied into the new worktree, and the worktree receives its own ignored Compose project configuration so stacks do not collide with sibling sessions.
 
-- [ ] **Step 3: Run the UX architecture fit gate**
+- [ ] **Step 3: Run `dpf-ux-fit-review`**
 
-Before writing code, record the answers in the implementation notes or PR body:
+Before writing code, run the DPF UX fit review skill and record the answers in the implementation notes or PR body:
 
 ```text
 Owning area: Business > Customer

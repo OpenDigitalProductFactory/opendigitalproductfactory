@@ -25,6 +25,39 @@ interface IssueReport {
   routeContext: string | null;
   errorStack: string | null;
   source: string;
+  // BI-B4F401B3: Next.js server digest token for crash_boundary reports. Used
+  // to dedup a whole crash incident (same real error across routes) and to
+  // anchor the operator's diagnostic prompt.
+  errorDigest?: string | null;
+}
+
+// BI-B4F401B3: reports filed by the production crash boundary carry only a
+// sanitized message + an opaque digest — the real error lives in the server
+// logs. Feeding that to the triage LLM only manufactures a plausible-but-wrong
+// root cause (a single 2026-06-07 migration-drift incident spawned 12+ phantom
+// "/build undefined.toLowerCase()" BIs). For these we skip the LLM entirely and
+// file an honest, deterministic item that points the operator at the real
+// diagnostic path instead of a guess.
+const CRASH_BOUNDARY_SOURCE = "crash_boundary";
+
+function buildCrashBoundaryItem(report: IssueReport, base: BacklogItemData): BacklogItemData {
+  const route = report.routeContext || "unknown route";
+  const note =
+    "NOTE: auto-captured production crash. This title is NOT a diagnosed root cause — " +
+    "Next.js sanitizes the real error message in production. Use the diagnostic prompt " +
+    "shown on the crash screen (or grep the portal server logs by the digest above) to " +
+    "find the real error before acting on this item.";
+  return {
+    ...base,
+    title: `Crash: ${route} (${report.reportId}) — investigate via diagnostic prompt`.slice(0, 200),
+    body: [
+      report.errorDigest ? `Error digest: ${report.errorDigest}` : null,
+      note,
+      base.body,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  };
 }
 
 // ─── Pure Functions ─────────────────────────────────────────────────────────
@@ -150,6 +183,10 @@ export async function triageIssueReports(deps: {
   createBacklogItem: (data: BacklogItemData) => Promise<void>;
   incrementOccurrence: (title: string) => Promise<void>;
   acknowledgeReport: (id: string) => Promise<void>;
+  /** BI-B4F401B3: returns the title of an existing crash BI that already
+   *  captured this error digest, or null. Powers cross-route incident dedup so
+   *  one underlying error reported from N routes folds into one BI. */
+  findCrashItemTitleByDigest?: (digest: string) => Promise<string | null>;
   resolveProductId?: () => Promise<string | null>;
   resolveTaxonomyNodeId?: () => Promise<string | null>;
   resolveTaxonomyNodeByPath?: (path: string) => Promise<string | null>;
@@ -172,18 +209,35 @@ export async function triageIssueReports(deps: {
   let llmEnhanced = 0;
 
   for (const report of reports) {
+    const isCrashBoundary = report.source === CRASH_BOUNDARY_SOURCE;
+
     // ── Step 1: Try LLM-enhanced triage ──────────────────────────────────
+    // BI-B4F401B3: NEVER run the LLM on crash-boundary reports — their only
+    // input is a sanitized message, so the model invents a phantom root cause.
     let llmResult: LlmTriageResult | null = null;
-    if (deps.callLlm) {
+    if (deps.callLlm && !isCrashBoundary) {
       llmResult = await llmTriageReport(report, existingTitles, deps.callLlm);
     }
 
-    // ── Step 2: Dedup — semantic (LLM) then deterministic fallback ───────
+    // ── Step 2: Dedup ────────────────────────────────────────────────────
+    // Crash boundary: fold the whole incident by error digest (same real error
+    // surfaces from several routes with different sanitized titles, so the
+    // title-based path below cannot catch it).
+    if (isCrashBoundary && report.errorDigest && deps.findCrashItemTitleByDigest) {
+      const existingTitle = await deps.findCrashItemTitleByDigest(report.errorDigest);
+      if (existingTitle) {
+        await deps.incrementOccurrence(existingTitle);
+        await deps.acknowledgeReport(report.id);
+        continue;
+      }
+    }
+
+    // Non-crash: semantic (LLM) then deterministic title dedup.
     const isDupe = llmResult?.duplicateOf
       ? existingTitles.some((t) => t.toLowerCase() === llmResult!.duplicateOf!.toLowerCase())
       : isDuplicate(report.title, existingTitles);
 
-    if (isDupe) {
+    if (!isCrashBoundary && isDupe) {
       await deps.incrementOccurrence(llmResult?.duplicateOf ?? report.title);
       await deps.acknowledgeReport(report.id);
       continue;
@@ -196,11 +250,13 @@ export async function triageIssueReports(deps: {
       if (resolved) taxonomyNodeId = resolved;
     }
 
-    // ── Step 4: Build backlog item — enhanced or basic ───────────────────
-    const data = buildIssueBacklogItem(report, dpfProductId, taxonomyNodeId);
+    // ── Step 4: Build backlog item — crash-honest, LLM-enhanced, or basic ─
+    let data = buildIssueBacklogItem(report, dpfProductId, taxonomyNodeId);
 
-    // Apply LLM enhancements
-    if (llmResult) {
+    if (isCrashBoundary) {
+      // Deterministic, honest item — no guessed root cause.
+      data = buildCrashBoundaryItem(report, data);
+    } else if (llmResult) {
       data.title = llmResult.suggestedTitle;
       data.priority = severityToPriority(llmResult.severity);
       if (llmResult.rootCause) {

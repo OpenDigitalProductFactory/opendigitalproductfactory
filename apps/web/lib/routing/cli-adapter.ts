@@ -435,6 +435,10 @@ export const cliAdapter: ExecutionAdapterHandler = {
     const tokenFile = `/tmp/cli-token-${slug}.txt`;
     const mcpConfigFile = `/tmp/cli-mcp-${slug}.json`;
     const runnerScript = `/tmp/cli-run-${slug}.sh`;
+    // Records the in-container claude PID so a timeout can reap the actual
+    // process inside the sandbox (BI-F36E7510). proc.kill() below only reaches
+    // the local `docker exec` client, not the containerized process.
+    const pidFile = `/tmp/cli-pid-${slug}.txt`;
 
     const cp = lazyChildProcess();
     const execAsync = lazyUtil().promisify(cp.exec);
@@ -512,12 +516,21 @@ export const cliAdapter: ExecutionAdapterHandler = {
       const mcpFlags = mcpJwt
         ? `--mcp-config ${mcpConfigFile} --strict-mcp-config `
         : "";
+      // NOTE: claude is backgrounded (NOT `exec`ed) so the runner sh stays the
+      // parent and records claude's PID to pidFile. This lets the timeout path
+      // reap the real in-container process tree (BI-F36E7510); `exec` would
+      // replace the sh, leaving the cmdline as bare `claude -p ...` with no
+      // unique handle and no way to signal it from the host. stdout/stderr are
+      // inherited by the background child, so capture is unchanged.
       const script = [
         "#!/bin/sh",
         "cd /workspace",
         authExportLine,
         `SYSPROMPT=$(cat ${systemFile})`,
-        `exec claude ${bareFlag}-p - --dangerously-skip-permissions ${mcpFlags}--disallowedTools "${CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE}" --output-format json --model ${cliModel} --system-prompt "$SYSPROMPT" < ${promptFile}`,
+        `claude ${bareFlag}-p - --dangerously-skip-permissions ${mcpFlags}--disallowedTools "${CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE}" --output-format json --model ${cliModel} --system-prompt "$SYSPROMPT" < ${promptFile} &`,
+        `CLIPID=$!`,
+        `echo "$CLIPID" > ${pidFile}`,
+        `wait "$CLIPID"`,
       ].join("\n");
 
       const scriptB64 = Buffer.from(script).toString("base64");
@@ -544,6 +557,19 @@ export const cliAdapter: ExecutionAdapterHandler = {
         const timer = setTimeout(() => {
           timedOut = true;
           proc.kill("SIGTERM");
+          // proc.kill() only signals the local `docker exec` client; the
+          // process INSIDE the container is not forwarded the signal and would
+          // orphan, pinning the shared sandbox to this build's branch and
+          // leaking pids/threads (BI-F36E7510 — the "portal bad state from too
+          // many CLIs" symptom). Reap the in-container tree explicitly: SIGTERM
+          // the recorded claude PID + the runner sh, then escalate to SIGKILL.
+          const reap = (sig: "TERM" | "KILL") =>
+            execAsync(
+              `docker exec ${SANDBOX_CONTAINER} sh -c "kill -${sig} $(cat ${pidFile} 2>/dev/null) 2>/dev/null; pkill -${sig} -f ${runnerScript} 2>/dev/null; true"`,
+              { timeout: 5_000 },
+            ).catch(() => {});
+          void reap("TERM");
+          setTimeout(() => void reap("KILL"), 3_000);
         }, CLI_TIMEOUT_MS);
 
         proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
@@ -689,7 +715,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // so a leaked sandbox shell can't dump the bearer from disk after the
       // call returns.
       execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${systemFile} ${tokenFile} ${mcpConfigFile} ${runnerScript}"`,
+        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${systemFile} ${tokenFile} ${mcpConfigFile} ${runnerScript} ${pidFile}"`,
         { timeout: 5_000 },
       ).catch(() => {});
     }

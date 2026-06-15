@@ -1,0 +1,121 @@
+<!doctype html>
+<!--
+  DPF PR-explainer template (HTML artifact). Opt-in companion to a PR.
+  See docs/superpowers/html-artifacts-guide.md.
+
+  HOW TO USE
+  1. Copy, fill in every {{PLACEHOLDER}}, replace the example diagram/tables.
+  2. Attach to the PR (commit under the PR's branch, or upload) and link it from
+     the PR description. The PR description itself stays Markdown — this is the
+     "code explainer" the source thesis attaches to every PR.
+  3. Single self-contained file: inline CSS + SVG, no CDN.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PR — {{TITLE}}</title>
+<style>
+  :root {
+    --bg:#fff; --fg:#1a1d24; --muted:#5b6472; --soft:#f4f6fa; --border:#dce1e8;
+    --accent:#2f6df6; --accent-soft:#e8f0ff; --code-bg:#f6f8fa;
+    --kw:#b5258a; --str:#167f3a; --com:#8a94a6;
+    --add:#167f3a; --add-bg:#e7f6ec; --del:#c0362c; --del-bg:#fbe9e7;
+    --warn:#9a6700; --warn-bg:#fbf3e0; --radius:10px; --maxw:920px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0f1117; --fg:#e6e9ef; --muted:#9aa4b2; --soft:#161a22; --border:#2a313d;
+      --accent:#6ea0ff; --accent-soft:#18233b; --code-bg:#12161e;
+      --kw:#e07ad0; --str:#6fd58a; --com:#6b7585;
+      --add:#6fd58a; --add-bg:#11281a; --del:#f08a80; --del-bg:#2c1513;
+      --warn:#e3b35a; --warn-bg:#2a2210;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  main { max-width:var(--maxw); margin:0 auto; padding:32px 24px 96px; }
+  h1 { font-size:28px; margin:0 0 4px; }
+  h2 { font-size:20px; margin:36px 0 12px; }
+  a { color:var(--accent); }
+  code { font-family:"SF Mono","JetBrains Mono",Consolas,monospace; font-size:.9em; background:var(--code-bg); padding:1px 5px; border-radius:5px; }
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; overflow:auto; }
+  pre code { background:none; padding:0; font-size:13px; line-height:1.6; }
+  .kw{color:var(--kw);} .str{color:var(--str);} .com{color:var(--com);font-style:italic;}
+  .sub { color:var(--muted); font-size:14px; margin:0 0 16px; }
+  .tldr { background:var(--accent-soft); border-left:3px solid var(--accent); padding:12px 16px; border-radius:0 var(--radius) var(--radius) 0; margin:16px 0; }
+  table { border-collapse:collapse; width:100%; margin:14px 0; font-size:14px; }
+  th,td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  thead th { background:var(--soft); font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  .tag { display:inline-block; font-size:12px; font-weight:600; padding:1px 8px; border-radius:999px; }
+  .tag.add { color:var(--add); background:var(--add-bg); }
+  .tag.del { color:var(--del); background:var(--del-bg); }
+  .tag.mod { color:var(--accent); background:var(--accent-soft); }
+  .gotcha { border-left:3px solid var(--warn); background:var(--warn-bg); padding:10px 16px; border-radius:0 var(--radius) var(--radius) 0; margin:12px 0; }
+  figure { margin:18px 0; padding:16px; background:var(--soft); border:1px solid var(--border); border-radius:var(--radius); }
+  figure svg { display:block; width:100%; height:auto; }
+  figcaption { margin-top:10px; font-size:13px; color:var(--muted); text-align:center; }
+  .svg-node { fill:var(--accent-soft); stroke:var(--accent); }
+  .svg-label { fill:var(--fg); font:600 13px sans-serif; }
+  .svg-edge { stroke:var(--muted); fill:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>{{PR title}}</h1>
+  <p class="sub">Branch <code>{{prefix/slug}}</code> &middot; BI {{BI-XXXXXXXX}} &middot;
+    {{N}} files changed &middot; <a href="{{PR-URL}}">PR #{{N}}</a></p>
+
+  <div class="tldr"><strong>TL;DR.</strong> {{One or two sentences: what this PR
+    does and why a reviewer should care. The thing you'd say out loud.}}</div>
+
+  <h2>Why</h2>
+  <p>{{The motivating problem / incident. Link the spec or BI. This is the part
+    the default GitHub diff view can't show.}}</p>
+
+  <h2>What changed — change map</h2>
+  <table>
+    <thead><tr><th>File</th><th>Kind</th><th>What &amp; why</th></tr></thead>
+    <tbody>
+      <tr><td><code>apps/web/lib/&lt;area&gt;/&lt;file&gt;.ts</code></td><td><span class="tag add">new</span></td><td>{{…}}</td></tr>
+      <tr><td><code>apps/web/app/&lt;route&gt;/page.tsx</code></td><td><span class="tag mod">edit</span></td><td>{{…}}</td></tr>
+      <tr><td><code>&lt;dead/file&gt;.ts</code></td><td><span class="tag del">remove</span></td><td>{{…}}</td></tr>
+    </tbody>
+  </table>
+
+  <h2>How it fits together</h2>
+  <figure>
+    <svg viewBox="0 0 720 130" role="img" aria-label="Touched flow">
+      <rect class="svg-node" x="20"  y="40" width="190" height="50" rx="8" />
+      <text class="svg-label" x="115" y="70" text-anchor="middle">{{caller}}</text>
+      <line class="svg-edge" x1="210" y1="65" x2="290" y2="65" marker-end="url(#a)" />
+      <rect class="svg-node" x="295" y="40" width="190" height="50" rx="8" />
+      <text class="svg-label" x="390" y="70" text-anchor="middle">{{new code}}</text>
+      <line class="svg-edge" x1="485" y1="65" x2="565" y2="65" marker-end="url(#a)" />
+      <rect class="svg-node" x="570" y="40" width="130" height="50" rx="8" />
+      <text class="svg-label" x="635" y="70" text-anchor="middle">{{surface}}</text>
+      <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)" /></marker></defs>
+    </svg>
+    <figcaption>{{caption}}</figcaption>
+  </figure>
+
+  <h2>Key snippet</h2>
+  <pre><code><span class="com">// the one piece a reviewer should actually read</span>
+<span class="kw">export function</span> theChange() { <span class="com">/* … */</span> }</code></pre>
+
+  <h2>Reviewer gotchas</h2>
+  <div class="gotcha">{{The non-obvious thing — a subtle ordering constraint, a
+    deliberately-not-done item, a migration that must run first, a place the
+    diff looks wrong but isn't.}}</div>
+
+  <h2>Verification</h2>
+  <ul>
+    <li>Unit: {{tests + counts}}</li>
+    <li>Build: {{pnpm --filter web build result}}</li>
+    <li>UX / functional: {{happy path driven on the running install}}</li>
+    <li>Migration: {{applies cleanly, or N/A}}</li>
+  </ul>
+</main>
+</body>
+</html>

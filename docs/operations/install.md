@@ -34,6 +34,49 @@ After the install completes, `install-dpf` prints a single readiness banner. The
 
 Re-running `install-dpf` is a true no-op when nothing has drifted. The installer should report *'Claude Code plugin already converged'*, *'Codex plugin already converged'*, *'Kernel-tier memory already converged'*, and produce **zero file writes**. If you see writes on a re-run without any version bump, that's a defect — capture a `dpf-doctor` bundle and file a backlog item.
 
+### Agent-toolchain-only update
+
+The DPF platform skills and MCP client wiring can be updated without installing
+or running the full DPF project. Use this path when a contributor only needs the
+Codex / Claude agent substrate, or when a source-only checkout lacks the Node
+dependencies needed by the full bootstrap planner.
+
+The standalone updater is shipped inside the skill pack and requires only
+Python 3 plus the skill-pack files:
+
+- Windows: `packages/dpf-skill-pack/scripts/update-agent-toolchain.ps1`
+- macOS / Linux: `packages/dpf-skill-pack/scripts/update-agent-toolchain.sh`
+
+It copies the current skill pack to the managed personal plugin location,
+updates Codex's personal marketplace and `~/.codex/config.toml`, writes a Claude
+local marketplace, and installs the Claude plugin when the Claude CLI is
+available. It does not require Docker, pnpm, Node dependencies, database access,
+or a running portal. It does not mint `DPF_MCP_BEARER_TOKEN`.
+
+Codex-only update:
+
+```powershell
+.\packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1 -CodexOnly
+```
+
+```bash
+bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --codex-only
+```
+
+Claude-only update:
+
+```powershell
+.\packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1 -ClaudeOnly
+```
+
+```bash
+bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --claude-only
+```
+
+Use `DPF_MCP_URL` to point at a non-local MCP endpoint. Restart Codex or Claude
+Code after the updater finishes because both clients load plugins and skills at
+session start.
+
 ### Where state lives
 
 `~/.dpf/install-state.json` carries the `agentToolchain` block after every install run. Schema reference: `scripts/installer/install-state.schema.json`. The block is:

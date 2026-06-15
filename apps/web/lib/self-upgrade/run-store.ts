@@ -2,24 +2,47 @@ import { randomUUID } from "node:crypto";
 import { prisma, Prisma } from "@dpf/db";
 
 export type SelfUpgradeRunStatus =
+  | "queued"
   | "pending"
   | "running"
   | "succeeded"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "skipped"
+  | "completing"
+  | "rolled_back";
 
 export async function createRun(params: {
+  runId?: string;
   triggeredBy?: string;
   fromVersion?: string;
   toVersion?: string;
   expectedDeployedSha?: string;
 }) {
-  const runId = `SUR-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+  const runId = params.runId ?? `SUR-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   return prisma.selfUpgradeRun.create({
     data: {
       runId,
-      status: "pending",
+      status: "queued",
       trigger: params.triggeredBy ?? "unknown",
+      currentSha: params.fromVersion ?? null,
+      targetSha: params.toVersion ?? null,
+      deployedSha: params.expectedDeployedSha ?? null,
+    },
+  });
+}
+
+export async function updateRunPlan(
+  runId: string,
+  params: {
+    fromVersion?: string;
+    toVersion?: string;
+    expectedDeployedSha?: string;
+  },
+) {
+  return prisma.selfUpgradeRun.update({
+    where: { runId },
+    data: {
       currentSha: params.fromVersion ?? null,
       targetSha: params.toVersion ?? null,
       deployedSha: params.expectedDeployedSha ?? null,
@@ -45,6 +68,13 @@ export async function failRun(runId: string, error: string) {
   return prisma.selfUpgradeRun.update({
     where: { runId },
     data: { status: "failed", completedAt: new Date(), failureLog: error },
+  });
+}
+
+export async function skipRun(runId: string, reason: string) {
+  return prisma.selfUpgradeRun.update({
+    where: { runId },
+    data: { status: "skipped", completedAt: new Date(), reason },
   });
 }
 

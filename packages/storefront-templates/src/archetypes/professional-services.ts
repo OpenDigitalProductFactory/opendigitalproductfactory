@@ -13,6 +13,35 @@ const BUSINESS_FIELDS = [
   { name: "currentSituation", label: "Current situation", type: "textarea" as const, required: false },
 ];
 
+// Field-dispatch professional services send a credentialed person to a site,
+// vehicle, or person, and produce a report as the deliverable — no parts or
+// inventory. form=services + delivery=physical + onsite-plus-portal is what the
+// forthcoming Field Dispatch capability reads to derive dispatch. Professional
+// licensing (inspector cert, PLS, notary commission) is a capability-layer
+// compliance overlay (Field Dispatch design ADR-5).
+const FIELD_PROFESSIONAL_ACTIVATION: ArchetypeDefinition["activationProfile"] = {
+  profileType: "standard",
+  modules: ["service-operations"],
+  billingReadinessMode: "none",
+  customerGraph: "none",
+  estateSeparation: "shared",
+  axes: {
+    form: "services",
+    delivery: "physical",
+    primaryConsumer: "household",
+    consumptionChannel: "onsite-plus-portal",
+    commercialModel: "transactional",
+    provisioning: "account-with-billing",
+    platform: "no",
+  },
+  portfolios: {
+    foundational: { scope: "minimal" },
+    manufactureAndDeliver: { scope: "primary", it4itStages: ["request-to-fulfill"] },
+    forEmployees: { scope: "standard" },
+    productsAndServicesSold: { scope: "primary" },
+  },
+};
+
 export const professionalServicesArchetypes: ArchetypeDefinition[] = [
   {
     archetypeId: "it-managed-services",
@@ -263,5 +292,115 @@ export const professionalServicesArchetypes: ArchetypeDefinition[] = [
       { name: "budgetRange", label: "Budget range", type: "select" as const, required: false, options: ["Under £10k", "£10k–£50k", "£50k–£150k", "£150k+", "Not sure"] },
       { name: "currentSituation", label: "What challenge are you facing?", type: "textarea" as const, required: true },
     ],
+  },
+  {
+    archetypeId: "field-inspection",
+    name: "Property & Field Inspection",
+    category: "professional-services",
+    ctaType: "inquiry",
+    tags: ["inspection", "home inspection", "property inspection", "insurance inspection", "inspector", "report"],
+    itemTemplates: [
+      { name: "Home Buyer's Inspection", description: "Full pre-purchase inspection with a written report", priceType: "from" },
+      { name: "Pre-Listing Inspection", description: "Seller's inspection to surface issues before listing", priceType: "from" },
+      { name: "Specialty Inspection", description: "Radon, mold, sewer scope, or thermal imaging add-ons", priceType: "from" },
+      { name: "Insurance / 4-Point Inspection", description: "Wind mitigation and 4-point reports for insurers", priceType: "fixed" },
+      { name: "Commercial Property Inspection", description: "Condition assessment for commercial buildings", priceType: "quote" },
+      { name: "Re-Inspection", description: "Verify that flagged items have been repaired", priceType: "fixed" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Inspection Services", sortOrder: 1 },
+      { type: "about", title: "About Us", sortOrder: 2 },
+      { type: "testimonials", title: "Client Reviews", sortOrder: 3 },
+      { type: "contact", title: "Schedule an Inspection", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...INQUIRY_BASE_FIELDS,
+      { name: "propertyAddress", label: "Property address", type: "text" as const, required: true },
+      { name: "inspectionType", label: "Inspection type", type: "select" as const, required: true, options: ["Home buyer's", "Pre-listing", "Specialty", "Insurance / 4-point", "Commercial", "Re-inspection"] },
+      { name: "propertyType", label: "Property type", type: "select" as const, required: false, options: ["Single-family home", "Condo / townhouse", "Multi-family", "Commercial", "Land"] },
+    ],
+    activationProfile: FIELD_PROFESSIONAL_ACTIVATION,
+  },
+  {
+    // Equipment-bound and project-flavored — surveys are scheduled jobs with a
+    // plat/report deliverable, so this carries the projects module.
+    archetypeId: "land-surveying",
+    name: "Land Surveying",
+    category: "professional-services",
+    ctaType: "inquiry",
+    tags: ["surveying", "land survey", "boundary survey", "topographic", "ALTA", "surveyor", "PLS"],
+    itemTemplates: [
+      { name: "Boundary Survey", description: "Establish and mark property lines and corners", priceType: "quote" },
+      { name: "Topographic Survey", description: "Map elevations and features for design and permits", priceType: "quote" },
+      { name: "ALTA / Title Survey", description: "ALTA/NSPS land title survey for commercial transactions", priceType: "quote" },
+      { name: "Subdivision / Plat", description: "Survey and plat preparation for lot subdivision", priceType: "quote" },
+      { name: "Elevation Certificate", description: "FEMA elevation certificate for flood insurance", priceType: "from" },
+      { name: "Construction Staking", description: "Stake-out of building corners and grades on site", priceType: "from" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Survey Services", sortOrder: 1 },
+      { type: "about", title: "About the Firm", sortOrder: 2 },
+      { type: "contact", title: "Request a Survey", sortOrder: 3 },
+    ],
+    formSchema: [
+      ...INQUIRY_BASE_FIELDS,
+      { name: "propertyAddress", label: "Property address or parcel ID", type: "text" as const, required: true },
+      { name: "surveyType", label: "Survey type", type: "select" as const, required: true, options: ["Boundary", "Topographic", "ALTA / title", "Subdivision / plat", "Elevation certificate", "Construction staking", "Not sure"] },
+    ],
+    activationProfile: {
+      profileType: "standard",
+      modules: ["service-operations", "projects"],
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "household",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "transactional",
+        provisioning: "account-with-billing",
+        platform: "no",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "primary", it4itStages: ["requirement-to-deploy", "request-to-fulfill"] },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+    },
+  },
+  {
+    // Pure go-to-person dispatch: the server/notary travels to a person to serve
+    // documents or witness a signing. Jurisdiction rules are a capability-layer
+    // compliance overlay.
+    archetypeId: "process-serving-notary",
+    name: "Process Serving & Mobile Notary",
+    category: "professional-services",
+    ctaType: "inquiry",
+    tags: ["process serving", "process server", "mobile notary", "loan signing", "apostille", "legal support"],
+    itemTemplates: [
+      { name: "Serve Legal Documents", description: "Service of summons, subpoenas, and court papers", priceType: "from" },
+      { name: "Rush / Same-Day Service", description: "Priority service of time-sensitive documents", priceType: "from" },
+      { name: "Skip Trace", description: "Locate a hard-to-find party for service", priceType: "from" },
+      { name: "Mobile Notary", description: "A notary travels to you to witness signatures", priceType: "fixed" },
+      { name: "Loan Signing", description: "Notarized signing agent for real-estate closings", priceType: "fixed" },
+      { name: "Court Filing & Courier", description: "File documents with the court on your behalf", priceType: "from" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Services", sortOrder: 1 },
+      { type: "about", title: "About Us", sortOrder: 2 },
+      { type: "contact", title: "Request Service", sortOrder: 3 },
+    ],
+    formSchema: [
+      ...INQUIRY_BASE_FIELDS,
+      { name: "serviceType", label: "Service needed", type: "select" as const, required: true, options: ["Serve documents", "Skip trace", "Mobile notary", "Loan signing", "Court filing", "Other"] },
+      { name: "serviceAddress", label: "Address for service / signing", type: "text" as const, required: false },
+      { name: "urgency", label: "Urgency", type: "select" as const, required: false, options: ["Standard", "Rush", "Same-day"] },
+    ],
+    activationProfile: FIELD_PROFESSIONAL_ACTIVATION,
   },
 ];

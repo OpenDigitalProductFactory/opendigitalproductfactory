@@ -4,6 +4,7 @@
 
 import type {
   ReviewResult,
+  ReviewerVerdict,
   ArchitectureAdvisory,
   BuildDesignDoc,
   BuildPlanDoc,
@@ -68,12 +69,13 @@ REVIEW CHECKLIST — evaluate EVERY item before responding:
 7. Are acceptance criteria testable and specific?
 ${hasUI ? `8. Does the design's "Accessibility" field explicitly address a11y? (semantic HTML, keyboard operability, ARIA labels, visible focus, color-not-sole-conveyor.) If the Accessibility field is present and covers these points, accept it — do NOT re-demand the same criteria as a failure reason. If the Accessibility field is missing or says "Not applicable" despite obvious UI surface, THAT's a critical issue.` : `8. (Accessibility review skipped — this feature has no user-facing UI components.)`}
 9. If reusabilityAnalysis exists and scope is "parameterizable", does the proposed approach actually parameterize the identified domain entities? Flag any entity listed in domainEntities that appears hardcoded in the proposedApproach rather than stored as configuration.
+10. WHOLE-OUTCOME ALIGNMENT (per the "Optimize for the Whole" commandment): does the design name the end-to-end outcome — the user objective or value stream — it serves, and is the proposed approach the right thing for that whole, not a local optimization that advances one step at the whole's expense? A small or local change can state its served outcome briefly. Reserve "critical" only for a design that demonstrably degrades the broader objective in order to win locally; use "important" when the served outcome is simply unstated or only weakly connected to the approach.
 
 SEVERITY CALIBRATION: Use "critical" ONLY for issues that would cause data loss, security vulnerabilities, or broken functionality. Use "important" for design gaps that should be addressed but don't block implementation. Use "minor" for style, naming, or nice-to-have improvements. A health endpoint or simple utility does NOT need the same rigor as a payment system — calibrate accordingly.
 
 "NOT APPLICABLE" HANDLING: Sections may legitimately not apply to a given feature (e.g. a UI-only fix has no data model change, a standalone utility has no reuse target). When a section's value begins with "Not applicable —" followed by a reason, evaluate only whether that reason is CORRECT for this feature. If the reason is correct, the section passes — do NOT flag it as "missing content", "underspecified", or "needs detail". If the reason is wrong (e.g. the author wrote "Not applicable — UI-only change" but the proposedApproach actually introduces new tables), flag that as an important issue.
 
-CRITICAL INSTRUCTION: You MUST report ALL issues in a SINGLE response. Do not stop after finding the first issue. Review the entire design document comprehensively. A revision cycle costs significant time and tokens. The goal is ZERO surprise issues on a re-review.
+DECISION DISCIPLINE: report the genuine BLOCKING issues in a single response — be comprehensive about real blockers so there are no surprises on re-review, but do NOT pad the list with nice-to-haves. Reserve "critical" for issues that would cause data loss, security holes, or broken functionality; "important"/"minor" do not block. If the design meets the checklist at a level appropriate to its scope, return "pass". A short, converging review beats an exhaustive one.
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {
@@ -109,7 +111,7 @@ export function buildPlanReviewPrompt(
   // anything still present using the SAME description so the operator sees
   // persistence, (c) flag only NEW issues the prior round didn't catch.
   const priorSection = prior && prior.issues.length > 0
-    ? `\n\nPRIOR REVIEW CONTEXT (this is review round ${prior.round + 1}):\nThe immediately-prior review of this plan surfaced these ${prior.issues.length} issues:\n${prior.issues.map((i, idx) => `  ${idx + 1}. [${i.severity}] ${i.description}`).join("\n")}\n\nDelta-aware review protocol:\n- For each prior issue, judge whether the new plan addresses it. If yes, do NOT re-surface it.\n- If a prior issue is still present, re-surface it but reuse the SAME description so the operator sees persistence.\n- Only add NEW issues that this revision genuinely introduces or that the prior round missed.\n- Goal: convergence, not re-litigation. Avoid trading one set of issues for another.\n`
+    ? `\n\nPRIOR REVIEW CONTEXT (this is review round ${prior.round + 1}):\nThe immediately-prior review of this plan surfaced these ${prior.issues.length} issues:\n${prior.issues.map((i, idx) => `  ${idx + 1}. [${i.severity}] ${i.description}`).join("\n")}\n\nDelta-aware review protocol (CONVERGENCE-ENFORCING — the issue set must shrink each round, never trade one set for another):\n- For each prior issue, judge whether the new plan addresses it. If yes, do NOT re-surface it.\n- If a prior issue is still present, re-surface it with the SAME description.\n- Do NOT introduce NEW important/minor issues on a re-review. The bar was set in round 1; later rounds VERIFY that bar is met — they do not raise it. (Surfacing fresh nit-level findings each round is the oscillation this protocol exists to stop.)\n- The ONLY new issue you may add on a re-review is a genuine CRITICAL regression THIS revision introduced (e.g. it deleted an error guard). Name exactly what changed.\n- DECISION on a re-review: return "pass" as soon as no CRITICAL issues remain — even if important/minor issues are still open. Those are caught downstream at the build + code-review gates; they must not block plan convergence here. This guarantees the loop converges instead of trading 4 issues for 8.\n`
     : "";
 
   return `You are reviewing an implementation plan for a platform feature.
@@ -120,16 +122,16 @@ ${fileList}
 TASKS (${tasks.length} total):
 ${taskList}${priorSection}
 
-REVIEW CHECKLIST — evaluate EVERY item against EVERY task before responding:
-1. Are tasks bite-sized (each should be 2-5 minutes of work)? Check EACH task individually.
-2. Does each task have a test-first step?
-3. Are file paths specific (not vague)?
-4. Is the file structure sensible (one responsibility per file)?
-5. Are there any missing tasks for the described file changes?
-6. Does the plan include data seeding/population tasks if new database entities are introduced?
-7. Are dependencies between tasks clear (does task N depend on task M completing first)?
+REVIEW CHECKLIST — judge the plan against THIS list and ONLY this list. It is the SAME standard the planner was given, so a plan that meets it MUST pass. Do not invent requirements beyond these, and do not escalate the bar across review rounds:
+1. REAL TEST-FIRST: does every task that adds/changes LOGIC (server action, API route handler, data transform, permission/auth check) name a real failing test to write first — a unit test for action/transform logic (incl. error + permission cases), an integration test for an API route (unauth, unauthorized, invalid input, success + status codes)? \`tsc --noEmit\` / "validate types" / "manual: read X" are NOT tests for a logic task (schema-only tasks may use validate_schema; pure presentational tasks may use a component/interaction test). DOCUMENTATION-ONLY changes — adding/editing a comment, JSDoc/docstring, README, or other prose that changes NO executable behavior — are NOT logic changes: they require NO test-first step, and the absence of a test is NEVER a critical (or blocking) issue for such a task. Accept a content/presence check (or no test at all) for a comment/doc task and PASS it.
+2. BITE-SIZED: is each task ~2-5 min / one responsibility? Flag a task ONLY if it clearly bundles >~5 distinct sub-steps.
+3. ERROR PATHS: does each logic task state failure handling, not just the happy path?
+4. DEPENDENCIES + PATHS: are task ordering dependencies stated and file paths specific?
+5. COMPLETENESS: any file with no task, or any task missing for the described changes (incl. data seeding if new entities are introduced)?
 
-CRITICAL INSTRUCTION: You MUST report ALL issues in a SINGLE response. Do not stop after finding the first issue. Review the entire plan comprehensively — every task, every file, every dependency. A revision cycle costs significant time and tokens. The goal is ZERO surprise issues on a re-review.
+SIZE-AWARENESS (prevents over-strict oscillation): scale expectations to the change. A one-file presentational tweak needs ONE small interaction test, not a full suite; a feature touching server action + API + UI needs a test for each of those surfaces. Do NOT demand integration/E2E ceremony a small change doesn't warrant.
+
+DECISION DISCIPLINE: reserve "critical" for a genuine blocking gap (a logic change with NO real test, a clearly oversized task, a missing error path on a risky action). Use "important"/"minor" for everything else — they do NOT block. If the plan meets the checklist at a level appropriate to its scope, return "pass" even if more tests could theoretically be added. Report the genuine blocking issues concisely — do NOT pad the list to be exhaustive; a short, converging review beats a long one.
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {
@@ -159,7 +161,7 @@ REVIEW CHECKLIST — evaluate EVERY item before responding:
 6. Does the code use CSS variables (var(--dpf-*)) for all colors — no text-white, bg-white, text-black, bg-black, or inline hex values? (Exception: text-white on accent-background buttons, semantic status colors from ThemeTokens.states)
 7. Are interactive elements keyboard-accessible with visible focus indicators? Do form inputs have associated labels? Do buttons have descriptive accessible names?
 
-CRITICAL INSTRUCTION: You MUST report ALL issues in a SINGLE response. Do not stop after finding the first issue. Review the entire code change comprehensively. A revision cycle costs significant time and tokens. The goal is ZERO surprise issues on a re-review.
+DECISION DISCIPLINE: report the genuine BLOCKING issues in a single response — be comprehensive about real blockers so there are no surprises on re-review, but do NOT pad the list with nice-to-haves. Reserve "critical" for issues that would cause data loss, security holes, or broken functionality; "important"/"minor" do not block. If the change is correct and tested at a level appropriate to its scope, return "pass". A short, converging review beats an exhaustive one.
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {
@@ -196,7 +198,7 @@ export const ARCHITECTURE_REVIEW_REFERENCES: ReadonlyArray<{
     label: "Kernel principles",
     path: "docs/founder-kernel/wiki/principles/",
     covers:
-      "architecture-over-shortcuts, single-source-of-truth, schema-audit-before-features, organization-canonical-identity, principal-convergence",
+      "optimize-for-the-whole, architecture-over-shortcuts, single-source-of-truth, schema-audit-before-features, organization-canonical-identity, principal-convergence",
   },
   {
     label: "Platform usability standards",
@@ -207,6 +209,12 @@ export const ARCHITECTURE_REVIEW_REFERENCES: ReadonlyArray<{
     label: "Deployment contracts",
     path: "docs/superpowers/specs/2026-05-09-deployment-contracts.md",
     covers: "the canonical deployment contracts every substrate must wrap",
+  },
+  {
+    label: "Archetype value streams",
+    path: "docs/architecture/archetype-business-value-streams.md",
+    covers:
+      "per-archetype operational value streams + load-bearing stages — the whole outcome each archetype design must serve; stage names stay stable across portal rebuilds, so this is the rebuild-surviving measure of whole-vs-local for storefront/archetype work",
   },
 ];
 
@@ -262,7 +270,9 @@ export function buildArchitectureReviewPrompt(
   const artifactLabel = input.kind === "design" ? "design document" : "implementation plan";
   const focus =
     input.kind === "design"
-      ? `- Does the data model EXTEND canonical models (Organization for identity, Principal/PrincipalAlias for identity-bearing entities) rather than create parallel tables?
+      ? `- Does this serve the end-to-end outcome / value stream it belongs to, rather than locally optimizing one step at the whole's expense? The design should name the broader objective it advances (Optimize for the Whole).
+- If the change touches an archetype/storefront surface, does it serve that archetype's LOAD-BEARING value-stream stage(s) (per docs/architecture/archetype-business-value-streams.md), not just a generic step? Strengthening a non-load-bearing stage while weakening the load-bearing one fails the whole — and those stage names stay stable across portal rebuilds, so they are the durable measure.
+- Does the data model EXTEND canonical models (Organization for identity, Principal/PrincipalAlias for identity-bearing entities) rather than create parallel tables?
 - Does the proposed approach respect single-source-of-truth (no rule/fact/decision duplicated)?
 - Does it choose the architecturally sound shape over a shortcut that creates debt?
 - Are string-enum columns aligned with the canonical enum registry (hyphens, not underscores)?
@@ -311,6 +321,58 @@ export function architectureAdvisoryFromReview(
   return { summary: arch.summary, issues: arch.issues };
 }
 
+// ─── Per-reviewer verdicts ───────────────────────────────────────────────────
+
+/** The three reviewers a dual-review run produces, in deliberation-branch order.
+ *  Source ids match the branchNodeIds emitted to runBuildReviewDeliberation, so
+ *  the persisted verdicts and the deliberation trail name reviewers identically.
+ *  This is the COMPLETE roster — there is no security/accessibility/governance
+ *  reviewer as a distinct agent; those are focus areas inside reviewer-2. */
+const REVIEWER_VERDICT_META = [
+  { source: "reviewer-1", label: "Primary review", role: "reviewer" },
+  { source: "reviewer-2", label: "Independent review", role: "reviewer" },
+  { source: "architect", label: "Architecture", role: "architect" },
+] as const;
+
+function countIssuesBySeverity(
+  issues: ReviewResult["issues"],
+): ReviewerVerdict["issueCounts"] {
+  const counts = { critical: 0, important: 0, minor: 0 };
+  for (const issue of issues) counts[issue.severity]++;
+  return counts;
+}
+
+/**
+ * Capture the individual reviewer verdicts BEFORE mergeReviews() collapses them,
+ * so they can be nested on the persisted ReviewResult.reviewers for the UI.
+ *
+ * Inputs are the same r1 / r2 / archReview the deliberation trail consumes; a
+ * null input means that reviewer did not respond and is simply omitted (it never
+ * appears as a passing verdict). A parse-error review is preserved with its
+ * parseError flag so the UI can show "unavailable" rather than a false pass.
+ */
+export function collectReviewerVerdicts(
+  r1: ReviewResult | null,
+  r2: ReviewResult | null,
+  archReview: ReviewResult | null,
+): ReviewerVerdict[] {
+  const inputs = [r1, r2, archReview];
+  const verdicts: ReviewerVerdict[] = [];
+  REVIEWER_VERDICT_META.forEach((meta, i) => {
+    const review = inputs[i];
+    if (!review) return;
+    verdicts.push({
+      source: meta.source,
+      label: meta.label,
+      role: meta.role,
+      decision: review.decision,
+      issueCounts: countIssuesBySeverity(review.issues),
+      ...(review.parseError ? { parseError: true } : {}),
+    });
+  });
+  return verdicts;
+}
+
 // ─── Review Merging ──────────────────────────────────────────────────────────
 
 /**
@@ -353,6 +415,51 @@ export function mergeReviews(r1: ReviewResult, r2: ReviewResult): ReviewResult {
     : r1.summary || r2.summary || "Review complete";
 
   return { decision, issues: merged, summary };
+}
+
+/** Build kinds for which a missing test-first step must not block the plan gate.
+ *  Test-first is a feature-grade discipline; a chore, fix, or docs build changes
+ *  little or no logic, so a "write a real failing test first" complaint is not a
+ *  genuine blocker for it. */
+const TEST_FIRST_LENIENT_KINDS: ReadonlySet<string> = new Set(["chore", "fix", "docs", "doc"]);
+
+/** Matches a reviewer issue that complains about a missing/weak test-first step. */
+const TEST_FIRST_ISSUE_RE = /test[\s-]?first|failing test|real test|test for (logic|behavior)|write (a |the )?(real |failing )?test/i;
+
+/**
+ * Deterministic kind-aware lenience for the plan-review gate.
+ *
+ * The plan-review rubric already scopes the test-first requirement to LOGIC
+ * changes and exempts documentation-only work, but a reviewer model — notably a
+ * small local model running the build on-host — over-applies TDD and marks a
+ * comment/chore task "critical" for lacking a test, wedging the gate across
+ * rounds. Rather than depend on the model honoring the prose exemption, enforce
+ * it in code: for a chore/fix/docs build, downgrade any test-first critical to
+ * minor (non-blocking) and recompute the severity-driven decision. Genuine
+ * blockers (missing files, broken logic, oversized tasks) are untouched.
+ *
+ * Pure + side-effect-free so it is trivially unit-testable.
+ */
+export function applyTestFirstLenienceForKind(
+  review: ReviewResult,
+  kind: string | null | undefined,
+): ReviewResult {
+  if (!kind || !TEST_FIRST_LENIENT_KINDS.has(kind)) return review;
+  let changed = false;
+  const issues = review.issues.map((i) => {
+    if (i.severity === "critical" && TEST_FIRST_ISSUE_RE.test(i.description)) {
+      changed = true;
+      return {
+        ...i,
+        severity: "minor" as const,
+        description: `${i.description} [non-blocking for a ${kind} build — test-first is a feature-grade gate]`,
+      };
+    }
+    return i;
+  });
+  if (!changed) return review;
+  const decision: "pass" | "fail" = issues.some((i) => i.severity === "critical") ? "fail" : "pass";
+  return { ...review, issues, decision };
 }
 
 // ─── Response Parsing ────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { FeedbackAutoFilePolicy, FeedbackTriggerKind } from "@/lib/feedback/feedback-event";
 import { submitReport } from "@/lib/quality-queue";
+import { UpstreamEscalation } from "./UpstreamEscalation";
 
 type Props = {
   routeContext: string;
@@ -63,6 +64,7 @@ export function FeedbackForm({
           : queued
             ? "Saved — will be sent when connectivity is restored."
             : "Saved — will be sent when connectivity is restored."}
+        {reportId && <UpstreamEscalation reportId={reportId} />}
         {onClose && (
           <button
             type="button"
@@ -120,3 +122,4 @@ export function FeedbackForm({
     </div>
   );
 }
+

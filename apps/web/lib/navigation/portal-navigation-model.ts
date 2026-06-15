@@ -36,6 +36,16 @@ export type PortalNavRecord = {
   audienceModes: readonly PortalAudienceMode[];
   destinationKind: PortalDestinationKind;
   capabilityKey?: CapabilityKey | null;
+  /**
+   * Archetype-capability gate (capability registry key(s) from
+   * @dpf/storefront-templates, e.g. "public-body-governance"). Entries carrying
+   * this render only when the org's effective capability activation has AT
+   * LEAST ONE of the keys active (any-of) — capability-driven surfaces per the
+   * civic archetypes spec §12, on top of (not instead of) the user-permission
+   * capabilityKey. An array expresses shared surfaces like /governance, which
+   * serves both public-body and member-owned governance.
+   */
+  orgCapabilityKey?: string | readonly string[] | null;
   primaryOrder?: number;
   sectionNavLabel?: string;
   shellNav?: {
@@ -51,6 +61,7 @@ export type PortalNavEntry = Pick<
   "key" | "label" | "path" | "parentPath" | "domain" | "destinationKind"
 > & {
   capabilityKey: CapabilityKey | null;
+  orgCapabilityKey: string | readonly string[] | null;
   audienceModes: readonly PortalAudienceMode[];
 };
 
@@ -98,6 +109,20 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       sectionKey: "workspace",
       description: "Search, open, publish, and trace managed documents.",
     },
+  },
+  {
+    key: "workbooks",
+    label: "Workbooks",
+    path: "/workbooks",
+    parentPath: "/workbooks",
+    domain: "workspace",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_workbooks",
+    // Demoted from the primary Workspace nav (EP-GRID-WORKBOOKS): the platform-data
+    // grids now live in-place on their domain surfaces; the user-tables hub is
+    // surfaced under Platform Hub (see platform-nav.ts). Record kept so links resolve.
+    sectionSiblings: ["/workbooks"],
   },
   {
     key: "customer",
@@ -231,6 +256,72 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     },
   },
   {
+    // Civic archetypes (BI-8D477188 Phase 3): public-body governance workflow.
+    // Renders only when the org's archetype derives public-body-governance
+    // active (towns, utilities, law enforcement — and member-owned boards
+    // reuse the same surface via member-governance in a later slice).
+    key: "governance",
+    label: "Governance",
+    path: "/governance",
+    parentPath: "/governance",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_compliance",
+    // Any-of: the surface serves council/open-meetings governance (public
+    // bodies) AND board/annual-meeting governance (member-owned orgs,
+    // BI-AFC178F3); the page adapts via the same capability activations.
+    orgCapabilityKey: ["public-body-governance", "member-governance"],
+    shellNav: {
+      sectionKey: "business",
+      description: "Meetings, agendas, minutes — council or board.",
+    },
+    sectionSiblings: ["/governance", "/governance/records-requests"],
+  },
+  {
+    // Member equity & patronage ledger (BI-AFC178F3) — co-ops and, later,
+    // member-owned utilities (capital credits).
+    key: "member-equity",
+    label: "Member Equity",
+    path: "/member-equity",
+    parentPath: "/member-equity",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_finance",
+    orgCapabilityKey: "member-equity",
+    shellNav: {
+      sectionKey: "business",
+      description: "Per-member equity, patronage allocations, and retirements.",
+    },
+  },
+  {
+    key: "governance-records-requests",
+    label: "Records Requests",
+    path: "/governance/records-requests",
+    parentPath: "/governance",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_compliance",
+    orgCapabilityKey: "records-request",
+  },
+  {
+    key: "service-requests",
+    label: "Service Requests",
+    path: "/service-requests",
+    parentPath: "/service-requests",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_storefront",
+    orgCapabilityKey: "service-request-311",
+    shellNav: {
+      sectionKey: "business",
+      description: "Resident service requests routed to departments.",
+    },
+  },
+  {
     key: "storefront",
     label: "Portal",
     path: "/storefront",
@@ -243,6 +334,26 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     shellNav: {
       sectionKey: "business",
       description: "Customer-facing portal experience and setup.",
+    },
+  },
+  {
+    // Rental / shared-asset value stream (BI-EEA24A34 Phase 4): the operator
+    // daily board for the reserve → checkout → return & inspect → re-pool
+    // lifecycle. Renders only for rental archetypes (equipment rental,
+    // self-storage, agricultural shared-machinery co-op) whose archetype
+    // derives the rental capabilities — any-of fleet/agreements.
+    key: "rental",
+    label: "Rental Desk",
+    path: "/rental",
+    parentPath: "/rental",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_storefront",
+    orgCapabilityKey: ["rental-fleet", "rental-agreements"],
+    shellNav: {
+      sectionKey: "business",
+      description: "Reservations, checkouts, and returns for your asset pool.",
     },
   },
   {
@@ -277,16 +388,23 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   {
     key: "ea_modeler",
     label: "Architecture",
-    path: "/portfolio/architecture",
-    parentPath: "/portfolio",
+    path: "/ea",
+    parentPath: "/ea",
     domain: "delivery",
     audienceModes: ["operator"],
-    destinationKind: "section-page",
+    destinationKind: "domain-home",
     capabilityKey: "view_ea_modeler",
     shellNav: {
       sectionKey: "products",
-      description: "Reference models, capabilities, and structure.",
+      description: "Capability map, value streams, EA views, and data architecture.",
     },
+    sectionSiblings: [
+      "/ea",
+      "/ea/capabilities",
+      "/ea/value-streams",
+      "/ea/views",
+      "/ea/models",
+    ],
   },
   {
     key: "ai_workforce",
@@ -332,6 +450,16 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       description: "Providers, integrations, services, and governance.",
     },
     sectionSiblings: platformSectionSiblings,
+  },
+  {
+    key: "platform-schedule",
+    label: "Schedule",
+    path: "/platform/schedule",
+    parentPath: "/platform",
+    domain: "platform",
+    audienceModes: ["operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_platform",
   },
   {
     key: "platform-identity",
@@ -772,6 +900,7 @@ function toEntry(route: PortalNavRecord): PortalNavEntry {
     audienceModes: route.audienceModes,
     destinationKind: route.destinationKind,
     capabilityKey: route.capabilityKey ?? null,
+    orgCapabilityKey: route.orgCapabilityKey ?? null,
   };
 }
 

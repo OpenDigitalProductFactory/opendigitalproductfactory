@@ -237,6 +237,35 @@ DPF_LLM_PROVIDER=external
 The Linux overlay still defines the `ollama` service, but you can stop
 it with `docker compose stop ollama` if you don't want it running.
 
+## Voice (STT + TTS)
+
+DPF coworkers support voice **input** (speech-to-text) and voice
+**output** (text-to-speech).
+
+**Speech-to-text (STT) — works out of the box.** The bundled `dpf-stt`
+container (faster-whisper) is profile-free, so it starts on a plain
+install and the coworker mic button works immediately. CPU-friendly; no
+GPU required.
+
+**Text-to-speech (TTS) — automatic on an NVIDIA GPU.** Spoken output
+uses the bundled `dpf-tts` container (Chatterbox — self-hosted, no API
+key, data stays on the Docker network). It needs hardware acceleration,
+so the installer starts it **automatically when it detects an NVIDIA GPU
+with ≥ 6 GB VRAM** — no manual `--profile tts` step. The portal is
+already wired to reach it (`TTS_PROVIDER=chatterbox`,
+`DPF_TTS_URL=http://dpf-tts:8000`), so spoken output just works.
+
+**No NVIDIA GPU?** The installer skips `dpf-tts` — its GPU reservation
+can't start on a GPU-less host, and the self-hosted CPU tier is
+~10–30× slower. STT still works. For spoken output without a GPU, route
+to a managed TTS API: set `TTS_PROVIDER=cartesia` or
+`TTS_PROVIDER=fish-audio` (plus the provider's API key) in `.env` and
+re-run the installer. (A GPU-reservation-free CPU-tier default is
+tracked as a follow-up.)
+
+> macOS Apple Silicon uses a native-host sidecar instead of `dpf-tts` —
+> see the [macOS guide](macos.md#voice-stt--tts).
+
 ## Autostart
 
 The installer registers a systemd **user** unit at:

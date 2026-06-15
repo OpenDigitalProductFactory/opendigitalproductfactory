@@ -23,6 +23,9 @@ export default async function PaymentsPage({ searchParams }: Props) {
             invoice: {
               select: { id: true, invoiceRef: true },
             },
+            bill: {
+              select: { id: true, billRef: true },
+            },
           },
         },
       },
@@ -33,14 +36,17 @@ export default async function PaymentsPage({ searchParams }: Props) {
 
   // Serialize to plain rows for the client table (no Decimal/Date across the boundary).
   const rows: PaymentRow[] = payments.map((pmt) => {
-    const linkedInvoice = pmt.allocations[0]?.invoice ?? null;
+    const linkedAllocation = pmt.allocations.find((allocation) => allocation.invoice || allocation.bill) ?? null;
+    const linkedInvoice = linkedAllocation?.invoice ?? null;
+    const linkedBill = linkedAllocation?.bill ?? null;
     return {
       id: pmt.id,
       paymentRef: pmt.paymentRef,
       method: pmt.method,
       direction: pmt.direction,
-      invoiceId: linkedInvoice?.id ?? null,
-      invoiceRef: linkedInvoice?.invoiceRef ?? null,
+      documentId: linkedInvoice?.id ?? linkedBill?.id ?? null,
+      documentRef: linkedInvoice?.invoiceRef ?? linkedBill?.billRef ?? null,
+      documentType: linkedInvoice ? "invoice" : linkedBill ? "bill" : null,
       dateISO: (pmt.receivedAt ?? pmt.createdAt).toISOString(),
       amount: Number(pmt.amount),
     };

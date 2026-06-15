@@ -447,7 +447,7 @@ describe("runAgenticLoop", () => {
     threadId: "thread-1",
   };
 
-  it("explains missing tool-use capacity instead of masking it as a temporary outage", async () => {
+  it("points to the real provider surface when no tool-capable endpoint is active", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
       "No eligible endpoints for task 'unknown': No endpoint satisfies agent capability floor (EP-AGENT-CAP-002). Missing: toolUse.",
@@ -459,13 +459,15 @@ describe("runAgenticLoop", () => {
       agentId: "admin-assistant",
     });
 
-    expect(result.content).toContain("No tool-use-capable AI provider is available");
-    expect(result.content).toContain("Platform > AI > Model Assignment");
+    // Genuine config gap → name the REAL surface, not the old "Model Assignment".
+    expect(result.content).toContain("No AI model that supports tools is active");
+    expect(result.content).toContain("Providers & Routing");
+    expect(result.content).not.toContain("Model Assignment");
     expect(result.providerId).toBe("unknown");
     expect(result.modelId).toBe("unknown");
   });
 
-  it("explains exhausted tool-using endpoint failures instead of masking them as temporary", async () => {
+  it("explains a transient paid outage + local tool cap instead of blaming config", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
       'All endpoints failed for onboarding. Attempts: [{"endpointId":"local","error":"Network error calling local: fetch failed"},{"endpointId":"local","error":"skipped local fallback: 58 tools exceeds threshold for small local models"}]',
@@ -477,10 +479,54 @@ describe("runAgenticLoop", () => {
       agentId: "admin-assistant",
     });
 
-    expect(result.content).toContain("No tool-use-capable AI provider is available");
-    expect(result.content).toContain("Platform > AI > Model Assignment");
+    // The bundled local model was bypassed for tool count while paid providers
+    // were down — nothing is misconfigured, so do NOT send the operator to settings.
+    expect(result.content).toContain("briefly unavailable");
+    expect(result.content).toContain("58 of them");
+    expect(result.content).toContain("Nothing is misconfigured");
+    expect(result.content).not.toContain("Model Assignment");
     expect(result.providerId).toBe("unknown");
     expect(result.modelId).toBe("unknown");
+  });
+
+  it("tells operator to configure a provider when codex has no credential (not 'wait for rate-limit')", async () => {
+    // This is the fresh-install scenario: codex has no credential row, local is
+    // blocked by the 80-tool threshold. The old classifier hit the threshold branch
+    // first and said "nothing is misconfigured / wait a minute" — wrong (BI-AUDIT-003).
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockRejectedValueOnce(new Error(
+      'All endpoints failed for onboarding. Attempts: [{"endpointId":"codex","error":"No credential for \\"codex\\". Configure via Admin > AI Workforce > External Services."},{"endpointId":"local","error":"skipped local fallback: 80 tools exceeds threshold for small local models"}]',
+    ));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/platform/ai/providers",
+      agentId: "platform-engineer",
+    });
+
+    expect(result.content).toContain("No AI provider credentials are configured");
+    expect(result.content).toContain("Providers & Routing");
+    expect(result.content).not.toContain("Nothing is misconfigured");
+    expect(result.content).not.toContain("briefly unavailable");
+    expect(result.content).not.toContain("wait a moment");
+    expect(result.providerId).toBe("unknown");
+    expect(result.modelId).toBe("unknown");
+  });
+
+  it("treats a generic all-endpoints-failed as a transient retry, not a config error", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockRejectedValueOnce(new Error(
+      'All endpoints failed for conversation. Attempts: [{"endpointId":"anthropic-sub","error":"429 rate limited"}]',
+    ));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/admin/issue-reports",
+      agentId: "admin-assistant",
+    });
+
+    expect(result.content).toContain("try again in about 30 seconds");
+    expect(result.content).not.toContain("Model Assignment");
   });
 
   it("executes tools through the governed lifecycle path", async () => {
@@ -1276,19 +1322,18 @@ describe("runAgenticLoop", () => {
     const mockRoute = vi.mocked(routeAndCall);
     const mockExecuteTool = vi.mocked(executeTool);
 
+    // First dispatch does a read-only tool call; every subsequent dispatch
+    // repeats the same fabricated "Plan ready" claim. A build route now retries
+    // fabrication up to 3 times (maxFabricationRetries = isBuildRoute ? 3 : 1,
+    // BI-PIR-cc091267), so the default keeps the result defined across all
+    // retry dispatches before the guard emits its final message.
     mockRoute
       .mockResolvedValueOnce(mockResult({
         content: "Checking the existing Build Studio workflow files.",
         toolCalls: [{ id: "toolu_read_1", name: "search_project_files", arguments: { query: "BuildStudio workflow actions" } }],
       }))
-      .mockResolvedValueOnce(mockResult({
+      .mockResolvedValue(mockResult({
         content: "Plan ready — 5 tasks across 4 files, and Start Implementation is the correct next approval in the product UI.",
-      }))
-      .mockResolvedValueOnce(mockResult({
-        content: "Plan ready — 5 tasks across 4 files, and Start Implementation is the correct next approval in the product UI.",
-      }))
-      .mockResolvedValueOnce(mockResult({
-        content: "",
       }));
 
     mockExecuteTool.mockResolvedValueOnce({ success: true, message: "Found Build Studio workflow files." });
@@ -1365,13 +1410,12 @@ describe("runAgenticLoop", () => {
   it("blocks a repeated fabricated plan-ready reply instead of surfacing it to the user", async () => {
     const mockRoute = vi.mocked(routeAndCall);
 
-    mockRoute
-      .mockResolvedValueOnce(mockResult({
-        content: "Plan ready — 5 tasks across 4 files. Building now.",
-      }))
-      .mockResolvedValueOnce(mockResult({
-        content: "Plan ready — 5 tasks across 4 files. Building now.",
-      }));
+    // Every dispatch repeats the fabricated claim. A build route retries
+    // fabrication up to 3 times (BI-PIR-cc091267); the default keeps the result
+    // defined across all retries until the guard blocks and emits its message.
+    mockRoute.mockResolvedValue(mockResult({
+      content: "Plan ready — 5 tasks across 4 files. Building now.",
+    }));
 
     const result = await runAgenticLoop({
       ...baseParams,
@@ -1501,18 +1545,13 @@ describe("runAgenticLoop", () => {
 
   it("uses honest infra copy (not fabrication copy) for a downgraded build-route claim", async () => {
     const mockRoute = vi.mocked(routeAndCall);
-    // Two fabricated build claims → retry exhausted → final emission.
-    mockRoute
-      .mockResolvedValueOnce(mockResult({
-        content: "Built and deployed the feature — implementation completed.",
-        downgraded: true,
-        downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
-      }))
-      .mockResolvedValueOnce(mockResult({
-        content: "Built and deployed the feature — implementation completed.",
-        downgraded: true,
-        downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
-      }));
+    // Every dispatch repeats the fabricated build claim → build-route retries
+    // exhausted (maxFabricationRetries = 3, BI-PIR-cc091267) → final emission.
+    mockRoute.mockResolvedValue(mockResult({
+      content: "Built and deployed the feature — implementation completed.",
+      downgraded: true,
+      downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
+    }));
 
     const result = await runAgenticLoop({
       ...baseParams,
@@ -1529,16 +1568,13 @@ describe("runAgenticLoop", () => {
 
   it("STILL fires the fabrication guard on a healthy (non-downgraded) false claim", async () => {
     const mockRoute = vi.mocked(routeAndCall);
-    // Healthy provider, repeated fabricated claim → fabrication copy must win.
-    mockRoute
-      .mockResolvedValueOnce(mockResult({
-        content: "Built and deployed the feature — implementation completed.",
-        downgraded: false,
-      }))
-      .mockResolvedValueOnce(mockResult({
-        content: "Built and deployed the feature — implementation completed.",
-        downgraded: false,
-      }));
+    // Healthy provider, every dispatch repeats the fabricated claim → build-route
+    // retries exhausted (maxFabricationRetries = 3, BI-PIR-cc091267) → fabrication
+    // copy must win.
+    mockRoute.mockResolvedValue(mockResult({
+      content: "Built and deployed the feature — implementation completed.",
+      downgraded: false,
+    }));
 
     const result = await runAgenticLoop({
       ...baseParams,

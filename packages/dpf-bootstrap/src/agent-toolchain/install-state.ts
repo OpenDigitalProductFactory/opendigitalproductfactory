@@ -19,6 +19,8 @@ export type MaterializeInputs = {
   superpowersVersion: string | null;
   claudeCodeWired: boolean;
   codexWired: boolean;
+  /** Optional, additive third client. Defaults to false when omitted. */
+  grokWired?: boolean;
   memorySeededAt: string | null;
   mcpReadiness: McpReadinessProbeResult;
   smokeTest: SmokeTestResult;
@@ -40,6 +42,7 @@ export function materializeAgentToolchainState(
     superpowersVersion: inputs.superpowersVersion,
     claudeCodeWired: inputs.claudeCodeWired,
     codexWired: inputs.codexWired,
+    grokWired: inputs.grokWired ?? false,
     memorySeededAt: inputs.memorySeededAt,
     mcpReadiness: inputs.mcpReadiness,
     smokeTest: inputs.smokeTest,

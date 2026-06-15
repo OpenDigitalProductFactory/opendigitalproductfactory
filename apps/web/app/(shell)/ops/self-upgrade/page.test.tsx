@@ -74,6 +74,27 @@ const baseStatus = {
   targetSha: null,
   isFresh: false,
   latestRun: null,
+  quiescence: {
+    level: "normal" as const,
+    runId: null,
+    enteredAt: "1970-01-01T00:00:00.000Z",
+    run: null,
+    blockersCapturedAt: null,
+    blockers: [],
+  },
+  admission: {
+    lane: { enabled: false, limit: null, key: "dpf-build-pipeline" },
+    buildHolders: 0,
+    totalHolders: 0,
+    summary:
+      "Build-pipeline lane uncapped — set DPF_BUILD_PIPELINE_CONCURRENCY to reserve self-upgrade headroom; nothing holding capacity.",
+  },
+  cooldownUntil: null,
+  jobEngine: {
+    status: "healthy" as const,
+    detail: null,
+    checkedAt: "2026-05-24T00:00:00.000Z",
+  },
   platformVersion: {
     version: "1.0.0",
     publishedAt: "2026-05-24T00:00:00.000Z",
@@ -82,7 +103,7 @@ const baseStatus = {
     buildDate: null,
     note: "baseline",
   },
-} as const;
+};
 
 describe("SelfUpgradePage", () => {
   it("renders page title and ops tab nav", async () => {

@@ -98,6 +98,7 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     none: "success",
     plan_details_needed: "warning",
     commitment_details_needed: "warning",
+    browser_profile_needed: "warning",
     missing_usage_source: "danger",
     underused_commitment: "warning",
     critical_low_allowance: "danger",
@@ -171,6 +172,19 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     failed: "danger",
     blocked: "warning",
   },
+  // Ops self-upgrade lifecycle. Keep these here so the Upgrade Center does not
+  // carry a private run-status color map.
+  selfUpgradeRun: {
+    queued: "info",
+    pending: "info",
+    running: "accent",
+    completing: "accent",
+    succeeded: "success",
+    failed: "danger",
+    skipped: "neutral",
+    cancelled: "neutral",
+    rolled_back: "warning",
+  },
   // Deliberation consensus outcome on the AI Operations Map deliberation lens.
   deliberationConsensus: {
     consensus: "success",
@@ -196,6 +210,41 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     resolved: "success",
     suppressed: "neutral",
   },
+  // Platform domain-readiness matrix (Six-Cs). good/attention/blocked/unknown
+  // map to the shared intent ramp so the readiness surface stops carrying its
+  // own state->color map. See PlatformReadinessMatrix + command-center.ts.
+  readiness: {
+    good: "success",
+    attention: "warning",
+    blocked: "danger",
+    unknown: "neutral",
+  },
+  // Field-dispatch job lifecycle (dispatch board). Mirrors FIELD_DISPATCH_JOB_STATUSES
+  // in @dpf/validators (packages/validators/src/field-dispatch.ts). `needs-review` is the exception
+  // bucket (a job with no valid dispatch state) so it is warning, not neutral; truly
+  // unknown values fall through resolveIntent() to neutral.
+  fieldDispatchJob: {
+    quoted: "neutral",
+    scheduled: "info",
+    confirmed: "info",
+    "en-route": "accent",
+    "on-site": "accent",
+    complete: "success",
+    invoiced: "info",
+    paid: "success",
+    cancelled: "neutral",
+    "needs-review": "warning",
+  },
+  // Operational health ramp shared by the dispatch board and the storefront
+  // composition view (CompositionCompatibilityStatus). good/concern/acute/
+  // in-motion/unknown — unknown is neutral (never green) for missing data.
+  operationalStatus: {
+    good: "success",
+    concern: "warning",
+    acute: "danger",
+    "in-motion": "accent",
+    unknown: "neutral",
+  },
   // Generic severity ramp, reusable by any surface that has none of its own.
   severity: {
     info: "info",
@@ -203,6 +252,17 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     medium: "warning",
     high: "warning",
     critical: "danger",
+  },
+  // Multi-archetype composition compatibility (EP-ARCH-8D4F2A §4.3).
+  // good = same-category or low-conflict; concern = cross-category differences;
+  // acute = trust/compliance/identity block; in-motion = seeding in progress;
+  // unknown = metadata missing (never green).
+  compositionCompatibility: {
+    good: "success",
+    concern: "warning",
+    acute: "danger",
+    "in-motion": "accent",
+    unknown: "neutral",
   },
 };
 

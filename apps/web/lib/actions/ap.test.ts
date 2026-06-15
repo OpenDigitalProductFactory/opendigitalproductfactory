@@ -70,6 +70,7 @@ import {
   convertPOToBill,
   createPaymentRun,
   listPaymentRuns,
+  recordBillPayment,
 } from "./ap";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
@@ -237,6 +238,33 @@ describe("submitBillForApproval", () => {
       expect.objectContaining({
         where: { id: "bill-001" },
         data: expect.objectContaining({ status: "awaiting_approval" }),
+      }),
+    );
+  });
+
+  it("approves the bill immediately when no approval rules are configured", async () => {
+    authorizedUser();
+
+    const fakeBill = {
+      id: "bill-owner-entered",
+      billRef: "BILL-2026-0019",
+      totalAmount: 20,
+      status: "draft",
+      currency: "USD",
+      supplier: { name: "Anthropic", email: null },
+    };
+
+    mockPrisma.bill.findUnique.mockResolvedValue(fakeBill);
+    mockPrisma.approvalRule.findMany.mockResolvedValue([]);
+    mockPrisma.bill.update.mockResolvedValue({ ...fakeBill, status: "approved" });
+
+    await submitBillForApproval("bill-owner-entered");
+
+    expect(mockPrisma.billApproval.create).not.toHaveBeenCalled();
+    expect(mockPrisma.bill.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "bill-owner-entered" },
+        data: expect.objectContaining({ status: "approved" }),
       }),
     );
   });
@@ -459,5 +487,112 @@ describe("listPaymentRuns", () => {
     expect(result).toEqual(fakePayments);
     const callArgs = mockPrisma.payment.findMany.mock.calls[0][0];
     expect(callArgs.where.direction).toBe("outbound");
+  });
+});
+
+// ─── recordBillPayment (server-side guard) ────────────────────────────────────
+
+describe("recordBillPayment", () => {
+  it("throws Unauthorized when no session", async () => {
+    mockAuth.mockResolvedValue(null);
+    mockCan.mockReturnValue(false);
+    await expect(
+      recordBillPayment({ billId: "bill-1", amount: 50, method: "bank_transfer" }),
+    ).rejects.toThrow("Unauthorized");
+  });
+
+  it("throws when the bill does not exist", async () => {
+    authorizedUser();
+    mockPrisma.bill.findUnique.mockResolvedValue(null);
+    await expect(
+      recordBillPayment({ billId: "missing", amount: 50, method: "bank_transfer" }),
+    ).rejects.toThrow("Bill not found");
+  });
+
+  it("refuses to pay a bill that is not approved or partially paid", async () => {
+    authorizedUser();
+    mockPrisma.bill.findUnique.mockResolvedValue({
+      id: "bill-1",
+      status: "draft",
+      currency: "USD",
+      amountDue: 100,
+    });
+    await expect(
+      recordBillPayment({ billId: "bill-1", amount: 100, method: "bank_transfer" }),
+    ).rejects.toThrow(/Cannot record a payment on a bill in "draft" status/);
+    expect(mockPrisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an amount greater than the outstanding balance", async () => {
+    authorizedUser();
+    mockPrisma.bill.findUnique.mockResolvedValue({
+      id: "bill-1",
+      status: "approved",
+      currency: "USD",
+      amountDue: 85,
+    });
+    await expect(
+      recordBillPayment({ billId: "bill-1", amount: 120, method: "bank_transfer" }),
+    ).rejects.toThrow(/exceeds the outstanding balance/);
+    expect(mockPrisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it("records an outbound payment that drives an approved bill to paid", async () => {
+    authorizedUser();
+    // Guard read + recordPayment's totals read share this mock.
+    mockPrisma.bill.findUnique.mockResolvedValue({
+      id: "bill-1",
+      status: "approved",
+      currency: "USD",
+      amountDue: 85,
+      totalAmount: 85,
+      amountPaid: 0,
+    });
+    mockPrisma.payment.count.mockResolvedValue(0);
+    mockPrisma.payment.create.mockResolvedValue({ id: "pay-1", paymentRef: "PAY-2026-0001" });
+    mockPrisma.paymentAllocation.create.mockResolvedValue({ id: "alloc-1" });
+    mockPrisma.bill.update.mockResolvedValue({ id: "bill-1", status: "paid" });
+
+    await recordBillPayment({ billId: "bill-1", amount: 85, method: "bank_transfer", receivedAt: "2026-06-19" });
+
+    expect(mockPrisma.paymentAllocation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ paymentId: "pay-1", billId: "bill-1", amount: 85 }),
+      }),
+    );
+    expect(mockPrisma.bill.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "bill-1" },
+        data: expect.objectContaining({ status: "paid", amountPaid: 85, amountDue: 0 }),
+      }),
+    );
+    // Outbound direction + bill currency are derived server-side, not supplied by the caller.
+    const paymentCreateArgs = mockPrisma.payment.create.mock.calls[0][0];
+    expect(paymentCreateArgs.data.direction).toBe("outbound");
+    expect(paymentCreateArgs.data.currency).toBe("USD");
+  });
+
+  it("leaves a bill partially_paid when the payment is less than the balance", async () => {
+    authorizedUser();
+    mockPrisma.bill.findUnique.mockResolvedValue({
+      id: "bill-2",
+      status: "approved",
+      currency: "USD",
+      amountDue: 200,
+      totalAmount: 200,
+      amountPaid: 0,
+    });
+    mockPrisma.payment.count.mockResolvedValue(3);
+    mockPrisma.payment.create.mockResolvedValue({ id: "pay-2", paymentRef: "PAY-2026-0004" });
+    mockPrisma.paymentAllocation.create.mockResolvedValue({ id: "alloc-2" });
+    mockPrisma.bill.update.mockResolvedValue({ id: "bill-2", status: "partially_paid" });
+
+    await recordBillPayment({ billId: "bill-2", amount: 75, method: "card" });
+
+    expect(mockPrisma.bill.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "partially_paid", amountPaid: 75, amountDue: 125 }),
+      }),
+    );
   });
 });

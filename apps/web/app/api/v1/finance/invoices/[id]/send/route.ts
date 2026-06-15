@@ -7,7 +7,7 @@ import { apiSuccess } from "@/lib/api/response";
 import { getInvoice, sendInvoice } from "@/lib/actions/finance";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
-import { sendEmail, composeInvoiceEmail } from "@/lib/email";
+import { sendEmail, composeInvoiceEmail, isEmailConfigured } from "@/lib/email";
 
 export async function POST(
   request: Request,
@@ -15,6 +15,19 @@ export async function POST(
 ) {
   try {
     await authenticateRequest(request);
+
+    // Pre-flight: refuse to "send" when email delivery isn't configured, instead
+    // of marking the invoice sent and silently dropping the email (the cold-start
+    // fresh-install failure from the Runs 6 & 7 audit). Checked before any state
+    // mutation so a failed send never leaves the invoice falsely marked "sent".
+    if (!(await isEmailConfigured())) {
+      throw apiError(
+        "EMAIL_NOT_CONFIGURED",
+        "Email delivery is not configured, so this invoice can't be emailed. Set it up in Admin → Settings → Email (or via SMTP environment variables), then try again.",
+        422,
+      );
+    }
+
     const { id } = await params;
     const invoice = await getInvoice(id);
     if (!invoice) throw apiError("NOT_FOUND", "Invoice not found", 404);

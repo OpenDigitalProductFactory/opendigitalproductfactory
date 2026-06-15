@@ -25,12 +25,16 @@ echo "  OK Migrations complete"
 
 echo "[2/5] Syncing provider registry..."
 cd /app
-pnpm --filter @dpf/db exec tsx scripts/sync-provider-registry.ts || echo "  WARN Provider sync had warnings (non-fatal)"
+pnpm --filter @dpf/db exec tsx scripts/sync-provider-registry.ts || echo "  ⚠️  PROVIDER SYNC FAILED — provider catalog (new providers, auth methods, cliEngine) was NOT reconciled into the DB on this start. The portal will run, but provider/Build-Studio catalog updates from this release may be missing. See the error above."
 echo "  OK Provider registry synced"
+
+echo "[2b/5] Syncing build-engine registry..."
+pnpm --filter @dpf/db exec tsx scripts/sync-engine-registry.ts || echo "  ⚠️  ENGINE SYNC FAILED — the build-engine catalog (claude/codex/grok) was NOT reconciled into the DB on this start. Build Studio dispatch still works, but engine readiness/provisioning may not reflect this release. See the error above."
+echo "  OK Build-engine registry synced"
 
 echo "[3/5] Seeding reference data..."
 cd /app
-pnpm --filter @dpf/db exec tsx src/seed.ts || echo "  WARN Seed had warnings (non-fatal)"
+pnpm --filter @dpf/db exec tsx src/seed.ts || echo "  ⚠️  SEED INCOMPLETE — one or more reconcile steps failed (see the 'SEED INCOMPLETE' summary above). The portal will start; catalog/reference updates from this release may be partial."
 echo "  OK Seed complete"
 
 echo "[3b/5] Reconciling model capability catalog..."
@@ -224,6 +228,13 @@ commit_workspace_snapshot() {
 if [ "$USER_MANAGED_WORKSPACE" = "true" ]; then
   echo "  -- Existing user-managed workspace detected at /workspace, skipping bootstrap"
 elif [ -d "$WORKSPACE" ] && [ ! -f "$WORKSPACE/.dpf-version" ]; then
+  # First-install ONLY: populate an empty /workspace volume so surfaces that
+  # mount it (the contributor :3001 preview, sandbox tooling) have a source tree.
+  # This is a one-time bootstrap of an EMPTY volume — it neither advances an
+  # already-running install nor writes the `updatePending` sentinel, so it does
+  # not participate in the retired Engine B source-advance (see the
+  # `.dpf-version`-present branch below; BI-5B6C1C35). Left intact to keep
+  # first-install working.
   echo "  Bootstrapping source volume from image version $IMAGE_VERSION..."
 
   sync_image_source_to_workspace
@@ -246,34 +257,46 @@ elif [ -d "$WORKSPACE" ] && [ ! -f "$WORKSPACE/.dpf-version" ]; then
   echo "$IMAGE_VERSION" > "$WORKSPACE/.dpf-version"
   echo "  OK Source volume bootstrapped (with dependencies)"
 elif [ -f "$WORKSPACE/.dpf-version" ]; then
+  # ── Engine B (the /workspace image-sync source-advance engine) — RETIRED ──
+  #
+  # DEPRECATION (BI-5B6C1C35; unified-delivery-surfaces spec §2 GAP 1 +
+  # governed-platform-upgrade spec §5.0). DPF had TWO competing source-advance
+  # engines. The canonical one (Engine A, §5.0) is the host-clone `dpf/install`
+  # merge promoter (apps/web/lib/self-upgrade/*, scripts/promote.sh): it merges
+  # upstream into a durable install branch, stamps the image with the bytes'
+  # real HEAD, and is the ONLY sanctioned path to advance the running install.
+  #
+  # The block that USED to live here was Engine B: on an image-version vs.
+  # `/workspace/.dpf-version` mismatch it (a) silently re-synced the running
+  # container's source from the image (`sync_image_source_to_workspace`) and
+  # (b) wrote `PlatformDevConfig.updatePending` via raw `psql`, arming the
+  # `applyPlatformUpdate` `/workspace` `my-changes` merge. Two engines racing on
+  # one install is the root cause of the stale-mislabeled-portal bug: the image
+  # stamp, the `/workspace` bytes, and `origin/main` diverge with nothing
+  # reconciling them.
+  #
+  # Per §5.0 ("the live install advances only via the self-upgrade pipeline")
+  # this engine is neutralized: the entrypoint no longer mutates the running
+  # source from the image, and no longer writes the `updatePending` sentinel.
+  # The `.dpf-version` sentinel is still tracked for the user-managed contributor
+  # preview, but it never drives a source-advance or an update prompt here.
+  # Upgrades flow exclusively through Engine A (Ops → Self-Upgrade).
+  #
+  # TODO(BI-5B6C1C35): once Engine A's host-clone promoter is confirmed as the
+  # sole advance path in production telemetry, remove the now-dead Engine B
+  # helpers (sync_image_source_to_workspace, commit_workspace_snapshot,
+  # workspace_has_user_changes, image_source_path_for_workspace_path,
+  # workspace_path_matches_image_source) and the `applyPlatformUpdate`
+  # /workspace merge in apps/web/lib/actions/platform-dev-config.ts.
   VOLUME_VERSION=$(cat "$WORKSPACE/.dpf-version" 2>/dev/null || echo "unknown")
   if [ "$IMAGE_VERSION" != "$VOLUME_VERSION" ]; then
-    echo "  Platform update detected: $VOLUME_VERSION -> $IMAGE_VERSION"
-    if [ -d "$WORKSPACE/.git" ] && ! workspace_has_user_changes; then
-      sync_image_source_to_workspace
-      install_workspace_dependencies
-      commit_workspace_snapshot
-      echo "$IMAGE_VERSION" > "$WORKSPACE/.dpf-version"
-      psql "$DATABASE_URL" -c "
-        INSERT INTO \"PlatformDevConfig\" (id, \"updatePending\", \"pendingVersion\", \"configuredAt\")
-        VALUES ('singleton', false, NULL, NOW())
-        ON CONFLICT (id) DO UPDATE SET \"updatePending\" = false, \"pendingVersion\" = NULL;
-      " || echo "  WARN Update-clear SQL had warnings (non-fatal)"
-      echo "  OK Source volume refreshed"
-    else
-      # Use psql to upsert — available via postgresql16-client in the image
-      psql "$DATABASE_URL" -c "
-        INSERT INTO \"PlatformDevConfig\" (id, \"updatePending\", \"pendingVersion\", \"configuredAt\")
-        VALUES ('singleton', true, '$IMAGE_VERSION', NOW())
-        ON CONFLICT (id) DO UPDATE SET \"updatePending\" = true, \"pendingVersion\" = '$IMAGE_VERSION';
-      " || echo "  WARN Update detection had warnings (non-fatal)"
-      echo "  OK Update pending flag set"
-    fi
+    echo "  -- Image/source-volume version differ ($VOLUME_VERSION -> $IMAGE_VERSION);"
+    echo "     Engine B source-advance is RETIRED (BI-5B6C1C35). The running"
+    echo "     install advances only via the Self-Upgrade pipeline (Engine A,"
+    echo "     governed-upgrade spec §5.0). Not mutating /workspace; not setting"
+    echo "     an update-pending flag."
   else
-    if [ -d "$WORKSPACE/.git" ] && ! workspace_has_user_changes; then
-      commit_workspace_snapshot
-    fi
-    echo "  -- Source volume already bootstrapped ($VOLUME_VERSION)"
+    echo "  -- Source volume present ($VOLUME_VERSION); Engine B retired, no action"
   fi
 else
   echo "  -- /workspace not mounted, skipping"

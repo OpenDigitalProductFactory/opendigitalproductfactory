@@ -3,21 +3,19 @@
 This is the end-user install guide for the Open Digital Product Factory
 on **Apple Silicon Macs** (M1 / M2 / M3 / M4).
 
-> **Status: Early access — please try it!**
+> **Status: GA — validated on real Apple Silicon hardware.**
 >
-> The macOS installer is code-complete and passes static CI gates.
-> What it hasn't seen yet is a real install on a real Apple Silicon
-> Mac in the wild — the `macos-14` GHA runner can't nest-virtualize
-> Docker Desktop, so CI only exercises the `--dry-run` path.
+> The macOS installer has been run end-to-end on a real Apple Silicon
+> Mac (M-series, macOS 14+) and troubleshot to a working portal,
+> including the voice (STT + native-host TTS) path. The findings from
+> that validation are folded into the steps and the
+> [Troubleshooting](#troubleshooting) section below.
 >
-> **If you have an Apple Silicon Mac, you can change that.** Follow
-> the steps below, then [tell us how it went](#help-us-graduate-to-ga)
-> — both success stories and "the installer hit a wall at step X"
-> reports are equally useful. A handful of community verification
-> reports is what we need to flip this guide from "early access" to
-> "GA."
->
-> The Windows installer remains the only GA install surface today.
+> CI still only exercises the `--dry-run` path (the `macos-14` GHA
+> runner can't nest-virtualize Docker Desktop), so additional
+> verification reports on other Mac models / macOS versions remain
+> welcome — see [Verify your install](#verify-your-install). Both
+> Windows and macOS Apple Silicon are GA install surfaces today.
 
 For the architectural background, see the
 [installer-parity roadmap](../superpowers/plans/2026-05-09-macos-linux-native-support.md)
@@ -164,9 +162,17 @@ single-tree mode persists — current behavior, full back-compat.
     native macOS Edge Node binary (T3) — until then, the Edge Node
     here demonstrates the enrollment + heartbeat + submission path
     but not L2 host-network discovery.
-14. **Persist state** — records `lastSuccessfulInstallVersion` and
+14. **Voice / TTS sidecar** (Apple Silicon only) — runs
+    `scripts/tts/setup-chatterbox-tts-macos.sh` to provision the
+    native-host text-to-speech sidecar (port `8771`) and wire its
+    `TTS_PROVIDER` / `DPF_TTS_URL` / `DPF_TTS_REFERENCE_HOST_ROOT`
+    values into `.env`, so spoken output works out of the box. Idempotent
+    and non-fatal (warns and continues if it fails); skipped on
+    Linux/Windows, which use the bundled `dpf-tts` container. See
+    [Voice (STT + TTS)](#voice-stt--tts).
+15. **Persist state** — records `lastSuccessfulInstallVersion` and
     `lastHealthCheck`.
-15. **LaunchAgent** — installs `~/Library/LaunchAgents/local.dpf-autostart.plist`
+16. **LaunchAgent** — installs `~/Library/LaunchAgents/local.dpf-autostart.plist`
     so the stack auto-starts at login (skip with `--no-autostart`).
 
 Total wall time: ~10 minutes including the AI-model download (varies
@@ -209,6 +215,66 @@ instead, set `LLM_BASE_URL` in `.env` before re-running the installer:
 ```bash
 LLM_BASE_URL=https://api.example.com/v1
 DPF_LLM_PROVIDER=external
+```
+
+## Voice (STT + TTS)
+
+DPF coworkers support both voice **input** (speech-to-text) and voice
+**output** (text-to-speech). On macOS the two halves are provisioned
+differently because Docker Desktop can't reach the Apple Neural Engine.
+
+**Speech-to-text (STT) — works out of the box.** A bundled `speaches`
+(faster-whisper / distil-whisper) service runs as the `dpf-stt`
+container. It's CPU-friendly and needs no GPU, so the mic button in the
+coworker panel works immediately after install — click it, speak, and
+your words land in the message box. STT is identical across macOS,
+Linux, and Windows.
+
+**Text-to-speech (TTS) — provisioned automatically on Apple Silicon.**
+Spoken output needs a synthesis engine with hardware acceleration.
+Docker Desktop can't expose the Mac's Neural Engine to a container, so
+on Apple Silicon the TTS engine runs as a **native-host sidecar** on
+the Mac instead of in Docker. The `docker-compose.macos.yml` overlay is
+already wired to talk to it (`TTS_PROVIDER=mlx`,
+`DPF_TTS_URL=http://host.docker.internal:8771`).
+
+**`bash install-dpf.sh` provisions this sidecar for you** — no manual
+step. On an Apple Silicon host the installer runs
+`scripts/tts/setup-chatterbox-tts-macos.sh`, which installs a launch
+agent so the sidecar restarts at login, listens on port `8771`, and
+writes the matching `TTS_PROVIDER` / `DPF_TTS_URL` /
+`DPF_TTS_REFERENCE_HOST_ROOT` values into `.env`. A **founder seed
+voice** ships in the install seed (with a consent record), so spoken
+output works as soon as the install finishes — no voice recording
+required to get started.
+
+> Both **customer** (`bash install-dpf.sh`) and **contributor**
+> (`scripts/setup.sh`) installs provision the sidecar automatically on
+> Apple Silicon; the step is idempotent and skips cleanly on re-runs.
+> If the sidecar setup fails the install still completes — it just warns
+> and points you at the manual command below. On Linux / Windows hosts
+> TTS uses the bundled `dpf-tts` Docker container instead and needs no
+> host-side step.
+>
+> To (re-)provision by hand at any time:
+>
+> ```bash
+> bash scripts/tts/setup-chatterbox-tts-macos.sh
+> ```
+
+Once the sidecar is running, voice output features — per-profile
+speed / enthusiasm tuning and sentence-level streaming for low
+time-to-first-audio — are available in the coworker panel. Real-person
+voice cloning always requires an explicit consent record; voice never
+changes approval, confidence, or audit rules.
+
+**If the coworker transcribes but won't speak back**, the TTS sidecar
+isn't running. Re-run the setup script and confirm the agent loaded:
+
+```bash
+bash scripts/tts/setup-chatterbox-tts-macos.sh
+launchctl list | grep -E 'mlx-tts|chatterbox-tts'
+curl -fsS http://localhost:8771/health    # sidecar health
 ```
 
 ## Autostart
@@ -286,13 +352,14 @@ The portal is still running at `http://localhost:3000`.
 | `bash uninstall-dpf.sh --purge --keep-env` | Purge but retain `.env`. |
 | `bash uninstall-dpf.sh --purge --keep-state` | Purge but retain `~/.dpf` install history. |
 
-## Help us graduate to GA
+## Verify your install
 
-We can't run this installer on real Apple Silicon hardware from CI
-(the GHA `macos-14` runner can't nest-virtualize Docker Desktop), so
-the path from "early access" to "GA" runs through the community.
-If you ran the install above on a real Mac, **please file a quick
-report** — happy paths and failures are equally valuable.
+macOS Apple Silicon is GA, but CI still can't run the installer on real
+hardware (the GHA `macos-14` runner can't nest-virtualize Docker
+Desktop), so verification reports from additional Mac models / macOS
+versions remain valuable for widening the tested matrix. If you ran the
+install above, **a quick report is appreciated** — happy paths and
+failures are equally useful.
 
 **One-command report (fastest path):**
 

@@ -11,9 +11,23 @@ import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
 import { seedEaCrossNotation } from "./seed-ea-cross-notation.js";
 import { seedEaReferenceModels } from "./seed-ea-reference-models.js";
 import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
+import { seedEaSysml2 } from "./seed-ea-sysml2.js";
+import { seedEaSysmlAiCockpit } from "./seed-ea-sysml-ai-cockpit.js";
+import { seedEaSysmlAgentAuthority } from "./seed-ea-sysml-agent-authority.js";
+import { seedEaSysmlDataAuthority } from "./seed-ea-sysml-data-authority.js";
+import {
+  seedViewpointsForNotation,
+  ARCHIMATE_VIEWPOINTS,
+  BPMN_VIEWPOINTS,
+  SYSML_VIEWPOINTS,
+} from "./seed-ea-viewpoints.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
 import { seedWorkforceReferenceData } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
+import { seedPublicSectorCompliance } from "./seed-public-sector-compliance.js";
+import { seedCooperativeCompliance } from "./seed-cooperative-compliance.js";
+import { seedLawEnforcementCompliance } from "./seed-law-enforcement-compliance.js";
+import { seedBankingCompliance } from "./seed-banking-compliance.js";
 import { seedBusinessCapabilityPerspective } from "./business-capability-perspectives.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
 import { seedTaxJurisdictions } from "./seed-tax-jurisdictions.js";
@@ -21,7 +35,8 @@ import { seedLicenseRequirements } from "./seed-license-requirements.js";
 import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
 import { seedWikiKernel } from "./seed-wiki-kernel.js";
-import { seedDecisionPerspective } from "./seed-decision-perspective.js";
+import { seedDecisionPerspective, seedProfessionProfiles } from "./seed-decision-perspective.js";
+import { seedProfessionCorpus } from "./seed-profession-corpus.js";
 import { seedPlatformVoice } from "./seed-platform-voice.js";
 import {
   SPEACHES_PROVIDER_ID,
@@ -32,14 +47,18 @@ import {
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
 import { seedStallThresholds } from "./seed-stall-thresholds.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
+import { ensureDataModelMirrorScheduledTask } from "./seed-data-model-mirror.js";
+import { ensureSysmlProjectionScheduledTask } from "./seed-sysml-projection.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
 import { ensureAllBackupScheduledJobs } from "./seed-platform-backup.js";
+import { ensureDataRetentionScheduledJob } from "./seed-platform-retention.js";
 import { ensureContributorInventoryScheduledJob } from "./seed-contributor-inventory.js";
 import { seedAgentControlPlaneMaturity } from "./seed-agent-control-plane-maturity.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
 import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
 import { toModelProfileSeedCreateData } from "./model-profile-seed.js";
+import { deriveLocalModelCapabilityPrior } from "./local-model-capabilities.js";
 import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
@@ -617,126 +636,13 @@ async function seedDefaultAdminUser(): Promise<void> {
 }
 
 async function seedEaViewpoints(): Promise<void> {
-  // Resolve the ArchiMate notation id (seeded in seedEaNotations)
-  const notation = await prisma.eaNotation.findUniqueOrThrow({
-    where: { slug: "archimate4" },
-    select: { id: true },
-  });
-  const nId = notation.id;
-
-  // Helper: look up element type slugs → throws if not found
-  async function resolveElementSlugs(slugs: string[]): Promise<string[]> {
-    for (const slug of slugs) {
-      await prisma.eaElementType.findUniqueOrThrow({
-        where: { notationId_slug: { notationId: nId, slug } },
-        select: { id: true },
-      });
-    }
-    return slugs;
-  }
-
-  // Helper: look up rel type slugs → throws if not found
-  async function resolveRelSlugs(slugs: string[]): Promise<string[]> {
-    for (const slug of slugs) {
-      await prisma.eaRelationshipType.findUniqueOrThrow({
-        where: { notationId_slug: { notationId: nId, slug } },
-        select: { id: true },
-      });
-    }
-    return slugs;
-  }
-
-  const viewpoints = [
-    {
-      name: "Application Architecture",
-      description: "Application components, services, data objects, and their relationships.",
-      elementSlugs: ["application_component", "application_service", "data_object", "technology_node", "technology_service", "system_software"],
-      relSlugs: ["realizes", "assigned_to", "composed_of", "associated_with"],
-    },
-    {
-      name: "Business Architecture",
-      description: "Business capabilities, roles, actors, and value streams.",
-      elementSlugs: ["business_capability", "business_role", "business_actor", "business_object", "value_stream", "value_stream_stage"],
-      relSlugs: ["realizes", "assigned_to", "influences", "composed_of", "associated_with"],
-    },
-    {
-      name: "Technology Architecture",
-      description: "Infrastructure nodes, services, and their deployment relationships.",
-      elementSlugs: ["technology_node", "technology_service", "system_software", "application_component"],
-      relSlugs: ["realizes", "assigned_to", "composed_of", "associated_with"],
-    },
-    {
-      name: "Capability Map",
-      description: "Business capability hierarchy.",
-      elementSlugs: ["business_capability"],
-      relSlugs: ["composed_of", "associated_with"],
-    },
-  ];
-
-  for (const vp of viewpoints) {
-    const allowedElementTypeSlugs = await resolveElementSlugs(vp.elementSlugs);
-    const allowedRelTypeSlugs = await resolveRelSlugs(vp.relSlugs);
-    await prisma.viewpointDefinition.upsert({
-      where: { name: vp.name },
-      update: { description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
-      create: { name: vp.name, description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
-    });
-  }
-  console.log("Seeded 4 viewpoint definitions");
-
-  // ── BPMN 2.0 viewpoints ───────────────────────────────────────────────
-  const bpmnNotation = await prisma.eaNotation.findUnique({
-    where: { slug: "bpmn20" },
-    select: { id: true },
-  });
-  if (bpmnNotation) {
-    const bpmnNId = bpmnNotation.id;
-    async function resolveBpmnElementSlugs(slugs: string[]): Promise<string[]> {
-      for (const slug of slugs) {
-        await prisma.eaElementType.findUniqueOrThrow({
-          where: { notationId_slug: { notationId: bpmnNId, slug } },
-          select: { id: true },
-        });
-      }
-      return slugs;
-    }
-    async function resolveBpmnRelSlugs(slugs: string[]): Promise<string[]> {
-      for (const slug of slugs) {
-        await prisma.eaRelationshipType.findUniqueOrThrow({
-          where: { notationId_slug: { notationId: bpmnNId, slug } },
-          select: { id: true },
-        });
-      }
-      return slugs;
-    }
-
-    const bpmnViewpoints = [
-      {
-        name: "Process Architecture",
-        description: "BPMN process flows with activities, gateways, events, and swimlanes. Shows who does what (AI coworker or human) and where decisions branch.",
-        elementSlugs: [
-          "bpmn_process", "bpmn_sub_process", "bpmn_service_task", "bpmn_user_task",
-          "bpmn_manual_task", "bpmn_script_task", "bpmn_business_rule_task",
-          "bpmn_exclusive_gateway", "bpmn_parallel_gateway", "bpmn_inclusive_gateway",
-          "bpmn_start_event", "bpmn_end_event", "bpmn_intermediate_throw_event", "bpmn_intermediate_catch_event",
-          "bpmn_pool", "bpmn_lane",
-          "bpmn_data_object", "bpmn_data_input", "bpmn_data_output",
-        ],
-        relSlugs: ["sequence_flow", "message_flow", "data_association", "conditional_flow", "default_flow", "association"],
-      },
-    ];
-
-    for (const vp of bpmnViewpoints) {
-      const allowedElementTypeSlugs = await resolveBpmnElementSlugs(vp.elementSlugs);
-      const allowedRelTypeSlugs = await resolveBpmnRelSlugs(vp.relSlugs);
-      await prisma.viewpointDefinition.upsert({
-        where: { name: vp.name },
-        update: { description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
-        create: { name: vp.name, description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
-      });
-    }
-    console.log("Seeded 1 BPMN viewpoint definition");
-  }
+  // Notation-aware viewpoint seeding lives in seed-ea-viewpoints.ts (2026-06-14
+  // SysML substrate spec §10 Phase 1 + §11 refactoring budget: one reusable helper
+  // instead of per-notation copy-paste). ArchiMate is required; BPMN and SysML are
+  // optional and skipped if their notation has not been seeded yet.
+  await seedViewpointsForNotation("archimate4", ARCHIMATE_VIEWPOINTS);
+  await seedViewpointsForNotation("bpmn20", BPMN_VIEWPOINTS, { optional: true });
+  await seedViewpointsForNotation("sysml2", SYSML_VIEWPOINTS, { optional: true });
 }
 
 async function seedEaViews(): Promise<void> {
@@ -750,6 +656,10 @@ async function seedEaViews(): Promise<void> {
   });
   const bizVp = await prisma.viewpointDefinition.findUnique({
     where: { name: "Business Architecture" },
+    select: { id: true },
+  });
+  const dataModelVp = await prisma.viewpointDefinition.findUnique({
+    where: { name: "Data Model" },
     select: { id: true },
   });
   const views = [
@@ -768,6 +678,16 @@ async function seedEaViews(): Promise<void> {
       scopeType: "custom",
       scopeRef: null,
       viewpointId: bizVp?.id ?? null,
+    },
+    {
+      // EP-DATA-ARCH: system-owned host view; populated by the data-model mirror
+      // (reconcileDataModelMirror finds it by scopeType+scopeRef and reuses it).
+      name: "Data Model",
+      description: "Live ERD mirrored from the Prisma schema (system-owned).",
+      layoutType: "graph",
+      scopeType: "data-model",
+      scopeRef: "prisma",
+      viewpointId: dataModelVp?.id ?? null,
     },
   ];
   for (const v of views) {
@@ -1159,6 +1079,12 @@ async function seedCoworkerAgents(): Promise<void> {
     // / ZDR agreement and clearing the destination channel.
     { agentId: "compliance-officer", slugId: "compliance-officer", name: "Compliance Officer", tier: 2, type: "coworker", description: "Regulatory compliance, policy governance, audit readiness, and risk management", valueStream: "cross-cutting", sensitivity: "confidential" },
     { agentId: "finance-controller", slugId: "finance-controller", name: "Finance Controller", tier: 2, type: "coworker", description: "Financial controls, budget governance, cost management, and financial reporting", valueStream: "cross-cutting", sensitivity: "confidential" },
+    // Field-dispatch coordinator (F2b of the Field Dispatch capability —
+    // docs/superpowers/specs/2026-06-13-field-dispatch-capability-design.html).
+    // Activated for field-service archetypes; coordinates the field-service-job
+    // lifecycle: scheduling, technician/crew assignment, and customer
+    // notifications (confirm / on-my-way / running-late) proposed for approval.
+    { agentId: "dispatcher", slugId: "dispatcher", name: "Dispatcher", tier: 2, type: "coworker", description: "Field-service dispatch: job scheduling, technician/crew assignment, customer ETA notifications (confirm / on-my-way / running-late), and running-late coordination", valueStream: "operate", sensitivity: "confidential" },
   ];
 
   // Tool grants per hardcoded coworker. Every coworker needs explicit grants —
@@ -1175,15 +1101,19 @@ async function seedCoworkerAgents(): Promise<void> {
     "customer-advisor":     ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read"],
     "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read"],
     "storefront-advisor":   ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read", "marketing_write", "web_search"],
-    "ops-coordinator":      ["backlog_read", "backlog_write", "registry_read", "portfolio_read"],
+    "ops-coordinator":      ["backlog_read", "backlog_write", "backlog_triage", "registry_read", "portfolio_read"],
     "platform-engineer":    ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read"],
     "build-specialist":     ["file_read", "code_graph_read", "backlog_read", "backlog_write", "architecture_read", "build_plan_write", "registry_read", "sandbox_execute", "deployment_plan_create", "iac_execute", "release_gate_create", "release_plan_create", "release_plan_read", "coworker_screen_read", "coworker_screen_drive"],
     "data-architect":       ["file_read", "sandbox_execute", "architecture_read", "registry_read"],
     "admin-assistant":      ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
-    "coo":                  ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read"],
+    "coo":                  ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read", "email_config"],
     "doc-specialist":       ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
     "compliance-officer":   ["policy_write", "data_governance_validate", "file_read", "backlog_read", "backlog_write", "tool_evaluation_create"],
     "finance-controller":   ["registry_read", "backlog_read", "portfolio_read"],
+    // Reads field-service jobs (WorkItems) + customer contact data; updates job
+    // status; proposes customer notifications for approval. Same grant family as
+    // customer-advisor, plus consumer_write for notification proposals.
+    "dispatcher":           ["backlog_read", "backlog_write", "consumer_read", "consumer_write", "registry_read"],
   };
 
   // Grants for onboarding-coo — the agent itself is created by
@@ -1580,6 +1510,7 @@ async function seedProviderRegistry(): Promise<void> {
           ...(entry.endpointType !== undefined && { endpointType: entry.endpointType as string }),
           ...(serviceKind !== undefined && { serviceKind }),
           ...(entry.supportsToolUse !== undefined && { supportsToolUse: entry.supportsToolUse as boolean }),
+          ...(entry.cliEngine !== undefined && { cliEngine: entry.cliEngine as string | null }),
           ...(entry.authorizeUrl !== undefined && { authorizeUrl: (entry.authorizeUrl as string) ?? null }),
           ...(entry.tokenUrl !== undefined && { tokenUrl: (entry.tokenUrl as string) ?? null }),
           ...(entry.oauthClientId !== undefined && { oauthClientId: (entry.oauthClientId as string) ?? null }),
@@ -1647,6 +1578,7 @@ async function seedProviderRegistry(): Promise<void> {
           ...(entry.endpointType !== undefined && { endpointType: entry.endpointType as string }),
           ...(serviceKind !== undefined && { serviceKind }),
           ...(entry.supportsToolUse !== undefined && { supportsToolUse: entry.supportsToolUse as boolean }),
+          ...(entry.cliEngine !== undefined && { cliEngine: entry.cliEngine as string | null }),
           authorizeUrl: (entry.authorizeUrl as string) ?? null,
           tokenUrl: (entry.tokenUrl as string) ?? null,
           oauthClientId: (entry.oauthClientId as string) ?? null,
@@ -1687,8 +1619,17 @@ async function seedLocalModels(): Promise<void> {
 
   if (models.length === 0) { console.log("  → No local models found"); return; }
 
-  // Activate provider and grant full sensitivity clearance (local = data never leaves machine)
-  if (provider.status === "unconfigured" || (provider.sensitivityClearance as string[]).length === 0) {
+  // Activate provider and grant full sensitivity clearance (local = data never leaves machine).
+  // The installer guarantees a model pull (or pre-existing model) *before* portal up
+  // for the bundled Docker Model Runner case. If models are visible at seed time,
+  // we treat "disabled" (possible initial seed state or prior manual disable) the same
+  // as "unconfigured" so the provider comes up enabled by default. This avoids the
+  // first-experience "disabled + unknown:unknown" state when the pull succeeded pre-portal.
+  if (
+    provider.status === "unconfigured" ||
+    provider.status === "disabled" ||
+    (provider.sensitivityClearance as string[]).length === 0
+  ) {
     await prisma.modelProvider.update({
       where: { providerId: "local" },
       data: {
@@ -1712,24 +1653,35 @@ async function seedLocalModels(): Promise<void> {
       where: { providerId_modelId: { providerId: "local", modelId: m.id } },
     });
     if (!existing) {
+      // Capability-aware bootstrap prior, keyed on model family. These are only
+      // priors (profileSource="seed", confidence "low") — the activation-time
+      // deterministic dimension eval promotes them to "evaluated" with measured
+      // scores. Replaces the prior flat toolFidelity=20 that made routing unable
+      // to distinguish a strong tool-caller from a reasoning model from an
+      // embedding model. See packages/db/src/local-model-capabilities.ts.
+      const prior = deriveLocalModelCapabilityPrior(m.id);
       await prisma.modelProfile.create({
         data: {
           providerId: "local",
           modelId: m.id,
-          friendlyName: m.id.replace("docker.io/ai/", ""),
-          summary: "Local model via Docker Model Runner",
-          capabilityCategory: "basic",
+          friendlyName: m.id.replace(/^docker\.io\/ai\//, "").replace(/^ai\//, ""),
+          summary: prior.isEmbedding
+            ? "Local embedding model via Docker Model Runner"
+            : "Local model via Docker Model Runner",
+          capabilityCategory: prior.capabilityCategory,
           costTier: "free",
-          bestFor: ["conversation", "general"],
-          avoidFor: [],
+          bestFor: prior.bestFor,
+          avoidFor: prior.avoidFor,
           modelStatus: "active",
           generatedBy: "system:seed",
           profileSource: "seed",
           profileConfidence: "low",
-          reasoning: 40, codegen: 30, toolFidelity: 20,
-          instructionFollowingScore: 50, structuredOutputScore: 30,
-          conversational: 60, contextRetention: 40,
-          capabilities: { streaming: true } as any,
+          supportsToolUse: prior.supportsToolUse,
+          reasoning: prior.reasoning, codegen: prior.codegen, toolFidelity: prior.toolFidelity,
+          instructionFollowingScore: prior.instructionFollowingScore,
+          structuredOutputScore: prior.structuredOutputScore,
+          conversational: prior.conversational, contextRetention: prior.contextRetention,
+          capabilities: { streaming: true, embedding: prior.isEmbedding } as any,
         },
       });
       discovered++;
@@ -2426,95 +2378,165 @@ async function seedWorkQueues(): Promise<void> {
 
 async function main(): Promise<void> {
   console.log("Starting seed...");
+
+  // Fault-isolation: every step runs independently. A failure is recorded and
+  // logged loudly but does NOT abort the remaining steps — so an unrelated
+  // failure (e.g. a ScheduledJob schema drift) can no longer silently skip the
+  // idempotent catalog/provider reconciles that follow on a portal update.
+  // Reconciles are upsert/merge only and never delete operator-owned rows
+  // (enforced by seed-reconcile-no-wipe.test.ts).
+  const failures: Array<{ step: string; error: string }> = [];
+  const step = async (name: string, fn: () => Promise<unknown>): Promise<void> => {
+    try {
+      await fn();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      failures.push({ step: name, error: message });
+      console.error(`  ✗ [seed] step "${name}" FAILED (continuing): ${message}`);
+    }
+  };
+
+  // Bootstrap org is a hard prerequisite for everything below; if it cannot be
+  // created the seed genuinely cannot proceed, so it is intentionally not isolated.
   const bootstrapOrganizationId = await ensureBootstrapOrganization();
-  await seedIntegrationCoverage(prisma, bootstrapOrganizationId);
-  await seedStallThresholds(prisma);
-  await seedGeographicData(prisma);
-  await seedTaxJurisdictions(prisma);
-  await seedLicenseRequirements(prisma);
-  await seedRoles();
-  await seedGovernanceReferenceData(prisma);
-  await seedWorkforceReferenceData(prisma);
-  await seedPortfolios();
-  await seedBusinessModels();
-  await seedAgents();
-  await seedCoworkerAgents();
+
+  await step("integrationCoverage", () => seedIntegrationCoverage(prisma, bootstrapOrganizationId));
+  await step("stallThresholds", () => seedStallThresholds(prisma));
+  await step("geographicData", () => seedGeographicData(prisma));
+  await step("taxJurisdictions", () => seedTaxJurisdictions(prisma));
+  await step("licenseRequirements", () => seedLicenseRequirements(prisma));
+  await step("roles", () => seedRoles());
+  await step("governanceReferenceData", () => seedGovernanceReferenceData(prisma));
+  await step("workforceReferenceData", () => seedWorkforceReferenceData(prisma));
+  await step("portfolios", () => seedPortfolios());
+  await step("businessModels", () => seedBusinessModels());
+  await step("agents", () => seedAgents());
+  await step("coworkerAgents", () => seedCoworkerAgents());
   // EP-AI-WORKFORCE-001: Seed unified agent lifecycle data
-  await seedCoworkerSkills();
-  await seedAgentPromptContexts();
-  await seedFeatureDegradationMappings();
-  await seedTaxonomyNodes();
-  await seedDiscoveryFingerprints();
-  await seedAgentControlPlaneMaturity(prisma);
-  await seedEaReferenceModels().catch((err: unknown) => {
-    console.warn("[seed] EA reference models skipped:", err instanceof Error ? err.message : err);
-  });
-  await seedDigitalProducts();
-  await seedEaArchimate4();
-  await seedEaBpmn20();
-  await seedEaCrossNotation();
-  await seedEaStructureRules();
-  await seedEaViewpoints();
-  await seedEaViews();
-  await seedDpfSelfRegistration();
-  await seedDefaultAdminUser();
-  await ensureDiscoveryTriageScheduledTask(prisma);
-  await ensureHiveScoutScheduledTask(prisma);
-  await ensureAllBackupScheduledJobs(prisma);
-  await ensureContributorInventoryScheduledJob(prisma);
-  await seedMcpServers();
-  await seedSandboxPool();
-  await seedRuntimeTargets();
-  await seedProviderRegistry();
-  await seedCodexModels();
-  await seedChatGPTModels();
-  await seedLocalModels();
-  await seedModelProfiles();
-  await seedSpeachesTranscriptionModel();
-  await seedAnthropicSubScope();
-  await ensureBuildStudioModelConfig();
-  await seedModelPricing();
-  await seedAgentModelDefaults();
-  await seedPlatformConfig();
-  await seedClientIdentity();
-  await seedHiveContributionCredential();
-  await seedStorefrontArchetypes(prisma);
-  const capabilityPerspectiveSeed = await seedBusinessCapabilityPerspective(prisma);
-  console.log(
-    `  business-capability-perspective: sources=${capabilityPerspectiveSeed.sourcePerspectiveIds.join(",")} ` +
-      `active=${capabilityPerspectiveSeed.appliedCount} deactivated=${capabilityPerspectiveSeed.deactivatedCount}`,
-  );
-  await seedWorkQueues();
-  await seedPromptTemplates(prisma);
-  await seedSkills(prisma);
-  const wikiSeed = await seedWikiKernel(prisma);
-  if (wikiSeed.emptyKernel) {
-    console.log("  founder-kernel: empty (no docs/founder-kernel/wiki/ or raw-sources/ content yet)");
-  } else {
-    const qdrantSummary = wikiSeed.embeddingsSidecarPresent
-      ? `qdrant=${wikiSeed.qdrantPointsSeeded}`
-      : "qdrant=no-sidecar";
+  await step("coworkerSkills", () => seedCoworkerSkills());
+  await step("agentPromptContexts", () => seedAgentPromptContexts());
+  await step("featureDegradationMappings", () => seedFeatureDegradationMappings());
+  await step("taxonomyNodes", () => seedTaxonomyNodes());
+  await step("discoveryFingerprints", () => seedDiscoveryFingerprints());
+  await step("agentControlPlaneMaturity", () => seedAgentControlPlaneMaturity(prisma));
+  await step("eaReferenceModels", () => seedEaReferenceModels());
+  await step("digitalProducts", () => seedDigitalProducts());
+  await step("eaArchimate4", () => seedEaArchimate4());
+  await step("eaBpmn20", () => seedEaBpmn20());
+  await step("eaSysml2", () => seedEaSysml2());
+  await step("eaCrossNotation", () => seedEaCrossNotation());
+  await step("eaStructureRules", () => seedEaStructureRules());
+  await step("eaViewpoints", () => seedEaViewpoints());
+  await step("eaViews", () => seedEaViews());
+  await step("eaSysmlAiCockpit", () => seedEaSysmlAiCockpit());
+  await step("eaSysmlAgentAuthority", () => seedEaSysmlAgentAuthority());
+  await step("eaSysmlDataAuthority", () => seedEaSysmlDataAuthority());
+  await step("dpfSelfRegistration", () => seedDpfSelfRegistration());
+  await step("defaultAdminUser", () => seedDefaultAdminUser());
+  await step("discoveryTriageScheduledTask", () => ensureDiscoveryTriageScheduledTask(prisma));
+  await step("dataModelMirrorScheduledTask", () => ensureDataModelMirrorScheduledTask(prisma));
+  await step("sysmlProjectionScheduledTask", () => ensureSysmlProjectionScheduledTask(prisma));
+  await step("hiveScoutScheduledTask", () => ensureHiveScoutScheduledTask(prisma));
+  await step("allBackupScheduledJobs", () => ensureAllBackupScheduledJobs(prisma));
+  await step("dataRetentionScheduledJob", () => ensureDataRetentionScheduledJob(prisma));
+  await step("contributorInventoryScheduledJob", () => ensureContributorInventoryScheduledJob(prisma));
+  await step("mcpServers", () => seedMcpServers());
+  await step("sandboxPool", () => seedSandboxPool());
+  await step("runtimeTargets", () => seedRuntimeTargets());
+  await step("providerRegistry", () => seedProviderRegistry());
+  await step("codexModels", () => seedCodexModels());
+  await step("chatGPTModels", () => seedChatGPTModels());
+  await step("localModels", () => seedLocalModels());
+  await step("modelProfiles", () => seedModelProfiles());
+  await step("speachesTranscriptionModel", () => seedSpeachesTranscriptionModel());
+  await step("anthropicSubScope", () => seedAnthropicSubScope());
+  await step("buildStudioModelConfig", () => ensureBuildStudioModelConfig());
+  await step("modelPricing", () => seedModelPricing());
+  await step("agentModelDefaults", () => seedAgentModelDefaults());
+  await step("platformConfig", () => seedPlatformConfig());
+  await step("clientIdentity", () => seedClientIdentity());
+  await step("hiveContributionCredential", () => seedHiveContributionCredential());
+  await step("storefrontArchetypes", () => seedStorefrontArchetypes(prisma));
+  await step("publicSectorCompliance", () => seedPublicSectorCompliance(prisma));
+  await step("cooperativeCompliance", () => seedCooperativeCompliance(prisma));
+  await step("lawEnforcementCompliance", () => seedLawEnforcementCompliance(prisma));
+  await step("bankingCompliance", () => seedBankingCompliance(prisma));
+  await step("businessCapabilityPerspective", async () => {
+    const capabilityPerspectiveSeed = await seedBusinessCapabilityPerspective(prisma);
     console.log(
-      `  founder-kernel: kernelVersion=${wikiSeed.kernelVersion} ` +
-        `pages=${wikiSeed.pageCount} sources=${wikiSeed.sourceCount} ` +
-        `orphan-links=${wikiSeed.orphanLinks.length} ${qdrantSummary}`,
+      `  business-capability-perspective: sources=${capabilityPerspectiveSeed.sourcePerspectiveIds.join(",")} ` +
+        `active=${capabilityPerspectiveSeed.appliedCount} deactivated=${capabilityPerspectiveSeed.deactivatedCount}`,
     );
-  }
-  await seedDeliberationPatterns(prisma);
-  const decisionPerspectiveSeed = await seedDecisionPerspective(prisma);
-  console.log(
-    `  decision-perspective: profile=${decisionPerspectiveSeed.profileId} ` +
-      `version=${decisionPerspectiveSeed.versionId} materials=${decisionPerspectiveSeed.materialCount}`,
-  );
+  });
+  await step("workQueues", () => seedWorkQueues());
+  await step("promptTemplates", () => seedPromptTemplates(prisma));
+  await step("skills", () => seedSkills(prisma));
+  await step("wikiKernel", async () => {
+    const wikiSeed = await seedWikiKernel(prisma);
+    if (wikiSeed.emptyKernel) {
+      console.log("  founder-kernel: empty (no docs/founder-kernel/wiki/ or raw-sources/ content yet)");
+    } else {
+      const qdrantSummary = wikiSeed.embeddingsSidecarPresent
+        ? `qdrant=${wikiSeed.qdrantPointsSeeded}`
+        : "qdrant=no-sidecar";
+      console.log(
+        `  founder-kernel: kernelVersion=${wikiSeed.kernelVersion} ` +
+          `pages=${wikiSeed.pageCount} sources=${wikiSeed.sourceCount} ` +
+          `orphan-links=${wikiSeed.orphanLinks.length} ${qdrantSummary}`,
+      );
+    }
+  });
+  await step("deliberationPatterns", () => seedDeliberationPatterns(prisma));
+  await step("decisionPerspective", async () => {
+    const decisionPerspectiveSeed = await seedDecisionPerspective(prisma);
+    console.log(
+      `  decision-perspective: profile=${decisionPerspectiveSeed.profileId} ` +
+        `version=${decisionPerspectiveSeed.versionId} materials=${decisionPerspectiveSeed.materialCount}`,
+    );
+  });
+  await step("professionProfiles", async () => {
+    const result = await seedProfessionProfiles(prisma);
+    console.log(`  profession-profiles: seeded=${result.seeded} skipped=${result.skipped}`);
+  });
+  await step("professionCorpus", async () => {
+    const result = await seedProfessionCorpus(prisma);
+    if (result.emptyCorpus) {
+      console.log("  profession-corpus: empty (no docs/professions/*/wiki/ content yet)");
+    } else {
+      const fmt = (cov: Record<string, number>) =>
+        Object.entries(cov)
+          .map(([k, v]) => `${k}=${v}`)
+          .join(",") || "none";
+      console.log(
+        `  profession-corpus: sources=${result.sourceCount} pages=${result.pageCount} ` +
+          `orphan-links=${result.orphanLinks.length} ` +
+          `jurisdiction[${fmt(result.jurisdictionCoverage)}] ` +
+          `competency[${fmt(result.competencyCoverage)}]`,
+      );
+    }
+  });
   // BI-2535D6F4: ship the founder's recorded seed voice on the platform profile.
-  const platformVoice = await seedPlatformVoice(prisma);
-  console.log(`  platform-voice: ${platformVoice.status} (clip-copied=${platformVoice.copiedClip})`);
-  await syncCapabilities(prisma);
-  await assertActiveProvidersHaveClearance();
-  await assertAnthropicSubToolCapability();
-  await assertCoworkerAgentsHaveGrants();
-  await assertSharedOAuthClientsHaveSharedRedirectUri();
-  console.log("Seed complete.");
+  await step("platformVoice", async () => {
+    const platformVoice = await seedPlatformVoice(prisma);
+    console.log(`  platform-voice: ${platformVoice.status} (clip-copied=${platformVoice.copiedClip})`);
+  });
+  await step("syncCapabilities", () => syncCapabilities(prisma));
+  // Invariant asserts — isolated so a violation is surfaced in the summary
+  // rather than aborting the whole seed (they run after all seeding).
+  await step("assert:activeProvidersHaveClearance", () => assertActiveProvidersHaveClearance());
+  await step("assert:anthropicSubToolCapability", () => assertAnthropicSubToolCapability());
+  await step("assert:coworkerAgentsHaveGrants", () => assertCoworkerAgentsHaveGrants());
+  await step("assert:sharedOAuthClientsHaveSharedRedirectUri", () => assertSharedOAuthClientsHaveSharedRedirectUri());
+
+  if (failures.length > 0) {
+    console.error(`\n================ SEED INCOMPLETE: ${failures.length} step(s) failed ================`);
+    for (const f of failures) console.error(`  - ${f.step}: ${f.error}`);
+    console.error("  Surfaced (not swallowed) so a partially-failed update is visible. Other steps still ran.");
+    console.error("============================================================================");
+    process.exitCode = 1;
+  } else {
+    console.log("Seed complete.");
+  }
 }
 
 /**

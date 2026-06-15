@@ -85,6 +85,9 @@ export type AgentEvent =
       type: "collaboration:summon";
       parentThreadId: string;
       childThreadId: string | null;
+      /** The active coworker who brought the peer in (the summon is coworker-
+       *  initiated; the human never tasks peers). */
+      fromAgentId?: string;
       summonedAgentId: string;
       tier: 2 | 3;
       byUserId?: string;

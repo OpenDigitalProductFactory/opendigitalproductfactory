@@ -3,6 +3,7 @@ import {
   deriveRecurringBillingEnabled,
   getFinancialProfile,
   getAllProfiles,
+  LEDGER_COA_FRAGMENTS,
 } from "./profiles";
 
 const EXPECTED_SLUGS = [
@@ -17,12 +18,15 @@ const EXPECTED_SLUGS = [
   "beauty_personal",
   "pet_services",
   "hoa_property_management",
+  "banking_financial_services",
+  "fund_accounting",
+  "software_platform",
 ];
 
 describe("financial profile catalog", () => {
-  it("has all 11 profiles", () => {
+  it("has all 14 profiles", () => {
     const all = getAllProfiles();
-    expect(all).toHaveLength(11);
+    expect(all).toHaveLength(14);
     const slugs = all.map((p) => p.slug);
     for (const expected of EXPECTED_SLUGS) {
       expect(slugs, `missing profile: ${expected}`).toContain(expected);
@@ -104,6 +108,25 @@ describe("financial profile catalog", () => {
     }
   });
 
+  it("banking profile carries interest/fee accounting and gentle collections posture (BI-5D9DCDE6)", () => {
+    const profile = getFinancialProfile("banking_financial_services");
+    expect(profile).not.toBeNull();
+    expect(profile!.archetypeCategory).toBe("banking-financial-services");
+    expect(profile!.defaultCurrency).toBe("USD");
+    // A regulated depository institution does not dun its own customers the
+    // way a trade business chases invoices — fees post to accounts.
+    expect(profile!.dunningEnabled).toBe(false);
+    expect(profile!.billingPatternProfile.invoiceExecutionMode).toBe("prepared-not-prescribed");
+    // Composes the canonical financial-institution ledger fragment — the
+    // interest-margin P&L shape; the core banking system stays authoritative.
+    expect(profile!.ledgerModel).toBe("financial-institution");
+    expect(profile!.chartOfAccountsSeed).toEqual(LEDGER_COA_FRAGMENTS["financial-institution"]);
+    const accountNames = profile!.chartOfAccountsSeed.map((a) => a.name);
+    expect(accountNames).toContain("Interest Income — Loans");
+    expect(accountNames).toContain("Deposits / Member Shares");
+    expect(accountNames).toContain("Provision for Credit Losses");
+  });
+
   it("nonprofit has dunning disabled", () => {
     const profile = getFinancialProfile("nonprofit");
     expect(profile).not.toBeNull();
@@ -116,6 +139,12 @@ describe("financial profile catalog", () => {
     expect(profile).not.toBeNull();
     expect(profile!.purchaseOrdersEnabled).toBe(true);
     expect(profile!.dunningStyle).toBe("aggressive");
+  });
+
+  it("trades_construction defaults to ad-hoc per-job invoicing, not a recurring agreement", () => {
+    const profile = getFinancialProfile("trades_construction");
+    expect(profile?.billingPatternProfile.primaryPaymentPattern).toBe("ad-hoc-invoice");
+    expect(profile?.billingPatternProfile.recurringBillingApplicability).toBe("optional");
   });
 
   it("professional services supports recurring agreements without prescribing invoice execution", () => {
@@ -140,5 +169,65 @@ describe("financial profile catalog", () => {
     expect(profile?.billingPatternProfile.supportedPaymentPatterns).toEqual(
       expect.arrayContaining(["appointment-checkout", "point-of-sale", "optional-package"]),
     );
+  });
+
+  it("every profile resolves a ledgerModel, defaulting to commercial", () => {
+    for (const profile of getAllProfiles()) {
+      if (profile.slug === "fund_accounting") {
+        expect(profile.ledgerModel).toBe("fund-accounting");
+      } else if (profile.slug === "banking_financial_services") {
+        expect(profile.ledgerModel).toBe("financial-institution");
+      } else {
+        expect(profile.ledgerModel, `${profile.slug} should default to commercial`).toBe("commercial");
+      }
+    }
+  });
+
+  it("the fund_accounting profile composes the fund-accounting COA fragment with statutory billing", () => {
+    const profile = getFinancialProfile("fund_accounting");
+    expect(profile?.archetypeCategory).toBe("public-sector");
+    expect(profile?.chartOfAccountsSeed).toEqual(LEDGER_COA_FRAGMENTS["fund-accounting"]);
+    expect(profile?.billingPatternProfile).toMatchObject({
+      primaryPaymentPattern: "ad-hoc-invoice",
+      invoiceExecutionMode: "prepared-not-prescribed",
+      recurringBillingApplicability: "optional",
+    });
+  });
+});
+
+describe("ledger-model chart-of-accounts fragments", () => {
+  it("ships fund-accounting, financial-institution, and cooperative-equity fragments", () => {
+    expect(Object.keys(LEDGER_COA_FRAGMENTS).sort()).toEqual([
+      "cooperative-equity",
+      "financial-institution",
+      "fund-accounting",
+    ]);
+  });
+
+  it("every fragment has unique codes and valid account types", () => {
+    for (const [model, fragment] of Object.entries(LEDGER_COA_FRAGMENTS)) {
+      expect(fragment.length, `${model} fragment must not be empty`).toBeGreaterThan(0);
+      const codes = fragment.map((account) => account.code);
+      expect(new Set(codes).size, `${model} fragment has duplicate codes`).toBe(codes.length);
+      for (const account of fragment) {
+        expect(account.name, `${model} account ${account.code} missing name`).toBeTruthy();
+        expect(
+          ["revenue", "expense", "asset", "liability", "equity"],
+          `${model} account ${account.code} has invalid type`,
+        ).toContain(account.type);
+      }
+    }
+  });
+
+  it("captures each model's defining accounts", () => {
+    const names = (model: keyof typeof LEDGER_COA_FRAGMENTS) =>
+      LEDGER_COA_FRAGMENTS[model].map((account) => account.name).join("; ");
+
+    expect(names("fund-accounting")).toContain("Fund Balance");
+    expect(names("fund-accounting")).toContain("Debt Service");
+    expect(names("financial-institution")).toContain("Allowance for Credit Losses");
+    expect(names("financial-institution")).toContain("Provision for Credit Losses");
+    expect(names("cooperative-equity")).toContain("Allocated Member Equity");
+    expect(names("cooperative-equity")).toContain("Patronage Dividends Payable");
   });
 });

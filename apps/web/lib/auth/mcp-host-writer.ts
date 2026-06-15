@@ -1,5 +1,4 @@
-import fs from "fs";
-import path from "path";
+import { lazyFs, lazyPath } from "@/lib/shared/lazy-node";
 
 import { buildSetupSnippets } from "./mcp-setup-snippets";
 
@@ -11,6 +10,8 @@ import { buildSetupSnippets } from "./mcp-setup-snippets";
  */
 export function writeMcpJsonToHost(plaintext: string, baseUrl: string): void {
   const mountPath = "/host-dpf";
+  const fs = lazyFs();
+  const p = lazyPath();
   if (!fs.existsSync(mountPath)) return;
 
   const snippets = buildSetupSnippets(plaintext, baseUrl);
@@ -18,10 +19,10 @@ export function writeMcpJsonToHost(plaintext: string, baseUrl: string): void {
   // Use path.posix so paths always use forward slashes — this code runs inside
   // a Linux Docker container regardless of the OS running the build/tests.
   try {
-    fs.writeFileSync(path.posix.join(mountPath, ".mcp.json"), snippets.claudeCode, "utf-8");
-    const vsDir = path.posix.join(mountPath, ".vscode");
+    fs.writeFileSync(p.posix.join(mountPath, ".mcp.json"), snippets.claudeCode, "utf-8");
+    const vsDir = p.posix.join(mountPath, ".vscode");
     if (!fs.existsSync(vsDir)) fs.mkdirSync(vsDir, { recursive: true });
-    fs.writeFileSync(path.posix.join(vsDir, "mcp.json"), snippets.vscode, "utf-8");
+    fs.writeFileSync(p.posix.join(vsDir, "mcp.json"), snippets.vscode, "utf-8");
   } catch (err) {
     console.error("[mcp-host-writer] Failed to write .mcp.json to host:", err);
   }

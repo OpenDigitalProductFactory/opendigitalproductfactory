@@ -1,10 +1,7 @@
 // apps/web/lib/git-utils.ts
 // Async git operations for the development lifecycle pipeline.
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { lazyPath, lazyFsPromises, lazyExec } from "@/lib/shared/lazy-node";
+import { lazyPath, lazyFsPromises, lazyExec, lazyOs, getCwd } from "@/lib/shared/lazy-node";
 import { isPathAllowedSync as isPathAllowed, isDevInstance } from "@/lib/codebase-tools";
 
 const exec = lazyExec();
@@ -15,7 +12,7 @@ function getGitRoot(): string {
   const { resolve } = lazyPath();
   return process.env.PROJECT_ROOT
     ? resolve(process.env.PROJECT_ROOT)
-    : resolve(process.cwd(), "..", "..");
+    : resolve(getCwd(), "..", "..");
 }
 
 // ─── Validation ──────────────────────────────────────────────────────────────
@@ -411,14 +408,17 @@ export async function pushBranch(
  */
 export async function applyPatch(patch: string): Promise<{ ok: true } | { error: string }> {
   if (!isDevInstance()) return { error: "Git apply is only available on dev instances." };
-  const { writeFile } = lazyFsPromises();
+  const fsp = lazyFsPromises();
+  const p = lazyPath();
+  const o = lazyOs();
+  const { writeFile } = fsp;
   // CodeQL #110 (js/insecure-temporary-file): predictable /tmp paths
   // let an attacker pre-create symlinks. The recognised safe pattern
   // is fs.mkdtemp() which atomically creates a 0700-perm subdirectory
   // owned by the current user; we write the patch inside that dir and
   // clean up the whole tree on the way out.
-  const workDir = await mkdtemp(join(tmpdir(), "dpf-pr-"));
-  const tmpFile = join(workDir, "patch.diff");
+  const workDir = await fsp.mkdtemp(p.join(o.tmpdir(), "dpf-pr-"));
+  const tmpFile = p.join(workDir, "patch.diff");
   try {
     await writeFile(tmpFile, patch, "utf-8");
     await exec(
@@ -429,7 +429,7 @@ export async function applyPatch(patch: string): Promise<{ ok: true } | { error:
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Git apply failed" };
   } finally {
-    await rm(workDir, { recursive: true, force: true }).catch(() => {});
+    await fsp.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 

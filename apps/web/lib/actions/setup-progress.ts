@@ -3,13 +3,17 @@
 import { prisma } from "@dpf/db";
 import { SETUP_STEPS, type SetupStep, type StepStatus, type SetupContext } from "./setup-constants";
 import { seedOrgWwwdCorpus } from "@/lib/onboarding/seed-org-wwwd-corpus";
+import { seedPortfolioDecomposition } from "@/lib/onboarding/seed-portfolio-decomposition";
+import { seedMarketOffer } from "@/lib/onboarding/seed-market-offer";
 import { applyMissionPrompt } from "@/lib/onboarding/apply-mission-prompt";
 
 /**
  * Runs once when initial setup completes: persist the captured mission into
- * the company-mission prompt (visible to every coworker) and seed the per-org
- * WWWD corpus. Fail-open and idempotent — onboarding completion must never
- * block on embedding/seeding errors, and the seed is safe to re-run.
+ * the company-mission prompt (visible to every coworker), seed the per-org
+ * WWWD corpus, persist the per-org portfolio decomposition (BI-2D452667), and
+ * seed the archetype-derived market offer into the Products & Services Sold
+ * portfolio (BI-4503E6B9). Fail-open and idempotent — onboarding completion
+ * must never block on embedding/seeding errors, and the seeds are safe to re-run.
  */
 async function finalizeSetupCompletion(organizationId: string | null): Promise<void> {
   try {
@@ -26,6 +30,8 @@ async function finalizeSetupCompletion(organizationId: string | null): Promise<v
 
     await applyMissionPrompt({ mission: bc?.mission ?? null });
     await seedOrgWwwdCorpus({ organizationId: orgId });
+    await seedPortfolioDecomposition({ organizationId: orgId });
+    await seedMarketOffer({ organizationId: orgId });
   } catch (err) {
     console.warn("[setup] mission/WWWD seeding on completion failed (fail-open):", err);
   }
@@ -97,6 +103,19 @@ export async function advanceStep(
   const steps = progress.steps as Record<string, StepStatus>;
   const context = { ...(progress.context as SetupContext), ...contextUpdate };
   const currentIdx = SETUP_STEPS.indexOf(progress.currentStep as SetupStep);
+
+  // The storefront step is only "complete" once the storefront actually exists.
+  // The setup overlay's Continue must not advance past it (to operating-hours /
+  // platform-development / ...) while StorefrontConfig is still null — otherwise
+  // the operator finishes onboarding with no portal (R1-CS-A-003). Completing the
+  // embedded SetupWizard creates the config; until then, Continue is a no-op that
+  // keeps the user on the storefront setup.
+  if (progress.currentStep === "storefront") {
+    const storefront = await prisma.storefrontConfig.findFirst({ select: { id: true } });
+    if (!storefront) {
+      return { ...progress, blocked: "storefront-required" as const };
+    }
+  }
 
   steps[progress.currentStep] = "completed";
 

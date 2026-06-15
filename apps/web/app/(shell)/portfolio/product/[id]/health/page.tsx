@@ -8,7 +8,12 @@ import { prisma } from "@dpf/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ServiceHealthDashboard } from "@/components/monitoring/ServiceHealthDashboard";
-import { TONE_COLOR, type Tone } from "@/components/monitoring/health-summary";
+import {
+  TONE_COLOR,
+  type ReleaseHealthCardData,
+  type Tone,
+} from "@/components/monitoring/health-summary";
+import { loadReleaseHealthState } from "@/lib/release-health/state";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -46,10 +51,19 @@ export default async function ProductHealthPage({ params }: Props) {
   const hasOfferings = product.serviceOfferings.length > 0;
   const hasObservation = product.observationConfig != null;
 
+  // BI-3630773C — last-known release stamp state for the portal's Latest
+  // Release card. Read from PlatformConfig (written by the release-health
+  // cron); null when never polled or never stamped.
+  const releaseHealth = isPortal ? await loadReleaseHealthCard() : null;
+
   return (
     <div>
       {isPortal ? (
-        <PortalHealth openBugs={product._count.backlogItems} productId={id} />
+        <PortalHealth
+          openBugs={product._count.backlogItems}
+          productId={id}
+          releaseHealth={releaseHealth}
+        />
       ) : (
         <ProductHealth
           hasObservation={hasObservation}
@@ -63,11 +77,37 @@ export default async function ProductHealthPage({ params }: Props) {
   );
 }
 
-function PortalHealth({ openBugs, productId }: { openBugs: number; productId: string }) {
+async function loadReleaseHealthCard(): Promise<ReleaseHealthCardData | null> {
+  try {
+    const state = await loadReleaseHealthState();
+    if (!state?.snapshot) return null;
+    return {
+      tag: state.snapshot.tag,
+      status: state.snapshot.status,
+      runUrl: state.snapshot.runUrl,
+      checkedAt: state.checkedAt,
+    };
+  } catch {
+    // State read failure must not break the health page — the card falls
+    // back to its "no stamps observed" neutral state.
+    return null;
+  }
+}
+
+function PortalHealth({
+  openBugs,
+  productId,
+  releaseHealth,
+}: {
+  openBugs: number;
+  productId: string;
+  releaseHealth: ReleaseHealthCardData | null;
+}) {
   return (
     <ServiceHealthDashboard
       openBacklogItems={openBugs}
       backlogHref={`/portfolio/product/${productId}/backlog`}
+      releaseHealth={releaseHealth}
     />
   );
 }

@@ -1,5 +1,7 @@
 # Local Redeploy Helper Implementation Plan
 
+> **Superseded scope note (2026-06-06).** `scripts/redeploy-portal.{ps1,sh}` is a **recovery / bootstrap** primitive only. It is **not** the feature-verification refresh path: AGENTS.md §5 and [`image-identity-equals-bytes`](../../founder-kernel/wiki/principles/image-identity-equals-bytes.md) reserve live-portal advancement for the governed self-upgrade pipeline (`/ops/self-upgrade`). Task 1's "update version-check drift guidance to point to the new helper" was **reversed** — `scripts/portal-version-check.{sh,ps1}` now point at the governed path, and the canonical entry point for verifying a feature on the live install is the preflight + `dpf-verify-on-live-install` skill ([`2026-06-06-procedural-functional-verification-design.md`](../specs/2026-06-06-procedural-functional-verification-design.md)). This historical plan is retained as the record of how the helper was built.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add one local redeploy helper per shell that builds and recreates `portal-init` and `portal` together so manual rebuilds cannot leave the init image behind the app image.

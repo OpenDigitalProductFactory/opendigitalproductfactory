@@ -9,6 +9,8 @@ import { TestimonialsSection } from "./sections/TestimonialsSection";
 import { DonationSection } from "./sections/DonationSection";
 import { AnimalsSection } from "./sections/AnimalsSection";
 import { CustomSection } from "./sections/CustomSection";
+import { DisclosuresSection } from "./sections/DisclosuresSection";
+import { LoanCalculatorSection } from "./sections/LoanCalculatorSection";
 
 export function SectionRenderer({
   section,
@@ -39,7 +41,16 @@ export function SectionRenderer({
     case "donate":
       return <DonationSection content={content} orgSlug={orgSlug} />;
     case "animals-available":
-      return <AnimalsSection content={content} />;
+      return <AnimalsSection content={content} animals={storefront.animals} />;
+    case "disclosures":
+      return (
+        <DisclosuresSection
+          title={section.title}
+          obligations={storefront.displayObligations}
+        />
+      );
+    case "calculator":
+      return <LoanCalculatorSection content={content} />;
     case "custom":
       return <CustomSection content={content} />;
     default:

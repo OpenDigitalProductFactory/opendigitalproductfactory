@@ -445,6 +445,11 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "This page displays finance operations data classified as confidential: invoices, bills, expense claims, recurring schedules, collections posture, tax remittance readiness, and accounting handoff boundaries. Treat finance figures as evidence-backed operational summaries, not guesses. Use canonical finance records for financial answers, call out open or incomplete records, and keep tax/legal recommendations separate from verified transaction totals.",
     domainTools: [
       "get_finance_period_summary",
+      "mcp-browser-use__browse_open",
+      "mcp-browser-use__browse_act",
+      "mcp-browser-use__browse_extract",
+      "mcp-browser-use__browse_screenshot",
+      "mcp-browser-use__browse_close",
       "search_public_web",
       "fetch_public_website",
       "wiki_query",
@@ -466,6 +471,12 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         prompt: "Summarize our current finance operating posture and where tax or accounting handoffs still need clarification.",
       },
       {
+        label: "Retrieve billing portal costs",
+        description: "Use the governed browser to collect subscription cost, renewal, and invoice evidence",
+        capability: "view_finance",
+        prompt: "Use browser-use to retrieve current provider and subscription billing details from the relevant billing portal. Extract plan name, amount, currency, cadence, renewal date, invoice or receipt evidence, and any access blocker. Do not change plans, submit payments, or update external account settings. If the portal cannot resolve a required field, queue the human ask with the exact missing fields.",
+      },
+      {
         label: "Review tax setup",
         description: "Summarize tax posture, open gaps, and what the coworker needs next",
         capability: "view_finance",
@@ -476,6 +487,45 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         description: "Use official sources to propose what DPF should configure for tax processing",
         capability: "view_finance",
         prompt: "Use External Access to research official tax authority sources for this business, then propose what DPF should configure to process taxes safely. Include assumptions, sources checked, approval boundaries, and next data needed.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  "/ops/dev-loop": {
+    routePrefix: "/ops/dev-loop",
+    domain: "Dev Loop — Runtime Coordination",
+    sensitivity: "internal",
+    domainContext:
+      "This page is the Dev Loop runtime coordination map. It shows governed RuntimeTargets (root portal, dev portal, build sandboxes, promotion sandboxes) grouped by lifecycle status, the active non-prod environment leases, and the runtimeTargetJanitor rules (BI-AD949172). It is NOT the delivery backlog. Use the PAGE DATA block as ground truth for what is currently deployed where. Multiple targets can legitimately share a status and even a URL/port at once — each build sandbox registers its own target on the shared sandbox port, and a 'running' target whose lastHeartbeat is stale simply has not been swept to 'expired' yet (janitor: running + no heartbeat for 2h → expired). Always reconcile a target's status against its lastHeartbeat before treating it as live, and prefer get_runtime_coordination_map for the full live record.",
+    domainTools: [
+      "get_runtime_coordination_map",
+      "list_nonprod_environment_leases",
+      "search_code_graph",
+      "trace_code_surface",
+      "doc_search",
+      "search_knowledge",
+    ],
+    docsPath: "/docs/operations/index",
+    skills: [
+      {
+        label: "Explain the runtime map",
+        description: "Summarize what is deployed where and flag anything stale",
+        capability: "view_platform",
+        taskType: "analysis",
+        prompt: "Look at the PAGE DATA for this Dev Loop page. Summarize the active runtime targets and leases in plain language, and flag any 'running' target whose lastHeartbeat is old enough that the janitor should sweep it to expired. Explain why duplicates on the same port can be normal. Don't call tools unless the page data is missing something you need from get_runtime_coordination_map.",
+      },
+      {
+        label: "Why is this here?",
+        description: "Trace a runtime target or janitor rule back to the code that creates it",
+        capability: "view_platform",
+        taskType: "analysis",
+        prompt: "I'll name a runtime target, lease, or janitor behavior on this page. Use search_code_graph / trace_code_surface and read_project_file to find the code that registers or sweeps it, and the docs that describe it, then explain how it works and why this entry exists.",
       },
       {
         label: "Report an issue",

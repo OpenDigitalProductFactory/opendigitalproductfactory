@@ -18,6 +18,7 @@
  * BI-QUIESCE-002.
  */
 import { prisma } from "@dpf/db";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 
 // ─── Quiescence level — runtime state, hot-read by middleware + gates ────
 
@@ -436,6 +437,42 @@ export async function signalSwapStarting(runId: string, now: Date = new Date()):
 }
 
 /**
+ * Send a quiescence swap-complete signal with a few quick retries. This event
+ * drives the coordinator's terminal transition (completed/failed/aborted) and
+ * flips the quiescence level back to normal — losing it leaves the platform
+ * draining until the watchdog reaps the coordinator minutes later. A transient
+ * inngest.send failure (network blip, rate limit) shouldn't cost that. After the
+ * final attempt the error is rethrown so the caller's own failure handling runs.
+ */
+async function withSwapSignalRetry(
+  label: string,
+  send: () => Promise<unknown>,
+  attempts = 3,
+): Promise<void> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      await send();
+      return;
+    } catch (err) {
+      lastErr = err;
+      // printf-style positional substitution (safe-log.ts / PR #999 convention):
+      // CodeQL models `%s` args + the registered sanitizer natively, so taint is
+      // broken unambiguously — clearer than a template literal for the dataflow.
+      console.warn(
+        "[quiescence] %s attempt %d/%d failed: %s",
+        sanitizeForLog(label),
+        i + 1,
+        attempts,
+        sanitizeForLog(err instanceof Error ? err.message : String(err)),
+      );
+      if (i < attempts - 1) await sleep(500 * (i + 1));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+/**
  * Caller signals "swap succeeded" — triggers the coordinator's terminal
  * success path via Inngest event. The coordinator transitions
  * swapping → completed, flips level to normal, and emits
@@ -443,10 +480,12 @@ export async function signalSwapStarting(runId: string, now: Date = new Date()):
  */
 export async function signalSwapComplete(runId: string): Promise<void> {
   const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
-    name: "ops/quiescence.swap-complete",
-    data: { runId, outcome: "succeeded" },
-  });
+  await withSwapSignalRetry(`swap-complete(succeeded) ${runId}`, () =>
+    inngest.send({
+      name: "ops/quiescence.swap-complete",
+      data: { runId, outcome: "succeeded" },
+    }),
+  );
 }
 
 /**
@@ -460,10 +499,12 @@ export async function signalSwapComplete(runId: string): Promise<void> {
  */
 export async function failQuiescenceSwap(runId: string, reason: string): Promise<void> {
   const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
-    name: "ops/quiescence.swap-complete",
-    data: { runId, outcome: "failed", reason },
-  });
+  await withSwapSignalRetry(`swap-complete(failed) ${runId}`, () =>
+    inngest.send({
+      name: "ops/quiescence.swap-complete",
+      data: { runId, outcome: "failed", reason },
+    }),
+  );
 }
 
 /**
@@ -473,10 +514,69 @@ export async function failQuiescenceSwap(runId: string, reason: string): Promise
  */
 export async function abortQuiescence(runId: string, operatorUserId: string): Promise<void> {
   const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
-    name: "ops/quiescence.swap-complete",
-    data: { runId, outcome: "aborted", operatorUserId },
+  await withSwapSignalRetry(`swap-complete(aborted) ${runId}`, () =>
+    inngest.send({
+      name: "ops/quiescence.swap-complete",
+      data: { runId, outcome: "aborted", operatorUserId },
+    }),
+  );
+}
+
+/**
+ * BI-4F3B2FA9 — mid-flight emergency escalation. Promotes an ALREADY-RUNNING
+ * drain to forced mode: records who/when on the QuiescenceRun and appends an
+ * audit entry to forcedSurfaces. The coordinator's wait loop re-reads
+ * shipForceEscalatedAt every tick (see isShipForceEscalated) and treats a
+ * non-null value as shipForce, so a stuck drain proceeds to ready-to-swap
+ * within one polling interval — without restarting the run.
+ *
+ * Idempotent (a second call on an already-escalated run is a no-op success).
+ * Refuses terminal runs — there is nothing to force once a drain has ended.
+ */
+export async function escalateQuiescenceToForced(
+  runId: string,
+  operatorUserId: string,
+  now: Date = new Date(),
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const row = await prisma.quiescenceRun.findUnique({
+    where: { runId },
+    select: { status: true, shipForceEscalatedAt: true, forcedSurfaces: true },
   });
+  if (!row) return { ok: false, reason: "run not found" };
+  if (isTerminalQuiescenceStatus(row.status)) {
+    return { ok: false, reason: `run already ${row.status}` };
+  }
+  if (row.shipForceEscalatedAt) return { ok: true }; // already escalated — no-op
+
+  const prior = Array.isArray(row.forcedSurfaces) ? (row.forcedSurfaces as unknown[]) : [];
+  await prisma.quiescenceRun.update({
+    where: { runId },
+    data: {
+      shipForceEscalatedAt: now,
+      shipForceEscalatedBy: operatorUserId,
+      forcedSurfaces: [
+        ...prior,
+        {
+          surface: "mid-flight-escalation",
+          reason: `operator ${operatorUserId} forced an in-flight drain`,
+          forcedAt: now.toISOString(),
+        },
+      ] as unknown as object,
+    },
+  });
+  return { ok: true };
+}
+
+/**
+ * BI-4F3B2FA9 — hot read of the mid-flight escalation flag, polled by the
+ * coordinator each wait tick. True once an operator has clicked "Force Now".
+ */
+export async function isShipForceEscalated(runId: string): Promise<boolean> {
+  const row = await prisma.quiescenceRun.findUnique({
+    where: { runId },
+    select: { shipForceEscalatedAt: true },
+  });
+  return !!row?.shipForceEscalatedAt;
 }
 
 /**
@@ -545,6 +645,45 @@ export type BlockerSignal =
 const TOOL_EXECUTION_RECENCY_MS = 5 * 60 * 1000;
 const EDGE_AGENT_PREFIX = "edge-node:";
 const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
+
+/**
+ * Liveness threshold for dead-phase reaping (admission-control spec §4.4 /
+ * BI-17377D05): a non-terminal BuildPhaseRun with completedAt=null whose build
+ * shows no active-TaskRun heartbeat AND whose own start is older than this is a
+ * corpse — it must not hold the self-upgrade drain open. 15 min with no
+ * observable signal.
+ */
+const DEAD_PHASE_LIVENESS_MS = 15 * 60 * 1000;
+
+/**
+ * Flag-gate (default OFF). This changes the self-upgrade DRAIN decision (what
+ * counts as "in flight"), so per the spec §6 it is enabled + load-tested
+ * deliberately, never blind-shipped to the deploy path. Operator sets
+ * QUIESCENCE_REAP_DEAD_PHASES=1 to exercise it under real concurrent load.
+ */
+function reapDeadPhasesEnabled(): boolean {
+  return process.env.QUIESCENCE_REAP_DEAD_PHASES === "1";
+}
+
+/**
+ * True when an in-flight build phase is a corpse: the most recent observable
+ * signal — the build's latest active-TaskRun heartbeat, or the phase's own
+ * start if newer — is older than `thresholdMs`. Pure; unit-tested. A live
+ * build (recent heartbeat) or a freshly-started phase is never reapable.
+ */
+export function isBuildPhaseReapable(args: {
+  phaseStartedAt: Date;
+  buildLastHeartbeatAt: Date | null;
+  now: Date;
+  thresholdMs: number;
+}): boolean {
+  const { phaseStartedAt, buildLastHeartbeatAt, now, thresholdMs } = args;
+  const lastSignal =
+    buildLastHeartbeatAt && buildLastHeartbeatAt.getTime() > phaseStartedAt.getTime()
+      ? buildLastHeartbeatAt
+      : phaseStartedAt;
+  return now.getTime() - lastSignal.getTime() > thresholdMs;
+}
 
 /**
  * Repair stale phase-run rows from terminal builds before blocker capture.
@@ -629,7 +768,35 @@ export async function captureActiveSessionBlockers(opts?: {
     select: { buildId: true, phase: true, startedAt: true },
     take: 25,
   });
+  // Dead-phase reaping (flag-gated, default OFF): build a buildId → latest
+  // active-TaskRun heartbeat map from the TaskRuns already fetched above (no
+  // extra query), so a corpse phase (no heartbeat + old start) can be dropped
+  // from the blockers instead of holding the drain open for the full budget.
+  const reapDeadPhases = reapDeadPhasesEnabled();
+  const buildLastHeartbeat = new Map<string, Date>();
+  if (reapDeadPhases) {
+    for (const tr of activeTaskRuns) {
+      if (!tr.buildId || !tr.lastHeartbeatAt) continue;
+      const prev = buildLastHeartbeat.get(tr.buildId);
+      if (!prev || tr.lastHeartbeatAt.getTime() > prev.getTime()) {
+        buildLastHeartbeat.set(tr.buildId, tr.lastHeartbeatAt);
+      }
+    }
+  }
+  let reapedPhaseCount = 0;
   for (const row of inFlightPhases) {
+    if (
+      reapDeadPhases &&
+      isBuildPhaseReapable({
+        phaseStartedAt: row.startedAt,
+        buildLastHeartbeatAt: buildLastHeartbeat.get(row.buildId) ?? null,
+        now,
+        thresholdMs: DEAD_PHASE_LIVENESS_MS,
+      })
+    ) {
+      reapedPhaseCount++;
+      continue; // corpse — does not block the drain
+    }
     const isShipPhase = row.phase === "ship";
     surfaces.push({
       surface: `build-studio.phase.${row.phase}`,
@@ -650,6 +817,11 @@ export async function captureActiveSessionBlockers(opts?: {
         shipPhaseShipForceRequired: isShipPhase,
       },
     });
+  }
+  if (reapedPhaseCount > 0) {
+    console.warn(
+      `[quiescence] reaped ${reapedPhaseCount} dead build phase(s) from the drain (no active heartbeat, started > ${DEAD_PHASE_LIVENESS_MS / 60000} min ago).`,
+    );
   }
 
   // B-class: ToolExecution recency — the existing stopgap signal.
@@ -745,6 +917,150 @@ export function pickPrimaryBlocker(snapshot: ActiveSessionBlockers | null): stri
   const coworker = snapshot.surfaces.find((s) => s.surface === "coworker.reasoning-loop");
   if (coworker) return coworker.surface;
   return snapshot.surfaces[0].surface;
+}
+
+// ─── Operator-facing activity summary (Self-Upgrade panel) ───────────────
+
+/**
+ * One aggregated blocker line for the operator panel: a surface name, a
+ * human-readable label, how many in-flight items share it, and the worst-case
+ * wait. Built by collapsing the raw ActiveSessionBlockers.surfaces list (which
+ * has one entry per in-flight item) by surface name.
+ */
+export type QuiescenceBlockerLine = {
+  surface: string;
+  label: string;
+  kind: "hard" | "soft";
+  count: number;
+  estimatedWaitMs: number | null;
+};
+
+/**
+ * Everything the Self-Upgrade page needs to explain "what's happening" during a
+ * drain: the current level, the active QuiescenceRun (if any), and the list of
+ * activities currently holding the drain open. Fully serializable.
+ */
+export type QuiescenceActivity = {
+  level: QuiescenceLevel;
+  runId: string | null;
+  enteredAt: string;
+  run: {
+    runId: string;
+    status: string;
+    trigger: string;
+    targetVersion: string | null;
+    targetBundleHash: string | null;
+    deferSurface: string | null;
+    deferReason: string | null;
+    budgetMs: number | null;
+    drainStartedAt: string | null;
+    lastHeartbeatAt: string | null;
+  } | null;
+  /** Capture time of the snapshot the blockers were read from, if any. */
+  blockersCapturedAt: string | null;
+  blockers: QuiescenceBlockerLine[];
+};
+
+/** Map an internal surface key to a friendly operator label. */
+export function describeBlockerSurface(surface: string): string {
+  if (surface === "coworker.reasoning-loop") return "AI coworker working";
+  if (surface === "request.recent-tool-execution") return "Recent portal / MCP activity";
+  if (surface === "build-studio.phase.ship") return "Build Studio — ship phase";
+  if (surface.startsWith("build-studio.phase.")) {
+    const phase = surface.slice("build-studio.phase.".length);
+    return `Build Studio — ${phase} phase`;
+  }
+  return surface;
+}
+
+/** Collapse a raw blockers snapshot into one line per surface, with counts. */
+export function summarizeBlockers(
+  snapshot: ActiveSessionBlockers | null,
+): QuiescenceBlockerLine[] {
+  if (!snapshot || !Array.isArray(snapshot.surfaces)) return [];
+  const bySurface = new Map<string, QuiescenceBlockerLine>();
+  for (const s of snapshot.surfaces) {
+    const existing = bySurface.get(s.surface);
+    if (existing) {
+      existing.count += 1;
+      existing.estimatedWaitMs = maxWait(existing.estimatedWaitMs, s.estimatedWaitMs);
+    } else {
+      bySurface.set(s.surface, {
+        surface: s.surface,
+        label: describeBlockerSurface(s.surface),
+        kind: s.kind,
+        count: 1,
+        estimatedWaitMs: s.estimatedWaitMs,
+      });
+    }
+  }
+  // Hard blockers first (they're what actually defer the drain), then by count.
+  return [...bySurface.values()].sort(
+    (a, b) => Number(b.kind === "hard") - Number(a.kind === "hard") || b.count - a.count,
+  );
+}
+
+function maxWait(a: number | null, b: number | null): number | null {
+  if (a == null) return b;
+  if (b == null) return a;
+  return Math.max(a, b);
+}
+
+/**
+ * Read the current quiescence activity for the operator panel. Returns the live
+ * level plus, when a run is/was active, its target and the activities holding
+ * the drain open (from the final snapshot if the run is terminal, else the
+ * initial/live snapshot). Never throws on a missing prisma model (fresh boot).
+ */
+export async function getQuiescenceActivity(now: Date = new Date()): Promise<QuiescenceActivity> {
+  const config = await getQuiescenceConfig(now);
+  const base: QuiescenceActivity = {
+    level: config.level,
+    runId: config.runId,
+    enteredAt: config.enteredAt,
+    run: null,
+    blockersCapturedAt: null,
+    blockers: [],
+  };
+
+  if (typeof prisma.quiescenceRun?.findFirst !== "function") return base;
+
+  // Prefer the run named by the live level; otherwise fall back to the most
+  // recent run so a just-deferred drain still explains why it backed off.
+  const row = config.runId
+    ? await prisma.quiescenceRun.findUnique({ where: { runId: config.runId } })
+    : await prisma.quiescenceRun.findFirst({ orderBy: { startedAt: "desc" } });
+  if (!row) return base;
+
+  const snapshot =
+    parseSnapshot(row.finalSnapshot) ?? parseSnapshot(row.initialSnapshot);
+  const enteredStateAt =
+    (row.enteredStateAt as unknown as EnteredStateAt | null) ?? {};
+
+  return {
+    ...base,
+    run: {
+      runId: row.runId,
+      status: row.status,
+      trigger: row.trigger,
+      targetVersion: row.targetVersion ?? null,
+      targetBundleHash: row.targetBundleHash ?? null,
+      deferSurface: row.deferSurface ?? null,
+      deferReason: row.deferReason ?? null,
+      budgetMs: row.budgetMs ?? null,
+      drainStartedAt: enteredStateAt.draining ?? null,
+      lastHeartbeatAt: row.lastHeartbeatAt?.toISOString() ?? null,
+    },
+    blockersCapturedAt: snapshot?.capturedAt ?? null,
+    blockers: summarizeBlockers(snapshot),
+  };
+}
+
+function parseSnapshot(raw: unknown): ActiveSessionBlockers | null {
+  if (!raw || typeof raw !== "object") return null;
+  const snap = raw as Partial<ActiveSessionBlockers>;
+  if (!Array.isArray(snap.surfaces)) return null;
+  return snap as ActiveSessionBlockers;
 }
 
 // ─── Errors raised by entry-point gates (BI-QUIESCE-005 consumer) ────────

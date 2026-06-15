@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Native Financial Management — Strategy &amp; Gap (replace QuickBooks, don't interface)</title>
+<meta name="dpf:status" content="Strategy — direction set, build deferred" />
+<meta name="dpf:date" content="2026-06-14" />
+<meta name="dpf:format" content="HTML + SysML v2" />
+<style>
+  :root {
+    --fg:#1a1d21;--muted:#5a6470;--bg:#fff;--surface:#f6f8fa;--border:#d8dee4;--accent:#2f6feb;
+    --ok:#1a7f37;--warn:#9a6700;--danger:#cf222e;--sysml-bg:#f0f4fb;--sysml-border:#2f6feb;
+  }
+  @media (prefers-color-scheme: dark){:root{
+    --fg:#e6edf3;--muted:#9aa7b4;--bg:#0d1117;--surface:#161b22;--border:#30363d;--accent:#6ea8ff;
+    --ok:#3fb950;--warn:#d29922;--danger:#f85149;--sysml-bg:#11192b;--sysml-border:#6ea8ff;}}
+  *{box-sizing:border-box}
+  body{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--fg);background:var(--bg);margin:0 auto;padding:2.2rem clamp(1rem,4vw,4rem);max-width:64rem}
+  h1{font-size:1.9rem;line-height:1.2;margin:0 0 .3rem}
+  h2{font-size:1.3rem;margin:2.4rem 0 .7rem;padding-top:.6rem;border-top:2px solid var(--border)}
+  h3{font-size:1.06rem;margin:1.4rem 0 .4rem;color:var(--accent)}
+  .muted{color:var(--muted)}
+  code{font-family:ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace;font-size:.9em}
+  table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.92rem}
+  th,td{border:1px solid var(--border);padding:.42rem .6rem;text-align:left;vertical-align:top}
+  th{background:var(--surface);font-weight:600}
+  .meta td:first-child{font-weight:600;width:12rem;background:var(--surface)}
+  pre.sysml{background:var(--sysml-bg);border:1px solid var(--border);border-left:4px solid var(--sysml-border);border-radius:6px;padding:.9rem 1rem;overflow-x:auto;font-size:.85rem;line-height:1.5;font-family:ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace;color:var(--fg)}
+  pre.sysml .kw{color:var(--accent);font-weight:600}
+  pre.sysml .cm{color:var(--muted);font-style:italic}
+  .note{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:.7rem 1rem;margin:1rem 0}
+  .have{color:var(--ok);font-weight:600}.gap{color:var(--danger);font-weight:600}.partial{color:var(--warn);font-weight:600}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<h1>Native Financial Management — Strategy &amp; Gap</h1>
+<p class="muted">Build QuickBooks-equivalent accounting <em>natively</em>. Don't interface to it. Cohesion is the moat.</p>
+
+<table class="meta">
+  <tr><td>Status</td><td><strong>Strategy — direction set 2026-06-14, build deferred</strong></td></tr>
+  <tr><td>Date</td><td>2026-06-14</td></tr>
+  <tr><td>Author</td><td>Agent (with Mark Bodman direction)</td></tr>
+  <tr><td>Format</td><td>HTML + SysML v2</td></tr>
+  <tr><td>Reverses</td><td>HVAC spec ADR-5 ("QuickBooks remains the accounting system of record") and the original <a href="2026-06-13-field-dispatch-capability-design.md">Field Dispatch</a> F12 (sync-to-QB).</td></tr>
+  <tr><td>Note</td><td>Gap grounded by a financial-substrate audit (2026-06-14): DPF is a strong <strong>subledger + reporting</strong> system with <strong>no general ledger</strong>. The GL is the keystone build.</td></tr>
+</table>
+
+<h2 id="decision">1. Decision</h2>
+<p>
+  The operator directive (2026-06-14): <em>"build the functionality that is equivalent to QuickBooks, not interface to
+  it. That will be a deferred functionality as the cohesion of this system in one will be the compelling reason to lure
+  customers away from it. If there is a gap in functionality, we close it."</em>
+</p>
+<p>
+  <strong>DPF builds native financial management equivalent to QuickBooks.</strong> The QuickBooks integration becomes a
+  <strong>migration bridge</strong> (import-from-QB, optional sync during transition), not the system of record. The end
+  state: a switcher loses no accounting capability (we close every gap) and gains cohesion they cannot get from QB.
+</p>
+
+<h2 id="thesis">2. The cohesion thesis (why native beats integration)</h2>
+<p>
+  An SMB field-service business today runs QuickBooks (accounting) + a dispatch tool (ServiceTitan/Housecall) + an
+  inventory tool + spreadsheets, stitched by brittle integrations that drift. The win is <strong>not "better accounting
+  than QuickBooks"</strong> — QB is mature. The win is <strong>accounting fused with operations and AI on one data
+  model</strong>:
+</p>
+<ul>
+  <li>The invoice is not a synced copy — it <em>is</em> the close of the job that the same system dispatched, drew parts for, and warranty-classified.</li>
+  <li>A covered compressor part is <code>$0</code> on the invoice <em>because</em> the same system holds the equipment's warranty terms — no re-keying, no integration.</li>
+  <li>The AI coworker sees the whole chain in one place — <strong>job → part used → warranty → invoice → payment → reorder</strong> — and watches every seam (the un-invoiced completion, the unpaid invoice, the margin leak). QuickBooks is accounting-only; it structurally cannot see the operation.</li>
+</ul>
+<p class="note">
+  <strong>The moat is the loop, not the ledger.</strong> Two products integrated will always be two products. One
+  cohesive system, with AI that reasons across operations <em>and</em> finance, is the reason to leave QuickBooks.
+</p>
+
+<h2 id="substrate">3. What DPF already has (toward QB-equivalence)</h2>
+<table>
+  <tr><th>Area</th><th>Status</th><th>Substrate (audit 2026-06-14)</th></tr>
+  <tr><td>AR — invoicing</td><td class="have">have</td><td><code>Invoice</code> + <code>InvoiceLineItem</code> (with <code>accountCode</code>), statuses, aging, <code>PaymentAllocation</code>, dunning sequences, recurring invoices, payment links (<code>payToken</code>). Job rails on <code>sourceType</code>/<code>sourceId</code>.</td></tr>
+  <tr><td>AP — bills / POs</td><td class="have">have</td><td><code>Bill</code>, <code>Supplier</code>, <code>PurchaseOrder</code>, <code>BillApproval</code>/<code>ApprovalRule</code> workflow.</td></tr>
+  <tr><td>Payments</td><td class="have">have</td><td>unified inbound/outbound <code>Payment</code> + allocation + reconcile flags + Stripe (<code>stripePaymentId</code>); partial payments.</td></tr>
+  <tr><td>P&amp;L + cash flow + VAT summary</td><td class="have">have</td><td>computed from subledgers: <code>getProfitAndLoss()</code>, <code>getCashFlowReport()</code>, <code>getVatSummary()</code>, aged debtors/creditors. Work today — but NOT GL-derived, so not GAAP-audit-grade.</td></tr>
+  <tr><td>Bank reconciliation</td><td class="partial">partial</td><td><code>BankAccount</code>/<code>BankTransaction</code>/<code>BankRule</code> + matching engine + reconcile UI — but <strong>CSV import only</strong> (live feeds not ready).</td></tr>
+  <tr><td>Sales tax</td><td class="partial">partial</td><td>per-line computation + an extensive compliance framework (<code>TaxRegistration</code>, <code>TaxLiabilityEntry</code>, <code>TaxObligationPeriod</code>, <code>TaxRemittanceRun</code>) — but <strong>filing execution not ready</strong>.</td></tr>
+  <tr><td>Fixed assets, QB bridge</td><td class="have">have</td><td><code>FixedAsset</code> w/ depreciation (not yet rolled into a balance sheet); QB read client + <code>erpSync*</code> → repurpose as the migration bridge.</td></tr>
+</table>
+
+<h2 id="gap">4. The gap to QuickBooks-equivalence (what to build)</h2>
+<p>
+  DPF is a strong <strong>subledger + reporting</strong> system today — but <strong>not a double-entry accounting system</strong>.
+  The keystone gap is the general ledger; it unlocks most of the rest.
+  <span class="muted">(Audit 2026-06-14: ~6–9 months to QuickBooks-Desktop parity, with a subledger→GL posting refactor.)</span>
+</p>
+<table>
+  <tr><th>Capability</th><th>Status</th><th>Why it's the gap</th></tr>
+  <tr><td><strong>General ledger — persisted chart of accounts + journal entries + double-entry posting</strong></td><td class="gap">build — keystone</td><td><strong>Critically absent</strong>: zero <code>JournalEntry</code>/<code>GeneralLedger</code>/<code>ChartOfAccounts</code> models; the chart of accounts exists only as seed templates in <code>finance-templates</code>. Every AR/AP/payment/asset event must post balanced debits/credits. QB's core; the thing the rest needs.</td></tr>
+  <tr><td>Balance sheet + trial balance</td><td class="gap">build (needs GL)</td><td>Cannot exist without the GL. <code>FixedAsset</code> values aren't rolled into assets/equity today.</td></tr>
+  <tr><td>Period close + retained earnings + GL audit trail</td><td class="gap">build (needs GL)</td><td>Period locking, carryforward, immutable posting — what makes it audit-grade.</td></tr>
+  <tr><td>Re-base P&amp;L / cash flow on the GL</td><td class="partial">deepen</td><td>They compute from subledgers now; re-derive from the GL for audit-grade consistency.</td></tr>
+  <tr><td>Live bank feeds</td><td class="partial">close</td><td>Reconciliation engine exists; add Plaid/API feeds (CSV-only today).</td></tr>
+  <tr><td>Sales-tax filing execution</td><td class="partial">close</td><td>Computation + liability tracking exist; add native filing/remittance (today integration/specialist-led).</td></tr>
+  <tr><td>Payroll</td><td class="partial">deferred decision</td><td>Absent. Regulated money-movement → likely <strong>conduit</strong> (customer's own payroll/banking account) per CF2, not native — a tension with "close every gap" worth the operator's call.</td></tr>
+</table>
+
+<h2 id="bridge">5. Migration bridge (how a QuickBooks shop switches)</h2>
+<p>
+  The existing QB read client + <code>erpSync</code> fields are repurposed: <strong>import</strong> the customer's chart of
+  accounts, open balances, customers/vendors, and history from QuickBooks into the native GL; optionally <strong>sync</strong>
+  during a transition window; then cut over. The customer's accountant gets native statements + the year-end export.
+  DPF never re-enrolls as a QB partner — it reads the customer's own QB via their connection (conduit).
+</p>
+
+<h2 id="model">6. SysML model</h2>
+<pre class="sysml"><code><span class="kw">package</span> NativeFinancialManagement {
+
+  <span class="kw">requirement def</span> RF1_NativeLedger     { <span class="kw">doc</span> <span class="cm">/* double-entry GL + chart of accounts; every financial event posts balanced entries */</span> }
+  <span class="kw">requirement def</span> RF2_NativeStatements { <span class="kw">doc</span> <span class="cm">/* P&amp;L, balance sheet, cash flow computed from the GL, no QuickBooks dependency */</span> }
+  <span class="kw">requirement def</span> RF3_BankRecon       { <span class="kw">doc</span> <span class="cm">/* import bank/card txns; match + reconcile against AR/AP/payments */</span> }
+  <span class="kw">requirement def</span> RF4_SalesTax        { <span class="kw">doc</span> <span class="cm">/* compute tax by jurisdiction on invoices; period liability + filing support */</span> }
+  <span class="kw">requirement def</span> RF5_Cohesion        { <span class="kw">doc</span> <span class="cm">/* finance posts from operations (job/invoice/part/warranty/payment) on one model; AI reasons across both */</span> }
+  <span class="kw">constraint def</span>  CF1_MigrationBridge { <span class="cm">/* QuickBooks is import/sync-only during transition, never the system of record */</span> }
+  <span class="kw">constraint def</span>  CF2_ConduitForRegulatedMoney { <span class="cm">/* payroll / banking money-movement via the customer's own account (conduit), not DPF-as-partner */</span> }
+
+  <span class="kw">part def</span> GeneralLedger    { <span class="cm">// chart of accounts + journal entries (debit/credit), the gap to build</span> }
+  <span class="kw">part def</span> ARLedger         { <span class="cm">// existing Invoice / InvoiceLineItem / PaymentAllocation -> posts to GL</span> }
+  <span class="kw">part def</span> APLedger         { <span class="cm">// existing Bill / PurchaseOrder / Supplier -> posts to GL</span> }
+  <span class="kw">part def</span> FinancialStatements { <span class="cm">// projections over the GL (P&amp;L / BS / CF)</span> }
+  <span class="kw">part def</span> BankReconciliation { }
+  <span class="kw">part def</span> QuickBooksBridge  { <span class="cm">// import + optional sync; existing QB read client + erpSync fields</span> }
+
+  <span class="kw">connection</span> arToLedger <span class="kw">connect</span> ARLedger <span class="kw">to</span> GeneralLedger;   <span class="cm">// field-service invoice (warranty-classified) posts here</span>
+  <span class="kw">connection</span> apToLedger <span class="kw">connect</span> APLedger <span class="kw">to</span> GeneralLedger;
+
+  <span class="kw">allocation</span> f1 <span class="kw">allocate</span> ARLedger <span class="kw">to</span> existing.invoiceSubstrate;     <span class="cm">// have</span>
+  <span class="kw">allocation</span> f2 <span class="kw">allocate</span> APLedger <span class="kw">to</span> existing.billPurchaseOrder;     <span class="cm">// have</span>
+  <span class="kw">allocation</span> f3 <span class="kw">allocate</span> QuickBooksBridge <span class="kw">to</span> integrate.quickbooks; <span class="cm">// repurpose as bridge</span>
+  <span class="cm">// GeneralLedger, FinancialStatements, BankReconciliation: TO BUILD (deferred)</span>
+
+  <span class="kw">satisfy</span> RF1 <span class="kw">by</span> GeneralLedger;  <span class="kw">satisfy</span> RF2 <span class="kw">by</span> FinancialStatements;
+  <span class="kw">satisfy</span> RF3 <span class="kw">by</span> BankReconciliation;  <span class="kw">satisfy</span> RF5 <span class="kw">by</span> arToLedger;
+}</code></pre>
+
+<h2 id="sequencing">7. Deferred sequencing</h2>
+<ol>
+  <li><strong>Now (in the dispatcher wedge):</strong> native field-service invoice → DPF AR (warranty-classified, F12/F14) + payment collection. No QuickBooks write. <span class="muted">The warranty engine is already built/verified.</span></li>
+  <li><strong>Phase N1 — the ledger:</strong> chart of accounts + double-entry GL; AR/AP post to it. The keystone.</li>
+  <li><strong>Phase N2 — statements:</strong> build the <strong>balance sheet + trial balance</strong> from the GL; re-base the existing P&amp;L / cash flow onto it (they work from subledgers today). Roll <code>FixedAsset</code> into the balance sheet.</li>
+  <li><strong>Phase N3 — live bank feeds</strong> (the reconciliation engine exists; add Plaid/API) + <strong>sales-tax filing</strong> execution (computation + liability tracking exist).</li>
+  <li><strong>Phase N4 — migration:</strong> QuickBooks import (chart of accounts, balances, history) + year-end/1099 export; cut-over.</li>
+</ol>
+<p class="note">This is a deferred, multi-phase build — captured as direction now. The dispatcher wedge proceeds on native AR; the GL and statements are the larger investment that makes the "replace QuickBooks" claim real.</p>
+
+<h2 id="sysml-note">8. SysML Architecture Note</h2>
+<table>
+  <tr><td class="muted" style="width:16rem">Scope</td><td>Strategic reframe of DPF financial management from QB-integration to QB-equivalent native accounting. New substrate (GL, statements, bank rec) is deferred build.</td></tr>
+  <tr><td class="muted">Changed requirements/constraints</td><td>RF1–RF5 + CF1 (QB = bridge) + CF2 (conduit for regulated money). Reverses HVAC ADR-5.</td></tr>
+  <tr><td class="muted">Changed interfaces</td><td>QuickBooks integration re-scoped to import/migration; native AR/AP post to a new GL boundary.</td></tr>
+  <tr><td class="muted">Allocations</td><td>AR/AP → existing substrate; QB → bridge; GL/statements/bank-rec → to build.</td></tr>
+  <tr><td class="muted">Verification cases</td><td>(deferred) GL balanced-posting invariants; statement-from-GL correctness; bank-match reconciliation; the field-service invoice posts to AR→GL.</td></tr>
+  <tr><td class="muted">Data authority impact</td><td><strong>Major:</strong> DPF becomes the financial system of record (today QB is). The GL is the new authority for financial truth; statements are projections over it.</td></tr>
+  <tr><td class="muted">Open architecture risks</td><td>(1) GL is a large, correctness-critical build (double-entry, audit trail, period close). (2) Payroll: native vs conduit (CF2). (3) Accountant trust during migration — the year-end export must satisfy their workflow.</td></tr>
+</table>
+
+<h2 id="next">9. Recommended next step</h2>
+<p>
+  Proceed on the dispatcher wedge with <strong>native AR</strong> (field-service invoice → DPF <code>Invoice</code>,
+  warranty-classified, payment collection) — no QuickBooks write. Schedule the <strong>general ledger</strong> (Phase N1)
+  as the keystone of the deferred native-accounting build; everything else (statements, bank rec, migration) composes
+  over it. Confirm the gap against the financial-substrate audit before the N1 design.
+</p>
+
+</body>
+</html>

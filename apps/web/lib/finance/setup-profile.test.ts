@@ -10,11 +10,12 @@ describe("finance setup profile resolution", () => {
     expect(financeProfileSlugFromCategory("trades-maintenance")).toBe("trades_construction");
     expect(financeProfileSlugFromCategory("education-training")).toBe("education_training");
     expect(financeProfileSlugFromCategory("retail-goods")).toBe("retail");
+    expect(financeProfileSlugFromCategory("software-platform")).toBe("software_platform");
   });
 
   it("falls back to professional services when the business category is unknown", () => {
     expect(financeProfileSlugFromCategory(null)).toBe("professional_services");
-    expect(financeProfileSlugFromCategory("software-platform")).toBe("professional_services");
+    expect(financeProfileSlugFromCategory("unknown-category")).toBe("professional_services");
   });
 
   it("returns display metadata for the resolved profile", () => {

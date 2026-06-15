@@ -1,13 +1,6 @@
 import { notFound } from "next/navigation";
-import { getPublicStorefront, getPublicItem } from "@/lib/storefront-data";
+import { getPublicStorefront, getPublicItem, resolveInquiryFormSchema } from "@/lib/storefront-data";
 import { InquiryForm } from "@/components/storefront/InquiryForm";
-
-const DEFAULT_INQUIRY_SCHEMA = [
-  { name: "name", label: "Your name", type: "text", required: true },
-  { name: "email", label: "Email address", type: "email", required: true },
-  { name: "phone", label: "Phone number (optional)", type: "tel", required: false },
-  { name: "message", label: "Message or question", type: "textarea", required: false },
-];
 
 export default async function ItemInquirePage({
   params,
@@ -21,11 +14,19 @@ export default async function ItemInquirePage({
   ]);
   if (!storefront || !item) notFound();
 
+  const formSchema = await resolveInquiryFormSchema(storefront.archetypeId);
+
+  const CTA_HEADINGS: Record<string, string> = {
+    rental: "Reserve",
+    inquiry: "Enquire about",
+  };
+  const headingVerb = item.ctaLabel ?? CTA_HEADINGS[item.ctaType] ?? "Enquire about";
+
   return (
     <div style={{ paddingTop: 40, maxWidth: 520 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Enquire about {item.name}</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>{headingVerb} {item.name}</h1>
       <p style={{ color: "var(--dpf-muted)", marginBottom: 24, fontSize: 14 }}>{item.description}</p>
-      <InquiryForm orgSlug={slug} itemId={itemId} formSchema={DEFAULT_INQUIRY_SCHEMA} />
+      <InquiryForm orgSlug={slug} itemId={itemId} formSchema={formSchema} />
     </div>
   );
 }

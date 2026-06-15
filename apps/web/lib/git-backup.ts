@@ -3,11 +3,8 @@
  * Used by fork_only mode to protect customizations against container rebuilds.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { prisma } from "@dpf/db";
-import { lazyChildProcess, lazyUtil, lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
+import { lazyChildProcess, lazyUtil, lazyFsPromises, lazyPath, lazyOs, getCwd } from "@/lib/shared/lazy-node";
 
 /**
  * Commit a promotion diff to the configured backup repository.
@@ -48,12 +45,15 @@ export async function backupPromotionToGit(input: {
 
   try {
     const exec = lazyUtil().promisify(lazyChildProcess().exec);
-    const { writeFile } = lazyFsPromises();
-    const { resolve } = lazyPath();
+    const fsp = lazyFsPromises();
+    const p = lazyPath();
+    const o = lazyOs();
+    const { writeFile } = fsp;
+    const { resolve } = p;
 
     const gitRoot = process.env.PROJECT_ROOT
       ? resolve(process.env.PROJECT_ROOT)
-      : resolve(process.cwd(), "..", "..");
+      : resolve(getCwd(), "..", "..");
 
     const timeout = 30_000;
 
@@ -66,9 +66,9 @@ export async function backupPromotionToGit(input: {
     // atomically creates a 0700-perm subdirectory only the current
     // user can write to; everything we drop inside that dir is safe
     // by virtue of its parent's perms + the unguessable random suffix.
-    const workDir = await mkdtemp(join(tmpdir(), "dpf-backup-"));
+    const workDir = await fsp.mkdtemp(p.join(o.tmpdir(), "dpf-backup-"));
     try {
-      const tmpFile = join(workDir, "patch.diff");
+      const tmpFile = p.join(workDir, "patch.diff");
       await writeFile(tmpFile, input.diffPatch, "utf-8");
 
       // Apply the patch
@@ -91,7 +91,7 @@ export async function backupPromotionToGit(input: {
       // messages. The script CONTAINS the GitHub token, so the 0700-perm
       // mkdtemp subdir is doubly important — it prevents both symlink
       // pre-creation attacks and other-user read of the token file.
-      const askpassScript = join(workDir, "askpass.sh");
+      const askpassScript = p.join(workDir, "askpass.sh");
       await writeFile(askpassScript, `#!/bin/sh\necho "${token}"`, { mode: 0o700 });
       await exec(`git push ${JSON.stringify(config.gitRemoteUrl)} HEAD:main`, {
         cwd: gitRoot, timeout,
@@ -126,7 +126,7 @@ export async function backupPromotionToGit(input: {
       // Remove the entire mkdtemp directory — covers both the patch
       // file and the askpass script in one cleanup, even if the work
       // above threw partway through.
-      await rm(workDir, { recursive: true, force: true }).catch(() => {});
+      await fsp.rm(workDir, { recursive: true, force: true }).catch(() => {});
     }
   } catch (err) {
     return { pushed: false, error: err instanceof Error ? err.message : "Git backup push failed" };

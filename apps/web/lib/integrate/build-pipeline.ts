@@ -226,8 +226,12 @@ export async function runBuildPipeline(params: {
  *
  * workspace_initialized comes BEFORE db_ready because prisma migrate deploy
  * needs the prisma/ directory to exist inside the container.
+ *
+ * Exported for the durable execution path (BI-89030C9B Phase 1) — the
+ * Inngest function runs each step as its own journaled step.run via
+ * build-execute-helpers.runPipelineStepDurable.
  */
-async function executeStep(
+export async function executeStep(
   step: BuildExecStep,
   buildId: string,
   state: BuildExecutionState,
@@ -419,6 +423,63 @@ async function stepGenerateCode(
     select: { id: true },
   });
   const threadId = thread?.id ?? `build-pipeline-${buildId}`;
+
+  // Local-LLM build path: when the configured dispatch engine is opencode, run
+  // the build through the opencode CLI runner instead of runAgenticLoop. The
+  // agentic loop relies on the model's API tool-calling (requireTools), which a
+  // local model can't do reliably — it fails with "No AI model that supports
+  // tools is active." opencode is exactly the runner built to bridge that: it
+  // parses the local model's native <function=…> tool format itself and drives
+  // the read-edit-write loop in the sandbox. Gated on provider === "opencode"
+  // so installs with a frontier CLI/provider keep the existing agentic path.
+  const { getBuildStudioConfig } = await import("./build-studio-config");
+  const dispatchConfig = await getBuildStudioConfig();
+  if (dispatchConfig.provider === "opencode") {
+    const { dispatchOpencodeTask } = await import("./opencode-dispatch");
+    const ocTask: import("./task-dependency-graph").AssignedTask = {
+      taskIndex: 0,
+      title: brief?.title ?? build.title ?? buildId,
+      specialist: "software-engineer",
+      files: [],
+      task: {
+        title: brief?.title ?? build.title ?? buildId,
+        testFirst: "",
+        implement: userMessage,
+        verify: Array.isArray(brief?.acceptanceCriteria) ? brief.acceptanceCriteria.join("; ") : "",
+      },
+    };
+    const oc = await dispatchOpencodeTask({
+      task: ocTask,
+      buildId,
+      buildContext,
+      model: dispatchConfig.opencodeModel,
+      providerId: dispatchConfig.opencodeProviderId,
+      onProgress: (message) => {
+        if (thread?.id) {
+          agentEventBus.emit(thread.id, { type: "orchestrator:task_progress", buildId, taskTitle: ocTask.title, message });
+        }
+      },
+    });
+    const ocToolNames = oc.executedTools.map((t) => t.name);
+    await prisma.featureBuild.update({
+      where: { buildId },
+      data: {
+        taskResults: {
+          agenticResult: oc.content.slice(0, 5000),
+          toolsExecuted: ocToolNames,
+          // opencode emits write/edit tool events for file changes.
+          filesChanged: ocToolNames.filter((n) => n === "write" || n === "edit").length,
+          ranTests: false,
+          providerId: dispatchConfig.opencodeProviderId || "local",
+          modelId: dispatchConfig.opencodeModel || "local",
+        } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+      },
+    });
+    if (!oc.success) {
+      throw new Error(`opencode build dispatch failed: ${oc.content.slice(0, 300)}`);
+    }
+    return state;
+  }
 
   // Run the agentic loop — this gives us iterative tool use with the full
   // read-edit-test-fix workflow instead of single-shot code generation

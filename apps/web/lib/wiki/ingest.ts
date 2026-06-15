@@ -13,9 +13,7 @@
 // how Mark drafted the v0.2.0 kernel content (raw-source pages first,
 // wiki pages second).
 
-import { readFileSync } from "node:fs";
-import { basename, extname } from "node:path";
-import path from "node:path";
+import { getCwd, lazyPath, lazyFs } from "@/lib/shared/lazy-node";
 
 // Split on both POSIX and Windows separators so callers can pass either flavor
 // of path (URL-style "/x/y/z.md" or native "C:\x\y\z.md") and get the same
@@ -94,10 +92,11 @@ export type IngestRawSourceResult = {
  * caller controls.
  */
 export function deriveSourceKeyFromPath(filePath: string): string {
+  const path = lazyPath();
   const segments = filePath.split(PATH_SEPARATOR).filter(Boolean);
   const file = segments.at(-1) ?? filePath;
   const parent = segments.at(-2);
-  const stem = basename(file, extname(file));
+  const stem = path.basename(file, path.extname(file));
   if (!parent) return stem;
   return `${parent}/${stem}`;
 }
@@ -109,6 +108,7 @@ export function deriveSourceKeyFromPath(filePath: string): string {
  * is not recognisable — the caller must supply `sourceType` explicitly.
  */
 export function deriveSourceTypeFromPath(filePath: string): RawSourceType | null {
+  const path = lazyPath();
   const segments = filePath.split(PATH_SEPARATOR).filter(Boolean);
   const parent = segments.at(-2);
   if (!parent) return null;
@@ -139,10 +139,11 @@ export const ALLOWED_INGEST_ROOTS = [
  * their own trust model).
  */
 export function assertAllowedIngestPath(filePath: string): string {
+  const path = lazyPath();
   const resolved = path.resolve(filePath);
   const projectRoot = process.env.PROJECT_ROOT
     ? path.resolve(process.env.PROJECT_ROOT)
-    : process.cwd();
+    : getCwd();
   for (const root of ALLOWED_INGEST_ROOTS) {
     const allowedAbs = path.resolve(projectRoot, root);
     const rel = path.relative(allowedAbs, resolved);
@@ -168,7 +169,8 @@ function readSourceFile(filePath: string): {
   frontmatter: Partial<RawSourceFrontmatter>;
   body: string;
 } {
-  const raw = readFileSync(filePath, "utf8");
+  const fs = lazyFs();
+  const raw = fs.readFileSync(filePath, "utf8");
   if (!raw.trimStart().startsWith("---")) {
     return { frontmatter: {}, body: raw };
   }

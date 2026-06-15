@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Date | 2026-05-26 |
-| Status | Draft for operator review |
+| Status | Runtime-current through Slice 4; Slice 5 queued as `BI-D8E00326` |
 | Owners | Mark Bodman, Codex |
 | Scope | Customer CRM, pipeline, marketing workspace, acquisition integrations, AI coworker use cases |
 | Related specs | `2026-03-20-crm-research-synthesis.md`, `2026-03-20-crm-sales-pipeline-design.md`, `2026-04-24-customer-marketing-workspace-design.md`, `2026-04-11-marketing-specialist-skills-design.md` |
@@ -28,10 +28,12 @@ The current repo already has the substrate needed for a first implementation sli
 - Pipeline data already includes `Opportunity.stage`, `probability`, `expectedValue`, and `stageChangedAt`.
 - `Engagement` already has `source` and `sourceRefId`, which are suitable for first-slice lead and market signal routing.
 - Marketing work products already exist: `MarketingStrategy`, `MarketingReview`, `MarketingCampaignBrief`, `MarketingAssetTask`, `MarketingKpiCheckpoint`, and `MarketingAutomationCandidate`.
-- `/customer/marketing` now exists as the internal marketing workspace and resolves to `marketing-specialist`.
+- `/customer/marketing` exists as the internal marketing workspace and resolves to `marketing-specialist`.
 - The marketing agent already persists durable work via MCP tools such as `save_marketing_review`, `create_marketing_campaign_brief`, `create_marketing_asset_task`, `record_marketing_kpi_checkpoint`, and `create_marketing_automation_candidate`.
-- The `MarketingTabNav` still exposes disabled Campaigns, Funnel, and Automation tabs with "Phase 2" / "Phase 3" labels. This creates visible product debt on a customer-facing operations surface.
-- The CRM pages under `/customer` still use hardcoded status and stage colors plus inline style objects. This violates the DPF theme-aware UI standard and should be cleaned up as part of the first product slice.
+- `MarketingTabNav` now exposes real Overview, Strategy, Campaigns, Funnel, and Automation routes. The visible "Phase 2" / "Phase 3" placeholder pattern has been removed.
+- The CRM pages under `/customer` now centralize stage/status labels in `apps/web/lib/crm/presentation.ts`, use `apps/web/lib/crm/revenue-cockpit.ts` for summary math, and render Customer CRM metric/status wrappers that compose the shared `report-kit` palette.
+- Pipeline inspector, acquisition signal routing, marketing subroutes, and guided coworker launch boundaries have landed on `origin/main`; see `docs/superpowers/audits/2026-06-06-customer-crm-marketing-ux-reconciliation.md`.
+- Authenticated browser crawl against the canonical portal was retried on 2026-06-06. Login reached `/workspace`, established an `authjs.session-token`, and `/customer`, `/customer/opportunities`, `/customer/engagements`, `/customer/marketing`, `/customer/marketing/strategy`, `/customer/marketing/campaigns`, `/customer/marketing/funnel`, and `/customer/marketing/automation` loaded without the app fallback. The crawl found a global shell UX issue: the collapsed AI Coworker FAB defaulted to the vertical midpoint and could occlude primary page actions, so the follow-up shell fix docks it in a lower safe band by default.
 - The native integration catalogue already includes HubSpot CRM and Marketing, Google Marketing Intelligence, Facebook Lead Ads, Google Business Profile, and Mailchimp Marketing.
 - The integration coverage matrix already says Facebook Lead Ads should land in CRM and sales workflow, and Mailchimp writeback requires consent and customer-record boundaries.
 
@@ -45,7 +47,7 @@ Live DB fallback found an existing in-progress epic:
 - 9 backlog items are linked.
 - Statuses include `done`, `in-progress`, and two existing `triaging` rows.
 
-This design should extend the existing marketing epic or spawn a tightly scoped CRM/marketing operations epic after operator approval. It should not mutate backlog statuses in this thread, especially because `triaging` exists in live data while AGENTS.md lists canonical backlog statuses as `open`, `in-progress`, `done`, and `deferred`.
+Live MCP state on 2026-06-06 shows `BI-D8E00326` open for CRM marketing Slice 5: agentic sales and marketing operations, under `EP-CRM-MKT-OPS`. Use that item for the next product slice rather than reopening the historical Slice 1 checklist. The implementation plan is `docs/superpowers/plans/2026-06-06-pipedrive-crm-marketing-slice-5.md`.
 
 ## 4. Research and Benchmarking
 

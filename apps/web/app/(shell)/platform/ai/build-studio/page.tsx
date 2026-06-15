@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { headers } from "next/headers";
 import { getProviders } from "@/lib/inference/ai-provider-data";
+import { prisma } from "@dpf/db";
 import { getBuildStudioConfig } from "@/lib/integrate/build-studio-config";
 import { getContributorMcpReadiness, type ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import {
@@ -40,13 +41,32 @@ export default async function BuildStudioPage() {
   const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "localhost:3000";
   const baseUrl = `${proto}://${host}`;
 
-  const [allProviders, config, contributorMcpReadiness] = await Promise.all([
+  const [allProviders, config, contributorMcpReadiness, engineStates] = await Promise.all([
     getProviders(),
     getBuildStudioConfig(),
     user
       ? getContributorMcpReadiness(user.id, { probe: false })
       : Promise.resolve(unauthenticatedReadiness()),
+    prisma.buildEngine.findMany({
+      select: { engineId: true, state: { select: { present: true, version: true, lastProbedAt: true } } },
+    }),
   ]);
+
+  // Per-engine readiness from the last probe (BuildEngineState) — drives the
+  // present/absent badge so an engine that is selectable but not actually
+  // installed in the sandbox shows "not installed" instead of silently failing
+  // at dispatch. Build-Engine Provisioning (EP-2D477458) Phase 1b.
+  const engineReadiness: Record<
+    string,
+    { present: boolean | null; version: string | null; lastProbedAt: string | null }
+  > = {};
+  for (const e of engineStates) {
+    engineReadiness[e.engineId] = {
+      present: e.state?.present ?? null,
+      version: e.state?.version ?? null,
+      lastProbedAt: e.state?.lastProbedAt ? e.state.lastProbedAt.toISOString() : null,
+    };
+  }
 
   // Dynamic: group providers by cliEngine field instead of hardcoded IDs
   const claudeProviders = allProviders.filter(p =>
@@ -54,6 +74,12 @@ export default async function BuildStudioPage() {
   );
   const codexProviders = allProviders.filter(p =>
     (p.provider as Record<string, unknown>).cliEngine === "codex",
+  );
+  const grokProviders = allProviders.filter(p =>
+    (p.provider as Record<string, unknown>).cliEngine === "grok",
+  );
+  const opencodeProviders = allProviders.filter(p =>
+    (p.provider as Record<string, unknown>).cliEngine === "opencode",
   );
 
   return (
@@ -91,7 +117,22 @@ export default async function BuildStudioPage() {
           billingLabel: p.provider.billingLabel,
           costNotes: p.provider.costPerformanceNotes,
         }))}
+        grokProviders={grokProviders.map(p => ({
+          providerId: p.provider.providerId,
+          name: p.provider.name,
+          status: p.credential?.status ?? "unconfigured",
+          billingLabel: p.provider.billingLabel,
+          costNotes: p.provider.costPerformanceNotes,
+        }))}
+        opencodeProviders={opencodeProviders.map(p => ({
+          providerId: p.provider.providerId,
+          name: p.provider.name,
+          status: p.credential?.status ?? "unconfigured",
+          billingLabel: p.provider.billingLabel,
+          costNotes: p.provider.costPerformanceNotes,
+        }))}
         contributorMcpReadiness={contributorMcpReadiness}
+        engineReadiness={engineReadiness}
         baseUrl={baseUrl}
         canWrite={canWrite}
       />

@@ -23,12 +23,13 @@ import {
   lazyFsPromises as getFsPromises,
   lazyPath as getPath,
   lazyExec,
+  getCwd,
 } from "@/lib/shared/lazy-node";
 
 function getProjectRoot(): string {
   const path = getPath();
   if (process.env.PROJECT_ROOT) return path.resolve(process.env.PROJECT_ROOT);
-  return path.resolve(process.cwd(), "..", "..");
+  return path.resolve(getCwd(), "..", "..");
 }
 
 // ─── Path Security ──────────────────────────────────────────────────────────

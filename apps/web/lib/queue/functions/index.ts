@@ -6,6 +6,8 @@ import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
 import { issueReportTriage } from "./issue-report-triage";
+import { issueReportProjectOnCreate } from "./issue-report-project";
+import { backlogTriageDrain } from "./backlog-triage-drain";
 import { coworkerRegressionDetect } from "./coworker-regression-detect";
 import { agentTaskDispatch } from "./agent-task-dispatch";
 import { taskrunWatchdog } from "./taskrun-watchdog";
@@ -15,6 +17,7 @@ import { materialFreshnessDecay } from "./material-freshness-decay";
 import { researchExecute } from "./research-execute";
 import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
+import { buildExecute } from "./build-execute";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -42,6 +45,13 @@ import {
   qdrantBackupRequested,
 } from "./postgres-daily-backup";
 import { runtimeTargetJanitor } from "./runtime-target-janitor";
+import {
+  dataRetentionSweepScheduled,
+  dataRetentionSweepRequested,
+} from "./data-retention-sweep";
+import { logSignatureScanner } from "./log-signature-scanner";
+import { alertDeliveryBridge } from "./alert-delivery-bridge";
+import { releaseHealthCheck } from "./release-health-check";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 export const scheduledFunctions = [
@@ -51,6 +61,7 @@ export const scheduledFunctions = [
   infraPrune,
   codeGraphReconcileScheduled,
   issueReportTriage,
+  backlogTriageDrain,
   coworkerRegressionDetect,
   agentTaskDispatch,
   taskrunWatchdog,
@@ -66,6 +77,10 @@ export const scheduledFunctions = [
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
+  dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
+  logSignatureScanner,   // BI-5FE8656F: EP-FULL-OBS Tier 2 novel-signature log scan, every 15m
+  alertDeliveryBridge,   // BI-5FE8656F: EP-FULL-OBS Tier 2 item #6 — Prometheus+Loki firing alerts -> PortfolioQualityIssue, every 1m
+  releaseHealthCheck,    // BI-3630773C: EP-FULL-OBS release stamp verify-gate watch, every 15m
 ];
 
 export const eventFunctions = [
@@ -78,10 +93,12 @@ export const eventFunctions = [
   brandExtract,
   researchExecute,
   buildReviewVerification,
+  buildExecute,
   assuranceBomGenerate,
   assuranceScanRun,
   deliberationRun,
   governedBacklogTeeUpRequested,
+  issueReportProjectOnCreate,
   contributorInventorySyncOnDemand,
   gitPromotionSandboxVerification,
   postgresBackupRequested,
@@ -90,6 +107,7 @@ export const eventFunctions = [
   qdrantBackupRequested,
   selfUpgradeManual,
   quiescenceRun,
+  dataRetentionSweepRequested, // EP-DATA-RETENTION: operator "run now" / dry-run
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

@@ -1,4 +1,19 @@
-import type { ArchetypeDefinition } from "../types";
+import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
+
+// Amenity / common-area reservations (clubhouse, pool, party room) are bookable
+// across the week into long daytime-to-evening windows. The archetype's
+// top-level ctaType is "inquiry", but the reservation item is ctaType:"booking"
+// and needs schedulingDefaults or its calendar ships empty (same root cause as
+// AUDIT-R3/R4).
+const AMENITY_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "customer-choice",
+  defaultOperatingHours: [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, start: "08:00", end: "22:00" })),
+  defaultBeforeBuffer: 0,
+  defaultAfterBuffer: 30,
+  minimumNoticeHours: 24,
+  maxAdvanceDays: 90,
+};
 
 const CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -16,8 +31,8 @@ export const hoaPropertyManagementArchetypes: ArchetypeDefinition[] = [
     ctaType: "inquiry",
     tags: ["hoa", "homeowners", "association", "property", "community", "residential"],
     itemTemplates: [
-      { name: "Annual Dues", description: "Annual homeowner association dues payment", priceType: "fixed", ctaType: "purchase" },
-      { name: "Special Assessment", description: "One-time assessment for community improvements", priceType: "fixed", ctaType: "purchase" },
+      { name: "Annual Dues", description: "Annual homeowner association dues payment", priceType: "fixed", priceAmount: 1200, ctaType: "purchase" },
+      { name: "Special Assessment", description: "One-time assessment for community improvements", priceType: "fixed", priceAmount: 500, ctaType: "purchase" },
       { name: "Amenity Reservation", description: "Reserve the clubhouse, pool, or common area for an event", priceType: "fixed", ctaType: "booking" },
       { name: "Architectural Review Request", description: "Submit plans for exterior modifications for board review", priceType: "free", ctaType: "inquiry" },
       { name: "Maintenance Request", description: "Report a common-area maintenance issue", priceType: "free", ctaType: "inquiry" },
@@ -33,6 +48,7 @@ export const hoaPropertyManagementArchetypes: ArchetypeDefinition[] = [
       ...CONTACT_FIELDS,
       { name: "requestType", label: "Request type", type: "select" as const, required: true, options: ["Maintenance", "Architectural Review", "Complaint", "General Inquiry", "Amenity Reservation"] },
     ],
+    schedulingDefaults: AMENITY_SCHEDULING,
   },
   {
     archetypeId: "condo-association",
@@ -41,8 +57,8 @@ export const hoaPropertyManagementArchetypes: ArchetypeDefinition[] = [
     ctaType: "inquiry",
     tags: ["condo", "condominium", "association", "property", "strata", "residential"],
     itemTemplates: [
-      { name: "Monthly Condo Fees", description: "Monthly condominium maintenance fees", priceType: "fixed", ctaType: "purchase" },
-      { name: "Special Assessment", description: "One-time levy for building repairs or improvements", priceType: "fixed", ctaType: "purchase" },
+      { name: "Monthly Condo Fees", description: "Monthly condominium maintenance fees", priceType: "fixed", priceAmount: 300, ctaType: "purchase" },
+      { name: "Special Assessment", description: "One-time levy for building repairs or improvements", priceType: "fixed", priceAmount: 800, ctaType: "purchase" },
       { name: "Parking Allocation", description: "Apply for or change your parking space assignment", priceType: "free", ctaType: "inquiry" },
       { name: "Common Area Booking", description: "Reserve a party room, rooftop, or meeting space", priceType: "fixed", ctaType: "booking" },
       { name: "Maintenance Request", description: "Report an issue in shared areas or building systems", priceType: "free", ctaType: "inquiry" },
@@ -58,6 +74,7 @@ export const hoaPropertyManagementArchetypes: ArchetypeDefinition[] = [
       ...CONTACT_FIELDS,
       { name: "requestType", label: "Request type", type: "select" as const, required: true, options: ["Maintenance", "Noise Complaint", "Parking", "Move-in / Move-out", "General Inquiry"] },
     ],
+    schedulingDefaults: AMENITY_SCHEDULING,
   },
   {
     archetypeId: "property-management-company",

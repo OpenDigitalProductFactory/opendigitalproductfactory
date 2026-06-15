@@ -25,7 +25,7 @@ async function getReadinessForTarget(
   jobId: string,
   target: BackupTarget,
 ): Promise<ReadinessSummary> {
-  const [job, lastRun, lastSuccess, retainedRuns, recentFailures, lastTrialRestore] =
+  const [job, lastRun, lastSuccess, retainedRuns, recentFailures, lastTrialRestore, openCorruptionAlert] =
     await Promise.all([
       prisma.scheduledJob.findUnique({ where: { jobId } }),
       prisma.backupRun.findFirst({
@@ -65,6 +65,16 @@ async function getReadinessForTarget(
               finishedAt: true,
               errorMessage: true,
             },
+          })
+        : Promise.resolve(null),
+      // BI-EA67A758: open critical alert for a failed trial restore. The runner
+      // creates a PlatformNotification on failure and resolves it on success.
+      // The readiness card surfaces this as an inline warning banner.
+      target === "postgres"
+        ? prisma.platformNotification.findFirst({
+            where: { category: "backup-trial-restore-failed", subjectId: target, resolvedAt: null },
+            orderBy: { createdAt: "desc" },
+            select: { id: true, message: true, createdAt: true },
           })
         : Promise.resolve(null),
     ]);
@@ -121,6 +131,13 @@ async function getReadinessForTarget(
           lastStartedAt: lastTrialRestore.startedAt.toISOString(),
           lastFinishedAt: lastTrialRestore.finishedAt?.toISOString() ?? null,
           lastError: lastTrialRestore.errorMessage,
+        }
+      : null,
+    openCorruptionAlert: openCorruptionAlert
+      ? {
+          id: openCorruptionAlert.id,
+          message: openCorruptionAlert.message,
+          createdAt: openCorruptionAlert.createdAt.toISOString(),
         }
       : null,
   };

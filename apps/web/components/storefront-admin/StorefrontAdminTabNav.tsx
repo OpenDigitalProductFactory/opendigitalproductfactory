@@ -5,15 +5,21 @@ import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary"
 
 type Props = {
   vocabulary: ArchetypeVocabulary;
+  /** Show the Animals tab — only for archetypes with an animals-available section. */
+  showAnimals?: boolean;
+  /** Show the Units tab — only for rental archetypes with a stockable fleet. */
+  showUnits?: boolean;
 };
 
-export function StorefrontAdminTabNav({ vocabulary }: Props) {
+export function StorefrontAdminTabNav({ vocabulary, showAnimals = false, showUnits = false }: Props) {
   const path = usePathname();
 
   const tabs = [
     { label: "Dashboard", href: "/storefront" },
     { label: "Sections", href: "/storefront/sections" },
     { label: vocabulary.itemsLabel, href: "/storefront/items" },
+    ...(showUnits ? [{ label: "Units", href: "/storefront/units" }] : []),
+    ...(showAnimals ? [{ label: "Animals", href: "/storefront/animals" }] : []),
     { label: vocabulary.teamLabel, href: "/storefront/team" },
     { label: vocabulary.inboxLabel, href: "/storefront/inbox" },
     { label: "Settings", href: "/storefront/settings" },

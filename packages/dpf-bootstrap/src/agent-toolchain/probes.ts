@@ -96,7 +96,7 @@ export async function runMcpReadinessProbe(args: {
  * Result of a single CLI's smoke probe attempt.
  */
 export type ClientSmokeResult = {
-  client: "claude" | "codex";
+  client: "claude" | "codex" | "grok";
   result: SmokeTestResult;
 };
 
@@ -115,22 +115,21 @@ export type ClientSmokeResult = {
 export async function runSmokeProbe(args: {
   hasToken: boolean;
   /** Override path lookup for tests. */
-  cliPath?: { claude?: string; codex?: string };
+  cliPath?: { claude?: string; codex?: string; grok?: string };
   /** Per-invocation timeout in milliseconds. Defaults to 60 seconds. */
   timeoutMs?: number;
   /** Test-mode spawn override; defaults to `node:child_process` `spawn`. */
   spawnImpl?: typeof spawn;
 }): Promise<ClientSmokeResult> {
   if (!args.hasToken) {
-    return { client: "claude", result: { result: "skipped", reason: "no_token" } };
+    return { client: "grok", result: { result: "skipped", reason: "no_token" } };
   }
 
   const scenario = renderSmokeTestScenario();
   const timeoutMs = args.timeoutMs ?? DEFAULT_SMOKE_TIMEOUT_MS;
   const spawnFn = args.spawnImpl ?? spawn;
 
-  // Prefer claude (the operator's primary client today). Codex follows in a
-  // future iteration when its one-shot flag is stabilized.
+  // Prefer claude (the operator's primary client today). Codex and Grok follow.
   const claudeCmd = args.cliPath?.claude ?? "claude";
 
   const claudePresent = await hasOnPath(claudeCmd);
@@ -139,9 +138,25 @@ export async function runSmokeProbe(args: {
     const codexCmd = args.cliPath?.codex ?? "codex";
     const codexPresent = await hasOnPath(codexCmd);
     if (!codexPresent) {
+      // Fall through to grok.
+      const grokCmd = args.cliPath?.grok ?? "grok";
+      const grokPresent = await hasOnPath(grokCmd);
+      if (!grokPresent) {
+        return {
+          client: "grok",
+          result: { result: "skipped", reason: "grok_not_on_path" },
+        };
+      }
+      // Grok one-shot. Uses -p for prompt (stdin or arg depending on CLI build);
+      // aligns with dispatch/ideate proven invocation style. --print for non-interactive.
+      // Falls back gracefully if flags differ in a given Grok CLI release.
       return {
-        client: "claude",
-        result: { result: "skipped", reason: "claude_not_on_path" },
+        client: "grok",
+        result: await invokeOneShot(spawnFn, grokCmd, [
+          "-p",
+          "--print",
+          scenario.prompt,
+        ], timeoutMs, scenario),
       };
     }
     // Codex one-shot invocation; flag set documented per developers.openai.com/codex

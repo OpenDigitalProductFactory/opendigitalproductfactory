@@ -5,6 +5,7 @@ import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { SubmitBillButton } from "@/components/finance/SubmitBillButton";
+import { RecordBillPaymentButton } from "@/components/finance/RecordBillPaymentButton";
 import { LocalTime } from "@/components/ui/LocalTime";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -66,6 +67,13 @@ export default async function BillDetailPage({ params }: Props) {
           <p className="text-sm text-[var(--dpf-muted)]">{bill.supplier.name}</p>
         </div>
         {bill.status === "draft" && <SubmitBillButton billId={bill.id} />}
+        {(bill.status === "approved" || bill.status === "partially_paid") && (
+          <RecordBillPaymentButton
+            billId={bill.id}
+            amountDue={Number(bill.amountDue)}
+            currency={bill.currency}
+          />
+        )}
       </div>
 
       {/* Metadata row */}
@@ -142,6 +150,22 @@ export default async function BillDetailPage({ params }: Props) {
                   {sym}{formatMoney(bill.totalAmount)}
                 </td>
               </tr>
+              {Number(bill.amountPaid) > 0 && (
+                <>
+                  <tr>
+                    <td colSpan={4} className="px-4 py-2.5 text-right text-[var(--dpf-muted)] text-[10px] uppercase tracking-widest">
+                      Paid
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">{sym}{formatMoney(bill.amountPaid)}</td>
+                  </tr>
+                  <tr>
+                    <td colSpan={4} className="px-4 py-2.5 text-right text-[var(--dpf-muted)] text-[10px] uppercase tracking-widest">
+                      Due
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">{sym}{formatMoney(bill.amountDue)}</td>
+                  </tr>
+                </>
+              )}
             </tfoot>
           </table>
         </div>

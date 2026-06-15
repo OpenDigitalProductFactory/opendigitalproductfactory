@@ -81,3 +81,114 @@ export function initialExecState(): BuildExecutionState {
     startedAt: new Date().toISOString(),
   };
 }
+
+// ─── Contradictory-checkpoint classification & recovery ──────────────────────
+// Single source of truth for the "stuck build" engine-reliability fixes
+// (spec §3.1 engine-first / FB-78E967D4 / FB-F0476EF3). Pure, dependency-light
+// functions so BOTH the UI affordance (build-studio-workflow-actions.ts) AND
+// the boot reconciler (instrumentation.ts) classify and recover the same way —
+// no drift between what the UI calls "stuck" and what the auto-recovery fixes.
+
+/**
+ * The minimal shape these classifiers read. A loosened view of
+ * BuildExecutionState because persisted rows predate the current type
+ * (e.g. a checkpoint written before `step` existed reads as `step: undefined`),
+ * and the `verificationOut` cross-check lives on the FeatureBuild row, not the
+ * exec state.
+ */
+export type ExecStateLike = {
+  step?: BuildExecStep | null;
+  error?: string | null;
+  failedAt?: string | null;
+} & Record<string, unknown>;
+
+/** Why a checkpoint is contradictory — drives the recovery decision + the log line. */
+export type ContradictoryExecReason =
+  | "missing-step"        // state object has content but no `step` (restart-killed before step 1)
+  | "error-without-fail"  // a non-`failed` step carrying an error/failedAt breadcrumb
+  | "complete-no-verify"; // step=complete but verificationOut never populated
+
+/**
+ * Classify a buildExecState (+ optional verificationOut) as one of the three
+ * contradictory shapes the existing recovery paths refuse to handle, or null
+ * if the state is internally consistent.
+ *
+ * Mirrors the detection PR #859 added; `failed` is a legitimate terminal step
+ * that `retryBuildExecution` already handles, so it is NOT contradictory.
+ */
+export function classifyContradictoryExecState(
+  state: ExecStateLike | null | undefined,
+  verificationOut?: unknown,
+): ContradictoryExecReason | null {
+  if (!state) return null;
+  // Pipeline died before setting the first step (e.g. portal restart killed
+  // the fire-and-forget autoExecuteBuild during stepCreateSandbox). The object
+  // has content (sourceCurrency, …) but no `step` key.
+  if (state.step == null) return "missing-step";
+  // A non-`failed` step carrying an error/failedAt breadcrumb is the
+  // FB-F0476EF3 "silent complete past the failed step" relic.
+  if (state.step !== "failed" && (state.error != null || state.failedAt != null)) {
+    return "error-without-fail";
+  }
+  // step=complete but tests never ran — unreachable via resume (no diff) and
+  // via advance-phase (verificationOut null blocks the review gate).
+  if (state.step === "complete" && verificationOut == null) {
+    return "complete-no-verify";
+  }
+  return null;
+}
+
+/** Convenience boolean wrapper around {@link classifyContradictoryExecState}. */
+export function isContradictoryExecState(
+  state: ExecStateLike | null | undefined,
+  verificationOut?: unknown,
+): boolean {
+  return classifyContradictoryExecState(state, verificationOut) !== null;
+}
+
+/**
+ * Compute the safe, resumable checkpoint a contradictory exec state should be
+ * reset to so the EXISTING recovery machinery takes over without a human:
+ *
+ *  - "error-without-fail" → coerce to `failed` (preserving the failedAt/error
+ *    breadcrumb) so `retryBuildExecution` retries from the failed step. This is
+ *    the least-destructive recovery: it keeps the live container/port pointers
+ *    and the diagnosis, and the failed step is re-run idempotently.
+ *  - "missing-step" / "complete-no-verify" → return `null`, signalling the
+ *    caller to clear the checkpoint and restart the pipeline from a clean
+ *    `pending` (the pipeline's own self-heal then re-runs setup idempotently).
+ *    These shapes have no trustworthy step to retry from.
+ *
+ * Idempotent: a state that is already `failed` (or otherwise non-contradictory)
+ * returns `{ action: "none" }`, so running this on every boot is safe.
+ */
+export type ExecRecoveryPlan =
+  | { action: "none" }
+  | { action: "clear"; reason: ContradictoryExecReason }
+  | { action: "to-failed"; reason: ContradictoryExecReason; state: BuildExecutionState };
+
+export function planExecStateRecovery(
+  state: ExecStateLike | null | undefined,
+  verificationOut?: unknown,
+): ExecRecoveryPlan {
+  const reason = classifyContradictoryExecState(state, verificationOut);
+  if (!reason || !state) return { action: "none" };
+
+  if (reason === "error-without-fail") {
+    // Preserve container/port/source pointers + the diagnosis; just coerce the
+    // step to `failed` and record where it failed so retry resumes there.
+    const failedAt =
+      (typeof state.failedAt === "string" && state.failedAt) ||
+      (typeof state.step === "string" ? state.step : "pending");
+    const recovered = {
+      ...(state as Record<string, unknown>),
+      step: "failed" as BuildExecStep,
+      failedAt,
+      error: typeof state.error === "string" ? state.error : "Recovered contradictory checkpoint",
+    } as unknown as BuildExecutionState;
+    return { action: "to-failed", reason, state: recovered };
+  }
+
+  // missing-step / complete-no-verify → clear and restart clean.
+  return { action: "clear", reason };
+}

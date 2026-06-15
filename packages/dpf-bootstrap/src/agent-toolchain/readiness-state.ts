@@ -55,8 +55,9 @@ export function computeReadinessState(
 ): ReadinessState {
   const claudeWired = state.claudeCodeWired === true;
   const codexWired = state.codexWired === true;
+  const grokWired = state.grokWired === true;
 
-  if (!claudeWired && !codexWired) {
+  if (!claudeWired && !codexWired && !grokWired) {
     return "missing_cli";
   }
 
@@ -74,6 +75,10 @@ export function computeReadinessState(
     return "failed_smoke";
   }
 
+  // Grok is an additive, optional third client: its presence counts toward
+  // "not missing_cli" (above) but readiness is still anchored on the established
+  // Claude + Codex pair so existing installs are never regressed to "partial"
+  // merely because the brand-new Grok beta CLI is absent.
   if (!claudeWired || !codexWired) {
     return "partial";
   }

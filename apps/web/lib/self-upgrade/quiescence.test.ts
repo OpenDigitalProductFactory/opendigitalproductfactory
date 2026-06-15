@@ -15,6 +15,8 @@ const prismaMock = vi.hoisted(() => ({
   buildPhaseRunFindMany: vi.fn(),
   buildPhaseRunUpdateMany: vi.fn(),
   toolExecutionFindMany: vi.fn(),
+  quiescenceRunFindUnique: vi.fn(),
+  quiescenceRunUpdate: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -29,11 +31,23 @@ vi.mock("@dpf/db", () => ({
     toolExecution: {
       findMany: (...args: unknown[]) => prismaMock.toolExecutionFindMany(...args),
     },
+    quiescenceRun: {
+      findUnique: (...args: unknown[]) => prismaMock.quiescenceRunFindUnique(...args),
+      update: (...args: unknown[]) => prismaMock.quiescenceRunUpdate(...args),
+    },
   },
+}));
+
+const inngestSendMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/queue/inngest-client", () => ({
+  inngest: { send: (...args: unknown[]) => inngestSendMock(...args) },
 }));
 
 import {
   captureActiveSessionBlockers,
+  escalateQuiescenceToForced,
+  isBuildPhaseReapable,
+  isShipForceEscalated,
   getQuiescenceConfig,
   invalidateQuiescenceCache,
   isTerminalQuiescenceStatus,
@@ -43,6 +57,7 @@ import {
   QuiescingError,
   QUIESCENCE_RUN_STATUSES,
   reconcileTerminalBuildPhaseRuns,
+  signalSwapComplete,
   TERMINAL_QUIESCENCE_STATUSES,
   type ActiveSessionBlockers,
   type SurfaceBlocker,
@@ -54,6 +69,104 @@ beforeEach(() => {
   prismaMock.buildPhaseRunFindMany.mockResolvedValue([]);
   prismaMock.buildPhaseRunUpdateMany.mockResolvedValue({ count: 0 });
   prismaMock.toolExecutionFindMany.mockResolvedValue([]);
+  prismaMock.quiescenceRunFindUnique.mockResolvedValue(null);
+  prismaMock.quiescenceRunUpdate.mockResolvedValue({});
+});
+
+describe("escalateQuiescenceToForced (BI-4F3B2FA9)", () => {
+  const NOW = new Date("2026-06-10T02:00:00.000Z");
+
+  it("sets shipForceEscalatedAt/By and appends a mid-flight-escalation audit entry", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValue({
+      status: "draining",
+      shipForceEscalatedAt: null,
+      forcedSurfaces: [],
+    });
+    const r = await escalateQuiescenceToForced("QR-1", "user-9", NOW);
+    expect(r).toEqual({ ok: true });
+    const update = prismaMock.quiescenceRunUpdate.mock.calls[0]?.[0];
+    expect(update.where).toEqual({ runId: "QR-1" });
+    expect(update.data.shipForceEscalatedAt).toBe(NOW);
+    expect(update.data.shipForceEscalatedBy).toBe("user-9");
+    expect(update.data.forcedSurfaces).toEqual([
+      { surface: "mid-flight-escalation", reason: expect.stringContaining("user-9"), forcedAt: NOW.toISOString() },
+    ]);
+  });
+
+  it("preserves prior forcedSurfaces entries when appending", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValue({
+      status: "draining",
+      shipForceEscalatedAt: null,
+      forcedSurfaces: [{ surface: "ship-force-flag", reason: "x", forcedAt: "t" }],
+    });
+    await escalateQuiescenceToForced("QR-1", "user-9", NOW);
+    const update = prismaMock.quiescenceRunUpdate.mock.calls[0]?.[0];
+    expect(update.data.forcedSurfaces).toHaveLength(2);
+    expect(update.data.forcedSurfaces[0].surface).toBe("ship-force-flag");
+  });
+
+  it("is idempotent — a no-op success when already escalated", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValue({
+      status: "draining",
+      shipForceEscalatedAt: new Date(),
+      forcedSurfaces: [],
+    });
+    const r = await escalateQuiescenceToForced("QR-1", "user-9", NOW);
+    expect(r).toEqual({ ok: true });
+    expect(prismaMock.quiescenceRunUpdate).not.toHaveBeenCalled();
+  });
+
+  it("refuses a terminal run", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValue({
+      status: "completed",
+      shipForceEscalatedAt: null,
+      forcedSurfaces: [],
+    });
+    const r = await escalateQuiescenceToForced("QR-1", "user-9", NOW);
+    expect(r).toEqual({ ok: false, reason: "run already completed" });
+    expect(prismaMock.quiescenceRunUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns not-found when the run is missing", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValue(null);
+    const r = await escalateQuiescenceToForced("QR-missing", "user-9", NOW);
+    expect(r).toEqual({ ok: false, reason: "run not found" });
+  });
+});
+
+describe("isShipForceEscalated (BI-4F3B2FA9)", () => {
+  it("is true when shipForceEscalatedAt is set, false otherwise", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValueOnce({ shipForceEscalatedAt: new Date() });
+    expect(await isShipForceEscalated("QR-1")).toBe(true);
+    prismaMock.quiescenceRunFindUnique.mockResolvedValueOnce({ shipForceEscalatedAt: null });
+    expect(await isShipForceEscalated("QR-1")).toBe(false);
+    prismaMock.quiescenceRunFindUnique.mockResolvedValueOnce(null);
+    expect(await isShipForceEscalated("QR-missing")).toBe(false);
+  });
+});
+
+describe("isBuildPhaseReapable", () => {
+  const now = new Date("2026-06-09T12:00:00Z");
+  const old = new Date(now.getTime() - 20 * 60 * 1000); // 20 min ago
+  const recent = new Date(now.getTime() - 2 * 60 * 1000); // 2 min ago
+  const thresholdMs = 15 * 60 * 1000;
+
+  it("reaps a phase with no heartbeat and an old start (a corpse)", () => {
+    expect(isBuildPhaseReapable({ phaseStartedAt: old, buildLastHeartbeatAt: null, now, thresholdMs })).toBe(true);
+  });
+
+  it("does NOT reap when the build has a recent heartbeat (live work)", () => {
+    expect(isBuildPhaseReapable({ phaseStartedAt: old, buildLastHeartbeatAt: recent, now, thresholdMs })).toBe(false);
+  });
+
+  it("does NOT reap a freshly-started phase even without a heartbeat", () => {
+    expect(isBuildPhaseReapable({ phaseStartedAt: recent, buildLastHeartbeatAt: null, now, thresholdMs })).toBe(false);
+  });
+
+  it("reaps when both the start and the last heartbeat are older than the threshold", () => {
+    const olderHeartbeat = new Date(now.getTime() - 30 * 60 * 1000);
+    expect(isBuildPhaseReapable({ phaseStartedAt: old, buildLastHeartbeatAt: olderHeartbeat, now, thresholdMs })).toBe(true);
+  });
 });
 
 describe("parseQuiescenceConfig", () => {
@@ -296,5 +409,40 @@ describe("QuiescingError", () => {
 
   it("is an Error instance (catches via instanceof Error)", () => {
     expect(new QuiescingError("draining")).toBeInstanceOf(Error);
+  });
+});
+
+describe("signalSwapComplete — swap-signal retry", () => {
+  it("retries the swap-complete event on a transient inngest.send failure", async () => {
+    vi.useFakeTimers();
+    try {
+      inngestSendMock
+        .mockRejectedValueOnce(new Error("blip"))
+        .mockResolvedValueOnce(undefined);
+      const p = signalSwapComplete("QR-1");
+      await vi.advanceTimersByTimeAsync(500); // let the backoff elapse
+      await p;
+      expect(inngestSendMock).toHaveBeenCalledTimes(2);
+      expect(inngestSendMock).toHaveBeenLastCalledWith({
+        name: "ops/quiescence.swap-complete",
+        data: { runId: "QR-1", outcome: "succeeded" },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rethrows after exhausting retries so the caller's failure handling runs", async () => {
+    vi.useFakeTimers();
+    try {
+      inngestSendMock.mockRejectedValue(new Error("inngest down"));
+      const p = signalSwapComplete("QR-1");
+      const assertion = expect(p).rejects.toThrow("inngest down");
+      await vi.advanceTimersByTimeAsync(1500); // both backoffs (500 + 1000)
+      await assertion;
+      expect(inngestSendMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

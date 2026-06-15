@@ -4,6 +4,8 @@ import { prisma, type Prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
+import { getOllamaBaseUrl } from "@/lib/inference/ollama-url";
+import { preflightLocalEndpoint, type LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
 
 async function requireManageProviders(): Promise<string> {
   const session = await auth();
@@ -14,7 +16,7 @@ async function requireManageProviders(): Promise<string> {
   return user.id;
 }
 
-const VALID_ENGINES = new Set(["claude", "codex", "agentic"]);
+const VALID_ENGINES = new Set(["claude", "codex", "grok", "opencode", "agentic"]);
 const VALID_CLAUDE_MODELS = new Set(["haiku", "sonnet", "opus"]);
 
 export async function saveBuildStudioConfig(
@@ -43,6 +45,22 @@ export async function saveBuildStudioConfig(
       throw new Error(`Provider ${config.codexProviderId} is not a Codex-compatible provider`);
     }
   }
+  if (config.grokProviderId) {
+    const grokProvider = await prisma.modelProvider.findFirst({
+      where: { providerId: config.grokProviderId, cliEngine: "grok" },
+    });
+    if (!grokProvider) {
+      throw new Error(`Provider ${config.grokProviderId} is not a Grok-compatible provider`);
+    }
+  }
+  if (config.opencodeProviderId) {
+    const opencodeProvider = await prisma.modelProvider.findFirst({
+      where: { providerId: config.opencodeProviderId, cliEngine: "opencode" },
+    });
+    if (!opencodeProvider) {
+      throw new Error(`Provider ${config.opencodeProviderId} is not an OpenCode-compatible (local) provider`);
+    }
+  }
 
   if (config.claudeModel && !VALID_CLAUDE_MODELS.has(config.claudeModel)) {
     throw new Error(`Invalid Claude model: ${config.claudeModel}`);
@@ -55,4 +73,18 @@ export async function saveBuildStudioConfig(
   });
 
   return { ok: true };
+}
+
+/**
+ * Config-time preflight of the local model endpoint behind the opencode engine.
+ * Surfaces, at configuration time rather than first at dispatch, whether the
+ * install's local OpenAI-compatible endpoint is reachable and serving the
+ * desired model. Read-only; gated on the same manage-providers capability.
+ */
+export async function checkLocalEndpoint(
+  model: string,
+): Promise<LocalEndpointPreflight> {
+  await requireManageProviders();
+  const portalBaseUrl = getOllamaBaseUrl().replace(/\/$/, "");
+  return preflightLocalEndpoint(portalBaseUrl, model ?? "");
 }

@@ -32,6 +32,7 @@ export const createInvoiceSchema = z.object({
   internalNotes: z.string().optional(),
   sourceType: z.string().optional(),
   sourceId: z.string().optional(),
+  signatureRequired: z.boolean().optional(),
   lineItems: z.array(lineItemSchema).min(1),
 });
 
@@ -50,10 +51,24 @@ export const recordPaymentSchema = z.object({
   currency: z.string().length(3).default("GBP"),
   reference: z.string().optional(),
   invoiceId: z.string().optional(),
+  billId: z.string().optional(),
   notes: z.string().optional(),
   receivedAt: z.string().optional(),
+});
+
+// Customer-facing e-signature capture on the payment portal (Phase 1).
+export const signInvoiceSchema = z.object({
+  token: z.string().min(1),
+  signedByName: z.string().trim().min(1).max(200),
+  signedByEmail: z.string().trim().email(),
+  // Captured signature image (canvas → PNG/JPEG data URL). Capped to bound the payload.
+  signatureDataUrl: z
+    .string()
+    .max(2_000_000)
+    .regex(/^data:image\/(png|jpeg);base64,/, "Signature must be a captured image"),
 });
 
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
+export type SignInvoiceInput = z.infer<typeof signInvoiceSchema>;

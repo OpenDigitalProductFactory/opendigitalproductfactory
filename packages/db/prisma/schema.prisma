@@ -84,6 +84,7 @@ model User {
   businessModelRoleAssignments  BusinessModelRoleAssignment[]
   platformDevConfigs            PlatformDevConfig[]           @relation("PlatformDevConfiguredBy")
   platformDevDcoAcceptances     PlatformDevConfig[]           @relation("PlatformDevDcoAcceptedBy")
+  platformDevFeedbackOptIns     PlatformDevConfig[]           @relation("PlatformDevUpstreamFeedbackOptInBy")
   agentModelConfigs             AgentModelConfig[]            @relation("AgentModelConfiguredBy")
   knowledgeArticles             KnowledgeArticle[]            @relation("KnowledgeArticleAuthor")
   knowledgeRevisions            KnowledgeArticleRevision[]    @relation("KnowledgeRevisionCreator")
@@ -97,6 +98,10 @@ model User {
   triggeredDecisionInteractions DecisionInteraction[]         @relation("DecisionInteractionTriggeredByUser")
   scheduledAgentTasks           ScheduledAgentTask[]          @relation("ScheduledAgentTaskOwner")
   addedLocalities               City[]                        @relation("CityAddedByUser")
+  workbooksCreated              Workbook[]                    @relation("WorkbookCreatedBy")
+  workbookShares                WorkbookShare[]               @relation("WorkbookShareUser")
+  workbookRowsCreated           WorkbookRow[]                 @relation("WorkbookRowCreatedBy")
+  workbookViewsCreated          WorkbookView[]                @relation("WorkbookViewCreatedBy")
 }
 
 model UserGroup {
@@ -133,6 +138,7 @@ model CustomerContact {
   engagements      Engagement[]
   opportunities    Opportunity[]
   activities       Activity[]
+  rentalAgreements RentalAgreement[]
 
   @@index([lastName])
   @@index([phone])
@@ -430,19 +436,23 @@ model Country {
 
 /// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
 model Region {
-  id        String   @id @default(cuid())
-  name      String
-  code      String?
-  countryId String
-  status    String   @default("active")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  cities    City[]
-  country   Country  @relation(fields: [countryId], references: [id])
+  id           String   @id @default(cuid())
+  name         String
+  code         String?
+  countryId    String
+  status       String   @default("active")
+  mergedIntoId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  cities       City[]
+  country      Country  @relation(fields: [countryId], references: [id])
+  mergedInto   Region?  @relation("RegionMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom   Region[] @relation("RegionMerge")
 
   @@index([countryId, name])
   @@index([countryId])
   @@index([status])
+  @@index([mergedIntoId])
 }
 
 /// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
@@ -459,16 +469,20 @@ model City {
   disambiguator  String?
   addedByUserId  String?
   status         String    @default("active")
+  mergedIntoId   String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   addedByUser    User?     @relation("CityAddedByUser", fields: [addedByUserId], references: [id])
   addresses      Address[]
   region         Region    @relation(fields: [regionId], references: [id])
+  mergedInto     City?     @relation("CityMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom     City[]    @relation("CityMerge")
 
   @@index([regionId, name])
   @@index([regionId])
   @@index([regionId, nameNormalized])
   @@index([status])
+  @@index([mergedIntoId])
   @@index([source])
   @@index([addedByUserId])
 }
@@ -1346,6 +1360,39 @@ model IntegrationCredential {
   @@index([provider, status])
 }
 
+// Browser-driving session binding (EP-BROWSER-DRIVE, spec 2026-06-05 §8.7).
+// A thin, auditable+resumable record of one driven browser session. It is NOT
+// an action log — individual actions live in ToolExecution keyed by sessionId.
+// Identity/credential/delegation refs are plain string semantic ids (matching
+// the CoworkerActionEnvelope convention), so this table does not add back-
+// relations to the heavily-related Principal/User/IntegrationCredential models.
+// Q1 (EP-CTRL convergence): no live ControlSession today, so this owns its own
+// table; field names are chosen to align with a future ControlSession.
+model BrowserSessionBinding {
+  id                String   @id @default(cuid())
+  sessionId         String   @unique
+  means             String // "deterministic" | "plugin" | "delegated"
+  driverRef         String? // adapter/sidecar session handle
+  engine            String // "chromium" | "safari" | "firefox"
+  profileRef        String // /profiles/<principalId>/<siteKey>/ or an operator-live handle
+  profileKind       String // "service-account" | "operator-live"
+  attended          Boolean  @default(false)
+  actingPrincipalId String? // Principal.principalId of the service account; null for operator-live
+  delegatingUserId  String // human on whose behalf the session runs
+  delegationGrantId String? // DelegationGrant.id bounding the run (side-effecting sessions)
+  credentialId      String? // IntegrationCredential.integrationId (browser-session kind)
+  targetDomains     String[] // navigation/act allowlist
+  status            String   @default("active") // active | closed | failed | blocked-on-reauth
+  meansDecisionJson Json? // per-task WWMD means-selector contribution ledger
+  evidenceDir       String? // session-scoped screenshot/evidence directory
+  startedAt         DateTime @default(now())
+  closedAt          DateTime?
+
+  @@index([actingPrincipalId])
+  @@index([delegatingUserId])
+  @@index([status])
+}
+
 // Call-level audit log for every enterprise-integration MCP tool invocation.
 // Distinct from ComplianceAuditLog (entity-diff focused) and AgentActionProposal
 // (write-proposal focused). Reusable across ADP, QuickBooks, Plaid, Workday.
@@ -1450,7 +1497,7 @@ model ModelProvider {
   updatedAt                DateTime                  @updatedAt
   authHeader               String?
   computeWatts             Float?
-  cliEngine                String? // "claude" | "codex" — which CLI dispatch engine this provider works with (null = not CLI-dispatchable)
+  cliEngine                String? // "claude" | "codex" | "grok" | "opencode" — which CLI dispatch engine this provider works with (null = not CLI-dispatchable). "opencode" = local OpenAI-compatible endpoint (Docker Model Runner / Ollama).
   costModel                String                    @default("token")
   electricityRateKwh       Float?
   enabledFamilies          Json                      @default("[]")
@@ -1619,6 +1666,8 @@ model TokenUsage {
   inferenceMs  Int?
   costUsd      Float    @default(0)
   createdAt    DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model EndpointTaskPerformance {
@@ -1665,6 +1714,7 @@ model TaskEvaluation {
 
   @@index([endpointId, taskType, createdAt])
   @@index([threadId])
+  @@index([createdAt])
 }
 
 model EndpointTestRun {
@@ -1687,6 +1737,7 @@ model EndpointTestRun {
 
   @@index([endpointId])
   @@index([status])
+  @@index([startedAt])
 }
 
 model ScheduledJob {
@@ -1704,6 +1755,21 @@ model ScheduledJob {
   // sweep that prunes ContributorInventorySyncRun history.
   // Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md §Etag persistence.
   metadata   Json?
+  // Classification + per-job control (BI-5A42E572 / EP-PROACTIVE-OPS).
+  // The static SCHEDULED_JOB_CATALOG (apps/web/lib/operate/scheduled-jobs/
+  // catalog.ts) is authoritative for known jobs; these columns persist
+  // classification for rows with no catalog entry plus any audited override.
+  //   category — "core" (platform-integrity cron, operator read-only) vs
+  //              "editable" (operationally tunable after install).
+  //   locked   — blocks operator edits even for an "editable" job until an
+  //              explicit override clears it; always true for core jobs.
+  //   enabled  — per-job kill switch complementing the global
+  //              DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED gate. Jobs that
+  //              honour it skip execution when false (the visibility gap the
+  //              13-day silent code-graph outage exposed).
+  category   String    @default("editable")
+  locked     Boolean   @default(false)
+  enabled    Boolean   @default(true)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 }
@@ -2247,9 +2313,11 @@ model CustomerAccount {
   recurringSchedules     RecurringSchedule[]
   inventoryEntities      InventoryEntity[]           @relation("InventoryEntityCustomerAccount")
   inventoryRelationships InventoryRelationship[]     @relation("InventoryRelationshipCustomerAccount")
+  masterDataSourceRefs   MasterDataSourceRef[]       @relation("CustomerAccountMdmSourceRef")
 
   @@index([status])
   @@index([parentAccountId])
+  memberEquityEntries MemberEquityEntry[]
 }
 
 model CustomerSite {
@@ -2509,6 +2577,7 @@ model AdapterRunTelemetry {
   @@index([raceCohortId])
   @@index([threadId, startedAt])
   @@index([agentId, startedAt])
+  @@index([startedAt])
 }
 
 // EP-COST Phase 2 prerequisite — one row per budget event so the
@@ -2774,6 +2843,11 @@ model Organization {
   integrationCoverageProviders  IntegrationCoverageProvider[]  @relation("OrgToCoverageProviders")
   integrationRoleCoverages      IntegrationRoleCoverage[]      @relation("OrgToCoverageCells")
   capabilityActivations         OrganizationCapabilityActivation[]
+  governanceMeetings            GovernanceMeeting[]
+  recordsRequests               RecordsRequest[]
+  fundBudgetLines               FundBudgetLine[]
+  memberEquityEntries           MemberEquityEntry[]
+  mediaAssets                   MediaAsset[]
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
@@ -2823,12 +2897,27 @@ model BusinessContext {
   companyStage    String?
   companySize     String?
   geographicScope String?
+  // US state/province code driving statutory defaults (records-request response
+  // deadlines, retention schedules) for public-sector archetypes. Org-level
+  // configuration on seeded obligations — not 50 seed variants (civic spec $10).
+  stateCode       String?
 
   // Derived from archetype (auto-populated)
   industry    String?
   ctaType     String?
   /// @deprecated Read StorefrontConfig.archetypeId. Column kept until next migration cycle.
   archetypeId String?
+
+  // Per-org Digital Product Portfolio decomposition (BI-2D452667, spec
+  // docs/superpowers/specs/2026-06-07-business-operating-model-portfolio-wiring-design.md §3/§8 Phase 0).
+  // Shape: PortfolioDecomposition (Record<PortfolioRole, PortfolioProfile>) from
+  // @dpf/storefront-templates — roles foundational | manufactureAndDeliver |
+  // forEmployees | productsAndServicesSold, each with a scope. Seeded ONCE from
+  // the archetype's activationProfile at setup completion (seed-is-bootstrap),
+  // then refinable by the operator. Read via resolvePortfolioDecomposition(),
+  // which prefers this persisted value and falls back to the archetype-derived
+  // computation when null.
+  portfolioDecomposition Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3727,6 +3816,7 @@ model AgentThread {
   @@unique([userId, contextKey])
   @@index([cliSessionLastUsedAt])
   @@index([parentThreadId])
+  @@index([updatedAt])
 }
 
 model AgentMessage {
@@ -3909,6 +3999,7 @@ model ToolExecution {
   @@index([skillId, createdAt(sort: Desc)])
   @@index([envelopeId])
   @@index([delegatingUserId, createdAt(sort: Desc)])
+  @@index([createdAt])
 }
 
 // Pseudo-User Contract (spec §6.4 + §8): destructive-action confirmation
@@ -4364,6 +4455,13 @@ model PlatformIssueReport {
   description         String?
   routeContext        String?
   errorStack          String?
+  // BI-B4F401B3: crash-boundary diagnostics. errorDigest is the Next.js server
+  // digest token (stable per real error on a build) — it lets operators and AI
+  // clients grep server logs for the message Next.js sanitizes away, and lets
+  // triage dedup a whole crash incident across routes. deployedSha anchors the
+  // diagnostic prompt to the exact image SHA that crashed.
+  errorDigest         String?
+  deployedSha         String?
   userAgent           String?
   reportedById        String?
   digitalProductId    String?
@@ -4373,6 +4471,12 @@ model PlatformIssueReport {
   triggerKind         String?
   supportSessionId    String?
   source              String        @default("manual")
+  // BI-5FE8656F (EP-FULL-OBS Tier 2): stable idempotency key for automated
+  // producers (the log-signature scanner files `log-sig:<service>:<sigId>`).
+  // A partial UNIQUE index — open rows only — lives in the migration (Prisma
+  // can't express partial-unique predicates); it lets a resolved signature
+  // re-file when the problem recurs while preventing duplicate open reports.
+  dedupeKey           String?
   // Governed Hermes learning Slice 1: link runtime issues to the thread/run
   // that produced them so reflection can avoid route/time-window heuristics.
   threadId            String?
@@ -4388,6 +4492,10 @@ model PlatformIssueReport {
   @@index([featureBuildId])
   @@index([threadId, createdAt(sort: Desc)])
   @@index([taskRunId])
+  // BI-B4F401B3: digest lookup powers cross-route incident dedup at triage time.
+  @@index([errorDigest])
+  // BI-5FE8656F: dedupeKey lookup powers the scanner's idempotency check.
+  @@index([dedupeKey])
   @@unique([reportedById, supportSessionId])
   @@index([reportedById, supportSessionId, createdAt(sort: Desc)])
 }
@@ -4414,6 +4522,10 @@ model ImprovementSignal {
   objectiveImpactHypothesis String?
   graphNodeRefs             String[] @default([])
   graphEdgeRefs             String[] @default([])
+  // EP-INTAKE-UNIFY / BI-B716B387: back-link to the BacklogItem a persistent
+  // signal was projected into (semantic itemId, BI-…). Null until the signal
+  // crosses the recurrence threshold and is filed through the shared front door.
+  backlogItemId             String?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   lastSeenAt                DateTime @default(now())
@@ -4423,6 +4535,7 @@ model ImprovementSignal {
   @@index([routeContext, createdAt(sort: Desc)])
   @@index([agentId, createdAt(sort: Desc)])
   @@index([toolName, createdAt(sort: Desc)])
+  @@index([backlogItemId])
 }
 
 model ExternalEvidenceRecord {
@@ -4914,6 +5027,7 @@ model BuildActivity {
   build     FeatureBuild @relation(fields: [buildId], references: [buildId])
 
   @@index([buildId, createdAt])
+  @@index([createdAt])
 }
 
 model BuildDispatchAttempt {
@@ -4939,6 +5053,7 @@ model BuildDispatchAttempt {
   @@index([buildId, startedAt])
   @@index([buildId, taskTitle, startedAt])
   @@index([failureAxis, startedAt])
+  @@index([startedAt])
 }
 
 // ─── EP-COST-001 Phase 3: Build Phase Run cost rollup ─────────────────────────
@@ -5096,6 +5211,7 @@ model StallEvent {
   @@index([buildId])
   @@index([phase, reason])
   @@index([outcome])
+  @@index([createdAt])
 }
 
 // ─── Activity Quiescence Protocol — coordinator audit (BI-QUIESCE-001) ───
@@ -5183,6 +5299,15 @@ model QuiescenceRun {
   // reconciler had to close out a pending run" from "watchdog forced cleanup".
   completionSource String?
   outcomeNotes     String? @db.Text
+
+  // BI-4F3B2FA9: mid-flight emergency escalation. When an operator clicks
+  // "Force Now" on an ALREADY-RUNNING drain, these record when/who promoted it
+  // to forced mode. The coordinator re-reads shipForceEscalatedAt every wait
+  // tick and treats a non-null value as shipForce, so a stuck drain can be
+  // forced through without restarting the run. Null when started forced or
+  // never escalated; an audit entry is also appended to forcedSurfaces.
+  shipForceEscalatedAt DateTime?
+  shipForceEscalatedBy String?
 
   @@index([trigger, startedAt])
   // Stuck-coordinator query: status NOT IN (terminal) AND lastHeartbeatAt < cutoff.
@@ -5369,6 +5494,18 @@ model PlatformDevConfig {
   // contribution types immediately.
   deviceFingerprintOptIn   Boolean @default(true)
   hiveContributionsPaused  Boolean @default(false)
+  // Upstream feedback escalation consent (BI-6D45BA27, spec 2026-06-06 §3).
+  // OPT-IN, defaulted OFF: nothing leaves the install until a user explicitly
+  // consents. The AI coworker surfaces the consent prompt and the
+  // "Report to the project team" action.
+  upstreamFeedbackOptIn     Boolean   @default(false)
+  upstreamFeedbackOptInAt   DateTime?
+  upstreamFeedbackOptInById String?
+  upstreamFeedbackOptInBy   User?     @relation("PlatformDevUpstreamFeedbackOptInBy", fields: [upstreamFeedbackOptInById], references: [id])
+  // Configurable intake relay target (spec §4). When set, the install posts
+  // redacted reports here (install-authenticated) instead of calling GitHub
+  // directly — the no-token consumer path and the reseller seam.
+  upstreamRelayUrl          String?
 }
 
 // One ledger for everything that flows to the hive — what was shared, when,
@@ -6858,7 +6995,8 @@ model StorefrontArchetype {
   marketingSkillRules Json?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
-  storefronts         StorefrontConfig[]
+  storefronts          StorefrontConfig[]
+  compositionSlots     StorefrontArchetypeComposition[]
 
   @@index([category])
   @@index([isActive])
@@ -6881,17 +7019,52 @@ model StorefrontConfig {
   portfolioId         String?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
-  bookings            StorefrontBooking[]
-  archetype           StorefrontArchetype  @relation(fields: [archetypeId], references: [id])
-  organization        Organization         @relation(fields: [organizationId], references: [id])
-  donations           StorefrontDonation[]
-  inquiries           StorefrontInquiry[]
-  items               StorefrontItem[]
-  orders              StorefrontOrder[]
-  sections            StorefrontSection[]
-  providers           ServiceProvider[]
-  bookingHolds        BookingHold[]
-  marketingStrategies MarketingStrategy[]
+  bookings               StorefrontBooking[]
+  archetype              StorefrontArchetype          @relation(fields: [archetypeId], references: [id])
+  organization           Organization                 @relation(fields: [organizationId], references: [id])
+  donations              StorefrontDonation[]
+  inquiries              StorefrontInquiry[]
+  items                  StorefrontItem[]
+  orders                 StorefrontOrder[]
+  sections               StorefrontSection[]
+  providers              ServiceProvider[]
+  bookingHolds           BookingHold[]
+  marketingStrategies    MarketingStrategy[]
+  rentableUnits          RentableUnit[]
+  rentalAgreements       RentalAgreement[]
+  adoptableAnimals       AdoptableAnimal[]
+  archetypeCompositions  StorefrontArchetypeComposition[]
+}
+
+// ── Multi-archetype composition (EP-ARCH-8D4F2A) ─────────────────────────────
+// One StorefrontConfig maps to one primary archetype + up to 2 secondaries.
+// StorefrontConfig.archetypeId remains the canonical primary FK (unchanged).
+// This join table is additive: single-archetype storefronts get one row here
+// (role=primary) written at setup completion; secondaries are added post-setup
+// via the "Add service line" admin action.
+model StorefrontArchetypeComposition {
+  id           String    @id @default(cuid())
+  storefrontId String
+  archetypeId  String
+  /// "primary" | "secondary"
+  role         String
+  sortOrder    Int       @default(0)
+  /// Soft-delete: set when operator removes a service line. Seeded items/sections
+  /// are deactivated/hidden first; this marks the composition row as inactive while
+  /// preserving the audit trail. sourceCompositionId FKs use onDelete:SetNull so
+  /// historical item rows survive a hard delete if ever needed.
+  removedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  storefront     StorefrontConfig    @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  archetype      StorefrontArchetype @relation(fields: [archetypeId], references: [id])
+  seededItems    StorefrontItem[]
+  seededSections StorefrontSection[]
+
+  @@unique([storefrontId, archetypeId])
+  @@index([storefrontId, role])
+  @@index([removedAt])
 }
 
 model MarketingStrategy {
@@ -7231,43 +7404,54 @@ model OutboundAutopilotPolicy {
 }
 
 model StorefrontSection {
-  id           String           @id @default(cuid())
-  storefrontId String
-  type         String
-  title        String?
-  content      Json
-  sortOrder    Int              @default(0)
-  isVisible    Boolean          @default(true)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  storefront   StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  id                  String                          @id @default(cuid())
+  storefrontId        String
+  type                String
+  title               String?
+  content             Json
+  sortOrder           Int                             @default(0)
+  isVisible           Boolean                         @default(true)
+  /// Provenance: set when this section was seeded by a secondary add-line action.
+  sourceCompositionId String?
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+  storefront          StorefrontConfig                @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  sourceComposition   StorefrontArchetypeComposition? @relation(fields: [sourceCompositionId], references: [id], onDelete: SetNull)
 
   @@index([storefrontId, sortOrder])
+  @@index([sourceCompositionId])
 }
 
 model StorefrontItem {
-  id               String            @id @default(cuid())
-  itemId           String            @unique
-  storefrontId     String
-  name             String
-  description      String?
-  category         String?
-  priceAmount      Decimal?
-  priceCurrency    String            @default("GBP")
-  priceType        String?
-  imageUrl         String?
-  ctaType          String
-  ctaLabel         String?
-  bookingConfig    Json?
-  isActive         Boolean           @default(true)
-  sortOrder        Int               @default(0)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  storefront       StorefrontConfig  @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
-  providerServices ProviderService[]
-  bookingHolds     BookingHold[]
+  id                  String                          @id @default(cuid())
+  itemId              String                          @unique
+  storefrontId        String
+  name                String
+  description         String?
+  category            String?
+  priceAmount         Decimal?
+  priceCurrency       String                          @default("GBP")
+  priceType           String?
+  imageUrl            String?
+  ctaType             String
+  ctaLabel            String?
+  bookingConfig       Json?
+  isActive            Boolean                         @default(true)
+  sortOrder           Int                             @default(0)
+  /// Provenance: set when this item was seeded by a secondary add-line action.
+  /// Used by removeStorefrontServiceLine to scope cleanup to the right items.
+  sourceCompositionId String?
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+  storefront          StorefrontConfig                @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  sourceComposition   StorefrontArchetypeComposition? @relation(fields: [sourceCompositionId], references: [id], onDelete: SetNull)
+  providerServices    ProviderService[]
+  bookingHolds        BookingHold[]
+  rentableUnits       RentableUnit[]
+  rentalAgreements    RentalAgreement[]
 
   @@index([storefrontId, isActive, sortOrder])
+  @@index([sourceCompositionId])
 }
 
 model StorefrontBooking {
@@ -7385,6 +7569,8 @@ model StorefrontOrder {
   storefrontId      String
   customerContactId String?
   customerEmail     String
+  customerName      String?
+  deliveryAddress   Json?
   items             Json
   totalAmount       Decimal
   currency          String           @default("GBP")
@@ -7395,6 +7581,179 @@ model StorefrontOrder {
 
   @@index([storefrontId, status])
   @@index([customerEmail])
+}
+
+// ── Rental / shared-asset value stream (EP-ARCH-8D4F2A, BI-EEA24A34) ──────────
+// Models the reserve → checkout → return & inspect → re-pool lifecycle for
+// stocked, returnable assets. StorefrontItem remains the rate-card *class*
+// ("Compact SUV", "Scaffold Tower", "10x10 Unit"); RentableUnit is an
+// individual stocked asset (optional — a class can be a quantity-pool with
+// stockQuantity and zero units); RentalAgreement is the rental analog of
+// StorefrontBooking. BookingHold (reused) carries reservation concurrency.
+// String-enum columns are registered in apps/web/lib/storefront/rental.ts.
+
+model RentableUnit {
+  id               String   @id @default(cuid())
+  unitId           String   @unique
+  storefrontId     String
+  storefrontItemId String
+  unitRef          String? // plate / VIN / serial
+  label            String
+  status           String   @default("available") // available|reserved|out|returned|maintenance|retired
+  meterReading     Decimal? // mileage / hours
+  attributes       Json?
+  acquiredAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  storefront StorefrontConfig  @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  item       StorefrontItem    @relation(fields: [storefrontItemId], references: [id], onDelete: Cascade)
+  agreements RentalAgreement[]
+
+  @@index([storefrontId, status])
+  @@index([storefrontItemId, status])
+}
+
+model RentalAgreement {
+  id                  String    @id @default(cuid())
+  agreementRef        String    @unique
+  storefrontId        String
+  storefrontItemId    String
+  rentableUnitId      String? // null for quantity-pool classes
+  customerContactId   String?
+  customerEmail       String
+  customerName        String
+  customerPhone       String?
+  periodStart         DateTime
+  periodEnd           DateTime
+  pricingModel        String    @default("per-day") // per-day|per-week|usage-based|fixed
+  rateAmount          Decimal?
+  depositAmount       Decimal?
+  currency            String    @default("GBP")
+  status              String    @default("reserved") // reserved|verified|active|returned|closed|cancelled
+  verificationStatus  String    @default("not-required") // not-required|pending|verified|failed
+  checkoutConditionId String?   @unique
+  returnConditionId   String?   @unique
+  cancellationReason  String?
+  cancelledAt         DateTime?
+  idempotencyKey      String?   @unique
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  storefront        StorefrontConfig        @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  item              StorefrontItem          @relation(fields: [storefrontItemId], references: [id], onDelete: Cascade)
+  rentableUnit      RentableUnit?           @relation(fields: [rentableUnitId], references: [id])
+  customerContact   CustomerContact?        @relation(fields: [customerContactId], references: [id])
+  checkoutCondition RentalConditionRecord?  @relation("CheckoutCondition", fields: [checkoutConditionId], references: [id])
+  returnCondition   RentalConditionRecord?  @relation("ReturnCondition", fields: [returnConditionId], references: [id])
+  conditionRecords  RentalConditionRecord[] @relation("AgreementConditions")
+
+  @@index([storefrontId, status])
+  @@index([rentableUnitId, status])
+  @@index([periodStart, periodEnd])
+  @@index([customerEmail])
+}
+
+model RentalConditionRecord {
+  id           String   @id @default(cuid())
+  agreementId  String
+  phase        String // checkout|return
+  meterReading Decimal?
+  notes        String?
+  mediaRefs    Json?
+  recordedById String?
+  recordedAt   DateTime @default(now())
+
+  agreement            RentalAgreement  @relation("AgreementConditions", fields: [agreementId], references: [id], onDelete: Cascade)
+  checkoutForAgreement RentalAgreement? @relation("CheckoutCondition")
+  returnForAgreement   RentalAgreement? @relation("ReturnCondition")
+
+  @@index([agreementId, phase])
+}
+
+// Media asset management — see
+// docs/superpowers/specs/2026-06-12-media-asset-management-design.md.
+// One first-class, org-scoped, content-addressed asset (MediaAsset) plus a
+// polymorphic, ordered, role-tagged attachment (MediaAttachment) so any entity
+// can carry galleries without a column per model. Existing scalar imageUrl /
+// logoUrl / avatarUrl / heroImageUrl fields stay as a denormalized primary-image
+// cache, kept in sync from the primary attachment.
+model MediaAsset {
+  id             String   @id @default(cuid())
+  organizationId String
+  sha256         String // content hash; dedup key within an org
+  storageKey     String // path within the blob store
+  storageDriver  String   @default("filesystem") // filesystem|s3|gcs — pluggable
+  kind           String   @default("image") // image|video|document
+  mimeType       String
+  sizeBytes      Int
+  width          Int?
+  height         Int?
+  durationMs     Int? // video
+  altText        String? // SEO + accessibility
+  dominantColor  String? // hex, low-quality placeholder background
+  blurhash       String? // tiny placeholder string
+  focalX         Float?   @default(0.5) // 0..1 crop anchor
+  focalY         Float?   @default(0.5)
+  originalName   String?
+  status         String   @default("ready") // uploading|ready|failed|quarantined
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  attachments  MediaAttachment[]
+
+  @@unique([organizationId, sha256])
+  @@index([organizationId, kind, status])
+}
+
+model MediaAttachment {
+  id             String   @id @default(cuid())
+  organizationId String
+  mediaAssetId   String
+  ownerType      String // StorefrontItem|RentableUnit|AdoptableAnimal|ServiceProvider|StorefrontConfig|StorefrontSection|Organization|RentalConditionRecord
+  ownerId        String
+  role           String   @default("gallery") // primary|gallery|hero|logo|avatar|equipment|inspection-checkout|inspection-return|before|after
+  sortOrder      Int      @default(0)
+  caption        String?
+  createdAt      DateTime @default(now())
+
+  asset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@index([ownerType, ownerId, role, sortOrder])
+  @@index([organizationId])
+  @@index([mediaAssetId])
+}
+
+// The adoptable animal — the entity behind the `animals-available` storefront
+// section (pet-rescue, animal-shelter), which previously had no model. Shaped
+// after Petfinder: a gallery (MediaAttachment, ownerType="AdoptableAnimal") plus
+// a designated primary photo.
+model AdoptableAnimal {
+  id                  String    @id @default(cuid())
+  animalRef           String    @unique
+  storefrontId        String
+  organizationId      String
+  name                String
+  species             String? // dog|cat|rabbit|other
+  breed               String?
+  age                 String? // baby|young|adult|senior | free text
+  sex                 String?
+  size                String? // small|medium|large|xl
+  description         String?   @db.Text
+  status              String    @default("available") // available|pending|adopted|hold
+  primaryPhotoAssetId String?
+  attributes          Json? // spayed/neutered, good-with-kids/dogs/cats, house-trained
+  publishedAt         DateTime?
+  adoptedAt           DateTime?
+  sortOrder           Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  storefront StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+
+  @@index([storefrontId, status, sortOrder])
 }
 
 model StorefrontInquiry {
@@ -7554,6 +7913,14 @@ model Invoice {
   erpSyncStatus  String?   @default("pending")
   erpRefId       String?
   payToken       String?   @unique
+  // E-signature (Phase 1): in-platform signature capture on the payment portal.
+  // signatureRequired gates the Pay Now flow; the signed* fields record the
+  // captured signature. Third-party e-sign (DocuSign/HelloSign) is a later phase.
+  signatureRequired Boolean   @default(false)
+  signedAt          DateTime?
+  signedByName      String?
+  signedByEmail     String?
+  signatureDataUrl  String?
   createdById    String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -7664,8 +8031,44 @@ model Supplier {
   aiProviderProfiles AiProviderFinanceProfile[]
   supplierContracts  SupplierContract[]
   financeWorkItems   FinanceWorkItem[]
+  masterDataSourceRefs MasterDataSourceRef[] @relation("SupplierMdmSourceRef")
 
   @@index([status])
+}
+
+/// Master Data Management source crosswalk (MDM spec §6.2, typed-FK hybrid,
+/// resolved 2026-06-06). The durable, resolved mapping from a source-system
+/// record to a canonical DPF record — written once a staged import record is
+/// accepted/linked, not a second intake table. Identity-bearing domains
+/// (organization, customer-contact) crosswalk via PrincipalAlias instead and
+/// are out of scope here. High-volume domains (customer-account, supplier)
+/// carry a typed FK for DB-enforced cascade; low-volume domains rely on the
+/// polymorphic (domain, canonicalId) pointer with application-enforced integrity.
+model MasterDataSourceRef {
+  id                String   @id @default(cuid())
+  domain            String
+  canonicalId       String
+  customerAccountId String?
+  supplierId        String?
+  sourceSystem      String
+  sourceEntityType  String?
+  sourceEntityId    String
+  sourcePayloadHash String?
+  observedAt        DateTime
+  lastSeenAt        DateTime
+  trustTier         String   @default("unknown")
+  status            String   @default("active")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customerAccount CustomerAccount? @relation("CustomerAccountMdmSourceRef", fields: [customerAccountId], references: [id], onDelete: Cascade)
+  supplier        Supplier?        @relation("SupplierMdmSourceRef", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([domain, sourceSystem, sourceEntityId])
+  @@index([domain, canonicalId])
+  @@index([sourceSystem, sourceEntityId])
+  @@index([customerAccountId])
+  @@index([supplierId])
 }
 
 model AiProviderFinanceProfile {
@@ -7706,12 +8109,16 @@ model SupplierContract {
   status                 String    @default("draft")
   contractType           String    @default("subscription")
   billingCadence         String    @default("monthly")
+  billingDayOfMonth      Int?
   currency               String    @default("USD")
   monthlyCommittedAmount Decimal?
   budgetAmount           Decimal?
   budgetWindow           String    @default("monthly")
   allowsOverage          Boolean   @default(false)
   usageUnit              String?
+  paymentMethod          String?
+  paymentReference       String?
+  coveredProviderIds     Json?
   billingUrl             String?
   usageUrl               String?
   renewalDate            DateTime?
@@ -7727,6 +8134,7 @@ model SupplierContract {
   allowances          ContractAllowance[]
   usageSnapshots      ContractUsageSnapshot[]
   financeWorkItems    FinanceWorkItem[]
+  bills               Bill[]
 
   @@index([profileId])
   @@index([supplierId])
@@ -7820,6 +8228,7 @@ model Bill {
   amountPaid      Decimal  @default(0)
   amountDue       Decimal
   purchaseOrderId String?
+  supplierContractId String?
   approvalToken   String?  @unique
   notes           String?
   createdById     String?
@@ -7828,12 +8237,14 @@ model Bill {
 
   supplier      Supplier            @relation(fields: [supplierId], references: [id])
   purchaseOrder PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+  supplierContract SupplierContract? @relation(fields: [supplierContractId], references: [id], onDelete: SetNull)
   createdBy     User?               @relation("BillCreations", fields: [createdById], references: [id])
   lineItems     BillLineItem[]
   allocations   PaymentAllocation[]
   approvals     BillApproval[]
 
   @@index([supplierId])
+  @@index([supplierContractId])
   @@index([status])
   @@index([dueDate])
 }
@@ -8486,6 +8897,7 @@ model SkillUsageEvent {
   @@index([threadId, createdAt(sort: Desc)])
   @@index([taskRunId, createdAt(sort: Desc)])
   @@index([phase, createdAt(sort: Desc)])
+  @@index([createdAt])
 }
 
 // Governed Hermes learning Slice 3: immutable per-version snapshot of a
@@ -8652,6 +9064,11 @@ model WikiPage {
   overrides                WikiPage[]         @relation("WikiPageOverride")
   derivedFromKernelVersion String?
   abstract                 String?            @db.Text
+  // Free-form frontmatter bag (mirrors PromptTemplate.metadata = "all other
+  // frontmatter"). Profession-corpus pages carry the WSID variant axes here
+  // (professionJurisdiction / professionCompetencyLevel) so coverage is
+  // queryable at runtime without typed/indexed columns (variants spec §3).
+  metadata                 Json?
   lastReviewedAt           DateTime?
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
@@ -8758,6 +9175,7 @@ model WikiIngestEvent {
 
   @@index([sourceId])
   @@index([organizationId])
+  @@index([createdAt])
 }
 
 model WikiLintFinding {
@@ -10037,6 +10455,307 @@ model CoworkerTurnMetric {
   createdAt       DateTime @default(now())
 
   @@unique([threadId, agentMessageId])
+  @@index([createdAt])
   @@index([agentId, routeContext, createdAt])
   @@index([threadId, createdAt])
+}
+
+// =============================================================================
+// Universal Grid & Workbooks (EP-GRID-WORKBOOKS)
+// Spec: docs/superpowers/specs/2026-03-23-universal-grid-workbooks-design.md
+// Airtable/Smartsheet-style grids for knowledge workers. WorkbookRow/Cell hold
+// user-defined ("custom") table data; platform-data tables are views resolved
+// through adapters at runtime and do not populate WorkbookRow.
+// =============================================================================
+
+model Workbook {
+  id          String          @id @default(cuid())
+  workbookId  String          @unique // format: "WB-<cuid>" — generated by server action
+  name        String
+  description String          @default("")
+  areaSlug    String? // links to shell area (ops, crm, etc.) — null for standalone
+  createdById String
+  createdBy   User            @relation("WorkbookCreatedBy", fields: [createdById], references: [id])
+  tables      WorkbookTable[]
+  shares      WorkbookShare[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([createdById])
+}
+
+model WorkbookShare {
+  id         String   @id @default(cuid())
+  workbookId String
+  workbook   Workbook @relation(fields: [workbookId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation("WorkbookShareUser", fields: [userId], references: [id], onDelete: Cascade)
+  role       String // owner | editor | viewer — validated by Zod enum at server action layer
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([workbookId, userId])
+}
+
+model WorkbookTable {
+  id               String           @id @default(cuid())
+  tableId          String           @unique // format: "TBL-<cuid>"
+  name             String
+  position         Int              @default(0)
+  workbookId       String
+  workbook         Workbook         @relation(fields: [workbookId], references: [id], onDelete: Cascade)
+  dataSource       String           @default("custom")
+  // "custom" = user-defined rows stored in WorkbookRow/Cell
+  // Any other value = view over an existing Prisma model (e.g., "backlog_item")
+  dataSourceFilter Json? // optional pre-filter — see spec "Data Source Filter Schema"
+  columns          WorkbookColumn[]
+  rows             WorkbookRow[] // only populated when dataSource = "custom"
+  views            WorkbookView[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([workbookId, position])
+}
+
+model WorkbookColumn {
+  id           String         @id @default(cuid())
+  columnId     String         @unique // format: "COL-<cuid>"
+  name         String
+  position     Int            @default(0)
+  tableId      String
+  table        WorkbookTable  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  fieldType    String // text | number | date | datetime | checkbox | select | multi_select | reference | url | email
+  fieldConfig  Json? // select options, reference target type, validation rules, etc.
+  sourceField  String? // when dataSource != "custom", maps to the Prisma model field name
+  required     Boolean        @default(false)
+  defaultValue String?
+  width        Int? // pixel width for grid rendering
+  cells        WorkbookCell[]
+  cellLinks    WorkbookCellLink[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([tableId, position])
+}
+
+model WorkbookRow {
+  id          String         @id @default(cuid())
+  rowId       String         @unique // format: "ROW-<cuid>"
+  position    Int            @default(0)
+  tableId     String
+  table       WorkbookTable  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?          @relation("WorkbookRowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  cells       WorkbookCell[]
+  cellLinks   WorkbookCellLink[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([tableId, position])
+}
+
+model WorkbookCell {
+  id               String         @id @default(cuid())
+  rowId            String
+  row              WorkbookRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  columnId         String
+  column           WorkbookColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  textValue        String?
+  numberValue      Float?
+  dateValue        DateTime?
+  boolValue        Boolean?
+  selectValue      String? // stored key from fieldConfig options
+  multiSelectValue String[] // array of selected keys (Postgres array)
+  referenceId      String? // platform entity ID
+  referenceType    String? // entity table: "epic", "customer_contact", etc.
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([rowId, columnId])
+  @@index([referenceType, referenceId])
+  @@index([columnId, textValue])
+  @@index([columnId, numberValue])
+  @@index([columnId, dateValue])
+}
+
+// A single link from a (row, column) cell to one target record — the "link-to-many"
+// substrate (EP-GRID-WORKBOOKS). Many rows per cell model 1-M / M-M; a `reference`
+// column stays single-valued on WorkbookCell. The target is a platform entity
+// (referenceType = "epic", … + referenceId) or another workbook row (referenceType
+// = a workbook table id + referenceId = WorkbookRow.rowId). First-class rows so
+// rollups can group/aggregate over links in SQL.
+model WorkbookCellLink {
+  id            String         @id @default(cuid())
+  rowId         String
+  row           WorkbookRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  columnId      String
+  column        WorkbookColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  referenceId   String // target record id (platform entity id or WorkbookRow.rowId)
+  referenceType String // target kind: "epic", "customer_account", … or a workbook table id
+  position      Int            @default(0)
+  createdAt     DateTime       @default(now())
+
+  @@unique([rowId, columnId, referenceId]) // no duplicate link within a cell
+  @@index([columnId, referenceId]) // reverse lookup + rollup groupBy
+  @@index([rowId, columnId]) // read a cell's links in one scan
+}
+
+model WorkbookView {
+  id          String        @id @default(cuid())
+  viewId      String        @unique // format: "VW-<cuid>"
+  name        String
+  tableId     String
+  table       WorkbookTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  viewType    String        @default("grid") // grid | kanban
+  config      Json // see spec "View Config Schema"
+  isDefault   Boolean       @default(false)
+  createdById String?
+  createdBy   User?         @relation("WorkbookViewCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([tableId, createdById])
+}
+
+model BuildEngine {
+  engineId        String   @id
+  binary          String
+  verifyCommand   String
+  versionRegex    String
+  bakeInDefault   Boolean  @default(false)
+  recipes         Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  state           BuildEngineState?
+
+  @@map("build_engine")
+}
+
+model BuildEngineState {
+  engineId          String      @id
+  engine            BuildEngine @relation(fields: [engineId], references: [engineId], onDelete: Cascade)
+  present           Boolean     @default(false)
+  version           String?
+  lastProbedAt      DateTime?
+  lastProvisionedAt DateTime?
+  recipeApplied     String?
+  desired           String      @default("present")
+  provisionedBy     String?
+
+  @@map("build_engine_state")
+}
+
+// ─── Civic & member-governed archetype models (BI-8D477188 Phase 2) ──────────
+// Spec: docs/superpowers/specs/2026-06-09-civic-and-member-governed-archetypes-design.md §7
+// Plan: docs/superpowers/plans/2026-06-09-small-town-municipality-archetype.md
+// GovernanceMeeting serves BOTH public-body governance (council/committee, gated
+// by governance=public-body) and member governance (board/annual meeting, gated
+// by governance=member-owned) — bodyType carries the distinction so the
+// credit-union and cooperative archetypes reuse the same workflow table.
+
+model GovernanceMeeting {
+  id             String       @id @default(cuid())
+  meetingId      String       @unique
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  bodyType    String // council | board | committee | annual-meeting
+  title       String
+  scheduledAt DateTime
+  location    String?
+  // scheduled → agenda-published → held → minutes-recorded → minutes-approved | cancelled
+  status      String   @default("scheduled")
+
+  agendaContent     String?
+  agendaPublishedAt DateTime?
+  minutesContent    String?
+  minutesRecordedAt DateTime?
+  minutesApprovedAt DateTime?
+  attendees         Json?
+  decisions         Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, scheduledAt])
+  @@index([organizationId, status])
+}
+
+model RecordsRequest {
+  id             String       @id @default(cuid())
+  requestId      String       @unique
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  requesterName    String
+  requesterEmail   String?
+  requesterPhone   String?
+  description      String
+  requestedRecords Json?
+
+  receivedAt    DateTime @default(now())
+  // Statutory response deadline — computed from the org-configured response-days
+  // (state-dependent; BusinessContext.stateCode sets the default).
+  responseDueAt DateTime
+  // submitted → in-progress → fulfilled | partially-fulfilled | denied | withdrawn
+  status        String   @default("submitted")
+
+  responseSummary String?
+  denialReason    String?
+  exemptionsCited Json?
+  respondedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([organizationId, responseDueAt])
+}
+
+model FundBudgetLine {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  fiscalYear     Int
+  // general | special-revenue | enterprise | capital-projects | debt-service
+  fund           String
+  accountCode    String
+  budgetedAmount Decimal @db.Decimal(14, 2)
+  notes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, fiscalYear, fund, accountCode])
+  @@index([organizationId, fiscalYear])
+}
+
+// Member equity & patronage ledger (BI-AFC178F3 — civic spec §7 cooperative).
+// One row per allocation/retirement/retain event; a member's equity balance is
+// the sum of amounts (retirements are negative). Serves co-ops first and
+// member-owned utilities (capital credits) later.
+model MemberEquityEntry {
+  id              String          @id @default(cuid())
+  entryId         String          @unique
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memberAccountId String
+  memberAccount   CustomerAccount @relation(fields: [memberAccountId], references: [id], onDelete: Cascade)
+
+  fiscalYear  Int
+  // patronage-allocation | equity-retirement | per-unit-retain | adjustment
+  kind        String
+  // Negative for retirements.
+  amount      Decimal  @db.Decimal(14, 2)
+  // Qualified written notice of allocation (Subchapter T) — drives the >=20% cash rule.
+  qualified   Boolean  @default(false)
+  cashPortion Decimal? @db.Decimal(14, 2)
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, memberAccountId])
+  @@index([organizationId, fiscalYear])
 }

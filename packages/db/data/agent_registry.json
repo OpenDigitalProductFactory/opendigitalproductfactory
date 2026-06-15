@@ -1977,6 +1977,7 @@
         "tool_grants": [
           "registry_read",
           "backlog_read",
+          "browser_drive",
           "budget_read",
           "chargeback_write",
           "financial_report_create",
@@ -2744,7 +2745,8 @@
           "file_read",
           "portfolio_read",
           "registry_read",
-          "web_search"
+          "web_search",
+          "email_config"
         ]
       }
     },

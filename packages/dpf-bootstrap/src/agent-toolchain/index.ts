@@ -18,6 +18,7 @@ export type {
 export {
   planCodexConfig,
   type CodexConfigPlan,
+  type CodexConfigConvergenceChange,
 } from "./codex-config";
 
 export {
@@ -65,6 +66,11 @@ export {
   type AgentToolchainPlan,
   type ComputeAgentToolchainPlanOptions,
 } from "./bridge";
+
+export {
+  planGrokConfig,
+  type GrokConfigPlan,
+} from "./grok-config";
 
 export {
   runMcpReadinessProbe,

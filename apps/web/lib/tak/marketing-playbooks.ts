@@ -40,6 +40,79 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     agentSkills: ["Draft community announcement", "Prepare assessment notice", "Summarise maintenance requests", "Board meeting agenda"],
   },
 
+  "banking-financial-services": {
+    primaryGoal: "Deepen customer and member relationships through trust, financial education, and product awareness — within regulated-communication boundaries",
+    stakeholders: "Customers/members, local businesses, community organizations, regulators",
+    campaignTypes: [
+      "Rate and product announcements (APY/APR figures must match current published rates — Reg DD / Reg Z accuracy)",
+      "Financial education series (budgeting, fraud awareness, first-home buying)",
+      "Branch and service updates (hours, new services, appointment availability)",
+      "Community involvement and local sponsorship stories",
+      "New account and membership onboarding sequences",
+      "Security and fraud-alert notices",
+      "Required-disclosure-bearing product promotions (Member FDIC / NCUA insurance, Equal Housing)",
+    ],
+    contentTone: "Trustworthy, clear, factual, community-anchored — never urgency-pressure or unverifiable claims",
+    keyMetrics: [
+      "New account / membership applications",
+      "Appointment bookings with bankers or advisors",
+      "Product inquiry conversion rate",
+      "Financial education engagement",
+      "Customer/member retention rate",
+    ],
+    ctaLanguage: ["Open an account", "Apply now", "Check today's rates", "Meet with a banker", "Become a member"],
+    agentSkills: ["Draft rate announcement", "Financial education article", "Branch notice", "Fraud awareness alert"],
+  },
+
+  "asset-rental": {
+    primaryGoal: "Keep the rentable pool utilized — drive reservations, fill off-peak, and recover repeat renters",
+    stakeholders: "Renters (contractors, event organizers, households), members (co-op), local trade networks",
+    campaignTypes: [
+      "Seasonal availability pushes (event season, harvest, moving season)",
+      "Off-peak / midweek promotions to lift utilization",
+      "New-equipment-in-the-pool announcements",
+      "Reservation reminders and return-due nudges",
+      "Deposit/damage-policy and how-it-works explainers",
+      "Repeat-renter loyalty and membership offers",
+      "Last-minute availability alerts for high-demand items",
+    ],
+    contentTone: "Practical, availability-forward, trustworthy about condition and deposits",
+    keyMetrics: [
+      "Asset-utilization %",
+      "Reservation conversion rate",
+      "Turnaround time between rentals",
+      "Overdue-return rate",
+      "Repeat-renter rate",
+    ],
+    ctaLanguage: ["Reserve now", "Check availability", "Book your dates", "Join the waitlist"],
+    agentSkills: ["Draft availability push", "Off-peak promotion", "Return-due reminder", "New-equipment announcement"],
+  },
+
+  "public-sector": {
+    primaryGoal: "Resident awareness, participation, and trust through transparent civic communication",
+    stakeholders: "Residents, council members, town staff, local businesses, neighboring jurisdictions",
+    campaignTypes: [
+      "Council and board meeting notices with agenda previews",
+      "Public hearing and comment-period announcements",
+      "Service disruption and road work notices",
+      "Seasonal reminders (leaf pickup, snow routes, hydrant flushing)",
+      "Budget season and levy communications with plain-language summaries",
+      "Permit and licensing deadline reminders",
+      "Community event and parks programming announcements",
+      "Emergency notifications (weather, water, public safety)",
+    ],
+    contentTone: "Official, plain-language, neutral, accessible to every resident",
+    keyMetrics: [
+      "Meeting attendance and public-comment participation",
+      "Service request response time",
+      "Records request on-time completion rate",
+      "Notice reach (open/read rate)",
+      "Resident satisfaction",
+    ],
+    ctaLanguage: ["Report an issue", "View the agenda", "Request records", "Apply for a permit"],
+    agentSkills: ["Draft meeting notice", "Plain-language budget summary", "Service disruption notice", "Public hearing announcement"],
+  },
+
   "professional-services": {
     primaryGoal: "Build authority pipeline through expertise demonstration and client nurture",
     stakeholders: "Clients, prospects, referral partners, industry contacts",
@@ -258,6 +331,39 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     agentSkills: ["Holiday boarding campaign", "Puppy programme launch", "Rebooking reminders", "Seasonal grooming promotion"],
   },
 
+  "real-estate-construction": {
+    primaryGoal: "Generate qualified buyer enquiries and display-home appointments that convert to purchase agreements",
+    stakeholders: "Home buyers (first-time, upsizing, downsizing, investing), real estate agents, mortgage brokers, subcontractors",
+    campaignTypes: [
+      "Community and stage release announcements",
+      "Display home open-weekend promotions",
+      "Design centre event invitations (colour palette reveals, upgrade showcases)",
+      "First-home buyer education content (the build journey explained)",
+      "Construction milestone updates for under-contract buyers",
+      "Post-handover warranty follow-up sequences (30 / 60 / 90 days)",
+      "Before-and-after project showcases for custom builds",
+      "Referral programmes for settled buyers",
+      "Build timeline and progress updates for custom clients",
+    ],
+    contentTone: "Aspirational, milestone-driven, trustworthy — homes are the largest purchase buyers will make; tone must project permanence and quality",
+    keyMetrics: [
+      "Display home appointments booked",
+      "Enquiry-to-appointment conversion rate",
+      "Purchase agreements signed",
+      "Days from first enquiry to contract",
+      "Buyer referral rate",
+      "Warranty call rate at 90 days post-handover",
+    ],
+    ctaLanguage: [
+      "Schedule a tour", "Book a display home visit", "Enquire now",
+      "View floor plans", "Register your interest", "Download the community guide",
+    ],
+    agentSkills: [
+      "Community release announcement", "Display home open-day promotion",
+      "Buyer journey explainer", "Construction milestone update template",
+    ],
+  },
+
   "retail-goods": {
     primaryGoal: "Increase order frequency and average order value",
     stakeholders: "Customers, wholesale/trade buyers, event organisers",
@@ -281,6 +387,78 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     ],
     ctaLanguage: ["Shop now", "Order today", "Browse collection", "Pre-order"],
     agentSkills: ["Product launch campaign", "Seasonal collection promotion", "Gift guide creation", "Loyalty programme ideas"],
+  },
+
+  "automotive-services": {
+    primaryGoal: "Win same-day jobs and keep service vans full — fast quotes, local search visibility, and repeat/fleet relationships",
+    stakeholders: "Drivers, fleet managers, insurers, dealerships, local trade networks",
+    campaignTypes: [
+      "Fix-the-chip-before-it-cracks reminders",
+      "Seasonal service pushes (winter batteries and tires, summer A/C)",
+      "Fleet and dealership account acquisition",
+      "Insurance-claim assistance messaging (glass)",
+      "Mobile-convenience promotion (we come to you)",
+      "Review and referral drives",
+      "ADAS-calibration safety awareness",
+    ],
+    contentTone: "Reassuring and fast-response — safety first, honest pricing, no upsell pressure",
+    keyMetrics: [
+      "Same-day booking rate",
+      "Quote-to-job conversion",
+      "Fleet / account growth",
+      "Repeat and referral rate",
+      "Average response time",
+    ],
+    ctaLanguage: ["Get a quote", "Book mobile service", "Request help now", "Add your fleet"],
+    agentSkills: ["Seasonal service reminder", "Fleet outreach", "Review request", "Insurance-claim explainer"],
+  },
+
+  "moving-and-logistics": {
+    primaryGoal: "Fill the calendar in peak season and win recurring B2B routes — fast quotes and trust on careful handling",
+    stakeholders: "Households relocating, businesses, real-estate agents, property managers",
+    campaignTypes: [
+      "Peak-season pushes (summer and month-end)",
+      "Off-peak midweek discounts to smooth demand",
+      "Realtor and property-manager referral partnerships",
+      "Packing and storage add-on upsell",
+      "B2B route and account acquisition",
+      "Review and referral drives",
+      "Moving-checklist and how-to content",
+    ],
+    contentTone: "Reassuring, reliable, stress-reducing",
+    keyMetrics: [
+      "Quote-to-booking conversion",
+      "Calendar fill rate (peak vs off-peak)",
+      "B2B account growth",
+      "Average job value",
+      "Referral rate",
+    ],
+    ctaLanguage: ["Get a moving quote", "Book a pickup", "Open a business account", "Request a route"],
+    agentSkills: ["Peak-season campaign", "Realtor referral outreach", "Review request", "B2B account proposal"],
+  },
+
+  "security-services": {
+    primaryGoal: "Win and renew recurring contracts — built on credibility, a response track record, and compliance assurance",
+    stakeholders: "Businesses, property managers, event organizers, residents, insurers",
+    campaignTypes: [
+      "Contract-renewal nurture sequences",
+      "B2B proposal and RFP responses",
+      "Event-security seasonal outreach",
+      "Alarm and monitoring upsell to install customers",
+      "Compliance, licensing, and vetting trust content",
+      "Incident-response case studies",
+      "Residential security awareness",
+    ],
+    contentTone: "Credible, reassuring, professional — safety and trust, never fear-mongering",
+    keyMetrics: [
+      "Contract win rate",
+      "Renewal / retention rate",
+      "Monitoring-plan attach rate",
+      "Response-time SLA adherence",
+      "Proposal conversion",
+    ],
+    ctaLanguage: ["Request a proposal", "Get a security assessment", "Add monitoring", "Talk to us"],
+    agentSkills: ["Contract renewal nurture", "RFP / proposal draft", "Monitoring upsell campaign", "Incident-response case study"],
   },
 };
 
@@ -347,4 +525,53 @@ export function getPlaybookForCtaType(ctaType: string | null | undefined): Marke
 /** Best-effort lookup: try category first, fall back to CTA type. */
 export function getPlaybook(category: string | null | undefined, ctaType: string | null | undefined): MarketingPlaybook {
   return CATEGORY_PLAYBOOKS[category ?? ""] ?? CTA_FALLBACKS[ctaType ?? "inquiry"] ?? CTA_FALLBACKS["inquiry"]!;
+}
+
+/**
+ * Composite playbook for multi-archetype storefronts.
+ *
+ * Primary drives identity (primaryGoal, stakeholders, contentTone,
+ * keyMetrics, ctaLanguage). Secondary categories contribute unique
+ * campaignTypes and agentSkills as supplemental context — so the AI
+ * coworker can suggest service-line-specific campaigns without losing the
+ * primary business's voice.
+ */
+export function getCompositePlaybook(
+  primaryCategory: string | null | undefined,
+  secondaryCategories: Array<string | null | undefined>,
+  primaryCtaType?: string | null,
+): MarketingPlaybook {
+  const primary = getPlaybook(primaryCategory, primaryCtaType);
+
+  if (secondaryCategories.length === 0) return primary;
+
+  const seenCampaigns = new Set(primary.campaignTypes);
+  const seenSkills = new Set(primary.agentSkills);
+
+  const addedCampaigns: string[] = [];
+  const addedSkills: string[] = [];
+
+  for (const cat of secondaryCategories) {
+    const secondary = getPlaybookForCategory(cat);
+    for (const c of secondary.campaignTypes) {
+      if (!seenCampaigns.has(c)) {
+        seenCampaigns.add(c);
+        addedCampaigns.push(c);
+      }
+    }
+    for (const s of secondary.agentSkills) {
+      if (!seenSkills.has(s)) {
+        seenSkills.add(s);
+        addedSkills.push(s);
+      }
+    }
+  }
+
+  if (addedCampaigns.length === 0 && addedSkills.length === 0) return primary;
+
+  return {
+    ...primary,
+    campaignTypes: [...primary.campaignTypes, ...addedCampaigns],
+    agentSkills: [...primary.agentSkills, ...addedSkills],
+  };
 }

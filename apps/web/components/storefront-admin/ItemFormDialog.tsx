@@ -1,6 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
+import { DEFAULT_CTA_LABELS } from "@/lib/storefront/cta-labels";
+import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
+import { MediaUploader } from "./MediaUploader";
 
 export type ItemFormData = {
   id?: string;
@@ -32,7 +35,7 @@ const EMPTY_FORM: ItemFormData = {
   ctaType: "booking",
   priceType: "",
   priceAmount: "",
-  priceCurrency: "GBP",
+  priceCurrency: "USD",
   imageUrl: "",
   ctaLabel: "",
   durationMinutes: "60",
@@ -48,6 +51,7 @@ const EMPTY_FORM: ItemFormData = {
 const CTA_TYPES = [
   { value: "booking", label: "Booking" },
   { value: "purchase", label: "Purchase" },
+  { value: "rental", label: "Rental" },
   { value: "inquiry", label: "Inquiry" },
   { value: "donation", label: "Donation" },
 ];
@@ -63,6 +67,13 @@ const PRICE_TYPES_BY_CTA: Record<string, Array<{ value: string; label: string }>
     { value: "fixed", label: "Fixed price" },
     { value: "from", label: "From (minimum)" },
   ],
+  rental: [
+    { value: "per-session", label: "Per rental period" },
+    { value: "per-hour", label: "Per hour" },
+    { value: "fixed", label: "Fixed price" },
+    { value: "from", label: "From (minimum)" },
+    { value: "free", label: "Free" },
+  ],
   inquiry: [
     { value: "quote", label: "Request a quote" },
     { value: "from", label: "From (starting at)" },
@@ -74,13 +85,6 @@ const PRICE_TYPES_BY_CTA: Record<string, Array<{ value: string; label: string }>
   ],
 };
 
-const CTA_LABEL_DEFAULTS: Record<string, string> = {
-  booking: "Book now",
-  purchase: "Order now",
-  inquiry: "Get a quote",
-  donation: "Donate now",
-};
-
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -89,7 +93,11 @@ type Props = {
   vocabulary: ArchetypeVocabulary;
   categorySuggestions: string[];
   defaultCtaType: string;
+  /** Workspace base currency; defaults to USD when not provided. */
+  defaultPriceCurrency?: string;
   isEditing: boolean;
+  /** DB id of the item being edited; enables the photo-gallery uploader. */
+  editingItemId?: string;
 };
 
 export function ItemFormDialog({
@@ -100,15 +108,38 @@ export function ItemFormDialog({
   vocabulary,
   categorySuggestions,
   defaultCtaType,
+  defaultPriceCurrency = "USD",
   isEditing,
+  editingItemId,
 }: Props) {
   const [form, setForm] = useState<ItemFormData>(() => ({
     ...EMPTY_FORM,
+    priceCurrency: defaultPriceCurrency,
     ctaType: defaultCtaType,
     priceType: PRICE_TYPES_BY_CTA[defaultCtaType]?.[0]?.value ?? "",
     ...initial,
   }));
   const [saving, setSaving] = useState(false);
+
+  // Reset form when dialog opens so stale values from a previous item don't bleed
+  // through (R6-003: edit modal opened with empty Name / wrong values on second open).
+  const prevOpenRef = useRef(false);
+  const initialRef = useRef(initial);
+  initialRef.current = initial;
+  const defaultCtaTypeRef = useRef(defaultCtaType);
+  defaultCtaTypeRef.current = defaultCtaType;
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      const ct = defaultCtaTypeRef.current ?? "booking";
+      setForm({
+        ...EMPTY_FORM,
+        ctaType: ct,
+        priceType: PRICE_TYPES_BY_CTA[ct]?.[0]?.value ?? "",
+        ...initialRef.current,
+      });
+    }
+    prevOpenRef.current = open;
+  }, [open]);
 
   if (!open) return null;
 
@@ -232,7 +263,7 @@ export function ItemFormDialog({
                 <Field label="Amount">
                   <div className="flex gap-2">
                     <span className="flex items-center text-sm text-[var(--dpf-muted)]">
-                      {form.priceCurrency === "GBP" ? "\u00a3" : form.priceCurrency === "USD" ? "$" : form.priceCurrency === "EUR" ? "\u20ac" : form.priceCurrency}
+                      {getCurrencySymbol(form.priceCurrency)}
                     </span>
                     <input
                       type="number"
@@ -252,7 +283,7 @@ export function ItemFormDialog({
                   type="text"
                   value={form.ctaLabel}
                   onChange={(e) => set("ctaLabel", e.target.value)}
-                  placeholder={CTA_LABEL_DEFAULTS[form.ctaType] ?? ""}
+                  placeholder={DEFAULT_CTA_LABELS[form.ctaType] ?? ""}
                   className="w-full px-3 py-1.5 text-sm rounded-md bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
                 />
               </Field>
@@ -358,7 +389,7 @@ export function ItemFormDialog({
               <Field label="Suggested amount">
                 <div className="flex gap-2">
                   <span className="flex items-center text-sm text-[var(--dpf-muted)]">
-                    {form.priceCurrency === "GBP" ? "\u00a3" : form.priceCurrency === "USD" ? "$" : form.priceCurrency === "EUR" ? "\u20ac" : form.priceCurrency}
+                    {getCurrencySymbol(form.priceCurrency)}
                   </span>
                   <input
                     type="number"
@@ -375,7 +406,7 @@ export function ItemFormDialog({
               <Field label="Goal amount">
                 <div className="flex gap-2">
                   <span className="flex items-center text-sm text-[var(--dpf-muted)]">
-                    {form.priceCurrency === "GBP" ? "\u00a3" : form.priceCurrency === "USD" ? "$" : form.priceCurrency === "EUR" ? "\u20ac" : form.priceCurrency}
+                    {getCurrencySymbol(form.priceCurrency)}
                   </span>
                   <input
                     type="number"
@@ -391,13 +422,29 @@ export function ItemFormDialog({
             </div>
           )}
 
-          {/* Image URL (all types) */}
-          <details className="text-sm pt-3 border-t border-[var(--dpf-border)]">
+          {/* Images */}
+          <details className="text-sm pt-3 border-t border-[var(--dpf-border)]" open={Boolean(editingItemId)}>
             <summary className="text-[10px] text-[var(--dpf-muted)] cursor-pointer hover:text-[var(--dpf-text)]">
-              Image
+              Images
             </summary>
-            <div className="mt-2">
-              <Field label="Image URL">
+            <div className="mt-2 flex flex-col gap-3">
+              {editingItemId ? (
+                // Existing item: real upload + gallery via the media substrate.
+                <MediaUploader
+                  ownerType="StorefrontItem"
+                  ownerId={editingItemId}
+                  role="product"
+                  label="Photos"
+                  hint="First photo is the one shown on the storefront card"
+                />
+              ) : (
+                // New item: gallery uploads need a saved item to attach to — save
+                // first, then reopen to add photos. A URL still works immediately.
+                <p className="text-[11px] text-[var(--dpf-muted)]">
+                  Save the {vocabulary.singleItemLabel.toLowerCase()} first, then reopen it to add photos.
+                </p>
+              )}
+              <Field label="Or paste an image URL">
                 <input
                   type="url"
                   value={form.imageUrl}

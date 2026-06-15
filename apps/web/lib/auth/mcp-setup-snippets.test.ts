@@ -36,6 +36,15 @@ describe("buildSetupSnippets", () => {
     expect(codex).not.toContain(TOKEN);
   });
 
+  it("grok produces the same TOML shape as codex (for ~/.grok/config.toml) and is documented", () => {
+    const { grok } = buildSetupSnippets(TOKEN, BASE);
+    expect(grok).toContain("[mcp_servers.dpf]");
+    expect(grok).toContain(`url = "${LOCAL_MCP_URL}"`);
+    expect(grok).toContain('bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"');
+    expect(grok).toContain("Grok (xAI) MCP server configuration");
+    expect(grok).not.toContain(TOKEN);
+  });
+
   it("env and runtime refresh snippets carry the full plaintext token", () => {
     const t = "dpfmcp_UNIQUETOKEN";
     const { envPowerShell, runtimeRefreshPowerShell } = buildSetupSnippets(t, BASE);
@@ -85,9 +94,10 @@ describe("buildSetupSnippets", () => {
   });
 
   it("JSON setup outputs are valid JSON", () => {
-    const { claudeCode, codex, vscode } = buildSetupSnippets(TOKEN, BASE);
+    const { claudeCode, codex, grok, vscode } = buildSetupSnippets(TOKEN, BASE);
     expect(() => JSON.parse(claudeCode)).not.toThrow();
     expect(codex).toContain("[mcp_servers.dpf]");
+    expect(grok).toContain("[mcp_servers.dpf]");
     expect(() => JSON.parse(vscode)).not.toThrow();
   });
 

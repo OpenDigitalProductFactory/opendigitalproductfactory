@@ -110,6 +110,42 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "Our physical supply chain is intentionally light — most of what we consume is software, research databases, and professional subscriptions. The discipline is in vendor selection and renewal review: a stale tool can cost more than its licence.",
   },
+  "real-estate-construction": {
+    missionTheme:
+      "build homes and communities our buyers are proud to live in",
+    businessModel:
+      "Home sales driven by display-home visits and purchase agreements; revenue arrives at settlement with milestone draws during construction. Subcontractors deliver the trade work; the builder's value is design, project management, and quality assurance.",
+    whoWeServe:
+      "We serve home buyers — first-timers, families upsizing, downsizers, and investors — who trust us with the largest purchase of their lives. Every home we hand over is a reflection of that trust and our reputation.",
+    howWeDecide:
+      "We decide for build quality, delivery on time, and the buyer's confidence at handover. A defect caught before settlement is never optional to fix, and a warranty call is an opportunity to demonstrate we stand behind our work. We hold completion integrity above schedule shortcuts.",
+    supplyChain:
+      "Our build supply chain is almost entirely subcontracted — framers, concreters, plumbers, electricians, plasterers, tilers, and painters all work under our project management umbrella. The discipline is in subcontractor qualification, schedule coordination, and quality inspection at every stage. Material supply (structural timber, windows, bricks, roof tiles) typically runs through builders' merchants and volume trade accounts; lead times and material price volatility are operational risks that need to be hedged in contract pricing.",
+  },
+  "asset-rental": {
+    missionTheme:
+      "keep a well-maintained pool of equipment available and turning so customers get what they need, when they need it",
+    businessModel:
+      "We earn by renting reusable assets for a period — reserved, handed out, used, returned, inspected, and re-pooled. Utilization, fast turnaround, and avoiding double-bookings are how the business makes money.",
+    whoWeServe:
+      "We serve renters who need an asset for a window of time, not to own it — contractors, event organizers, households, or (for a co-op) member-owners sharing a pool. The asset comes back and serves the next customer.",
+    howWeDecide:
+      "We decide for asset availability and condition: keep the pool maintained and ready, prevent reservation conflicts, recover overdue returns promptly, and protect against damage with deposits. A unit sitting idle or stuck out is lost revenue.",
+    supplyChain:
+      "Our 'inventory' is the rentable pool itself plus maintenance parts and consumables; the operational discipline is turnaround time, condition tracking, and keeping high-demand items available through peak season.",
+  },
+  "public-sector": {
+    missionTheme:
+      "serve every resident of our community fairly, openly, and well with the public services they rely on",
+    businessModel:
+      "We are funded by levies, fees, and grants set in public session — not by sales. The measure of the operation is budget-to-actual stewardship and resident trust, not profit.",
+    whoWeServe:
+      "We serve the residents of our jurisdiction — everyone within it, by right, not by contract. Residents are simultaneously the people we serve, the taxpayers who fund us, and the voters we answer to.",
+    howWeDecide:
+      "We decide in public: open meetings, published agendas and minutes, and records anyone can request. Equal treatment and due process are non-negotiable — we cannot pick our customers, so fairness and transparency lead every call.",
+    supplyChain:
+      "Purchasing follows public procurement rules — quotes and sealed bids above statutory thresholds, with an audit trail. We rely on local contractors for streets, parks, and facilities work, and intergovernmental agreements for what we cannot staff ourselves.",
+  },
   "hoa-property-management": {
     missionTheme:
       "care for the properties and communities entrusted to us so owners and residents can thrive",
@@ -121,6 +157,18 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
       "We decide to protect the asset, treat residents fairly, and respond quickly when something needs attention. We are transparent about costs and decisions, and we hold the long-term health of the property above any short-term convenience.",
     supplyChain:
       "Our 'supply chain' is mostly trusted contractors and service vendors — landscaping, plumbing, electrical, pool service — plus consumables for common areas. We keep a vetted bench so urgent jobs do not become emergency markups.",
+  },
+  "banking-financial-services": {
+    missionTheme:
+      "safeguard our customers' money and help them reach their financial goals",
+    businessModel:
+      "Deposit, lending, and card relationships sustained over years; interest margin and account fees fund the institution, and trust is the product.",
+    whoWeServe:
+      "We serve the people and businesses of our community who trust us with their deposits and their borrowing. Many relationships span decades and generations — every interaction either builds or spends that trust.",
+    howWeDecide:
+      "Safety and soundness come first: regulatory compliance and our customers' trust outrank growth and speed, and we never trade examination posture for short-term revenue. Rate and term claims must always match what we actually offer, and required disclosures stay attached to the products they describe. Within that frame we decide for long-term relationships over transactional wins.",
+    supplyChain:
+      "Our operating backbone is a small set of critical vendors: the core processing platform, card networks and processors, the deposit-insurance regime, credit bureaus, and loan-document and appraisal services. Vendor changes are regulated events, so we manage these as long-term, examined relationships.",
   },
   "education-training": {
     missionTheme:
@@ -158,6 +206,78 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "Our supply chain blends purchased program supplies, in-kind donations from supporters, and contributions from partner organisations. Stewardship matters — we choose suppliers and partners who match our mission and respect that donors' trust comes attached.",
   },
+  "automotive-services": {
+    missionTheme:
+      "get our customers safely back on the road with honest, convenient vehicle service",
+    businessModel:
+      "Mobile service that comes to the customer — most jobs are dispatched to a driveway, workplace, or roadside. Trust, honest diagnosis, and fast turnaround drive repeat work and referrals.",
+    whoWeServe:
+      "We serve drivers and fleet owners who need work done on their vehicle without the hassle of a shop visit. Many are stranded or inconvenienced, so speed and reliability earn the next call.",
+    howWeDecide:
+      "We decide for safety, honest diagnosis, and getting the customer moving again. We never upsell work a vehicle does not need, we stand behind our parts and our calibration, and we are transparent about price before we start.",
+    supplyChain:
+      "We stock parts on the van or truck and resolve the right part from the vehicle's VIN — glass SKUs, filters, tires, keys. Keeping the mobile inventory matched to the day's jobs is the discipline; a wrong or missing part means a second trip and a lost slot.",
+  },
+  "moving-and-logistics": {
+    missionTheme:
+      "move our customers' belongings and freight safely, on time, and with care",
+    businessModel:
+      "Crew-and-truck jobs quoted per move or run on recurring routes; careful handling and on-time delivery turn a stressful day into a referral.",
+    whoWeServe:
+      "We serve households relocating and businesses that need goods moved or delivered. We are handling people's possessions or a company's promises to its own customers, so trust is the product.",
+    howWeDecide:
+      "We decide for careful handling, honest estimates, and hitting the promised window. We protect what we carry, communicate delays early, and never cut corners on securing a load or on a driver's legal hours.",
+    supplyChain:
+      "Our 'inventory' is trucks, fuel, packing materials, and the crew's time; the discipline is routing, load planning, and keeping vehicles and equipment road-ready. Driver hours and vehicle availability are the real constraints on what we can promise.",
+  },
+  "security-services": {
+    missionTheme:
+      "keep the people, property, and events entrusted to us safe",
+    businessModel:
+      "Recurring guard and monitoring contracts plus field installation; dependability and a credible response are what clients renew for.",
+    whoWeServe:
+      "We serve businesses, property managers, and residents who need a visible, reliable security presence. The relationship rests on trust that we will be there and respond when it matters.",
+    howWeDecide:
+      "We decide for the safety of people first, then property — with trained, licensed officers, clear post orders, and documented incident response. We never compromise coverage or cut corners on vetting and licensing.",
+    supplyChain:
+      "We provision uniforms, vehicles, radios, and — for the install side — alarm, camera, and access-control hardware from security distributors. Licensing and training are as load-bearing as equipment; an unlicensed officer or an unmonitored panel is an operational and legal failure.",
+  },
+  "trades-maintenance": {
+    missionTheme:
+      "do reliable, quality work that keeps our customers' homes and properties running",
+    businessModel:
+      "Job- and call-out-based work — quotes, repairs, installs, and maintenance plans. Reputation, reliability, and showing up when we said we would drive repeat work and referrals.",
+    whoWeServe:
+      "We serve homeowners, landlords, and businesses who need work done right and on time, often urgently. Trust is earned one job at a time, and a good tradesperson becomes the one they call again.",
+    howWeDecide:
+      "We decide for quality workmanship, safety, and honest pricing. We never cut corners on a fix that affects safety, we are upfront about what is needed versus what can wait, and we stand behind our work.",
+    supplyChain:
+      "We rely on trade suppliers and merchants for parts and materials — much of it carried as van stock so common jobs are first-visit fixes. Matching the right parts to the day's jobs is the discipline; a missing part means a second trip and a lost slot.",
+  },
+  "pet-services": {
+    missionTheme:
+      "care for every pet as if it were our own",
+    businessModel:
+      "Appointment- and visit-based services — grooming, walking, boarding, and care. Trust with people's animals drives loyalty and word-of-mouth referrals.",
+    whoWeServe:
+      "We serve pet owners who trust us with a member of their family. Many become regulars, so each visit is part of an ongoing relationship built on the animal's wellbeing and the owner's peace of mind.",
+    howWeDecide:
+      "We decide for the animal's safety, comfort, and wellbeing first, then the owner's trust. We are honest about what a pet needs, careful with handling and health, and we never take on more than we can care for well.",
+    supplyChain:
+      "We provision grooming and care consumables, food, and supplies from pet-trade distributors, plus equipment that must be cleaned and maintained to a hygiene standard. Running out of a consumable or a broken piece of equipment is a welfare and reputation issue, not just a cost one.",
+  },
+  "software-platform": {
+    missionTheme:
+      "build software that genuinely helps the people and businesses who depend on it",
+    businessModel:
+      "Subscription and usage-based recurring revenue. The business compounds on retention, expansion, and word-of-mouth — keeping customers successful matters far more than any single sale.",
+    whoWeServe:
+      "We serve the users and organizations who run part of their work on our product. The relationship is ongoing and renewal-driven, so their success and trust are the whole business, not a one-time transaction.",
+    howWeDecide:
+      "We decide for long-term customer success, reliability, and data trust over short-term growth hacks. We protect uptime and security, are honest about limitations and roadmap, and keep humans in control of consequential automated decisions.",
+    supplyChain:
+      "Our supply chain is almost entirely digital — cloud infrastructure, third-party APIs, and software subscriptions. The discipline is vendor selection, dependency and security review, and avoiding lock-in; an unreviewed dependency or a single-vendor outage can take the whole product down.",
+  },
 };
 
 // ─── Flagship specific-archetype overrides (merged over the industry profile) ─
@@ -193,6 +313,22 @@ const ARCHETYPE_PROFILES: Record<string, Partial<ArchetypeBusinessProfile>> = {
     supplyChain:
       "Inventory comes from wholesalers, brand suppliers, or via dropship; some SKUs we hold, some ship direct. We manage against turn rate, lead times, and fulfilment-partner reliability — what is on the website needs to be in stock or shippable, not aspirational.",
   },
+  "new-home-builder": {
+    missionTheme:
+      "build quality homes and thriving communities that buyers are proud to call home",
+    businessModel:
+      "Volume production of homes across planned communities; display homes serve as the showroom, and most buyer contact begins with a guided tour. Subcontractors complete most trade work under the builder's project management; revenue arrives at settlement.",
+    supplyChain:
+      "Volume builders run centralised supply chains with preferred suppliers and trade partnerships across structural, building envelope, joinery, services (MEP), and finishes categories. Trade-pack pricing and volume commitments buffer against spot-price volatility; site supervisors manage the subcontractor schedule and stage inspections.",
+  },
+  "custom-home-builder": {
+    missionTheme:
+      "design and build the home each client has been imagining, on the lot they have chosen",
+    businessModel:
+      "Project-based: one contract per home, structured around a build programme with milestone payments. Each project is unique; the builder manages the design-to-handover journey including permits, subcontractor coordination, and quality sign-off.",
+    supplyChain:
+      "Custom builders procure on a project-by-project basis, working with trusted local subcontractors and trade suppliers who match the quality standard the brief demands. Supplier relationships are long-term but quantities are project-specific, with provisional sums built into contracts for items such as stone, joinery, and fixtures where selection drives price. Site lead times for premium materials require early ordering.",
+  },
   nonprofit: {
     missionTheme:
       "advance our cause and serve our community with integrity and impact",
@@ -203,13 +339,52 @@ const ARCHETYPE_PROFILES: Record<string, Partial<ArchetypeBusinessProfile>> = {
  * Resolve the best business profile for an org: a flagship archetype override
  * (merged over its industry profile) when available, else the industry profile,
  * else the generic profile. Pure and deterministic.
+ *
+ * When secondaryArchetypeIds / secondaryIndustries are provided (multi-archetype
+ * composition), each secondary's whoWeServe and supplyChain paragraphs are
+ * appended to the primary's when they differ — blended, not replaced.
+ * All prior call sites without secondaries are unchanged.
  */
 export function resolveBusinessProfile(input: {
   archetypeId?: string | null;
   industry?: string | null;
+  secondaryArchetypeIds?: string[] | null;
+  secondaryIndustries?: string[] | null;
 }): ArchetypeBusinessProfile {
   const base: ArchetypeBusinessProfile =
     (input.industry ? INDUSTRY_PROFILES[input.industry] : undefined) ?? GENERIC_BUSINESS_PROFILE;
   const override = input.archetypeId ? ARCHETYPE_PROFILES[input.archetypeId] : undefined;
-  return override ? { ...base, ...override } : base;
+  const primary = override ? { ...base, ...override } : base;
+
+  const secondaryIds = input.secondaryArchetypeIds ?? [];
+  const secondaryIndustries = input.secondaryIndustries ?? [];
+  const count = Math.max(secondaryIds.length, secondaryIndustries.length);
+  if (count === 0) return primary;
+
+  const extraWhoWeServe: string[] = [];
+  const extraSupplyChain: string[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const secId = i < secondaryIds.length ? secondaryIds[i] : undefined;
+    const secInd = i < secondaryIndustries.length ? secondaryIndustries[i] : undefined;
+    const secBase =
+      (secInd ? INDUSTRY_PROFILES[secInd] : undefined) ?? GENERIC_BUSINESS_PROFILE;
+    const secOverride = secId ? ARCHETYPE_PROFILES[secId] : undefined;
+    const sec = secOverride ? { ...secBase, ...secOverride } : secBase;
+
+    if (sec.whoWeServe !== primary.whoWeServe) extraWhoWeServe.push(sec.whoWeServe);
+    if (sec.supplyChain !== primary.supplyChain) extraSupplyChain.push(sec.supplyChain);
+  }
+
+  return {
+    ...primary,
+    whoWeServe:
+      extraWhoWeServe.length > 0
+        ? `${primary.whoWeServe}\n\n${extraWhoWeServe.join("\n\n")}`
+        : primary.whoWeServe,
+    supplyChain:
+      extraSupplyChain.length > 0
+        ? `${primary.supplyChain}\n\n${extraSupplyChain.join("\n\n")}`
+        : primary.supplyChain,
+  };
 }

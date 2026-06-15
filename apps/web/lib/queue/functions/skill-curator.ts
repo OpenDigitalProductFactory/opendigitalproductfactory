@@ -11,6 +11,12 @@ import { gateAtEntry } from "../quiescence-gates";
  * The curator is idempotent end-to-end: classification is deterministic,
  * signal emission dedupes on (sourceType, sourceId), and a missed tick is
  * recovered automatically on the next run.
+ *
+ * Ownership: the proactive TaskRun the curator writes is owned by the
+ * bootstrap superuser (HR-000), resolved at run time via
+ * resolveScheduledOwnerUserId — the same principal every other proactive cron
+ * attributes to. It must never be a hardcoded "system" string: TaskRun.userId
+ * is a NOT NULL FK to User, so a sentinel id violates TaskRun_userId_fkey.
  */
 export const skillCurator = inngest.createFunction(
   {
@@ -25,7 +31,10 @@ export const skillCurator = inngest.createFunction(
 
     return step.run("run-skill-curator", async () => {
       const { runSkillCurator } = await import("@/lib/skills/curator");
-      const result = await runSkillCurator({ invokedByUserId: "system" });
+      const { resolveScheduledOwnerUserId } = await import("../scheduled-owner");
+      const result = await runSkillCurator({
+        invokedByUserId: await resolveScheduledOwnerUserId(),
+      });
       console.log(
         `[skill-curator] scanned ${result.findings.length} skills; totals=${JSON.stringify(result.totals)}`,
       );

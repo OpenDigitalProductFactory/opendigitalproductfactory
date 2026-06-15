@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { IssueReportPanel } from "@/components/admin/IssueReportPanel";
-import { getIssueReports, getIssueReportStats } from "@/lib/actions/quality";
+import { getIssueReports, getIssueReportStats, getBacklogLinksForReports } from "@/lib/actions/quality";
 
 export default async function AdminIssueReportsPage() {
   const [data, stats] = await Promise.all([
     getIssueReports(),
     getIssueReportStats(),
   ]);
+  const backlogLinks = await getBacklogLinksForReports(
+    data.items.map((r: { reportId: string }) => r.reportId),
+  );
 
   return (
     <div>
@@ -19,7 +22,7 @@ export default async function AdminIssueReportsPage() {
           <Link href="/ops" className="text-[var(--dpf-accent)] hover:underline">
             backlog item
           </Link>
-          {" "}with workType=bug on the next 15-minute triage tick.
+          {" "}with workType=bug immediately on report (a 15-minute sweep is the safety net).
         </p>
       </div>
 
@@ -29,6 +32,7 @@ export default async function AdminIssueReportsPage() {
         items={JSON.parse(JSON.stringify(data.items))}
         total={data.total}
         stats={JSON.parse(JSON.stringify(stats))}
+        backlogLinks={backlogLinks}
       />
     </div>
   );

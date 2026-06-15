@@ -42,10 +42,19 @@ const mocks = vi.hoisted(() => ({
   toolsToOpenAIFormat: vi.fn(),
   executeTool: vi.fn(),
   governedExecuteTool: vi.fn(),
+  reconcileSysmlProjections: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
-vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
+vi.mock("@dpf/db", () => ({
+  prisma: mocks.prisma,
+  // executeScheduledAgentTask short-circuits to the deterministic data-model
+  // mirror when task.taskId === DATA_MODEL_MIRROR_TASK_ID (EP-DATA-ARCH, #1618).
+  // The const must be exported from the mock or vitest throws on access; none of
+  // these tests use the mirror task id, so any non-matching value is fine.
+  DATA_MODEL_MIRROR_TASK_ID: "data-model-mirror-nightly",
+  SYSML_PROJECTION_TASK_ID: "sysml-projection-nightly",
+}));
 vi.mock("@/lib/tak/agent-routing-server", () => ({
   resolveAgentForRouteWithPrompts: mocks.resolveAgentForRouteWithPrompts,
   resolveAgentByIdWithPrompts: mocks.resolveAgentByIdWithPrompts,
@@ -60,6 +69,9 @@ vi.mock("@/lib/mcp-tools", () => ({
 }));
 vi.mock("@/lib/mcp-governed-execute", () => ({
   governedExecuteTool: mocks.governedExecuteTool,
+}));
+vi.mock("@/lib/ea/reconcile-sysml-projections", () => ({
+  reconcileSysmlProjections: mocks.reconcileSysmlProjections,
 }));
 
 import {
@@ -746,6 +758,53 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
       "external-catalog-scout",
       expect.objectContaining({
         userId: "user-1",
+      }),
+    );
+  });
+});
+
+describe("executeScheduledAgentTask — SysML projection reconcile branch", () => {
+  it("runs the deterministic reconcile directly (no LLM loop) and records ok status", async () => {
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: "sysml-projection-nightly",
+      isActive: true,
+      schedule: "0 4 * * *",
+    });
+    mocks.reconcileSysmlProjections.mockResolvedValue({
+      mcpAuthority: { status: "applied", created: 0, updated: 304, removed: 0, toolCount: 248, grantCount: 54 },
+      coworkerAuthority: { status: "applied", created: 0, updated: 64, removed: 0 },
+    });
+    mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
+    mocks.prisma.scheduledJob.update.mockResolvedValue({});
+
+    await executeScheduledAgentTask("sysml-projection-nightly");
+
+    expect(mocks.reconcileSysmlProjections).toHaveBeenCalledOnce();
+    expect(mocks.runAgenticLoop).not.toHaveBeenCalled();
+    expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { taskId: "sysml-projection-nightly" },
+        data: expect.objectContaining({ lastStatus: "ok", lastError: null }),
+      }),
+    );
+  });
+
+  it("records error status when the reconcile throws", async () => {
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: "sysml-projection-nightly",
+      isActive: true,
+      schedule: "0 4 * * *",
+    });
+    mocks.reconcileSysmlProjections.mockRejectedValue(new Error("notation missing"));
+    mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
+    mocks.prisma.scheduledJob.update.mockResolvedValue({});
+
+    await executeScheduledAgentTask("sysml-projection-nightly");
+
+    expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { taskId: "sysml-projection-nightly" },
+        data: expect.objectContaining({ lastStatus: "error", lastError: "notation missing" }),
       }),
     );
   });

@@ -37,7 +37,9 @@ export type LintFindingKind =
   | "principle-contradiction-review"
   // ─── Ring-scope axis (spec 2026-05-24-founder-kernel-evolution-discipline) ───
   | "principle-ring-scope-unknown"
-  | "principle-ring-scope-overuse";
+  | "principle-ring-scope-overuse"
+  // ─── Profession corpus (WSID Phase 2, BI-871126F9) ────────────────────────
+  | "profession-unsourced-page";
 
 /** Mirrors the `WikiLintFinding.severity` enum. */
 export type LintSeverity = "info" | "warn" | "error";
@@ -355,6 +357,51 @@ export function detectKernelDrift(input: {
   return findings;
 }
 
+// ─── 6. Profession corpus — unsourced pages ─────────────────────────────────
+
+/**
+ * Profession corpus page (slug prefix `professions/`) that has no
+ * `WikiPageSource` entry. Every profession corpus page must cite at
+ * least one fetched `RawSource` — this is the provenance invariant
+ * from WSID Phase 2 (BI-871126F9).
+ *
+ * Severity: error. Citation-empty corpus pages cannot serve as
+ * evidence-grounded professional doctrine. The lint gate is
+ * mechanical — not a review judgment call.
+ */
+export function detectUnsourcedProfessionPages(input: {
+  pages: LintWikiPage[];
+  sources: LintWikiPageSource[];
+}): LintFinding[] {
+  const sourceCount = new Map<string, number>();
+  for (const src of input.sources) {
+    sourceCount.set(src.pageId, (sourceCount.get(src.pageId) ?? 0) + 1);
+  }
+
+  const findings: LintFinding[] = [];
+  for (const page of input.pages) {
+    if (!page.slug.startsWith("professions/")) continue;
+    if (page.status !== "published") continue;
+
+    const cites = sourceCount.get(page.id) ?? 0;
+    if (cites === 0) {
+      findings.push({
+        organizationId: page.organizationId,
+        pageId: page.id,
+        findingKind: "profession-unsourced-page",
+        severity: "error",
+        detail: {
+          slug: page.slug,
+          message:
+            "Profession corpus page has no source citations. " +
+            "All published profession corpus pages must cite at least one fetched RawSource.",
+        },
+      });
+    }
+  }
+  return findings;
+}
+
 // ─── Aggregator ─────────────────────────────────────────────────────────────
 
 /**
@@ -389,6 +436,10 @@ export function runDetectors(input: {
     ...detectKernelDrift({
       pages: input.pages,
       currentKernelVersion: input.currentKernelVersion,
+    }),
+    ...detectUnsourcedProfessionPages({
+      pages: input.pages,
+      sources: input.sources,
     }),
   ];
 }

@@ -22,6 +22,7 @@ import {
   planClaudePluginConfig,
   type ClaudePluginConfigPlan,
 } from "./claude-plugins";
+import { planGrokConfig, type GrokConfigPlan } from "./grok-config";
 import { planKernelMemorySeed, type MemorySeedPlan } from "./memory-seed";
 import {
   planMcpReadinessProbe,
@@ -47,8 +48,14 @@ export type AgentToolchainPlan = {
   claudeCliPresent: boolean;
   /** Whether the host has Codex CLI on PATH (caller-supplied detection). */
   codexCliPresent: boolean;
+  /** Whether the host has Grok CLI on PATH (caller-supplied detection). */
+  grokCliPresent: boolean;
   /** Whether a DPF MCP token was discovered (e.g. via DPF_MCP_BEARER_TOKEN). */
   hasToken: boolean;
+  /** Grok presence + optional dedicated config plan (TOML [mcp_servers.dpf] wiring).
+   * Main MCP client config is still via the generic mcpClientConfig for .mcp.json etc.
+   */
+  grok: { present: boolean; config?: GrokConfigPlan } | null;
   /** TOML upsert plan for the contributor's Codex config (null when Codex CLI absent). */
   codex: CodexConfigPlan | null;
   /** Repo-root .mcp.json + .vscode/mcp.json writes (env-backed, secret-free). */
@@ -99,8 +106,12 @@ export type ComputeAgentToolchainPlanOptions = {
   claudeCliPresent: boolean;
   /** Caller-detected presence of `codex` CLI on PATH. */
   codexCliPresent: boolean;
+  /** Caller-detected presence of `grok` CLI on PATH. */
+  grokCliPresent: boolean;
   /** Caller-detected presence of a DPF MCP bearer token. */
   hasToken: boolean;
+  /** Path to Grok config.toml (e.g. ~/.grok/config.toml). Wired for Grok-specific MCP. */
+  grokConfigPath?: string;
   /** Endpoint to probe for MCP `tools/list`. */
   mcpEndpoint: string;
   /** Expected dpf-platform plugin version (from packages/dpf-skill-pack/.claude-plugin/plugin.json). */
@@ -159,6 +170,24 @@ export function computeAgentToolchainPlan(
     });
   }
 
+  // Grok plan (skipped when Grok CLI absent). Dedicated TOML wiring for
+  // [mcp_servers.dpf] using the grok.mcp.json descriptor (env-var token).
+  let grok: { present: boolean; config?: GrokConfigPlan } | null = null;
+  if (options.grokCliPresent && options.grokConfigPath) {
+    const grokText = _exists(options.grokConfigPath)
+      ? _readFile(options.grokConfigPath, "utf8")
+      : "";
+    const grokConfig = planGrokConfig(
+      grokText,
+      options.repoRoot,
+      options.grokConfigPath,
+      options.mcpEndpoint,
+    );
+    grok = { present: true, config: grokConfig };
+  } else if (options.grokCliPresent) {
+    grok = { present: true };
+  }
+
   // Kernel memory seed (always planned — the contributor benefits from local
   // memory whether or not the CLI is installed yet).
   const memory = planKernelMemorySeed(
@@ -209,6 +238,7 @@ export function computeAgentToolchainPlan(
   const previewReadiness = computeReadinessState({
     claudeCodeWired: options.claudeCliPresent,
     codexWired: options.codexCliPresent,
+    grokWired: options.grokCliPresent,
     mcpReadiness: options.hasToken
       ? { ok: true, toolCount: 0, observedAt: new Date().toISOString() }
       : { ok: false, reason: "no_token", httpStatus: null },
@@ -219,9 +249,11 @@ export function computeAgentToolchainPlan(
     repoRoot: options.repoRoot,
     claudeCliPresent: options.claudeCliPresent,
     codexCliPresent: options.codexCliPresent,
+    grokCliPresent: options.grokCliPresent,
     hasToken: options.hasToken,
     codex,
     claude,
+    grok,
     mcpClientConfig,
     memory,
     mcpProbe,
@@ -246,8 +278,10 @@ export function summarizePlan(plan: AgentToolchainPlan): string {
   parts.push(`codex=${plan.codexCliPresent ? "present" : "missing"}`);
   parts.push(`token=${plan.hasToken ? "present" : "missing"}`);
   parts.push(`codex-writes=${plan.codex?.writes.length ?? 0}`);
+  parts.push(`codex-convergence=${plan.codex?.convergence.length ?? 0}`);
   parts.push(`mcp-client-writes=${plan.mcpClientConfig.writes.length}`);
   parts.push(`claude-writes=${plan.claude?.writes.length ?? 0}`);
+  parts.push(`grok-writes=${plan.grok?.config?.writes?.length ?? 0}`);
   parts.push(`memory-writes=${plan.memory.writes.length}`);
   parts.push(`stale-claude-entries=${plan.claude?.staleEntriesToReconcile.length ?? 0}`);
   parts.push(`mcp-probe=${"skipReason" in plan.mcpProbe ? "skip:no_token" : "planned"}`);

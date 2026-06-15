@@ -46,6 +46,17 @@ export type PromoterParams = {
   backupHostPath?: string;
   /** HOST path to the canonical install .env; mounted read-only for compose interpolation. */
   composeEnvFileHostPath?: string;
+  /**
+   * The platform-correct compose chain the install was created with (relative
+   * filenames, e.g. ["docker-compose.yml", "docker-compose.linux.yml",
+   * "docker-compose.edge.yml"]). Passed to promote.sh as PROMOTE_COMPOSE_FILES so
+   * the portal is recreated with the SAME overlays the install uses. When empty,
+   * promote.sh falls back to base-only — never a platform overlay, so it can't
+   * force macOS/Linux env onto the wrong host (the TTS-on-Windows defect).
+   */
+  composeFiles?: string[];
+  /** Compose project name (COMPOSE_PROJECT_NAME). Defaults to "dpf" in promote.sh. */
+  composeProject?: string;
   dryRun?: boolean;
 };
 
@@ -115,6 +126,17 @@ export function buildPromoterCommand(
     args.push("-e", `PROMOTE_COMPOSE_ENV_FILE=${PROMOTER_COMPOSE_ENV_FILE}`);
   }
 
+  // Recreate the portal with the install's recorded platform chain. promote.sh
+  // splits PROMOTE_COMPOSE_FILES on whitespace, so a space-joined list is the
+  // contract. Omitted when empty so promote.sh applies its base-only fallback.
+  if (params.composeFiles && params.composeFiles.length > 0) {
+    args.push("-e", `PROMOTE_COMPOSE_FILES=${params.composeFiles.join(" ")}`);
+  }
+
+  if (params.composeProject && params.composeProject.length > 0) {
+    args.push("-e", `PROMOTE_COMPOSE_PROJECT=${params.composeProject}`);
+  }
+
   args.push(
     image,
     "--self-upgrade",
@@ -123,6 +145,41 @@ export function buildPromoterCommand(
   if (params.dryRun) args.push("--dry-run");
 
   return { command: "docker", args };
+}
+
+/**
+ * Whether the promoter image is present on the daemon.
+ *
+ * A self-upgrade can never complete a swap without it, so the orchestrator
+ * checks this BEFORE draining the portal — otherwise it drains, burns the full
+ * quiescence budget, then fails at `docker run` because there's no `dpf-promoter`
+ * image, leaving the portal needlessly cycled (the live BI-A3930CD7 cluster
+ * symptom). Returns false when the image is absent OR docker itself is
+ * unreachable (the portal can't promote either way). Never throws.
+ *
+ * dryRun never swaps, so callers skip this check on the dry-run path.
+ */
+export async function isPromoterAvailable(promoterImage?: string): Promise<boolean> {
+  const image =
+    promoterImage && promoterImage.length > 0 ? promoterImage : DEFAULT_PROMOTER_IMAGE;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean): void => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    try {
+      const child = spawn("docker", ["image", "inspect", image], { env: { ...process.env } });
+      // Drain stdio so the child can exit cleanly; we only care about the code.
+      child.stdout?.on("data", () => {});
+      child.stderr?.on("data", () => {});
+      child.on("close", (code: number | null) => finish(code === 0));
+      child.on("error", () => finish(false));
+    } catch {
+      finish(false);
+    }
+  });
 }
 
 export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {

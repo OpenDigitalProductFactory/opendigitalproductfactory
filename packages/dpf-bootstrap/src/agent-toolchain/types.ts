@@ -43,7 +43,7 @@ export type SmokeTestResult =
   | { result: "failed"; transcript: string; reason: string }
   | {
       result: "skipped";
-      reason: "claude_not_on_path" | "codex_not_on_path" | "no_token";
+      reason: "claude_not_on_path" | "codex_not_on_path" | "grok_not_on_path" | "no_token";
     };
 
 /**
@@ -76,6 +76,7 @@ export type AgentToolchainState = {
   superpowersVersion: string | null;
   claudeCodeWired: boolean;
   codexWired: boolean;
+  grokWired: boolean;
   memorySeededAt: string | null;
   mcpReadiness: McpReadinessProbeResult;
   smokeTest: SmokeTestResult;

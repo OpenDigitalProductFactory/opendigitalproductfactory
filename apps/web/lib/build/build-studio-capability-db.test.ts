@@ -5,6 +5,12 @@ vi.mock("@dpf/db", () => ({
     modelProfile: {
       findMany: vi.fn(),
     },
+    modelProvider: {
+      findMany: vi.fn(),
+    },
+    buildEngine: {
+      findFirst: vi.fn(),
+    },
   },
 }));
 
@@ -12,10 +18,20 @@ import { prisma } from "@dpf/db";
 import { loadBuildStudioCapability } from "./build-studio-capability";
 
 const mockModelProfileFindMany = vi.mocked(prisma.modelProfile.findMany);
+const mockModelProviderFindMany = vi.mocked(prisma.modelProvider.findMany);
+const mockBuildEngineFindFirst = vi.mocked(prisma.buildEngine.findFirst);
 
 describe("loadBuildStudioCapability", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: nothing merely disabled.
+    mockModelProviderFindMany.mockResolvedValue(
+      [] as unknown as Awaited<ReturnType<typeof prisma.modelProvider.findMany>>,
+    );
+    // Default: opencode engine not present (preserves pre-opencode gate behavior).
+    mockBuildEngineFindFirst.mockResolvedValue(
+      null as unknown as Awaited<ReturnType<typeof prisma.buildEngine.findFirst>>,
+    );
   });
 
   it("queries active chat and code model profiles so Codex CLI can satisfy the Build Studio gate", async () => {
@@ -48,6 +64,76 @@ describe("loadBuildStudioCapability", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.satisfyingProviderNames).toEqual(["OpenAI Codex"]);
+    }
+  });
+
+  it("queries inactive CLI runners and surfaces them as enableable when the gate is closed", async () => {
+    mockModelProfileFindMany.mockResolvedValue(
+      [] as unknown as Awaited<ReturnType<typeof prisma.modelProfile.findMany>>,
+    );
+    mockModelProviderFindMany.mockResolvedValue([
+      { providerId: "anthropic-sub", name: "Claude / Anthropic (OAuth Subscription)", cliEngine: "claude" },
+    ] as unknown as Awaited<ReturnType<typeof prisma.modelProvider.findMany>>);
+
+    const result = await loadBuildStudioCapability();
+
+    expect(mockModelProviderFindMany).toHaveBeenCalledWith({
+      where: { status: "inactive", cliEngine: { not: null } },
+      select: { providerId: true, name: true, cliEngine: true },
+      orderBy: { providerId: "asc" },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.enableableRunners).toEqual([
+        { providerId: "anthropic-sub", name: "Claude / Anthropic (OAuth Subscription)", shortLabel: "Claude" },
+      ]);
+    }
+  });
+
+  it("opens the gate for a local strong-tier model when the opencode engine is present (baked-in/probed)", async () => {
+    mockModelProfileFindMany.mockResolvedValue([
+      {
+        providerId: "local",
+        modelId: "docker.io/ai/qwen3-coder:latest",
+        supportsToolUse: false, // local API flag — opencode supplies the tool loop
+        maxInputTokens: null,
+        provider: { name: "Docker Model Runner (local)" },
+      },
+    ] as unknown as Awaited<ReturnType<typeof prisma.modelProfile.findMany>>);
+    mockBuildEngineFindFirst.mockResolvedValue(
+      { bakeInDefault: true, state: { present: true } } as unknown as Awaited<
+        ReturnType<typeof prisma.buildEngine.findFirst>
+      >,
+    );
+
+    const result = await loadBuildStudioCapability();
+
+    expect(mockBuildEngineFindFirst).toHaveBeenCalledWith({
+      where: { engineId: "opencode" },
+      select: { bakeInDefault: true, state: { select: { present: true } } },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.satisfyingProviderNames).toEqual(["Docker Model Runner (local)"]);
+    }
+  });
+
+  it("keeps the gate closed for a local model when the opencode engine is absent", async () => {
+    mockModelProfileFindMany.mockResolvedValue([
+      {
+        providerId: "local",
+        modelId: "docker.io/ai/qwen3-coder:latest",
+        supportsToolUse: false,
+        maxInputTokens: null,
+        provider: { name: "Docker Model Runner (local)" },
+      },
+    ] as unknown as Awaited<ReturnType<typeof prisma.modelProfile.findMany>>);
+    // buildEngine.findFirst → null (default from beforeEach)
+
+    const result = await loadBuildStudioCapability();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("only_local_provider_active");
     }
   });
 });

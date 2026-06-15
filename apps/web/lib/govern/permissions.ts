@@ -41,6 +41,8 @@ export type CapabilityKey =
   | "manage_tool_evaluations"
   | "approve_tool_evaluations"
   | "manage_business_models"
+  | "view_workbooks"
+  | "manage_workbooks"
   | "manage_platform";
 
 type Permission = {
@@ -76,6 +78,11 @@ export const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_tool_evaluations:     { roles: ["HR-000", "HR-300"] },
   approve_tool_evaluations:    { roles: ["HR-000", "HR-300"] },
   manage_business_models:      { roles: ["HR-000", "HR-200", "HR-300"] },
+  // Workbooks are a cross-domain knowledge-worker tool; the coarse role gate is
+  // "can you use the feature", while fine-grained access is enforced per-workbook
+  // by WorkbookShare (owner/editor/viewer). Both granted to all roles.
+  view_workbooks:              { roles: ["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500"] },
+  manage_workbooks:            { roles: ["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500"] },
   manage_platform:             { roles: ["HR-000"] },
 };
 
@@ -126,6 +133,8 @@ export type ShellNavItem = {
   description: string;
   sectionKey: PortalShellSectionKey;
   capabilityKey: CapabilityKey | null;
+  /** Archetype-capability gate (any-of when array) — see PortalNavRecord.orgCapabilityKey. */
+  orgCapabilityKey: string | readonly string[] | null;
 };
 
 export type SectionNavItem = {
@@ -200,6 +209,7 @@ const SHELL_ITEMS: ShellNavItem[] = getShellNavEntries().map((entry) => ({
   description: entry.description,
   sectionKey: entry.sectionKey,
   capabilityKey: entry.capabilityKey,
+  orgCapabilityKey: entry.orgCapabilityKey,
 }));
 
 const WORKSPACE_SECTION_BLUEPRINTS: Array<{
@@ -252,10 +262,33 @@ export function getWorkspaceTiles(user: UserContext): WorkspaceTile[] {
   return ALL_TILES.filter((t) => can(user, t.capabilityKey));
 }
 
-export function getShellNavSections(user: UserContext): ShellNavSection[] {
+export function getShellNavSections(
+  user: UserContext,
+  options?: {
+    /**
+     * Effectively-active archetype capability keys for the org (from
+     * getActiveOrgCapabilities). Nav items carrying an orgCapabilityKey render
+     * only when that key is in the set; when the set is not provided they stay
+     * hidden — the safe default for callers without org context.
+     */
+    activeOrgCapabilities?: ReadonlySet<string>;
+  },
+): ShellNavSection[] {
+  const activeOrgCapabilities = options?.activeOrgCapabilities;
+  const orgGateOpen = (gate: string | readonly string[] | null): boolean => {
+    if (gate === null) return true;
+    if (!activeOrgCapabilities) return false;
+    const keys = typeof gate === "string" ? [gate] : gate;
+    return keys.some((key) => activeOrgCapabilities.has(key));
+  };
   return SHELL_SECTIONS.map((section) => ({
     ...section,
-    items: SHELL_ITEMS.filter((item) => item.sectionKey === section.key && isAllowed(user, item.capabilityKey)),
+    items: SHELL_ITEMS.filter(
+      (item) =>
+        item.sectionKey === section.key &&
+        isAllowed(user, item.capabilityKey) &&
+        orgGateOpen(item.orgCapabilityKey),
+    ),
   })).filter((section) => section.items.length > 0);
 }
 

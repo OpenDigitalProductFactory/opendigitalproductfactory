@@ -1,4 +1,18 @@
-import type { ArchetypeDefinition } from "../types";
+import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
+
+// Artisan workshops are booked into daytime slots, typically Tue–Sat. The
+// archetype's top-level ctaType is "purchase" (selling goods), but the
+// "Workshop Booking" item is ctaType:"booking" and needs schedulingDefaults or
+// its calendar ships empty (same root cause as AUDIT-R3/R4).
+const WORKSHOP_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "customer-choice",
+  defaultOperatingHours: [2, 3, 4, 5, 6].map((day) => ({ day, start: "10:00", end: "17:00" })),
+  defaultBeforeBuffer: 0,
+  defaultAfterBuffer: 15,
+  minimumNoticeHours: 48,
+  maxAdvanceDays: 90,
+};
 
 const CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -15,11 +29,11 @@ export const retailGoodsArchetypes: ArchetypeDefinition[] = [
     ctaType: "purchase",
     tags: ["retail", "shop", "products", "ecommerce"],
     itemTemplates: [
-      { name: "Featured Product 1", description: "Showcase your best-selling product", priceType: "fixed", ctaType: "purchase" },
-      { name: "Featured Product 2", description: "Highlight another popular product", priceType: "fixed", ctaType: "purchase" },
-      { name: "Gift Voucher", description: "Gift voucher in a variety of denominations", priceType: "from", ctaType: "purchase" },
-      { name: "Bundle Deal", description: "Curated bundle of popular items at a great price", priceType: "from", ctaType: "purchase" },
-      { name: "New Arrival", description: "Latest product added to our collection", priceType: "fixed", ctaType: "purchase" },
+      { name: "Featured Product 1", description: "Showcase your best-selling product", priceType: "fixed", priceAmount: 25, ctaType: "purchase" },
+      { name: "Featured Product 2", description: "Highlight another popular product", priceType: "fixed", priceAmount: 18, ctaType: "purchase" },
+      { name: "Gift Voucher", description: "Gift voucher in a variety of denominations", priceType: "from", priceAmount: 10, ctaType: "purchase" },
+      { name: "Bundle Deal", description: "Curated bundle of popular items at a great price", priceType: "from", priceAmount: 35, ctaType: "purchase" },
+      { name: "New Arrival", description: "Latest product added to our collection", priceType: "fixed", priceAmount: 22, ctaType: "purchase" },
     ],
     sectionTemplates: [
       { type: "hero", title: "Hero", sortOrder: 0 },
@@ -37,11 +51,11 @@ export const retailGoodsArchetypes: ArchetypeDefinition[] = [
     ctaType: "purchase",
     tags: ["artisan", "handmade", "craft", "bespoke"],
     itemTemplates: [
-      { name: "Handmade Item", description: "Individually crafted piece — each one unique", priceType: "fixed", ctaType: "purchase" },
+      { name: "Handmade Item", description: "Individually crafted piece — each one unique", priceType: "fixed", priceAmount: 45, ctaType: "purchase" },
       { name: "Custom Commission", description: "Bespoke item made to your specification", priceType: "quote", ctaType: "inquiry" },
       { name: "Workshop Booking", description: "Learn the craft in a hands-on workshop", priceType: "fixed", ctaType: "booking" },
-      { name: "Gift Set", description: "Curated gift set of artisan products", priceType: "fixed", ctaType: "purchase" },
-      { name: "Seasonal Collection", description: "Limited edition seasonal pieces", priceType: "from", ctaType: "purchase" },
+      { name: "Gift Set", description: "Curated gift set of artisan products", priceType: "fixed", priceAmount: 35, ctaType: "purchase" },
+      { name: "Seasonal Collection", description: "Limited edition seasonal pieces", priceType: "from", priceAmount: 25, ctaType: "purchase" },
     ],
     sectionTemplates: [
       { type: "hero", title: "Hero", sortOrder: 0 },
@@ -54,6 +68,7 @@ export const retailGoodsArchetypes: ArchetypeDefinition[] = [
       ...CONTACT_FIELDS,
       { name: "commissionDetails", label: "Commission details", type: "textarea" as const, required: false, placeholder: "Describe what you have in mind" },
     ],
+    schedulingDefaults: WORKSHOP_SCHEDULING,
   },
   {
     archetypeId: "florist",
@@ -62,10 +77,10 @@ export const retailGoodsArchetypes: ArchetypeDefinition[] = [
     ctaType: "purchase",
     tags: ["florist", "flowers", "bouquet", "wedding"],
     itemTemplates: [
-      { name: "Seasonal Bouquet", description: "Hand-tied bouquet using the freshest seasonal flowers", priceType: "from", ctaType: "purchase" },
-      { name: "Bespoke Arrangement", description: "Custom floral arrangement for any occasion", priceType: "from", ctaType: "purchase" },
+      { name: "Seasonal Bouquet", description: "Hand-tied bouquet using the freshest seasonal flowers", priceType: "from", priceAmount: 25, ctaType: "purchase" },
+      { name: "Bespoke Arrangement", description: "Custom floral arrangement for any occasion", priceType: "from", priceAmount: 55, ctaType: "purchase" },
       { name: "Wedding Flowers", description: "Consultation and full wedding floral service", priceType: "quote", ctaType: "inquiry" },
-      { name: "Dried Flower Arrangement", description: "Long-lasting dried flower display", priceType: "from", ctaType: "purchase" },
+      { name: "Dried Flower Arrangement", description: "Long-lasting dried flower display", priceType: "from", priceAmount: 30, ctaType: "purchase" },
       { name: "Funeral Tribute", description: "Sympathy flowers and funeral tributes", priceType: "from", ctaType: "inquiry" },
       { name: "Corporate Flowers", description: "Regular fresh flower arrangements for your office", priceType: "from", ctaType: "inquiry" },
     ],
@@ -133,6 +148,59 @@ export const retailGoodsArchetypes: ArchetypeDefinition[] = [
         foundational: { scope: "minimal" },
         manufactureAndDeliver: { scope: "minimal" },
         forEmployees: { scope: "minimal" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+    },
+  },
+  {
+    // White-glove last-mile: the operating model is a delivery + installation
+    // *service* (crew + truck to a property), not a goods sale — which is why it
+    // sets form=services and derives field dispatch. Composes as a secondary
+    // service line on a retail primary (Field Dispatch composition design §6).
+    archetypeId: "furniture-delivery-install",
+    name: "Furniture & Appliance Delivery & Install",
+    category: "retail-goods",
+    ctaType: "inquiry",
+    tags: ["delivery", "white glove", "furniture assembly", "appliance installation", "last mile", "haul away"],
+    itemTemplates: [
+      { name: "White-Glove Delivery", description: "Two-person delivery to the room of choice with packaging removed", priceType: "from", ctaType: "inquiry" },
+      { name: "Furniture Assembly", description: "On-site assembly of flat-pack and built furniture", priceType: "from", ctaType: "inquiry" },
+      { name: "Appliance Delivery & Install", description: "Deliver, connect, and test large appliances", priceType: "from", ctaType: "inquiry" },
+      { name: "TV & Wall Mounting", description: "Mount and set up televisions and shelving", priceType: "fixed", ctaType: "inquiry" },
+      { name: "Haul-Away of Old Item", description: "Remove and responsibly dispose of the item being replaced", priceType: "fixed", ctaType: "inquiry" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Delivery & Install Services", sortOrder: 1 },
+      { type: "about", title: "About Us", sortOrder: 2 },
+      { type: "testimonials", title: "Customer Reviews", sortOrder: 3 },
+      { type: "contact", title: "Request a Quote", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...CONTACT_FIELDS,
+      { name: "itemType", label: "What needs delivering or installing?", type: "select" as const, required: true, options: ["Furniture", "Large appliance", "TV / electronics", "Multiple items", "Other"] },
+      { name: "deliveryAddress", label: "Delivery address", type: "text" as const, required: true },
+      { name: "accessNotes", label: "Access notes (stairs, lift, parking)", type: "textarea" as const, required: false },
+    ],
+    activationProfile: {
+      profileType: "standard",
+      modules: ["service-operations"],
+      billingReadinessMode: "none",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "household",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "transactional",
+        provisioning: "account-with-billing",
+        platform: "no",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "primary", it4itStages: ["request-to-fulfill"] },
+        forEmployees: { scope: "standard" },
         productsAndServicesSold: { scope: "primary" },
       },
     },
