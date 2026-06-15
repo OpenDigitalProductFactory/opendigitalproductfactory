@@ -71,6 +71,7 @@ const PRICE_TYPES_BY_CTA: Record<string, Array<{ value: string; label: string }>
     { value: "per-hour", label: "Per hour" },
     { value: "fixed", label: "Fixed price" },
     { value: "from", label: "From (minimum)" },
+    { value: "free", label: "Free" },
   ],
   inquiry: [
     { value: "quote", label: "Request a quote" },
