@@ -1,6 +1,7 @@
 "use client";
 import { useState, useCallback } from "react";
 import { ItemFormDialog, type ItemFormData } from "./ItemFormDialog";
+import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
 
 type Item = {
@@ -319,7 +320,7 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatPrice(amount: string | null, currency: string, priceType: string | null): string {
-  const symbol = currency === "GBP" ? "\u00a3" : currency === "USD" ? "$" : currency === "EUR" ? "\u20ac" : currency + " ";
+  const symbol = getCurrencySymbol(currency);
 
   if (!priceType) return "\u2014";
 
