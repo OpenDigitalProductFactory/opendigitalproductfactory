@@ -254,6 +254,30 @@ export async function runPostgresTrialRestore(
     postgresTrialRestoreLastSuccessSeconds.set(Math.floor(finishedAt.getTime() / 1000));
   }
 
+  // BI-EA67A758: proactive operator alerting via PlatformNotification.
+  // On failure: create a critical notification so the operator sees a banner
+  // without having to navigate to Admin > Backups. On success: resolve any
+  // open notification so the banner clears automatically.
+  if (finalStatus === "failed") {
+    await prisma.platformNotification
+      .create({
+        data: {
+          severity: "critical",
+          category: "backup-trial-restore-failed",
+          subjectId: "postgres",
+          message: `Postgres backup trial restore failed: ${errorMessage ?? "unknown error"}. Navigate to Admin → Backups to inspect the log and trigger a new backup.`,
+        },
+      })
+      .catch(() => {}); // never crash the runner on a notification write failure
+  } else {
+    await prisma.platformNotification
+      .updateMany({
+        where: { category: "backup-trial-restore-failed", subjectId: "postgres", resolvedAt: null },
+        data: { resolvedAt: finishedAt },
+      })
+      .catch(() => {});
+  }
+
   await prisma.scheduledJob
     .update({
       where: { jobId: POSTGRES_TRIAL_RESTORE_JOB_ID },

@@ -89,6 +89,22 @@ else
   fail "pg_dump failed (exit=$EXIT)" 3
 fi
 
+# Structural validation: pg_restore --list exercises the custom-format header
+# and TOC catalog without performing a full restore. This catches silent
+# stream truncation caused by Docker socket proxy resets — the host-side
+# redirect commits partial bytes silently and pg_dump may exit 0 inside the
+# container while the dump is already corrupt. SHA256 cannot detect this
+# because it is computed on whatever bytes were written.
+# postgresql16-client is installed in the runner image (Dockerfile:apk add).
+if pg_restore --list "$DUMP_FILE" > /dev/null 2>> "$LOG_FILE"; then
+  log "structural validation passed (pg_restore --list ok)"
+else
+  VALID_EXIT=$?
+  log "structural validation failed exit=$VALID_EXIT — dump is truncated or corrupt, deleting"
+  rm -f "$DUMP_FILE"
+  fail "corrupt dump detected by structural validation (pg_restore --list exit=$VALID_EXIT)" 3
+fi
+
 # sha256 checksum so the admin UX can verify integrity without re-reading the
 # whole dump. We store the bare hash for easy comparison.
 DUMP_SHA="$(sha256sum "$DUMP_FILE" | awk '{print $1}')" || fail "sha256sum failed" 4
