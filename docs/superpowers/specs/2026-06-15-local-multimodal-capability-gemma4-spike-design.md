@@ -96,8 +96,30 @@ GAP 1 + GAP 2 implemented directly in this worktree (BS re-architecture standing
 - Unit tests: `packages/db/test/local-model-capabilities.test.ts`,
   `apps/web/lib/inference/ai-inference-toolcalls.test.ts`.
 
-GAP 3 (vision UI assessment → rubric) and GAP 4 (reasoning-token budget at the call site) are the
-follow-on use-case work tracked under BI-7C8E3F8F; the enabling transport above unblocks them.
+GAP 3 implemented (the use case, end-to-end through the platform code):
+- `apps/web/lib/decision/visual-cognitive-load.ts` — `assessVisualCognitiveLoad()` builds a
+  text+image_url multimodal message and calls `routeAndCall` with the `imageInput` capability
+  floor (no provider pin), parses a structured `{cognitive_load, visual_density,
+  control_count_estimate, reasoning}`; returns null gracefully when no vision endpoint exists.
+- `apps/web/lib/decision/ui-surface-features.ts` — `UiSurfaceChange.visualCognitiveLoad` blends
+  the measured visual load 50/50 into the heuristic `human_cognitive_load`.
+- `apps/web/lib/mcp-tools.ts` — `evaluate_page` now feeds its captured screenshot to
+  `assessVisualCognitiveLoad` (best-effort) and returns `visualCognitiveLoad`, so the structural
+  tool emits a real visual signal for the rubric.
+- Tests: `visual-cognitive-load.test.ts` (parse/clamp + multimodal message shape + graceful null),
+  `ui-surface-features.test.ts` (visual-load blend both directions).
+
+**Live end-to-end exercise** (real `assessVisualCognitiveLoad` → real Gemma 4 via DMR → real
+`uiSurfaceFeatures`, 2026-06-15): clean card → `cognitiveLoad 0.10` (2 controls); cluttered
+dashboard → `cognitiveLoad 0.45, density 0.80` (33 controls, exact). Rubric `human_cognitive_load`:
+heuristic-only **0.470** → +clean visual **0.285** → +cluttered visual **0.460** — the measured
+visual signal moves the real rubric (a clean UI buys the cost axis down; a cluttered one holds it
+high). Routing-layer selection (`imageInput` floor) is unit-tested; exercising the *deployed*
+`evaluate_page` MCP tool over a live browser screenshot is the operator-gated post-merge step
+(self-upgrade deploy), per AGENTS.md §5.
+
+GAP 4 (reasoning-token budget) handled at the call site by allocating adequate output budget for
+the vision call; the assessment parser tolerates `reasoning_content`-heavy replies.
 
 ## Research & Benchmarking
 

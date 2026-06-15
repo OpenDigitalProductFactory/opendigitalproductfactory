@@ -91,6 +91,32 @@ describe("uiSurfaceFeatures", () => {
     expect(retire.long_term_maintainability).toBeGreaterThan(0.8);
   });
 
+  it("blends a measured visual cognitive load into the heuristic load", () => {
+    // Justified/reusable addition → low heuristic load (~0.13). A high measured
+    // visual load must pull the blended load up (50/50), giving the rubric real
+    // visual evidence the structural signals can't see.
+    const justified = {
+      ...base,
+      controlsAdded: 1,
+      justification: "researched" as const,
+      reuseBreadth: 0.9,
+      clarifiesOutcome: 0.9,
+    };
+    const withoutVisual = uiSurfaceFeatures(justified).ship.human_cognitive_load;
+    const withHighVisual = uiSurfaceFeatures({ ...justified, visualCognitiveLoad: 0.9 }).ship
+      .human_cognitive_load;
+    expect(withHighVisual).toBeGreaterThan(withoutVisual);
+    expect(withHighVisual).toBeCloseTo(0.5 * withoutVisual + 0.5 * 0.9, 5);
+  });
+
+  it("a low measured visual load can buy down an otherwise high heuristic load", () => {
+    const unjustified = { ...base, controlsAdded: 1, justification: "none" as const };
+    const heuristic = uiSurfaceFeatures(unjustified).ship.human_cognitive_load;
+    const blended = uiSurfaceFeatures({ ...unjustified, visualCognitiveLoad: 0.1 }).ship
+      .human_cognitive_load;
+    expect(blended).toBeLessThan(heuristic);
+  });
+
   it("keeps every feature within [0,1]", () => {
     const { ship, retire } = uiSurfaceFeatures({
       ...base,

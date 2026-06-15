@@ -11610,14 +11610,36 @@ export async function executeTool(
           findings = [];
         }
 
+        // Visual cognitive-load assessment — feed the rendered screenshot to a
+        // vision-capable model (capability-routed; local Gemma 4 when configured)
+        // so the structural findings above are joined by a MEASURED visual signal
+        // that flows into the WWMD human_cognitive_load rubric. Best-effort: a
+        // null (no vision endpoint / parse miss) never fails the evaluation.
+        let visualCognitiveLoad:
+          | import("@/lib/decision/visual-cognitive-load").VisualCognitiveLoad
+          | null = null;
+        const screenshotB64 = ssContent.screenshot_base64 ?? null;
+        if (screenshotB64) {
+          try {
+            const { assessVisualCognitiveLoad } = await import("@/lib/decision/visual-cognitive-load");
+            visualCognitiveLoad = await assessVisualCognitiveLoad(screenshotB64);
+          } catch {
+            visualCognitiveLoad = null;
+          }
+        }
+
         return {
           success: true,
-          message: `Found ${findings.length} UX/accessibility issues on ${targetUrl}.`,
+          message: `Found ${findings.length} UX/accessibility issues on ${targetUrl}.`
+            + (visualCognitiveLoad
+              ? ` Visual cognitive load: ${visualCognitiveLoad.cognitiveLoad.toFixed(2)}.`
+              : ""),
           data: {
             url: targetUrl,
-            screenshot: ssContent.screenshot_base64 ?? null,
+            screenshot: screenshotB64,
             findingCount: findings.length,
             findings,
+            visualCognitiveLoad,
           },
         };
       } catch (e) {
