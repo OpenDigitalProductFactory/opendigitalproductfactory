@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveLocalModelCapabilityPrior,
   detectLocalModelFamily,
+  detectLocalModelVision,
   normalizeLocalModelId,
 } from "../src/local-model-capabilities";
 
@@ -74,5 +75,48 @@ describe("deriveLocalModelCapabilityPrior", () => {
     expect(p.supportsToolUse).toBe(true);
     expect(p.toolFidelity).toBeGreaterThan(20);
     expect(p.toolFidelity).toBeLessThan(60);
+  });
+
+  it("flags multimodal models as vision-capable (drives imageInput floor)", () => {
+    // Verified on-machine 2026-06-15: ai/gemma4:12B does real vision via DMR.
+    expect(deriveLocalModelCapabilityPrior("ai/gemma4:12B").supportsVision).toBe(true);
+    expect(deriveLocalModelCapabilityPrior("docker.io/ai/gemma4:26B").supportsVision).toBe(true);
+  });
+
+  it("does not flag text-only local models as vision-capable", () => {
+    expect(deriveLocalModelCapabilityPrior("ai/qwen3:14B-Q6_K").supportsVision).toBe(false);
+    expect(deriveLocalModelCapabilityPrior("ai/qwen2.5-coder:7B").supportsVision).toBe(false);
+    expect(deriveLocalModelCapabilityPrior("ai/magistral-small-3.2:latest").supportsVision).toBe(false);
+  });
+
+  it("never marks an embedding model vision-capable", () => {
+    expect(deriveLocalModelCapabilityPrior("docker.io/ai/nomic-embed-text-v1.5:latest").supportsVision).toBe(false);
+  });
+});
+
+describe("detectLocalModelVision", () => {
+  it("detects multimodal families orthogonal to the text/tool family", () => {
+    for (const id of [
+      "ai/gemma4:12B",
+      "docker.io/ai/gemma3n:latest",
+      "ai/llava:13b",
+      "ai/moondream2:latest",
+      "ai/pixtral-12b:latest",
+      "ai/qwen2.5-vl:7b",
+      "ai/minicpm-v:latest",
+    ]) {
+      expect(detectLocalModelVision(id)).toBe(true);
+    }
+  });
+
+  it("returns false for text-only and embedding models", () => {
+    for (const id of [
+      "ai/qwen3-coder:latest",
+      "ai/gemma3:latest",
+      "ai/magistral-small-3.2:latest",
+      "docker.io/ai/nomic-embed-text-v1.5:latest",
+    ]) {
+      expect(detectLocalModelVision(id)).toBe(false);
+    }
   });
 });

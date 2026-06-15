@@ -23,6 +23,13 @@
 export interface LocalModelCapabilityPrior {
   /** True for embedding models (nomic, bge, e5, ...). Not chat/tool routable. */
   isEmbedding: boolean;
+  /**
+   * True for multimodal-IN models that accept image content (Gemma 4, Gemma 3n,
+   * *-VL, LLaVA, moondream, pixtral, MiniCPM-V, ...). Drives ModelProfile
+   * capabilities.imageInput so the `imageInput` routing floor can select it.
+   * Bootstrap prior only — the activation eval still calibrates.
+   */
+  supportsVision: boolean;
   capabilityCategory: string;
   supportsToolUse: boolean;
   reasoning: number;
@@ -73,11 +80,41 @@ export function detectLocalModelFamily(modelId: string): LocalModelFamily {
 }
 
 /**
+ * Best-effort detection of multimodal (image-input) local models, orthogonal to
+ * the text/tool family. Capability-routing relies on this to populate
+ * ModelProfile.capabilities.imageInput so the `imageInput` floor
+ * (apps/web/lib/routing/agent-capability-types.ts) can select a vision model
+ * without any provider/model pin. Verified on-machine 2026-06-15: Gemma 4 12B
+ * (ai/gemma4:12B) accepts OpenAI-compatible image_url content via Docker Model
+ * Runner and returns accurate visual assessments. This is a prior — the
+ * activation eval still measures and can correct it.
+ */
+export function detectLocalModelVision(modelId: string): boolean {
+  const id = normalizeLocalModelId(modelId);
+  // Embedding models are never vision-routable, regardless of name.
+  if (/embed|nomic|bge|e5-|gte-/.test(id)) return false;
+  return /gemma4|gemma-4|gemma3n|gemma-3n|llava|moondream|pixtral|minicpm-v|[-/]vl\b|-vl[-:]|vision/.test(
+    id,
+  );
+}
+
+/**
  * Derive a capability prior for a local model id. Pure — no DB, no network.
  * The numbers are deliberately coarse: they only need to be *good enough to
  * route* until the deterministic eval measures the real model.
  */
 export function deriveLocalModelCapabilityPrior(modelId: string): LocalModelCapabilityPrior {
+  const base = derivePriorBase(modelId);
+  return {
+    ...base,
+    // Vision is orthogonal to the text/tool family; embedding models are never
+    // vision-routable. Bootstrap prior — the activation eval still calibrates.
+    supportsVision: base.isEmbedding ? false : detectLocalModelVision(modelId),
+  };
+}
+
+/** Family-keyed text/tool capability base (vision added by the wrapper above). */
+function derivePriorBase(modelId: string): Omit<LocalModelCapabilityPrior, "supportsVision"> {
   const family = detectLocalModelFamily(modelId);
   switch (family) {
     case "embedding":

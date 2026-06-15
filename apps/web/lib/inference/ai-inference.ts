@@ -43,8 +43,32 @@ import "../routing/codex-cli-adapter"; // codex: registers "codex-cli" adapter
 /** Anthropic-style content blocks for structured tool-calling messages */
 export type ContentBlock =
   | { type: "text"; text: string }
+  /**
+   * Image input for multimodal models. Carried in OpenAI Chat Completions wire
+   * form (`image_url` with a data: URL or http(s) URL); converted to the
+   * Anthropic `image` source block by formatMessageForAnthropic. Enables vision
+   * models (e.g. local Gemma 4 via Docker Model Runner) to receive screenshots.
+   */
+  | { type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; content: string };
+
+/** True when a message's content array carries only model-facing input blocks
+ *  (text / image) that can be passed through to a chat API as-is. The formatters
+ *  rely on ContentBlock discriminated-union narrowing for per-block typing. */
+function isMultimodalInputContent(content: ContentBlock[]): boolean {
+  return content.length > 0 && content.every((b) => b.type === "text" || b.type === "image_url");
+}
+
+/** Convert an OpenAI-style image_url (data: URL) to an Anthropic image source block. */
+function imageUrlToAnthropicBlock(url: string): Record<string, unknown> {
+  const m = /^data:([^;]+);base64,(.*)$/s.exec(url);
+  if (m) {
+    return { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } };
+  }
+  // Anthropic also accepts URL image sources.
+  return { type: "image", source: { type: "url", url } };
+}
 
 export type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
@@ -305,6 +329,17 @@ export function formatMessageForAnthropic(msg: ChatMessage): Record<string, unkn
       ],
     };
   }
+  // Multimodal user input (text + image blocks) → Anthropic content array.
+  if (Array.isArray(msg.content) && isMultimodalInputContent(msg.content)) {
+    return {
+      role: msg.role,
+      content: msg.content.map((b) => {
+        if (b.type === "image_url") return imageUrlToAnthropicBlock(b.image_url.url);
+        // isMultimodalInputContent guarantees the only other member is text.
+        return { type: "text", text: b.type === "text" ? b.text : "" };
+      }),
+    };
+  }
   // Plain messages — pass through with string content
   return { role: msg.role, content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) };
 }
@@ -325,6 +360,11 @@ export function formatMessageForOpenAI(msg: ChatMessage): Record<string, unknown
         function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
       })),
     };
+  }
+  // Multimodal user input (text + image_url blocks) → pass through as-is; this is
+  // already the OpenAI Chat Completions vision wire format.
+  if (Array.isArray(msg.content) && isMultimodalInputContent(msg.content)) {
+    return { role: msg.role, content: msg.content };
   }
   // Plain messages — pass through with string content
   return { role: msg.role, content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) };
