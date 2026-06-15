@@ -1681,7 +1681,19 @@ async function seedLocalModels(): Promise<void> {
           instructionFollowingScore: prior.instructionFollowingScore,
           structuredOutputScore: prior.structuredOutputScore,
           conversational: prior.conversational, contextRetention: prior.contextRetention,
-          capabilities: { streaming: true, embedding: prior.isEmbedding } as any,
+          // imageInput drives the `imageInput` routing floor so vision tasks can
+          // select a multimodal local model (e.g. Gemma 4) with no provider pin.
+          capabilities: {
+            streaming: true,
+            embedding: prior.isEmbedding,
+            ...(prior.supportsVision ? { imageInput: true } : {}),
+          } as any,
+          inputModalities: prior.supportsVision ? ["text", "image"] : ["text"],
+          outputModalities: ["text"],
+          supportedModalities: {
+            input: prior.supportsVision ? ["text", "image"] : ["text"],
+            output: ["text"],
+          },
         },
       });
       discovered++;
