@@ -1,0 +1,347 @@
+<!doctype html>
+<!--
+  DPF spec (HTML artifact) — Multi-Business "Town" Super-App (mobile).
+  Extends 2026-06-14-native-mobile-archetype-apps-design.html.
+  Self-contained: inline CSS, inline SVG, no external assets.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Multi-Business Town Super-App — Mobile Design</title>
+<style>
+  :root {
+    --bg:#fff; --fg:#1a1d24; --muted:#5b6472; --soft:#f4f6fa; --border:#dce1e8;
+    --accent:#2f6df6; --accent-soft:#e8f0ff; --code-bg:#f6f8fa; --kw:#b5258a;
+    --str:#167f3a; --com:#8a94a6; --ok:#167f3a; --ok-bg:#e7f6ec; --warn:#9a6700;
+    --warn-bg:#fbf3e0; --crit:#c0362c; --crit-bg:#fbe9e7; --neutral:#5b6472;
+    --neutral-bg:#eef1f5; --radius:10px; --maxw:1040px;
+  }
+  @media (prefers-color-scheme: dark){:root{--bg:#0f1117;--fg:#e6e9ef;--muted:#9aa4b2;--soft:#161a22;--border:#2a313d;--accent:#6ea0ff;--accent-soft:#18233b;--code-bg:#12161e;--kw:#e07ad0;--str:#6fd58a;--com:#6b7585;--ok:#6fd58a;--ok-bg:#11281a;--warn:#e3b35a;--warn-bg:#2a2210;--crit:#f08a80;--crit-bg:#2c1513;--neutral:#9aa4b2;--neutral-bg:#1b2129;}}
+  *{box-sizing:border-box}html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:40px;max-width:var(--maxw);margin:0 auto;padding:32px 24px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13.5px;max-height:92vh;overflow:auto}
+  nav.toc strong{display:block;text-transform:uppercase;letter-spacing:.06em;font-size:11px;color:var(--muted);margin-bottom:10px}
+  nav.toc a{display:block;color:var(--muted);text-decoration:none;padding:4px 10px;border-left:2px solid var(--border)}
+  nav.toc a:hover{color:var(--accent);border-left-color:var(--accent)}
+  main{min-width:0}
+  h1{font-size:30px;line-height:1.2;margin:0 0 4px}
+  h2{font-size:21px;margin:44px 0 12px;padding-top:8px;border-top:1px solid var(--border)}
+  h3{font-size:16px;margin:24px 0 8px}
+  a{color:var(--accent)}
+  code{font-family:"SF Mono","JetBrains Mono",Consolas,monospace;font-size:.9em;background:var(--code-bg);padding:1px 5px;border-radius:5px}
+  pre{background:var(--code-bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow:auto}
+  pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+  .kw{color:var(--kw)}.str{color:var(--str)}.com{color:var(--com);font-style:italic}
+  .meta-card{display:flex;flex-wrap:wrap;gap:8px 28px;margin:14px 0 8px;padding:14px 18px;background:var(--soft);border:1px solid var(--border);border-radius:var(--radius)}
+  .meta-card div{font-size:14px}.meta-card span.k{color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-size:11px;display:block}
+  .pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap}
+  .pill.ok{color:var(--ok);background:var(--ok-bg)}.pill.warn{color:var(--warn);background:var(--warn-bg)}
+  .pill.crit{color:var(--crit);background:var(--crit-bg)}.pill.neutral{color:var(--neutral);background:var(--neutral-bg)}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  thead th{background:var(--soft);font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  figure{margin:18px 0;padding:16px;background:var(--soft);border:1px solid var(--border);border-radius:var(--radius)}
+  figure svg{display:block;width:100%;height:auto}
+  figcaption{margin-top:10px;font-size:13px;color:var(--muted);text-align:center}
+  .svg-node{fill:var(--accent-soft);stroke:var(--accent)}.svg-node-2{fill:var(--soft);stroke:var(--muted)}
+  .svg-label{fill:var(--fg);font:600 13px sans-serif}.svg-sub{fill:var(--muted);font:11px sans-serif}
+  .svg-edge{stroke:var(--muted);fill:none}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 16px;border-radius:0 var(--radius) var(--radius) 0;margin:16px 0}
+  .callout.warn{border-left-color:var(--warn);background:var(--warn-bg)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:16px 0}
+  .card{border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;background:var(--soft)}
+  .card h4{margin:0 0 6px;font-size:14.5px}.card .rec{font-size:12px;font-weight:700;color:var(--ok)}
+  @media (max-width:820px){.layout{grid-template-columns:1fr}nav.toc{position:static;max-height:none}}
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="On this page">
+    <strong>On this page</strong>
+    <a href="#summary">1 · The vision</a>
+    <a href="#reframe">2 · Single → multi-space</a>
+    <a href="#layers">3 · Three layers</a>
+    <a href="#identity">4 · Identity (the crux)</a>
+    <a href="#payments">5 · Payments</a>
+    <a href="#geo-push">6 · Geo + notifications</a>
+    <a href="#directory">7 · The directory</a>
+    <a href="#usecases">8 · Use-cases mapped</a>
+    <a href="#split">9 · Client / server / federation</a>
+    <a href="#research">10 · Research &amp; benchmarking</a>
+    <a href="#sysml">11 · SysML substrate</a>
+    <a href="#roadmap">12 · Roadmap</a>
+    <a href="#decisions">13 · Decisions for you</a>
+    <a href="#scope">14 · Scope &amp; relation</a>
+  </nav>
+
+  <main>
+    <h1>Multi-Business "Town" Super-App — Mobile</h1>
+    <div class="meta-card">
+      <div><span class="k">BI</span>to file under EP-MOBILE-ARCHETYPE</div>
+      <div><span class="k">Status</span><span class="pill neutral">draft — for operator review</span></div>
+      <div><span class="k">Date</span>2026-06-14</div>
+      <div><span class="k">Extends</span>2026-06-14-native-mobile-archetype-apps-design</div>
+    </div>
+
+    <p>One resident's app that holds <strong>many local businesses as "spaces"</strong> — book the auto shop, join the
+    hairdresser's waitlist before you arrive, check equipment availability and reserve it at the rental shop — each
+    business in its own space, your <em>persona</em> there (customer or employee) driving the UI, and one device-level
+    setup for payments, location, and notifications reused across all of them. The town, in one app.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="summary">1 · The vision, and the one insight that makes it tractable</h2>
+    <p>The previous spec built "one generic app connects to <em>one</em> self-hosted business install." This evolves it
+    to "one app engages with <em>many</em> businesses." The precedents are well-trodden — <strong>Uber's personal/business
+    profiles</strong> (one account, switchable profile, a different payment method per profile), <strong>Slack/Mastodon
+    multi-workspace</strong> (N independent backends, one client, a switcher, notifications aggregated), and
+    <strong>WeChat/Gojek super-apps</strong> (many independent merchants, one shared wallet + discovery + identity).</p>
+
+    <div class="callout">
+      <strong>The insight:</strong> this is a <strong>client-side generalization, not server multi-tenancy.</strong> Each
+      business stays a separate single-org-per-install backend — unchanged. The app simply holds a <em>list of
+      install-connections</em> ("spaces") instead of one, plus a shared device layer and two consciously-thin federation
+      services. Single-org-per-install — the load-bearing DPF law — is fully preserved. Research confirms the
+      booking / rental / waitlist / invoice / payment models already exist and are <code>storefrontId</code>-scoped, so
+      <strong>the server needs almost no change</strong>; the work is the multi-space client + customer surfaces + two thin services.
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="reframe">2 · From single-install to multi-space</h2>
+    <figure>
+      <svg viewBox="0 0 980 330" role="img" aria-label="One app holds many spaces, each its own install, over a shared device layer">
+        <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+        <rect class="svg-node" x="20" y="120" width="150" height="70" rx="8"/>
+        <text class="svg-label" x="95" y="150" text-anchor="middle">One app</text>
+        <text class="svg-sub" x="95" y="168" text-anchor="middle">spaces[] + switcher</text>
+        <!-- spaces -->
+        <line class="svg-edge" x1="170" y1="140" x2="250" y2="60"  marker-end="url(#a)"/>
+        <line class="svg-edge" x1="170" y1="155" x2="250" y2="155" marker-end="url(#a)"/>
+        <line class="svg-edge" x1="170" y1="170" x2="250" y2="250" marker-end="url(#a)"/>
+        <rect class="svg-node-2" x="253" y="32" width="300" height="58" rx="8"/>
+        <text class="svg-label" x="270" y="56">Salon — customer (waitlist)</text>
+        <text class="svg-sub" x="270" y="74">install A · /api/v1/app/config · persona=customer</text>
+        <rect class="svg-node-2" x="253" y="126" width="300" height="58" rx="8"/>
+        <text class="svg-label" x="270" y="150">Auto shop — customer (booking)</text>
+        <text class="svg-sub" x="270" y="168">install B · own backend · persona=customer</text>
+        <rect class="svg-node-2" x="253" y="220" width="300" height="58" rx="8"/>
+        <text class="svg-label" x="270" y="244">Rental co — employee (dispatch)</text>
+        <text class="svg-sub" x="270" y="262">install C · own backend · persona=employee</text>
+        <!-- shared device layer -->
+        <rect class="svg-node" x="620" y="40" width="335" height="100" rx="8"/>
+        <text class="svg-label" x="640" y="66">Shared device layer</text>
+        <text class="svg-sub" x="640" y="86">wallet (Apple/Google Pay) · geo grant</text>
+        <text class="svg-sub" x="640" y="102">push token · used by every space</text>
+        <text class="svg-sub" x="640" y="124">— one setup, N businesses —</text>
+        <!-- federation -->
+        <rect class="svg-node-2" x="620" y="170" width="335" height="108" rx="8"/>
+        <text class="svg-label" x="640" y="196">Federation (2 thin, opt-in services)</text>
+        <text class="svg-sub" x="640" y="216">Directory — "Nearby" businesses → install URL</text>
+        <text class="svg-sub" x="640" y="234">Identity broker (optional) — sign in once</text>
+        <text class="svg-sub" x="640" y="258">the only things any super-app centralizes</text>
+      </svg>
+      <figcaption>Figure 1 — The app holds many spaces (each its own single-org install, persona-driven). A shared device
+        layer (wallet/geo/push) and two thin federation services (directory + optional identity) are the only additions.</figcaption>
+    </figure>
+
+    <table>
+      <thead><tr><th>Concept</th><th>Single-install (built)</th><th>Multi-space (this spec)</th></tr></thead>
+      <tbody>
+        <tr><td>Install connection</td><td>one <code>serverConfig</code> URL</td><td><code>Space[]</code> registry — N installs, each URL + descriptor + session</td></tr>
+        <tr><td>Session</td><td>one set of tokens</td><td>one session <em>per space</em> (Slack-workspace model)</td></tr>
+        <tr><td>Manifest / theme / persona</td><td>one manifest, applied globally</td><td>per-space manifest; re-theme on space switch (already keyed by install)</td></tr>
+        <tr><td>Home</td><td>the connected portal</td><td>"my town" — list of joined spaces + a switcher + "Nearby" directory</td></tr>
+        <tr><td>Payments / geo / push</td><td>per install</td><td><strong>device-level, reused</strong> across spaces; each business processes its own</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2 id="layers">3 · The three layers</h2>
+    <div class="cards">
+      <div class="card"><h4>① Spaces (client)</h4><p>A <code>Space[]</code> registry generalizing today's single <code>serverConfig</code>. Each space = <code>{ url, descriptor, session, manifest }</code>. A switcher (Slack rail / Mastodon corner / WeChat tray) + a "my town" home. Entering a space loads its persona-driven UI and re-themes. <em>All the heavy lifting.</em></p></div>
+      <div class="card"><h4>② Shared device (client)</h4><p>One <strong>device wallet</strong> (Apple/Google Pay + saved card), one <strong>location grant</strong>, one <strong>push token</strong> — granted once, reused by every space. Each business charges via <em>its own</em> processor; the device just presents the instrument. (Uber-profiles + Gojek shared-platform.)</p></div>
+      <div class="card"><h4>③ Federation (2 thin services)</h4><p>The <strong>directory</strong> ("Nearby" businesses → install URL) and an optional <strong>identity broker</strong> (sign in once, present a scoped token to each install). The only two centralization points — every super-app centralizes exactly these and federates everything else.</p></div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="identity">4 · Identity — the crux, answered honestly</h2>
+    <p>This is the one genuinely hard problem, and <strong>no precedent decentralizes it.</strong> Slack/Mastodon keep
+    identity <em>siloed per backend</em> — "portability" is the illusion of one client holding many separate logins.
+    WeChat/Gojek achieve <em>real</em> portability only because a central host issues scoped tokens. Portable identity over
+    truly independent installs requires <em>some</em> shared trust anchor; the only question is how thin.</p>
+
+    <table>
+      <thead><tr><th>Model</th><th>How</th><th>Fit</th></tr></thead>
+      <tbody>
+        <tr><td><strong>A · Per-space memberships</strong> <span class="pill ok">baseline</span></td><td>Each business is a separate login (Slack-workspace model). The app holds N sessions; the "shared" part is the <em>device</em> layer. Per AGENTS §11, a Principal is <strong>install-local</strong> — the same email is a different Principal at each business. No central identity.</td><td>Cleanest fit for single-org-per-install. Ship this first.</td></tr>
+        <tr><td><strong>B · Thin identity broker</strong> <span class="pill warn">later</span></td><td>A passkey/OIDC issuer the device trusts; on "join a space" it presents a scoped token (WeChat pattern) the install verifies + links to a local Principal/<code>PrincipalAlias</code>. Sign-in-once UX over federated installs. The install still owns the local identity; the broker holds <em>no</em> business data.</td><td>The Uber-grade "one identity, many contexts" upgrade. Opt-in; a trust anchor, deliberately thin.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn"><strong>Prerequisite already found:</strong> the mobile app can't authenticate customers at
+    all yet — <code>/api/v1/auth/login</code> + the JWT middleware only handle workforce <code>User</code>s
+    (a customer login returns <code>NO_WORKFORCE_GROUP</code>), and there are zero <code>requireCustomerAuth</code> API
+    routes. Model A's first task is <strong>per-space customer auth</strong>: a JWT <code>kind</code> discriminator + a
+    middleware branch resolving a <code>CustomerContact</code> → <code>{ type:"customer", accountId, contactId }</code>,
+    mirroring the existing web customer-credentials provider. Security-sensitive (touches every <code>/api/v1</code> route's
+    principal assumptions) → build carefully with a live customer-login check.</div>
+
+    <!-- ============================================================ -->
+    <h2 id="payments">5 · Payments — device wallet, each business its own processor</h2>
+    <p>Confirmed standard (Stripe Connect, Apple/Google Pay): the <strong>client holds the instrument once; each business
+    charges via its OWN processor account</strong> (its own Stripe/Square) — each business is its own merchant of record.
+    This is exactly DPF's <em>conduit, not broker</em> stance: the platform records <code>Invoice</code>/<code>Payment</code>
+    but never holds everyone's card. The Uber "business vs personal card" = a <strong>payment context per space</strong>
+    (and optionally a personal/business sub-context within a space). Card-on-file for repeat business is vaulted <em>at that
+    business's processor</em> (Fresha/Housecall pattern), never centrally.</p>
+    <div class="callout"><strong>Store policy is a tailwind, not a blocker:</strong> physical goods + real-world services
+    are <em>exempt</em> from in-app purchase on both stores (Apple guideline 3.1.3(e); Google Play Payments policy) — haircuts,
+    auto service, equipment rental all qualify, with <strong>no store commission</strong>. Keep any purely-<em>digital</em>
+    in-app SKU out of this path (those still require store billing).</div>
+
+    <!-- ============================================================ -->
+    <h2 id="geo-push">6 · Geo + notifications — one grant, fanned per space</h2>
+    <ul>
+      <li><strong>Location:</strong> one device permission (<code>expo-location</code>), reused by every space — powers the
+        directory's "Nearby," waitlist proximity ("I'm 5 min away"), and field geo. A business only sees location scoped to
+        an active interaction, never ambient cross-business tracking.</li>
+      <li><strong>Push:</strong> one device token, registered with <em>each</em> space's
+        <code>/api/v1/notifications/register-device</code> (one device, N registrations). Payloads carry a
+        <code>spaceId</code> so a tap routes to the right space. Notifications aggregate into one inbox, <strong>badged per
+        business</strong> (Slack's all-workspaces model). The Expo push sender adapter (built, gated by
+        <code>DPF_PUSH_ENABLED</code>) delivers per space.</li>
+    </ul>
+
+    <!-- ============================================================ -->
+    <h2 id="directory">7 · The directory — "Nearby," the second thin service</h2>
+    <p>A discovery directory turns a pile of independent installs into a browsable town. Mirror WeChat: a
+    <strong>geo "Nearby" list</strong> + <strong>search</strong> + a <strong>recently-used tray</strong>, with
+    <strong>QR / deep-link</strong> as the offline→app "join this business" bridge. It is a thin <em>registry</em> indexing
+    participating installs — name, location, archetype, install URL — keyed by each install's existing public
+    <code>/.well-known/dpf-instance.json</code> descriptor. It holds no business data; it is a phonebook, the second
+    (and last) consciously-centralized service. Opt-in for both businesses (list me) and residents (find me).</p>
+    <figure>
+      <svg viewBox="0 0 980 140" role="img" aria-label="Discovery to joined space flow">
+        <defs><marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+        <rect class="svg-node-2" x="10" y="45" width="150" height="54" rx="8"/><text class="svg-label" x="85" y="68" text-anchor="middle">"Nearby" / QR</text><text class="svg-sub" x="85" y="86" text-anchor="middle">directory or scan</text>
+        <line class="svg-edge" x1="160" y1="72" x2="205" y2="72" marker-end="url(#b)"/>
+        <rect class="svg-node" x="208" y="43" width="180" height="58" rx="8"/><text class="svg-label" x="298" y="66" text-anchor="middle">Validate install</text><text class="svg-sub" x="298" y="84" text-anchor="middle">/.well-known/dpf-instance</text>
+        <line class="svg-edge" x1="388" y1="72" x2="433" y2="72" marker-end="url(#b)"/>
+        <rect class="svg-node-2" x="436" y="45" width="170" height="54" rx="8"/><text class="svg-label" x="521" y="68" text-anchor="middle">Join + sign in</text><text class="svg-sub" x="521" y="86" text-anchor="middle">per-space session</text>
+        <line class="svg-edge" x1="606" y1="72" x2="651" y2="72" marker-end="url(#b)"/>
+        <rect class="svg-node" x="654" y="43" width="316" height="58" rx="8"/><text class="svg-label" x="812" y="66" text-anchor="middle">Space added → manifest → persona UI</text><text class="svg-sub" x="812" y="84" text-anchor="middle">themed, capability-gated; appears on "my town"</text>
+      </svg>
+      <figcaption>Figure 2 — Adding a business: find (Nearby/QR) → validate the install → join + sign in → the space appears
+        on the home, persona-driven. Same connectivity primitive as the single-install flow, now repeatable per business.</figcaption>
+    </figure>
+
+    <!-- ============================================================ -->
+    <h2 id="usecases">8 · The use-cases, mapped to existing substrate</h2>
+    <table>
+      <thead><tr><th>Use-case (your examples)</th><th>Persona</th><th>Backend that exists</th><th>New (mobile surface)</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Hairdresser waitlist</strong> — see the queue, add my name before I arrive</td><td>customer</td><td><code>WorkQueue</code>/<code>WorkItem</code> (the queue); <code>StorefrontItem</code></td><td>customer "join waitlist" + live queue position screen; geo "I'm near"</td></tr>
+        <tr><td><strong>Auto shop appointment</strong> — schedule a service slot</td><td>customer</td><td><code>StorefrontItem</code> (ctaType <code>book</code>) + <code>StorefrontBooking</code> + <code>ProviderAvailability</code> + <code>BookingHold</code></td><td>availability picker → hold → confirm booking screen</td></tr>
+        <tr><td><strong>Equipment rental</strong> — see availability, book without calling</td><td>customer</td><td><code>RentableUnit</code> (status) + <code>RentalAgreement</code> + <code>BookingHold</code></td><td>availability calendar + reserve + agreement/deposit screen</td></tr>
+        <tr><td>Field tech (any of the above businesses)</td><td>employee</td><td><code>WorkItem</code> + <code>/api/v1/work-items</code> (built)</td><td>"My Jobs" (built, PR #1915)</td></tr>
+      </tbody>
+    </table>
+    <p>The same resident is a <em>customer</em> at the salon and an <em>employee</em> at the rental co — different persona per
+    space, each driven by that install's manifest. No global role; role is per business.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="split">9 · What's client vs server vs federation</h2>
+    <div class="cards">
+      <div class="card"><h4>Server — ~unchanged</h4><p>Each business = its own single-org install. Booking / rental / waitlist / invoice / payment models exist + are scoped. Only additions: <strong>per-space customer auth</strong> + the customer-facing read/booking endpoints (<code>requireCustomerAuth</code>) + per-business processor wiring + the push sender (built).</p></div>
+      <div class="card"><h4>Client — the big work</h4><p><code>Space[]</code> registry + per-space sessions/manifests + switcher + "my town" home + the shared device layer (wallet, geo, push fan-out) + the customer use-case screens (waitlist/booking/rental).</p></div>
+      <div class="card"><h4>Federation — 2 thin services</h4><p>The <strong>directory</strong> (Nearby) and the optional <strong>identity broker</strong>. New, small, opt-in, Arcamanus-hostable. Hold no business data. The only centralization.</p></div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="research">10 · Research &amp; benchmarking (cited)</h2>
+    <ul>
+      <li><strong>Two-sided, mode-by-profile</strong> — <a href="https://help.uber.com/en/riders/article/switching-between-personal-and-business-ride-profiles?nodeId=2da6dcd7-43fa-46ca-84e2-9e6ec383e4dd">Uber personal/business profiles</a> (one account, switchable profile, <em>payment-method-per-profile</em>, defaults to last-used) is the direct precedent for per-space context. <a href="https://www.ridesharingdriver.com/lyft-driver-and-passenger-app-features-explained/">Lyft</a> proves a single app with a role toggle is viable; Uber/DoorDash split the heavy <em>workforce</em> role into a second binary. We adopt the per-space toggle.</li>
+      <li><strong>Super-apps</strong> — <a href="https://www.nngroup.com/articles/wechat-mini-programs/">WeChat mini-programs</a> (host owns identity+wallet; merchants own their space; scoped token, never a password) + <a href="https://en.wikipedia.org/wiki/Super_app">Gojek/Grab</a> (one onboarding, shared wallet, strong central governance of <em>payments/identity/data</em> while services innovate independently). Discovery = search + <strong>geo "Nearby" (~5 km)</strong> + recently-used tray + QR.</li>
+      <li><strong>Multi-account clients</strong> (closest UX) — <a href="https://slack.com/help/articles/212681477-Sign-in-to-Slack">Slack workspaces</a> (N independent backends, switcher rail, per-workspace identity, notifications aggregated, <em>no</em> cross-workspace identity bleed) + <a href="https://fedi.tips/using-multiple-accounts-on-mastodon-and-the-fediverse/">Mastodon multi-server</a> (corner switcher across independent instances). This is our "spaces" model.</li>
+      <li><strong>Local-commerce</strong> — <a href="https://www.fresha.com/help-center/knowledge-base/payments/110-collect-payments-using-self-checkout">Fresha</a> + <a href="https://support.booksy.com/hc/en-us/articles/20255861937682-What-s-the-difference-between-a-Shared-Location-and-a-multi-staffer-business">Booksy</a> (one consumer identity + saved card reused across independent businesses; availability/booking/waitlist). Field-service (<a href="https://help.housecallpro.com/en/articles/2046930-housecall-pro-payment-processing-options">Housecall Pro</a>) is still business-by-business — validating "the town in one app" as new ground there.</li>
+      <li><strong>Payments</strong> — <a href="https://docs.stripe.com/connect/cloning-customers-across-accounts">Stripe Connect</a> (store the instrument on the platform, charge on each connected account; each is its own merchant of record) + <a href="https://docs.stripe.com/apple-pay/merchant-tokens">Apple Pay tokenization</a> (device holds the card; each merchant's processor charges; merchant tokens are per-business). Store policy: <a href="https://developer.apple.com/app-store/review/guidelines/">Apple 3.1.3(e)</a> + <a href="https://support.google.com/googleplay/android-developer/answer/10281818?hl=en">Google Play</a> exempt physical/real-world services from IAP.</li>
+    </ul>
+
+    <!-- ============================================================ -->
+    <h2 id="sysml">11 · SysML v2 architecture substrate</h2>
+    <pre><code><span class="kw">package</span> MultiBusinessTownApp {
+
+  <span class="com">// ---- Systems ----</span>
+  <span class="kw">part def</span> TownApp;            <span class="com">// one generic binary (Arcamanus LLC)</span>
+  <span class="kw">part def</span> BusinessInstall;     <span class="com">// a single-org-per-install backend (unchanged)</span>
+  <span class="kw">part def</span> DeviceLayer;         <span class="com">// wallet + geo grant + push token (shared)</span>
+  <span class="kw">part def</span> Directory;           <span class="com">// thin registry: Nearby businesses -&gt; install URL</span>
+  <span class="kw">part def</span> IdentityBroker;      <span class="com">// optional thin scoped-token issuer</span>
+
+  <span class="com">// ---- A space = one joined business connection ----</span>
+  <span class="kw">part def</span> Space {
+    <span class="kw">attribute</span> instanceUrl : String;
+    <span class="kw">attribute</span> descriptor  : InstanceDescriptor;   <span class="com">// /.well-known/dpf-instance</span>
+    <span class="kw">attribute</span> session     : SpaceSession;         <span class="com">// per-space tokens</span>
+    <span class="kw">attribute</span> manifest    : AppConfigManifest;     <span class="com">// per-space persona/theme/caps</span>
+  }
+  <span class="kw">part</span> app : TownApp { <span class="kw">part</span> spaces : Space[0..*]; <span class="kw">part</span> device : DeviceLayer; }
+
+  <span class="com">// ---- Requirements ----</span>
+  <span class="kw">requirement def</span> R1_FederatedMemberships { doc <span class="str">/* each business is an independent install; identity/session per space, no bleed */</span> }
+  <span class="kw">requirement def</span> R2_NoServerMultitenancy  { doc <span class="str">/* single-org-per-install preserved; multi-business is client-side */</span> }
+  <span class="kw">requirement def</span> R3_PersonaPerSpace        { doc <span class="str">/* the install manifest drives customer|employee per business */</span> }
+  <span class="kw">requirement def</span> R4_DeviceCustodiedPayments { doc <span class="str">/* device holds instrument; each business charges via its own processor */</span> }
+  <span class="kw">requirement def</span> R5_OneGrantManySpaces      { doc <span class="str">/* geo + push granted once, reused; push token N-registered, payloads carry spaceId */</span> }
+  <span class="kw">requirement def</span> R6_ThinFederation          { doc <span class="str">/* directory + optional identity broker hold no business data; opt-in */</span> }
+
+  <span class="com">// ---- Allocations: obligation -> substrate ----</span>
+  <span class="kw">allocate</span> R1_FederatedMemberships to serverConfig_to_spaces, auth_store_per_space, SecureStorage_per_space;
+  <span class="kw">allocate</span> R2_NoServerMultitenancy  to BusinessInstall, storefrontId_scoping;
+  <span class="kw">allocate</span> R3_PersonaPerSpace        to appConfig_per_space, manifest_persona;
+  <span class="kw">allocate</span> R4_DeviceCustodiedPayments to DeviceLayer_wallet, Invoice_Payment_models, per_business_processor;
+  <span class="kw">allocate</span> R5_OneGrantManySpaces      to expo_location, PushDeviceRegistration_per_install, spaceId_in_payload;
+  <span class="kw">allocate</span> R6_ThinFederation          to Directory, IdentityBroker, wellknown_dpf_instance;
+
+  <span class="com">// ---- Verification ----</span>
+  <span class="kw">verification def</span> V_Spaces  { doc <span class="str">/* unit: Space[] registry add/switch/remove + per-space session routing */</span> }
+  <span class="kw">verification def</span> V_NoBleed { doc <span class="str">/* a space's tokens/manifest never resolve for another space */</span> }
+  <span class="kw">verification def</span> V_Persona { doc <span class="str">/* live: same device, two installs, two personas */</span> }
+  <span class="kw">verify</span> R1_FederatedMemberships <span class="kw">by</span> V_Spaces, V_NoBleed;
+  <span class="kw">verify</span> R3_PersonaPerSpace <span class="kw">by</span> V_Persona;
+}</code></pre>
+
+    <!-- ============================================================ -->
+    <h2 id="roadmap">12 · Roadmap (milestones)</h2>
+    <table>
+      <thead><tr><th>#</th><th>Milestone</th><th>Outcome</th><th>Depends</th></tr></thead>
+      <tbody>
+        <tr><td><strong>M1</strong></td><td>Multi-space client foundation</td><td><code>Space[]</code> registry (generalize <code>serverConfig</code> + sessions + manifests); switcher + "my town" home. <em>Direction-independent; buildable now.</em></td><td>—</td></tr>
+        <tr><td><strong>M2</strong></td><td>Per-space customer auth + customer surfaces</td><td>customer JWT auth (the found prerequisite) + waitlist / appointment / rental booking screens (customer persona)</td><td>M1</td></tr>
+        <tr><td><strong>M3</strong></td><td>Shared device layer</td><td>device wallet (Apple/Google Pay → per-business processor); geo grant reuse; push fan-out + per-space badge</td><td>M1</td></tr>
+        <tr><td><strong>M4</strong></td><td>Directory ("Nearby")</td><td>thin hosted registry + geo/search/recently-used + QR join</td><td>M1</td></tr>
+        <tr><td><strong>M5</strong></td><td>Optional identity broker</td><td>sign-in-once portable identity (passkey/OIDC scoped token)</td><td>M2, M4</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2 id="decisions">13 · Decisions for you</h2>
+    <div class="cards">
+      <div class="card"><h4>A · Identity</h4><p class="rec">Rec: per-space memberships now; broker later</p><p>Ship Slack-style per-space logins (fits single-org-per-install); add the thin identity broker (sign-in-once) only when the "one identity, many businesses" UX is worth the trust anchor.</p></div>
+      <div class="card"><h4>B · Directory host</h4><p class="rec">Rec: Arcamanus-hosted, opt-in</p><p>The registry needs a host (every super-app centralizes it). Arcamanus LLC hosting a thin, opt-in "Nearby" index is the natural fit — it holds only public descriptors, no business data.</p></div>
+      <div class="card"><h4>C · Payments</h4><p class="rec">Rec: device wallet + per-business processor</p><p>No central broker (cohesion with "conduit not broker"). Confirm each business brings its own Stripe/Square; the device holds the instrument.</p></div>
+      <div class="card"><h4>D · Scope first</h4><p class="rec">Rec: single-business UX first, multi-space-ready</p><p>You said "you don't need to" go multi-business — so M1 ships the spaces foundation but the app is fully usable with one space; the "town" lights up as businesses join.</p></div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="scope">14 · Out of scope &amp; relation to existing work</h2>
+    <ul>
+      <li><strong>No server multi-tenancy</strong> — each business stays its own install; this is the load-bearing constraint.</li>
+      <li><strong>No central money broker</strong> — payments stay conduit-not-broker; each business is its own merchant of record.</li>
+      <li><strong>Extends</strong> <code>2026-06-14-native-mobile-archetype-apps-design</code>: the install manifest, persona, theming, connectivity, field surface (PR #1915), offline (PR #1917), and push adapter (PR #1918) are the per-space building blocks. The directory was flagged optional there; here it is elevated to the federation layer. The customer surfaces (waitlist/appointment/rental) are the <code>BI-MOBAPP-CUSTOMER</code> work, now framed per-space.</li>
+    </ul>
+    <div class="callout"><strong>Verification:</strong> M1's spaces registry + per-space routing are unit-testable (mobile jest/typecheck); persona-per-space + device-layer + directory need live-install / multi-install functional checks per AGENTS §5.</div>
+  </main>
+</div>
+</body>
+</html>

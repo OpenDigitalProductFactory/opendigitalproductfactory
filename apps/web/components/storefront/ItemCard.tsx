@@ -13,6 +13,7 @@ function formatPrice(item: PublicItem): string | null {
   if (!item.priceAmount && item.priceType === "free") return "Free";
   if (!item.priceAmount && item.priceType === "quote") return "POA";
   if (!item.priceAmount && item.priceType === "donation") return "Donation";
+  if (!item.priceAmount && item.priceType === "from") return "From...";
   if (!item.priceAmount) return null;
   const prefix = PRICE_PREFIX[item.priceType ?? ""] ?? "";
   const suffix = PRICE_SUFFIX[item.priceType ?? ""] ?? "";

@@ -89,3 +89,60 @@ export interface InstanceDescriptor {
   capabilities?: string[];
   branding?: { accent?: string; logoUrl?: string };
 }
+
+/* ------------------------------------------------------------------ */
+/*  Multi-business "spaces" model                                      */
+/*                                                                     */
+/*  One generic app holds connections to MANY self-hosted businesses,  */
+/*  each its own single-org-per-install backend ("space"). This is a   */
+/*  client-side generalization — there is NO server multi-tenancy.     */
+/*  Spec: docs/superpowers/specs/2026-06-14-multi-business-town-       */
+/*  super-app-design.html (§2–§3). EP-MOBILE-ARCHETYPE / BI-MOBAPP-    */
+/*  SPACES (M1).                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Runtime session metadata for one space. The actual JWT/refresh tokens live
+ * in secure storage (per-space), keyed by spaceId; this is only the
+ * non-secret descriptive state the switcher/home render.
+ */
+export interface SpaceSession {
+  /** True once this space has a live session this launch. */
+  authenticated: boolean;
+  /** Persona authenticated to this space (customer at the salon, employee at the shop). */
+  personaKind?: AppPersonaKind;
+  /** Display name of the signed-in principal, for the switcher. */
+  displayName?: string;
+}
+
+/**
+ * One connected business in the multi-space client. The durable identity is
+ * the install's URL + descriptor; `session` and `manifest` are runtime state
+ * (the manifest is refreshed on activation, so it is not part of the persisted
+ * form). `spaceId` is the install's stable `instanceId`.
+ */
+export interface Space {
+  spaceId: string;
+  /** Normalized install base URL (no trailing slash). */
+  url: string;
+  /** Display label for the switcher/home (defaults to the org name). */
+  label: string;
+  /** Public discovery descriptor captured at connect time. */
+  descriptor: InstanceDescriptor;
+  /** Runtime session metadata (tokens stored separately, per-space). */
+  session?: SpaceSession;
+  /** Last absorbed install manifest (persona/theme/capabilities) — runtime only. */
+  manifest?: AppConfigManifest;
+  /** Epoch ms of last activation, for "recently used" ordering. */
+  lastUsedAt?: number;
+}
+
+/**
+ * The serializable registry of joined spaces plus which one is active. The
+ * persisted form strips each space's runtime `session`/`manifest`, keeping only
+ * the durable connection identity.
+ */
+export interface SpacesRegistry {
+  spaces: Space[];
+  activeSpaceId: string | null;
+}
