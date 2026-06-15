@@ -596,6 +596,7 @@ export type SelfUpgradeRunDto = {
   currentSha: string | null;    // schema: currentSha (was: fromVersion)
   targetSha: string | null;     // schema: targetSha (was: toVersion)
   deployedSha: string | null;   // schema: deployedSha (was: absent — adding for completeness)
+  reason: string | null;        // why a run was skipped (audit + operator-facing explanation)
   completionEvidence?: Prisma.JsonValue | null;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -623,6 +624,7 @@ export async function listSelfUpgradeRuns(opts?: {
       currentSha: true,
       targetSha: true,
       deployedSha: true,
+      reason: true,
       completionEvidence: true,
       startedAt: true,
       completedAt: true,

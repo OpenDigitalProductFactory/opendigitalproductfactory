@@ -571,6 +571,7 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
     expect(select.currentSha).toBe(true);
     expect(select.targetSha).toBe(true);
     expect(select.deployedSha).toBe(true);
+    expect(select.reason).toBe(true);
     expect(select.completionEvidence).toBe(true);
     expect(select.startedAt).toBe(true);
     expect(select.completedAt).toBe(true);

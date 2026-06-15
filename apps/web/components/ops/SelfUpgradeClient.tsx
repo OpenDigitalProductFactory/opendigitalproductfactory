@@ -12,6 +12,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 import type { SummaryResult } from "@/lib/self-upgrade/impact/types";
 import { StatusBadge } from "@/components/ui/report-kit";
+import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 
 type LatestRun = {
   runId: string;
@@ -20,6 +21,7 @@ type LatestRun = {
   currentSha: string | null;
   targetSha: string | null;
   deployedSha: string | null;
+  reason: string | null;
   startedAt: Date | string | null;
   completedAt: Date | string | null;
   completionEvidence?: unknown;
@@ -819,6 +821,29 @@ export default function SelfUpgradeClient({
               </div>
             </details>
           )}
+
+          {/* A skipped run persists WHY on `reason`. Without surfacing it, the
+              operator sees only a "skipped" badge with no words — the silent
+              no-op an operator should never be left guessing about. */}
+          {latestRun.status === "skipped" &&
+            (() => {
+              const explanation = describeSkipReason(latestRun.reason);
+              if (!explanation) return null;
+              return (
+                <div
+                  className="mt-1 p-2 rounded-lg bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-xs space-y-1"
+                  data-skip-reason={latestRun.reason ?? ""}
+                >
+                  <div className="font-medium text-[var(--dpf-text)]">
+                    {explanation.title} — upgrade did not run
+                  </div>
+                  <div className="text-[var(--dpf-muted)]">{explanation.detail}</div>
+                  {explanation.remedy && (
+                    <div className="text-[var(--dpf-muted)]">{explanation.remedy}</div>
+                  )}
+                </div>
+              );
+            })()}
 
           {latestRecoveryPoint && (
             <div

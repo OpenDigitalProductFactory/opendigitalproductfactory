@@ -147,6 +147,7 @@ describe("SelfUpgradePage", () => {
       currentSha: "abc123",
       targetSha: "def456",
       deployedSha: null,
+      reason: null,
       startedAt: new Date("2025-01-01"),
       completedAt: new Date("2025-01-01"),
       failureLog: null,

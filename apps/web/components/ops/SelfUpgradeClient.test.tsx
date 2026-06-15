@@ -69,6 +69,7 @@ function makeRun(status: string, overrides: Record<string, unknown> = {}) {
     currentSha: "abc1234",
     targetSha: "def5678",
     deployedSha: "def5678",
+    reason: null as string | null,
     startedAt: new Date("2026-05-20T02:00:00Z"),
     completedAt: new Date("2026-05-20T02:05:00Z"),
     completionEvidence: null,
@@ -304,6 +305,32 @@ describe("SelfUpgradeClient – skipped", () => {
     );
     // No error property on a skipped run
     expect(html).not.toContain("promoter exited");
+  });
+
+  it("explains WHY a skip happened instead of a silent badge", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("skipped", {
+          reason: "activity-in-flight: build-studio.phase.build, build-studio.phase.build",
+        })}
+      />,
+    );
+    // The persisted reason is surfaced (machine string in a data attribute) ...
+    expect(html).toContain(
+      'data-skip-reason="activity-in-flight: build-studio.phase.build, build-studio.phase.build"',
+    );
+    // ... and rendered as an operator-facing explanation + remedy.
+    expect(html).toContain("Work in progress");
+    expect(html).toContain("Build Studio build phase");
+    expect(html).toContain("Emergency override");
+  });
+
+  it("does not render a skip explanation block for a succeeded run", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("succeeded")} />,
+    );
+    expect(html).not.toContain("data-skip-reason");
   });
 });
 
