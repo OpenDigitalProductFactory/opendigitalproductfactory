@@ -76,6 +76,27 @@ type OpenAiModelsResponse = {
  * Hard gate: the endpoint must return a model list, and the requested model (if
  * any) must be present. Context is enforced only when the endpoint reports it.
  */
+/**
+ * Pick a coding-capable model when none was explicitly requested.
+ *
+ * A local OpenAI-compatible endpoint (Docker Model Runner / Ollama) commonly
+ * serves NON-chat models too — embeddings (nomic-embed, bge), rerankers, STT
+ * (whisper). Blindly taking models[0] picked `nomic-embed-text` and dispatched
+ * a build to an embedding model (it cannot follow a coding agent loop). Exclude
+ * those classes and prefer an explicit coder model, then a qwen3 family model,
+ * then any remaining chat model. Returns null only when nothing usable is served.
+ */
+export function pickDefaultCodingModel(models: string[]): string | null {
+  const NON_CHAT_RE = /embed|nomic|bge[-_]|rerank|whisper|\bstt\b|\btts\b|clip|vision-embed/i;
+  const chatModels = models.filter((m) => !NON_CHAT_RE.test(m));
+  return (
+    chatModels.find((m) => /coder|[-_]code\b|code[-_]/i.test(m)) ??
+    chatModels.find((m) => /qwen3/i.test(m)) ??
+    chatModels[0] ??
+    null
+  );
+}
+
 export async function preflightLocalEndpoint(
   portalBaseUrl: string,
   requestedModel: string,
@@ -104,7 +125,7 @@ export async function preflightLocalEndpoint(
     ? requestedModel
     : requestedModel
       ? null
-      : models[0];
+      : pickDefaultCodingModel(models);
 
   if (!resolvedModel) {
     return { ok: false, resolvedModel: null, models, contextOk: false, reason: `Requested model "${requestedModel}" is not served by the local endpoint. Available: ${models.join(", ")}.` };
@@ -310,8 +331,11 @@ export async function dispatchOpencodeTask(params: {
     );
 
     const promptB64 = Buffer.from(taskPrompt).toString("base64");
+    // Write as the `node` user — the runner script below is executed as `node`
+    // (docker exec --user node), and it `cat`s this prompt file. Writing it as
+    // root with chmod 600 makes it unreadable to node ("Permission denied").
     await execAsync(
-      `docker exec ${containerId} sh -c "echo '${promptB64}' | base64 -d > ${promptFile} && chmod 600 ${promptFile}"`,
+      `docker exec --user node ${containerId} sh -c "echo '${promptB64}' | base64 -d > ${promptFile} && chmod 600 ${promptFile}"`,
       { timeout: 5_000 },
     );
 
@@ -329,8 +353,11 @@ export async function dispatchOpencodeTask(params: {
       "cleanup",
     ].join("\n");
     const scriptB64 = Buffer.from(script).toString("base64");
+    // Write as the `node` user for the same reason — the script is executed via
+    // `docker exec --user node ... ${runnerScript}`; written as root with chmod
+    // 700 it is unreadable/unexecutable to node ("Permission denied").
     await execAsync(
-      `docker exec ${containerId} sh -c "echo '${scriptB64}' | base64 -d > ${runnerScript} && chmod 700 ${runnerScript}"`,
+      `docker exec --user node ${containerId} sh -c "echo '${scriptB64}' | base64 -d > ${runnerScript} && chmod 700 ${runnerScript}"`,
       { timeout: 5_000 },
     );
 
