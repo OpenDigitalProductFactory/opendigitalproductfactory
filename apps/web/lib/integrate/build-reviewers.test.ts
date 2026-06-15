@@ -124,6 +124,15 @@ describe("buildPlanReviewPrompt", () => {
     expect(prompt).toContain("a short, converging review beats a long one");
   });
 
+  it("exempts documentation-only changes from the test-first requirement (no test is never critical for a comment/doc task)", () => {
+    const prompt = buildPlanReviewPrompt({
+      fileStructure: [{ path: "lib/x.ts", action: "modify", purpose: "Add header comment" }],
+      tasks: [{ title: "Add header comment", testFirst: "n/a — comment only", implement: "add comment", verify: "comment present" }],
+    });
+    expect(prompt).toContain("DOCUMENTATION-ONLY changes");
+    expect(prompt).toContain("require NO test-first step");
+  });
+
   it("includes task count for reviewer context", () => {
     const prompt = buildPlanReviewPrompt({
       fileStructure: [],
