@@ -87,7 +87,7 @@ type OpenAiModelsResponse = {
  * then any remaining chat model. Returns null only when nothing usable is served.
  */
 export function pickDefaultCodingModel(models: string[]): string | null {
-  const NON_CHAT_RE = /embed|nomic|bge[-_]|rerank|whisper|\bstt\b|\btts\b|clip|vision-embed/i;
+  const NON_CHAT_RE = /embed|nomic|bge[-_]|rerank|whisper|\bstt\b|\btts\b|clip|vision-embed|minilm|gte|e5/i;
   const chatModels = models.filter((m) => !NON_CHAT_RE.test(m));
   return (
     chatModels.find((m) => /coder|[-_]code\b|code[-_]/i.test(m)) ??
