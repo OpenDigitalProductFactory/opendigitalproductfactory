@@ -18,6 +18,7 @@
  * BI-QUIESCE-002.
  */
 import { prisma } from "@dpf/db";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 
 // ─── Quiescence level — runtime state, hot-read by middleware + gates ────
 
@@ -436,6 +437,42 @@ export async function signalSwapStarting(runId: string, now: Date = new Date()):
 }
 
 /**
+ * Send a quiescence swap-complete signal with a few quick retries. This event
+ * drives the coordinator's terminal transition (completed/failed/aborted) and
+ * flips the quiescence level back to normal — losing it leaves the platform
+ * draining until the watchdog reaps the coordinator minutes later. A transient
+ * inngest.send failure (network blip, rate limit) shouldn't cost that. After the
+ * final attempt the error is rethrown so the caller's own failure handling runs.
+ */
+async function withSwapSignalRetry(
+  label: string,
+  send: () => Promise<unknown>,
+  attempts = 3,
+): Promise<void> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      await send();
+      return;
+    } catch (err) {
+      lastErr = err;
+      // printf-style positional substitution (safe-log.ts / PR #999 convention):
+      // CodeQL models `%s` args + the registered sanitizer natively, so taint is
+      // broken unambiguously — clearer than a template literal for the dataflow.
+      console.warn(
+        "[quiescence] %s attempt %d/%d failed: %s",
+        sanitizeForLog(label),
+        i + 1,
+        attempts,
+        sanitizeForLog(err instanceof Error ? err.message : String(err)),
+      );
+      if (i < attempts - 1) await sleep(500 * (i + 1));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+/**
  * Caller signals "swap succeeded" — triggers the coordinator's terminal
  * success path via Inngest event. The coordinator transitions
  * swapping → completed, flips level to normal, and emits
@@ -443,10 +480,12 @@ export async function signalSwapStarting(runId: string, now: Date = new Date()):
  */
 export async function signalSwapComplete(runId: string): Promise<void> {
   const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
-    name: "ops/quiescence.swap-complete",
-    data: { runId, outcome: "succeeded" },
-  });
+  await withSwapSignalRetry(`swap-complete(succeeded) ${runId}`, () =>
+    inngest.send({
+      name: "ops/quiescence.swap-complete",
+      data: { runId, outcome: "succeeded" },
+    }),
+  );
 }
 
 /**
@@ -460,10 +499,12 @@ export async function signalSwapComplete(runId: string): Promise<void> {
  */
 export async function failQuiescenceSwap(runId: string, reason: string): Promise<void> {
   const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
-    name: "ops/quiescence.swap-complete",
-    data: { runId, outcome: "failed", reason },
-  });
+  await withSwapSignalRetry(`swap-complete(failed) ${runId}`, () =>
+    inngest.send({
+      name: "ops/quiescence.swap-complete",
+      data: { runId, outcome: "failed", reason },
+    }),
+  );
 }
 
 /**
@@ -473,10 +514,12 @@ export async function failQuiescenceSwap(runId: string, reason: string): Promise
  */
 export async function abortQuiescence(runId: string, operatorUserId: string): Promise<void> {
   const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
-    name: "ops/quiescence.swap-complete",
-    data: { runId, outcome: "aborted", operatorUserId },
-  });
+  await withSwapSignalRetry(`swap-complete(aborted) ${runId}`, () =>
+    inngest.send({
+      name: "ops/quiescence.swap-complete",
+      data: { runId, outcome: "aborted", operatorUserId },
+    }),
+  );
 }
 
 /**
