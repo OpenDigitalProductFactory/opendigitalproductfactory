@@ -478,6 +478,11 @@ function DateStep({
       {error && (
         <div style={{ fontSize: 13, color: "var(--dpf-error)" }}>{error}</div>
       )}
+      {!loading && !error && availableDates.size === 0 && (
+        <div style={{ textAlign: "center", fontSize: 13, color: "var(--dpf-muted)", padding: "12px 0" }}>
+          No availability this month. Try the next month or check back soon.
+        </div>
+      )}
     </div>
   );
 }
