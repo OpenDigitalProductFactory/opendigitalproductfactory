@@ -4,11 +4,14 @@ import { ItemsManager } from "@/components/storefront-admin/ItemsManager";
 import { getVocabulary, getCategorySuggestions } from "@/lib/storefront/archetype-vocabulary";
 
 export default async function ItemsPage() {
-  const config = await prisma.storefrontConfig.findFirst({
-    include: {
-      archetype: { select: { archetypeId: true, category: true, ctaType: true, customVocabulary: true } },
-    },
-  });
+  const [config, orgSettings] = await Promise.all([
+    prisma.storefrontConfig.findFirst({
+      include: {
+        archetype: { select: { archetypeId: true, category: true, ctaType: true, customVocabulary: true } },
+      },
+    }),
+    prisma.orgSettings.findFirst({ select: { baseCurrency: true } }),
+  ]);
   if (!config) redirect("/storefront/setup");
 
   const items = await prisma.storefrontItem.findMany({
@@ -33,6 +36,7 @@ export default async function ItemsPage() {
       vocabulary={vocabulary}
       categorySuggestions={categorySuggestions}
       defaultCtaType={config.archetype.ctaType}
+      defaultCurrency={orgSettings?.baseCurrency ?? "USD"}
     />
   );
 }

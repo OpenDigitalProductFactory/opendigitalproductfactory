@@ -27,6 +27,7 @@ type Props = {
   vocabulary: ArchetypeVocabulary;
   categorySuggestions: string[];
   defaultCtaType: string;
+  defaultCurrency?: string;
 };
 
 const CTA_BADGES: Record<string, { color: string; label: string }> = {
@@ -36,7 +37,7 @@ const CTA_BADGES: Record<string, { color: string; label: string }> = {
   donation: { color: "#f472b6", label: "Donation" },
 };
 
-export function ItemsManager({ storefrontId, items: initial, vocabulary, categorySuggestions, defaultCtaType }: Props) {
+export function ItemsManager({ storefrontId, items: initial, vocabulary, categorySuggestions, defaultCtaType, defaultCurrency }: Props) {
   const [items, setItems] = useState(initial);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -310,6 +311,7 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
         vocabulary={vocabulary}
         categorySuggestions={categorySuggestions}
         defaultCtaType={defaultCtaType}
+        defaultPriceCurrency={defaultCurrency}
         isEditing={!!editingItem}
         editingItemId={editingItem?.id}
       />
