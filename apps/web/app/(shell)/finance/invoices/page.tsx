@@ -1,6 +1,5 @@
 // apps/web/app/(shell)/finance/invoices/page.tsx
 import { prisma } from "@dpf/db";
-import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
@@ -33,7 +32,7 @@ export default async function InvoicesPage({ searchParams }: Props) {
   const { status, view: viewParam } = await searchParams;
   const view = parseSurfaceView(viewParam);
 
-  const [invoices, statusCounts, orgSettings] = await Promise.all([
+  const [invoices, statusCounts] = await Promise.all([
     prisma.invoice.findMany({
       ...(status ? { where: { status } } : {}),
       orderBy: { createdAt: "desc" },
@@ -42,6 +41,7 @@ export default async function InvoicesPage({ searchParams }: Props) {
         invoiceRef: true,
         status: true,
         totalAmount: true,
+        currency: true,
         dueDate: true,
         account: { select: { name: true } },
       },
@@ -50,9 +50,7 @@ export default async function InvoicesPage({ searchParams }: Props) {
       by: ["status"],
       _count: true,
     }),
-    getOrgSettings(),
   ]);
-  const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
   const countByStatus = Object.fromEntries(
     statusCounts.map((s) => [s.status, s._count])
@@ -192,7 +190,7 @@ export default async function InvoicesPage({ searchParams }: Props) {
                       <LocalTime value={inv.dueDate} utc />
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      {sym}{formatMoney(Number(inv.totalAmount))}
+                      {getCurrencySymbol(inv.currency)}{formatMoney(Number(inv.totalAmount))}
                     </td>
                   </tr>
                 );
