@@ -38,6 +38,11 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
+const inngestSendMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/queue/inngest-client", () => ({
+  inngest: { send: (...args: unknown[]) => inngestSendMock(...args) },
+}));
+
 import {
   captureActiveSessionBlockers,
   escalateQuiescenceToForced,
@@ -52,6 +57,7 @@ import {
   QuiescingError,
   QUIESCENCE_RUN_STATUSES,
   reconcileTerminalBuildPhaseRuns,
+  signalSwapComplete,
   TERMINAL_QUIESCENCE_STATUSES,
   type ActiveSessionBlockers,
   type SurfaceBlocker,
@@ -403,5 +409,40 @@ describe("QuiescingError", () => {
 
   it("is an Error instance (catches via instanceof Error)", () => {
     expect(new QuiescingError("draining")).toBeInstanceOf(Error);
+  });
+});
+
+describe("signalSwapComplete — swap-signal retry", () => {
+  it("retries the swap-complete event on a transient inngest.send failure", async () => {
+    vi.useFakeTimers();
+    try {
+      inngestSendMock
+        .mockRejectedValueOnce(new Error("blip"))
+        .mockResolvedValueOnce(undefined);
+      const p = signalSwapComplete("QR-1");
+      await vi.advanceTimersByTimeAsync(500); // let the backoff elapse
+      await p;
+      expect(inngestSendMock).toHaveBeenCalledTimes(2);
+      expect(inngestSendMock).toHaveBeenLastCalledWith({
+        name: "ops/quiescence.swap-complete",
+        data: { runId: "QR-1", outcome: "succeeded" },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rethrows after exhausting retries so the caller's failure handling runs", async () => {
+    vi.useFakeTimers();
+    try {
+      inngestSendMock.mockRejectedValue(new Error("inngest down"));
+      const p = signalSwapComplete("QR-1");
+      const assertion = expect(p).rejects.toThrow("inngest down");
+      await vi.advanceTimersByTimeAsync(1500); // both backoffs (500 + 1000)
+      await assertion;
+      expect(inngestSendMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
