@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
+import {
+  upsertHealthAlertIssue,
+  resolveHealthAlertIssue,
+  healthAlertIssueKey,
+} from "@/lib/observability/health-alert-issue";
 
-// Grafana webhook alert receiver.
-// Creates/resolves PortfolioQualityIssue records from Prometheus alerts.
+// Grafana / Alertmanager webhook alert receiver.
+// Creates/resolves PortfolioQualityIssue records from pushed alerts. Shares the
+// writer (lib/observability/health-alert-issue) with the alert-delivery-bridge
+// poll path so push and poll produce identical rows. Note: there is no
+// Alertmanager in the default stack today, so the active delivery path is the
+// poll bridge — this endpoint remains a valid receiver if one is ever added.
 
 type GrafanaAlert = {
   labels: Record<string, string>;
@@ -29,46 +38,18 @@ export async function POST(req: NextRequest) {
 
   const alerts = body.alerts ?? [];
 
+  // `prisma as never` at the db-handle boundary matches the established pattern
+  // for passing the full client to a narrow injectable handle (see
+  // discovery-runner.ts); the writer body stays type-checked against HealthAlertDb.
   for (const alert of alerts) {
-    const alertName = alert.labels?.alertname ?? "unknown";
-    const issueKey = `health-alert-${alertName}`;
-    const severity = alert.labels?.severity === "critical" ? "error" : "warn";
-    const summary = alert.annotations?.summary ?? alertName;
-    const description = alert.annotations?.description ?? "";
-
     if (alert.status === "firing") {
-      // Upsert: create if new, update lastDetectedAt if existing
-      await prisma.portfolioQualityIssue.upsert({
-        where: { issueKey },
-        create: {
-          issueKey,
-          issueType: "health_alert",
-          severity,
-          summary,
-          details: { alertName, description, labels: alert.labels },
-          status: "open",
-          firstDetectedAt: alert.startsAt ? new Date(alert.startsAt) : new Date(),
-          lastDetectedAt: new Date(),
-        },
-        update: {
-          severity,
-          summary,
-          details: { alertName, description, labels: alert.labels },
-          status: "open",
-          lastDetectedAt: new Date(),
-          resolvedAt: null,
-        },
+      await upsertHealthAlertIssue(prisma as never, {
+        labels: alert.labels ?? {},
+        annotations: alert.annotations ?? {},
+        startsAt: alert.startsAt,
       });
     } else if (alert.status === "resolved") {
-      // Auto-resolve
-      await prisma.portfolioQualityIssue.updateMany({
-        where: { issueKey, status: "open" },
-        data: {
-          status: "resolved",
-          resolvedAt: new Date(),
-          lastDetectedAt: new Date(),
-        },
-      });
+      await resolveHealthAlertIssue(prisma as never, healthAlertIssueKey(alert.labels ?? {}));
     }
   }
 
