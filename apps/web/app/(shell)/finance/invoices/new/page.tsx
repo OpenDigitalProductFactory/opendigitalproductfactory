@@ -8,7 +8,7 @@ import { defaultSignatureRequiredForArchetype } from "@/lib/finance/invoice-sign
 export default async function NewInvoicePage() {
   // Default the TAX % field from the org's wizard VAT selection, not a 20% hardcode
   // (shared with the recurring-schedule form via getInvoiceDefaultTaxRate).
-  const [customers, storefront, defaultTaxRate] = await Promise.all([
+  const [customers, storefront, defaultTaxRate, orgSettings] = await Promise.all([
     prisma.customerAccount.findMany({
       where: {
         status: { in: ["active", "prospect", "qualified", "onboarding"] },
@@ -25,6 +25,7 @@ export default async function NewInvoicePage() {
       select: { archetype: { select: { archetypeId: true } } },
     }),
     getInvoiceDefaultTaxRate(),
+    prisma.orgSettings.findFirst({ select: { baseCurrency: true } }),
   ]);
 
   // Default "require signature" on for regulated archetypes (legal/accounting).
@@ -65,6 +66,7 @@ export default async function NewInvoicePage() {
         customers={customers}
         defaultTaxRate={defaultTaxRate}
         defaultSignatureRequired={defaultSignatureRequired}
+        defaultCurrency={orgSettings?.baseCurrency ?? "USD"}
       />
     </div>
   );
