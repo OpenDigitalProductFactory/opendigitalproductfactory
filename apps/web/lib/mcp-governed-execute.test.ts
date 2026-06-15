@@ -374,3 +374,57 @@ describe("governedExecuteTool — resilience", () => {
     expect(auditRows[0]?.success).toBe(false);
   });
 });
+
+// BI-16A80690: some MCP clients serialize array/object tool args as JSON
+// strings on the wire. governedExecuteTool is the single funnel for all MCP
+// wire transports, so it re-hydrates those strings (schema-driven) before the
+// tool switch sees them. These tests use the REAL principle_decide schema from
+// PLATFORM_TOOLS (resolved by findTool) and assert via the executeTool spy that
+// the handler receives native values — locking BOTH the JSON-string and the
+// already-structured shapes.
+describe("governedExecuteTool — JSON-string arg coercion (BI-16A80690)", () => {
+  const STRUCTURED_OPTIONS = [
+    { id: "a", description: "Option A" },
+    { id: "b", description: "Option B" },
+  ];
+
+  it("re-hydrates principle_decide options sent as a JSON string before dispatch", async () => {
+    await governedExecuteTool({
+      toolName: "principle_decide",
+      rawParams: {
+        context: "ship now vs. wait",
+        callingPopulation: "external_coding_agent",
+        options: JSON.stringify(STRUCTURED_OPTIONS), // <-- stringified by client
+      },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      source: "external-jsonrpc",
+    });
+
+    expect(executeMock).toHaveBeenCalledOnce();
+    const dispatchedParams = executeMock.mock.calls[0]![1];
+    // Pre-fix this arrived as a string -> Array.isArray() false -> "Empty options".
+    expect(Array.isArray(dispatchedParams.options)).toBe(true);
+    expect(dispatchedParams.options).toEqual(STRUCTURED_OPTIONS);
+    expect(dispatchedParams.callingPopulation).toBe("external_coding_agent");
+  });
+
+  it("passes already-structured principle_decide args through unchanged", async () => {
+    await governedExecuteTool({
+      toolName: "principle_decide",
+      rawParams: {
+        context: "ship now vs. wait",
+        callingPopulation: "human",
+        options: STRUCTURED_OPTIONS, // <-- native array
+      },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      source: "external-jsonrpc",
+    });
+
+    expect(executeMock).toHaveBeenCalledOnce();
+    const dispatchedParams = executeMock.mock.calls[0]![1];
+    expect(dispatchedParams.options).toEqual(STRUCTURED_OPTIONS);
+    expect(dispatchedParams.callingPopulation).toBe("human");
+  });
+});
