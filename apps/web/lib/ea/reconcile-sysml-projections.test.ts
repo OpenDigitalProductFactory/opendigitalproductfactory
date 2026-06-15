@@ -19,9 +19,11 @@ describe("reconcileSysmlProjections", () => {
     expect(r.valueStreams.status).toBe("skipped");
     expect(r.routes.status).toBe("skipped");
     expect(r.codeStructure.status).toBe("skipped");
-    // mcp + coworker + routes are notation-backed; value-streams checks the reference
-    // model first; code-structure checks graph freshness first.
-    expect(db.eaNotation.findUnique).toHaveBeenCalledTimes(3);
+    expect(r.processModels.status).toBe("skipped");
+    // mcp + coworker + routes (sysml2) + process (bpmn20) are notation-backed;
+    // value-streams checks the reference model first; code-structure checks graph
+    // freshness first.
+    expect(db.eaNotation.findUnique).toHaveBeenCalledTimes(4);
     expect(db.eaReferenceModel.findUnique).toHaveBeenCalledTimes(1);
     expect(getFreshness).toHaveBeenCalledTimes(1);
   });
