@@ -5,7 +5,7 @@ status: published
 abstract: Recurring config or data regressions mean the seed wasn't patched. Fix the source, then add an invariant guard.
 principleTier: core
 principleDirection: Patch the seed/template/setup script that produces the wrong state, not the runtime that observes it.
-principleDimensionVector: {"long_term_maintainability": 0.7, "schema_grounding": 0.5, "blast_radius": 0.4}
+principleDimensionVector: {"long_term_maintainability": 0.7, "schema_grounding": 0.5, "blast_radius": -0.4}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -42,7 +42,7 @@ When a bug report describes "X keeps being wrong," ask: where does X get its ini
 
 - `long_term_maintainability: 0.7` — seed-level fixes don't recur; runtime-only fixes recur on every fresh install.
 - `schema_grounding: 0.5` — the seed IS the canonical config schema; patching it keeps the schema aligned.
-- `blast_radius: 0.4` — patching once at the seed propagates to every install; patching the runtime once propagates to nothing.
+- `blast_radius: -0.4` — fixing the root shrinks the blast radius of recurrence: a seed-level fix stops the defect being reborn on every fresh install, whereas a runtime-only patch leaves the seed free to regenerate it indefinitely.
 
 ## Examples
 

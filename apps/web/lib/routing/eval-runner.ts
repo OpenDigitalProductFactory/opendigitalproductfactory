@@ -5,6 +5,7 @@
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
 import { callProvider, InferenceError } from "@/lib/ai-inference";
+import { providerHasConfiguredCredential } from "@/lib/inference/ai-provider-internals";
 import type { BuiltinDimension } from "./types";
 import { BUILTIN_DIMENSIONS } from "./types";
 import { getTestsForDimension, type GoldenTest, type ScoringMethod } from "./golden-tests";
@@ -49,6 +50,48 @@ const INFRASTRUCTURE_ERROR_PATTERNS: RegExp[] = [
  */
 export function errorLooksLikeInfrastructure(error: string | null): boolean {
   return error !== null && INFRASTRUCTURE_ERROR_PATTERNS.some((re) => re.test(error));
+}
+
+// ── Config-gap Error Classifier ────────────────────────────────────────────
+//
+// Credential / setup gaps: the provider is selectable but not actually usable
+// (no API key, a key that no longer decrypts, OAuth never connected). Like
+// infrastructure errors, these describe a FIXABLE setup problem, not a
+// model-quality failure — so the auto-retire circuit breaker must NOT retire
+// the model for them. Retiring on "No credential configured" was a real bug:
+// the operator adds the key later and finds every model stranded as "retired".
+// The eval scheduler also pre-filters these providers out entirely (see
+// runAllDimensionEvals) so this classifier is the second line of defence.
+const CONFIG_ERROR_PATTERNS: RegExp[] = [
+  /No credential configured/i,
+  /No credential for/i,
+  /failed to decrypt/i,
+  /re-configure this provider/i,
+  /requires an API key/i,
+  /not connected/i,
+];
+
+/**
+ * Classify an eval error string as a provider config/credential gap.
+ * Returns true for fixable setup problems (missing/rotated key, OAuth not
+ * connected) — in which case the model must NOT be auto-retired. Returns false
+ * for null/unknown errors so they fall through to existing behaviour.
+ */
+export function errorLooksLikeConfigGap(error: string | null): boolean {
+  return error !== null && CONFIG_ERROR_PATTERNS.some((re) => re.test(error));
+}
+
+/**
+ * Whole-endpoint failure: an error that will recur identically on EVERY test of
+ * this endpoint because it describes the endpoint/setup, not the model output —
+ * infrastructure (timeout / network / runner down) OR a config gap (missing or
+ * rotated key, OAuth not connected). When the first probe matches, the eval
+ * cycle short-circuits the remaining tests and dimensions: re-running them only
+ * reproduces the same failure, burning wall-clock and flooding the logs.
+ * Neither cause retires the model — both are fixable without touching it.
+ */
+export function errorEndsEvalCycle(error: string | null): boolean {
+  return errorLooksLikeInfrastructure(error) || errorLooksLikeConfigGap(error);
 }
 
 // ── Score Computation ────────────────────────────────────────────────────────
@@ -218,6 +261,7 @@ async function evalDimension(
   const tests = getTestsForDimension(dimension);
   const testResults: TestResult[] = [];
 
+  let endpointAborted = false;
   for (let i = 0; i < tests.length; i++) {
     if (i > 0) {
       // 500 ms between tests to avoid triggering burst rate limits
@@ -225,11 +269,26 @@ async function evalDimension(
     }
     const result = await runGoldenTest(endpointId, modelId, tests[i]!);
     testResults.push(result);
+
+    // Whole-endpoint short-circuit: once a probe fails for an endpoint/setup
+    // reason — infrastructure (timeout, network, runner down) OR a config gap
+    // (missing/rotated key) — every remaining test in this dimension fails
+    // identically. Each can burn up to 60s plus a log line. Stop now; the
+    // dimension is inconclusive regardless. Turns ~30 duplicate error lines
+    // (and minutes of wasted wall-clock) into one.
+    if (errorEndsEvalCycle(result.error ?? null)) {
+      console.warn(
+        `[eval-runner] ${endpointId}/${modelId}: endpoint/setup error on ${dimension} — skipping remaining tests this cycle: ${result.error}`,
+      );
+      endpointAborted = true;
+      break;
+    }
   }
 
-  // Check if inconclusive (>50% errors)
+  // Inconclusive when we aborted early on an endpoint/setup failure, or when
+  // >50% of the tests that ran errored. Either way scores are preserved.
   const errorCount = testResults.filter((r) => r.error).length;
-  const inconclusive = errorCount > tests.length / 2;
+  const inconclusive = endpointAborted || errorCount > tests.length / 2;
 
   if (inconclusive) {
     return {
@@ -332,6 +391,23 @@ export async function runDimensionEval(
     const previousScore = (modelProfile as Record<string, unknown>)[dbField] as number ?? 50;
     const result = await evalDimension(providerId, modelId, dim, previousScore, currentEvalCount);
     dimensions.push(result);
+
+    // Per-model short-circuit: if this dimension was abandoned for an
+    // endpoint/setup reason (infrastructure OR config gap — e.g. a rotated key
+    // that passed the existence pre-filter but fails at call time), the
+    // remaining dimensions fail identically. Stop rather than burn another ~7
+    // dimensions × up-to-60s timeouts. Skipped dimensions keep their previous
+    // scores (they were never re-scored), and the all-inconclusive verdict below
+    // still correctly avoids retiring the model.
+    const endpointUnusable =
+      result.inconclusive &&
+      result.testResults.some((t) => errorEndsEvalCycle(t.error ?? null));
+    if (endpointUnusable) {
+      console.warn(
+        `[eval-runner] ${providerId}/${modelId}: endpoint unusable this cycle — skipping remaining dimensions`,
+      );
+      break;
+    }
   }
 
   // Update ModelProfile with new scores (skip inconclusive dimensions)
@@ -409,8 +485,9 @@ export async function runDimensionEval(
   // classifier is the only behavior change here that's worth a focused
   // test, and keeping it pure makes that test trivial.
   const looksLikeInfrastructure = errorLooksLikeInfrastructure(firstError);
+  const looksLikeConfigGap = errorLooksLikeConfigGap(firstError);
 
-  if (allInconclusive && firstError && !looksLikeInfrastructure) {
+  if (allInconclusive && firstError && !looksLikeInfrastructure && !looksLikeConfigGap) {
     await prisma.modelProfile.update({
       where: { providerId_modelId: { providerId, modelId } },
       data: {
@@ -420,9 +497,9 @@ export async function runDimensionEval(
       },
     });
     console.log(`[eval-runner] Auto-retired ${providerId}/${modelId}: all tests failed — ${firstError.slice(0, 100)}`);
-  } else if (allInconclusive && looksLikeInfrastructure) {
+  } else if (allInconclusive && (looksLikeInfrastructure || looksLikeConfigGap)) {
     console.warn(
-      `[eval-runner] All dimensions inconclusive for ${providerId}/${modelId} but error looks like infrastructure — NOT retiring. Error: ${firstError?.slice(0, 200)}`,
+      `[eval-runner] All dimensions inconclusive for ${providerId}/${modelId} but error looks like ${looksLikeConfigGap ? "a config gap" : "infrastructure"} — NOT retiring. Error: ${firstError?.slice(0, 200)}`,
     );
   }
 
@@ -451,11 +528,39 @@ export async function runAllDimensionEvals(triggeredBy: string): Promise<EvalRun
         NOT: { authMethod: "oauth2_authorization_code" },
       },
     },
-    select: { providerId: true, modelId: true },
+    select: {
+      providerId: true,
+      modelId: true,
+      provider: { select: { authMethod: true } },
+    },
   });
 
-  const results: EvalRunResult[] = [];
+  // Pre-filter providers with no usable credential. Calling them is guaranteed
+  // to fail with "No credential configured" — which floods the logs (one error
+  // per golden test) and used to wrongly auto-retire otherwise-fine models for
+  // a setup gap. Skip with ONE log line per provider instead. Credential
+  // presence is cached so a multi-model provider is only checked once.
+  const credentialOk = new Map<string, boolean>();
+  const eligible: typeof models = [];
   for (const m of models) {
+    let ok = credentialOk.get(m.providerId);
+    if (ok === undefined) {
+      ok = await providerHasConfiguredCredential(
+        m.providerId,
+        m.provider?.authMethod ?? null,
+      );
+      credentialOk.set(m.providerId, ok);
+      if (!ok) {
+        console.log(
+          `[eval-runner] Skipping ${m.providerId}: no credential configured — not scheduling evals until the provider is set up`,
+        );
+      }
+    }
+    if (ok) eligible.push(m);
+  }
+
+  const results: EvalRunResult[] = [];
+  for (const m of eligible) {
     try {
       const result = await runDimensionEval(m.providerId, m.modelId, triggeredBy);
       results.push(result);

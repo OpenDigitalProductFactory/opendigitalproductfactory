@@ -11,6 +11,7 @@ packages/db/generated/
 .playwright-mcp/
 .playwright-cli/
 .pnpm-store/
+.claude/settings.local.json
 docker-compose.override.yml
 # Host-side platform-managed backup dumps (root-anchored so the pattern
 # does NOT match source-tree directories like apps/web/lib/operate/backups/

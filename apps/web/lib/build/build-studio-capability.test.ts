@@ -103,7 +103,7 @@ describe("deriveBuildStudioCapability", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("REJECTS even strong-tier local models — Build Studio requires a remote provider regardless of local model strength (operator directive 2026-05-23)", () => {
+  it("REJECTS strong-tier local models when opencode is NOT available — the original robustness safeguard still holds (default localBuildEngineAvailable=false)", () => {
     const result = deriveBuildStudioCapability([
       model({
         providerId: "local",
@@ -116,6 +116,43 @@ describe("deriveBuildStudioCapability", () => {
     if (!result.ok) {
       expect(result.reason).toBe("only_local_provider_active");
     }
+  });
+
+  it("ACCEPTS a strong-tier local model when opencode IS available — even with API supportsToolUse=false (opencode supplies the tool loop) (operator decision 2026-06-15)", () => {
+    const result = deriveBuildStudioCapability(
+      [
+        model({
+          providerId: "local",
+          providerName: "Docker Model Runner (local)",
+          modelId: "docker.io/ai/qwen3-coder:latest",
+          supportsToolUse: false, // local chat model API flag — opencode handles tools
+          maxInputTokens: null, // 32K configured; null = assumed sufficient
+        }),
+      ],
+      [],
+      true, // localBuildEngineAvailable — opencode present/baked-in
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.satisfyingProviderNames).toContain("Docker Model Runner (local)");
+    }
+  });
+
+  it("REJECTS an adequate-tier local model even with opencode available — tier floor still applies", () => {
+    const result = deriveBuildStudioCapability(
+      [
+        model({
+          providerId: "local",
+          providerName: "Docker Model Runner (local)",
+          modelId: "docker.io/ai/gemma4:latest", // adequate tier
+          supportsToolUse: false,
+          maxInputTokens: null,
+        }),
+      ],
+      [],
+      true,
+    );
+    expect(result.ok).toBe(false);
   });
 
   it("REJECTS docker.io-prefixed local model IDs (real shape from Docker Model Runner)", () => {

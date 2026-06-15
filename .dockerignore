@@ -1,5 +1,10 @@
 node_modules
 **/node_modules
+# Prisma client + other generated artifacts are rebuilt in the image
+# (Dockerfile runs `prisma generate`). Excluding them keeps the build context
+# clean — in a dev worktree these are symlinks/junctions to the root clone
+# (the test "junction trick") that otherwise leak in and break `COPY packages/`.
+**/generated
 .next
 **/.next
 apps/web/.next

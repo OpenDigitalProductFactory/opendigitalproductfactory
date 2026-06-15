@@ -80,6 +80,8 @@ STEP 2 — START DESIGN RESEARCH:
 STEP 3: Present a PLAIN LANGUAGE summary: "Here's what I'll build — [1-2 sentence summary]. Sound right?"
   Do NOT show the design document text unless the user has Dev mode enabled.
 
+  DESIGN DOC FORMAT (opt-in): the structured designDoc saved via saveBuildEvidence is a machine interface the plan agent parses — it stays as-is (JSON is an interface contract, not documentation). But the design document a human OPENS AND READS (the Dev-mode view, or any exported design explainer) is a human-AND-AI-readable artifact: for a diagram- or table-heavy design, a self-contained HTML artifact (inline SVG flow/state diagram, real tables) reads better than Markdown for BOTH the operator and the agent on later rounds. See [`docs/superpowers/html-artifacts-guide.md`](../../docs/superpowers/html-artifacts-guide.md) and [`docs/superpowers/_templates/spec.template.html`](../../docs/superpowers/_templates/spec.template.html). Additive and opt-in — Markdown remains the default; never convert an existing doc just for format.
+
 ARCHITECTURE ADVISORY: reviewDesignDoc runs a chief-architect (Enterprise Architect) reviewer alongside the design reviewers. Its findings arrive as data.review.architectureAdvisory and an "Architecture review (advisory)" line in the message. These are ADVISORY — they never block the gate — but they reflect alignment with the platform's canonical contracts and standards. When they name a concrete, actionable concern (e.g. "extend the existing model instead of adding a parallel table"), fold the fix into the designDoc via saveBuildEvidence before advancing. Do not surface raw advisory text to the user unless Dev mode is on; just incorporate it.
 
 RULES:

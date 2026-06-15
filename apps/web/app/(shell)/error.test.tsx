@@ -41,9 +41,13 @@ describe("ShellError", () => {
     expect(feedback).toHaveAttribute("rows", "4");
   });
 
-  // BI-B4F401B3: the AI-client diagnostic prompt is the headline behavior.
-  it("renders a copy-paste AI diagnostic prompt with route, digest, and investigation steps", () => {
+  // BI-B4F401B3: the AI-client diagnostic prompt is collapsed behind a disclosure
+  // so the primary CTA (description + escalation) is first for non-technical users.
+  it("renders a copy-paste AI diagnostic prompt with route, digest, and investigation steps after expanding the diagnostic section", () => {
     render(<ShellError error={crashError("digest-xyz-123")} reset={() => undefined} />);
+
+    // The developer diagnostic section is collapsed by default; expand it first.
+    fireEvent.click(screen.getByRole("button", { name: /Developer diagnostic/ }));
 
     const prompt = screen.getByText(/You are debugging a production crash/);
     expect(prompt.textContent).toContain("Route: /portal/build");
@@ -59,6 +63,9 @@ describe("ShellError", () => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
 
     render(<ShellError error={crashError("digest-xyz-123")} reset={() => undefined} />);
+
+    // Expand the developer diagnostic section before looking for the copy button.
+    fireEvent.click(screen.getByRole("button", { name: /Developer diagnostic/ }));
 
     // Button carries the descriptive aria-label and enables once the auto-report resolves.
     const btn = await screen.findByRole("button", { name: "Copy AI diagnostic prompt to clipboard" });

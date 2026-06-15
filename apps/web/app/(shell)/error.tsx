@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { UpstreamEscalation } from "@/components/feedback/UpstreamEscalation";
 
 export default function ShellError({
   error,
@@ -21,6 +22,7 @@ export default function ShellError({
   const [autoReportId, setAutoReportId] = useState<string | null>(null);
   const [prepared, setPrepared] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
+  const [showDiagnostic, setShowDiagnostic] = useState(false);
   // Stamp the crash time once, on mount, so the prompt is stable across renders.
   const [crashTime] = useState(() => new Date().toISOString());
 
@@ -154,6 +156,10 @@ export default function ShellError({
     setSubmitted(true);
   }
 
+  // The report to surface in the escalation button — prefer the user's manual
+  // submission (has their description); fall back to the auto-filed crash report.
+  const escalationReportId = reportId ?? autoReportId;
+
   return (
     <div className="flex min-h-[60vh] items-center justify-center px-4 py-10">
       <div className="w-full max-w-[34rem] rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6 text-center shadow-sm sm:p-8">
@@ -181,41 +187,53 @@ export default function ShellError({
           </div>
         </dl>
 
-        {/* BI-B4F401B3: hand the operator a copy-paste prompt for their AI client
-            instead of relying on an LLM to guess the cause from a sanitized message. */}
+        {/* BI-B4F401B3: diagnostic prompt — collapsed by default so the primary
+            CTA (add context + report to team) is the first thing a non-technical
+            user sees. Developers can expand to get the AI-ready prompt. */}
         <div className="mb-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-left">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="text-xs font-medium text-[var(--dpf-text)]">
-              Resolve faster with your AI assistant
-            </span>
-            <button
-              type="button"
-              onClick={copyPrompt}
-              disabled={!prepared}
-              aria-disabled={!prepared}
-              aria-label={
-                prepared
-                  ? "Copy AI diagnostic prompt to clipboard"
-                  : "Preparing diagnostic prompt, please wait"
-              }
-              className="shrink-0 rounded-md border border-[var(--dpf-accent)] px-3 py-1 text-xs font-medium text-[var(--dpf-accent)] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dpf-accent)]"
-            >
-              {!prepared ? "Preparing…" : promptCopied ? "Copied!" : "Copy diagnostic prompt"}
-            </button>
-          </div>
-          <p className="mb-2 text-xs leading-5 text-[var(--dpf-muted)]">
-            Paste this into Claude, Codex, or Grok — it can read the server logs and fix the real error.
-          </p>
-          <pre
-            tabIndex={0}
-            className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 font-mono text-[11px] leading-5 text-[var(--dpf-text)]"
+          <button
+            type="button"
+            onClick={() => setShowDiagnostic((v) => !v)}
+            className="flex w-full items-center justify-between text-xs font-medium text-[var(--dpf-text)]"
+            aria-expanded={showDiagnostic}
           >
-            {diagnosticPrompt}
-          </pre>
-          {/* Screen-reader confirmation without a visual-only color flash. */}
-          <span role="status" aria-live="polite" className="sr-only">
-            {promptCopied ? "Diagnostic prompt copied to clipboard" : ""}
-          </span>
+            <span>Developer diagnostic</span>
+            <span aria-hidden="true" className="text-[var(--dpf-muted)]">
+              {showDiagnostic ? "▲" : "▼"}
+            </span>
+          </button>
+          {showDiagnostic && (
+            <div className="mt-2">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs leading-5 text-[var(--dpf-muted)]">
+                  Paste this into Claude, Codex, or Grok — it can read the server logs and fix the real error.
+                </p>
+                <button
+                  type="button"
+                  onClick={copyPrompt}
+                  disabled={!prepared}
+                  aria-disabled={!prepared}
+                  aria-label={
+                    prepared
+                      ? "Copy AI diagnostic prompt to clipboard"
+                      : "Preparing diagnostic prompt, please wait"
+                  }
+                  className="shrink-0 rounded-md border border-[var(--dpf-accent)] px-3 py-1 text-xs font-medium text-[var(--dpf-accent)] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dpf-accent)]"
+                >
+                  {!prepared ? "Preparing…" : promptCopied ? "Copied!" : "Copy prompt"}
+                </button>
+              </div>
+              <pre
+                tabIndex={0}
+                className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 font-mono text-[11px] leading-5 text-[var(--dpf-text)]"
+              >
+                {diagnosticPrompt}
+              </pre>
+              <span role="status" aria-live="polite" className="sr-only">
+                {promptCopied ? "Diagnostic prompt copied to clipboard" : ""}
+              </span>
+            </div>
+          )}
         </div>
 
         {!submitted ? (
@@ -247,12 +265,23 @@ export default function ShellError({
                 Try again
               </button>
             </div>
+            {/* Surface the escalation path even before the user submits their
+                description — the auto-report is already filed and the non-technical
+                user should be able to route it to GitHub immediately. */}
+            {autoReportId && !submitted && (
+              <div className="pt-1">
+                <UpstreamEscalation reportId={autoReportId} />
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-sm text-[var(--dpf-muted)]">
             {reportId
               ? `Thanks! Report ${reportId} filed.`
               : "Thanks for the feedback."}
+            {escalationReportId && (
+              <UpstreamEscalation reportId={escalationReportId} />
+            )}
             <button
               type="button"
               onClick={reset}

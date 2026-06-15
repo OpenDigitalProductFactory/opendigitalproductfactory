@@ -1,0 +1,383 @@
+// EP-DATA-RETENTION — Declarative data-retention policy registry.
+//
+// Spec: docs/superpowers/specs/2026-06-14-data-retention-lifecycle-governance-design.md
+//
+// This file is the SINGLE SOURCE OF TRUTH for what the platform purges and what
+// it must retain. It is code, not seed data, on purpose (kernel:
+// single-source-of-truth + fix-the-seed-not-the-runtime): the registry that
+// DEFINES a policy is the same artifact the engine ENFORCES, so the two can
+// never drift. Per-org tuning happens through industry floors
+// (industry-floors.ts) and the operator kill switch (ScheduledJob.enabled),
+// not by editing rows that could disagree with this code.
+//
+// Two closed axes:
+//   • PURGE_POLICIES   — accumulating operational / telemetry / log / chat
+//                        datasets that are safe to delete past a retention
+//                        window.
+//   • RETAINED_DATASETS — regulated records the platform must NOT auto-purge
+//                        (financial, tax, compliance, licensing, HR, consent).
+//                        Listed explicitly so the guard test
+//                        (retention.test.ts) fails the build if any regulated
+//                        model is ever enrolled for deletion.
+
+import {
+  DAYS_90,
+  DAYS_180,
+  DAYS_365,
+  DAYS_545,
+} from "./constants";
+
+/** Closed set of retention categories. Industry floors key off these, so the
+ *  union is shared with industry-floors.ts. Add a value here before using it. */
+export type RetentionCategory =
+  | "ai-telemetry"
+  | "audit-log"
+  | "security-audit"
+  | "routing-log"
+  | "build-log"
+  | "coworker-chat"
+  | "coworker-metrics"
+  | "skill-telemetry"
+  | "knowledge-audit"
+  | "eval-history"
+  | "inbox"
+  | "self-upgrade-log"
+  | "coordination-log";
+
+export const RETENTION_CATEGORIES: readonly RetentionCategory[] = [
+  "ai-telemetry",
+  "audit-log",
+  "security-audit",
+  "routing-log",
+  "build-log",
+  "coworker-chat",
+  "coworker-metrics",
+  "skill-telemetry",
+  "knowledge-audit",
+  "eval-history",
+  "inbox",
+  "self-upgrade-log",
+  "coordination-log",
+] as const;
+
+/** Minimal structural view of a Prisma model delegate the engine needs. Keeping
+ *  it structural (rather than importing PrismaClient) decouples the engine and
+ *  makes it trivially testable with an in-memory fake. */
+export interface RetentionModelDelegate {
+  findMany(args: {
+    where: Record<string, unknown>;
+    select: { id: true };
+    take: number;
+  }): Promise<Array<{ id: string }>>;
+  deleteMany(args: { where: Record<string, unknown> }): Promise<{ count: number }>;
+  count(args: { where: Record<string, unknown> }): Promise<number>;
+}
+
+/** Structural Prisma surface the engine + custom handlers rely on. */
+export type RetentionPrismaClient = Record<string, RetentionModelDelegate> & {
+  $transaction(operations: unknown[]): Promise<unknown[]>;
+};
+
+/** Custom purge handler for models whose children RESTRICT a plain delete (e.g.
+ *  AgentThread, whose AgentActionProposal children block a naive deleteMany).
+ *  Returns rows (or parent records) removed. */
+export type RetentionCustomPurge = (args: {
+  prisma: RetentionPrismaClient;
+  cutoff: Date;
+  batchSize: number;
+  cap: number;
+}) => Promise<{ deleted: number; capped: boolean }>;
+
+export interface PurgePolicy {
+  /** Prisma model accessor on PrismaClient, e.g. "toolExecution". */
+  model: string;
+  /** Human label for reports + the admin surface. */
+  label: string;
+  category: RetentionCategory;
+  /** Timestamp column the cutoff is applied to (varies: createdAt / startedAt /
+   *  updatedAt / detectedAt). MUST be a real column with an index — see the
+   *  purge-index migration. */
+  timestampField: string;
+  /** Base retention in days. Industry floors may LENGTHEN this, never shorten. */
+  baseRetentionDays: number;
+  /** Extra where-clause AND-ed with the cutoff (e.g. only purge READ
+   *  notifications). Optional. */
+  extraWhere?: Record<string, unknown>;
+  /** Custom cascade-correct handler; when present the generic path is bypassed. */
+  customPurge?: RetentionCustomPurge;
+  /** What it stores + why it is safe to purge past the window. */
+  rationale: string;
+}
+
+export interface RetainedDataset {
+  /** Prisma model accessor. */
+  model: string;
+  label: string;
+  /** Statutory / regulatory basis for retention (cited, not invented). */
+  regulatoryBasis: string;
+  /** Minimum the business is typically obligated to keep. */
+  minRetentionYears: number;
+}
+
+// ── Custom handlers ─────────────────────────────────────────────────────────
+
+/**
+ * Coworker chat purge. AgentThread has three child relations:
+ *   • AgentMessage   — onDelete: Cascade  (DB removes with the thread)
+ *   • AgentAttachment — onDelete: Cascade (DB removes with the thread)
+ *   • AgentActionProposal — onDelete: RESTRICT on BOTH thread + message FKs
+ * so a plain deleteMany on AgentThread throws whenever a thread ever produced a
+ * proposal. We therefore delete the proposals for the selected threads first
+ * (inside one transaction), then delete the threads — which cascades messages +
+ * attachments. Selection is by `updatedAt` (last activity), so an actively-used
+ * thread is never swept just because it is old.
+ */
+export const purgeStaleAgentThreads: RetentionCustomPurge = async ({
+  prisma,
+  cutoff,
+  batchSize,
+  cap,
+}) => {
+  let deleted = 0;
+  // eslint-disable-next-line no-constant-condition
+  while (deleted < cap) {
+    const take = Math.min(batchSize, cap - deleted);
+    const threads = await prisma.agentThread.findMany({
+      where: { updatedAt: { lt: cutoff } },
+      select: { id: true },
+      take,
+    });
+    if (threads.length === 0) break;
+    const ids = threads.map((t) => t.id);
+    await prisma.$transaction([
+      // Remove the RESTRICT-ing children first so the thread delete is legal.
+      prisma.agentActionProposal.deleteMany({ where: { threadId: { in: ids } } }),
+      // Cascades AgentMessage + AgentAttachment via their onDelete: Cascade FKs.
+      prisma.agentThread.deleteMany({ where: { id: { in: ids } } }),
+    ]);
+    deleted += threads.length;
+    if (threads.length < take) break;
+  }
+  return { deleted, capped: deleted >= cap };
+};
+
+// ── Purge policies (enrolled accumulation surfaces) ─────────────────────────
+// Ordered roughly by growth rate. Windows are conservative; see spec §6.
+
+export const PURGE_POLICIES: readonly PurgePolicy[] = [
+  {
+    model: "toolExecution",
+    label: "Tool execution audit log",
+    category: "audit-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "Every tool/capability invocation (the #1 growth driver, /platform/ai/authority audit trail). One year of operational audit; regulated industries lengthen via floors.",
+  },
+  {
+    model: "adapterRunTelemetry",
+    label: "AI adapter run telemetry",
+    category: "ai-telemetry",
+    timestampField: "startedAt",
+    baseRetentionDays: DAYS_180,
+    rationale:
+      "One row per LLM inference (probes, evals, coworker reasoning, builds). Cost/quality telemetry; running aggregates live elsewhere, so raw rows are disposable past 6 months.",
+  },
+  {
+    model: "tokenUsage",
+    label: "Token usage accounting",
+    category: "ai-telemetry",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_180,
+    rationale:
+      "Per-inference token/cost rows. Kept long enough for billing reconciliation; superseded by aggregates afterwards.",
+  },
+  {
+    model: "routeDecisionLog",
+    label: "AI routing decision log",
+    category: "routing-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Endpoint-selection reasoning per coworker/task call. Debugging value decays fast; 90 days is ample.",
+  },
+  {
+    model: "authorizationDecisionLog",
+    label: "Authorization decision log",
+    category: "security-audit",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "Every authorization decision (actor, grant, outcome). Security-audit trail; one year baseline, longer for regulated industries.",
+  },
+  {
+    model: "coworkerTurnMetric",
+    label: "Coworker turn metrics",
+    category: "coworker-metrics",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_180,
+    rationale:
+      "Per-turn latency/dispatch/tool counts. Quality telemetry; disposable past 6 months.",
+  },
+  {
+    model: "skillUsageEvent",
+    label: "Skill usage events",
+    category: "skill-telemetry",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_180,
+    rationale:
+      "Per skill invocation. Feeds the daily skill-metrics aggregator; raw rows disposable afterwards.",
+  },
+  {
+    model: "buildActivity",
+    label: "Build Studio activity log",
+    category: "build-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Tool runs during a build. Operational build trail; 90 days covers post-build investigation.",
+  },
+  {
+    model: "buildDispatchAttempt",
+    label: "Build dispatch attempts",
+    category: "build-log",
+    timestampField: "startedAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "One row per AI specialist dispatch attempt/retry. Build telemetry; 90 days.",
+  },
+  {
+    model: "stallEvent",
+    label: "Build watchdog stall events",
+    category: "build-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Build Studio stall detections + operator outcomes. Operational; 90 days.",
+  },
+  {
+    model: "taskEvaluation",
+    label: "Endpoint task evaluations",
+    category: "eval-history",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Per-eval rows. Spec 2026-03-16 confirms EndpointTaskPerformance running averages are the source of truth; raw rows >90d are archivable.",
+  },
+  {
+    model: "endpointTestRun",
+    label: "Endpoint test runs",
+    category: "eval-history",
+    timestampField: "startedAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Probe/scenario test-run summaries. Trending value is short-lived; 90 days.",
+  },
+  {
+    model: "wikiIngestEvent",
+    label: "Wiki ingest events",
+    category: "knowledge-audit",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Knowledge-base ingest audit. Operational; 90 days.",
+  },
+  {
+    model: "notification",
+    label: "Read in-app notifications",
+    category: "inbox",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_90,
+    // Only purge notifications the user has already read. Unread ones are never
+    // swept regardless of age — they are still pending work.
+    extraWhere: { read: true },
+    rationale:
+      "Read inbox items past 90 days. Unread notifications are preserved at any age.",
+  },
+  {
+    model: "selfUpgradeRun",
+    label: "Self-upgrade run log",
+    category: "self-upgrade-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "Platform self-upgrade orchestration history. Low volume but operationally valuable; one year of deployment history.",
+  },
+  {
+    model: "quiescenceRun",
+    label: "Quiescence orchestration runs",
+    category: "coordination-log",
+    timestampField: "startedAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Activity-quiescence drain orchestration records. Coordination audit; 90 days.",
+  },
+  {
+    model: "agentThread",
+    label: "AI coworker chat threads",
+    category: "coworker-chat",
+    timestampField: "updatedAt",
+    baseRetentionDays: DAYS_545,
+    customPurge: purgeStaleAgentThreads,
+    rationale:
+      "Coworker conversations with no activity for ~18 months, cascading their messages + attachments. Conservative default; regulated industries lengthen via floors. Selection by last activity so active threads are never swept.",
+  },
+] as const;
+
+// ── Retained datasets (regulated — NEVER auto-purged) ───────────────────────
+// The engine never touches these. They are catalogued here so the regulatory
+// posture is explicit and the guard test can assert no overlap with
+// PURGE_POLICIES. Deletion of these, when ever needed, is a deliberate,
+// separately-governed action (legal hold release), not a scheduled sweep.
+
+export const RETAINED_DATASETS: readonly RetainedDataset[] = [
+  // Financial records — IRS/SOX-style 7-year floor.
+  { model: "invoice", label: "Invoices", regulatoryBasis: "Financial record retention (IRS / SOX-style statutory)", minRetentionYears: 7 },
+  { model: "invoiceLineItem", label: "Invoice line items", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
+  { model: "payment", label: "Payments", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
+  { model: "paymentAllocation", label: "Payment allocations", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
+  { model: "bill", label: "Bills (AP)", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
+  { model: "billLineItem", label: "Bill line items", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
+  { model: "billApproval", label: "Bill approvals", regulatoryBasis: "Financial controls audit (SOX)", minRetentionYears: 7 },
+  { model: "purchaseOrder", label: "Purchase orders", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
+  { model: "purchaseOrderLineItem", label: "PO line items", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
+  { model: "expenseClaim", label: "Expense claims", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
+  { model: "expenseItem", label: "Expense items", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
+  { model: "fixedAsset", label: "Fixed assets", regulatoryBasis: "Depreciation / financial record retention", minRetentionYears: 7 },
+  { model: "exchangeRate", label: "Exchange rates", regulatoryBasis: "Financial record reproducibility", minRetentionYears: 7 },
+  { model: "dunningLog", label: "Dunning log", regulatoryBasis: "Collections / financial audit", minRetentionYears: 7 },
+  { model: "storefrontOrder", label: "Storefront orders", regulatoryBasis: "Sales/financial record retention", minRetentionYears: 7 },
+  { model: "storefrontDonation", label: "Storefront donations", regulatoryBasis: "Nonprofit financial record retention", minRetentionYears: 7 },
+  { model: "rentalAgreement", label: "Rental agreements", regulatoryBasis: "Contract / financial record retention", minRetentionYears: 7 },
+
+  // Tax records.
+  { model: "taxRemittanceRun", label: "Tax remittance runs", regulatoryBasis: "Tax record retention", minRetentionYears: 7 },
+  { model: "taxDecisionSnapshot", label: "Tax decision snapshots", regulatoryBasis: "Tax record retention", minRetentionYears: 7 },
+  { model: "taxLiabilityEntry", label: "Tax liability entries", regulatoryBasis: "Tax record retention", minRetentionYears: 7 },
+  { model: "taxFilingArtifact", label: "Tax filing artifacts", regulatoryBasis: "Tax filing retention", minRetentionYears: 7 },
+
+  // Compliance / regulatory evidence.
+  { model: "complianceEvidence", label: "Compliance evidence", regulatoryBasis: "GRC evidence (per-record retentionUntil)", minRetentionYears: 7 },
+  { model: "complianceAuditLog", label: "Compliance audit log", regulatoryBasis: "Compliance change audit", minRetentionYears: 7 },
+  { model: "complianceAudit", label: "Compliance audits", regulatoryBasis: "Audit record retention", minRetentionYears: 7 },
+  { model: "auditFinding", label: "Audit findings", regulatoryBasis: "Audit record retention", minRetentionYears: 7 },
+  { model: "regulatorySubmission", label: "Regulatory submissions", regulatoryBasis: "Regulatory filing retention", minRetentionYears: 7 },
+  { model: "requirementCompletion", label: "Requirement completions", regulatoryBasis: "Training/compliance evidence", minRetentionYears: 6 },
+  { model: "policyAcknowledgment", label: "Policy acknowledgments", regulatoryBasis: "Policy compliance evidence", minRetentionYears: 6 },
+
+  // Licensing / credentials.
+  { model: "organizationLicenseRecord", label: "Org license records", regulatoryBasis: "Licensing compliance", minRetentionYears: 7 },
+  { model: "personLicenseRecord", label: "Person license records", regulatoryBasis: "Credential / licensing compliance", minRetentionYears: 7 },
+
+  // HR lifecycle.
+  { model: "employmentEvent", label: "Employment events", regulatoryBasis: "Employment record retention (varies; conservative 7y)", minRetentionYears: 7 },
+  { model: "terminationRecord", label: "Termination records", regulatoryBasis: "Employment record retention", minRetentionYears: 7 },
+
+  // Consent.
+  { model: "voiceConsentRecord", label: "Voice consent records", regulatoryBasis: "Consent provenance (GDPR/biometric)", minRetentionYears: 7 },
+] as const;
+
+/** Models the engine will purge (for guard tests + reporting). */
+export const PURGE_MODELS: readonly string[] = PURGE_POLICIES.map((p) => p.model);
+/** Regulated models the engine must never touch. */
+export const RETAINED_MODELS: readonly string[] = RETAINED_DATASETS.map((d) => d.model);

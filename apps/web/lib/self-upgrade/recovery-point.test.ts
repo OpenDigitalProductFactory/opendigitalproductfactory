@@ -1,12 +1,20 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  classifyRecoveryPointStatus,
   createSelfUpgradeRecoveryPoint,
+  resolveRecoveryBackupTargets,
+  summarizeRecoveryPointDegradation,
   summarizeRecoveryPointFailure,
+  type SelfUpgradeRecoveryPointMember,
 } from "./recovery-point";
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe("self-upgrade recovery point", () => {
-  it("runs all managed data-store backups with the pre-upgrade trigger", async () => {
+  it("backs up only the primary store by default and skips the derived stores", async () => {
     const postgres = vi.fn().mockResolvedValue({ runId: "BR-PG", status: "ok" });
     const neo4j = vi.fn().mockResolvedValue({ runId: "BR-N4J", status: "ok" });
     const qdrant = vi.fn().mockResolvedValue({ runId: "BR-QD", status: "ok" });
@@ -27,8 +35,8 @@ describe("self-upgrade recovery point", () => {
       createdAt: "2026-06-01T00:00:00.000Z",
       members: [
         { target: "postgres", runId: "BR-PG", status: "ok" },
-        { target: "neo4j", runId: "BR-N4J", status: "ok" },
-        { target: "qdrant", runId: "BR-QD", status: "ok" },
+        { target: "neo4j", runId: null, status: "skipped" },
+        { target: "qdrant", runId: null, status: "skipped" },
       ],
     });
     expect(postgres).toHaveBeenCalledWith({
@@ -36,40 +44,31 @@ describe("self-upgrade recovery point", () => {
       composeProject: "dpf-test",
       backupsRoot: "/tmp/backups",
     });
-    expect(neo4j).toHaveBeenCalledWith({
-      trigger: "pre-upgrade-recovery",
-      composeProject: "dpf-test",
-      backupsRoot: "/tmp/backups",
-    });
-    expect(qdrant).toHaveBeenCalledWith({
-      trigger: "pre-upgrade-recovery",
-      backupsRoot: "/tmp/backups",
-    });
+    // Derived stores rebuild from source and aren't touched by a portal upgrade,
+    // so they are never backed up by default — the runners must not be invoked.
+    expect(neo4j).not.toHaveBeenCalled();
+    expect(qdrant).not.toHaveBeenCalled();
   });
 
-  it("fails the recovery point when a backup runner reports failed", async () => {
+  it("fails the recovery point when the required postgres backup fails", async () => {
     const point = await createSelfUpgradeRecoveryPoint({
       runId: "SUR-TEST",
       runners: {
-        postgres: vi.fn().mockResolvedValue({ runId: "BR-PG", status: "ok" }),
-        neo4j: vi.fn().mockResolvedValue({ runId: "BR-N4J", status: "failed" }),
-        qdrant: vi.fn().mockResolvedValue({ runId: "BR-QD", status: "ok" }),
+        postgres: vi.fn().mockResolvedValue({ runId: "BR-PG", status: "failed" }),
       },
     });
 
     expect(point.status).toBe("failed");
     expect(summarizeRecoveryPointFailure(point)).toBe(
-      "recovery-point-failed: neo4j BR-N4J",
+      "recovery-point-failed: postgres BR-PG",
     );
   });
 
-  it("captures thrown runner errors as failed members", async () => {
+  it("captures a thrown postgres error as a failed member", async () => {
     const point = await createSelfUpgradeRecoveryPoint({
       runId: "SUR-TEST",
       runners: {
         postgres: vi.fn().mockRejectedValue(new Error("pg_dump unavailable")),
-        neo4j: vi.fn().mockResolvedValue({ runId: "BR-N4J", status: "ok" }),
-        qdrant: vi.fn().mockResolvedValue({ runId: "BR-QD", status: "ok" }),
       },
     });
 
@@ -82,6 +81,25 @@ describe("self-upgrade recovery point", () => {
     });
     expect(summarizeRecoveryPointFailure(point)).toBe(
       "recovery-point-failed: postgres: pg_dump unavailable",
+    );
+  });
+
+  it("backs up an opted-in derived store best-effort: degraded (not failed) on failure", async () => {
+    vi.stubEnv("DPF_RECOVERY_POINT_BACKUP_TARGETS", "neo4j");
+    const postgres = vi.fn().mockResolvedValue({ runId: "BR-PG", status: "ok" });
+    const neo4j = vi.fn().mockResolvedValue({ runId: "BR-N4J", status: "failed" });
+
+    const point = await createSelfUpgradeRecoveryPoint({
+      runId: "SUR-TEST",
+      runners: { postgres, neo4j },
+    });
+
+    // Opted in, so neo4j IS backed up — but a failure only degrades the
+    // recovery point; the orchestrator still proceeds (it aborts on "failed").
+    expect(neo4j).toHaveBeenCalled();
+    expect(point.status).toBe("degraded");
+    expect(summarizeRecoveryPointDegradation(point)).toBe(
+      "recovery-point-degraded (best-effort backup failed, upgrade proceeding): neo4j",
     );
   });
 
@@ -99,5 +117,45 @@ describe("self-upgrade recovery point", () => {
       members: [],
     });
     expect(postgres).not.toHaveBeenCalled();
+  });
+
+  it("classifyRecoveryPointStatus blocks only on the required (postgres) target", () => {
+    const ok: SelfUpgradeRecoveryPointMember[] = [
+      { target: "postgres", runId: "BR-PG", status: "ok" },
+      { target: "neo4j", runId: null, status: "skipped" },
+      { target: "qdrant", runId: null, status: "skipped" },
+    ];
+    expect(classifyRecoveryPointStatus(ok)).toBe("ok");
+    // A required (postgres) failure blocks the upgrade.
+    expect(
+      classifyRecoveryPointStatus([
+        { target: "postgres", runId: "BR-PG", status: "failed" },
+        ok[1],
+        ok[2],
+      ]),
+    ).toBe("failed");
+    // A best-effort (derived-store) failure only degrades.
+    expect(
+      classifyRecoveryPointStatus([
+        ok[0],
+        { target: "neo4j", runId: "BR-N4J", status: "failed" },
+        ok[2],
+      ]),
+    ).toBe("degraded");
+  });
+
+  it("resolveRecoveryBackupTargets always includes postgres and honors the opt-in", () => {
+    expect([...resolveRecoveryBackupTargets({})]).toEqual(["postgres"]);
+    expect(
+      [
+        ...resolveRecoveryBackupTargets({
+          DPF_RECOVERY_POINT_BACKUP_TARGETS: "neo4j,qdrant",
+        }),
+      ].sort(),
+    ).toEqual(["neo4j", "postgres", "qdrant"]);
+    // postgres can never be dropped; unknown tokens are ignored.
+    expect([
+      ...resolveRecoveryBackupTargets({ DPF_RECOVERY_POINT_BACKUP_TARGETS: "bogus" }),
+    ]).toEqual(["postgres"]);
   });
 });

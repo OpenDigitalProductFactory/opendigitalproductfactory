@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getPublicStorefront, getPublicItem } from "@/lib/storefront-data";
+import { getPublicStorefront, getPublicItem, resolveInquiryFormSchema } from "@/lib/storefront-data";
 import { SlotBookingFlow } from "@/components/storefront/SlotBookingFlow";
 
 export default async function BookItemPage({
@@ -14,6 +14,8 @@ export default async function BookItemPage({
   ]);
   if (!storefront || !item) notFound();
 
+  const formSchema = await resolveInquiryFormSchema(storefront.archetypeId);
+
   return (
     <div style={{ paddingTop: 40, maxWidth: 520 }}>
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Book: {item.name}</h1>
@@ -24,6 +26,7 @@ export default async function BookItemPage({
         itemName={item.name}
         timezone={storefront.timezone}
         bookingConfig={item.bookingConfig as Record<string, unknown> | null}
+        formSchema={formSchema}
       />
     </div>
   );

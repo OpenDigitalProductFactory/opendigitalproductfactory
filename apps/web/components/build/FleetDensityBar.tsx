@@ -32,7 +32,7 @@ export function FleetDensityBar({ taskResults, buildPlan }: Props) {
   // Mirrors AgentActivityStrip's resultByTitle reduction so both surfaces
   // count completion the same way.
   const byTitle = new Map<string, boolean>();
-  for (const r of taskResults ?? []) {
+  for (const r of (Array.isArray(taskResults) ? taskResults : [])) {
     byTitle.set(r.title, r.testResult?.passed ?? true);
   }
   let done = 0;

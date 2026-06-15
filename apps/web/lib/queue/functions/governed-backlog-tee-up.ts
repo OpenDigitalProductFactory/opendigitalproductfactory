@@ -2,24 +2,6 @@ import { cron } from "inngest";
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
 
-async function resolveScheduledUserId(): Promise<string> {
-  const { prisma } = await import("@dpf/db");
-  const user = await prisma.user.findFirst({
-    where: {
-      isSuperuser: true,
-      isActive: true,
-    },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-
-  if (!user) {
-    throw new Error("No active superuser is available to own governed backlog drafts.");
-  }
-
-  return user.id;
-}
-
 export const governedBacklogTeeUpScheduled = inngest.createFunction(
   {
     id: "build/governed-backlog-tee-up-scheduled",
@@ -34,10 +16,11 @@ export const governedBacklogTeeUpScheduled = inngest.createFunction(
     return step.run("tee-up-governed-backlog-daily", async () => {
       const { prisma } = await import("@dpf/db");
       const { runGovernedBacklogTeeUp } = await import("@/lib/governed-backlog-tee-up");
+      const { resolveScheduledOwnerUserId } = await import("../scheduled-owner");
 
       return runGovernedBacklogTeeUp({
         prisma,
-        userId: await resolveScheduledUserId(),
+        userId: await resolveScheduledOwnerUserId(),
         trigger: "daily",
       });
     });

@@ -7,8 +7,10 @@ import {
   architectureAdvisoryFromReview,
   ARCHITECTURE_REVIEW_REFERENCES,
   parseReviewResponse,
+  applyTestFirstLenienceForKind,
   extractClaimsFromReview,
   buildReviewBranchArtifacts,
+  collectReviewerVerdicts,
   deriveReviewRiskLevel,
   artifactTypeForPhase,
   mapCompactSummaryToBuildEntry,
@@ -29,6 +31,20 @@ describe("buildDesignReviewPrompt", () => {
     expect(prompt).toContain("Reuse OpsClient pattern");
     expect(prompt).toContain("Filter hides done items");
     expect(prompt).toContain("JSON FORMAT");
+  });
+
+  it("gates on whole-outcome alignment per the Optimize for the Whole commandment", () => {
+    const prompt = buildDesignReviewPrompt({
+      problemStatement: "Users need filtering",
+      existingCodeAudit: "No existing filter",
+      reusePlan: "Reuse OpsClient pattern",
+      proposedApproach: "Add checkbox filter",
+      acceptanceCriteria: ["Filter hides done items"],
+    }, "Test project");
+    // The design review must ask which end-to-end outcome the change serves —
+    // local correctness alone is not "done".
+    expect(prompt).toContain("WHOLE-OUTCOME ALIGNMENT");
+    expect(prompt).toContain("Optimize for the Whole");
   });
 
   // BI-CE49D82E — Delta-aware design review prompt, mirror of the plan path
@@ -107,6 +123,61 @@ describe("buildPlanReviewPrompt", () => {
     // each re-review. Same whack-a-mole requirement, bounded/size-aligned text.
     expect(prompt).toContain("do not escalate the bar across review rounds");
     expect(prompt).toContain("a short, converging review beats a long one");
+  });
+
+  it("exempts documentation-only changes from the test-first requirement (no test is never critical for a comment/doc task)", () => {
+    const prompt = buildPlanReviewPrompt({
+      fileStructure: [{ path: "lib/x.ts", action: "modify", purpose: "Add header comment" }],
+      tasks: [{ title: "Add header comment", testFirst: "n/a — comment only", implement: "add comment", verify: "comment present" }],
+    });
+    expect(prompt).toContain("DOCUMENTATION-ONLY changes");
+    expect(prompt).toContain("require NO test-first step");
+  });
+});
+
+describe("applyTestFirstLenienceForKind", () => {
+  const testFirstCritical = {
+    decision: "fail" as const,
+    issues: [
+      { severity: "critical" as const, description: "Task 2 does not specify a real failing test to write first for the header comment addition." },
+      { severity: "important" as const, description: "Task 1 omits the expected function signature." },
+    ],
+    summary: "two issues",
+  };
+
+  it("downgrades a test-first critical to non-blocking for a chore build → decision flips to pass", () => {
+    const out = applyTestFirstLenienceForKind(testFirstCritical, "chore");
+    expect(out.decision).toBe("pass");
+    expect(out.issues.find((i) => i.description.includes("test to write first"))?.severity).toBe("minor");
+    // the unrelated important issue is preserved as-is
+    expect(out.issues.find((i) => i.description.includes("function signature"))?.severity).toBe("important");
+  });
+
+  it("applies to fix and docs kinds too", () => {
+    expect(applyTestFirstLenienceForKind(testFirstCritical, "fix").decision).toBe("pass");
+    expect(applyTestFirstLenienceForKind(testFirstCritical, "docs").decision).toBe("pass");
+  });
+
+  it("does NOT touch a feature build — test-first stays critical and blocking", () => {
+    const out = applyTestFirstLenienceForKind(testFirstCritical, "feature");
+    expect(out.decision).toBe("fail");
+    expect(out.issues[0].severity).toBe("critical");
+  });
+
+  it("leaves a genuine (non-test-first) critical blocking even for a chore", () => {
+    const realBlocker = {
+      decision: "fail" as const,
+      issues: [{ severity: "critical" as const, description: "Plan refers to a missing modify target: lib/gone.ts" }],
+      summary: "missing file",
+    };
+    const out = applyTestFirstLenienceForKind(realBlocker, "chore");
+    expect(out.decision).toBe("fail");
+    expect(out.issues[0].severity).toBe("critical");
+  });
+
+  it("is a no-op when kind is null/undefined", () => {
+    expect(applyTestFirstLenienceForKind(testFirstCritical, null).decision).toBe("fail");
+    expect(applyTestFirstLenienceForKind(testFirstCritical, undefined).decision).toBe("fail");
   });
 
   it("includes task count for reviewer context", () => {
@@ -501,6 +572,10 @@ describe("buildArchitectureReviewPrompt", () => {
     expect(prompt).toContain("ArchitectureReview table");
     // The chief-architect lens must invite reference-doc feedback.
     expect(prompt).toContain("[reference-doc]");
+    // Whole-over-local is a first-class architectural-alignment concern.
+    expect(prompt).toContain("Optimize for the Whole");
+    // Archetype/storefront designs are measured against their load-bearing stages.
+    expect(prompt).toContain("LOAD-BEARING value-stream");
     expect(prompt).toContain("JSON FORMAT");
   });
 
@@ -523,6 +598,16 @@ describe("buildArchitectureReviewPrompt", () => {
   it("exposes the reference standards as a non-empty, repo-relative list", () => {
     expect(ARCHITECTURE_REVIEW_REFERENCES.length).toBeGreaterThan(0);
     expect(ARCHITECTURE_REVIEW_REFERENCES.map((r) => r.path)).toContain("AGENTS.md");
+    // The Optimize-for-the-Whole commandment is among the kernel principles the
+    // architect lens measures a spec against.
+    const kernel = ARCHITECTURE_REVIEW_REFERENCES.find(
+      (r) => r.path === "docs/founder-kernel/wiki/principles/",
+    );
+    expect(kernel?.covers).toContain("optimize-for-the-whole");
+    // Archetype designs are measured against their load-bearing value-stream
+    // stages — the whole-outcome measure that survives portal rebuilds.
+    expect(ARCHITECTURE_REVIEW_REFERENCES.map((r) => r.path))
+      .toContain("docs/architecture/archetype-business-value-streams.md");
   });
 });
 
@@ -549,5 +634,67 @@ describe("architectureAdvisoryFromReview", () => {
         parseError: true,
       }),
     ).toBeNull();
+  });
+});
+
+describe("collectReviewerVerdicts", () => {
+  function rev(overrides: Partial<ReviewResult> = {}): ReviewResult {
+    return { decision: "pass", issues: [], summary: "", ...overrides };
+  }
+
+  it("maps r1/r2/archReview to named verdicts in deliberation-branch order", () => {
+    const verdicts = collectReviewerVerdicts(
+      rev({ decision: "pass" }),
+      rev({ decision: "fail", issues: [{ severity: "critical", description: "x" }] }),
+      rev({ decision: "pass", issues: [{ severity: "minor", description: "n" }] }),
+    );
+    expect(verdicts.map((v) => v.source)).toEqual(["reviewer-1", "reviewer-2", "architect"]);
+    expect(verdicts.map((v) => v.label)).toEqual([
+      "Primary review",
+      "Independent review",
+      "Architecture",
+    ]);
+    expect(verdicts[1]).toMatchObject({
+      role: "reviewer",
+      decision: "fail",
+      issueCounts: { critical: 1, important: 0, minor: 0 },
+    });
+    expect(verdicts[2]).toMatchObject({ role: "architect", decision: "pass" });
+  });
+
+  it("omits reviewers that did not respond (null) rather than inventing a pass", () => {
+    const verdicts = collectReviewerVerdicts(rev(), null, null);
+    expect(verdicts).toHaveLength(1);
+    expect(verdicts[0]?.source).toBe("reviewer-1");
+  });
+
+  it("returns an empty array when no reviewer responded", () => {
+    expect(collectReviewerVerdicts(null, null, null)).toEqual([]);
+  });
+
+  it("preserves the parseError flag so the UI can show 'unavailable' not a false pass", () => {
+    const verdicts = collectReviewerVerdicts(
+      rev({ parseError: true, decision: "fail" }),
+      rev({ decision: "pass" }),
+      null,
+    );
+    expect(verdicts[0]).toMatchObject({ source: "reviewer-1", parseError: true });
+    expect(verdicts[1]).not.toHaveProperty("parseError");
+  });
+
+  it("counts issues by severity", () => {
+    const verdicts = collectReviewerVerdicts(
+      rev({
+        issues: [
+          { severity: "critical", description: "a" },
+          { severity: "important", description: "b" },
+          { severity: "important", description: "c" },
+          { severity: "minor", description: "d" },
+        ],
+      }),
+      null,
+      null,
+    );
+    expect(verdicts[0]?.issueCounts).toEqual({ critical: 1, important: 2, minor: 1 });
   });
 });

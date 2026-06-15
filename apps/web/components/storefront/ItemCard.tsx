@@ -1,4 +1,5 @@
 import type { PublicItem } from "@/lib/storefront-types";
+import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import { CtaButton } from "./CtaButton";
 import { MediaImage } from "./MediaImage";
 
@@ -13,10 +14,13 @@ function formatPrice(item: PublicItem): string | null {
   if (!item.priceAmount && item.priceType === "free") return "Free";
   if (!item.priceAmount && item.priceType === "quote") return "POA";
   if (!item.priceAmount && item.priceType === "donation") return "Donation";
+  if (!item.priceAmount && item.priceType === "from") return "From...";
+  if (!item.priceAmount && item.priceType === "per-hour") return "Per hour";
+  if (!item.priceAmount && item.priceType === "per-session") return "Per session";
   if (!item.priceAmount) return null;
   const prefix = PRICE_PREFIX[item.priceType ?? ""] ?? "";
   const suffix = PRICE_SUFFIX[item.priceType ?? ""] ?? "";
-  const currency = item.priceCurrency === "GBP" ? "£" : item.priceCurrency;
+  const currency = getCurrencySymbol(item.priceCurrency);
   return `${prefix}${currency}${item.priceAmount}${suffix}`;
 }
 

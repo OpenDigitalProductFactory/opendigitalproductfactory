@@ -2339,11 +2339,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "provision_build_engine",
-    description: "Install a build-dispatch engine (claude, codex, grok) into the running sandbox from its registry recipe, then verify by re-probing. Idempotent — a no-op if the engine is already present. Side-effecting: runs the install command (e.g. `npm install -g`, or the grok curl-installer) inside the sandbox, so it requires sandbox_execute. Pass offline:true to use only no-egress (prestaged-binary) recipes for air-gapped installs. Returns { kind, version, recipe }.",
+    description: "Install a build-dispatch engine (claude, codex, grok, opencode) into the running sandbox from its registry recipe, then verify by re-probing. Idempotent — a no-op if the engine is already present. Side-effecting: runs the install command (e.g. `npm install -g`, the grok curl-installer, or the opencode prestaged-binary/tarball) inside the sandbox, so it requires sandbox_execute. Pass offline:true to use only no-egress (prestaged-binary) recipes for air-gapped installs. Returns { kind, version, recipe }.",
     inputSchema: {
       type: "object",
       properties: {
-        engineId: { type: "string", description: "Engine to provision: 'claude' | 'codex' | 'grok'." },
+        engineId: { type: "string", description: "Engine to provision: 'claude' | 'codex' | 'grok' | 'opencode'." },
         offline: {
           type: "boolean",
           description: "When true, only run no-egress (prestaged-binary) recipes (air-gapped install). Default false.",
@@ -2358,7 +2358,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "get_build_engine_readiness",
-    description: "Report whether each build-dispatch engine (claude, codex, grok) is present and healthy in the build sandbox. Returns per-engine { present, version, lastProbedAt, bakeInDefault } from the last probe (BuildEngineState). Pass refresh:true to live re-probe each engine (docker exec <verifyCommand>) and persist the fresh result. Use this to see engine readiness before selecting a build dispatch engine — e.g. an engine that is selectable but shows present:false would fail at runtime with 'not found'.",
+    description: "Report whether each build-dispatch engine (claude, codex, grok, opencode) is present and healthy in the build sandbox. Returns per-engine { present, version, lastProbedAt, bakeInDefault } from the last probe (BuildEngineState). Pass refresh:true to live re-probe each engine (docker exec <verifyCommand>) and persist the fresh result. Use this to see engine readiness before selecting a build dispatch engine — e.g. an engine that is selectable but shows present:false would fail at runtime with 'not found'.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2562,6 +2562,31 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
     buildPhases: ["ship"],
+  },
+  // ─── Email setup (PBI-INV-04 Phase 2) ──────────────────────────────────
+  // Lets the onboarding/COO coworker walk a non-technical operator through
+  // configuring their OWN outbound email (SMTP). Operator-only
+  // (manage_provider_connections) + the `email_config` agent grant.
+  {
+    name: "setup_email",
+    description:
+      "Help the operator set up their OWN outbound email (SMTP) so the platform can send invoices, payment links, dunning, and approvals. Three actions: action='detect' identifies the provider from the organization's domain and returns the one credential the operator must obtain (e.g. a Google App Password); action='save' persists the SMTP settings the operator provides; action='test' sends a test email to confirm delivery. DPF never relays email on the operator's behalf — their own provider sends. Walk the operator through getting the credential in plain language before calling 'save'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["detect", "save", "test"], description: "detect | save | test" },
+        host: { type: "string", description: "SMTP host (save) — e.g. smtp.gmail.com" },
+        port: { type: "number", description: "SMTP port (save) — default 587 (STARTTLS) or 465 (implicit TLS)" },
+        secure: { type: "boolean", description: "Implicit TLS on port 465 (save)" },
+        user: { type: "string", description: "SMTP username (save) — usually the full email address" },
+        from: { type: "string", description: "From address (save) — e.g. 'Acme <billing@acme.com>'" },
+        pass: { type: "string", description: "SMTP password / app password / API key (save). Leave blank to keep the existing one." },
+        to: { type: "string", description: "Recipient for the test email (test)" },
+      },
+      required: ["action"],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
   },
   // ─── Admin Coworker Tools (TAK-ADMIN-001) ──────────────────────────────
   // These tools are available on the /admin route for platform administration.
@@ -8258,7 +8283,7 @@ export async function executeTool(
       }
 
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
-      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
+      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
       const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
       // BI-CE49D82E — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
@@ -8346,7 +8371,11 @@ export async function executeTool(
       // have already seen the signal in passing.
       const { sizeDesignDoc } = await import("@/lib/build/size-design-doc");
       const sizeAssessment = sizeDesignDoc(build.designDoc as Parameters<typeof sizeDesignDoc>[0]);
-      const reviewWithSize = { ...review, sizeAssessment };
+      // Preserve the individual reviewer verdicts (pre-merge) so the Review-phase
+      // UI can show which named reviewer cleared vs flagged. Nested on the JSON
+      // column — no migration. Same r1/r2/archReview the deliberation trail uses.
+      const reviewers = collectReviewerVerdicts(r1, r2, archReview);
+      const reviewWithSize = { ...review, sizeAssessment, ...(reviewers.length > 0 ? { reviewers } : {}) };
       await prisma.featureBuild.update({ where: { buildId }, data: { designReview: reviewWithSize as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
@@ -8668,7 +8697,7 @@ export async function executeTool(
       // BI-4396EFEC (D38) — also load the prior planReview so we can pass
       // its issues to the reviewer prompt for delta-awareness and compute
       // the iteration trajectory for the operator-facing chip.
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true, planReview: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true, planReview: true, kind: true } });
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
       const priorPlanReview = (build.planReview ?? null) as
         | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
@@ -8703,7 +8732,7 @@ export async function executeTool(
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
-      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
+      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews, applyTestFirstLenienceForKind, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
       // BI-4396EFEC (D38) — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
       // ReviewResult.iteration on the output. Round is 1-based: first
@@ -8751,11 +8780,17 @@ export async function executeTool(
       const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
         ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the plan before building — they do not block this gate.`
         : "";
-      const mergedReview = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
+      const rawMergedReview = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
+      // Deterministic kind-aware lenience: a chore/fix/docs build must not be
+      // blocked by a reviewer's missing-test-first complaint (test-first is a
+      // feature-grade gate). Enforced in code so it does not depend on the
+      // reviewer model honoring the rubric's prose exemption — the local model
+      // in particular over-applies TDD to comment/chore tasks.
+      const mergedReview = applyTestFirstLenienceForKind(rawMergedReview, build.kind);
       // BI-4396EFEC (D38) — Compute the iteration delta against the prior
       // round and attach to the ReviewResult. computeReviewDelta + isOscillating
       // live in feature-build-types so they're independently unit-testable.
@@ -8778,7 +8813,10 @@ export async function executeTool(
       const review = architectureAdvisory
         ? { ...reviewWithIteration, architectureAdvisory }
         : reviewWithIteration;
-      await prisma.featureBuild.update({ where: { buildId }, data: { planReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+      // Preserve individual reviewer verdicts (pre-merge) for the Review-phase UI.
+      const reviewers = collectReviewerVerdicts(r1, r2, archReview);
+      const planReviewToPersist = reviewers.length > 0 ? { ...review, reviewers } : review;
+      await prisma.featureBuild.update({ where: { buildId }, data: { planReview: planReviewToPersist as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
       logBuildActivity(buildId, "reviewBuildPlan", `Plan review: ${review.decision}. ${review.summary}`);
@@ -15065,6 +15103,27 @@ export async function executeTool(
           hasChanges,
           changes: { itemsAdded, itemsRemoved, itemsDeactivated, categoriesUsed, sectionsAdded, sectionsHidden },
         },
+      };
+    }
+
+    // ─── Email setup (PBI-INV-04 Phase 2) ───────────────────────────────
+    case "setup_email": {
+      const { runEmailSetupTool } = await import("./shared/email-setup-tool");
+      const result = await runEmailSetupTool({
+        action: String(params.action ?? "") as "detect" | "save" | "test",
+        host: typeof params.host === "string" ? params.host : undefined,
+        port: typeof params.port === "number" ? params.port : undefined,
+        secure: typeof params.secure === "boolean" ? params.secure : undefined,
+        user: typeof params.user === "string" ? params.user : undefined,
+        from: typeof params.from === "string" ? params.from : undefined,
+        pass: typeof params.pass === "string" ? params.pass : undefined,
+        to: typeof params.to === "string" ? params.to : undefined,
+      });
+      return {
+        success: result.ok,
+        message: result.message,
+        ...(result.error ? { error: result.error } : {}),
+        data: result.data,
       };
     }
 

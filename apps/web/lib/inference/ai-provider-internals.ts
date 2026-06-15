@@ -69,6 +69,50 @@ export async function getDecryptedCredential(providerId: string) {
   return { ...cred, secretRef, clientSecret, cachedToken, refreshToken };
 }
 
+/**
+ * Cheap pre-flight: does this provider have credential material adequate for
+ * its auth method? Existence-only (no decrypt, no warning log) so it is safe to
+ * call in hot loops such as the background eval scheduler. "none" / unset auth
+ * (local Docker Model Runner, self-hosted speech) needs no credential and is
+ * always eligible. Returns false when the provider needs a key but has none —
+ * the caller should skip it rather than make a guaranteed-to-fail call that
+ * floods the logs with "No credential configured".
+ *
+ * Intentionally NOT getDecryptedCredential: that decrypts every field and emits
+ * diagnostic warnings on a missing/rotated row, which would itself become
+ * per-call log noise when used as a filter.
+ */
+export async function providerHasConfiguredCredential(
+  providerId: string,
+  authMethod: string | null,
+): Promise<boolean> {
+  const method = (authMethod ?? "").toLowerCase();
+  // No-auth endpoints (local model runner, self-hosted) need no credential.
+  if (method === "none" || method === "") return true;
+
+  const cred = await prisma.credentialEntry.findUnique({
+    where: { providerId },
+    select: {
+      secretRef: true,
+      clientSecret: true,
+      cachedToken: true,
+      refreshToken: true,
+    },
+  });
+  if (!cred) return false;
+
+  if (method === "api_key") return Boolean(cred.secretRef);
+  if (method === "oauth2_client_credentials") {
+    return Boolean(cred.clientSecret || cred.cachedToken || cred.refreshToken);
+  }
+  // oauth2_authorization_code + unknown methods: usable only if SOME token or
+  // secret material is present. (authorization_code is excluded from background
+  // eval upstream, but keep this correct for other callers.)
+  return Boolean(
+    cred.secretRef || cred.clientSecret || cred.cachedToken || cred.refreshToken,
+  );
+}
+
 /** Provider-specific headers required beyond auth (e.g. Anthropic API versioning). */
 export function isAnthropicProvider(providerId: string): boolean {
   return providerId === "anthropic" || providerId.startsWith("anthropic-");
@@ -1037,6 +1081,60 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
   }
 
   return result;
+}
+
+/**
+ * Queue deterministic dimension evals for any ACTIVE models on a provider whose
+ * profiles are still un-calibrated seed priors (profileSource="seed",
+ * evalCount=0). This is the catch-up path for the bundled local provider: its
+ * models are seeded at install but, unlike user-configured providers, never went
+ * through autoDiscoverAndProfile — so they were stuck on flat seed priors and
+ * routing could not tell a strong tool-caller from a weak one.
+ *
+ * Safe to call repeatedly (e.g. on page-load health checks): once a model's
+ * first eval completes (evalCount>=1, even if inconclusive) it no longer matches
+ * the filter, so it stops re-queueing. No-op for providers ineligible for
+ * background evals (OAuth-delegated, non-LLM endpoints). Returns the number of
+ * models queued.
+ */
+export async function queueUncalibratedModelEvals(providerId: string): Promise<number> {
+  const provider = await prisma.modelProvider.findUnique({
+    where: { providerId },
+    select: {
+      providerId: true,
+      endpointType: true,
+      category: true,
+      serviceKind: true,
+      authMethod: true,
+      cliEngine: true,
+    },
+  });
+  if (!canQueueBackgroundModelEvals(provider ?? {})) {
+    console.log(
+      `[auto-eval] Skipping calibration evals for ${JSON.stringify(providerId)}: ${JSON.stringify(backgroundModelEvalSkipReason(provider))}`,
+    );
+    return 0;
+  }
+
+  const models = await prisma.modelProfile.findMany({
+    where: { providerId, modelStatus: "active", profileSource: "seed", evalCount: 0 },
+    select: { modelId: true, id: true },
+  });
+  if (models.length === 0) return 0;
+
+  try {
+    const { inngest } = await import("@/lib/queue/inngest-client");
+    for (const event of buildAutoDiscoveryEvalEvents(providerId, models)) {
+      await inngest.send(event);
+    }
+    console.log(`[auto-eval] Queued calibration evals for ${models.length} un-calibrated model(s) on ${JSON.stringify(providerId)}`);
+  } catch (err) {
+    // Non-fatal — seed priors remain usable until the eval runs.
+    console.warn("[auto-eval] Failed to queue calibration evals for %s: %s",
+      JSON.stringify(providerId),
+      err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
+  }
+  return models.length;
 }
 
 /**

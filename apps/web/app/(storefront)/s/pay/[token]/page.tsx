@@ -4,6 +4,7 @@
 import { getInvoiceByPayToken, markInvoiceViewed } from "@/lib/actions/finance";
 import { notFound } from "next/navigation";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { InvoiceSignaturePad } from "@/components/finance/InvoiceSignaturePad";
 
 type Props = { params: Promise<{ token: string }> };
 
@@ -20,6 +21,8 @@ export default async function PayPage({ params }: Props) {
   const isPaid = invoice.status === "paid";
   const total = Number(invoice.totalAmount);
   const due = Number(invoice.amountDue);
+  // Signature gate (Phase 1 e-sign): block the Pay Now flow until the customer signs.
+  const needsSignature = invoice.signatureRequired && !invoice.signedAt;
 
   return (
     <div
@@ -263,8 +266,37 @@ export default async function PayPage({ params }: Props) {
             </div>
           </div>
 
+          {/* Signature gate — capture before payment is enabled */}
+          {needsSignature && (
+            <InvoiceSignaturePad token={token} defaultEmail={invoice.contact?.email ?? null} />
+          )}
+
+          {/* Signed confirmation */}
+          {invoice.signatureRequired && invoice.signedAt && (
+            <div
+              style={{
+                background: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                borderRadius: 8,
+                padding: 16,
+                marginBottom: 24,
+              }}
+            >
+              <p style={{ margin: "0 0 2px", color: "#16a34a", fontSize: 13, fontWeight: 600 }}>
+                Signed
+              </p>
+              <p style={{ margin: 0, color: "#374151", fontSize: 13 }}>
+                Signed by {invoice.signedByName ?? invoice.signedByEmail ?? "the customer"} on{" "}
+                <LocalTime
+                  value={invoice.signedAt}
+                  options={{ day: "numeric", month: "long", year: "numeric" }}
+                />
+              </p>
+            </div>
+          )}
+
           {/* Pay Now button — placeholder until Stripe integration */}
-          {!isPaid && (
+          {!isPaid && !needsSignature && (
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <p
                 style={{ fontSize: 13, color: "var(--dpf-muted)", marginBottom: 12 }}

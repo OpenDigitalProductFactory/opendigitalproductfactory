@@ -181,8 +181,8 @@ export const healthcareWellnessArchetypes: ArchetypeDefinition[] = [
     itemTemplates: [
       { name: "Eye Test", description: "Full sight test and eye health examination", priceType: "fixed", bookingDurationMinutes: 30 },
       { name: "Contact Lens Consultation", description: "Assessment and fitting for contact lenses", priceType: "fixed", bookingDurationMinutes: 45 },
-      { name: "Glasses Frames", description: "Browse our range of designer and own-brand frames", priceType: "from", ctaType: "purchase" },
-      { name: "Prescription Lenses", description: "Single-vision, varifocal, and tinted lenses", priceType: "from", ctaType: "purchase" },
+      { name: "Glasses Frames", description: "Browse our range of designer and own-brand frames", priceType: "from", priceAmount: 89, ctaType: "purchase" },
+      { name: "Prescription Lenses", description: "Single-vision, varifocal, and tinted lenses", priceType: "from", priceAmount: 120, ctaType: "purchase" },
       { name: "Children's Eye Test", description: "NHS-funded sight test for under-16s", priceType: "free", bookingDurationMinutes: 30 },
     ],
     sectionTemplates: [

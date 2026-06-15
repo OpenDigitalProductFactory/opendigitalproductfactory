@@ -15,6 +15,19 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// Keep the signed-confirmation side-effects out of these unit tests: the PDF
+// renderer and mailer are exercised elsewhere; here isEmailConfigured()=false
+// short-circuits the confirmation path entirely.
+vi.mock("@/lib/invoice-pdf", () => ({
+  generateInvoicePdf: vi.fn().mockResolvedValue(Buffer.from("pdf")),
+  getInvoicePdfFilename: vi.fn(() => "Invoice.pdf"),
+}));
+vi.mock("@/lib/org-identity", () => ({ getOrgIdentity: vi.fn().mockResolvedValue(null) }));
+vi.mock("@/lib/email", () => ({
+  sendEmail: vi.fn().mockResolvedValue({ messageId: "x" }),
+  composeSignedConfirmationEmail: vi.fn(() => ({ to: "", subject: "", text: "", html: "" })),
+  isEmailConfigured: vi.fn(() => false),
+}));
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -28,6 +41,8 @@ import {
   generateInvoiceFromSalesOrder,
   sendInvoice,
   getInvoiceByPayToken,
+  signInvoice,
+  setInvoiceSignatureRequired,
 } from "./finance";
 
 const mockAuth = vi.mocked(auth);
@@ -453,5 +468,113 @@ describe("getInvoiceByPayToken", () => {
 
     const result = await getInvoiceByPayToken("bad-token");
     expect(result).toBeNull();
+  });
+});
+
+// ─── signInvoice (public, payToken-authorized) ────────────────────────────────
+
+describe("signInvoice", () => {
+  const validInput = {
+    token: "tok_abc",
+    signedByName: "Jane Client",
+    signedByEmail: "jane@client.com",
+    signatureDataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAterminate=",
+  };
+
+  it("records the signature when required and not yet signed", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({
+      id: "inv1",
+      signatureRequired: true,
+      signedAt: null,
+    } as never);
+    mockPrisma.invoice.update.mockResolvedValue({} as never);
+
+    const result = await signInvoice(validInput);
+
+    expect(result).toEqual({ ok: true });
+    const updateCall = mockPrisma.invoice.update.mock.calls[0][0];
+    expect(updateCall.where).toEqual({ id: "inv1" });
+    expect(updateCall.data.signedByName).toBe("Jane Client");
+    expect(updateCall.data.signedByEmail).toBe("jane@client.com");
+    expect(updateCall.data.signatureDataUrl).toBe(validInput.signatureDataUrl);
+    expect(updateCall.data.signedAt).toBeInstanceOf(Date);
+  });
+
+  it("is idempotent — already-signed invoice does not write again", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({
+      id: "inv1",
+      signatureRequired: true,
+      signedAt: new Date(),
+    } as never);
+
+    const result = await signInvoice(validInput);
+
+    expect(result).toEqual({ ok: true });
+    expect(mockPrisma.invoice.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the invoice does not require a signature", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({
+      id: "inv1",
+      signatureRequired: false,
+      signedAt: null,
+    } as never);
+
+    await expect(signInvoice(validInput)).rejects.toThrow(/does not require a signature/);
+    expect(mockPrisma.invoice.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the token matches no invoice", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue(null);
+
+    await expect(signInvoice(validInput)).rejects.toThrow(/not found/);
+  });
+
+  it("rejects an invalid signature payload (not an image data URL)", async () => {
+    await expect(
+      signInvoice({ ...validInput, signatureDataUrl: "not-an-image" }),
+    ).rejects.toThrow();
+    expect(mockPrisma.invoice.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing signer name", async () => {
+    await expect(signInvoice({ ...validInput, signedByName: "" })).rejects.toThrow();
+  });
+});
+
+// ─── setInvoiceSignatureRequired (admin) ──────────────────────────────────────
+
+describe("setInvoiceSignatureRequired", () => {
+  it("throws when unauthenticated", async () => {
+    mockAuth.mockResolvedValue(null as never);
+    await expect(setInvoiceSignatureRequired("inv1", true)).rejects.toThrow("Unauthorized");
+  });
+
+  it("updates the flag on an unsigned invoice", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({ id: "inv1", signedAt: null } as never);
+    mockPrisma.invoice.update.mockResolvedValue({} as never);
+
+    await setInvoiceSignatureRequired("inv1", true);
+
+    const updateCall = mockPrisma.invoice.update.mock.calls[0][0];
+    expect(updateCall.where).toEqual({ id: "inv1" });
+    expect(updateCall.data.signatureRequired).toBe(true);
+  });
+
+  it("refuses to change the requirement after the invoice is signed", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({
+      id: "inv1",
+      signedAt: new Date(),
+    } as never);
+
+    await expect(setInvoiceSignatureRequired("inv1", false)).rejects.toThrow(
+      /after the invoice has been signed/,
+    );
+    expect(mockPrisma.invoice.update).not.toHaveBeenCalled();
+  });
+
+  it("throws when the invoice is not found", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue(null);
+    await expect(setInvoiceSignatureRequired("missing", true)).rejects.toThrow("Invoice not found");
   });
 });

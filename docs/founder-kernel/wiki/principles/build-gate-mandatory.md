@@ -5,7 +5,7 @@ status: published
 abstract: Work is not complete until unit tests pass, the production build succeeds, UX is verified, and any new migration applies cleanly.
 principleTier: commandment
 principleDirection: Pass all four Build Gate checks before declaring work complete.
-principleDimensionVector: {"governance_compliance": 0.9, "evidence_density": 0.8, "blast_radius": 0.6}
+principleDimensionVector: {"governance_compliance": 0.9, "evidence_density": 0.8, "blast_radius": -0.6}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -52,7 +52,7 @@ Run the four checks in order; stop on the first failure and fix it before contin
 
 - `governance_compliance: 0.9` — the Build Gate IS the platform's primary done-state contract.
 - `evidence_density: 0.8` — each of the four checks produces durable artifacts (test report, build log, screenshots/recording, migration trace) that auditors and on-call can read months later.
-- `blast_radius: 0.6` — the gate is what keeps regressions from reaching production; skipping it expands the blast radius of every change.
+- `blast_radius: -0.6` — the gate is what keeps regressions from reaching production; skipping it expands the blast radius of every change.
 
 ## Examples
 

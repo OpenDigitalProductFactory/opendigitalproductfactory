@@ -28,6 +28,15 @@ type SlotsResult =
 
 type Step = "date" | "slot" | "form" | "confirmation";
 
+type FormField = {
+  name: string;
+  label: string;
+  type: string;
+  required: boolean;
+  options?: string[];
+  placeholder?: string;
+};
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface SlotBookingFlowProps {
@@ -37,6 +46,7 @@ export interface SlotBookingFlowProps {
   itemName: string;
   timezone: string;
   bookingConfig: Record<string, unknown> | null;
+  formSchema?: FormField[];
 }
 
 // ── Shared style helpers ──────────────────────────────────────────────────────
@@ -143,6 +153,7 @@ export function SlotBookingFlow({
   itemInternalId,
   itemName,
   timezone,
+  formSchema,
 }: SlotBookingFlowProps) {
   const router = useRouter();
 
@@ -302,6 +313,22 @@ export function SlotBookingFlow({
     const durationMinutes = computeDurationMinutes(slot.startTime, slot.endTime);
     const providerId = selectedProvider?.id ?? slot.providerId;
 
+    // Collect archetype-specific fields and prepend to notes
+    const STANDARD_FIELDS = ["name", "email", "phone", "notes"];
+    const extraLines: string[] = [];
+    if (formSchema) {
+      for (const field of formSchema) {
+        if (!STANDARD_FIELDS.includes(field.name)) {
+          const val = fd.get(field.name) as string | null;
+          if (val) extraLines.push(`${field.label}: ${val}`);
+        }
+      }
+    }
+    const userNotes = (fd.get("notes") as string) || "";
+    const notes = extraLines.length > 0
+      ? extraLines.join("\n") + (userNotes ? "\n\n" + userNotes : "")
+      : userNotes || undefined;
+
     const result = await submitBooking(orgSlug, {
       itemId: itemInternalId,
       holderToken: holderToken ?? undefined,
@@ -311,7 +338,7 @@ export function SlotBookingFlow({
       customerEmail: fd.get("email") as string,
       customerName: fd.get("name") as string,
       customerPhone: (fd.get("phone") as string) || undefined,
-      notes: (fd.get("notes") as string) || undefined,
+      notes: notes || undefined,
       idempotencyKey: crypto.randomUUID(),
     });
 
@@ -363,6 +390,7 @@ export function SlotBookingFlow({
           error={submitError}
           onBack={() => setStep("slot")}
           onSubmit={handleFormSubmit}
+          formSchema={formSchema}
         />
       )}
     </div>
@@ -477,6 +505,11 @@ function DateStep({
       )}
       {error && (
         <div style={{ fontSize: 13, color: "var(--dpf-error)" }}>{error}</div>
+      )}
+      {!loading && !error && availableDates.size === 0 && (
+        <div style={{ textAlign: "center", fontSize: 13, color: "var(--dpf-muted)", padding: "12px 0" }}>
+          No availability this month. Try the next month or check back soon.
+        </div>
       )}
     </div>
   );
@@ -720,6 +753,7 @@ function FormStep({
   error,
   onBack,
   onSubmit,
+  formSchema,
 }: {
   selectedDate: string;
   selectedSlot: AvailableSlot;
@@ -729,6 +763,7 @@ function FormStep({
   error: string | null;
   onBack: () => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+  formSchema?: FormField[];
 }) {
   const providerName =
     selectedProvider?.name ?? selectedSlot.providerName;
@@ -785,6 +820,25 @@ function FormStep({
           <label style={labelStyle}>Phone (optional)</label>
           <PhoneInput name="phone" style={inputStyle} />
         </div>
+
+        {formSchema?.filter(f => !["name", "email", "phone", "notes", "message"].includes(f.name)).map((field) => (
+          <div key={field.name} style={fieldStyle}>
+            <label style={labelStyle}>{field.label}{field.required ? " *" : " (optional)"}</label>
+            {field.type === "textarea" ? (
+              <textarea name={field.name} required={field.required} rows={3}
+                placeholder={field.placeholder}
+                style={{ ...inputStyle, resize: "vertical" }} />
+            ) : field.type === "select" ? (
+              <select name={field.name} required={field.required} style={inputStyle}>
+                <option value="">Select…</option>
+                {field.options?.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            ) : (
+              <input type={field.type} name={field.name} required={field.required}
+                placeholder={field.placeholder} style={inputStyle} />
+            )}
+          </div>
+        ))}
 
         <div style={fieldStyle}>
           <label style={labelStyle}>Notes (optional)</label>

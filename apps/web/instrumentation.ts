@@ -118,13 +118,29 @@ export async function syncPlatformVersionOnBoot(
  */
 export async function reconcileSelfUpgradeRunsOnBoot(
   logger: Pick<Console, "log" | "error"> = console,
+  opts: { staleAfterMs?: number; now?: () => Date } = {},
 ): Promise<{ succeeded: number; failed: number } | null> {
   try {
     const { prisma } = await import("@dpf/db");
     const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
     const { completeRun, failRun } = await import("@/lib/self-upgrade/run-store");
     const deployedSha = await getDeployedSha();
-    const running = await prisma.selfUpgradeRun.findMany({ where: { status: "running" } });
+    // staleAfterMs > 0 → PERIODIC mode (called in-process on an interval, not just
+    // on boot): only touch runs stuck "running" well past a normal upgrade (~7
+    // min), so an in-flight swap is never reconciled out from under itself.
+    // staleAfterMs = 0 (boot default) reconciles every "running" row, because a
+    // boot means the orchestrating process is already gone.
+    const staleAfterMs = opts.staleAfterMs ?? 0;
+    const now = opts.now?.() ?? new Date();
+    const running = await prisma.selfUpgradeRun.findMany({
+      where:
+        staleAfterMs > 0
+          ? {
+              status: "running",
+              startedAt: { lt: new Date(now.getTime() - staleAfterMs) },
+            }
+          : { status: "running" },
+    });
     let succeeded = 0;
     let failed = 0;
     for (const run of running) {
@@ -140,12 +156,41 @@ export async function reconcileSelfUpgradeRunsOnBoot(
       } else {
         await failRun(
           run.runId,
-          `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`,
+          staleAfterMs > 0
+            ? `Reconciled by watchdog (stuck "running" > ${Math.round(staleAfterMs / 60000)}m): orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`
+            : `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`,
         );
         failed++;
         logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (orphaned)`);
       }
     }
+
+    // In PERIODIC mode, also fail runs stuck "queued"/"pending" that never
+    // started — the dispatch event was dropped (e.g. the job engine was down),
+    // so they can never run, yet requestPortalSelfUpgradeAction silently no-ops
+    // on a queued/pending row and blocks every future upgrade. (SUR-B26DF3E4 had
+    // to be cleared by hand during the 2026-06-14 incident.) Boot mode leaves
+    // these alone — a freshly-queued run there may still be mid-dispatch.
+    if (staleAfterMs > 0) {
+      const staleQueued = await prisma.selfUpgradeRun.findMany({
+        where: {
+          status: { in: ["queued", "pending"] },
+          startedAt: null,
+          createdAt: { lt: new Date(now.getTime() - staleAfterMs) },
+        },
+      });
+      for (const run of staleQueued) {
+        await failRun(
+          run.runId,
+          `Reconciled by watchdog: dispatch never started (stuck "${run.status}" > ${Math.round(staleAfterMs / 60000)}m — the queue event was likely dropped). Re-invoke to retry.`,
+        );
+        failed++;
+        logger.log(
+          `[self-upgrade-reconcile] ${run.runId} -> failed (never-dispatched ${run.status})`,
+        );
+      }
+    }
+
     if (succeeded || failed) {
       logger.log(`[self-upgrade-reconcile] resolved ${succeeded} succeeded, ${failed} failed`);
     }
@@ -465,6 +510,31 @@ export async function register() {
     // came up on the target SHA; fails orphans so triggers aren't blocked.
     void reconcileSelfUpgradeRunsOnBoot();
 
+    // Periodic safety net — cron-independent (the boot reconcile above and the
+    // Inngest cron can BOTH miss this). If a swap's orchestrator dies while the
+    // portal stays UP (no reboot), the SelfUpgradeRun sits "running" forever and
+    // every future trigger silently no-ops (requestPortalSelfUpgradeAction). The
+    // June-10 run sat "running" for 4 days until a manual restart — this re-runs
+    // the reconcile in-process so a stuck run self-heals within ~20 min instead.
+    // Staleness-guarded so a legitimately in-flight upgrade is never touched.
+    setInterval(
+      () => {
+        void reconcileSelfUpgradeRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
+      },
+      20 * 60 * 1000,
+    );
+
+    // Same boot + periodic safety net for BackupRun rows stuck "running": a
+    // backup runner that dies mid-dump leaves a false "in progress" row forever
+    // (no other recovery), polluting the backup-health card + corruption alerts.
+    void (async () => {
+      const { reconcileStuckBackupRuns } = await import(
+        "@/lib/operate/backups/reconcile-stuck-runs"
+      );
+      await reconcileStuckBackupRuns();
+      setInterval(() => void reconcileStuckBackupRuns(), 20 * 60 * 1000);
+    })();
+
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
     // These run unconditionally — they are correctness reconcilers, not optional
     // maintenance — and FIX 1 runs before FIX 2 so contradictory checkpoints are
@@ -511,6 +581,10 @@ export async function register() {
             if (res.ok) {
               const body = await res.json().catch(() => ({}));
               console.log(`[inngest-sync] Registered with Inngest server: ${JSON.stringify(body)}`);
+              const { recordInngestRegistration } = await import(
+                "@/lib/queue/job-engine-health"
+              );
+              await recordInngestRegistration(true);
               return;
             }
             lastErr = `HTTP ${res.status}`;
@@ -523,9 +597,50 @@ export async function register() {
           `[inngest-sync] Failed to register with Inngest server after 6 attempts: ${String(lastErr)}. ` +
           `Background jobs (brand extract, evals, etc.) will not dispatch until this succeeds.`,
         );
+        // Persist the failure so the ops UI surfaces a dead job engine — the
+        // missing signal that let the 2026-06-14 outage hide for 4 days.
+        const { recordInngestRegistration } = await import(
+          "@/lib/queue/job-engine-health"
+        );
+        await recordInngestRegistration(
+          false,
+          `Inngest registration failed after 6 attempts: ${String(lastErr)}`,
+        );
       }, 3_000);
     } else if (process.env.INNGEST_BASE_URL) {
       console.log("[inngest-sync] Boot self-registration skipped (disabled)");
+    }
+
+    // Periodic re-sync (in-process, cron-independent): re-register every 5 min so
+    // the job engine self-heals WITHOUT a portal reboot if the boot sync failed
+    // or Inngest later restarts and forgets its registration (the 2026-06-14
+    // outage needed a reboot to re-register). Also keeps the ops.jobEngine health
+    // record fresh — it then reflects the CURRENT state, not just boot. The PUT is
+    // idempotent ("modified:false" when the catalog is unchanged).
+    if (process.env.INNGEST_BASE_URL && isInngestSelfSyncOnBootEnabled()) {
+      const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+      setInterval(
+        () => {
+          void (async () => {
+            const { recordInngestRegistration } = await import(
+              "@/lib/queue/job-engine-health"
+            );
+            try {
+              const res = await fetch(`${appUrl}/api/inngest`, { method: "PUT" });
+              await recordInngestRegistration(
+                res.ok,
+                res.ok ? null : `Inngest re-sync failed: HTTP ${res.status}`,
+              );
+            } catch (err) {
+              await recordInngestRegistration(
+                false,
+                `Inngest re-sync failed: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          })();
+        },
+        5 * 60 * 1000,
+      );
     }
 
     // ── Pin audit invariant ────────────────────────────────────────────────

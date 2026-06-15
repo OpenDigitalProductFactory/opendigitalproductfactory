@@ -1,7 +1,8 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
 import { nanoid } from "nanoid";
 import { projectOperationalValueStreamForArchetype } from "./project-operational-value-stream";
+import { seedBookingScheduleDefaults } from "./seed-booking-defaults";
 
 type ResetMode = "replace-seeded-content";
 
@@ -15,7 +16,7 @@ export async function resetStorefrontArchetype(input: {
   return prisma.$transaction(async (tx) => {
     const organization = await tx.organization.findUnique({
       where: { id: organizationId },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
     if (!organization) {
@@ -79,6 +80,9 @@ export async function resetStorefrontArchetype(input: {
       archetypeId: targetArchetype.archetypeId,
     });
 
+    const orgSettingsRow = await tx.orgSettings.findFirst({ select: { baseCurrency: true } });
+    const seedCurrency = orgSettingsRow?.baseCurrency ?? "USD";
+
     let sectionsCreated = 0;
     let itemsCreated = 0;
 
@@ -120,15 +124,23 @@ export async function resetStorefrontArchetype(input: {
         ctaLabel?: string | null;
       }>;
 
+      // Content-dependent sections (team, gallery, testimonials) return null when
+      // their content is empty. Seed them as hidden until the operator adds content
+      // so the public storefront never shows invisible gap-sections (R10-SECT-001).
+      const CONTENT_DEPENDENT_TYPES = ["team", "gallery", "testimonials"];
+
       const sectionResult = await tx.storefrontSection.createMany({
-        data: sectionTemplates.map((section) => ({
-          storefrontId: storefront.id,
-          type: section.type,
-          title: section.title ?? null,
-          content: section.content ?? {},
-          sortOrder: section.sortOrder,
-          isVisible: true,
-        })),
+        data: sectionTemplates.map((section) => {
+          const hasContent = Object.keys(section.content ?? {}).length > 0;
+          return {
+            storefrontId: storefront.id,
+            type: section.type,
+            title: section.title ?? null,
+            content: (section.content ?? {}) as unknown as Prisma.InputJsonValue,
+            sortOrder: section.sortOrder,
+            isVisible: CONTENT_DEPENDENT_TYPES.includes(section.type) ? hasContent : true,
+          };
+        }),
       });
 
       const itemResult = await tx.storefrontItem.createMany({
@@ -139,7 +151,7 @@ export async function resetStorefrontArchetype(input: {
           description: item.description ?? null,
           category: item.category ?? null,
           priceType: item.priceType ?? null,
-          priceCurrency: "GBP",
+          priceCurrency: seedCurrency,
           ctaType: item.ctaType ?? targetArchetype.ctaType,
           ctaLabel: item.ctaLabel ?? null,
           sortOrder: index,
@@ -149,6 +161,19 @@ export async function resetStorefrontArchetype(input: {
 
       sectionsCreated = sectionResult.count;
       itemsCreated = itemResult.count;
+
+      // Booking archetypes (e.g. restaurant) seed booking items but, before this,
+      // no provider/availability — leaving the storefront's booking calendar with
+      // every date greyed out (R9-RES-001). Seed a default provider + hours +
+      // provider→item links + bookingConfig from the template, inside the reset
+      // transaction so it commits or rolls back atomically with the rest. No-op
+      // for non-booking archetypes. Shared with storefront setup so the two seed
+      // paths can't drift.
+      await seedBookingScheduleDefaults(tx, {
+        storefrontId: storefront.id,
+        archetypeId: targetArchetype.archetypeId,
+        providerName: organization.name ?? "Bookings",
+      });
     }
 
     return {

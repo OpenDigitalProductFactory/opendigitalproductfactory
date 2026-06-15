@@ -346,6 +346,22 @@ export function BackupsClient({
               </div>
             </div>
 
+            {/* BI-EA67A758: inline warning banner when last trial restore failed */}
+            {target === "postgres" && r.openCorruptionAlert && (
+              <div
+                className="mb-3 p-3 rounded text-sm"
+                style={{
+                  background: "rgba(248, 113, 113, 0.15)",
+                  color: "#f87171",
+                  border: "1px solid rgba(248, 113, 113, 0.3)",
+                }}
+              >
+                <strong>Critical:</strong> The last Postgres backup trial restore failed &mdash;{" "}
+                {r.openCorruptionAlert.message} Run a new backup and use &ldquo;Verify last
+                backup&rdquo; to confirm integrity.
+              </div>
+            )}
+
             {/* ─── Readiness card ──────────────────────────────────────── */}
             <div
               className="rounded p-4 grid gap-3 text-sm mb-3"

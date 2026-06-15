@@ -1,0 +1,62 @@
+<svg viewBox="0 0 680 520" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif">
+<title>opencode local-LLM dispatch architecture</title>
+<desc>The Build Studio orchestrator dispatches a build task through opencode-dispatch.ts into the sandbox container, where the opencode CLI runs an agent loop pointed at the install's local Docker Model Runner (qwen3-coder on the GPU), parses the model's native tool-call format, and writes files into the workspace — with no vendor credential.</desc>
+<style>
+  .t { fill: #1a1f25; }
+  .m { fill: #515b66; }
+  .grp { stroke: #d9dde3; }
+  @media (prefers-color-scheme: dark) {
+    .t { fill: #e6e8eb; }
+    .m { fill: #a4adb8; }
+    .grp { stroke: #262d36; }
+  }
+</style>
+
+<text x="340" y="28" text-anchor="middle" font-size="17" font-weight="600" class="t">Build Studio · opencode local-LLM dispatch</text>
+
+<rect x="30" y="46" width="620" height="92" rx="6" fill="none" class="grp" stroke-dasharray="4 4"/>
+<text x="44" y="64" font-size="12" font-weight="600" class="m">dpf-portal-1 · portal</text>
+<rect x="55" y="72" width="262" height="54" rx="4" fill="none" stroke="#3b82f6" stroke-width="1.5"/>
+<text x="186" y="96" text-anchor="middle" font-size="14" font-weight="600" class="t">Build orchestrator</text>
+<text x="186" y="114" text-anchor="middle" font-size="12" class="m">picks dispatchEngine</text>
+<rect x="363" y="72" width="262" height="54" rx="4" fill="none" stroke="#3b82f6" stroke-width="1.5"/>
+<text x="494" y="96" text-anchor="middle" font-size="14" font-weight="600" class="t">opencode-dispatch.ts</text>
+<text x="494" y="114" text-anchor="middle" font-size="12" class="m">runner · preflight</text>
+<path d="M317 99 L361 99" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#a)"/>
+
+<path d="M494 138 L494 168" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="504" y="157" font-size="12" class="m">docker exec</text>
+
+<rect x="30" y="170" width="620" height="100" rx="6" fill="none" class="grp" stroke-dasharray="4 4"/>
+<text x="44" y="188" font-size="12" font-weight="600" class="m">dpf-sandbox-1 · sandbox</text>
+<rect x="55" y="198" width="262" height="58" rx="4" fill="none" stroke="#14b8a6" stroke-width="1.5"/>
+<text x="186" y="222" text-anchor="middle" font-size="14" font-weight="600" class="t">opencode CLI</text>
+<text x="186" y="240" text-anchor="middle" font-size="12" class="m">agent loop · no credential</text>
+<rect x="363" y="198" width="262" height="58" rx="4" fill="none" stroke="#14b8a6" stroke-width="1.5"/>
+<text x="494" y="222" text-anchor="middle" font-size="14" font-weight="600" class="t">parses &lt;function=…&gt;</text>
+<text x="494" y="240" text-anchor="middle" font-size="12" class="m">native tool-call format</text>
+<path d="M317 227 L361 227" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#a)"/>
+
+<path d="M186 256 L186 306" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#a)" marker-start="url(#b)"/>
+<text x="196" y="285" font-size="12" class="m">OpenAI /v1</text>
+<path d="M494 256 L494 306" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="504" y="285" font-size="12" class="m">writes files</text>
+
+<rect x="55" y="308" width="262" height="66" rx="4" fill="none" stroke="#8b5cf6" stroke-width="1.5"/>
+<text x="186" y="334" text-anchor="middle" font-size="14" font-weight="600" class="t">Docker Model Runner</text>
+<text x="186" y="353" text-anchor="middle" font-size="12" class="m">qwen3-coder · local GPU</text>
+<rect x="363" y="308" width="262" height="66" rx="4" fill="none" stroke="#16a34a" stroke-width="1.5"/>
+<text x="494" y="334" text-anchor="middle" font-size="14" font-weight="600" class="t">/workspace</text>
+<text x="494" y="353" text-anchor="middle" font-size="12" class="m">files + git diff returned</text>
+
+<rect x="30" y="402" width="620" height="86" rx="6" fill="none" class="grp"/>
+<text x="44" y="424" font-size="13" font-weight="600" class="t">vs. claude / codex / grok engines</text>
+<text x="44" y="446" font-size="12.5" class="m">Same in-sandbox agent loop — only the model endpoint differs.</text>
+<text x="44" y="465" font-size="12.5" class="m">opencode: local endpoint · no vendor credential · zero token cost · air-gappable.</text>
+<text x="44" y="481" font-size="12.5" class="m">Others: vendor cloud API + OAuth/key required.</text>
+
+<defs>
+<marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#9ca3af"/></marker>
+<marker id="b" markerWidth="8" markerHeight="8" refX="0" refY="3" orient="auto"><path d="M6 0 L0 3 L6 6 Z" fill="#9ca3af"/></marker>
+</defs>
+</svg>

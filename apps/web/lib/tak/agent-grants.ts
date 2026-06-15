@@ -89,8 +89,12 @@ export const COWORKER_READ_BASELINE_GRANTS: readonly string[] = [
  * A tool is allowed if the agent has ANY of the grants it maps to —
  * directly OR via GRANT_IMPLICATIONS expansion (see expandGrants).
  * Tools not in this map are DENIED by default — every tool must have an entry.
+ *
+ * Exported so the MCP-authority SysML reconcile (apps/web/lib/ea/reconcile-mcp-authority.ts)
+ * can project this authority surface into the EA graph at runtime without parsing
+ * source. The coworker-tool-grant audit still regex-parses the source form.
  */
-const TOOL_TO_GRANTS: Record<string, string[]> = {
+export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Browser-driving (namespaced MCP, server slug `mcp-browser-use`) —
   // EP-BROWSER-DRIVE, spec 2026-06-05 §8.2 (Verdict 5). These are the
   // platform-visible `<serverId>__<toolName>` names (see mcp-server-tools.ts
@@ -421,6 +425,12 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   analyze_seo_opportunity:      ["marketing_read"],
   generate_custom_archetype:    ["marketing_write"],
   assess_archetype_refinement:  ["marketing_read"],
+
+  // Email setup (PBI-INV-04 Phase 2). Operator-only at the user-capability
+  // layer (the tool carries requiredCapability: "manage_provider_connections");
+  // this agent grant gates whether the coworker may surface + call it. Held by
+  // the onboarding-coo (setup wizard) and the workspace COO.
+  setup_email: ["email_config"],
 
   // Admin
   admin_view_logs:        ["admin_read"],
