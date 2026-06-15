@@ -24,6 +24,7 @@ export default async function CustomerPage({
     campaignBriefsOpen,
     assetTasksOpen,
     automationCandidatesOpen,
+    orgSettings,
   ] = await Promise.all([
     prisma.customerAccount.findMany({
       orderBy: { name: "asc" },
@@ -68,6 +69,7 @@ export default async function CustomerPage({
     prisma.marketingAutomationCandidate.count({
       where: { status: "draft" },
     }),
+    prisma.orgSettings.findFirst({ select: { baseCurrency: true } }),
   ]);
 
   const revenueSummary = buildRevenueCockpitSummary({
@@ -88,6 +90,7 @@ export default async function CustomerPage({
       status: item.status,
       count: item._count,
     })),
+    currency: orgSettings?.baseCurrency ?? "USD",
     staleOpportunityCount,
     marketingWork: {
       campaignBriefsOpen,

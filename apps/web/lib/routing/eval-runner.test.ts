@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const evalState = vi.hoisted(() => ({
   profileUpdates: [] as Array<Record<string, unknown>>,
   callCount: 0,
+  errorMessage: "The operation was aborted due to timeout",
 }));
 
 vi.mock("@/lib/ai-inference", () => {
@@ -19,10 +20,7 @@ vi.mock("@/lib/ai-inference", () => {
     InferenceError,
     callProvider: vi.fn(async () => {
       evalState.callCount++;
-      throw new InferenceError(
-        "The operation was aborted due to timeout",
-        "network",
-      );
+      throw new InferenceError(evalState.errorMessage, "network");
     }),
   };
 });
@@ -51,6 +49,7 @@ import {
   detectDrift,
   errorLooksLikeInfrastructure,
   errorLooksLikeConfigGap,
+  errorEndsEvalCycle,
   runDimensionEval,
   type DriftResult,
 } from "./eval-runner";
@@ -187,10 +186,27 @@ describe("errorLooksLikeConfigGap (credential/setup circuit breaker)", () => {
   });
 });
 
-describe("runDimensionEval — infrastructure short-circuit", () => {
+describe("errorEndsEvalCycle (whole-endpoint short-circuit predicate)", () => {
+  it("is true for infrastructure failures", () => {
+    expect(errorEndsEvalCycle("The operation was aborted due to timeout")).toBe(true);
+    expect(errorEndsEvalCycle("fetch failed")).toBe(true);
+  });
+  it("is true for config/credential gaps", () => {
+    expect(errorEndsEvalCycle("No credential configured")).toBe(true);
+    expect(errorEndsEvalCycle("All encrypted fields failed to decrypt")).toBe(true);
+  });
+  it("is false for genuine model-quality failures (those still get scored/retired)", () => {
+    expect(errorEndsEvalCycle("schema validation failed")).toBe(false);
+    expect(errorEndsEvalCycle("Model not found on local")).toBe(false);
+    expect(errorEndsEvalCycle(null)).toBe(false);
+  });
+});
+
+describe("runDimensionEval — whole-endpoint short-circuit", () => {
   beforeEach(() => {
     evalState.profileUpdates.length = 0;
     evalState.callCount = 0;
+    evalState.errorMessage = "The operation was aborted due to timeout";
   });
 
   it("stops after the first timed-out probe instead of grinding every test", async () => {
@@ -207,6 +223,21 @@ describe("runDimensionEval — infrastructure short-circuit", () => {
 
     // A timeout is a broken probe path, not a model-quality failure — retiring
     // would strand a working-but-slow model.
+    const retired = evalState.profileUpdates.some(
+      (u) => u.modelStatus === "retired",
+    );
+    expect(retired).toBe(false);
+  });
+
+  it("also short-circuits on a config gap (rotated/missing key fails every test identically)", async () => {
+    // Regression for the gap found in live verification: a credential error is
+    // a whole-endpoint failure too, but only infrastructure errors used to
+    // short-circuit — so an uncredentialed/rotated provider flooded ~24 lines.
+    evalState.errorMessage = "No credential configured";
+
+    await runDimensionEval("gemini", "gemma-3-1b-it", "test");
+
+    expect(evalState.callCount).toBe(1);
     const retired = evalState.profileUpdates.some(
       (u) => u.modelStatus === "retired",
     );
