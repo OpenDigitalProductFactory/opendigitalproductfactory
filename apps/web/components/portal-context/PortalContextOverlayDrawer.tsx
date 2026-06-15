@@ -22,7 +22,18 @@ export function PortalContextOverlayDrawer({
   return (
     <aside
       aria-label="Portal context overlay"
-      className="fixed inset-y-0 right-0 z-40 flex w-full max-w-xl flex-col border-l border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] shadow-xl"
+      // Dock to the LEFT of the AI coworker panel instead of underneath it.
+      // The coworker panel (z-50) docks to the viewport's right edge on desktop
+      // and reserves a gutter via --agent-panel-reserved-width — the same gutter
+      // the shell content honors in (shell)/layout.tsx. Offsetting our right
+      // edge by that gutter lets both panels sit side by side rather than
+      // overlapping. When the coworker is closed or floating the gutter is 0px
+      // and we fall back to the right edge. z-[60] keeps the drawer above the
+      // coworker tier (z-50) for the narrow-viewport floating case, where there
+      // is no gutter to offset around, while staying below the z-[80] banner
+      // overlay tier.
+      style={{ right: "var(--agent-panel-reserved-width, 0px)" }}
+      className="fixed inset-y-0 z-[60] flex w-full max-w-xl flex-col border-l border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] shadow-xl transition-[right] duration-200"
     >
       <div className="flex items-center justify-between gap-3 border-b border-[var(--dpf-border)] px-4 py-3">
         <div className="min-w-0">
