@@ -90,6 +90,11 @@ const baseStatus = {
       "Build-pipeline lane uncapped — set DPF_BUILD_PIPELINE_CONCURRENCY to reserve self-upgrade headroom; nothing holding capacity.",
   },
   cooldownUntil: null,
+  jobEngine: {
+    status: "healthy" as const,
+    detail: null,
+    checkedAt: "2026-05-24T00:00:00.000Z",
+  },
   platformVersion: {
     version: "1.0.0",
     publishedAt: "2026-05-24T00:00:00.000Z",

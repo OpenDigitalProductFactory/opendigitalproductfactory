@@ -581,6 +581,10 @@ export async function register() {
             if (res.ok) {
               const body = await res.json().catch(() => ({}));
               console.log(`[inngest-sync] Registered with Inngest server: ${JSON.stringify(body)}`);
+              const { recordInngestRegistration } = await import(
+                "@/lib/queue/job-engine-health"
+              );
+              await recordInngestRegistration(true);
               return;
             }
             lastErr = `HTTP ${res.status}`;
@@ -593,9 +597,50 @@ export async function register() {
           `[inngest-sync] Failed to register with Inngest server after 6 attempts: ${String(lastErr)}. ` +
           `Background jobs (brand extract, evals, etc.) will not dispatch until this succeeds.`,
         );
+        // Persist the failure so the ops UI surfaces a dead job engine — the
+        // missing signal that let the 2026-06-14 outage hide for 4 days.
+        const { recordInngestRegistration } = await import(
+          "@/lib/queue/job-engine-health"
+        );
+        await recordInngestRegistration(
+          false,
+          `Inngest registration failed after 6 attempts: ${String(lastErr)}`,
+        );
       }, 3_000);
     } else if (process.env.INNGEST_BASE_URL) {
       console.log("[inngest-sync] Boot self-registration skipped (disabled)");
+    }
+
+    // Periodic re-sync (in-process, cron-independent): re-register every 5 min so
+    // the job engine self-heals WITHOUT a portal reboot if the boot sync failed
+    // or Inngest later restarts and forgets its registration (the 2026-06-14
+    // outage needed a reboot to re-register). Also keeps the ops.jobEngine health
+    // record fresh — it then reflects the CURRENT state, not just boot. The PUT is
+    // idempotent ("modified:false" when the catalog is unchanged).
+    if (process.env.INNGEST_BASE_URL && isInngestSelfSyncOnBootEnabled()) {
+      const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+      setInterval(
+        () => {
+          void (async () => {
+            const { recordInngestRegistration } = await import(
+              "@/lib/queue/job-engine-health"
+            );
+            try {
+              const res = await fetch(`${appUrl}/api/inngest`, { method: "PUT" });
+              await recordInngestRegistration(
+                res.ok,
+                res.ok ? null : `Inngest re-sync failed: HTTP ${res.status}`,
+              );
+            } catch (err) {
+              await recordInngestRegistration(
+                false,
+                `Inngest re-sync failed: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          })();
+        },
+        5 * 60 * 1000,
+      );
     }
 
     // ── Pin audit invariant ────────────────────────────────────────────────
