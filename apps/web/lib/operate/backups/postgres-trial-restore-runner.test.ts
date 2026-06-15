@@ -12,6 +12,7 @@ vi.mock("@dpf/db", () => ({
     backupRun: { findMany: vi.fn() },
     backupRestore: { create: vi.fn() },
     scheduledJob: { update: vi.fn() },
+    platformNotification: { create: vi.fn(), updateMany: vi.fn() },
   },
 }));
 
@@ -22,13 +23,19 @@ type Mock = ReturnType<typeof vi.fn>;
 const findManyMock = prisma.backupRun.findMany as unknown as Mock;
 const createMock = prisma.backupRestore.create as unknown as Mock;
 const scheduledJobUpdateMock = prisma.scheduledJob.update as unknown as Mock;
+const notificationCreateMock = prisma.platformNotification.create as unknown as Mock;
+const notificationUpdateManyMock = prisma.platformNotification.updateMany as unknown as Mock;
 
 beforeEach(() => {
   findManyMock.mockReset();
   createMock.mockReset();
   scheduledJobUpdateMock.mockReset();
+  notificationCreateMock.mockReset();
+  notificationUpdateManyMock.mockReset();
   createMock.mockImplementation(async ({ data, select }) => ({ id: "restore_test_id", ...(select ? {} : data) }));
   scheduledJobUpdateMock.mockResolvedValue({});
+  notificationCreateMock.mockResolvedValue({ id: "notif_test_id" });
+  notificationUpdateManyMock.mockResolvedValue({ count: 1 });
 });
 
 describe("parseResultLine", () => {
@@ -237,6 +244,67 @@ describe("runPostgresTrialRestore", () => {
           }),
         }),
       );
+    } finally {
+      accessSpy.mockRestore();
+    }
+  });
+
+  it("failed trial restore creates a critical PlatformNotification (BI-EA67A758)", async () => {
+    const { promises: fs } = await import("node:fs");
+    const accessSpy = vi.spyOn(fs, "access").mockResolvedValue(undefined);
+    try {
+      findManyMock.mockResolvedValue([
+        { id: "backuprun_a", storagePath: "postgres/2026-05-24T03-00-00Z" },
+      ]);
+      const failedScript: ScriptOutcome = {
+        ok: false,
+        stdout: "RESULT failed assert_BacklogItem=0 duration_ms=5000 reason=BacklogItem:zero-rows\n",
+        stderr: "",
+        exitCode: 5,
+      };
+      await runPostgresTrialRestore({ backupsRoot: "/test/backups", runScript: async () => failedScript });
+      expect(notificationCreateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            severity: "critical",
+            category: "backup-trial-restore-failed",
+            subjectId: "postgres",
+            message: expect.stringContaining("failed"),
+          }),
+        }),
+      );
+      expect(notificationUpdateManyMock).not.toHaveBeenCalled();
+    } finally {
+      accessSpy.mockRestore();
+    }
+  });
+
+  it("successful trial restore resolves open PlatformNotification (BI-EA67A758)", async () => {
+    const { promises: fs } = await import("node:fs");
+    const accessSpy = vi.spyOn(fs, "access").mockResolvedValue(undefined);
+    try {
+      findManyMock.mockResolvedValue([
+        { id: "backuprun_a", storagePath: "postgres/2026-05-24T03-00-00Z" },
+      ]);
+      const okScript: ScriptOutcome = {
+        ok: true,
+        stdout:
+          "RESULT ok assert_BacklogItem=550 assert_Epic=62 assert_ModelProvider=30 assert_User=1 duration_ms=10000\n",
+        stderr: "",
+        exitCode: 0,
+      };
+      await runPostgresTrialRestore({ backupsRoot: "/test/backups", runScript: async () => okScript });
+      expect(notificationUpdateManyMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            category: "backup-trial-restore-failed",
+            subjectId: "postgres",
+            resolvedAt: null,
+          }),
+          data: expect.objectContaining({ resolvedAt: expect.any(Date) }),
+        }),
+      );
+      expect(notificationCreateMock).not.toHaveBeenCalled();
     } finally {
       accessSpy.mockRestore();
     }
