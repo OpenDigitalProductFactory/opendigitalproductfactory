@@ -74,7 +74,21 @@ export function AnimalsSection({
   const legacy = Array.isArray(content.animals) ? (content.animals as LegacyAnimal[]) : [];
   const records = animals ?? [];
 
-  if (!intro && records.length === 0 && legacy.length === 0) return null;
+  if (!intro && records.length === 0 && legacy.length === 0) {
+    return (
+      <div
+        style={{
+          padding: "32px 0",
+          color: "var(--dpf-muted)",
+          fontSize: 14,
+          fontStyle: "italic",
+          textAlign: "center",
+        }}
+      >
+        Add animals in Admin → Animals to populate this section.
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "40px 0" }}>
