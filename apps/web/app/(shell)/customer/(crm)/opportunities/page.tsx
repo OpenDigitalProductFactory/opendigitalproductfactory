@@ -31,6 +31,7 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
       account: { select: { id: true, accountId: true, name: true } },
       contact: { select: { id: true, firstName: true, lastName: true, email: true } },
       assignedTo: { select: { id: true, email: true } },
+      },
     }),
     getOrgSettings(),
   ]);
