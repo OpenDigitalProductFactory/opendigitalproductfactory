@@ -5,6 +5,7 @@ import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InvoiceSendButton } from "@/components/finance/InvoiceSendButton";
+import { InvoiceDownloadButton } from "@/components/finance/InvoiceDownloadButton";
 import { InvoiceSignatureToggle } from "@/components/finance/InvoiceSignatureToggle";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -90,14 +91,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
           </p>
           {/* Action buttons */}
           <div className="flex gap-2 mt-3">
-            <a
-              href={`/api/v1/finance/invoices/${invoice.id}/pdf`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
-            >
-              Download PDF
-            </a>
+            <InvoiceDownloadButton invoiceId={invoice.id} />
             <InvoiceSendButton invoiceId={invoice.id} status={invoice.status} />
           </div>
         </div>
