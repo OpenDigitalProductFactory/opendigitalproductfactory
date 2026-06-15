@@ -90,7 +90,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
           {/* Action buttons */}
           <div className="flex gap-2 mt-3">
             <InvoiceDownloadButton invoiceId={invoice.id} />
-            <InvoiceSendButton invoiceId={invoice.id} status={invoice.status} />
+            <InvoiceSendButton invoiceId={invoice.id} status={invoice.status} customerAccountId={invoice.account.id} />
           </div>
         </div>
         <div className="text-right">
