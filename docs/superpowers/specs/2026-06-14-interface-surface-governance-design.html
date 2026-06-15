@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interface-Surface Governance via Design-Time SysML — Design</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1.2rem; }
+  h1 { font-size: 1.7rem; } h2 { margin-top: 2rem; border-bottom: 1px solid #8884; padding-bottom: .2rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid #8886; padding: .35rem .5rem; text-align: left; vertical-align: top; }
+  code { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: .9em; }
+  pre { background: #8881; padding: 1rem; overflow-x: auto; border-radius: 6px; }
+  pre code { font-size: .85em; line-height: 1.5; }
+  .kw { color: #07d; font-weight: 600; } .com { color: #690; font-style: italic; } .str { color: #a50; }
+  .tag { display: inline-block; font-size: .75em; padding: .05rem .4rem; border: 1px solid #8886; border-radius: 999px; }
+  blockquote { border-left: 3px solid #8886; margin: 1rem 0; padding: .2rem 1rem; color: inherit; }
+</style>
+</head>
+<body>
+
+<h1>Interface-Surface Governance via Design-Time SysML</h1>
+
+<table>
+  <tr><th>Field</th><th>Value</th></tr>
+  <tr><td>Status</td><td>Draft — design for operator review (no code in this artifact)</td></tr>
+  <tr><td>Date</td><td>2026-06-14</td></tr>
+  <tr><td>Owner</td><td>Enterprise Architect, Build Studio platform team</td></tr>
+  <tr><td>Builds on</td><td><a href="2026-06-14-sysml-architecture-substrate-design.md">SysML Architecture Substrate</a> (notation; this is a concrete slice of its <strong>Phase 3 — Build Studio planning hooks</strong>, and answers its open <strong>Q5</strong>), <a href="2026-06-14-design-implementation-parity-engine-design.md">Design–Implementation Parity Engine</a> (the extraction pattern)</td></tr>
+  <tr><td>WWMD anchor</td><td>Kernel principle <code>remove-avoidable-failure-opportunities</code> (§"Interface surface is failure surface")</td></tr>
+  <tr><td>Kernel decisions (live <code>principle_decide</code>, reseeded kernel)</td><td><strong>Source = design SysML</strong> (<code>sysml-sourced</code> 11.23 vs <code>interim-markdown</code> 5.00, high confidence, no commandment conflict). <strong>Design-first</strong> (<code>spec-first</code> 10.59 vs <code>just-build</code> 6.21, high confidence) — this artifact is that design.</td></tr>
+  <tr><td>Mechanism already merged</td><td>cost-axis calibration (#1904), interface-surface rubric (#1906), the <code>ui-surface-features</code> deriver (#1910), <code>dpf-decision-via-kernel</code> guidance (#1914)</td></tr>
+</table>
+
+<h2>1. Problem — the rule exists, but nothing scores real work against it</h2>
+
+<p>The kernel now <em>says</em> interface surface is failure surface: every new button or
+fillable field must earn its surface (justification + long-term reuse + clarification),
+and removing interfaces is favored (<code>remove-avoidable-failure-opportunities</code>,
+PR #1906). The scorer exists too — <code>apps/web/lib/decision/ui-surface-features.ts</code>
+(<code>scoreUiSurfaceChange</code>, PR #1910) turns a surface change into a
+<code>pass</code> / <code>soft-block</code> / <code>no-op</code> verdict.</p>
+
+<p><strong>But no code reads an actual Build Studio design and runs the scorer.</strong>
+Today a feature can add ten unjustified controls and the design gate says nothing.
+The rule and the scorer are inert because nothing supplies the scorer's inputs
+(<code>controlsAdded/removed</code>, <code>justification</code>, <code>reuseBreadth</code>,
+<code>clarifiesOutcome</code>) from a real design. Closing that — by <em>system</em>, not by a
+reviewer remembering — is the whole point of the principle.</p>
+
+<h2>2. Decision</h2>
+
+<p>Both forks were resolved by the live kernel (the <code>principle_decide</code> MCP tool on the
+reseeded, sign-corrected kernel — verified to match the pure engine):</p>
+
+<ol>
+  <li><strong>Source the rubric inputs from the design's formal SysML model</strong>, not a
+  parallel markdown field. Kernel: <code>sysml-sourced</code> beat <code>interim-markdown</code>
+  11.23 vs 5.00 (high confidence), pulled by <em>Single Source of Truth</em>,
+  <em>Architecture Over Shortcuts</em>, <em>Research and Use Standards</em>,
+  <em>Optimize for the Whole</em>. A second markdown source would diverge from the SysML
+  design representation and never feed the parity engine.</li>
+  <li><strong>Design this before building it.</strong> Kernel: <code>spec-first</code> beat
+  <code>just-build</code> 10.59 vs 6.21 (high confidence) — the change touches the shared SysML
+  vocabulary, so it is designed and reviewed before it becomes load-bearing across every design.</li>
+</ol>
+
+<h2>3. Position in the substrate — a slice of Phase 3, not a new island</h2>
+
+<p>The SysML Architecture Substrate spec already contemplates exactly this: §9 puts SysML
+into the work lifecycle, <strong>Phase 3</strong> is "Build Studio planning hooks," and open
+question <strong>Q5</strong> asks <em>which gate owns mandatory SysML-note enforcement</em>.
+This design is the first concrete instance of Phase 3 and a partial answer to Q5: the
+<strong>design-review gate</strong> owns interface-surface enforcement, sourced from the
+per-feature SysML architecture note.</p>
+
+<p>It honors the substrate spec's discipline (§3 Non-Goals, §4, §13): <strong>no new EA tables,
+and no new element types</strong> in this slice — interface surface is modeled with the
+<em>existing</em> seeded <code>sysml2</code> element types plus a property convention. A
+first-class <code>ui-control</code> element type is flagged as a <em>future</em> option "if
+proven insufficient" (§7 of the substrate spec already anticipates "future part/interface
+types if needed"), not introduced speculatively.</p>
+
+<h2>4. Notation — interface surface in design SysML (existing types + a convention)</h2>
+
+<p>A design author models the feature's interface surface inside its SysML architecture note
+using elements already seeded by <code>seed-ea-sysml2.ts</code>:</p>
+
+<table>
+  <tr><th>Rubric input</th><th>SysML representation (existing element types)</th></tr>
+  <tr><td>A control (button / fillable field / form / route)</td><td>A <code>part_usage</code> carrying <code>properties.uiControl ∈ {button, fillable_field, form, route}</code> and <code>properties.surfaceDelta ∈ {added, removed, changed}</code>. No new element type.</td></tr>
+  <tr><td><code>controlsAdded</code> / <code>controlsRemoved</code></td><td>Count of <code>uiControl</code> part usages by <code>surfaceDelta</code>.</td></tr>
+  <tr><td><code>justification</code> (<code>none</code>/<code>weak</code>/<code>researched</code>)</td><td>The <code>requirement</code> that <code>satisfy</code>-s the control. <em>researched</em> = the requirement carries a <code>sourceKey</code>/citation; <em>weak</em> = a bare requirement; <em>none</em> = no satisfy-ing requirement. "We might want it" never reaches <em>researched</em>.</td></tr>
+  <tr><td><code>reuseBreadth</code></td><td>The control's <code>allocates</code> fan-out — how many value streams / parts it is allocated to (and how many requirements it satisfies). Broad fan-out → high reuse.</td></tr>
+  <tr><td><code>clarifiesOutcome</code></td><td>A <code>satisfy</code>-ing requirement tagged <code>properties.intent: clarification</code> with a stated better-outcome.</td></tr>
+</table>
+
+<p>This reuses the substrate's own grammar: <code>requirement</code> carries the rationale
+(exactly as <code>seed-ea-sysml-data-authority.ts</code> does today), and <code>allocates</code>
+is inherently one-to-many, so reuse breadth is structural, not asserted.</p>
+
+<h2>5. The SysML v2 model</h2>
+
+<p>The governance gate and an example feature's surface, in SysML v2 textual notation:</p>
+
+<pre><code><span class="kw">package</span> InterfaceSurfaceGovernance {
+
+  <span class="com">// ---- Governance obligations ----</span>
+  <span class="kw">requirement def</span> R1_EarnSurface {
+    <span class="kw">doc</span> <span class="str">/* Every new interactive control must earn its surface: justified by
+           research, reused across multiple internal outcomes, or it scores
+           against remove-avoidable-failure-opportunities. */</span>
+  }
+  <span class="kw">requirement def</span> R2_RemovalFavored {
+    <span class="kw">doc</span> <span class="str">/* A net removal of interface surface scores favorably. */</span>
+  }
+  <span class="kw">requirement def</span> R3_DesignSourced {
+    <span class="kw">doc</span> <span class="str">/* Rubric inputs come from the design's SysML note, not a parallel
+           markdown field (kernel-ratified: sysml-sourced). */</span>
+  }
+  <span class="kw">requirement def</span> R4_SoftBlock {
+    <span class="kw">doc</span> <span class="str">/* Unjustified net-new surface soft-blocks design advancement;
+           overridable, with the override recorded as evidence. */</span>
+  }
+
+  <span class="com">// ---- Interface surface: existing part usages + a ui-control property tag ----</span>
+  <span class="kw">part def</span> UiControl;   <span class="com">// realized by part_usage + properties.uiControl; NO new element type</span>
+
+  <span class="com">// Example design-time surface (status: planned) for a "register a truck" feature</span>
+  <span class="kw">part</span> addTruckButton : UiControl;  <span class="com">// properties { uiControl: button, surfaceDelta: added, intent: clarification }</span>
+  <span class="kw">part</span> truckVinField  : UiControl;  <span class="com">// properties { uiControl: fillable_field, surfaceDelta: added }</span>
+
+  <span class="com">// ---- Justification = a satisfy-ing requirement (researched carries a sourceKey) ----</span>
+  <span class="kw">requirement def</span> REQ_InlineTruckReg {
+    <span class="kw">doc</span> <span class="str">/* Dispatchers register a truck inline; 4/5 pilot dispatchers abandoned
+           the separate fleet page. provenance: architect; sourceKey: research/dispatch-pilot. */</span>
+  }
+  <span class="kw">satisfy</span> REQ_InlineTruckReg <span class="kw">by</span> addTruckButton, truckVinField;
+
+  <span class="com">// ---- Reuse breadth = allocates fan-out (3 value streams -> high reuseBreadth) ----</span>
+  <span class="kw">allocate</span> addTruckButton <span class="kw">to</span> fleet_dispatch_vs, parts_inventory_vs, warranty_vs;
+
+  <span class="com">// ---- The gate behaviour + its verification ----</span>
+  <span class="kw">action def</span> ScoreInterfaceSurface;  <span class="com">// reviewDesignDoc extracts ui-controls and scores them</span>
+  <span class="kw">verification def</span> V_GateScores {
+    <span class="kw">doc</span> <span class="str">/* reviewDesignDoc persists designReview.uiSurfaceAssessment and
+           soft-blocks low-scoring net-new surface. */</span>
+  }
+  <span class="kw">verify</span> R4_SoftBlock <span class="kw">by</span> V_GateScores;
+
+  <span class="kw">allocate</span> ScoreInterfaceSurface <span class="kw">to</span>
+    <span class="str">"apps/web/lib/mcp-tools.ts#reviewDesignDoc"</span>,
+    <span class="str">"apps/web/lib/ea/ui-surface-extractor.ts"</span>,
+    <span class="str">"apps/web/lib/decision/ui-surface-features.ts#scoreUiSurfaceChange"</span>;
+}
+</code></pre>
+
+<h2>6. Extractor — reuse the parity-engine pattern</h2>
+
+<p>A pure module <code>apps/web/lib/ea/ui-surface-extractor.ts</code> reuses the
+<code>parse → buildDesired(descriptor) → diff</code> contract from
+<code>architecture-parity.ts</code> / <code>data-model-mirror*.ts</code>:</p>
+
+<ul>
+  <li><strong>parse</strong> the design's SysML note → the <code>uiControl</code> part usages,
+  their <code>satisfy</code>-ing requirements, and their <code>allocates</code> edges.</li>
+  <li><strong>buildDesired</strong> → a <code>UiSurfaceChange</code> (the deriver's input type):
+  <code>controlsAdded/removed</code> from <code>surfaceDelta</code> counts; <code>justification</code>
+  from the satisfy-ing requirement's provenance/sourceKey; <code>reuseBreadth</code> normalized from
+  <code>allocates</code> fan-out; <code>clarifiesOutcome</code> from <code>intent: clarification</code>.</li>
+  <li>feed it to <code>scoreUiSurfaceChange()</code> (#1910), which already frames the decision as
+  <em>ship-as-designed vs retire/rework</em> through <code>principle_decide</code>.</li>
+</ul>
+
+<p>Pure and deterministic — no LLM in the gate inputs (consistent with
+<code>size-design-doc.ts</code>'s stance), versioned and fixture-tested like the Prisma adapter.</p>
+
+<h2>7. Gate wiring</h2>
+
+<p>At the <code>reviewDesignDoc</code> handler (<code>apps/web/lib/mcp-tools.ts</code>), right after
+<code>sizeDesignDoc</code>:</p>
+
+<ol>
+  <li>Extract the design's interface-surface change (§6) and call <code>scoreUiSurfaceChange</code>.</li>
+  <li><strong>soft-block-override</strong> on a <code>soft-block</code> verdict (the kernel's chosen
+  enforcement strength): unjustified net-new surface holds advancement, surfaces the rubric tier +
+  the contribution ledger, and an operator can override — the override recorded as evidence.</li>
+  <li>Persist the verdict to <code>designReview.uiSurfaceAssessment</code> (parallel to
+  <code>sizeAssessment</code>) and file an <code>EaConformanceIssue</code> when the design's SysML
+  drifts from its realized controls (reusing existing finding substrate, not a new table).</li>
+</ol>
+
+<h2>8. Verification</h2>
+
+<ul>
+  <li>Pure unit tests for the extractor (parse/diff, fixture SysML notes) and the existing deriver
+  tests (#1910, 15/15).</li>
+  <li>A <code>reviewDesignDoc</code> snapshot/unit test asserting a low-scoring net-new surface
+  soft-blocks and a justified/reusable one passes.</li>
+  <li>Runtime EA + Build Studio flow verification in the shared nonprod environment — deferred from
+  the worktree per the substrate spec's stance (§10/§13), confirmed on the rebuilt portal.</li>
+</ul>
+
+<h2>9. Risks</h2>
+
+<ul>
+  <li><strong>Over-modeling</strong> (substrate §13): only controls whose <code>surfaceDelta</code>
+  changes are modeled; a feature touching no interface surface produces no <code>uiControl</code>
+  elements and the gate is a <code>no-op</code>.</li>
+  <li><strong>Per-feature SysML dependency:</strong> this needs the design to carry a SysML
+  architecture note. That is exactly substrate Phase 3 — this design gives Phase 3 its first
+  concrete consumer rather than waiting for it. Until per-feature notes are routine, the gate
+  no-ops when no SysML note is attached (fail-open, observable), so it never blocks a markdown-only
+  design — it only bites once a design is modeled.</li>
+  <li><strong>Soft-block false positives:</strong> heuristic justification reading can mis-grade;
+  the override valve (recorded) is the mitigation, and the verdict is advisory-with-teeth, not a
+  hard gate.</li>
+  <li><strong>Notation drift toward a new element type:</strong> if the property convention proves
+  insufficient for clean extraction, promote <code>ui-control</code> to a seeded element type via a
+  follow-up — a notation-extension decision gated by <code>verify-substrate-before-proposing-new</code>,
+  not a default.</li>
+</ul>
+
+<h2>10. SysML Architecture Note</h2>
+
+<table>
+  <tr><th>Field</th><th>Value</th></tr>
+  <tr><td>Scope</td><td>Build Studio design-review gate; the <code>sysml2</code> notation convention for interface surface; a new pure extractor module.</td></tr>
+  <tr><td>Changed requirements/constraints</td><td>R1 earn-surface, R2 removal-favored, R3 design-sourced, R4 soft-block (above). All design-time obligations realized by the gate.</td></tr>
+  <tr><td>Changed interfaces/ports</td><td>No external API change. Internal: <code>reviewDesignDoc</code> output gains <code>designReview.uiSurfaceAssessment</code>; a new internal extractor module boundary.</td></tr>
+  <tr><td>Allocations</td><td><code>reviewDesignDoc</code> → extractor → <code>scoreUiSurfaceChange</code> (#1910) → <code>principle_decide</code>. Conformance findings → existing <code>EaConformanceIssue</code>.</td></tr>
+  <tr><td>Verification cases</td><td>Extractor parse/diff unit tests; gate soft-block/pass snapshot test; deferred runtime EA/Build-Studio verification on the rebuilt portal.</td></tr>
+  <tr><td>Data authority impact</td><td>None new. Verdicts are derived projections persisted on <code>FeatureBuild.designReview</code>; drift findings reuse <code>EaConformanceIssue</code>. No new table, no new element type.</td></tr>
+  <tr><td>EA/current-state catch-up</td><td>Adds the interface-surface modeling convention to the <code>sysml2</code> notation guidance; the gate is the first realized Phase-3 hook.</td></tr>
+  <tr><td>Open architecture risks</td><td>Per-feature SysML-note adoption rate; possible future <code>ui-control</code> element-type promotion.</td></tr>
+</table>
+
+<h2>11. Phasing &amp; open questions</h2>
+
+<p><strong>Phasing</strong> (each a small PR): (A) the pure extractor + fixtures; (B) the
+<code>reviewDesignDoc</code> wiring + <code>uiSurfaceAssessment</code> persistence + soft-block;
+(C) the notation-convention guidance in the <code>dpf-sysml-architecture-substrate</code> skill so
+design authors model interface surface consistently.</p>
+
+<p><strong>Open questions for operator review:</strong></p>
+<ol>
+  <li>Fail-open vs prompt when a design has <em>no</em> SysML note yet — no-op silently (proposed,
+  during Phase-3 adoption) or surface "model your interface surface to be scored"?</li>
+  <li>Should the gate run at <strong>design review only</strong>, or also re-check at
+  <strong>plan/ship</strong> against the realized diff (catching surface added after design)?</li>
+  <li>Promote <code>ui-control</code> to a first-class seeded element type now, or hold to the
+  property convention until extraction proves it insufficient (proposed: hold)?</li>
+</ol>
+
+</body>
+</html>

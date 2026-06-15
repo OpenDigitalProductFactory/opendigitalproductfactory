@@ -57,85 +57,83 @@ describe("prepareUpgradeSource — local mode", () => {
   });
 });
 
-describe("prepareUpgradeSource — upstream mode", () => {
-  it("fetches, checks out an existing install branch, merges, and stamps the merge commit", async () => {
+describe("prepareUpgradeSource — upstream mode (isolated workspace, BI-4043A64B)", () => {
+  // The workspace lives under the host clone but the merge runs entirely inside
+  // it; the host clone's WORKING TREE is never checked-out/merged/cleaned.
+  const baseWorkspace = { ...baseUpstream, workspacePath: "/host-dpf/.upgrade-workspace" };
+
+  // Asserts no git op mutates the host clone's working tree directly
+  // (`-C /host-dpf <checkout|merge|reset|clean>`). The retired legacy path did.
+  function noHostTreeMutation(calls: string[][]): boolean {
+    const mutating = new Set(["checkout", "merge", "reset", "clean"]);
+    return !calls.some(
+      (c) => c[0] === "-C" && c[1] === "/host-dpf" && c.some((a) => mutating.has(a)),
+    );
+  }
+
+  it("refuses an upstream merge without an isolated workspace (legacy direct-merge retired)", async () => {
+    const git = fakeGit([]);
+    const r = await prepareUpgradeSource(baseUpstream, git); // no workspacePath
+    expect(r).toMatchObject({ ok: false, reason: "prep-error" });
+    if (r.ok) return;
+    expect(r.message).toMatch(/isolated workspace/i);
+    // Must NOT touch the host clone at all — no checkout/merge against it.
+    expect(git.calls.some((c) => c.includes("checkout") || c.includes("merge"))).toBe(false);
+  });
+
+  it("merges upstream inside the workspace and stamps the merge commit (clean)", async () => {
     const git = fakeGit([
-      ["fetch origin main", ok()],
-      ["rev-parse origin/main", ok(`${UPSTREAM}\n`)],
-      ["rev-parse --verify --quiet dpf/install", ok(`${SHA}\n`)], // branch exists
-      ["merge --no-edit --no-ff", ok()],
+      ["rev-parse --git-dir", ok()], // workspace already initialized
+      ["config --get remote.origin.url", ok("https://github.com/x/y.git\n")],
+      ["config --get remote.upgrade-upstream.url", ok("")],
+      ["rev-parse upgrade-upstream/main", ok(`${UPSTREAM}\n`)],
       ["rev-parse HEAD", ok(`${MERGE}\n`)],
       ["status --porcelain", ok("")],
     ]);
-    const r = await prepareUpgradeSource(baseUpstream, git);
+    const r = await prepareUpgradeSource(baseWorkspace, git);
     expect(r).toEqual({ ok: true, mode: "upstream", stamp: MERGE, upstreamSha: UPSTREAM });
-    // existing branch is checked out, not recreated/reset.
-    expect(git.calls.some((c) => c.join(" ").includes("checkout dpf/install"))).toBe(true);
-    expect(git.calls.some((c) => c.includes("-B"))).toBe(false);
+    expect(noHostTreeMutation(git.calls)).toBe(true);
+    // The merge runs in the workspace tree.
+    expect(
+      git.calls.some(
+        (c) => c[0] === "-C" && c[1] === "/host-dpf/.upgrade-workspace" && c.includes("merge"),
+      ),
+    ).toBe(true);
+    // The new install-branch tip is pushed back to the install clone (ref-only).
+    expect(
+      git.calls.some((c) => c.join(" ").includes("push origin HEAD:refs/heads/dpf/install")),
+    ).toBe(true);
   });
 
-  it("creates the install branch from HEAD on first run", async () => {
+  it("defers on merge conflict and cleans the workspace (host tree untouched)", async () => {
     const git = fakeGit([
-      ["fetch origin main", ok()],
-      ["rev-parse origin/main", ok(`${UPSTREAM}\n`)],
-      ["rev-parse --verify --quiet dpf/install", fail("", 1)], // branch absent
-      ["checkout -b dpf/install", ok()],
-      ["merge --no-edit --no-ff", ok()],
-      ["rev-parse HEAD", ok(`${MERGE}\n`)],
-      ["status --porcelain", ok("")],
-    ]);
-    const r = await prepareUpgradeSource(baseUpstream, git);
-    expect(r).toMatchObject({ ok: true, stamp: MERGE });
-    expect(git.calls.some((c) => c.join(" ").includes("checkout -b dpf/install"))).toBe(true);
-  });
-
-  it("defers on merge conflict: reports the files and aborts the merge", async () => {
-    const git = fakeGit([
-      ["fetch origin main", ok()],
-      ["rev-parse origin/main", ok(`${UPSTREAM}\n`)],
-      ["rev-parse --verify --quiet dpf/install", ok(`${SHA}\n`)],
-      ["merge --no-edit --no-ff", fail("CONFLICT", 1)],
+      ["rev-parse --git-dir", ok()],
+      ["config --get remote.origin.url", ok("https://github.com/x/y.git\n")],
+      ["config --get remote.upgrade-upstream.url", ok("")],
+      ["rev-parse upgrade-upstream/main", ok(`${UPSTREAM}\n`)],
+      ["merge --no-ff", fail("CONFLICT", 1)],
       ["diff --name-only --diff-filter=U", ok("apps/web/a.ts\napps/web/b.ts\n")],
-      ["merge --abort", ok()],
     ]);
-    const r = await prepareUpgradeSource(baseUpstream, git);
+    const r = await prepareUpgradeSource(baseWorkspace, git);
     expect(r).toMatchObject({
       ok: false,
       reason: "merge-conflict",
       conflictFiles: ["apps/web/a.ts", "apps/web/b.ts"],
       upstreamSha: UPSTREAM,
     });
-    // the clone must be returned to a clean state.
     expect(git.calls.some((c) => c.join(" ").includes("merge --abort"))).toBe(true);
+    expect(noHostTreeMutation(git.calls)).toBe(true);
   });
 
-  it("refuses on an uncommitted working tree before fetching or checking out", async () => {
+  it("returns no-target when the upstream ref cannot be resolved in the workspace", async () => {
     const git = fakeGit([
-      ["status --porcelain", ok(" M apps/web/x.ts\n?? apps/web/y.ts\n")],
+      ["rev-parse --git-dir", ok()],
+      ["config --get remote.origin.url", ok("https://github.com/x/y.git\n")],
+      ["config --get remote.upgrade-upstream.url", ok("")],
+      ["rev-parse upgrade-upstream/main", fail("unknown revision", 128)],
     ]);
-    const r = await prepareUpgradeSource(baseUpstream, git);
-    expect(r).toMatchObject({ ok: false, reason: "dirty-tree" });
-    if (r.ok || r.reason !== "dirty-tree") return;
-    expect(r.message).toContain("apps/web/x.ts");
-    // Fails fast: no fetch, checkout, or merge against a dirty tree.
-    expect(git.calls.some((c) => c.includes("fetch") || c.includes("checkout") || c.includes("merge"))).toBe(false);
-  });
-
-  it("returns no-target when the upstream ref cannot be resolved", async () => {
-    const git = fakeGit([
-      ["fetch origin main", ok()],
-      ["rev-parse origin/main", fail("unknown revision", 128)],
-    ]);
-    const r = await prepareUpgradeSource(baseUpstream, git);
+    const r = await prepareUpgradeSource(baseWorkspace, git);
     expect(r).toMatchObject({ ok: false, reason: "no-target" });
-    // must not attempt a merge with no resolved target.
-    expect(git.calls.some((c) => c.includes("merge"))).toBe(false);
-  });
-
-  it("surfaces a fetch failure as prep-error without merging", async () => {
-    const git = fakeGit([["fetch origin main", fail("network down", 1)]]);
-    const r = await prepareUpgradeSource(baseUpstream, git);
-    expect(r).toMatchObject({ ok: false, reason: "prep-error" });
-    expect(git.calls.some((c) => c.includes("merge"))).toBe(false);
+    expect(git.calls.some((c) => c.join(" ").includes("merge --no-ff"))).toBe(false);
   });
 });

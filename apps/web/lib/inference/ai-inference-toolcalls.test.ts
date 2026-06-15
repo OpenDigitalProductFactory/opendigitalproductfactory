@@ -100,6 +100,35 @@ describe("formatMessagesForProvider", () => {
       const formatted = formatMessageForAnthropic(msg);
       expect(formatted).toEqual({ role: "user", content: "hello" });
     });
+
+    it("converts a multimodal user message (text + image_url) to Anthropic image source blocks", () => {
+      const msg: ChatMessage = {
+        role: "user",
+        content: [
+          { type: "text", text: "Assess this UI" },
+          { type: "image_url", image_url: { url: "data:image/png;base64,AAAB" } },
+        ],
+      };
+      const formatted = formatMessageForAnthropic(msg);
+      expect(formatted).toEqual({
+        role: "user",
+        content: [
+          { type: "text", text: "Assess this UI" },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAB" } },
+        ],
+      });
+    });
+
+    it("converts an http image_url to an Anthropic url image source", () => {
+      const msg: ChatMessage = {
+        role: "user",
+        content: [{ type: "image_url", image_url: { url: "https://x/y.png" } }],
+      };
+      const formatted = formatMessageForAnthropic(msg);
+      expect(formatted.content).toEqual([
+        { type: "image", source: { type: "url", url: "https://x/y.png" } },
+      ]);
+    });
   });
 
   describe("OpenAI-compatible", () => {
@@ -133,6 +162,15 @@ describe("formatMessagesForProvider", () => {
       const msg: ChatMessage = { role: "user", content: "hello" };
       const formatted = formatMessageForOpenAI(msg);
       expect(formatted).toEqual({ role: "user", content: "hello" });
+    });
+
+    it("passes a multimodal user message through as the OpenAI vision wire format", () => {
+      const content: ChatMessage["content"] = [
+        { type: "text", text: "Assess this UI" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AAAB" } },
+      ];
+      const formatted = formatMessageForOpenAI({ role: "user", content });
+      expect(formatted).toEqual({ role: "user", content });
     });
   });
 

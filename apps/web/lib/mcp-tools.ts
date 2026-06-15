@@ -1327,6 +1327,23 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["ideate", "plan", "build", "review", "ship"],
   },
   {
+    name: "renew_nonprod_environment_lease",
+    description: "Heartbeat an active shared nonproduction environment lease to extend its hold window so a still-active session keeps it. Only the owning session can renew, and a lapsed lease is NOT revivable (re-claim instead). The window is capped — long-running work should run on an isolated runtime, not hold the single shared lease.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        leaseId: { type: "string" },
+        ownerSessionId: { type: "string" },
+        ttlMinutes: { type: "number", description: "Optional renewal window in minutes; clamped to the max hold window." },
+      },
+      required: ["leaseId", "ownerSessionId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+  },
+  {
     name: "record_local_integration_result",
     description: "Record the result of a local merged-code integration gate before push or PR. Captures candidate branch, mode, pass/fail/conflict status, and evidence.",
     inputSchema: {
@@ -6799,6 +6816,42 @@ export async function executeTool(
       };
     }
 
+    case "renew_nonprod_environment_lease": {
+      const { renewNonprodEnvironmentLease } = await import("@/lib/nonprod/environment-lease");
+      const leaseId = typeof params["leaseId"] === "string" ? params["leaseId"].trim() : "";
+      const ownerSessionId = typeof params["ownerSessionId"] === "string" ? params["ownerSessionId"].trim() : "";
+      if (!leaseId || !ownerSessionId) {
+        return {
+          success: false,
+          error: "missing_required",
+          message: "leaseId and ownerSessionId are required",
+        };
+      }
+      const ttlMinutes =
+        typeof params["ttlMinutes"] === "number" && params["ttlMinutes"] > 0
+          ? params["ttlMinutes"]
+          : undefined;
+      const result = await renewNonprodEnvironmentLease({
+        leaseId,
+        ownerSessionId,
+        ttlMs: ttlMinutes ? ttlMinutes * 60_000 : undefined,
+      });
+      if (result.status === "lost") {
+        return {
+          success: false,
+          error: "lease_lost",
+          message: `Lease cannot be renewed (${result.reason}); re-claim if you still need the environment.`,
+          data: { reason: result.reason },
+        };
+      }
+      return {
+        success: true,
+        entityId: result.lease.leaseId,
+        message: `Renewed nonproduction environment lease ${result.lease.leaseId}.`,
+        data: { lease: result.lease },
+      };
+    }
+
     case "record_local_integration_result": {
       const { recordLocalIntegrationResult } = await import("@/lib/nonprod/local-integration");
       const stringValue = (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
@@ -8893,6 +8946,7 @@ export async function executeTool(
             title: true,
             kind: true,
             parentEpicId: true,
+            deliberationSummary: true,
             dependenciesOut: FEATURE_BUILD_DEPENDENCY_GATE_SELECT.dependenciesOut,
           },
         });
@@ -8912,6 +8966,37 @@ export async function executeTool(
             if (!dependencyGate.allowed) {
               logBuildActivity(buildId, "phase:gate-blocked", dependencyGate.message);
             } else {
+              // WWMD kernel gate. The structural checkPhaseGate + dependency gate
+              // above are necessary but not sufficient: the decision kernel
+              // (principle_decide) is the authority on whether plan→build honors
+              // platform principles. The advance-phase HTTP route runs this gate;
+              // this agentic-loop auto-advance MUST too, or local-model builds
+              // silently bypass WWMD. Fail OPEN on evaluator error so a kernel
+              // hiccup can't wedge the streamlined flow — but a genuine principle
+              // conflict (gate not allowed) blocks the auto-advance and surfaces a
+              // DecisionInteraction for operator review.
+              let decisionAllowed = true;
+              try {
+                const { evaluateBuildStudioPlanAdvancementGate } = await import("@/lib/decision-perspective/build-studio-gate");
+                const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
+                  db: prisma,
+                  build: {
+                    buildId: updatedBuild.buildId,
+                    title: updatedBuild.title ?? updatedBuild.buildId,
+                    phase: "plan",
+                    planReview: updatedBuild.planReview as Parameters<typeof evaluateBuildStudioPlanAdvancementGate>[0]["build"]["planReview"],
+                    deliberationSummary: updatedBuild.deliberationSummary as Parameters<typeof evaluateBuildStudioPlanAdvancementGate>[0]["build"]["deliberationSummary"],
+                  },
+                  triggeredByUserId: userId,
+                });
+                if (!decisionGate.allowed) {
+                  decisionAllowed = false;
+                  logBuildActivity(buildId, "wwmd:gate-blocked", decisionGate.operatorMessage ?? "Decision kernel withheld plan→build advancement.");
+                }
+              } catch (wwmdErr) {
+                console.error("[reviewBuildPlan] WWMD gate errored (failing open):", wwmdErr);
+              }
+              if (decisionAllowed) {
               // Initialize the build branch BEFORE flipping the phase. If the
               // phase flip lands without buildBranch set, deploy_feature runs
               // on whatever the current sandbox HEAD is — picking up leftover
@@ -8947,6 +9032,7 @@ export async function executeTool(
                 }
               } catch (branchErr) {
                 logBuildActivity(buildId, "phase:gate-blocked", `startBuildBranch failed: ${(branchErr as Error).message?.slice(0, 200)}`);
+              }
               }
             }
           } else {
@@ -9364,7 +9450,19 @@ export async function executeTool(
       const autoFix = params.auto_fix === true;
       const MAX_FIX_ATTEMPTS = 3;
 
-      let results = await runSandboxTests(rstSandboxId);
+      // Scope verification to the build's changed files so the feature's OWN
+      // tests gate the build (not just typecheck) and their output isn't
+      // truncated behind the full monorepo suite.
+      let rstChangedFiles: string[] = [];
+      try {
+        const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
+        const rstState = await getSandboxStateForBuild(buildId);
+        rstChangedFiles = rstState?.sourceDiffstat.map((entry) => entry.path) ?? [];
+      } catch (err) {
+        console.warn("[run_sandbox_tests] could not resolve changed files for scoping:", (err as Error)?.message);
+      }
+
+      let results = await runSandboxTests(rstSandboxId, { changedFiles: rstChangedFiles });
       let fixAttempts = 0;
 
       // Auto-fix loop: diagnose failures, apply fixes via LLM, re-test
@@ -9521,8 +9619,8 @@ export async function executeTool(
             break; // LLM call failed — stop retrying
           }
 
-          // Re-run tests
-          results = await runSandboxTests(rstSandboxId);
+          // Re-run tests (same scoping as the initial run)
+          results = await runSandboxTests(rstSandboxId, { changedFiles: rstChangedFiles });
         }
       }
 

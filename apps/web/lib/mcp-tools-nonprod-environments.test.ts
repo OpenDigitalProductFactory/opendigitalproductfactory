@@ -4,11 +4,13 @@ const {
   mockListActiveNonprodEnvironmentLeases,
   mockClaimNonprodEnvironmentLease,
   mockReleaseNonprodEnvironmentLease,
+  mockRenewNonprodEnvironmentLease,
   mockRecordLocalIntegrationResult,
 } = vi.hoisted(() => ({
   mockListActiveNonprodEnvironmentLeases: vi.fn(),
   mockClaimNonprodEnvironmentLease: vi.fn(),
   mockReleaseNonprodEnvironmentLease: vi.fn(),
+  mockRenewNonprodEnvironmentLease: vi.fn(),
   mockRecordLocalIntegrationResult: vi.fn(),
 }));
 
@@ -20,6 +22,7 @@ vi.mock("@/lib/nonprod/environment-lease", () => ({
   listActiveNonprodEnvironmentLeases: mockListActiveNonprodEnvironmentLeases,
   claimNonprodEnvironmentLease: mockClaimNonprodEnvironmentLease,
   releaseNonprodEnvironmentLease: mockReleaseNonprodEnvironmentLease,
+  renewNonprodEnvironmentLease: mockRenewNonprodEnvironmentLease,
 }));
 
 vi.mock("@/lib/nonprod/local-integration", () => ({
@@ -113,6 +116,40 @@ describe("nonproduction environment MCP tools", () => {
     expect(result.success).toBe(true);
     expect(result.entityId).toBe("NPEL-1");
     expect(mockReleaseNonprodEnvironmentLease).toHaveBeenCalledWith({ leaseId: "NPEL-1" });
+  });
+
+  it("renews an owned nonproduction environment lease (heartbeat)", async () => {
+    mockRenewNonprodEnvironmentLease.mockResolvedValue({
+      status: "renewed",
+      lease: { leaseId: "NPEL-1" },
+    });
+
+    const result = await executeTool("renew_nonprod_environment_lease", {
+      leaseId: "NPEL-1",
+      ownerSessionId: "session-1",
+      ttlMinutes: 10,
+    }, "user-1", { routeContext: "/build" });
+
+    expect(result.success).toBe(true);
+    expect(result.entityId).toBe("NPEL-1");
+    expect(mockRenewNonprodEnvironmentLease).toHaveBeenCalledWith({
+      leaseId: "NPEL-1",
+      ownerSessionId: "session-1",
+      ttlMs: 600000,
+    });
+  });
+
+  it("reports lease_lost when a renewal target is expired or not owned", async () => {
+    mockRenewNonprodEnvironmentLease.mockResolvedValue({ status: "lost", reason: "expired" });
+
+    const result = await executeTool("renew_nonprod_environment_lease", {
+      leaseId: "NPEL-1",
+      ownerSessionId: "session-1",
+    }, "user-1", { routeContext: "/build" });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("lease_lost");
+    expect(result.data?.reason).toBe("expired");
   });
 
   it("records a local integration result", async () => {

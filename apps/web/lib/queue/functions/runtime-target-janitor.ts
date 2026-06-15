@@ -16,6 +16,7 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
 import { prisma } from "@dpf/db";
+import { reapExpiredNonprodEnvironmentLeases } from "@/lib/nonprod/environment-lease";
 
 const STALE_RUNNING_HOURS = 2;   // running/starting targets with no heartbeat
 const STALE_PLANNED_DAYS  = 7;   // planned targets with no consumer ever started
@@ -107,24 +108,12 @@ type ExpireLeaseResult = {
 };
 
 async function expireStaleLeases(): Promise<ExpireLeaseResult> {
-  const now = new Date();
-
-  // Any lease whose expiresAt has passed and releasedAt is still null is orphaned.
-  // The gate-worktree.sh script explicitly calls release_nonprod_environment_lease
-  // on completion; this sweep catches crashes or sessions that were killed.
-  const update = await prisma.nonProductionEnvironmentLease.updateMany({
-    where: {
-      expiresAt: { lt: now },
-      releasedAt: null,
-      // Only sweep "active" leases. Leases already in a terminal state
-      // (released, expired) are fine as-is; don't touch them.
-      status: "active",
-    },
-    data: {
-      status: "expired",
-      releasedAt: now,
-    },
-  });
-
-  return { expired: update.count };
+  // Single source of truth: the reaper the lease lib also exposes for unit tests
+  // and on-demand callers (BI-4043A64B). Catches crashed/killed sessions whose
+  // lease never got an explicit release_nonprod_environment_lease (gate-worktree.sh
+  // releases on clean completion), and is the safety net for a holder that
+  // stopped heartbeating (renew) — a long/stuck process can't lock the single
+  // shared instance because its lapsed lease is swept here.
+  const { reaped } = await reapExpiredNonprodEnvironmentLeases();
+  return { expired: reaped };
 }

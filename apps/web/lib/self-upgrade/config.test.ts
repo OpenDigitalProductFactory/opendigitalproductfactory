@@ -127,13 +127,15 @@ describe("parseSelfUpgradeConfig", () => {
     expect(parseSelfUpgradeConfig(null).useIsolatedWorkspace).toBe(true);
   });
 
-  it("honors an explicit useIsolatedWorkspace=false opt-out", () => {
+  it("forces useIsolatedWorkspace true even when explicitly disabled (legacy direct-merge retired, BI-4043A64B)", () => {
+    // The legacy direct-merge the false value once selected mutated the host
+    // clone's working tree and corrupted it (721 files lost, 2026-06-15). The
+    // opt-out is retired: a stored false is no longer honored.
     const cfg = parseSelfUpgradeConfig({ useIsolatedWorkspace: false });
-    expect(cfg.useIsolatedWorkspace).toBe(false);
+    expect(cfg.useIsolatedWorkspace).toBe(true);
   });
 
-  it("ignores non-boolean useIsolatedWorkspace values and falls back to the safe default", () => {
-    // Defensive: a malformed value MUST NOT silently flip behavior either way.
+  it("forces useIsolatedWorkspace true for any stored value (boolean or malformed)", () => {
     expect(parseSelfUpgradeConfig({ useIsolatedWorkspace: "yes" }).useIsolatedWorkspace).toBe(true);
     expect(parseSelfUpgradeConfig({ useIsolatedWorkspace: 1 }).useIsolatedWorkspace).toBe(true);
   });

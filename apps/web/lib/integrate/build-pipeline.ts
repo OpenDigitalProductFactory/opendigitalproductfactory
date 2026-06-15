@@ -533,7 +533,18 @@ async function stepRunTests(
   const { prisma } = await import("@dpf/db");
   const { runSandboxTests, diagnoseTestFailures } = await import("./coding-agent");
 
-  const results = await runSandboxTests(state.containerId!);
+  // Scope verification to the build's changed files so the feature's own tests
+  // gate the build and their output isn't truncated behind the full suite.
+  let changedFiles: string[] = [];
+  try {
+    const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
+    const sandboxState = await getSandboxStateForBuild(buildId);
+    changedFiles = sandboxState?.sourceDiffstat.map((entry) => entry.path) ?? [];
+  } catch (err) {
+    console.warn("[stepRunTests] could not resolve changed files for scoping:", (err as Error)?.message);
+  }
+
+  const results = await runSandboxTests(state.containerId!, { changedFiles });
   const diagnosis = results.passed ? null : diagnoseTestFailures(results);
 
   // Persist test results to the build record.
