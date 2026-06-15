@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { DEFAULT_CTA_LABELS } from "@/lib/storefront/cta-labels";
+import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import { MediaUploader } from "./MediaUploader";
 
 export type ItemFormData = {
@@ -92,6 +93,8 @@ type Props = {
   vocabulary: ArchetypeVocabulary;
   categorySuggestions: string[];
   defaultCtaType: string;
+  /** Workspace base currency; defaults to USD when not provided. */
+  defaultPriceCurrency?: string;
   isEditing: boolean;
   /** DB id of the item being edited; enables the photo-gallery uploader. */
   editingItemId?: string;
@@ -105,11 +108,13 @@ export function ItemFormDialog({
   vocabulary,
   categorySuggestions,
   defaultCtaType,
+  defaultPriceCurrency = "USD",
   isEditing,
   editingItemId,
 }: Props) {
   const [form, setForm] = useState<ItemFormData>(() => ({
     ...EMPTY_FORM,
+    priceCurrency: defaultPriceCurrency,
     ctaType: defaultCtaType,
     priceType: PRICE_TYPES_BY_CTA[defaultCtaType]?.[0]?.value ?? "",
     ...initial,
@@ -258,7 +263,7 @@ export function ItemFormDialog({
                 <Field label="Amount">
                   <div className="flex gap-2">
                     <span className="flex items-center text-sm text-[var(--dpf-muted)]">
-                      {form.priceCurrency === "GBP" ? "\u00a3" : form.priceCurrency === "USD" ? "$" : form.priceCurrency === "EUR" ? "\u20ac" : form.priceCurrency}
+                      {getCurrencySymbol(form.priceCurrency)}
                     </span>
                     <input
                       type="number"
@@ -384,7 +389,7 @@ export function ItemFormDialog({
               <Field label="Suggested amount">
                 <div className="flex gap-2">
                   <span className="flex items-center text-sm text-[var(--dpf-muted)]">
-                    {form.priceCurrency === "GBP" ? "\u00a3" : form.priceCurrency === "USD" ? "$" : form.priceCurrency === "EUR" ? "\u20ac" : form.priceCurrency}
+                    {getCurrencySymbol(form.priceCurrency)}
                   </span>
                   <input
                     type="number"
@@ -401,7 +406,7 @@ export function ItemFormDialog({
               <Field label="Goal amount">
                 <div className="flex gap-2">
                   <span className="flex items-center text-sm text-[var(--dpf-muted)]">
-                    {form.priceCurrency === "GBP" ? "\u00a3" : form.priceCurrency === "USD" ? "$" : form.priceCurrency === "EUR" ? "\u20ac" : form.priceCurrency}
+                    {getCurrencySymbol(form.priceCurrency)}
                   </span>
                   <input
                     type="number"

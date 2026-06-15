@@ -87,6 +87,9 @@ export async function addStorefrontServiceLine(
         },
       });
 
+  const orgSettingsRow = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
+  const seedCurrency = orgSettingsRow?.baseCurrency ?? "USD";
+
   // Seed item templates from the secondary archetype
   const itemTemplates = secondaryArchetype.itemTemplates as Array<{
     name: string;
@@ -110,7 +113,7 @@ export async function addStorefrontServiceLine(
         priceAmount: t.priceAmount ?? null,
         sortOrder: 1000 + i,
         isActive: true,
-        priceCurrency: "GBP",
+        priceCurrency: seedCurrency,
         sourceCompositionId: composition.id,
       })),
     });

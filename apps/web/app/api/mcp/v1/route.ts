@@ -23,7 +23,7 @@ import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
-import { getToolGrantMapping } from "@/lib/tak/agent-grants";
+import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 
@@ -236,7 +236,10 @@ function tokenCanUseTool(
   if (!tokenScopeSatisfies(normalizeTokenScope(token), requiredScope)) {
     return false;
   }
-  return required.some((g) => token.scopes.includes(g));
+  // Expand through GRANT_IMPLICATIONS so an implying grant (e.g. build_promote)
+  // surfaces the finer-grant tools it implies (e.g. build_lifecycle). Mirrors
+  // the call-time check below and the agent-grant layer.
+  return required.some((g) => expandGrants(token.scopes).includes(g));
 }
 
 function requiredTokenScopeForTool(
@@ -379,7 +382,14 @@ async function handleToolsCall(
       insufficientScopeResult(toolName, tokenScope, requiredScope, required),
     );
   }
-  const tokenAllowed = required.some((g) => token.scopes.includes(g));
+  // Expand the token's scopes through GRANT_IMPLICATIONS before checking, so a
+  // legacy implying-grant satisfies the finer grant it implies (e.g. a
+  // `build_promote` token satisfies `build_lifecycle`). Without this expansion
+  // the token layer rejected implying-grant tokens that the agent-grant layer
+  // (isToolAllowedByGrants, which already expands) would accept — an
+  // inconsistency that left valid tokens unable to reach refactored tools.
+  const expandedScopes = expandGrants(token.scopes);
+  const tokenAllowed = required.some((g) => expandedScopes.includes(g));
   if (!tokenAllowed) {
     return jsonRpcOk(id, {
       content: [
