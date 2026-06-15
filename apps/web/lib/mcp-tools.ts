@@ -8929,13 +8929,13 @@ export async function executeTool(
                   db: prisma,
                   build: {
                     buildId: updatedBuild.buildId,
-                    title: updatedBuild.title,
+                    title: updatedBuild.title ?? updatedBuild.buildId,
                     phase: "plan",
-                    planReview: updatedBuild.planReview,
-                    deliberationSummary: updatedBuild.deliberationSummary,
+                    planReview: updatedBuild.planReview as Parameters<typeof evaluateBuildStudioPlanAdvancementGate>[0]["build"]["planReview"],
+                    deliberationSummary: updatedBuild.deliberationSummary as Parameters<typeof evaluateBuildStudioPlanAdvancementGate>[0]["build"]["deliberationSummary"],
                   },
                   triggeredByUserId: userId,
-                } as Parameters<typeof evaluateBuildStudioPlanAdvancementGate>[0]);
+                });
                 if (!decisionGate.allowed) {
                   decisionAllowed = false;
                   logBuildActivity(buildId, "wwmd:gate-blocked", decisionGate.operatorMessage ?? "Decision kernel withheld plan→build advancement.");
