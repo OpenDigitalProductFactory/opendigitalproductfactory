@@ -35,7 +35,7 @@ const EMPTY_FORM: ItemFormData = {
   ctaType: "booking",
   priceType: "",
   priceAmount: "",
-  priceCurrency: "GBP",
+  priceCurrency: "USD",
   imageUrl: "",
   ctaLabel: "",
   durationMinutes: "60",
