@@ -294,6 +294,57 @@ The monitoring stack runs as part of the default Docker Compose stack. All servi
 
 *[High-resolution PNG](monitoring-diagrams/png/02-monitoring-stack-topology.png) | [Mermaid source](monitoring-diagrams/02-monitoring-stack-topology.mmd)*
 
+### Layer 3b: Loki + Alloy — Container Logs (the unbounded signal)
+
+Metrics answer "how is a *pre-declared* signal trending?" Logs answer the larger, unbounded question: "what did any container actually write to stdout/stderr?" An error line repeated 500×/min, or a brand-new exception nobody instrumented, is invisible to Prometheus. Loki + Alloy close that gap, and — like the rest of the stack — run default-on in the base Compose project.
+
+| Component | Role | Why it is cross-platform |
+|-----------|------|--------------------------|
+| **Alloy** (Grafana Alloy) | Discovers every container on the Docker daemon and tails its stdout/stderr into Loki, labeled by compose service. One config, no per-service wiring — a new container is captured on the next 15-second discovery refresh. | Reads the Docker **log API via the socket** — no host-path bind mounts (`/proc`, `/sys`, `/var/lib/docker`), so it runs identically on Docker Desktop for macOS/Windows and native Linux, unlike cAdvisor/node-exporter. |
+| **Loki** | Stores the lines, label-indexed (not full-text), 14-day retention. A per-stream rate cap means one flooding container cannot fill the disk — excess is dropped, and the drop is itself an alert (`LogIngestionThrottled`). | Touches no host paths; the log *source* is Alloy. |
+
+Two complementary detectors run on top, because a *loud* problem and a *quiet* problem need different lenses:
+
+- **Loud path — Loki ruler (LogQL).** Error-rate rules (`ContainerErrorLogSpike` at >5 lines/min for 10m; `ContainerErrorLogStorm` at >60/min) fire in real time when a service sustains an elevated error rate.
+- **Quiet path — novel-signature scanner.** An Inngest cron (every 15 min) clusters error lines into signatures — template extraction strips digits, UUIDs, hex, paths, and timestamps to a stable hash — and files **one** issue per *first-seen* signature. It catches a single novel exception even at low volume, deduped so a recurring line is filed once, not every cycle.
+
+### How the Platform Handles Anything That Happens
+
+The defining design choice is **one issue substrate**: every detection source — a metric breach, a log storm, a novel error line, an in-process crash, or a human report — converges into a single deduped inbox, is auto-triaged into the backlog, and is tracked to resolution. No source gets its own parallel inbox, so a *new* detector plugs into the same pipe without new surfacing or triage code. This is the IT4IT SS5.7 *Detect → Diagnose → Change → Resolve → Close* loop.
+
+```
+DETECT (many sources)        CONVERGE (one inbox)     SURFACE              MANAGE → RESOLVE
+─────────────────────        ────────────────────     ───────              ────────────────
+metric thresholds  ┐                                   System Health tab    auto-triage →
+log rate / storm   ┤                                   shell health dot       BacklogItem
+novel log lines    ┼─►  PlatformIssueReport      ─►   (amber/red, any    ─►  (deduped, sized)
+app crash/regress  ┤    + PortfolioQualityIssue        page) + backlog     resolve: auto-clear
+user reports       ┘    (deduped by key)                                    or "fix" build
+```
+
+**1 — Detect.** Each source carries its own dedup key so a recurring problem files *once*:
+
+| Source | Mechanism | Lands as |
+|--------|-----------|----------|
+| Metric thresholds | Prometheus alert rules (`ContainerDown`, `HighErrorRate`, `HostDiskCritical`, `PostgresDown`, `AIInferenceHighLatency`…) | `PortfolioQualityIssue` (`health_alert`) |
+| Log rate / storm | Loki ruler LogQL rules | `PortfolioQualityIssue` (`health_alert`) |
+| Novel log lines | Novel-signature scanner (Inngest, 15 min) | `PlatformIssueReport` (`log_signature`) |
+| App crashes / regressions | In-process error boundary + coworker-regression detector | `PlatformIssueReport` (`runtime_error`) |
+| User reports | Feedback + support intake | `PlatformIssueReport` (`user_report` / `feedback`) |
+| Estate drift | Discovery/portfolio quality writer | `PortfolioQualityIssue` (discovery kinds) |
+
+**2 — Converge.** Two sibling tables share the operator inbox: `PlatformIssueReport` (runtime/log/user issues, deduped by `dedupeKey`) and `PortfolioQualityIssue` (metric/log-rate health alerts + discovery quality, keyed by `issueKey`). One inbox, one triage, one backlog.
+
+**3 — Surface.** The native **System Health** tab (alert banner, service grid, resource gauges, Log Issues panel), the shell-nav **health dot** (`PlatformHealthIndicator`, amber/red on every page), and the **backlog**.
+
+**4 — Manage → Resolve.** The `issue-report-triage` cron projects each issue into a tracked `BacklogItem` (`source=automated-detection`) — the "managed going forward" loop. Resolution is automatic (the issue auto-closes when its alert stops firing) or operator-driven ("Send to Build Studio as a fix" spins a fix-kind build).
+
+**Alert delivery without an Alertmanager.** The stack deliberately ships **no** Alertmanager (fewer moving parts). Instead, an `alert-delivery-bridge` Inngest cron polls firing alerts from both Prometheus (`/api/v1/alerts`) and the Loki ruler (`/prometheus/api/v1/alerts`) and upserts them into `PortfolioQualityIssue` via the same writer the webhook receiver uses; the System Health alert endpoint (`/api/platform/metrics/alerts`) merges both evaluators so the shell-nav health dot reflects log-rate alerts, not just metric alerts. New detectors reuse the existing Inngest runtime rather than adding a process.
+
+**Storm-resilient by construction.** The bridge reads **aggregated** alert state, so a container flooding 10k lines/sec yields exactly **one** `ContainerErrorLogStorm` issue, never a per-line flood. Loki's per-stream rate cap bounds disk; only *firing* alerts (past their `for:` debounce) are persisted; and reconciliation is source-attributed, so a transient Prometheus outage never false-resolves a still-firing issue.
+
+**Coverage edges (honest limits).** The platform can tell you *that* something failed and *how often*, but not yet reconstruct a single request's path across services — **distributed tracing (Tier 3) is not built**. Detection is threshold- and novelty-based, not predictive: a slow drift that never crosses a threshold and repeats an existing signature stays invisible.
+
 ### AI Provider Failure Detection and Recovery
 
 When an AI provider fails (credential expiry, rate limit exhaustion, network outage), the platform detects, adapts, and surfaces the issue through a governed cascade:
