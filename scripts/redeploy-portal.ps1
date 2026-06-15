@@ -94,7 +94,13 @@ $buildArgs += @("portal", "portal-init")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "[redeploy-portal] Recreating portal-init and portal from the built images"
-$upArgs = $composeArgs + @("up", "-d", "--no-build", "--force-recreate", "portal-init", "portal")
+# --no-deps: recreate ONLY portal-init + portal, never their dependency containers.
+# Without it, `compose up` also recreates postgres/neo4j/qdrant — and if a running
+# container's data volume differs from what compose resolves (e.g. an override bind
+# vs a named volume), that silently swaps the data store and can present an empty,
+# freshly-seeded DB. (Data-loss incident 2026-06-15.) The self-upgrade promoter
+# already swaps the portal with --no-deps for the same reason.
+$upArgs = $composeArgs + @("up", "-d", "--no-build", "--no-deps", "--force-recreate", "portal-init", "portal")
 & docker @upArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

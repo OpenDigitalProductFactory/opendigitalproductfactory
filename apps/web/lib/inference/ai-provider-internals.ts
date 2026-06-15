@@ -69,6 +69,50 @@ export async function getDecryptedCredential(providerId: string) {
   return { ...cred, secretRef, clientSecret, cachedToken, refreshToken };
 }
 
+/**
+ * Cheap pre-flight: does this provider have credential material adequate for
+ * its auth method? Existence-only (no decrypt, no warning log) so it is safe to
+ * call in hot loops such as the background eval scheduler. "none" / unset auth
+ * (local Docker Model Runner, self-hosted speech) needs no credential and is
+ * always eligible. Returns false when the provider needs a key but has none —
+ * the caller should skip it rather than make a guaranteed-to-fail call that
+ * floods the logs with "No credential configured".
+ *
+ * Intentionally NOT getDecryptedCredential: that decrypts every field and emits
+ * diagnostic warnings on a missing/rotated row, which would itself become
+ * per-call log noise when used as a filter.
+ */
+export async function providerHasConfiguredCredential(
+  providerId: string,
+  authMethod: string | null,
+): Promise<boolean> {
+  const method = (authMethod ?? "").toLowerCase();
+  // No-auth endpoints (local model runner, self-hosted) need no credential.
+  if (method === "none" || method === "") return true;
+
+  const cred = await prisma.credentialEntry.findUnique({
+    where: { providerId },
+    select: {
+      secretRef: true,
+      clientSecret: true,
+      cachedToken: true,
+      refreshToken: true,
+    },
+  });
+  if (!cred) return false;
+
+  if (method === "api_key") return Boolean(cred.secretRef);
+  if (method === "oauth2_client_credentials") {
+    return Boolean(cred.clientSecret || cred.cachedToken || cred.refreshToken);
+  }
+  // oauth2_authorization_code + unknown methods: usable only if SOME token or
+  // secret material is present. (authorization_code is excluded from background
+  // eval upstream, but keep this correct for other callers.)
+  return Boolean(
+    cred.secretRef || cred.clientSecret || cred.cachedToken || cred.refreshToken,
+  );
+}
+
 /** Provider-specific headers required beyond auth (e.g. Anthropic API versioning). */
 export function isAnthropicProvider(providerId: string): boolean {
   return providerId === "anthropic" || providerId.startsWith("anthropic-");
