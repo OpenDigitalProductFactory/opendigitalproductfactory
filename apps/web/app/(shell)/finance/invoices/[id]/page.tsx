@@ -1,6 +1,5 @@
 // apps/web/app/(shell)/finance/invoices/[id]/page.tsx
 import { getInvoice } from "@/lib/actions/finance";
-import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -36,8 +35,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
     notFound();
   }
 
-  const orgSettings = await getOrgSettings();
-  const sym = getCurrencySymbol(orgSettings.baseCurrency);
+  const sym = getCurrencySymbol(invoice.currency);
 
   const colour = STATUS_COLOURS[invoice.status] ?? "#6b7280";
   const totalAmount = Number(invoice.totalAmount);
@@ -92,7 +90,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
           {/* Action buttons */}
           <div className="flex gap-2 mt-3">
             <InvoiceDownloadButton invoiceId={invoice.id} />
-            <InvoiceSendButton invoiceId={invoice.id} status={invoice.status} />
+            <InvoiceSendButton invoiceId={invoice.id} status={invoice.status} customerAccountId={invoice.account.id} />
           </div>
         </div>
         <div className="text-right">

@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 type Props = {
   invoiceId: string;
   status: string;
+  /** Customer account CUID — used to link the "add email" prompt when send fails due to missing contact email. */
+  customerAccountId?: string;
 };
 
-export function InvoiceSendButton({ invoiceId, status }: Props) {
+export function InvoiceSendButton({ invoiceId, status, customerAccountId }: Props) {
   const router = useRouter();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +54,17 @@ export function InvoiceSendButton({ invoiceId, status }: Props) {
         {sending ? "Sending…" : canSend ? "Send Invoice" : "Resend"}
       </button>
       {error && (
-        <span className="text-[10px] text-[var(--dpf-error)] ml-2">{error}</span>
+        <span className="text-[10px] text-[var(--dpf-error)] ml-2">
+          {error}
+          {customerAccountId && /no contact email/i.test(error) && (
+            <Link
+              href={`/customer/${customerAccountId}`}
+              className="ml-1 underline text-[var(--dpf-accent)]"
+            >
+              Add email to customer →
+            </Link>
+          )}
+        </span>
       )}
     </>
   );

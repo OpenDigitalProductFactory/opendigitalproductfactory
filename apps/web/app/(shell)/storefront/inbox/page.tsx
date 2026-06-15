@@ -1,12 +1,14 @@
 import { prisma } from "@dpf/db";
 import { redirect } from "next/navigation";
 import { StorefrontInbox } from "@/components/storefront-admin/StorefrontInbox";
+import { getOrgSettings } from "@/lib/actions/currency";
+import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 
 export default async function InboxPage() {
   const config = await prisma.storefrontConfig.findFirst({ select: { id: true } });
   if (!config) redirect("/storefront/setup");
 
-  const [inquiries, bookings, orders, donations, providerList, digitalProducts] = await Promise.all([
+  const [inquiries, bookings, orders, donations, providerList, digitalProducts, orgSettings] = await Promise.all([
     prisma.storefrontInquiry.findMany({
       where: { storefrontId: config.id },
       orderBy: { createdAt: "desc" },
@@ -74,7 +76,10 @@ export default async function InboxPage() {
       orderBy: [{ name: "asc" }],
       take: 20,
     }),
+    getOrgSettings(),
   ]);
+
+  const currencySymbol = getCurrencySymbol(orgSettings.baseCurrency);
 
   type InboxEntry = {
     id: string;
@@ -137,7 +142,7 @@ export default async function InboxPage() {
       name: null,
       email: order.customerEmail,
       type: "order",
-      detail: `£${order.totalAmount.toString()}`,
+      detail: `${currencySymbol}${order.totalAmount.toString()}`,
       createdAt: order.createdAt.toISOString(),
       providerName: null,
       status: "",
@@ -148,7 +153,7 @@ export default async function InboxPage() {
       name: donation.donorName,
       email: donation.donorEmail,
       type: "donation",
-      detail: `£${donation.amount.toString()}`,
+      detail: `${currencySymbol}${donation.amount.toString()}`,
       createdAt: donation.createdAt.toISOString(),
       providerName: null,
       status: "",
