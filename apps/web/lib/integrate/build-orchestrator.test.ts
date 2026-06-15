@@ -476,6 +476,42 @@ describe("parseQAVerification", () => {
     expect(result.typecheckPassed).toBe(true);
     expect(result.parseConfidence).toBe("high");
   });
+
+  it("aggregates counts across multiple package summaries (monorepo pnpm -r run)", () => {
+    // A real `pnpm -r test` prints one vitest summary per package. The old
+    // single-.match() parse captured only the first package's numbers.
+    const multiPkg = [
+      " Tests  26 passed (26)",
+      " Tests  137 passed (137)",
+      " Tests  17 passed (17)",
+    ].join("\n");
+    const result = parseQAVerification(multiPkg);
+    expect(result.testsPassed).toBe(180);
+    expect(result.testsFailed).toBe(0);
+  });
+
+  it("flags a failure in a LATER package that a first-match parse would miss", () => {
+    // Regression for the truncateMiddle build: apps/web sorts last in pnpm -r,
+    // so its failures appear after several all-green package summaries. The old
+    // parser stopped at the first "N passed" and reported testsFailed:0, letting
+    // the build slip past the build→review gate.
+    const output = [
+      " Tests  26 passed (26)",
+      " Tests  137 passed (137)",
+      " Tests  3 failed | 2 passed (5)", // apps/web — the feature's broken tests
+    ].join("\n");
+    const result = parseQAVerification(output);
+    expect(result.testsFailed).toBe(3);
+    expect(result.testsPassed).toBe(165);
+  });
+
+  it("strips ANSI color codes before counting", () => {
+    // vitest colorizes its output; the escape sequences must not corrupt counts.
+    const colorized = " \x1b[32mTests\x1b[39m  \x1b[31m4 failed\x1b[39m | \x1b[32m10 passed\x1b[39m (14)";
+    const result = parseQAVerification(colorized);
+    expect(result.testsFailed).toBe(4);
+    expect(result.testsPassed).toBe(10);
+  });
 });
 
 // ─── Outcome Classification: False Positive Fixes ─────────────────────────
