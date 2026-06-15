@@ -3,6 +3,7 @@ import {
   computeNewScore,
   detectDrift,
   errorLooksLikeInfrastructure,
+  errorLooksLikeConfigGap,
   type DriftResult,
 } from "./eval-runner";
 
@@ -106,5 +107,34 @@ describe("errorLooksLikeInfrastructure (BI-INST-008 circuit breaker)", () => {
   it("is case-insensitive", () => {
     expect(errorLooksLikeInfrastructure("NETWORK ERROR")).toBe(true);
     expect(errorLooksLikeInfrastructure("Fetch Failed")).toBe(true);
+  });
+});
+
+describe("errorLooksLikeConfigGap (credential/setup circuit breaker)", () => {
+  // The exact error that flooded the portal logs and wrongly retired xAI's
+  // grok models: a provider with no API key configured.
+  it("classifies a missing credential as a config gap (not model quality)", () => {
+    expect(errorLooksLikeConfigGap("No credential configured")).toBe(true);
+  });
+  it("matches the CLI-adapter 'No credential for' phrasing", () => {
+    expect(
+      errorLooksLikeConfigGap('No credential for "xai". Configure via Admin.'),
+    ).toBe(true);
+  });
+  it("matches a rotated-key decrypt failure", () => {
+    expect(
+      errorLooksLikeConfigGap("All encrypted fields failed to decrypt"),
+    ).toBe(true);
+  });
+  it("does NOT match a genuine model-quality / not-found failure (still retires)", () => {
+    expect(errorLooksLikeConfigGap("Model not found on local")).toBe(false);
+    expect(errorLooksLikeConfigGap("schema validation failed")).toBe(false);
+  });
+  it("returns false for null / empty", () => {
+    expect(errorLooksLikeConfigGap(null)).toBe(false);
+    expect(errorLooksLikeConfigGap("")).toBe(false);
+  });
+  it("is case-insensitive", () => {
+    expect(errorLooksLikeConfigGap("NO CREDENTIAL CONFIGURED")).toBe(true);
   });
 });
