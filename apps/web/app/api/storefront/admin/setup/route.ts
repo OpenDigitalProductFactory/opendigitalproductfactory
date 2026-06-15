@@ -55,6 +55,9 @@ export async function POST(req: NextRequest) {
   const archetype = await prisma.storefrontArchetype.findUnique({ where: { archetypeId } });
   if (!archetype) return NextResponse.json({ error: "Archetype not found" }, { status: 400 });
 
+  const orgSettingsRow = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
+  const seedCurrency = orgSettingsRow?.baseCurrency ?? "USD";
+
   const config = await prisma.storefrontConfig.create({
     data: {
       organizationId: org.id,
@@ -95,7 +98,7 @@ export async function POST(req: NextRequest) {
           priceAmount: t.priceAmount ?? null,
           sortOrder: i,
           isActive: true,
-          priceCurrency: "GBP",
+          priceCurrency: seedCurrency,
         })),
       },
     },

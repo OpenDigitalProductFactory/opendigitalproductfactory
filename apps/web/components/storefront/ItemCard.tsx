@@ -1,4 +1,5 @@
 import type { PublicItem } from "@/lib/storefront-types";
+import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import { CtaButton } from "./CtaButton";
 import { MediaImage } from "./MediaImage";
 
@@ -16,7 +17,7 @@ function formatPrice(item: PublicItem): string | null {
   if (!item.priceAmount) return null;
   const prefix = PRICE_PREFIX[item.priceType ?? ""] ?? "";
   const suffix = PRICE_SUFFIX[item.priceType ?? ""] ?? "";
-  const currency = item.priceCurrency === "GBP" ? "£" : item.priceCurrency;
+  const currency = getCurrencySymbol(item.priceCurrency);
   return `${prefix}${currency}${item.priceAmount}${suffix}`;
 }
 
