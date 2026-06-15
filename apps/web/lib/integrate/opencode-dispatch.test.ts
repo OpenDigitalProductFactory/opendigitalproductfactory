@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   sandboxReachableUrl,
   preflightLocalEndpoint,
+  pickDefaultCodingModel,
   buildOpencodeConfig,
   summarizeOpencodeEvent,
   extractOpencodeResult,
@@ -78,11 +79,38 @@ describe("preflightLocalEndpoint", () => {
     expect(res.resolvedModel).toBe("qwen3-coder");
   });
 
-  it("falls back to the first served model when none requested", async () => {
+  it("falls back to the first served CHAT model when none requested", async () => {
     const fetchImpl = (async () => modelsResponse(["first-model", "second"])) as unknown as typeof fetch;
     const res = await preflightLocalEndpoint("http://localhost:11434/v1", "", fetchImpl);
     expect(res.ok).toBe(true);
     expect(res.resolvedModel).toBe("first-model");
+  });
+
+  it("never auto-resolves to an embedding model — skips nomic-embed and prefers the coder (regression: build dispatched to nomic-embed-text)", async () => {
+    const fetchImpl = (async () =>
+      modelsResponse(["docker.io/ai/nomic-embed-text-v1.5:latest", "docker.io/ai/qwen3-coder:latest"])) as unknown as typeof fetch;
+    const res = await preflightLocalEndpoint("http://localhost:11434/v1", "", fetchImpl);
+    expect(res.ok).toBe(true);
+    expect(res.resolvedModel).toBe("docker.io/ai/qwen3-coder:latest");
+  });
+});
+
+describe("pickDefaultCodingModel", () => {
+  it("excludes embedding/rerank/stt models", () => {
+    expect(pickDefaultCodingModel(["nomic-embed-text", "bge-m3", "qwen3:8b"])).toBe("qwen3:8b");
+    expect(pickDefaultCodingModel(["whisper-base", "gemma3:latest"])).toBe("gemma3:latest");
+  });
+
+  it("prefers a coder model over a plain chat model", () => {
+    expect(pickDefaultCodingModel(["gemma3", "qwen3-coder", "qwen3"])).toBe("qwen3-coder");
+  });
+
+  it("prefers a qwen3 model when no explicit coder is present", () => {
+    expect(pickDefaultCodingModel(["gemma3", "qwen3:14b"])).toBe("qwen3:14b");
+  });
+
+  it("returns null when only non-chat models are served", () => {
+    expect(pickDefaultCodingModel(["nomic-embed-text", "bge-reranker"])).toBeNull();
   });
 
   it("enforces the context floor only when the endpoint reports it", async () => {
