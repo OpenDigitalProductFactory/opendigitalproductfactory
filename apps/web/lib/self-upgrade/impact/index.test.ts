@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/self-upgrade/run-store", () => ({
   getLatestSucceededRun: vi.fn(),
@@ -7,16 +7,58 @@ vi.mock("@/lib/self-upgrade/completion", () => ({
   getDeployedSha: vi.fn(),
 }));
 
-import { summarizeUpgradeImpact } from "./index";
+// Mock the durable store so the orchestrator tests stay DB-free; store.ts has
+// its own test for the prisma interaction.
+const { persistSummaryMock, getPersistedSummaryMock, getPersistedSummaryRowMock } =
+  vi.hoisted(() => ({
+    persistSummaryMock: vi.fn(),
+    getPersistedSummaryMock: vi.fn(),
+    getPersistedSummaryRowMock: vi.fn(),
+  }));
+vi.mock("./store", () => ({
+  persistSummary: (...a: unknown[]) => persistSummaryMock(...a),
+  getPersistedSummary: (...a: unknown[]) => getPersistedSummaryMock(...a),
+  getPersistedSummaryRow: (...a: unknown[]) => getPersistedSummaryRowMock(...a),
+}));
+
+import {
+  summarizeUpgradeImpact,
+  loadPersistedImpactSummary,
+  getCurrentImpactSummaryId,
+} from "./index";
 import { _resetCacheForTest } from "./cache";
 import { getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
-import type { InstallSignals, RawCommit } from "./types";
+import type { InstallSignals, RawCommit, UpgradeImpactSummary } from "./types";
+
+beforeEach(() => {
+  // Defaults: nothing persisted, writes succeed. Individual tests override.
+  persistSummaryMock.mockResolvedValue("UIS-1");
+  getPersistedSummaryMock.mockResolvedValue(null);
+  getPersistedSummaryRowMock.mockResolvedValue(null);
+});
 
 afterEach(() => {
   _resetCacheForTest();
   vi.clearAllMocks();
 });
+
+function storedSummary(
+  overrides: Partial<UpgradeImpactSummary> = {},
+): UpgradeImpactSummary {
+  return {
+    currentLineageSha: "a".repeat(40),
+    targetSha: "b".repeat(40),
+    counts: { breaking: 0, feature: 1, fix: 0, performance: 0, other: 0, total: 1 },
+    topItems: [],
+    allItems: [],
+    phrased: null,
+    enrichment: { githubReachable: false, prsEnriched: 0 },
+    generatedAt: "2026-01-01T00:00:00.000Z",
+    fromCache: false,
+    ...overrides,
+  };
+}
 
 const SIGNALS: InstallSignals = {
   archetypeId: "field-service",
@@ -179,5 +221,130 @@ describe("summarizeUpgradeImpact — orchestrator", () => {
     await summarizeUpgradeImpact({ skipPhrasing: true }, deps);
     await summarizeUpgradeImpact({ skipPhrasing: true, refresh: true }, deps);
     expect(change).toHaveBeenCalledTimes(2);
+  });
+
+  it("persists a freshly computed summary to the durable store", async () => {
+    const out = await summarizeUpgradeImpact({ skipPhrasing: true }, {
+      loadCurrentLineageSha: async () => "a".repeat(40),
+      loadTargetSha: async () => "b".repeat(40),
+      loadInstallSignals: async () => SIGNALS,
+      loadChangeSet: async () => [rawCommit("feat: x", [], "1".repeat(40))],
+      enrichPrs: async () => ({ reachable: false, enriched: 0, byPr: new Map() }),
+      phraseSummary: async () => null,
+    });
+    expect(out.ok).toBe(true);
+    expect(persistSummaryMock).toHaveBeenCalledTimes(1);
+    expect(persistSummaryMock.mock.calls[0]![0]).toMatchObject({
+      currentLineageSha: "a".repeat(40),
+      targetSha: "b".repeat(40),
+    });
+  });
+
+  it("serves a persisted summary on an L1 miss without recomputing", async () => {
+    getPersistedSummaryMock.mockResolvedValue(storedSummary());
+    const change = vi.fn().mockResolvedValue([]);
+    const out = await summarizeUpgradeImpact({ skipPhrasing: true }, {
+      loadCurrentLineageSha: async () => "a".repeat(40),
+      loadTargetSha: async () => "b".repeat(40),
+      loadInstallSignals: async () => SIGNALS,
+      loadChangeSet: change,
+      enrichPrs: async () => ({ reachable: false, enriched: 0, byPr: new Map() }),
+      phraseSummary: async () => null,
+    });
+    // Durable hit → no git walk, no re-persist, marked fromCache.
+    expect(change).not.toHaveBeenCalled();
+    expect(persistSummaryMock).not.toHaveBeenCalled();
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.summary.fromCache).toBe(true);
+  });
+
+  it("refresh=true bypasses the durable store and recomputes", async () => {
+    getPersistedSummaryMock.mockResolvedValue(storedSummary());
+    const change = vi.fn().mockResolvedValue([rawCommit("feat: x", [], "1".repeat(40))]);
+    await summarizeUpgradeImpact({ skipPhrasing: true, refresh: true }, {
+      loadCurrentLineageSha: async () => "a".repeat(40),
+      loadTargetSha: async () => "b".repeat(40),
+      loadInstallSignals: async () => SIGNALS,
+      loadChangeSet: change,
+      enrichPrs: async () => ({ reachable: false, enriched: 0, byPr: new Map() }),
+      phraseSummary: async () => null,
+    });
+    expect(getPersistedSummaryMock).not.toHaveBeenCalled();
+    expect(change).toHaveBeenCalledTimes(1);
+    expect(persistSummaryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("a persistence failure does not break the returned summary", async () => {
+    persistSummaryMock.mockRejectedValue(new Error("db down"));
+    const out = await summarizeUpgradeImpact({ skipPhrasing: true }, {
+      loadCurrentLineageSha: async () => "a".repeat(40),
+      loadTargetSha: async () => "b".repeat(40),
+      loadInstallSignals: async () => SIGNALS,
+      loadChangeSet: async () => [rawCommit("feat: x", [], "1".repeat(40))],
+      enrichPrs: async () => ({ reachable: false, enriched: 0, byPr: new Map() }),
+      phraseSummary: async () => null,
+    });
+    expect(out.ok).toBe(true);
+  });
+});
+
+describe("loadPersistedImpactSummary", () => {
+  it("returns the persisted summary marked fromCache", async () => {
+    getPersistedSummaryMock.mockResolvedValue(storedSummary());
+    const out = await loadPersistedImpactSummary("b".repeat(40), {
+      loadCurrentLineageSha: async () => "a".repeat(40),
+    });
+    expect(out?.ok).toBe(true);
+    if (out?.ok) expect(out.summary.fromCache).toBe(true);
+  });
+
+  it("returns null when there is no target", async () => {
+    expect(await loadPersistedImpactSummary(null)).toBeNull();
+  });
+
+  it("returns null when lineage equals target (nothing to summarize)", async () => {
+    const out = await loadPersistedImpactSummary("a".repeat(40), {
+      loadCurrentLineageSha: async () => "a".repeat(40),
+    });
+    expect(out).toBeNull();
+    expect(getPersistedSummaryMock).not.toHaveBeenCalled();
+  });
+
+  it("returns null when nothing is persisted yet", async () => {
+    getPersistedSummaryMock.mockResolvedValue(null);
+    const out = await loadPersistedImpactSummary("b".repeat(40), {
+      loadCurrentLineageSha: async () => "a".repeat(40),
+    });
+    expect(out).toBeNull();
+  });
+});
+
+describe("getCurrentImpactSummaryId", () => {
+  it("returns the persisted row id for the current pair", async () => {
+    getPersistedSummaryRowMock.mockResolvedValue({ id: "UIS-9", summary: storedSummary() });
+    const id = await getCurrentImpactSummaryId({
+      loadCurrentLineageSha: async () => "a".repeat(40),
+      loadTargetSha: async () => "b".repeat(40),
+    });
+    expect(id).toBe("UIS-9");
+  });
+
+  it("returns null when no summary is persisted for the current pair", async () => {
+    getPersistedSummaryRowMock.mockResolvedValue(null);
+    const id = await getCurrentImpactSummaryId({
+      loadCurrentLineageSha: async () => "a".repeat(40),
+      loadTargetSha: async () => "b".repeat(40),
+    });
+    expect(id).toBeNull();
+  });
+
+  it("returns null (never throws) when resolution fails", async () => {
+    const id = await getCurrentImpactSummaryId({
+      loadCurrentLineageSha: async () => {
+        throw new Error("boom");
+      },
+      loadTargetSha: async () => "b".repeat(40),
+    });
+    expect(id).toBeNull();
   });
 });
