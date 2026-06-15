@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "orgSlug is required" }, { status: 400 });
   }
 
-  const org = await prisma.organization.findFirst({ select: { id: true, name: true } });
+  const org = await prisma.organization.findFirst({ select: { id: true, name: true, slug: true } });
   if (!org) {
     return NextResponse.json(
       { error: "Organization not found. Complete account setup first." },
@@ -41,12 +41,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Update org name if the user edited it in the storefront wizard
-  if (orgName && orgName !== org.name) {
-    await prisma.organization.update({
-      where: { id: org.id },
-      data: { name: orgName },
-    });
+  // Update org name and/or slug if the user edited them in the storefront wizard
+  const orgUpdates: { name?: string; slug?: string } = {};
+  if (orgName && orgName !== org.name) orgUpdates.name = orgName;
+  if (orgSlug !== org.slug) orgUpdates.slug = orgSlug;
+  if (Object.keys(orgUpdates).length > 0) {
+    await prisma.organization.update({ where: { id: org.id }, data: orgUpdates });
   }
 
   const existing = await prisma.storefrontConfig.findUnique({ where: { organizationId: org.id } });
@@ -73,7 +73,8 @@ export async function POST(req: NextRequest) {
           title: s.title,
           sortOrder: s.sortOrder,
           content: {},
-          isVisible: true,
+          // Content-dependent sections start hidden until operator adds content (R10-SECT-001).
+          isVisible: !["team", "gallery", "testimonials"].includes(s.type),
         })),
       },
       items: {

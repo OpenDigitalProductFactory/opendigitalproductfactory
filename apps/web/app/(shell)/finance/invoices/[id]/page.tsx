@@ -1,10 +1,10 @@
 // apps/web/app/(shell)/finance/invoices/[id]/page.tsx
 import { getInvoice } from "@/lib/actions/finance";
-import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InvoiceSendButton } from "@/components/finance/InvoiceSendButton";
+import { InvoiceDownloadButton } from "@/components/finance/InvoiceDownloadButton";
 import { InvoiceSignatureToggle } from "@/components/finance/InvoiceSignatureToggle";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -35,8 +35,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
     notFound();
   }
 
-  const orgSettings = await getOrgSettings();
-  const sym = getCurrencySymbol(orgSettings.baseCurrency);
+  const sym = getCurrencySymbol(invoice.currency);
 
   const colour = STATUS_COLOURS[invoice.status] ?? "#6b7280";
   const totalAmount = Number(invoice.totalAmount);
@@ -90,14 +89,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
           </p>
           {/* Action buttons */}
           <div className="flex gap-2 mt-3">
-            <a
-              href={`/api/v1/finance/invoices/${invoice.id}/pdf`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
-            >
-              Download PDF
-            </a>
+            <InvoiceDownloadButton invoiceId={invoice.id} />
             <InvoiceSendButton invoiceId={invoice.id} status={invoice.status} customerAccountId={invoice.account.id} />
           </div>
         </div>

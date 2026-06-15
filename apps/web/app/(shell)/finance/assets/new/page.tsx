@@ -1,8 +1,11 @@
 // apps/web/app/(shell)/finance/assets/new/page.tsx
 import { CreateAssetForm } from "@/components/finance/CreateAssetForm";
+import { getOrgSettings } from "@/lib/actions/currency";
 import Link from "next/link";
 
-export default function NewAssetPage() {
+export default async function NewAssetPage() {
+  const orgSettings = await getOrgSettings();
+
   return (
     <div>
       {/* Breadcrumb */}
@@ -21,7 +24,7 @@ export default function NewAssetPage() {
       <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-6">Register Asset</h1>
 
       <div className="max-w-2xl">
-        <CreateAssetForm />
+        <CreateAssetForm defaultCurrency={orgSettings.baseCurrency} />
       </div>
     </div>
   );
