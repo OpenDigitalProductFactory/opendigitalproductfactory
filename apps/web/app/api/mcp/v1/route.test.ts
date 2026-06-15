@@ -897,6 +897,43 @@ describe("POST — tools/call", () => {
     expect(call.source).toBe("external-jsonrpc");
   });
 
+  it("accepts an implying grant for a finer required grant (build_promote → build_lifecycle)", async () => {
+    // promote_to_build_studio requires `build_lifecycle`; a legacy
+    // `build_promote` token implies it via GRANT_IMPLICATIONS. The token-scope
+    // gate must expand before checking, mirroring the agent-grant layer.
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_promote",
+      userId: "u1",
+      agentId: "AGT-BUILD",
+      scopes: ["build_promote"], // NOT build_lifecycle directly
+      capability: "write",
+      scope: "write",
+    });
+    govMock.mockResolvedValue({
+      success: true,
+      message: "Promoted BI-SCOPE to Build Studio.",
+      entityId: "BI-SCOPE",
+      data: { buildId: "FB-SCOPE" },
+    });
+
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_PROMOTE",
+        body: {
+          jsonrpc: "2.0",
+          id: 73,
+          method: "tools/call",
+          params: { name: "promote_to_build_studio", arguments: { itemId: "BI-SCOPE" } },
+        },
+      }),
+    );
+
+    const body = await res.json();
+    expect(body.result.isError).toBe(false);
+    expect(govMock).toHaveBeenCalledOnce();
+    expect(govMock.mock.calls[0]![0].toolName).toBe("promote_to_build_studio");
+  });
+
   it("dispatches to governedExecuteTool with source=external-jsonrpc and apiTokenId", async () => {
     resolveMock.mockResolvedValue({
       tokenId: "tok_abc",

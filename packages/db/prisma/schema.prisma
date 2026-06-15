@@ -1666,6 +1666,8 @@ model TokenUsage {
   inferenceMs  Int?
   costUsd      Float    @default(0)
   createdAt    DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model EndpointTaskPerformance {
@@ -1712,6 +1714,7 @@ model TaskEvaluation {
 
   @@index([endpointId, taskType, createdAt])
   @@index([threadId])
+  @@index([createdAt])
 }
 
 model EndpointTestRun {
@@ -1734,6 +1737,7 @@ model EndpointTestRun {
 
   @@index([endpointId])
   @@index([status])
+  @@index([startedAt])
 }
 
 model ScheduledJob {
@@ -2573,6 +2577,7 @@ model AdapterRunTelemetry {
   @@index([raceCohortId])
   @@index([threadId, startedAt])
   @@index([agentId, startedAt])
+  @@index([startedAt])
 }
 
 // EP-COST Phase 2 prerequisite — one row per budget event so the
@@ -3811,6 +3816,7 @@ model AgentThread {
   @@unique([userId, contextKey])
   @@index([cliSessionLastUsedAt])
   @@index([parentThreadId])
+  @@index([updatedAt])
 }
 
 model AgentMessage {
@@ -3993,6 +3999,7 @@ model ToolExecution {
   @@index([skillId, createdAt(sort: Desc)])
   @@index([envelopeId])
   @@index([delegatingUserId, createdAt(sort: Desc)])
+  @@index([createdAt])
 }
 
 // Pseudo-User Contract (spec §6.4 + §8): destructive-action confirmation
@@ -5020,6 +5027,7 @@ model BuildActivity {
   build     FeatureBuild @relation(fields: [buildId], references: [buildId])
 
   @@index([buildId, createdAt])
+  @@index([createdAt])
 }
 
 model BuildDispatchAttempt {
@@ -5045,6 +5053,7 @@ model BuildDispatchAttempt {
   @@index([buildId, startedAt])
   @@index([buildId, taskTitle, startedAt])
   @@index([failureAxis, startedAt])
+  @@index([startedAt])
 }
 
 // ─── EP-COST-001 Phase 3: Build Phase Run cost rollup ─────────────────────────
@@ -5202,6 +5211,7 @@ model StallEvent {
   @@index([buildId])
   @@index([phase, reason])
   @@index([outcome])
+  @@index([createdAt])
 }
 
 // ─── Activity Quiescence Protocol — coordinator audit (BI-QUIESCE-001) ───
@@ -7559,6 +7569,8 @@ model StorefrontOrder {
   storefrontId      String
   customerContactId String?
   customerEmail     String
+  customerName      String?
+  deliveryAddress   Json?
   items             Json
   totalAmount       Decimal
   currency          String           @default("GBP")
@@ -8885,6 +8897,7 @@ model SkillUsageEvent {
   @@index([threadId, createdAt(sort: Desc)])
   @@index([taskRunId, createdAt(sort: Desc)])
   @@index([phase, createdAt(sort: Desc)])
+  @@index([createdAt])
 }
 
 // Governed Hermes learning Slice 3: immutable per-version snapshot of a
@@ -9162,6 +9175,7 @@ model WikiIngestEvent {
 
   @@index([sourceId])
   @@index([organizationId])
+  @@index([createdAt])
 }
 
 model WikiLintFinding {
@@ -10441,6 +10455,7 @@ model CoworkerTurnMetric {
   createdAt       DateTime @default(now())
 
   @@unique([threadId, agentMessageId])
+  @@index([createdAt])
   @@index([agentId, routeContext, createdAt])
   @@index([threadId, createdAt])
 }

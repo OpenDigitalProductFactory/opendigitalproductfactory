@@ -28,13 +28,15 @@ export default async function CheckoutPage({
 
   const storefrontId = storefrontConfig.id;
   let refValid = false;
+  let bookingDetail: { scheduledAt: Date; durationMinutes: number; customerName: string } | null = null;
 
   if (type === "booking") {
     const tx = await prisma.storefrontBooking.findFirst({
       where: { bookingRef: ref, storefrontId },
-      select: { id: true },
+      select: { id: true, scheduledAt: true, durationMinutes: true, customerName: true },
     });
     refValid = !!tx;
+    if (tx) bookingDetail = { scheduledAt: tx.scheduledAt, durationMinutes: tx.durationMinutes, customerName: tx.customerName };
   } else if (type === "inquiry") {
     const tx = await prisma.storefrontInquiry.findFirst({
       where: { inquiryRef: ref, storefrontId },
@@ -66,6 +68,19 @@ export default async function CheckoutPage({
       <p style={{ color: "var(--dpf-muted)", fontSize: 15, marginBottom: 4 }}>
         Reference: <strong>{ref}</strong>
       </p>
+      {bookingDetail && (
+        <p style={{ color: "var(--dpf-muted)", fontSize: 14, marginBottom: 4 }}>
+          {new Date(bookingDetail.scheduledAt).toLocaleString(undefined, {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+          {` · ${bookingDetail.durationMinutes} min`}
+        </p>
+      )}
       <p style={{ color: "var(--dpf-muted)", fontSize: 14 }}>
         {"We'll be in touch shortly. You can return to "}
         <a href={`/s/${slug}`} style={{ color: "var(--dpf-accent, #4f46e5)" }}>
