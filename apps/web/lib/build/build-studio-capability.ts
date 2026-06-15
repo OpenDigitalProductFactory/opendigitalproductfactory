@@ -124,21 +124,29 @@ function isLocalProviderName(name: string): boolean {
  * decide whether Build Studio's build-specialist agent can be served by at
  * least one of them.
  *
- * **Hard rule: local-provider models never satisfy the gate**, regardless
- * of tier classification. Operator directive (Mark, 2026-05-23): Build Studio
- * does code generation + long tool sequences + complex reasoning that exceed
- * even strong-tier local model robustness (cf. `project_mechanism_question_
- * grounding_gap.md` — small/local models confabulate on this workload).
- * Local stays valid for less demanding coworkers; Build Studio specifically
- * requires a remote provider.
+ * **Local-provider rule: local models satisfy the gate ONLY when a
+ * deterministic tool-calling build engine (opencode) is available** to drive
+ * them. The original blanket block (operator directive, Mark, 2026-05-23) was
+ * grounded in raw local-model robustness on long tool sequences — small/local
+ * models confabulate on this workload (cf. `project_mechanism_question_
+ * grounding_gap.md`). That concern is addressed when the build dispatch runs
+ * through opencode, which parses the model's native tool-call format and
+ * supplies the tool loop itself rather than relying on the model's API
+ * tool-use. Operator decision (Mark, 2026-06-15): with opencode proven on
+ * qwen3-coder, enable local Build Studio gated on that engine's presence.
+ * Without opencode, local still cannot satisfy the gate. Remote providers are
+ * unchanged — they still require their own API tool-use.
  *
  * Nullable fields (supportsToolUse, maxInputTokens) are treated as "assumed
  * sufficient" so a freshly connected REMOTE provider isn't blocked while
- * model discovery is still running in the background.
+ * model discovery is still running in the background. For LOCAL models the
+ * API supportsToolUse flag is intentionally NOT required, because opencode —
+ * not the model API — provides the tool-call loop.
  */
 export function deriveBuildStudioCapability(
   models: ActiveProviderModel[],
   inactiveRunners: ConfiguredInactiveRunner[] = [],
+  localBuildEngineAvailable = false,
 ): BuildStudioCapability {
   const enableableRunners: EnableableRunner[] = inactiveRunners.map((r) => ({
     providerId: r.providerId,
@@ -159,11 +167,16 @@ export function deriveBuildStudioCapability(
   const activeProviderNames = Array.from(new Set(models.map((m) => m.providerName)));
 
   const satisfying = models.filter((m) => {
-    // Hard rule: local providers never satisfy Build Studio's gate, even when
-    // the tier classifier rates the model as strong (e.g. Qwen3 14B). The
-    // workload exceeds even strong-tier local robustness.
-    if (isLocalProviderName(m.providerName)) return false;
-    if (m.supportsToolUse === false) return false;
+    const isLocal = isLocalProviderName(m.providerName);
+    // Local providers satisfy the gate only when opencode is available to
+    // drive them (it supplies the tool-call loop the build workload needs).
+    // Without that engine, local stays blocked — preserving the original
+    // robustness safeguard.
+    if (isLocal && !localBuildEngineAvailable) return false;
+    // Remote providers must advertise API tool-use. Local models route their
+    // tool-calls through opencode's parser, so the model's API supportsToolUse
+    // flag (often false for local chat models) must NOT gate them out.
+    if (!isLocal && m.supportsToolUse === false) return false;
     const tier = assignTierFromModelId(m.modelId);
     if (!BUILD_STUDIO_REQUIRED_TIERS.has(tier)) return false;
     if (m.maxInputTokens !== null && m.maxInputTokens < BUILD_STUDIO_REQUIRED_CONTEXT_TOKENS) {
@@ -195,7 +208,7 @@ export function deriveBuildStudioCapability(
  * calls the pure decision function. Used at /build page render time.
  */
 export async function loadBuildStudioCapability(): Promise<BuildStudioCapability> {
-  const [profiles, inactiveProviders] = await Promise.all([
+  const [profiles, inactiveProviders, localEngine] = await Promise.all([
     prisma.modelProfile.findMany({
       where: {
         modelClass: { in: ["chat", "code"] },
@@ -220,7 +233,17 @@ export async function loadBuildStudioCapability(): Promise<BuildStudioCapability
       select: { providerId: true, name: true, cliEngine: true },
       orderBy: { providerId: "asc" },
     }),
+    // The opencode build engine — the deterministic tool-calling runner that
+    // makes a local model viable for Build Studio. "Available" = its binary is
+    // present in the sandbox (probed) OR it is baked into the image by default.
+    prisma.buildEngine.findFirst({
+      where: { engineId: "opencode" },
+      select: { bakeInDefault: true, state: { select: { present: true } } },
+    }),
   ]);
+
+  const localBuildEngineAvailable =
+    !!localEngine && (localEngine.state?.present === true || localEngine.bakeInDefault === true);
 
   const models: ActiveProviderModel[] = profiles.map((p) => ({
     providerId: p.providerId,
@@ -236,7 +259,7 @@ export async function loadBuildStudioCapability(): Promise<BuildStudioCapability
     cliEngine: p.cliEngine,
   }));
 
-  return deriveBuildStudioCapability(models, inactiveRunners);
+  return deriveBuildStudioCapability(models, inactiveRunners, localBuildEngineAvailable);
 }
 
 /**
