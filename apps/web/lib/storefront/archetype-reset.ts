@@ -80,6 +80,9 @@ export async function resetStorefrontArchetype(input: {
       archetypeId: targetArchetype.archetypeId,
     });
 
+    const orgSettingsRow = await tx.orgSettings.findFirst({ select: { baseCurrency: true } });
+    const seedCurrency = orgSettingsRow?.baseCurrency ?? "USD";
+
     let sectionsCreated = 0;
     let itemsCreated = 0;
 
@@ -140,7 +143,7 @@ export async function resetStorefrontArchetype(input: {
           description: item.description ?? null,
           category: item.category ?? null,
           priceType: item.priceType ?? null,
-          priceCurrency: "GBP",
+          priceCurrency: seedCurrency,
           ctaType: item.ctaType ?? targetArchetype.ctaType,
           ctaLabel: item.ctaLabel ?? null,
           sortOrder: index,
