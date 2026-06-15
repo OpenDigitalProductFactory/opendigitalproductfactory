@@ -8893,6 +8893,7 @@ export async function executeTool(
             title: true,
             kind: true,
             parentEpicId: true,
+            deliberationSummary: true,
             dependenciesOut: FEATURE_BUILD_DEPENDENCY_GATE_SELECT.dependenciesOut,
           },
         });
@@ -8912,6 +8913,37 @@ export async function executeTool(
             if (!dependencyGate.allowed) {
               logBuildActivity(buildId, "phase:gate-blocked", dependencyGate.message);
             } else {
+              // WWMD kernel gate. The structural checkPhaseGate + dependency gate
+              // above are necessary but not sufficient: the decision kernel
+              // (principle_decide) is the authority on whether plan→build honors
+              // platform principles. The advance-phase HTTP route runs this gate;
+              // this agentic-loop auto-advance MUST too, or local-model builds
+              // silently bypass WWMD. Fail OPEN on evaluator error so a kernel
+              // hiccup can't wedge the streamlined flow — but a genuine principle
+              // conflict (gate not allowed) blocks the auto-advance and surfaces a
+              // DecisionInteraction for operator review.
+              let decisionAllowed = true;
+              try {
+                const { evaluateBuildStudioPlanAdvancementGate } = await import("@/lib/decision-perspective/build-studio-gate");
+                const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
+                  db: prisma,
+                  build: {
+                    buildId: updatedBuild.buildId,
+                    title: updatedBuild.title,
+                    phase: "plan",
+                    planReview: updatedBuild.planReview,
+                    deliberationSummary: updatedBuild.deliberationSummary,
+                  },
+                  triggeredByUserId: userId,
+                } as Parameters<typeof evaluateBuildStudioPlanAdvancementGate>[0]);
+                if (!decisionGate.allowed) {
+                  decisionAllowed = false;
+                  logBuildActivity(buildId, "wwmd:gate-blocked", decisionGate.operatorMessage ?? "Decision kernel withheld plan→build advancement.");
+                }
+              } catch (wwmdErr) {
+                console.error("[reviewBuildPlan] WWMD gate errored (failing open):", wwmdErr);
+              }
+              if (decisionAllowed) {
               // Initialize the build branch BEFORE flipping the phase. If the
               // phase flip lands without buildBranch set, deploy_feature runs
               // on whatever the current sandbox HEAD is — picking up leftover
@@ -8947,6 +8979,7 @@ export async function executeTool(
                 }
               } catch (branchErr) {
                 logBuildActivity(buildId, "phase:gate-blocked", `startBuildBranch failed: ${(branchErr as Error).message?.slice(0, 200)}`);
+              }
               }
             }
           } else {
