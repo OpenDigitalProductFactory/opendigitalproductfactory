@@ -179,6 +179,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   },
   // ── Editable (operationally tunable) ──────────────────────────────────────
   {
+    jobId: "data-retention-sweep",
+    inngestId: "ops/data-retention-sweep-scheduled",
+    name: "Data retention sweep",
+    purpose:
+      "Purges aged operational logs, AI telemetry, and inactive coworker chat so the database does not grow without bound. Regulated records (financial, tax, compliance, licensing, HR, consent) are never auto-purged. Editable so an operator can disable or run-now this destructive sweep.",
+    cron: "0 4 * * *",
+    cadence: "Daily at 04:00",
+    category: "editable",
+    tracksRunData: true,
+    runNowEvent: "ops/data-retention.requested",
+  },
+  {
     jobId: "discovery-prometheus-poll",
     inngestId: "ops/prometheus-poll",
     name: "Discovery: Prometheus poll",
