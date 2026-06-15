@@ -42,6 +42,8 @@ Issue 1 [Section: <name>]: <what is missing or vague> — <why this blocks imple
 Issue 2 [Section: <name>]: <what is missing or vague> — <what specific answer is needed>
 ```
 
+**Format note (opt-in).** I review the design doc on its substance, not its file format. A design doc presented as a self-contained HTML artifact (inline SVG flow/state diagram, real tables, jump links) is welcome — often clearer for diagram-heavy designs than Markdown — and I review it against the same checklist. See [`docs/superpowers/html-artifacts-guide.md`](../../docs/superpowers/html-artifacts-guide.md). Markdown stays the default; I never fail a doc for choosing one over the other.
+
 ---
 
 ## Gate 2 — Plan Review (Plan → Build)

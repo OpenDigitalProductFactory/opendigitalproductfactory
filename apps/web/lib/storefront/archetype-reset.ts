@@ -1,7 +1,8 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
 import { nanoid } from "nanoid";
 import { projectOperationalValueStreamForArchetype } from "./project-operational-value-stream";
+import { seedBookingScheduleDefaults } from "./seed-booking-defaults";
 
 type ResetMode = "replace-seeded-content";
 
@@ -15,7 +16,7 @@ export async function resetStorefrontArchetype(input: {
   return prisma.$transaction(async (tx) => {
     const organization = await tx.organization.findUnique({
       where: { id: organizationId },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
     if (!organization) {
@@ -125,7 +126,7 @@ export async function resetStorefrontArchetype(input: {
           storefrontId: storefront.id,
           type: section.type,
           title: section.title ?? null,
-          content: section.content ?? {},
+          content: (section.content ?? {}) as unknown as Prisma.InputJsonValue,
           sortOrder: section.sortOrder,
           isVisible: true,
         })),
@@ -149,6 +150,19 @@ export async function resetStorefrontArchetype(input: {
 
       sectionsCreated = sectionResult.count;
       itemsCreated = itemResult.count;
+
+      // Booking archetypes (e.g. restaurant) seed booking items but, before this,
+      // no provider/availability — leaving the storefront's booking calendar with
+      // every date greyed out (R9-RES-001). Seed a default provider + hours +
+      // provider→item links + bookingConfig from the template, inside the reset
+      // transaction so it commits or rolls back atomically with the rest. No-op
+      // for non-booking archetypes. Shared with storefront setup so the two seed
+      // paths can't drift.
+      await seedBookingScheduleDefaults(tx, {
+        storefrontId: storefront.id,
+        archetypeId: targetArchetype.archetypeId,
+        providerName: organization.name ?? "Bookings",
+      });
     }
 
     return {

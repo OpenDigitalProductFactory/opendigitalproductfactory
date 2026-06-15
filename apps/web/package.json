@@ -9,7 +9,9 @@
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:route-manifest": "tsx scripts/build-route-manifest.ts",
+    "check:route-manifest": "tsx scripts/build-route-manifest.ts --check"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.11.3",
@@ -17,6 +19,7 @@
     "@dpf/finance-templates": "workspace:*",
     "@dpf/integration-shared": "workspace:*",
     "@dpf/storefront-templates": "workspace:*",
+    "@dpf/types": "workspace:*",
     "@dpf/validators": "workspace:*",
     "@floating-ui/react": "^0.27.19",
     "@fullcalendar/core": "^6.1.20",

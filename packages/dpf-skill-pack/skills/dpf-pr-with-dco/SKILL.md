@@ -172,6 +172,7 @@ All three commits carry `Signed-off-by: Mark Bodman <markdbodman@gmail.com>` and
 ## See also
 
 - AGENTS.md §4 (Branching, Commits & PRs) — full canonical doctrine
+- **Optional HTML PR explainer (opt-in).** The PR *description* stays Markdown, but for a change whose rationale leans on a flow diagram, a change-map table, or annotated snippets, you can attach a self-contained HTML "code explainer" that reads better than the default diff view — copy [`docs/superpowers/_templates/pr-explainer.template.html`](../../../../docs/superpowers/_templates/pr-explainer.template.html) and link it from the description. See [`html-artifacts-guide.md`](../../../../docs/superpowers/html-artifacts-guide.md). Additive only; Markdown PR bodies remain the default.
 - Predecessor skill: [`dpf-worktree-per-session`](../dpf-worktree-per-session/SKILL.md)
 - Composes with: `dpf-finishing-a-development-branch` (integration-shape decisions)
 - Kernel principles: [`all-changes-land-via-pr`](../../../../docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md), [`dco-sign-off-required`](../../../../docs/founder-kernel/wiki/principles/dco-sign-off-required.md), [`branch-guard-before-implementation`](../../../../docs/founder-kernel/wiki/principles/branch-guard-before-implementation.md)

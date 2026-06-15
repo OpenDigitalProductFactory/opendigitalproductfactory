@@ -5,7 +5,7 @@ status: published
 abstract: Routing picks the right model by capability tier and task contract, dynamically. Never pin an agent to a specific provider or model.
 principleTier: core
 principleDirection: Express what a task needs as capability requirements and tiers; let routing pick the model. No hard pins in seeds, AgentModelConfig, or override tables.
-principleDimensionVector: {"long_term_maintainability": 0.8, "vendor_lock_in": 0.9, "operational_independence": 0.6, "capacity_utilization": 0.4}
+principleDimensionVector: {"long_term_maintainability": 0.8, "vendor_lock_in": -0.9, "operational_independence": 0.6, "capacity_utilization": 0.4}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -45,7 +45,7 @@ In-platform coworkers configuring agent profiles, external coding agents authori
 ## Decision Dimensions
 
 - `long_term_maintainability: 0.8` — a no-pin routing layer adapts to the changing model landscape without per-agent edits.
-- `vendor_lock_in: 0.9` — the principle directly negates provider lock-in. Pins concentrate dependence on one vendor; capability-tier routing distributes it.
+- `vendor_lock_in: -0.9` — the principle directly negates provider lock-in. Pins concentrate dependence on one vendor; capability-tier routing distributes it.
 - `operational_independence: 0.6` — a pinned agent fails when its provider stumbles; a capability-routed agent rolls over to the next qualifying model automatically.
 - `capacity_utilization: 0.4` — routing can balance load across qualifying models; a pin forces one model to absorb everything.
 

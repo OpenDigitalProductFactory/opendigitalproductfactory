@@ -1,0 +1,122 @@
+// EP-FULL-OBS Tier 2 (BI-5FE8656F item #6) — shared health-alert issue writer.
+//
+// Turns a firing Prometheus/Loki alert into a PortfolioQualityIssue row in the
+// operator's existing inbox. Extracted from /api/platform/alerts (the Grafana
+// webhook receiver) so the SAME writer serves both delivery paths:
+//   - push  — the webhook route, if an Alertmanager/Grafana ever POSTs
+//   - poll  — alert-delivery-bridge cron (the active path today; no Alertmanager)
+//
+// Why not reuse packages/db's openOrUpdateQualityIssue: that canonical writer
+// owns the discovery->portfolio quality family — a CLOSED QualityIssueType set
+// (none of them health_alert) keyed by a REQUIRED inventory/taxonomy/portfolio
+// FK scope (it throws without one). Health alerts have no such FK; they are
+// keyed by alertname+service. Same table, deliberately different family — so
+// this is a focused sibling writer, not a duplicate.
+
+export type HealthAlertSeverity = "info" | "warn" | "error";
+
+/** Normalized alert input shared by the push (webhook) and poll (cron) paths. */
+export interface IncomingHealthAlert {
+  labels: Record<string, string>;
+  annotations?: Record<string, string>;
+  /** Grafana/Alertmanager push provides startsAt; the poll path has activeAt. */
+  startsAt?: string;
+  activeAt?: string;
+  /** "prometheus" | "loki-ruler" for the poll path; undefined → "webhook". */
+  sourceSystem?: string;
+}
+
+/** Narrow Prisma surface so tests inject a mock without the full client type. */
+export interface HealthAlertDb {
+  portfolioQualityIssue: {
+    upsert(args: {
+      where: { issueKey: string };
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    }): Promise<unknown>;
+    updateMany(args: {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    }): Promise<{ count: number }>;
+  };
+}
+
+/**
+ * Deterministic issueKey for a health alert. Scoped by the most specific
+ * distinguishing label so two services firing the same alert (e.g.
+ * ContainerErrorLogSpike on `sandbox` AND `portal`) become two distinct
+ * tracked issues instead of clobbering one row. Singleton metric alerts with
+ * no service/instance/job label fall back to the bare alertname (backward
+ * compatible with the original webhook key shape).
+ */
+export function healthAlertIssueKey(labels: Record<string, string>): string {
+  const name = labels.alertname ?? "unknown";
+  const scope = labels.service || labels.instance || labels.job || null;
+  return scope ? `health-alert-${name}:${scope}` : `health-alert-${name}`;
+}
+
+function detailsFor(alert: IncomingHealthAlert) {
+  return {
+    alertName: alert.labels.alertname ?? "unknown",
+    description: alert.annotations?.description ?? "",
+    labels: alert.labels,
+    // Attribution drives the cron's reconciliation: it only auto-resolves rows
+    // whose source it actually polled this cycle (never webhook-owned rows).
+    source: alert.sourceSystem ?? "webhook",
+  };
+}
+
+/**
+ * Open or refresh the PortfolioQualityIssue for a firing alert. Idempotent:
+ * the unique issueKey means repeated firings update lastDetectedAt rather than
+ * duplicating. Returns the issueKey so callers can track the firing set.
+ */
+export async function upsertHealthAlertIssue(
+  db: HealthAlertDb,
+  alert: IncomingHealthAlert,
+): Promise<string> {
+  const issueKey = healthAlertIssueKey(alert.labels);
+  const alertName = alert.labels.alertname ?? "unknown";
+  const severity: HealthAlertSeverity = alert.labels.severity === "critical" ? "error" : "warn";
+  const summary = alert.annotations?.summary ?? alertName;
+  const details = detailsFor(alert);
+  const firstDetectedAt = alert.startsAt
+    ? new Date(alert.startsAt)
+    : alert.activeAt
+      ? new Date(alert.activeAt)
+      : new Date();
+
+  await db.portfolioQualityIssue.upsert({
+    where: { issueKey },
+    create: {
+      issueKey,
+      issueType: "health_alert",
+      severity,
+      summary,
+      details,
+      status: "open",
+      firstDetectedAt,
+      lastDetectedAt: new Date(),
+    },
+    update: {
+      severity,
+      summary,
+      details,
+      status: "open",
+      lastDetectedAt: new Date(),
+      resolvedAt: null,
+    },
+  });
+  return issueKey;
+}
+
+/** Flip an open health-alert issue to resolved (alert stopped firing). */
+export async function resolveHealthAlertIssue(
+  db: HealthAlertDb,
+  issueKey: string,
+): Promise<void> {
+  await db.portfolioQualityIssue.updateMany({
+    where: { issueKey, status: "open" },
+    data: { status: "resolved", resolvedAt: new Date(), lastDetectedAt: new Date() },
+  });
+}

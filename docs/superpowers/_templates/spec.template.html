@@ -1,0 +1,174 @@
+<!doctype html>
+<!--
+  DPF spec template (HTML artifact). Opt-in alternative to a Markdown spec.
+  See docs/superpowers/html-artifacts-guide.md for when to use this.
+
+  HOW TO USE
+  1. Copy to docs/superpowers/specs/YYYY-MM-DD-<topic>-design.html
+  2. Replace every {{PLACEHOLDER}} and the example diagram/table/code.
+  3. Keep it a SINGLE self-contained file: inline CSS, inline SVG, no CDN.
+  4. If it needs to be discoverable via search_specs_and_plans, also leave a
+     short Markdown stub (title, BI, abstract, link to this file).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{{TITLE}} — Design</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1d24; --muted: #5b6472; --soft: #f4f6fa;
+    --border: #dce1e8; --accent: #2f6df6; --accent-soft: #e8f0ff;
+    --code-bg: #f6f8fa; --kw: #b5258a; --str: #167f3a; --com: #8a94a6;
+    --ok: #167f3a; --ok-bg: #e7f6ec; --warn: #9a6700; --warn-bg: #fbf3e0;
+    --crit: #c0362c; --crit-bg: #fbe9e7; --neutral: #5b6472; --neutral-bg: #eef1f5;
+    --radius: 10px; --maxw: 980px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1117; --fg: #e6e9ef; --muted: #9aa4b2; --soft: #161a22;
+      --border: #2a313d; --accent: #6ea0ff; --accent-soft: #18233b;
+      --code-bg: #12161e; --kw: #e07ad0; --str: #6fd58a; --com: #6b7585;
+      --ok: #6fd58a; --ok-bg: #11281a; --warn: #e3b35a; --warn-bg: #2a2210;
+      --crit: #f08a80; --crit-bg: #2c1513; --neutral: #9aa4b2; --neutral-bg: #1b2129;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 40px;
+    max-width: var(--maxw); margin: 0 auto; padding: 32px 24px 96px; }
+  /* Sticky jump-link TOC */
+  nav.toc { position: sticky; top: 24px; align-self: start; font-size: 14px; }
+  nav.toc strong { display: block; text-transform: uppercase; letter-spacing: .06em;
+    font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  nav.toc a { display: block; color: var(--muted); text-decoration: none;
+    padding: 4px 10px; border-left: 2px solid var(--border); }
+  nav.toc a:hover { color: var(--accent); border-left-color: var(--accent); }
+  main { min-width: 0; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 40px 0 12px; padding-top: 8px; }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { color: var(--fg); }
+  a { color: var(--accent); }
+  code { font-family: "SF Mono", "JetBrains Mono", Consolas, monospace; font-size: .9em;
+    background: var(--code-bg); padding: 1px 5px; border-radius: 5px; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; overflow: auto; }
+  pre code { background: none; padding: 0; font-size: 13px; line-height: 1.6; }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  /* Frontmatter card */
+  .meta-card { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 14px 0 8px;
+    padding: 14px 18px; background: var(--soft); border: 1px solid var(--border); border-radius: var(--radius); }
+  .meta-card div { font-size: 14px; }
+  .meta-card span { color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-size: 11px; display: block; }
+  /* Status pills */
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.crit { color: var(--crit); background: var(--crit-bg); }
+  .pill.neutral { color: var(--neutral); background: var(--neutral-bg); }
+  /* Tables */
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  thead th { background: var(--soft); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  /* Figure / diagram */
+  figure { margin: 18px 0; padding: 16px; background: var(--soft);
+    border: 1px solid var(--border); border-radius: var(--radius); }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 10px; font-size: 13px; color: var(--muted); text-align: center; }
+  .svg-node { fill: var(--accent-soft); stroke: var(--accent); }
+  .svg-label { fill: var(--fg); font: 600 13px sans-serif; }
+  .svg-edge { stroke: var(--muted); fill: none; }
+  .svg-edge-label { fill: var(--muted); font: 12px sans-serif; }
+  /* Callout */
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 10px 16px; border-radius: 0 var(--radius) var(--radius) 0; margin: 16px 0; }
+  @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } nav.toc { position: static; } }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <nav class="toc" aria-label="On this page">
+    <strong>On this page</strong>
+    <a href="#problem">Problem</a>
+    <a href="#design">Design</a>
+    <a href="#data">Data &amp; contracts</a>
+    <a href="#out-of-scope">Out of scope</a>
+    <a href="#verification">Verification</a>
+  </nav>
+
+  <main>
+    <h1>{{TITLE}} — Design</h1>
+    <div class="meta-card">
+      <div><span>BI</span>{{BI-XXXXXXXX}}</div>
+      <div><span>Epic</span>{{EP-XXXX}} ({{Epic name}})</div>
+      <div><span>Status</span><span class="pill neutral">draft</span></div>
+      <div><span>Date</span>{{YYYY-MM-DD}}</div>
+    </div>
+
+    <h2 id="problem">Problem</h2>
+    <p>{{What's broken or missing, and the concrete incident or pressure that
+      makes it worth fixing now. Ground it — name the failure, not the
+      aspiration.}}</p>
+
+    <h2 id="design">Design</h2>
+    <p>{{One or two sentences of the shape of the solution. Then the pieces.}}</p>
+
+    <h3>Flow</h3>
+    <figure>
+      <!-- Replace with the real flow/state machine. This is a 3-node example. -->
+      <svg viewBox="0 0 720 150" role="img" aria-label="Example flow diagram">
+        <rect class="svg-node" x="20"  y="50" width="170" height="50" rx="8" />
+        <text class="svg-label" x="105" y="80" text-anchor="middle">Input</text>
+        <line class="svg-edge" x1="190" y1="75" x2="270" y2="75" marker-end="url(#arrow)" />
+        <rect class="svg-node" x="275" y="50" width="170" height="50" rx="8" />
+        <text class="svg-label" x="360" y="80" text-anchor="middle">Process</text>
+        <line class="svg-edge" x1="445" y1="75" x2="525" y2="75" marker-end="url(#arrow)" />
+        <rect class="svg-node" x="530" y="50" width="170" height="50" rx="8" />
+        <text class="svg-label" x="615" y="80" text-anchor="middle">Output</text>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)" />
+          </marker>
+        </defs>
+      </svg>
+      <figcaption>Figure 1 — {{caption describing the flow}}.</figcaption>
+    </figure>
+
+    <h3>Pieces</h3>
+    <p>{{Describe each component. Reference real files in <code>backticks</code>.}}</p>
+    <pre><code><span class="com">// apps/web/lib/&lt;area&gt;/&lt;file&gt;.ts</span>
+<span class="kw">export function</span> classify(run: Run): Status {
+  <span class="kw">if</span> (run.conclusion === <span class="str">"success"</span>) <span class="kw">return</span> <span class="str">"verified"</span>;
+  <span class="kw">return</span> <span class="str">"in-progress"</span>;
+}</code></pre>
+
+    <h2 id="data">Data &amp; contracts</h2>
+    <table>
+      <thead><tr><th>State</th><th>Meaning</th><th>Tone</th></tr></thead>
+      <tbody>
+        <tr><td><code>verified</code></td><td>{{…}}</td><td><span class="pill ok">success</span></td></tr>
+        <tr><td><code>in-progress</code></td><td>{{…}}</td><td><span class="pill neutral">neutral</span></td></tr>
+        <tr><td><code>failed</code></td><td>{{…}}</td><td><span class="pill crit">critical</span></td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="out-of-scope">Out of scope</h2>
+    <ul>
+      <li>{{What this design explicitly does not do, and who owns it instead.}}</li>
+    </ul>
+
+    <h2 id="verification">Verification evidence</h2>
+    <div class="callout">{{How you'll know it works — functionally, not just
+      structurally. Unit counts, the live-contract check, the happy path you
+      drove on the running install.}}</div>
+  </main>
+</div>
+</body>
+</html>

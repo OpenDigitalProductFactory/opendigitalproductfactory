@@ -9,6 +9,7 @@ import {
   parseReviewResponse,
   extractClaimsFromReview,
   buildReviewBranchArtifacts,
+  collectReviewerVerdicts,
   deriveReviewRiskLevel,
   artifactTypeForPhase,
   mapCompactSummaryToBuildEntry,
@@ -29,6 +30,20 @@ describe("buildDesignReviewPrompt", () => {
     expect(prompt).toContain("Reuse OpsClient pattern");
     expect(prompt).toContain("Filter hides done items");
     expect(prompt).toContain("JSON FORMAT");
+  });
+
+  it("gates on whole-outcome alignment per the Optimize for the Whole commandment", () => {
+    const prompt = buildDesignReviewPrompt({
+      problemStatement: "Users need filtering",
+      existingCodeAudit: "No existing filter",
+      reusePlan: "Reuse OpsClient pattern",
+      proposedApproach: "Add checkbox filter",
+      acceptanceCriteria: ["Filter hides done items"],
+    }, "Test project");
+    // The design review must ask which end-to-end outcome the change serves —
+    // local correctness alone is not "done".
+    expect(prompt).toContain("WHOLE-OUTCOME ALIGNMENT");
+    expect(prompt).toContain("Optimize for the Whole");
   });
 
   // BI-CE49D82E — Delta-aware design review prompt, mirror of the plan path
@@ -501,6 +516,10 @@ describe("buildArchitectureReviewPrompt", () => {
     expect(prompt).toContain("ArchitectureReview table");
     // The chief-architect lens must invite reference-doc feedback.
     expect(prompt).toContain("[reference-doc]");
+    // Whole-over-local is a first-class architectural-alignment concern.
+    expect(prompt).toContain("Optimize for the Whole");
+    // Archetype/storefront designs are measured against their load-bearing stages.
+    expect(prompt).toContain("LOAD-BEARING value-stream");
     expect(prompt).toContain("JSON FORMAT");
   });
 
@@ -523,6 +542,16 @@ describe("buildArchitectureReviewPrompt", () => {
   it("exposes the reference standards as a non-empty, repo-relative list", () => {
     expect(ARCHITECTURE_REVIEW_REFERENCES.length).toBeGreaterThan(0);
     expect(ARCHITECTURE_REVIEW_REFERENCES.map((r) => r.path)).toContain("AGENTS.md");
+    // The Optimize-for-the-Whole commandment is among the kernel principles the
+    // architect lens measures a spec against.
+    const kernel = ARCHITECTURE_REVIEW_REFERENCES.find(
+      (r) => r.path === "docs/founder-kernel/wiki/principles/",
+    );
+    expect(kernel?.covers).toContain("optimize-for-the-whole");
+    // Archetype designs are measured against their load-bearing value-stream
+    // stages — the whole-outcome measure that survives portal rebuilds.
+    expect(ARCHITECTURE_REVIEW_REFERENCES.map((r) => r.path))
+      .toContain("docs/architecture/archetype-business-value-streams.md");
   });
 });
 
@@ -549,5 +578,67 @@ describe("architectureAdvisoryFromReview", () => {
         parseError: true,
       }),
     ).toBeNull();
+  });
+});
+
+describe("collectReviewerVerdicts", () => {
+  function rev(overrides: Partial<ReviewResult> = {}): ReviewResult {
+    return { decision: "pass", issues: [], summary: "", ...overrides };
+  }
+
+  it("maps r1/r2/archReview to named verdicts in deliberation-branch order", () => {
+    const verdicts = collectReviewerVerdicts(
+      rev({ decision: "pass" }),
+      rev({ decision: "fail", issues: [{ severity: "critical", description: "x" }] }),
+      rev({ decision: "pass", issues: [{ severity: "minor", description: "n" }] }),
+    );
+    expect(verdicts.map((v) => v.source)).toEqual(["reviewer-1", "reviewer-2", "architect"]);
+    expect(verdicts.map((v) => v.label)).toEqual([
+      "Primary review",
+      "Independent review",
+      "Architecture",
+    ]);
+    expect(verdicts[1]).toMatchObject({
+      role: "reviewer",
+      decision: "fail",
+      issueCounts: { critical: 1, important: 0, minor: 0 },
+    });
+    expect(verdicts[2]).toMatchObject({ role: "architect", decision: "pass" });
+  });
+
+  it("omits reviewers that did not respond (null) rather than inventing a pass", () => {
+    const verdicts = collectReviewerVerdicts(rev(), null, null);
+    expect(verdicts).toHaveLength(1);
+    expect(verdicts[0]?.source).toBe("reviewer-1");
+  });
+
+  it("returns an empty array when no reviewer responded", () => {
+    expect(collectReviewerVerdicts(null, null, null)).toEqual([]);
+  });
+
+  it("preserves the parseError flag so the UI can show 'unavailable' not a false pass", () => {
+    const verdicts = collectReviewerVerdicts(
+      rev({ parseError: true, decision: "fail" }),
+      rev({ decision: "pass" }),
+      null,
+    );
+    expect(verdicts[0]).toMatchObject({ source: "reviewer-1", parseError: true });
+    expect(verdicts[1]).not.toHaveProperty("parseError");
+  });
+
+  it("counts issues by severity", () => {
+    const verdicts = collectReviewerVerdicts(
+      rev({
+        issues: [
+          { severity: "critical", description: "a" },
+          { severity: "important", description: "b" },
+          { severity: "important", description: "c" },
+          { severity: "minor", description: "d" },
+        ],
+      }),
+      null,
+      null,
+    );
+    expect(verdicts[0]?.issueCounts).toEqual({ critical: 1, important: 2, minor: 1 });
   });
 });

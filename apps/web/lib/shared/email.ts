@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { resolveSmtpConfig, isSmtpConfigured } from "./smtp-config";
 
 type EmailOptions = {
   to: string;
@@ -7,6 +8,13 @@ type EmailOptions = {
   html: string;
   /** Resolved sender ("Name <email>"). Falls back to SMTP_FROM when unset. */
   from?: string;
+  /**
+   * Reply-To header. Usually left unset: when sending through a shared relay
+   * (source:"relay", rewriteFrom), sendEmail preserves the intended `from` as
+   * Reply-To automatically so replies still reach the business. An explicit
+   * value here always wins.
+   */
+  replyTo?: string;
   attachments?: Array<{
     filename: string;
     content: Buffer;
@@ -68,6 +76,67 @@ export function composeInvoiceEmail(params: InvoiceEmailParams) {
 
       <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
         A PDF copy of this invoice is attached to this email.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  return { to, subject, text, html };
+}
+
+type SignedConfirmationEmailParams = {
+  to: string;
+  invoiceRef: string;
+  accountName: string;
+  signedByName: string;
+  signedAt: string;
+  payUrl: string;
+  /** Issuing business name (from live org identity). Omitted when unknown. */
+  orgName?: string | null;
+};
+
+export function composeSignedConfirmationEmail(params: SignedConfirmationEmailParams) {
+  const { to, invoiceRef, accountName, signedByName, signedAt, payUrl, orgName } = params;
+
+  const subject = orgName
+    ? `Signed: invoice ${invoiceRef} from ${orgName}`
+    : `Signed: invoice ${invoiceRef}`;
+
+  const text = [
+    `Thank you, ${signedByName}.`,
+    ``,
+    `Your signature for invoice ${invoiceRef} (${accountName}) was recorded on ${signedAt}.`,
+    `A countersigned PDF copy is attached for your records.`,
+    ``,
+    `View or pay your invoice: ${payUrl}`,
+  ].join("\n");
+
+  const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f9fafb;">
+  <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
+    <div style="background:white;border-radius:8px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <h1 style="margin:0 0 8px;font-size:22px;color:#111;">Signature recorded</h1>
+      <p style="margin:0 0 24px;color:#6b7280;font-size:14px;">Thank you, ${signedByName}.</p>
+
+      <div style="background:#f3f4f6;border-radius:8px;padding:20px;margin-bottom:24px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:#6b7280;font-size:14px;">Invoice</span>
+          <span style="font-size:16px;font-weight:600;color:#111;">${invoiceRef}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#6b7280;font-size:14px;">Signed on</span>
+          <span style="font-size:14px;color:#111;">${signedAt}</span>
+        </div>
+      </div>
+
+      <div style="text-align:center;margin-bottom:24px;">
+        <a href="${payUrl}" style="display:inline-block;background:#22c55e;color:white;font-size:16px;font-weight:600;padding:14px 40px;border-radius:8px;text-decoration:none;">View Invoice</a>
+      </div>
+
+      <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
+        A countersigned PDF copy of this invoice is attached for your records.
       </p>
     </div>
   </div>
@@ -300,12 +369,26 @@ export function composeExpenseApprovalEmail(params: ExpenseApprovalEmailParams) 
   return { to, subject, text, html };
 }
 
+/**
+ * Whether outbound email delivery is configured — a usable SMTP host resolves
+ * from either the in-portal settings (Admin → Settings → Email) or env vars.
+ *
+ * Send flows that are operator-triggered (e.g. "Send Invoice") should pre-flight
+ * this and surface an actionable error, rather than relying on sendEmail's
+ * behaviour — which throws in production and log-and-fakes a success in dev. On a
+ * cold-start fresh install with no SMTP, that fake dev success is exactly the
+ * silent no-op the Runs 6 & 7 audit flagged.
+ */
+export async function isEmailConfigured(): Promise<boolean> {
+  return isSmtpConfigured();
+}
+
 export async function sendEmail(options: EmailOptions): Promise<{ messageId: string }> {
-  const host = process.env.SMTP_HOST;
-  const port = parseInt(process.env.SMTP_PORT || "587", 10);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const from = options.from || process.env.SMTP_FROM || "noreply@example.com";
+  const cfg = await resolveSmtpConfig();
+  const host = cfg.host;
+  const port = cfg.port;
+  const user = cfg.user;
+  const pass = cfg.pass;
 
   // Without SMTP config: in production this is a hard failure — returning a
   // fake success would let callers record an email as "sent" that never went
@@ -325,15 +408,28 @@ export async function sendEmail(options: EmailOptions): Promise<{ messageId: str
     return { messageId: `dev-${Date.now()}` };
   }
 
+  // From/Reply-To resolution. The message's intended sender is options.from (the
+  // business identity), falling back to the transport's configured From. When
+  // sending through a shared relay (cfg.rewriteFrom), the relay's authenticated
+  // address MUST be the envelope/header From for SPF/DKIM alignment, so the
+  // intended sender is moved to Reply-To — replies still reach the business,
+  // deliverability stays intact. Operator-owned SMTP (db/env) sends as-is.
+  const intendedFrom = options.from || cfg.from || "noreply@example.com";
+  const from = cfg.rewriteFrom ? (cfg.from ?? intendedFrom) : intendedFrom;
+  const replyTo =
+    options.replyTo ??
+    (cfg.rewriteFrom && options.from && options.from !== from ? options.from : undefined);
+
   const transport = nodemailer.createTransport({
     host,
     port,
-    secure: port === 465,
-    auth: user ? { user, pass } : undefined,
+    secure: cfg.secure,
+    auth: user ? { user, pass: pass ?? undefined } : undefined,
   });
 
   const result = await transport.sendMail({
     from,
+    ...(replyTo ? { replyTo } : {}),
     to: options.to,
     subject: options.subject,
     text: options.text,

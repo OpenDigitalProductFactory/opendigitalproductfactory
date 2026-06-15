@@ -5,7 +5,7 @@ status: published
 abstract: A specialist with 5 focused tools outperforms a generalist with 40.
 principleTier: core
 principleDirection: Prefer specialists with focused tool sets over generalists with broad surfaces.
-principleDimensionVector: {"blast_radius": 0.7, "human_cognitive_load": -0.5, "reusability": 0.5}
+principleDimensionVector: {"blast_radius": -0.7, "human_cognitive_load": -0.5, "reusability": 0.5}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -37,7 +37,7 @@ Tag every tool with the phases and contexts where it is relevant. The platform f
 
 ## Decision Dimensions
 
-- `blast_radius: 0.7` — focused tool sets contain failure to a narrow surface; a specialist with a bad tool can damage less than a generalist with the same tool.
+- `blast_radius: -0.7` — focused tool sets contain failure to a narrow surface; a specialist with a bad tool can damage less than a generalist with the same tool.
 - `human_cognitive_load: -0.5` — operators and reviewers can reason about a specialist coworker faster than a kitchen-sink coworker.
 - `reusability: 0.5` — specialists compose into other workflows; generalists rarely do.
 

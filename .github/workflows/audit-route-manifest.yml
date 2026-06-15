@@ -1,0 +1,64 @@
+name: Route Manifest Freshness
+
+# CodeQL actions/missing-workflow-permissions: least-privilege default.
+# Read-only freshness check; needs no write surface.
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      # Route-defining files — the only changes that can make the manifest stale.
+      - "apps/web/app/**/page.ts"
+      - "apps/web/app/**/page.tsx"
+      - "apps/web/app/**/route.ts"
+      - "apps/web/app/**/route.tsx"
+      # The manifest, its generator, and the row type the generator imports.
+      - "apps/web/lib/ea/route-manifest.json"
+      - "apps/web/scripts/build-route-manifest.ts"
+      - "apps/web/lib/ea/route-extract.ts"
+      - ".github/workflows/audit-route-manifest.yml"
+  push:
+    branches: [main]
+
+concurrency:
+  group: audit-route-manifest-${{ github.ref }}
+  cancel-in-progress: true
+
+# What this guard does
+# --------------------
+# Regenerates apps/web/lib/ea/route-manifest.json in-memory from the Next.js App
+# Router tree (apps/web/app/**/{page,route}.{ts,tsx}) and fails if it differs from the
+# committed file. A PR that adds, removes, or renames a route without regenerating the
+# manifest is design↔implementation drift: the live SysML route projection
+# (reconcile-routes.ts reads this manifest) would no longer match the actual routes.
+#
+# This is the enforcement leg (spec §4.3) for the Parity Engine routes domain
+# (docs/superpowers/specs/2026-06-14-design-implementation-parity-engine-design.md):
+# it makes the committed manifest self-policing so the navigation architecture cannot
+# silently rot — automation over vigilance. Mirrors audit-architecture-parity.yml.
+#
+# To fix a STALE failure: pnpm --filter web build:route-manifest && commit the result.
+
+jobs:
+  freshness:
+    name: Route Manifest Freshness
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check route manifest is up to date
+        run: pnpm --filter web check:route-manifest

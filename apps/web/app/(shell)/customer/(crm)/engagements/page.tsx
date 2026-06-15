@@ -7,6 +7,7 @@ import { getAcquisitionSignalWorkspace } from "@/lib/crm/acquisition-signal-data
 import { formatAcquisitionSourceLabel } from "@/lib/crm/acquisition-signals";
 import { getEngagementStatusMeta } from "@/lib/crm/presentation";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 
 async function routeSignalToEngagement(formData: FormData) {
   "use server";
@@ -14,7 +15,8 @@ async function routeSignalToEngagement(formData: FormData) {
   await createEngagementFromSignalForm(formData);
 }
 
-export default async function EngagementsPage() {
+export default async function EngagementsPage({ searchParams }: { searchParams?: Promise<{ view?: string }> }) {
+  const view = parseSurfaceView((await searchParams)?.view);
   const [engagements, signalWorkspace] = await Promise.all([
     prisma.engagement.findMany({
       orderBy: { createdAt: "desc" },
@@ -46,6 +48,9 @@ export default async function EngagementsPage() {
         formAction={routeSignalToEngagement}
       />
 
+      <PlatformGridSection entityType="engagement" view={view} />
+
+      {!view && (<>
       {/* Status summary chips */}
       <div className="flex flex-wrap gap-2 mb-4">
         {Object.entries(statusCounts).map(([status, count]) => {
@@ -114,6 +119,7 @@ export default async function EngagementsPage() {
       {engagements.length === 0 && (
         <p className="text-sm text-[var(--dpf-muted)]">No engagements yet.</p>
       )}
+      </>)}
     </div>
   );
 }

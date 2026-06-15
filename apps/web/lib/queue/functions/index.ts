@@ -46,6 +46,7 @@ import {
 } from "./postgres-daily-backup";
 import { runtimeTargetJanitor } from "./runtime-target-janitor";
 import { logSignatureScanner } from "./log-signature-scanner";
+import { alertDeliveryBridge } from "./alert-delivery-bridge";
 import { releaseHealthCheck } from "./release-health-check";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
@@ -73,6 +74,7 @@ export const scheduledFunctions = [
   selfUpgradeScheduled,
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
   logSignatureScanner,   // BI-5FE8656F: EP-FULL-OBS Tier 2 novel-signature log scan, every 15m
+  alertDeliveryBridge,   // BI-5FE8656F: EP-FULL-OBS Tier 2 item #6 — Prometheus+Loki firing alerts -> PortfolioQualityIssue, every 1m
   releaseHealthCheck,    // BI-3630773C: EP-FULL-OBS release stamp verify-gate watch, every 15m
 ];
 

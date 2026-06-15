@@ -14,10 +14,13 @@ vi.mock("@dpf/db", () => ({
   syncInfraCI: vi.fn(),
 }));
 
-// Mock internal functions
+// Mock internal functions. ollama.ts now drives discovery/profiling/eval through
+// autoDiscoverAndProfile (on activation — discover + profile + queue the
+// deterministic capability eval) and queueUncalibratedModelEvals (steady-state
+// catch-up calibration for models still on a seed prior).
 vi.mock("./ai-provider-internals", () => ({
-  discoverModelsInternal: vi.fn().mockResolvedValue({ discovered: 2, newCount: 2 }),
-  profileModelsInternal: vi.fn().mockResolvedValue({ profiled: 2, failed: 0 }),
+  autoDiscoverAndProfile: vi.fn().mockResolvedValue({ discovered: 2, profiled: 2 }),
+  queueUncalibratedModelEvals: vi.fn().mockResolvedValue(0),
 }));
 
 // Mock global fetch
@@ -25,13 +28,13 @@ const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
 import { prisma, syncInfraCI } from "@dpf/db";
-import { discoverModelsInternal, profileModelsInternal } from "./ai-provider-internals";
+import { autoDiscoverAndProfile, queueUncalibratedModelEvals } from "./ai-provider-internals";
 import { checkBundledProviders } from "./ollama";
 
 const mockFindFirst = vi.mocked(prisma.modelProvider.findFirst);
 const mockUpdate = vi.mocked(prisma.modelProvider.update);
-const mockDiscover = vi.mocked(discoverModelsInternal);
-const mockProfile = vi.mocked(profileModelsInternal);
+const mockAutoDiscover = vi.mocked(autoDiscoverAndProfile);
+const mockQueueEvals = vi.mocked(queueUncalibratedModelEvals);
 const mockSyncInfraCI = vi.mocked(syncInfraCI);
 
 describe("checkBundledProviders", () => {
@@ -39,32 +42,27 @@ describe("checkBundledProviders", () => {
     mockFindFirst.mockReset();
     mockUpdate.mockReset();
     mockFetch.mockReset();
-    mockDiscover.mockReset().mockResolvedValue({ discovered: 2, newCount: 2 });
-    mockProfile.mockReset().mockResolvedValue({ profiled: 2, failed: 0 });
+    mockAutoDiscover.mockReset().mockResolvedValue({ discovered: 2, profiled: 2 });
+    mockQueueEvals.mockReset().mockResolvedValue(0);
     mockSyncInfraCI.mockReset();
   });
 
-  it("activates Ollama and triggers discovery when reachable and unconfigured", async () => {
+  it("activates the provider and runs auto-discover+profile when reachable and unconfigured", async () => {
     mockFindFirst.mockResolvedValue({
       providerId: "local",
       status: "unconfigured",
       baseUrl: "http://localhost:11434/v1",
       endpoint: null,
     } as any);
-    // /api/tags response
+    // /v1/models response (reachability check)
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ models: [{ name: "llama3:8b" }, { name: "phi3:mini" }] }),
+      json: async () => ({ data: [{ id: "llama3:8b" }, { id: "phi3:mini" }] }),
     });
-    // /api/ps response (for hardware enrichment)
+    // /v1/models again (hardware info — getOllamaHardwareInfo)
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ models: [] }),
-    });
-    // /api/tags again (for model count in hardware info)
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ models: [{ name: "llama3:8b" }, { name: "phi3:mini" }] }),
+      json: async () => ({ data: [{ id: "llama3:8b" }, { id: "phi3:mini" }] }),
     });
 
     await checkBundledProviders();
@@ -73,11 +71,13 @@ describe("checkBundledProviders", () => {
       where: { providerId: "local" },
       data: { status: "active" },
     });
-    expect(mockDiscover).toHaveBeenCalledWith("local");
-    expect(mockProfile).toHaveBeenCalledWith("local");
+    // autoDiscoverAndProfile handles discovery + profiling + queues the eval that
+    // calibrates seed scores; checkBundledProviders no longer calls the low-level
+    // discover/profile functions directly.
+    expect(mockAutoDiscover).toHaveBeenCalledWith("local");
   });
 
-  it("deactivates Ollama when unreachable and currently active", async () => {
+  it("deactivates the provider when unreachable and currently active", async () => {
     mockFindFirst.mockResolvedValue({
       providerId: "local",
       status: "active",
@@ -92,7 +92,8 @@ describe("checkBundledProviders", () => {
       where: { providerId: "local" },
       data: { status: "inactive" },
     });
-    expect(mockDiscover).not.toHaveBeenCalled();
+    expect(mockAutoDiscover).not.toHaveBeenCalled();
+    expect(mockQueueEvals).not.toHaveBeenCalled();
     expect(mockSyncInfraCI).toHaveBeenCalledWith(
       expect.objectContaining({ status: "offline" }),
       undefined,
@@ -111,10 +112,13 @@ describe("checkBundledProviders", () => {
     await checkBundledProviders();
 
     expect(mockUpdate).not.toHaveBeenCalled();
-    expect(mockDiscover).not.toHaveBeenCalled();
+    expect(mockAutoDiscover).not.toHaveBeenCalled();
   });
 
-  it("skips auto-profiling when model count >= 20", async () => {
+  it("runs auto-discover+profile via autoDiscoverAndProfile regardless of model count when unconfigured", async () => {
+    // The prior count-based profiling skip (>= 20 models) lived in
+    // checkBundledProviders; it is gone now that activation routes through
+    // autoDiscoverAndProfile, which owns the discover+profile decision.
     mockFindFirst.mockResolvedValue({
       providerId: "local",
       status: "unconfigured",
@@ -123,17 +127,15 @@ describe("checkBundledProviders", () => {
     } as any);
     mockFetch.mockResolvedValue({
       ok: true,
-      json: async () => ({ models: Array.from({ length: 25 }, (_, i) => ({ name: `model-${i}` })) }),
+      json: async () => ({ data: Array.from({ length: 25 }, (_, i) => ({ id: `model-${i}` })) }),
     });
-    mockDiscover.mockResolvedValue({ discovered: 25, newCount: 25 });
 
     await checkBundledProviders();
 
-    expect(mockDiscover).toHaveBeenCalled();
-    expect(mockProfile).not.toHaveBeenCalled();
+    expect(mockAutoDiscover).toHaveBeenCalledWith("local");
   });
 
-  it("does nothing when Ollama provider not in database", async () => {
+  it("does nothing when the provider is not in the database", async () => {
     mockFindFirst.mockResolvedValue(null);
 
     await checkBundledProviders();
@@ -142,7 +144,7 @@ describe("checkBundledProviders", () => {
     expect(mockUpdate).not.toHaveBeenCalled();
   });
 
-  it("refreshes hardware info when already active and reachable (steady state)", async () => {
+  it("queues calibration evals and refreshes hardware info when already active (steady state)", async () => {
     mockFindFirst.mockResolvedValue({
       providerId: "local",
       status: "active",
@@ -162,9 +164,11 @@ describe("checkBundledProviders", () => {
 
     await checkBundledProviders();
 
-    // Should NOT re-discover or re-profile
-    expect(mockDiscover).not.toHaveBeenCalled();
-    expect(mockProfile).not.toHaveBeenCalled();
+    // Profiles already exist (count mocked to 1), so we don't re-run full
+    // discovery — but we DO queue the catch-up calibration eval for any models
+    // still on a seed prior.
+    expect(mockAutoDiscover).not.toHaveBeenCalled();
+    expect(mockQueueEvals).toHaveBeenCalledWith("local");
     // Should update hardware info
     expect(mockSyncInfraCI).toHaveBeenCalledWith(
       expect.objectContaining({ status: "operational" }),

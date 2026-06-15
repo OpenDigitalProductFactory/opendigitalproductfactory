@@ -6,7 +6,7 @@ status: published
 abstract: The two interactive host surfaces (Claude Code, Codex) share ONE canonical worktree location — the dedicated sibling dir D:/DPF-worktrees/<topic>, not .claude/worktrees/ nesting. Every worktree is born governed (topic branch off origin/main, MCP seeded, capsule claim) and is reaped when idle or done.
 principleTier: contextual
 principleDirection: Create host-surface worktrees only at the canonical sibling location D:/DPF-worktrees/<topic>, born governed (topic branch off origin/main, MCP config seeded, compose project isolated, capsule claimed); reap idle/done worktrees, their branches, their CI images, and any stray compose project so the count stays bounded.
-principleDimensionVector: {"long_term_maintainability": 0.8, "governance_compliance": 0.6, "blast_radius": 0.5, "capacity_utilization": 0.5}
+principleDimensionVector: {"long_term_maintainability": 0.8, "governance_compliance": 0.6, "blast_radius": -0.5, "capacity_utilization": 0.5}
 principleAppliesTo:
   - external_coding_agent
   - human
@@ -44,7 +44,7 @@ On 2026-06-05 the live install carried 119 worktrees in two conflicting conventi
 
 - `long_term_maintainability: 0.8` — bounded, uniformly-located worktrees stay maintainable; 119 in two conventions do not.
 - `governance_compliance: 0.6` — born-governed + reaped is the enforceable lifecycle.
-- `blast_radius: 0.5` — nesting runtime/source-control concerns inside the root clone risks the canonical state.
+- `blast_radius: -0.5` — nesting runtime/source-control concerns inside the root clone risks the canonical state.
 - `capacity_utilization: 0.5` — reaping reclaims disk, branches, and orphaned CI images.
 
 ## Related

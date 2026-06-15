@@ -5,7 +5,7 @@ status: published
 abstract: Stop on the first error; don't retry blindly; tell the user what happened.
 principleTier: core
 principleDirection: Report errors plainly and stop, instead of retrying or hiding the failure.
-principleDimensionVector: {"evidence_density": 0.8, "blast_radius": 0.5, "speed_to_value": 0.4}
+principleDimensionVector: {"evidence_density": 0.8, "blast_radius": -0.5, "speed_to_value": 0.4}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -37,7 +37,7 @@ In the agent system prompt, declare the error-reporting contract: on tool failur
 ## Decision Dimensions
 
 - `evidence_density: 0.8` — clear error reports concentrate signal; retries dilute it.
-- `blast_radius: 0.5` — stopping early contains the failure; retrying past errors can corrupt state or hit unintended side effects.
+- `blast_radius: -0.5` — stopping early contains the failure; retrying past errors can corrupt state or hit unintended side effects.
 - `speed_to_value: 0.4` — fast failure unblocks human review sooner than a slow retry loop.
 
 ## Examples

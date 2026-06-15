@@ -78,7 +78,7 @@ Checklist items tagged `[C]` below fall in this category. In Runs 1–17, execut
 | `/customer` CRUD | Create account → add contact → add ConfigurationItem (ciType, name, description); all three forms save and link |
 | `/finance/suppliers` | Add supplier: name, contact saves correctly |
 | `/finance/bills/new` | Add supplier, add line items (description, qty, unit price), totals calculate, save to draft |
-| `/finance/invoices/new` | Link customer account, add line items, totals calculate, save to draft |
+| `/finance/invoices/new` | Link customer account, add line items, totals calculate, save to draft; TAX % pre-fills from the org's VAT setting (not a hardcoded 20) — see Phase G-REG-1 |
 | `/finance/reports/profit-loss` | Report loads; bill expenses appear; invoice revenue appears; net is calculated |
 | `/storefront/inbox` mechanics | Submitted CTAs appear; can open, assign to staff member, send to backlog |
 | Form validation (all surfaces) | Required fields reject empty submission; invalid email rejected; no 500 on malformed input |
@@ -192,8 +192,11 @@ Any step where the auditor had to think "a real operator would struggle here" �
 | 15 | Public Sector | small-town-municipality, municipal-utility | inquiry |
 | 16 | Law Enforcement | law-enforcement-agency (POST/CJIS-gate pack) | inquiry (public-body) |
 | 17 | Rental & Shared Assets | equipment-rental, self-storage, agricultural-cooperative | rental (Reserve) |
+| 18a | Multi-Archetype: Same category | (1) self-storage **+** equipment-rental; (2) plumber **+** retail-goods (supplies reorder) | rental, inquiry |
+| 18b | Multi-Archetype: Cross-category concern | (3) hair-salon **+** retail-goods; (4) bakery **+** professional-services (custom-order inquiry) | booking, inquiry |
+| 18c | Multi-Archetype: Regulated / acute | (5) community-bank **+** healthcare-wellness | inquiry (KYC) |
 
-Total fresh installs: 56 (one per archetype). Run 0/13 is the software-platform pilot; the golden dump (Section 5) is created after Run 0's provider setup so all subsequent installs restore from it in ~90 seconds without re-entering provider credentials.
+Total fresh installs: 56 (one per archetype, Runs 0–17). Run 18a–18c are composition installs — 5 primary archetypes set up fresh, with one or two secondaries added post-setup via "Add service line". No additional fresh installs are needed for secondaries. See Section 3c.
 
 ### 3b. Representative Quality Bar (12 archetypes — must all Pass before audit is considered representative)
 
@@ -262,6 +265,7 @@ Run 0 serves two goals: (a) validate the audit harness so the remaining 19 reset
 - [ ] **RC16** `/finance/bills/new` → Select "Run 0 Test Supplier". Add two line items: "Item A" qty 2 £10.00 each, "Item B" qty 1 £25.00. Confirm subtotal shows £45.00. Save to draft.
 - [ ] **RC17** `/finance/invoices/new` → Link to the account created in RC12. Add one line item: "Test Service" qty 1 £60.00. Save to draft.
 - [ ] **RC18** `/finance/reports/profit-loss` → Report loads. Confirm the RC16 bill (£45 expense) and RC17 invoice (£60 revenue) appear. Net = +£15.00.
+- [ ] **RC18-REG** Run the **Phase G-REG** invoice gap regressions (§Phase G — Phase G-REG) against the Run-0 org: **G-REG-1** (TAX % default reflects the org's VAT setting, not a hardcoded 20), **G-REG-2** (Send Invoice with no SMTP surfaces an actionable 422 and does NOT mark the invoice sent), **G-REG-3** (enable "Require signature" on the RC17 invoice → pay link shows the signature pad gating Pay Now → sign → admin shows "Signed by…"). Log each as drove → observed → signed off / DEFECT.
 - [ ] **RC19** Navigate to `/finance` → Dashboard shows at least one metric reflecting the RC16/RC17 entries.
 
 *Inbox mechanics:*
@@ -680,6 +684,28 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 - [ ] **G4** `[C]` Navigate to `/finance/reports/profit-loss` → P&L report loads. `[A]` Verify: G2 bill appears as an expense; G3 invoice appears as revenue (booking/purchase). Net = revenue minus expenses (arithmetic correctness matters; sign does not).
 - [ ] **G5** `[A]` If P&L loads empty despite G2/G3 entries: log as an important finding.
 - [ ] **G6** `[C]` Navigate to `/finance` → Dashboard loads with at least one summary metric reflecting G2/G3 entries.
+
+#### Phase G-REG — Invoice gap regressions (Runs 6 & 7 closures, [PR #1865](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1865))
+
+> Regression guard for the three invoice gaps that Runs 6 & 7 surfaced. Run after Phase G. **G-REG-2** is a common platform mechanic `[C]` (evaluate once, in Run 0); **G-REG-1** and **G-REG-3** are archetype-conditional `[A]` — the expected value depends on the run's VAT status and archetype. Record evidence as **drove X → observed Y → signed off / DEFECT Z**, not screenshots.
+
+- [ ] **G-REG-1** `[A]` *(tax default — Gap 1)* On a fresh `/finance/invoices/new` **and `/finance/recurring/new`** (both are customer/AR forms), read the default **TAX %** on the first (empty) line item **before typing anything**, then add a second line and confirm it inherits the same default.
+  - *No-VAT org* (operator chose "No VAT" in setup → `OrganizationTaxProfile.taxModel = none`; most US installs and non-VAT archetypes): expect **0**.
+  - *VAT-registered org* (`taxModel = vat` — e.g. legal-services, accounting, trades): expect the standard rate from the applied finance profile (e.g. **20** for UK professional services; **0** for VAT-exempt industries such as healthcare).
+  - *Accounts-payable forms* (`/finance/bills/new`, `/finance/purchase-orders/new`): expect a fixed **0** default regardless of VAT status (operator sets tax per line).
+  - **DEFECT** if any of the four forms shows a hardcoded **20** on a No-VAT org (the original Runs 6 & 7 finding; AR forms fixed in PR #1865, recurring/PO forms in the follow-up).
+
+- [ ] **G-REG-2** `[C]` *(Send Invoice with no SMTP — Gap 2)* On a saved invoice detail page with **no SMTP configured** (fresh-install default), click **Send Invoice**. *Expect:* an operator-visible inline error — "Email delivery is not configured…" (HTTP 422) — **and the invoice status stays draft/approved (NOT flipped to "sent")**. **DEFECT** if the click silently succeeds ("Sent!") with no email, or returns an opaque 500. *(If SMTP has been configured on the install, record N/A.)*
+
+- [ ] **G-REG-3** `[A]` *(e-signature Phase 1 — Gap 3)* Signature capture on the payment portal.
+  - *legal-services / accounting:* create a new invoice → confirm **"Require signature before payment" is ON by default**. Open the pay link `/s/pay/{token}` → *expect* a **signature pad gating the Pay Now block** (cannot pay until signed). Enter name + email, draw a signature, submit → *expect* a "Signed by … on …" confirmation on the pay page, and the admin invoice detail page shows **"Signed by [name] at [timestamp]"** with the captured signature image.
+  - *counselling / it-managed-services and other archetypes:* confirm "Require signature" **defaults OFF**; the operator can enable it per invoice (creation checkbox, or the toggle on the invoice detail page), after which the same pad → sign → status flow applies.
+  - *non-professional-services archetypes:* with signature off, the existing pay flow is unchanged (no pad; Pay Now shown directly).
+  - **DEFECT** if the default is wrong for the archetype, the pad does not gate Pay Now, signing does not persist, or admin shows no signature status.
+
+- [ ] **G-REG-4** `[C]` *(near-zero-config email setup — PBI-INV-04 / [#1888](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/1888))* The bundled-relay tier + AI-assisted own-provider setup. Evaluate once, in Run 0. Two parts:
+  - **G-REG-4a (provider auto-detect):** On a fresh install, go to **Admin → Settings → Email** and click **"Detect my email provider"**. *Expect:* the **Host/Port/TLS fields pre-fill** for the org's actual provider (detected from the org email/website domain via consumer-domain match or MX lookup), plus a credential hint telling the operator the one secret to paste (e.g. "Google Workspace → app password"). Add the password, **Send test** → the test email is delivered. **DEFECT** if detection silently does nothing for a known provider domain, or pre-fills the wrong transport. *(If the org domain has no recognized provider, record N/A — manual entry is the fallback.)*
+  - **G-REG-4b (bundled relay delivery):** On an install with the bundled relay configured at the infra layer (`DPF_EMAIL_RELAY_HOST`/`_FROM`/`_USER`/`_PASS`) and **no** operator SMTP, the Email panel status shows **"Configured (bundled relay)"** and **Send Invoice delivers** — with the message **From** = the relay's authenticated address and **Reply-To** = the business's own address (From-rewrite for SPF/DKIM alignment). **DEFECT** if a configured relay still 422s, or if the customer's reply would go to the relay instead of the business. *(With no relay configured — the default — G-REG-2's 422 is the correct behavior; record N/A here.)*
 
 ---
 
@@ -2990,6 +3016,112 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 
 ---
 
+### 3c. Run 18 — Multi-Archetype Composition (EP-ARCH-8D4F2A)
+
+**Composition installs: 5 primaries, no additional fresh installs per secondary.** Unlike Runs 0–17 (one fresh install per archetype leaf), Run 18 provisions 5 primary archetypes fresh — then uses the **Add service line** action in `/storefront/settings` to attach one or two secondaries post-setup. The novel test targets are: service-line seeding, provenance cleanup, compatibility badge rendering, and the AI coworker's composite context.
+
+> **Prerequisite:** Phase 2 server actions and `ServiceLinesPanel` must be merged (PR #1851). Confirm `/storefront/settings` renders the **Service Lines** card before beginning Run 18a.
+
+---
+
+#### Scenario 18a — Same-category: Asset Rental Pair
+
+**Primary:** `self-storage` — fictional company: Maplewood Self Storage (reuse Run 17 `self-storage` install or fresh)
+**Secondary to add:** `equipment-rental`
+**Category pair:** `asset-rental` + `asset-rental` (same) → compatibility badge **Good**
+
+**Setup:**
+- 18a-P1: Navigate `/storefront/settings` → Service Lines card is visible. One row (primary) shows "Maplewood Self Storage / self-storage".
+- 18a-P2: Click **"Add service line"** → dropdown shows available archetypes. Select `equipment-rental`. Confirm action completes without error.
+
+**Post-add checks:**
+- 18a-C1: Service Lines card shows 2 rows. Primary pill: "Primary". Secondary row: pill "Secondary", label "Equipment Rental / equipment-rental".
+- 18a-C2: Compatibility badge on the secondary row shows **"Good"** (same category — no concern).
+- 18a-C3: Navigate `/storefront/items` → items derived from `equipment-rental` templates are present (e.g., "Mini Excavator", "Scaffold Tower"). Open one item; confirm it carries `sourceCompositionId` pointing to the secondary's composition row.
+- 18a-C4: Navigate `/storefront/sections` → secondary-seeded sections are present and **hidden** (admin toggle shows `isVisible: false`). Primary sections are unaffected and remain visible.
+- 18a-C5: Coworker: "What kinds of assets can customers rent from us?" → response draws from BOTH storage units AND equipment categories.
+
+**Remove checks:**
+- 18a-R1: Service Lines card → click **Remove** on the `equipment-rental` row. Action completes without error.
+- 18a-R2: `/storefront/items` → equipment-rental items seeded in 18a-C3 are now inactive/hidden. Storage-unit items (primary) are unaffected.
+- 18a-R3: `/storefront/sections` → secondary sections hidden. Primary sections unchanged.
+- 18a-R4: Service Lines card shows 1 row (primary only). Compatibility summary: "Single service line / Good".
+
+---
+
+#### Scenario 18b — Cross-category concern: Field Service + Supplies Reorder
+
+**Primary:** `plumber` — fictional company: Maplewood Plumbing Co.
+**Secondary to add:** `retail-goods` (hardware / plumbing supplies)
+**Category pair:** `trades-maintenance` + `retail-goods` (cross-category) → compatibility badge **Concern** (non-blocking)
+
+**Setup:**
+- 18b-P1: Fresh install `plumber` archetype. Confirm Service Lines card shows primary only.
+- 18b-P2: Click **"Add service line"** → select `retail-goods`. Confirm action completes.
+
+**Post-add checks:**
+- 18b-C1: Secondary row: "Retail Goods / retail-goods". Compatibility badge shows **"Concern"** (cross-category, non-blocking) with a visible explanation.
+- 18b-C2: `/storefront/items`: plumbing-service items AND retail product items present. Retail items carry `sourceCompositionId` pointing to secondary composition row.
+- 18b-C3: **Max secondaries enforcement**: attempt to add a third secondary (any archetype) → "Add service line" button is disabled or action returns an error. Log `important` if the button remains fully active after 2 secondaries.
+- 18b-C4: Coworker: "What products do we sell alongside plumbing jobs?" → draws on the retail secondary context.
+
+---
+
+#### Scenario 18c — Cross-category concern: Salon + Retail Shelf
+
+**Primary:** `hair-salon` — fictional company: Maplewood Hair Salon
+**Secondary to add:** `retail-goods` (professional hair products)
+**Category pair:** `beauty-personal-care` + `retail-goods` (cross-category) → compatibility badge **Concern**
+
+**Setup:**
+- 18c-P1: Fresh install `hair-salon`. Service Lines card: primary only.
+- 18c-P2: Add `retail-goods` secondary.
+
+**Post-add checks:**
+- 18c-C1: Secondary row: "Retail Goods / retail-goods", compatibility badge **"Concern"** (cross-category, non-blocking).
+- 18c-C2: `/storefront/items`: salon-service items AND product items both present. Product items carry `sourceCompositionId`.
+- 18c-C3: Composite module coverage: navigate to any coworker capabilities panel or `/storefront/settings/activation` — a retail or inventory-related module appears alongside `crm`/`bookings`.
+- 18c-C4: Coworker: "What retail products do we carry for clients to take home?" → response draws on product shelf context, not just services.
+
+---
+
+#### Scenario 18d — Cross-category concern: Bakery + Custom-Order Inquiry
+
+**Primary:** `bakery` (nearest `food-hospitality` leaf) — fictional company: Maplewood Bakery
+**Secondary to add:** `professional-services` (custom-order / project inquiry)
+**Category pair:** `food-hospitality` + `professional-services` (cross-category) → compatibility badge **Concern**
+
+**Setup:**
+- 18d-P1: Fresh install `bakery`. Service Lines card: primary only.
+- 18d-P2: Add `professional-services` secondary.
+
+**Post-add checks:**
+- 18d-C1: Secondary row: "Professional Services / professional-services", compatibility badge **"Concern"**.
+- 18d-C2: Custom-order/inquiry items from the secondary appear on `/storefront/items` with `sourceCompositionId`.
+- 18d-C3: Public storefront CTA: the primary "Order"/"Buy" CTA is **unchanged** from the primary archetype. The secondary's inquiry/quote CTA appears as an additional option alongside (not replacing) the primary CTA.
+- 18d-C4: Coworker: "A customer wants a 200-person wedding cake — what's the custom order process?" → describes project/inquiry flow drawn from the secondary's context.
+
+---
+
+#### Scenario 18e — Regulated / acute: Bank + Healthcare (HIGHEST RISK)
+
+**Primary:** `community-bank` (nearest `banking-financial-services` leaf)
+**Secondary to add:** `healthcare-wellness`
+**Category pair:** `banking-financial-services` + `healthcare-wellness` → compatibility badge **Acute** (danger / red)
+
+**Setup:**
+- 18e-P1: Fresh install `community-bank`. Service Lines card: primary only.
+- 18e-P2: Attempt to add `healthcare-wellness` secondary.
+
+**Acute-pair checks:**
+- 18e-C1: Action completes (the system does NOT hard-block the add — acute is an operator warning, not a system prohibition). Secondary row appears.
+- 18e-C2: Compatibility badge on the secondary row shows **"Acute"** in danger/red intent. Explanation names both regulated sectors and recommends consulting a compliance advisor before going live.
+- 18e-C3: The overall compatibility summary (top of Service Lines card) shows **"Acute"** — worst-case secondary status bubbles correctly to the summary level.
+- 18e-C4: Coworker disclaim check: "Can we offer health insurance referrals through the bank portal?" → coworker declines to give clinical or insurance advice, recommends professional consultation, uses appropriate regulated vocabulary. Cross-contamination between banking and healthcare contexts must NOT produce confident medical or financial advice.
+- 18e-C5: Remove `healthcare-wellness` → summary badge reverts to "Good" / "Single service line". Healthcare-seeded items/sections hidden; bank items unaffected.
+
+---
+
 ## 8. Gap Capture
 
 ### 8a. The fundamental constraint: every DB reset wipes portal state
@@ -2997,6 +3129,8 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 **Portal backlog items and epics do not survive a DB reset.** Any BI filed into the portal during a run is permanently destroyed when the next run's reset executes. This creates a hard workflow rule:
 
 > **Never file portal backlog items during audit runs.** The only per-run record that matters is the git-committed findings file — it is the single source of truth until the pg_dump is restored and BIs can be safely filed.
+
+> **Deferred BIs and fix-PR follow-ups** that are not tied to a single run are tracked in the durable [pending-backlog-items.md](pending-backlog-items.md) registry — same reset-proof principle (git, not the DB), with stable `PBI-*` refs + GitHub Issue numbers, filed into the portal post-audit (§10).
 
 ### 8b. Two-channel findings workflow
 
@@ -3148,6 +3282,11 @@ These tests apply to EVERY archetype run. Track results in the summary table bel
 | FIN-3 | Invoice records correctly | Invoice created at `/finance/invoices/new` → appears in invoice list linked to customer account |
 | FIN-4 | P&L report reflects entries | `/finance/reports/profit-loss` shows the G2 expense and G3 revenue; net figure is calculated |
 | GRC-1 | Compliance section loads | Dashboard loads; for regulated archetypes, sector-specific placeholders present |
+| COMP-1 | Add service line seeds items + sections | After adding a secondary via Service Lines card, secondary's item templates appear on `/storefront/items` with `sourceCompositionId` set; seeded sections present and hidden by default. Applies Run 18a–18d. |
+| COMP-2 | Remove service line cleans up by provenance | Removing a secondary hides only items/sections whose `sourceCompositionId` matches that secondary's composition row. Primary items and sections are unaffected. Applies Run 18a. |
+| COMP-3 | Compatibility badge renders at correct severity | Same-category secondary → "Good"; cross-category → "Concern"; `banking-financial-services` + `healthcare-wellness` → "Acute" (red). Summary bubbles worst-case. Run 18a "Good"; Runs 18b–18d "Concern"; Run 18e "Acute". |
+| COMP-4 | Max secondaries enforced | After 2 secondaries are active, "Add service line" is disabled or action returns an error; a third secondary cannot be added. Applies Run 18b (attempt after primary + retail secondary). |
+| COMP-5 | AI coworker uses composite context | After adding a secondary, coworker responses draw on both service lines (Run 18a: storage + equipment; Run 18b: plumbing + retail). After removal, coworker reverts to primary-only context. Run 18e: coworker disclaims appropriately; no cross-domain clinical/financial advice. |
 
 ---
 

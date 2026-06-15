@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "dpf": {
+      "type": "http",
+      "url": "http://localhost:3000/api/mcp/v1",
+      "headers": {
+        "Authorization": "Bearer ${DPF_MCP_TOKEN}"
+      }
+    }
+  }
+}

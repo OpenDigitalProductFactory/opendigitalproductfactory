@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Card } from "@/src/components/ui/Card";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { useTheme } from "@/src/lib/theme";
 import type { WidgetProps } from "./index";
 
 /**
@@ -9,6 +9,41 @@ import type { WidgetProps } from "./index";
  * Full implementation will use react-native-maps.
  */
 export function MapWidget({ definition, data }: WidgetProps) {
+  const { colors, spacing, borderRadius } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        card: { marginBottom: spacing.md },
+        title: {
+          color: colors.text,
+          fontSize: 16,
+          fontWeight: "600",
+          marginBottom: spacing.sm,
+        },
+        placeholder: {
+          height: 180,
+          backgroundColor: colors.surface1,
+          borderRadius: borderRadius.md,
+          borderWidth: 1,
+          borderColor: colors.border,
+          borderStyle: "dashed",
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        placeholderText: {
+          color: colors.textMuted,
+          fontSize: 18,
+          fontWeight: "600",
+        },
+        markerCount: {
+          color: colors.textMuted,
+          fontSize: 14,
+          marginTop: spacing.xs,
+        },
+      }),
+    [colors, spacing, borderRadius],
+  );
+
   const raw = data[definition.dataKey];
   const markers = Array.isArray(raw) ? raw.length : 0;
 
@@ -24,35 +59,3 @@ export function MapWidget({ definition, data }: WidgetProps) {
     </Card>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    marginBottom: spacing.md,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: spacing.sm,
-  },
-  placeholder: {
-    height: 180,
-    backgroundColor: colors.surface1,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderStyle: "dashed",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  placeholderText: {
-    color: colors.textMuted,
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  markerCount: {
-    color: colors.textMuted,
-    fontSize: 14,
-    marginTop: spacing.xs,
-  },
-});

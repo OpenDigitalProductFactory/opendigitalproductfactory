@@ -4,6 +4,13 @@ import type { ApiClientConfig } from "./types";
 export class DpfClient {
   constructor(private config: ApiClientConfig) {}
 
+  /** Resolve the active install URL — static string or runtime resolver. */
+  private resolveBaseUrl(): string {
+    return typeof this.config.baseUrl === "function"
+      ? this.config.baseUrl()
+      : this.config.baseUrl;
+  }
+
   async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const token = await this.config.getToken();
     const headers: Record<string, string> = {
@@ -16,7 +23,7 @@ export class DpfClient {
     }
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    const response = await fetch(`${this.config.baseUrl}${path}`, {
+    const response = await fetch(`${this.resolveBaseUrl()}${path}`, {
       ...options,
       headers,
     });
@@ -25,7 +32,7 @@ export class DpfClient {
       const newToken = await this.config.onTokenExpired();
       if (newToken) {
         headers["Authorization"] = `Bearer ${newToken}`;
-        const retry = await fetch(`${this.config.baseUrl}${path}`, {
+        const retry = await fetch(`${this.resolveBaseUrl()}${path}`, {
           ...options,
           headers,
         });

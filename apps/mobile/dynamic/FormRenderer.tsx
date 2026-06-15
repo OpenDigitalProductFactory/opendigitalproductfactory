@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 import type { DynamicFormSchema } from "@dpf/types";
 import { Button } from "@/src/components/ui/Button";
-import { colors, spacing } from "@/src/lib/theme";
+import { useTheme } from "@/src/lib/theme";
 import { fieldRegistry, type FieldProps } from "./fields";
 
 interface FormRendererProps {
@@ -16,8 +16,24 @@ export function FormRenderer({
   onSubmit,
   isSubmitting,
 }: FormRendererProps) {
+  const { colors, spacing } = useTheme();
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          flex: 1,
+          backgroundColor: colors.surface1,
+        },
+        content: {
+          padding: spacing.md,
+          paddingBottom: spacing.xl,
+        },
+      }),
+    [colors, spacing],
+  );
 
   function validate(): boolean {
     const newErrors: Record<string, string> = {};
@@ -60,22 +76,7 @@ export function FormRenderer({
           />
         );
       })}
-      <Button
-        title="Submit"
-        onPress={handleSubmit}
-        loading={isSubmitting}
-      />
+      <Button title="Submit" onPress={handleSubmit} loading={isSubmitting} />
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.surface1,
-  },
-  content: {
-    padding: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-});

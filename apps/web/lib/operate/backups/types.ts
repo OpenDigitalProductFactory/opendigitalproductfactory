@@ -138,4 +138,16 @@ export interface ReadinessSummary {
     lastFinishedAt: string | null;
     lastError: string | null;
   } | null;
+  /**
+   * Open critical PlatformNotification for a failed trial restore on this
+   * target (category="backup-trial-restore-failed", resolvedAt=null).
+   * Non-null means the operator needs to act — the last trial restore failed
+   * and no subsequent successful restore has cleared it (or the operator
+   * has not dismissed it). Null when healthy or never run.
+   */
+  openCorruptionAlert: {
+    id: string;
+    message: string;
+    createdAt: string;
+  } | null;
 }
