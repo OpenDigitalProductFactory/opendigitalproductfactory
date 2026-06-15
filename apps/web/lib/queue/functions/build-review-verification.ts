@@ -189,23 +189,44 @@ export const buildReviewVerification = inngest.createFunction(
     // finalStatus is "complete" | "failed" here (skipped was handled above).
     // Treat "complete" as the passing signal for auto-ship dispatch.
     if (finalStatus === "complete") {
-      await step.run("auto-dispatch-ship", async () => {
-        const { prisma: db } = await import("@dpf/db");
-        const b = await db.featureBuild.findUnique({
-          where: { buildId },
-          select: { createdById: true },
-        });
-        const actorUserId = b?.createdById ?? "system";
-        const { dispatchShipForVerifiedBuild } = await import("@/lib/integrate/ship-on-review-approval");
-        const outcome = await dispatchShipForVerifiedBuild({
-          buildId,
-          userId: actorUserId,
-          verificationStatus: "complete",
-        });
-        return { shipOutcome: outcome.kind };
-      });
+      await step.run("auto-dispatch-ship", () =>
+        autoDispatchShipForCompletedVerification(buildId),
+      );
     }
 
     return { status: finalStatus, passed: steps.filter((s) => s.passed).length, total: steps.length };
   },
 );
+
+/**
+ * Auto-dispatch the ship phase for a build whose review verification just
+ * completed. Extracted from the inngest `step.run` closure so the actor
+ * resolution is unit-testable.
+ *
+ * The resolved actor flows into `dispatchShipForVerifiedBuild` ->
+ * `executeTool("deploy_feature")` and ultimately `TaskRun.userId`, a NOT NULL
+ * FK to `User` (`TaskRun_userId_fkey`). When the build has no `createdById` the
+ * actor MUST resolve to the real install owner via `resolveScheduledOwnerUserId`
+ * — NEVER a `"system"` sentinel. There is no `User` row with id `"system"`, so
+ * the downstream write fails the FK with Prisma P2003. This is the same latent
+ * bug fixed for the skill curator in PR #1925; it only surfaces here when a
+ * `FeatureBuild` has a null `createdById`, so it never appears in normal flows.
+ */
+export async function autoDispatchShipForCompletedVerification(
+  buildId: string,
+): Promise<{ shipOutcome: string }> {
+  const { prisma: db } = await import("@dpf/db");
+  const b = await db.featureBuild.findUnique({
+    where: { buildId },
+    select: { createdById: true },
+  });
+  const { resolveScheduledOwnerUserId } = await import("../scheduled-owner");
+  const actorUserId = b?.createdById ?? (await resolveScheduledOwnerUserId());
+  const { dispatchShipForVerifiedBuild } = await import("@/lib/integrate/ship-on-review-approval");
+  const outcome = await dispatchShipForVerifiedBuild({
+    buildId,
+    userId: actorUserId,
+    verificationStatus: "complete",
+  });
+  return { shipOutcome: outcome.kind };
+}
