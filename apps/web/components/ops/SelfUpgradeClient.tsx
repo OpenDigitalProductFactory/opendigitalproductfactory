@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
+import type { SummaryResult } from "@/lib/self-upgrade/impact/types";
 import { StatusBadge } from "@/components/ui/report-kit";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 
@@ -94,6 +95,7 @@ type Props = {
   };
   history?: LatestRun[];
   historyNextCursor?: string | null;
+  initialImpactSummary?: SummaryResult | null;
   platformVersion: {
     version: string;
     publishedAt: string;
@@ -208,6 +210,7 @@ export default function SelfUpgradeClient({
   jobEngine,
   history,
   historyNextCursor,
+  initialImpactSummary,
   platformVersion,
 }: Props) {
   const router = useRouter();
@@ -742,7 +745,7 @@ export default function SelfUpgradeClient({
         </div>
       )}
 
-      <UpgradeImpactPanel enabled={enabled} />
+      <UpgradeImpactPanel enabled={enabled} initialSummary={initialImpactSummary} />
 
       {enabled && !latestRun && (
         <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)]">

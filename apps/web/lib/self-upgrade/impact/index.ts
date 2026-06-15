@@ -15,6 +15,7 @@ import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveTargetSha } from "@/lib/self-upgrade/version";
 import { cacheKey, getCached, setCached } from "./cache";
+import { getPersistedSummary, getPersistedSummaryRow, persistSummary } from "./store";
 import { collectChangeSet } from "./change-set";
 import { collectInstallSignals } from "./install-signals";
 import { parseCommits } from "./conventional";
@@ -135,6 +136,21 @@ export async function summarizeUpgradeImpact(
       return { ok: true, summary: { ...cached.summary, fromCache: true } };
     }
     if (cached && !cached.ok) return cached;
+
+    // L1 (in-memory) miss — check the durable store. This is what survives the
+    // process restart every self-upgrade triggers: a previously-computed
+    // summary is served without re-walking git log or re-calling the LLM.
+    const persisted = await getPersistedSummary(currentLineageSha, targetSha).catch(
+      () => null,
+    );
+    if (persisted) {
+      const result: SummaryResult = {
+        ok: true,
+        summary: { ...persisted, fromCache: true },
+      };
+      setCached(currentLineageSha, targetSha, result);
+      return result;
+    }
   }
 
   let raw;
@@ -191,7 +207,61 @@ export async function summarizeUpgradeImpact(
 
   const result: SummaryResult = { ok: true, summary };
   setCached(currentLineageSha, targetSha, result);
+  // Durably persist the computed summary so it survives refresh + the restart
+  // every self-upgrade triggers. Non-fatal: a write failure must not break the
+  // operator's view — L1 still serves this process and the next compute retries.
+  await persistSummary(summary).catch(() => undefined);
   return result;
+}
+
+/**
+ * Read-only path for the self-upgrade page server-component: return the
+ * persisted summary for the CURRENT (lineage, target) WITHOUT computing
+ * anything, so the panel rehydrates on page load — no click, no LLM call, no
+ * git walk. Null when nothing is persisted yet (the panel falls back to its
+ * "Summarize update" call-to-action). The target is passed in (the page already
+ * resolved it via getSelfUpgradeStatus) so this adds no extra git read.
+ */
+export async function loadPersistedImpactSummary(
+  targetSha: string | null,
+  deps: { loadCurrentLineageSha?: () => Promise<string | null> } = {},
+): Promise<SummaryResult | null> {
+  if (!targetSha) return null;
+  const loadLineage = deps.loadCurrentLineageSha ?? defaultLoadCurrentLineageSha;
+  const currentLineageSha = await loadLineage().catch(() => null);
+  if (!currentLineageSha || currentLineageSha === targetSha) return null;
+  const summary = await getPersistedSummary(currentLineageSha, targetSha).catch(
+    () => null,
+  );
+  if (!summary) return null;
+  return { ok: true, summary: { ...summary, fromCache: true } };
+}
+
+/**
+ * Resolve the persisted summary id for the CURRENT (lineage, target) so a
+ * SelfUpgradeRun can be linked to the what's-new the operator reviewed before
+ * launching it. Best effort: null when no summary was generated, or on any
+ * resolution error — the upgrade proceeds regardless.
+ */
+export async function getCurrentImpactSummaryId(
+  deps: SummarizeDeps = {},
+): Promise<string | null> {
+  try {
+    const config = !deps.loadTargetSha ? await getSelfUpgradeConfig() : null;
+    const loadLineage = deps.loadCurrentLineageSha ?? defaultLoadCurrentLineageSha;
+    const loadTarget =
+      deps.loadTargetSha ??
+      (() => resolveTargetSha("operator-impact-summary", config ?? {}));
+    const currentLineageSha = await loadLineage();
+    const targetSha = await loadTarget();
+    if (!currentLineageSha || !targetSha || currentLineageSha === targetSha) {
+      return null;
+    }
+    const row = await getPersistedSummaryRow(currentLineageSha, targetSha);
+    return row?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export { cacheKey };

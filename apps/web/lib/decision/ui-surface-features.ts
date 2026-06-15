@@ -39,6 +39,14 @@ export type UiSurfaceChange = {
   reuseBreadth: number;
   /** Does the control clarify intent toward a demonstrably better outcome? (0..1) */
   clarifiesOutcome: number;
+  /**
+   * Optional MEASURED visual cognitive load (0..1) from a vision model fed the
+   * rendered screenshot (see `visual-cognitive-load.ts`). When present it is
+   * blended into the heuristic `human_cognitive_load`, giving the rubric real
+   * visual evidence instead of structural signals alone. Omit when no
+   * vision-capable model is configured — the heuristic still applies.
+   */
+  visualCognitiveLoad?: number;
 };
 
 export type UiSurfaceTier = "no-op" | "removal" | "high" | "mid" | "low";
@@ -88,9 +96,16 @@ export function uiSurfaceFeatures(change: UiSurfaceChange): {
   const netAddition = controlsAdded > controlsRemoved;
   // Net additions impose cognitive load; justification, reuse, and clarification
   // value buy it down. A net removal imposes near-zero.
-  const load = netAddition
+  const heuristicLoad = netAddition
     ? clamp(0.85 - 0.4 * e - 0.25 * reuseBreadth - 0.2 * clarifiesOutcome)
     : 0.1;
+  // Blend in the MEASURED visual load when a vision model assessed the rendered
+  // screenshot — real visual evidence (density, whitespace, grouping) the
+  // structural signals can't see. Equal weight: neither the structural estimate
+  // nor the single-shot visual read should dominate.
+  const load = change.visualCognitiveLoad != null
+    ? clamp(0.5 * heuristicLoad + 0.5 * clamp(change.visualCognitiveLoad))
+    : heuristicLoad;
   return {
     ship: {
       human_cognitive_load: load,

@@ -5455,7 +5455,36 @@ model SelfUpgradeRun {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
+  // The "What's in this update?" summary the operator reviewed when launching
+  // this upgrade — attached so the run records the changes it carried, and so
+  // the summary survives the process restart the swap triggers.
+  impactSummaryId       String?
+  impactSummary         UpgradeImpactSummary? @relation(fields: [impactSummaryId], references: [id])
+
   @@index([status, createdAt])
+  @@index([targetSha])
+  @@index([impactSummaryId])
+}
+
+/// Durable "What's in this update?" impact summary, keyed by the immutable
+/// (currentLineageSha, targetSha) pair. The commit range between two SHAs is
+/// fixed, so a computed summary for a pair never changes — it is cached here so
+/// it survives a page refresh AND the process restart every self-upgrade
+/// triggers (the prior in-memory cache died on both). The in-memory map
+/// (impact/cache.ts) is an L1 in front of this; the panel's Refresh forces a
+/// recompute. Only successful (ok:true) summaries are persisted.
+model UpgradeImpactSummary {
+  id                String           @id @default(cuid())
+  currentLineageSha String
+  targetSha         String
+  /// The full UpgradeImpactSummary object (the ok:true SummaryResult.summary).
+  summary           Json
+  generatedAt       DateTime         @default(now())
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  runs              SelfUpgradeRun[]
+
+  @@unique([currentLineageSha, targetSha])
   @@index([targetSha])
 }
 

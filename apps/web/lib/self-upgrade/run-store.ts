@@ -18,6 +18,8 @@ export async function createRun(params: {
   fromVersion?: string;
   toVersion?: string;
   expectedDeployedSha?: string;
+  /** Link to the UpgradeImpactSummary the operator reviewed (best effort). */
+  impactSummaryId?: string | null;
 }) {
   const runId = params.runId ?? `SUR-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   return prisma.selfUpgradeRun.create({
@@ -28,6 +30,7 @@ export async function createRun(params: {
       currentSha: params.fromVersion ?? null,
       targetSha: params.toVersion ?? null,
       deployedSha: params.expectedDeployedSha ?? null,
+      impactSummaryId: params.impactSummaryId ?? null,
     },
   });
 }

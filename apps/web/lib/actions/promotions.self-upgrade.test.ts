@@ -50,6 +50,10 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   getLatestRun: vi.fn(),
 }));
 
+vi.mock("@/lib/self-upgrade/impact", () => ({
+  getCurrentImpactSummaryId: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock("@/lib/self-upgrade/window", () => ({
   isStoreOpen: vi.fn().mockReturnValue(false),
   isUpgradeWindowOpen: vi.fn().mockReturnValue(true),
@@ -141,6 +145,7 @@ import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { createRun, getLatestRun } from "@/lib/self-upgrade/run-store";
+import { getCurrentImpactSummaryId } from "@/lib/self-upgrade/impact";
 import { isUpgradeWindowOpen, nextUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import { inngest } from "@/lib/queue/inngest-client";
@@ -205,6 +210,7 @@ beforeEach(() => {
     createdAt: new Date("2026-06-13T21:00:00Z"),
     updatedAt: new Date("2026-06-13T21:00:00Z"),
   } as never);
+  vi.mocked(getCurrentImpactSummaryId).mockResolvedValue(null);
   vi.mocked(getLastCheckedAt).mockResolvedValue(null);
   vi.mocked(nextUpgradeWindowOpen).mockReturnValue(null);
   // Default: treat triggers as in-window so dispatch tests exercise the happy
@@ -666,6 +672,7 @@ describe("triggerSelfUpgrade – dispatch", () => {
 
     expect(createRun).toHaveBeenCalledWith({
       triggeredBy: "manual:user-ops-1",
+      impactSummaryId: null,
     });
     expect(vi.mocked(inngest.send)).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -673,6 +680,17 @@ describe("triggerSelfUpgrade – dispatch", () => {
       }),
     );
     expect(result).toEqual({ queued: true, runId: "SUR-QUEUED1" });
+  });
+
+  it("attaches the reviewed impact summary to the run when one exists", async () => {
+    vi.mocked(getCurrentImpactSummaryId).mockResolvedValueOnce("UIS-77");
+
+    await triggerSelfUpgrade();
+
+    expect(createRun).toHaveBeenCalledWith({
+      triggeredBy: "manual:user-ops-1",
+      impactSummaryId: "UIS-77",
+    });
   });
 
   it("sends self-upgrade event to inngest", async () => {

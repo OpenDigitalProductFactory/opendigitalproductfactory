@@ -131,9 +131,17 @@ async function fetchUpgradeImpactSummary(refresh: boolean): Promise<SummaryResul
   return body;
 }
 
-export default function UpgradeImpactPanel({ enabled }: { enabled: boolean }) {
+export default function UpgradeImpactPanel({
+  enabled,
+  initialSummary,
+}: {
+  enabled: boolean;
+  // Persisted summary pre-loaded by the page server-component, so a previously
+  // generated summary is shown immediately on load — no click, no recompute.
+  initialSummary?: SummaryResult | null;
+}) {
   const [isPending, startTransition] = useTransition();
-  const [result, setResult] = useState<SummaryResult | null>(null);
+  const [result, setResult] = useState<SummaryResult | null>(initialSummary ?? null);
   const [error, setError] = useState<string | null>(null);
   const [showFullList, setShowFullList] = useState(false);
 
