@@ -6,7 +6,21 @@ interface GalleryImage {
 export function GallerySection({ content }: { content: Record<string, unknown> }) {
   const images = Array.isArray(content.images) ? (content.images as GalleryImage[]) : [];
 
-  if (images.length === 0) return null;
+  if (images.length === 0) {
+    return (
+      <div
+        style={{
+          padding: "32px 0",
+          color: "var(--dpf-muted)",
+          fontSize: 14,
+          fontStyle: "italic",
+          textAlign: "center",
+        }}
+      >
+        Add gallery images in Admin → Storefront to populate this section.
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "40px 0" }}>

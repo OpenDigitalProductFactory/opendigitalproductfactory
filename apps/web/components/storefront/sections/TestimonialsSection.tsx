@@ -10,7 +10,21 @@ export function TestimonialsSection({ content }: { content: Record<string, unkno
     ? (content.testimonials as Testimonial[])
     : [];
 
-  if (testimonials.length === 0) return null;
+  if (testimonials.length === 0) {
+    return (
+      <div
+        style={{
+          padding: "32px 0",
+          color: "var(--dpf-muted)",
+          fontSize: 14,
+          fontStyle: "italic",
+          textAlign: "center",
+        }}
+      >
+        Add testimonials in Admin → Storefront to populate this section.
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "40px 0" }}>

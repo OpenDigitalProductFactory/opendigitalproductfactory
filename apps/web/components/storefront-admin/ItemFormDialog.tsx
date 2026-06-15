@@ -51,6 +51,7 @@ const CTA_TYPES = [
   { value: "booking", label: "Booking" },
   { value: "purchase", label: "Purchase" },
   { value: "inquiry", label: "Inquiry" },
+  { value: "rental", label: "Rental" },
   { value: "donation", label: "Donation" },
 ];
 
@@ -70,6 +71,12 @@ const PRICE_TYPES_BY_CTA: Record<string, Array<{ value: string; label: string }>
     { value: "from", label: "From (starting at)" },
     { value: "per-hour", label: "Per hour" },
     { value: "fixed", label: "Fixed price" },
+  ],
+  rental: [
+    { value: "from", label: "From (per period)" },
+    { value: "per-hour", label: "Per hour" },
+    { value: "fixed", label: "Fixed price" },
+    { value: "free", label: "Free" },
   ],
   donation: [
     { value: "donation", label: "Any amount" },

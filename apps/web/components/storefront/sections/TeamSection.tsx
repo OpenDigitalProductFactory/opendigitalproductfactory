@@ -8,7 +8,21 @@ interface TeamMember {
 export function TeamSection({ content }: { content: Record<string, unknown> }) {
   const members = Array.isArray(content.members) ? (content.members as TeamMember[]) : [];
 
-  if (members.length === 0) return null;
+  if (members.length === 0) {
+    return (
+      <div
+        style={{
+          padding: "32px 0",
+          color: "var(--dpf-muted)",
+          fontSize: 14,
+          fontStyle: "italic",
+          textAlign: "center",
+        }}
+      >
+        Add team members in Admin → Storefront to populate this section.
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "40px 0" }}>

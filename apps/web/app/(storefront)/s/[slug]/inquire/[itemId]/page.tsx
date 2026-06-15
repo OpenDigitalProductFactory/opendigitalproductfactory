@@ -18,7 +18,15 @@ export default async function ItemInquirePage({
 
   return (
     <div style={{ paddingTop: 40, maxWidth: 520 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Enquire about {item.name}</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>
+        {item.ctaType === "rental"
+          ? `Reserve ${item.name}`
+          : item.ctaType === "booking"
+          ? `Book ${item.name}`
+          : item.ctaType === "donation"
+          ? `Donate — ${item.name}`
+          : `Enquire about ${item.name}`}
+      </h1>
       <p style={{ color: "var(--dpf-muted)", marginBottom: 24, fontSize: 14 }}>{item.description}</p>
       <InquiryForm orgSlug={slug} itemId={itemId} formSchema={formSchema} />
     </div>

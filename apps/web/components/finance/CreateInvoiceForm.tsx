@@ -28,6 +28,8 @@ interface Props {
   defaultTaxRate?: number;
   /** Default for "require signature before payment". On for legal/accounting archetypes. */
   defaultSignatureRequired?: boolean;
+  /** Workspace base currency from OrgSettings. Shown before a customer is selected. */
+  defaultCurrency?: string;
 }
 
 function round2(n: number): number {
@@ -44,6 +46,7 @@ export function CreateInvoiceForm({
   customers,
   defaultTaxRate = 0,
   defaultSignatureRequired = false,
+  defaultCurrency = "USD",
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -51,7 +54,7 @@ export function CreateInvoiceForm({
 
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [dueDate, setDueDate] = useState(getDefaultDueDate());
-  const [currency, setCurrency] = useState("GBP");
+  const [currency, setCurrency] = useState(defaultCurrency);
   const [paymentTerms, setPaymentTerms] = useState("");
   const [notes, setNotes] = useState("");
   const [signatureRequired, setSignatureRequired] = useState(defaultSignatureRequired);
