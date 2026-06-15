@@ -47,6 +47,27 @@ jobs:
       - name: Run guard
         run: node scripts/check-no-bare-working-write.mjs
 
+  system-user-sentinel-guard:
+    name: System User Sentinel Guard
+    runs-on: ubuntu-latest
+    # BI-170E99A9. Catches new code that uses a "system" sentinel as a User
+    # principal id. There is no User row with id "system", so a value that
+    # becomes a User-FK column (e.g. TaskRun.userId, a NOT NULL FK -> User)
+    # fails the FK with Prisma P2003 at runtime. This bug shipped twice — #1925
+    # (skill curator) and #1926 (auto-ship) — both on rare null-owner edges the
+    # happy-path tests never hit. The fix is to resolve a real principal via
+    # resolveScheduledOwnerUserId() (apps/web/lib/queue/scheduled-owner.ts).
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Test guard logic
+        run: node --test scripts/check-no-system-user-sentinel.test.mjs
+      - name: Run guard
+        run: node scripts/check-no-system-user-sentinel.mjs
+
   mobile-jest-pin-guard:
     name: Mobile Jest Pin Guard
     runs-on: ubuntu-latest
