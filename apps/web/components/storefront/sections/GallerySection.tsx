@@ -6,7 +6,13 @@ interface GalleryImage {
 export function GallerySection({ content }: { content: Record<string, unknown> }) {
   const images = Array.isArray(content.images) ? (content.images as GalleryImage[]) : [];
 
-  if (images.length === 0) return null;
+  if (images.length === 0) {
+    return (
+      <div style={{ padding: "40px 0", textAlign: "center", color: "var(--dpf-muted)", fontSize: 14 }}>
+        Our photo gallery will appear here.
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "40px 0" }}>

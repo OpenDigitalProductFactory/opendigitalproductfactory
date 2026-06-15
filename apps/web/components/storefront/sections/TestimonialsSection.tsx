@@ -10,7 +10,13 @@ export function TestimonialsSection({ content }: { content: Record<string, unkno
     ? (content.testimonials as Testimonial[])
     : [];
 
-  if (testimonials.length === 0) return null;
+  if (testimonials.length === 0) {
+    return (
+      <div style={{ padding: "40px 0", textAlign: "center", color: "var(--dpf-muted)", fontSize: 14 }}>
+        Customer reviews will appear here.
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "40px 0" }}>
