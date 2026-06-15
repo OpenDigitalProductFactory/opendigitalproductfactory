@@ -124,15 +124,23 @@ export async function resetStorefrontArchetype(input: {
         ctaLabel?: string | null;
       }>;
 
+      // Content-dependent sections (team, gallery, testimonials) return null when
+      // their content is empty. Seed them as hidden until the operator adds content
+      // so the public storefront never shows invisible gap-sections (R10-SECT-001).
+      const CONTENT_DEPENDENT_TYPES = ["team", "gallery", "testimonials"];
+
       const sectionResult = await tx.storefrontSection.createMany({
-        data: sectionTemplates.map((section) => ({
-          storefrontId: storefront.id,
-          type: section.type,
-          title: section.title ?? null,
-          content: (section.content ?? {}) as unknown as Prisma.InputJsonValue,
-          sortOrder: section.sortOrder,
-          isVisible: true,
-        })),
+        data: sectionTemplates.map((section) => {
+          const hasContent = Object.keys(section.content ?? {}).length > 0;
+          return {
+            storefrontId: storefront.id,
+            type: section.type,
+            title: section.title ?? null,
+            content: (section.content ?? {}) as unknown as Prisma.InputJsonValue,
+            sortOrder: section.sortOrder,
+            isVisible: CONTENT_DEPENDENT_TYPES.includes(section.type) ? hasContent : true,
+          };
+        }),
       });
 
       const itemResult = await tx.storefrontItem.createMany({

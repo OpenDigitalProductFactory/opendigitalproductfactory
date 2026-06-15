@@ -194,6 +194,15 @@ export async function submitOrder(
   slug: string,
   data: {
     customerEmail: string;
+    customerName?: string;
+    deliveryAddress?: {
+      line1: string;
+      line2?: string;
+      city: string;
+      county?: string;
+      postcode: string;
+      country: string;
+    };
     items: Array<{ itemId: string; name: string; qty: number; unitPrice: number }>;
     totalAmount: number | string; // ignored — recalculated server-side
     currency?: string;
@@ -246,6 +255,8 @@ export async function submitOrder(
       orderRef: ref,
       storefrontId: storefront.id,
       customerEmail: data.customerEmail,
+      customerName: data.customerName ?? null,
+      deliveryAddress: data.deliveryAddress ? (data.deliveryAddress as never) : undefined,
       items: data.items as never,
       totalAmount: computedTotal,
       currency: data.currency ?? "GBP",

@@ -17,6 +17,7 @@ import {
 import { getAccountStatusMeta } from "@/lib/crm/presentation";
 import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { getOrgSettings } from "@/lib/actions/currency";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝",
@@ -162,7 +163,9 @@ export default async function AccountDetailPage({
         },
       },
     }),
+    getOrgSettings(),
   ]);
+
 
   if (!account) notFound();
 

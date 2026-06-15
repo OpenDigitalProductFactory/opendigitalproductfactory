@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { TeamManager } from "@/components/storefront-admin/TeamManager";
+import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 
 export default async function TeamPage() {
   const config = await prisma.storefrontConfig.findFirst({
     select: {
       id: true,
+      archetype: { select: { category: true, customVocabulary: true } },
       providers: {
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         include: {
@@ -52,5 +54,17 @@ export default async function TeamPage() {
     })),
   }));
 
-  return <TeamManager providers={providers} storefrontId={config.id} items={config.items} />;
+  const vocabulary = getVocabulary(
+    config.archetype.category,
+    config.archetype.customVocabulary as Record<string, string> | null,
+  );
+
+  return (
+    <TeamManager
+      providers={providers}
+      storefrontId={config.id}
+      items={config.items}
+      teamLabel={vocabulary.teamLabel}
+    />
+  );
 }
