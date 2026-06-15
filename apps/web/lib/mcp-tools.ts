@@ -8697,7 +8697,7 @@ export async function executeTool(
       // BI-4396EFEC (D38) — also load the prior planReview so we can pass
       // its issues to the reviewer prompt for delta-awareness and compute
       // the iteration trajectory for the operator-facing chip.
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true, planReview: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true, planReview: true, kind: true } });
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
       const priorPlanReview = (build.planReview ?? null) as
         | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
@@ -8732,7 +8732,7 @@ export async function executeTool(
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
-      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
+      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews, applyTestFirstLenienceForKind, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
       // BI-4396EFEC (D38) — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
       // ReviewResult.iteration on the output. Round is 1-based: first
@@ -8780,11 +8780,17 @@ export async function executeTool(
       const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
         ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the plan before building — they do not block this gate.`
         : "";
-      const mergedReview = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
+      const rawMergedReview = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
+      // Deterministic kind-aware lenience: a chore/fix/docs build must not be
+      // blocked by a reviewer's missing-test-first complaint (test-first is a
+      // feature-grade gate). Enforced in code so it does not depend on the
+      // reviewer model honoring the rubric's prose exemption — the local model
+      // in particular over-applies TDD to comment/chore tasks.
+      const mergedReview = applyTestFirstLenienceForKind(rawMergedReview, build.kind);
       // BI-4396EFEC (D38) — Compute the iteration delta against the prior
       // round and attach to the ReviewResult. computeReviewDelta + isOscillating
       // live in feature-build-types so they're independently unit-testable.
