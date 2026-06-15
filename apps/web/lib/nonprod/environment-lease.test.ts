@@ -7,6 +7,7 @@ import {
   renewNonprodEnvironmentLease,
   reapExpiredNonprodEnvironmentLeases,
   MAX_LEASE_TTL_MS,
+  DEFAULT_LEASE_TTL_MS,
 } from "./environment-lease";
 
 function db() {
@@ -148,7 +149,8 @@ describe("nonprod lease anti-monopolization (BI-4043A64B)", () => {
     });
     expect(r.status).toBe("renewed");
     const data = mockDb.nonProductionEnvironmentLease.update.mock.calls[0][0].data;
-    expect(data.expiresAt.getTime()).toBe(now.getTime() + MAX_LEASE_TTL_MS);
+    // Heartbeat with no explicit ttl uses the DEFAULT window (clamped to MAX).
+    expect(data.expiresAt.getTime()).toBe(now.getTime() + DEFAULT_LEASE_TTL_MS);
   });
 
   it("refuses to revive an already-expired lease (holder lost it → must re-claim)", async () => {
