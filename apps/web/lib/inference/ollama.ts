@@ -103,10 +103,25 @@ export async function checkBundledProviders(): Promise<void> {
     if (profileCount === 0) {
       await autoDiscoverAndProfile("local");
     } else {
-      // Profiles exist but may still be un-calibrated seed priors (e.g. seeded at
-      // install, never evaluated). Queue the deterministic eval so capability
-      // scores reflect the real model. Self-limiting: stops once each model has
-      // an eval on record.
+      // Profiles exist. Re-enumerate the runner periodically so a newly-pulled or
+      // swapped local model (e.g. gemma4:26B → gemma4:12B) is discovered and a
+      // vanished tag retired. autoDiscoverAndProfile owns that reconciliation, but
+      // the steady-state path used to skip it entirely — so once any profile
+      // existed, new local models were never picked up and stale tags lingered
+      // (the daily revalidation cron is the primary path, but it is not always
+      // effective and page visits are far more frequent). Throttle on the freshest
+      // lastSeenAt so we don't re-profile on every render. (BI-86CC0266)
+      const freshest = await prisma.discoveredModel.aggregate({
+        where: { providerId: "local" },
+        _max: { lastSeenAt: true },
+      });
+      const lastSeenMs = freshest._max.lastSeenAt?.getTime() ?? 0;
+      const REDISCOVER_AFTER_MS = 60 * 60 * 1000; // 1h
+      if (Date.now() - lastSeenMs > REDISCOVER_AFTER_MS) {
+        await autoDiscoverAndProfile("local");
+      }
+      // Always catch up calibration for any models still on a seed prior.
+      // Self-limiting: stops once each model has an eval on record.
       await queueUncalibratedModelEvals("local");
     }
     await enrichLocalInfraCI(baseUrl, "operational");
