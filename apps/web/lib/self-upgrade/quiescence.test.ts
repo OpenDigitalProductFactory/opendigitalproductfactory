@@ -341,6 +341,68 @@ describe("captureActiveSessionBlockers", () => {
       take: 25,
     });
   });
+
+  it("reaps AND closes a dead build phase (corpse: no active TaskRun, old start)", async () => {
+    // The live FB-69231490 shape: a "build" phase open for an hour with zero
+    // active TaskRuns. It must not be reported as in-flight, and the row must be
+    // closed so it never re-trips the next capture.
+    const now = new Date("2026-06-16T12:00:00.000Z");
+    const old = new Date(now.getTime() - 60 * 60 * 1000); // 1h ago
+    prismaMock.buildPhaseRunFindMany.mockResolvedValue([
+      { buildId: "FB-69231490", phase: "build", startedAt: old },
+    ]);
+    prismaMock.taskRunFindMany.mockResolvedValue([]); // no live work
+
+    const snapshot = await captureActiveSessionBlockers({ now });
+
+    expect(snapshot.surfaces.find((s) => s.surface === "build-studio.phase.build")).toBeUndefined();
+    expect(snapshot.hardBlockers).toBe(0);
+    // 1st updateMany = reconcileTerminalBuildPhaseRuns; 2nd = the corpse close.
+    expect(prismaMock.buildPhaseRunUpdateMany).toHaveBeenCalledTimes(2);
+    expect(prismaMock.buildPhaseRunUpdateMany).toHaveBeenLastCalledWith({
+      where: { completedAt: null, OR: [{ buildId: "FB-69231490", phase: "build" }] },
+      data: { completedAt: now },
+    });
+  });
+
+  it("keeps a live build phase as a blocker and does NOT close it", async () => {
+    const now = new Date("2026-06-16T12:00:00.000Z");
+    const old = new Date(now.getTime() - 60 * 60 * 1000);
+    const recent = new Date(now.getTime() - 60 * 1000); // heartbeat 1 min ago
+    prismaMock.buildPhaseRunFindMany.mockResolvedValue([
+      { buildId: "FB-LIVE", phase: "build", startedAt: old },
+    ]);
+    prismaMock.taskRunFindMany.mockResolvedValue([
+      {
+        taskRunId: "tr-live",
+        title: "building",
+        buildId: "FB-LIVE",
+        status: "working",
+        lastHeartbeatAt: recent,
+        startedAt: old,
+      },
+    ]);
+
+    const snapshot = await captureActiveSessionBlockers({ now });
+
+    expect(snapshot.surfaces.some((s) => s.surface === "build-studio.phase.build")).toBe(true);
+    // Only the reconcile updateMany — no corpse close for a live phase.
+    expect(prismaMock.buildPhaseRunUpdateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT reap a freshly-started build phase even with no active TaskRun yet (startup race)", async () => {
+    const now = new Date("2026-06-16T12:00:00.000Z");
+    const recentStart = new Date(now.getTime() - 2 * 60 * 1000); // started 2 min ago
+    prismaMock.buildPhaseRunFindMany.mockResolvedValue([
+      { buildId: "FB-NEW", phase: "build", startedAt: recentStart },
+    ]);
+    prismaMock.taskRunFindMany.mockResolvedValue([]); // TaskRun not working/active yet
+
+    const snapshot = await captureActiveSessionBlockers({ now });
+
+    expect(snapshot.surfaces.some((s) => s.surface === "build-studio.phase.build")).toBe(true);
+    expect(prismaMock.buildPhaseRunUpdateMany).toHaveBeenCalledTimes(1); // no corpse close
+  });
 });
 
 describe("pickPrimaryBlocker", () => {
