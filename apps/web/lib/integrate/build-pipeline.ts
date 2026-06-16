@@ -331,11 +331,38 @@ async function stepInitDb(
 }
 
 async function stepInstallDeps(
-  _buildId: string,
+  buildId: string,
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
   const { installDepsAndStart } = await import("./sandbox/sandbox-workspace");
   await installDepsAndStart(state.containerId!);
+
+  // Preflight the test toolchain. The shared pool sandbox reuses node_modules
+  // across builds; a stale/partial install makes vitest fail to LOAD (rolldown
+  // native-binding error, vitest-not-found) and surfaces later as a confusing
+  // parse error on a valid file — the FB-69231490 stall. Heal it here so the
+  // sandbox is sound for every subsequent command (run_sandbox_command,
+  // run_sandbox_tests, the QA specialist). If it cannot be healed, fail LOUD
+  // with the structured diagnosis rather than proceeding to an opaque failure.
+  const { ensureSandboxToolchainHealthy } = await import("./sandbox/sandbox-toolchain-health");
+  const health = await ensureSandboxToolchainHealthy(state.containerId!);
+  if (health.restored) {
+    const { prisma } = await import("@dpf/db");
+    await prisma.buildActivity.create({
+      data: {
+        buildId,
+        tool: "sandbox:toolchain-restored",
+        summary: `Sandbox toolchain was unloadable (${health.signature ?? "unknown"}); auto-restored node_modules before verification.`,
+      },
+    }).catch(() => {});
+  }
+  if (!health.healthy) {
+    throw new Error(
+      `Sandbox toolchain is not loadable${health.signature ? ` (${health.signature})` : ""}: ` +
+      `${health.diagnosis ?? "vitest could not be loaded after a clean reinstall."} ` +
+      `This is sandbox state, not a code defect — recover the sandbox before retrying.`,
+    );
+  }
   return state;
 }
 

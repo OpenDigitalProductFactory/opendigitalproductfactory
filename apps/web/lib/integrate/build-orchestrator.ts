@@ -1177,6 +1177,47 @@ export async function runBuildOrchestrator(params: {
     }
   }
 
+  // ─── Pre-flight check: sandbox test toolchain is loadable ────────────────
+  // The shared sandbox (dpf-sandbox-1) reuses node_modules across builds. A
+  // stale/partial install makes vitest fail to LOAD (rolldown native-binding
+  // error, vitest-not-found) and surfaces later as a confusing parse error on a
+  // valid file — the FB-69231490 stall. Heal it BEFORE dispatching tasks so the
+  // QA specialist's verification runs against a sound toolchain; if it cannot be
+  // healed, block LOUD with the structured diagnosis instead of letting a
+  // specialist hang on an opaque failure.
+  try {
+    const { ensureSandboxToolchainHealthy } = await import("./sandbox/sandbox-toolchain-health");
+    const health = await ensureSandboxToolchainHealthy(sandboxContainer);
+    if (health.restored) {
+      await prisma.buildActivity.create({
+        data: {
+          buildId,
+          tool: "sandbox:toolchain-restored",
+          summary: `Sandbox toolchain was unloadable (${health.signature ?? "unknown"}); auto-restored node_modules before dispatch.`,
+        },
+      }).catch(() => {});
+    }
+    if (!health.healthy) {
+      return {
+        content: formatCoworkerOperationalCloseout({
+          status: "blocked before implementation",
+          evidence:
+            `the build sandbox test toolchain is not loadable` +
+            `${health.signature ? ` (${health.signature})` : ""}: ${health.diagnosis ?? "vitest could not load after a clean reinstall."} ` +
+            `This is sandbox state, not a code defect.`,
+          nextAction: "recover the sandbox (diagnose_sandbox / recover_sandbox) or rebuild its node_modules, then retry implementation.",
+          owner: "operator/admin",
+        }),
+        totalTasks: 0, completedTasks: 0, failedTasks: 0,
+        specialistResults: [], totalInputTokens: 0, totalOutputTokens: 0,
+      };
+    }
+  } catch (err) {
+    // A probe failure must not hard-stop the build — log and proceed; the QA
+    // gate still guards the advance.
+    console.warn("[orchestrator] toolchain preflight skipped:", (err as Error)?.message);
+  }
+
   // Build dependency graph from plan
   const phases = buildDependencyGraph(
     normalizedPlan.plan.fileStructure ?? [],
