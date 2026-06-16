@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { DialogHost } from "@/components/ui/Dialog";
 
 vi.mock("@/lib/actions/mcp-tokens", () => ({
   bulkRevokeMyMcpTokens: vi.fn(),
@@ -508,10 +509,12 @@ describe("McpTokenManager — idle hygiene", () => {
       revokedCount: 1,
       failedCount: 0,
     });
-    // Auto-confirm the bulk-revoke dialog.
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-
-    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    render(
+      <>
+        <McpTokenManager baseUrl="http://localhost:3000" />
+        <DialogHost />
+      </>,
+    );
     expect(await screen.findByText("Stale agent")).toBeTruthy();
 
     const checkbox = screen.getByLabelText(/Select token Stale agent for bulk revoke/i);
@@ -520,14 +523,18 @@ describe("McpTokenManager — idle hygiene", () => {
     const bulkButton = screen.getByRole("button", { name: /Revoke 1 selected/i });
     fireEvent.click(bulkButton);
 
+    // In-app confirm dialog (BI-B0E4F3F1) — confirm via its stable DOM ref,
+    // the same path an agent uses. A native confirm() was unreachable here.
+    const confirmRef = await screen.findByText("Revoke tokens");
+    expect(confirmRef).toBeTruthy();
+    fireEvent.click(document.querySelector('[data-dialog-action="confirm"]')!);
+
     await waitFor(() => {
       expect(bulkRevokeMock).toHaveBeenCalledWith({
         tokenIds: ["tok_stale"],
         reason: "bulk revoke from admin UI",
       });
     });
-    expect(confirmSpy).toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
   it("does not render a checkbox on revoked rows (once revealed via Show revoked)", async () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { confirmDialog } from "@/components/ui/Dialog";
 import {
   disconnectEmailPostmarkAction,
   saveEmailPostmarkAction,
@@ -34,8 +35,16 @@ export function EmailPostmarkConnectPanel({ initialState, defaultInboundWebhookU
     });
   }
 
-  function onDisconnect() {
-    if (!confirm("Disconnect Postmark? Outbound sends and inbound webhooks will stop.")) return;
+  async function onDisconnect() {
+    if (
+      !(await confirmDialog({
+        title: "Disconnect Postmark",
+        message: "Disconnect Postmark? Outbound sends and inbound webhooks will stop.",
+        tone: "danger",
+        confirmLabel: "Disconnect",
+      }))
+    )
+      return;
     startTransition(async () => {
       const result = await disconnectEmailPostmarkAction();
       if (!result.ok) setError(result.error);

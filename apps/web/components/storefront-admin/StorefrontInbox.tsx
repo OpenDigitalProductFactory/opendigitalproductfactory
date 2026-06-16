@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { promptDialog } from "@/components/ui/Dialog";
 
 type Entry = {
   id: string;
@@ -59,7 +60,12 @@ export function StorefrontInbox({
   });
 
   async function cancelBooking(id: string) {
-    const reason = window.prompt("Cancellation reason:");
+    const reason = await promptDialog({
+      title: "Cancel booking",
+      message: "Cancellation reason:",
+      confirmLabel: "Cancel booking",
+      cancelLabel: "Keep booking",
+    });
     if (reason === null) return; // user dismissed
     await fetch(`/api/storefront/bookings/${id}/cancel`, {
       method: "POST",
