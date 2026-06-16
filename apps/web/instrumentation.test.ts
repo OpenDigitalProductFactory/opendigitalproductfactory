@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  advanceStrandedBuildToReview,
   areOptionalStartupTasksEnabled,
   isInngestSelfSyncOnBootEnabled,
   isStartupModelRevalidationEnabled,
@@ -17,8 +18,12 @@ const completeRunMock = vi.fn();
 const failRunMock = vi.fn();
 const selfUpgradeRunFindManyMock = vi.fn();
 const featureBuildFindManyMock = vi.fn();
+const featureBuildFindUniqueMock = vi.fn();
 const featureBuildUpdateMock = vi.fn();
+const featureBuildUpdateManyMock = vi.fn();
 const buildActivityCreateMock = vi.fn();
+const getScopedVerificationForBuildMock = vi.fn();
+const queueBuildReviewVerificationMock = vi.fn();
 
 vi.mock("@/lib/platform/version-config", () => ({
   syncPlatformVersionConfig: (...args: unknown[]) => syncPlatformVersionConfigMock(...args),
@@ -40,7 +45,9 @@ vi.mock("@dpf/db", () => ({
     },
     featureBuild: {
       findMany: (...args: unknown[]) => featureBuildFindManyMock(...args),
+      findUnique: (...args: unknown[]) => featureBuildFindUniqueMock(...args),
       update: (...args: unknown[]) => featureBuildUpdateMock(...args),
+      updateMany: (...args: unknown[]) => featureBuildUpdateManyMock(...args),
     },
     buildActivity: {
       create: (...args: unknown[]) => buildActivityCreateMock(...args),
@@ -50,16 +57,30 @@ vi.mock("@dpf/db", () => ({
   Prisma: { DbNull: { __dbnull: true }, JsonNull: { __jsonnull: true } },
 }));
 
+vi.mock("@/lib/build/scoped-verification", () => ({
+  getScopedVerificationForBuild: (...args: unknown[]) => getScopedVerificationForBuildMock(...args),
+}));
+
+vi.mock("@/lib/build-review-verification-trigger", () => ({
+  queueBuildReviewVerification: (...args: unknown[]) => queueBuildReviewVerificationMock(...args),
+}));
+
 beforeEach(() => {
   getDeployedShaMock.mockReset();
   completeRunMock.mockReset();
   failRunMock.mockReset();
   selfUpgradeRunFindManyMock.mockReset();
   featureBuildFindManyMock.mockReset();
+  featureBuildFindUniqueMock.mockReset();
   featureBuildUpdateMock.mockReset();
+  featureBuildUpdateManyMock.mockReset();
   buildActivityCreateMock.mockReset();
+  getScopedVerificationForBuildMock.mockReset();
+  queueBuildReviewVerificationMock.mockReset();
   featureBuildUpdateMock.mockResolvedValue({});
+  featureBuildUpdateManyMock.mockResolvedValue({ count: 1 });
   buildActivityCreateMock.mockResolvedValue({});
+  queueBuildReviewVerificationMock.mockResolvedValue(undefined);
 });
 
 describe("warnIfLegacyHiveTokenEnvSet", () => {
@@ -376,7 +397,7 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
 
     const result = await resumeStrandedBuildsOnBoot({ dispatch }, { log: vi.fn(), error: vi.fn() });
 
-    expect(result).toEqual({ resumed: 1, flagged: 0 });
+    expect(result).toEqual({ resumed: 1, flagged: 0, advanced: 0 });
     expect(dispatch).toHaveBeenCalledWith("BLD-STRANDED");
     expect(buildActivityCreateMock).toHaveBeenCalledTimes(1);
   });
@@ -385,18 +406,27 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
     featureBuildFindManyMock.mockResolvedValueOnce([
       // contradictory: error-without-fail
       { buildId: "BLD-CONTRA", phase: "build", buildExecState: { step: "complete", error: "x" }, verificationOut: null },
-      // terminal
+      // verified-complete but gate-blocked → build->review advancer is consulted, declines
       { buildId: "BLD-COMPLETE", phase: "build", buildExecState: { step: "complete" }, verificationOut: { typecheckPassed: true } },
       { buildId: "BLD-FAILED", phase: "build", buildExecState: { step: "failed", failedAt: "db_ready", error: "x" }, verificationOut: null },
       // missing step (contradictory)
       { buildId: "BLD-NOSTEP", phase: "build", buildExecState: { sourceCurrency: { a: 1 } }, verificationOut: null },
     ]);
     const dispatch = vi.fn();
+    const advanceToReview = vi.fn().mockResolvedValue(false);
 
-    const result = await resumeStrandedBuildsOnBoot({ dispatch }, { log: vi.fn(), error: vi.fn() });
+    const result = await resumeStrandedBuildsOnBoot(
+      { dispatch, advanceToReview },
+      { log: vi.fn(), error: vi.fn() },
+    );
 
-    expect(result).toEqual({ resumed: 0, flagged: 0 });
+    expect(result).toEqual({ resumed: 0, flagged: 0, advanced: 0 });
     expect(dispatch).not.toHaveBeenCalled();
+    // Only the non-contradictory verified-complete row reaches the advancer.
+    expect(advanceToReview).toHaveBeenCalledTimes(1);
+    expect(advanceToReview).toHaveBeenCalledWith("BLD-COMPLETE");
+    // Gate-blocked → no phase flip, no activity row.
+    expect(buildActivityCreateMock).not.toHaveBeenCalled();
   });
 
   // BI-9257CF19: pre-build phases (ideate/plan/review) now AUTO-RESUME via the
@@ -417,7 +447,7 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
       { log: vi.fn(), error: vi.fn() },
     );
 
-    expect(result).toEqual({ resumed: 0, flagged: 3 });
+    expect(result).toEqual({ resumed: 0, flagged: 3, advanced: 0 });
     expect(dispatch).not.toHaveBeenCalled(); // build-phase step-machine only
     // Each pre-build strand is handed to the canonical resumer with its actor.
     expect(resumePreBuild).toHaveBeenCalledTimes(3);
@@ -440,6 +470,35 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
     expect(where.updatedAt.lt).toBeInstanceOf(Date);
   });
 
+  // This fix: a build stranded at the build->review TRANSITION (phase=build,
+  // step=complete, verification populated, but the auto-advance never fired —
+  // interrupted by a swap, or fired before a gate fix deployed) is advanced to
+  // review via the injectable advancer. Mirrors live case FB-69231490.
+  it("advances a build-phase strand stuck at the build→review transition (gate passes)", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      {
+        buildId: "BLD-AT-GATE",
+        phase: "build",
+        buildExecState: { step: "complete" },
+        verificationOut: { typecheckPassed: true, testsFailed: 0 },
+      },
+    ]);
+    const dispatch = vi.fn();
+    const advanceToReview = vi.fn().mockResolvedValue(true);
+    const log = vi.fn();
+
+    const result = await resumeStrandedBuildsOnBoot(
+      { dispatch, advanceToReview },
+      { log, error: vi.fn() },
+    );
+
+    expect(result).toEqual({ resumed: 0, flagged: 0, advanced: 1 });
+    expect(advanceToReview).toHaveBeenCalledWith("BLD-AT-GATE");
+    expect(dispatch).not.toHaveBeenCalled(); // not a step-machine re-dispatch
+    expect(buildActivityCreateMock).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls.some((c) => String(c[0]).includes("build→review transition"))).toBe(true);
+  });
+
   it("is non-fatal: returns null and logs when the query throws", async () => {
     featureBuildFindManyMock.mockRejectedValueOnce(new Error("db down"));
     const error = vi.fn();
@@ -449,6 +508,96 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
     expect(result).toBeNull();
     expect(error).toHaveBeenCalledTimes(1);
     expect(error.mock.calls[0]![0]).toContain("[build-resume]");
+  });
+});
+
+describe("advanceStrandedBuildToReview (build→review transition resume)", () => {
+  it("advances a build whose SCOPED verification clears the gate", async () => {
+    featureBuildFindUniqueMock.mockResolvedValueOnce({
+      buildId: "FB-69231490",
+      phase: "build",
+      verificationOut: { typecheckPassed: true, testsFailed: 0 },
+    });
+    // Scoped view: build's OWN files are clean.
+    getScopedVerificationForBuildMock.mockResolvedValueOnce({
+      buildScoped: { typecheckPassed: true, testsFailed: 0 },
+    });
+
+    const advanced = await advanceStrandedBuildToReview("FB-69231490");
+
+    expect(advanced).toBe(true);
+    // Phase flip guarded on still-`build`.
+    expect(featureBuildUpdateManyMock).toHaveBeenCalledWith({
+      where: { buildId: "FB-69231490", phase: "build" },
+      data: { phase: "review" },
+    });
+    expect(queueBuildReviewVerificationMock).toHaveBeenCalledWith("FB-69231490");
+  });
+
+  it("treats an OUT-of-scope failure (null scoped typecheck) as a pass and advances", async () => {
+    featureBuildFindUniqueMock.mockResolvedValueOnce({
+      buildId: "BLD-NOISE",
+      phase: "build",
+      // Raw verification shows a failure, but it's elsewhere in the repo.
+      verificationOut: { typecheckPassed: false, testsFailed: 3 },
+    });
+    getScopedVerificationForBuildMock.mockResolvedValueOnce({
+      buildScoped: { typecheckPassed: null, testsFailed: null },
+    });
+
+    const advanced = await advanceStrandedBuildToReview("BLD-NOISE");
+
+    expect(advanced).toBe(true);
+    expect(featureBuildUpdateManyMock).toHaveBeenCalled();
+  });
+
+  it("does NOT advance a build with an IN-scope failure (gate stays blocked)", async () => {
+    featureBuildFindUniqueMock.mockResolvedValueOnce({
+      buildId: "BLD-BROKEN",
+      phase: "build",
+      verificationOut: { typecheckPassed: false, testsFailed: 2 },
+    });
+    // The failure is in the build's OWN changed files.
+    getScopedVerificationForBuildMock.mockResolvedValueOnce({
+      buildScoped: { typecheckPassed: false, testsFailed: 2 },
+    });
+
+    const advanced = await advanceStrandedBuildToReview("BLD-BROKEN");
+
+    expect(advanced).toBe(false);
+    expect(featureBuildUpdateManyMock).not.toHaveBeenCalled();
+    expect(queueBuildReviewVerificationMock).not.toHaveBeenCalled();
+  });
+
+  it("is a no-op when the row already left the build phase", async () => {
+    featureBuildFindUniqueMock.mockResolvedValueOnce({
+      buildId: "BLD-PAST",
+      phase: "review",
+      verificationOut: { typecheckPassed: true, testsFailed: 0 },
+    });
+
+    const advanced = await advanceStrandedBuildToReview("BLD-PAST");
+
+    expect(advanced).toBe(false);
+    expect(getScopedVerificationForBuildMock).not.toHaveBeenCalled();
+    expect(featureBuildUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it("no-ops when the guarded phase flip loses the race (count=0)", async () => {
+    featureBuildFindUniqueMock.mockResolvedValueOnce({
+      buildId: "BLD-RACE",
+      phase: "build",
+      verificationOut: { typecheckPassed: true, testsFailed: 0 },
+    });
+    getScopedVerificationForBuildMock.mockResolvedValueOnce({
+      buildScoped: { typecheckPassed: true, testsFailed: 0 },
+    });
+    featureBuildUpdateManyMock.mockResolvedValueOnce({ count: 0 });
+
+    const advanced = await advanceStrandedBuildToReview("BLD-RACE");
+
+    expect(advanced).toBe(false);
+    expect(queueBuildReviewVerificationMock).not.toHaveBeenCalled();
   });
 });
 
