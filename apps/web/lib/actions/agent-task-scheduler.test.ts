@@ -42,7 +42,7 @@ const mocks = vi.hoisted(() => ({
   toolsToOpenAIFormat: vi.fn(),
   executeTool: vi.fn(),
   governedExecuteTool: vi.fn(),
-  reconcileSysmlProjections: vi.fn(),
+  runArchitectureParitySteward: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
@@ -70,8 +70,8 @@ vi.mock("@/lib/mcp-tools", () => ({
 vi.mock("@/lib/mcp-governed-execute", () => ({
   governedExecuteTool: mocks.governedExecuteTool,
 }));
-vi.mock("@/lib/ea/reconcile-sysml-projections", () => ({
-  reconcileSysmlProjections: mocks.reconcileSysmlProjections,
+vi.mock("@/lib/ea/architecture-parity-steward", () => ({
+  runArchitectureParitySteward: mocks.runArchitectureParitySteward,
 }));
 
 import {
@@ -770,16 +770,19 @@ describe("executeScheduledAgentTask — SysML projection reconcile branch", () =
       isActive: true,
       schedule: "0 4 * * *",
     });
-    mocks.reconcileSysmlProjections.mockResolvedValue({
-      mcpAuthority: { status: "applied", created: 0, updated: 304, removed: 0, toolCount: 248, grantCount: 54 },
-      coworkerAuthority: { status: "applied", created: 0, updated: 64, removed: 0 },
+    mocks.runArchitectureParitySteward.mockResolvedValue({
+      projections: {
+        mcpAuthority: { status: "applied", created: 0, updated: 304, removed: 0, toolCount: 248, grantCount: 54 },
+        coworkerAuthority: { status: "applied", created: 0, updated: 64, removed: 0 },
+      },
+      steward: { created: 1, updated: 0, resolved: 0 },
     });
     mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
     mocks.prisma.scheduledJob.update.mockResolvedValue({});
 
     await executeScheduledAgentTask("sysml-projection-nightly");
 
-    expect(mocks.reconcileSysmlProjections).toHaveBeenCalledOnce();
+    expect(mocks.runArchitectureParitySteward).toHaveBeenCalledOnce();
     expect(mocks.runAgenticLoop).not.toHaveBeenCalled();
     expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -795,7 +798,7 @@ describe("executeScheduledAgentTask — SysML projection reconcile branch", () =
       isActive: true,
       schedule: "0 4 * * *",
     });
-    mocks.reconcileSysmlProjections.mockRejectedValue(new Error("notation missing"));
+    mocks.runArchitectureParitySteward.mockRejectedValue(new Error("notation missing"));
     mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
     mocks.prisma.scheduledJob.update.mockResolvedValue({});
 
