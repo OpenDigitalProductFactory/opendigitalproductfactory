@@ -25,6 +25,23 @@ const GEOGRAPHIC_SCOPE_OPTIONS = [
   { value: "international", label: "International", description: "Multiple countries" },
 ];
 
+// Jurisdiction options for the compliance-scope capture. Slugs match
+// PROFESSION_JURISDICTIONS so the corpus jurisdiction-basis model can match them.
+const JURISDICTION_OPTIONS = [
+  { value: "us", label: "United States" },
+  { value: "eu", label: "European Union" },
+  { value: "uk", label: "United Kingdom" },
+];
+
+const COMPLIANCE_SCOPE_DIMENSIONS = [
+  { field: "operatesIn", label: "Where the business operates" },
+  { field: "sellsTo", label: "Where your customers are (you sell to)" },
+  { field: "employsIn", label: "Where your employees work" },
+  { field: "dataResidency", label: "Where data must stay (data residency)" },
+] as const;
+
+type JurisdictionScopeField = (typeof COMPLIANCE_SCOPE_DIMENSIONS)[number]["field"];
+
 type BusinessContextData = {
   description: string;
   mission: string;
@@ -34,6 +51,11 @@ type BusinessContextData = {
   revenueModel: string;
   contactEmail: string;
   contactPhone: string;
+  operatesIn: string[];
+  sellsTo: string[];
+  employsIn: string[];
+  dataResidency: string[];
+  handlesCardPayments: boolean;
 };
 
 type BusinessContextFormProps = {
@@ -65,6 +87,11 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editedFields, setEditedFields] = useState<Set<string>>(new Set());
+  // Progressive disclosure: the cross-border detail (sell/employ/data-residency)
+  // is hidden until the operator says their business spans more than one region.
+  const [showCrossBorder, setShowCrossBorder] = useState(
+    initial.sellsTo.length > 0 || initial.employsIn.length > 0 || initial.dataResidency.length > 0,
+  );
 
   const hasAutoFill = (autoFilledFields?.length ?? 0) > 0;
 
@@ -72,6 +99,44 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
     setData((prev) => ({ ...prev, [field]: value }));
     setEditedFields((prev) => new Set(prev).add(field));
     setSaved(false);
+  }
+
+  function toggleJurisdiction(field: JurisdictionScopeField, value: string) {
+    const cur = data[field];
+    update(field, cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value]);
+  }
+
+  function renderScopeChips(field: JurisdictionScopeField, label: string) {
+    return (
+      <div style={{ marginTop: 10 }}>
+        <div style={{ fontSize: 12, marginBottom: 4 }}>{label}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {JURISDICTION_OPTIONS.map((o) => {
+            const on = data[field].includes(o.value);
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => toggleJurisdiction(field, o.value)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontSize: 12,
+                  border: on ? "2px solid var(--dpf-accent)" : "1px solid var(--dpf-border)",
+                  background: on
+                    ? "color-mix(in srgb, var(--dpf-accent) 8%, var(--dpf-surface-1))"
+                    : "var(--dpf-surface-1)",
+                  color: "var(--dpf-text)",
+                }}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
   async function handleSubmit() {
@@ -295,6 +360,43 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
             ))}
           </div>
           {autoFilledFields?.includes("geographicScope") && <AutoFillHint field="geographicScope" editedFields={editedFields} />}
+        </div>
+
+        {/* Compliance & regulatory scope — progressive disclosure keeps the
+            default to a couple of plain choices; cross-border detail is opt-in. */}
+        <div style={{ borderTop: "1px solid var(--dpf-border)", paddingTop: 14 }}>
+          <div style={fieldLabelStyle}>Compliance &amp; regulatory scope</div>
+          <div style={hintStyle}>
+            Where you do business decides which rules each AI coworker applies — taxes and marketing
+            consent follow your customers, employment law follows your staff.
+          </div>
+
+          {renderScopeChips("operatesIn", "Where is your business based / where do you operate?")}
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={data.handlesCardPayments}
+              onChange={(e) => update("handlesCardPayments", e.target.checked)}
+            />
+            We accept card payments (PCI-DSS applies wherever you handle cards)
+          </label>
+
+          {showCrossBorder ? (
+            <div style={{ marginTop: 12, paddingLeft: 12, borderLeft: "2px solid var(--dpf-border)" }}>
+              {renderScopeChips("sellsTo", "Where your customers are (you sell to)")}
+              {renderScopeChips("employsIn", "Where your employees work")}
+              {renderScopeChips("dataResidency", "Where data must stay (data residency)")}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowCrossBorder(true)}
+              style={{ marginTop: 10, fontSize: 12, color: "var(--dpf-accent)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+            >
+              + We sell to, employ in, or store data in other regions
+            </button>
+          )}
         </div>
 
         {/* Contact details */}

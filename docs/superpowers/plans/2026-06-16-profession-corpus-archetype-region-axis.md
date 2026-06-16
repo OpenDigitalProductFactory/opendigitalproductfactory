@@ -87,6 +87,21 @@ regression). `ProfessionCorpusInstallContext.regional` carries
 captures it). Exemplar pages: `finance/pci-dss-card-handling-global` (global),
 `marketing/eu-gdpr-consent-by-recipient-selling` (selling).
 
-**Follow-up:** capture the install's `operatesIn/sellsTo/employsIn` at setup; and
-re-tag the pre-existing jurisdiction pages (hr → `employing`, marketing → `selling`)
-which currently default to `operating` (latent until the profile is populated).
+### Setup capture (added 2026-06-16)
+
+The regional profile is now **captured at setup**, on `BusinessContext`
+(`operatesIn / sellsTo / employsIn / dataResidency` jurisdiction sets +
+`handlesCardPayments`, migration `..._add_business_context_compliance_scope`).
+The business-context step gains a **"Compliance & regulatory scope"** section
+using **progressive disclosure** (UX-Fit): the primary "where do you operate?" +
+card-payments question is visible; the cross-border sell/employ/data-residency
+detail is opt-in. `resolveInstallVariantContext` reads `BusinessContext` and
+populates `regional`, so the jurisdiction-basis engine now bites for installs
+that have declared their scope — and stays permissive (no filter) where a
+dimension is blank.
+
+**Follow-up:** re-tag the pre-existing jurisdiction pages (hr → `employing`,
+marketing → `selling`, finance revenue-recognition → `operating`) which default
+to `operating`; expand the jurisdiction taxonomy + setup options beyond us/eu/uk
+as real installs need them; consider capability-gating `global`-basis pages on
+`handlesCardPayments` (so PCI only surfaces for card-handling businesses).

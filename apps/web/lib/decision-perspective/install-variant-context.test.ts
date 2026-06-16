@@ -5,13 +5,32 @@ import {
   type InstallVariantClient,
 } from "./install-variant-context";
 
-function fakeDb(category: string | null | undefined, opts: { throws?: boolean } = {}): InstallVariantClient {
+const EMPTY_REGIONAL = { operatesIn: [], sellsTo: [], employsIn: [], dataResidency: [] };
+
+function fakeDb(opts: {
+  category?: string | null; // undefined → storefront returns null
+  storefrontThrows?: boolean;
+  bc?: Partial<Record<"operatesIn" | "sellsTo" | "employsIn" | "dataResidency", string[]>> | null;
+  bcThrows?: boolean;
+} = {}): InstallVariantClient {
   return {
     storefrontConfig: {
       findFirst: async () => {
-        if (opts.throws) throw new Error("no storefront");
-        if (category === undefined) return null;
-        return { archetype: category === null ? null : { category } };
+        if (opts.storefrontThrows) throw new Error("no storefront");
+        if (opts.category === undefined) return null;
+        return { archetype: opts.category === null ? null : { category: opts.category } };
+      },
+    },
+    businessContext: {
+      findFirst: async () => {
+        if (opts.bcThrows) throw new Error("no business context");
+        if (!opts.bc) return null;
+        return {
+          operatesIn: opts.bc.operatesIn ?? [],
+          sellsTo: opts.bc.sellsTo ?? [],
+          employsIn: opts.bc.employsIn ?? [],
+          dataResidency: opts.bc.dataResidency ?? [],
+        };
       },
     },
   };
@@ -19,22 +38,37 @@ function fakeDb(category: string | null | undefined, opts: { throws?: boolean } 
 
 describe("resolveInstallVariantContext", () => {
   it("maps a storefront archetype category to the install archetype", async () => {
-    const ctx = await resolveInstallVariantContext(fakeDb("automotive-services"));
-    expect(ctx).toEqual({ archetype: "automotive-services", regional: {} });
+    const ctx = await resolveInstallVariantContext(fakeDb({ category: "automotive-services" }));
+    expect(ctx).toEqual({ archetype: "automotive-services", regional: EMPTY_REGIONAL });
   });
 
   it("ignores a category that is not a known PROFESSION_ARCHETYPES slug", async () => {
-    const ctx = await resolveInstallVariantContext(fakeDb("totally-made-up"));
+    const ctx = await resolveInstallVariantContext(fakeDb({ category: "totally-made-up" }));
     expect(ctx.archetype).toBeNull();
   });
 
-  it("returns null archetype + empty regional profile when no storefront config exists", async () => {
-    const ctx = await resolveInstallVariantContext(fakeDb(undefined));
-    expect(ctx).toEqual({ archetype: null, regional: {} });
+  it("returns null archetype + empty regional profile when nothing is configured", async () => {
+    const ctx = await resolveInstallVariantContext(fakeDb({}));
+    expect(ctx).toEqual({ archetype: null, regional: EMPTY_REGIONAL });
   });
 
-  it("fails open to {} on a DB error", async () => {
-    const ctx = await resolveInstallVariantContext(fakeDb(null, { throws: true }));
-    expect(ctx).toEqual({});
+  it("populates the regional profile from the captured compliance scope", async () => {
+    const ctx = await resolveInstallVariantContext(
+      fakeDb({ category: "retail-goods", bc: { operatesIn: ["us"], sellsTo: ["us", "eu"], employsIn: ["us"] } }),
+    );
+    expect(ctx.regional).toEqual({
+      operatesIn: ["us"],
+      sellsTo: ["us", "eu"],
+      employsIn: ["us"],
+      dataResidency: [],
+    });
+  });
+
+  it("is resilient per-read: a storefront failure still resolves the regional profile", async () => {
+    const ctx = await resolveInstallVariantContext(
+      fakeDb({ storefrontThrows: true, bc: { sellsTo: ["eu"] } }),
+    );
+    expect(ctx.archetype).toBeNull();
+    expect(ctx.regional?.sellsTo).toEqual(["eu"]);
   });
 });

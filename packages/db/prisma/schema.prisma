@@ -2902,6 +2902,24 @@ model BusinessContext {
   // configuration on seeded obligations — not 50 seed variants (civic spec $10).
   stateCode       String?
 
+  // ─── Compliance & regulatory scope (captured at setup) ───────────────────
+  // Region is multi-dimensional: a business OPERATES in some jurisdictions,
+  // SELLS to others, and EMPLOYS in others — and different obligations key off
+  // different dimensions (sales tax & marketing consent off where customers are;
+  // employment law off where staff work; data sovereignty off where data
+  // subjects are). Each set holds PROFESSION_JURISDICTIONS slugs (us | eu | uk).
+  // Read by resolveInstallVariantContext to drive per-coworker corpus selection
+  // via the jurisdiction-basis model. Empty = undeclared → that dimension is not
+  // filtered (no regression).
+  operatesIn         String[] @default([])
+  sellsTo            String[] @default([])
+  employsIn          String[] @default([])
+  dataResidency      String[] @default([])
+  // Whether the business handles card payments (PCI-DSS, a global-basis obligation).
+  handlesCardPayments Boolean @default(false)
+  // When the operator last confirmed the compliance scope at setup.
+  complianceScopeCapturedAt DateTime?
+
   // Derived from archetype (auto-populated)
   industry    String?
   ctaType     String?
