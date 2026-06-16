@@ -11,15 +11,21 @@ import {
 } from "@/lib/decision-perspective/resolve-profession-profile";
 
 describe("normalizeVariantAxes", () => {
-  it("defaults to global / practitioner / universal when metadata is empty (seed parity)", () => {
-    expect(normalizeVariantAxes(null)).toEqual({ jurisdictions: ["global"], level: "practitioner", archetypes: ["universal"] });
-    expect(normalizeVariantAxes({})).toEqual({ jurisdictions: ["global"], level: "practitioner", archetypes: ["universal"] });
+  it("defaults to global / practitioner / universal / global-basis when metadata is empty (seed parity)", () => {
+    expect(normalizeVariantAxes(null)).toEqual({ jurisdictions: ["global"], level: "practitioner", archetypes: ["universal"], basis: "global" });
+    expect(normalizeVariantAxes({})).toEqual({ jurisdictions: ["global"], level: "practitioner", archetypes: ["universal"], basis: "global" });
   });
 
-  it("reads persisted variant axes from metadata", () => {
+  it("reads persisted variant axes from metadata (specific jurisdiction defaults basis to operating)", () => {
     expect(
       normalizeVariantAxes({ professionJurisdiction: ["us", "eu"], professionCompetencyLevel: "expert" }),
-    ).toEqual({ jurisdictions: ["us", "eu"], level: "expert", archetypes: ["universal"] });
+    ).toEqual({ jurisdictions: ["us", "eu"], level: "expert", archetypes: ["universal"], basis: "operating" });
+  });
+
+  it("reads an explicit jurisdiction basis from metadata", () => {
+    expect(
+      normalizeVariantAxes({ professionJurisdiction: ["eu"], professionJurisdictionBasis: "selling" }).basis,
+    ).toBe("selling");
   });
 
   it("falls back to global when jurisdiction array is empty", () => {

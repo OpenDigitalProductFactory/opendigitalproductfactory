@@ -36,6 +36,11 @@ export default async function StorefrontBusinessSettingsPage() {
     revenueModel: businessContext?.revenueModel ?? "",
     contactEmail: org?.email ?? suggestions?.contactEmail ?? "",
     contactPhone: org?.phone ?? suggestions?.contactPhone ?? "",
+    operatesIn: businessContext?.operatesIn ?? [],
+    sellsTo: businessContext?.sellsTo ?? [],
+    employsIn: businessContext?.employsIn ?? [],
+    dataResidency: businessContext?.dataResidency ?? [],
+    handlesCardPayments: businessContext?.handlesCardPayments ?? false,
   };
 
   const missionSuggestion = suggestMission({

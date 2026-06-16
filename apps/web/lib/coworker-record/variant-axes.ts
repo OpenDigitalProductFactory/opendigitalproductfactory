@@ -11,7 +11,7 @@
  */
 export function normalizeVariantAxes(
   metadata: unknown,
-): { jurisdictions: string[]; level: string; archetypes: string[] } {
+): { jurisdictions: string[]; level: string; archetypes: string[]; basis: string } {
   const meta = (metadata ?? {}) as Record<string, unknown>;
   const rawJur = meta.professionJurisdiction;
   const jurisdictions =
@@ -25,5 +25,11 @@ export function normalizeVariantAxes(
     Array.isArray(rawArch) && rawArch.length > 0
       ? rawArch.filter((a): a is string => typeof a === "string")
       : ["universal"];
-  return { jurisdictions, level, archetypes };
+  // Basis defaults: region-neutral pages → "global"; jurisdiction-specific pages
+  // with no declared basis → "operating" (parity with the seed default).
+  const rawBasis = meta.professionJurisdictionBasis;
+  const jurisdictionSpecific = !(jurisdictions.length === 1 && jurisdictions[0] === "global");
+  const basis =
+    typeof rawBasis === "string" ? rawBasis : jurisdictionSpecific ? "operating" : "global";
+  return { jurisdictions, level, archetypes, basis };
 }

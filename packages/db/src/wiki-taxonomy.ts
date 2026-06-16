@@ -273,6 +273,33 @@ export const PROFESSION_JURISDICTIONS = [
 export type ProfessionJurisdiction = (typeof PROFESSION_JURISDICTIONS)[number];
 
 /**
+ * Jurisdiction BASIS axis — *why* a jurisdiction-specific page applies, i.e.
+ * which dimension of the install's regional profile triggers it. Region is not
+ * one tag: an install operates in some jurisdictions, sells to others, and
+ * employs in others, and different obligations key off different dimensions:
+ *   - `global`        — applies everywhere a relevant capability exists, no
+ *                       jurisdiction filter (e.g. PCI-DSS for card handling).
+ *   - `operating`     — where the business is established (business licensing,
+ *                       corporate tax/nexus).
+ *   - `selling`       — where the customer / recipient is (sales tax & VAT,
+ *                       marketing consent — GDPR/CAN-SPAM/CASL, consumer law).
+ *   - `employing`     — where employees do the work (employment law, payroll
+ *                       tax, workers' compensation).
+ *   - `data-residency`— where data subjects are / data must reside (data
+ *                       sovereignty — concern in some regions, not others).
+ * A page omitting `professionJurisdictionBasis` defaults to `operating` when it
+ * declares a specific jurisdiction, and is treated as `global` when it does not.
+ */
+export const PROFESSION_JURISDICTION_BASES = [
+  "global",
+  "operating",
+  "selling",
+  "employing",
+  "data-residency",
+] as const;
+export type ProfessionJurisdictionBasis = (typeof PROFESSION_JURISDICTION_BASES)[number];
+
+/**
  * Competency-level axis — the depth of professional judgment a page encodes,
  * loosely aligned to SFIA's responsibility bands and O*NET job zones (used as
  * a coverage frame, never as ingested text):
@@ -441,6 +468,19 @@ export function isProfessionArchetype(
   return (
     typeof value === "string" &&
     (PROFESSION_ARCHETYPES as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Narrowing predicate for the WSID jurisdiction-basis axis. Gates
+ * `professionJurisdictionBasis` frontmatter against `PROFESSION_JURISDICTION_BASES`.
+ */
+export function isProfessionJurisdictionBasis(
+  value: unknown,
+): value is ProfessionJurisdictionBasis {
+  return (
+    typeof value === "string" &&
+    (PROFESSION_JURISDICTION_BASES as readonly string[]).includes(value)
   );
 }
 
