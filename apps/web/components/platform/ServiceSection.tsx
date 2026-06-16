@@ -2,26 +2,33 @@
 
 import { useState } from "react";
 import type { ProviderWithCredential } from "@/lib/ai-provider-types";
-
-const STATUS_COLORS = {
-  active:       "var(--dpf-success)",
-  unconfigured: "var(--dpf-warning)",
-  inactive:     "var(--dpf-muted)",
-} as const;
+import type { RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
+import { intentStyle } from "@/components/ui/report-kit/statusColors";
 
 type Props = {
   endpointType: string;
   displayName: string;
   providers: ProviderWithCredential[];
+  /** Per-provider routing eligibility, keyed by providerId. Drives the counts. */
+  eligibilityById: Record<string, RoutingEligibility>;
   children: React.ReactNode;
 };
 
-export function ServiceSection({ endpointType, displayName, providers, children }: Props) {
-  const activeCount       = providers.filter((pw) => pw.provider.status === "active").length;
-  const unconfiguredCount = providers.filter((pw) => pw.provider.status === "unconfigured").length;
-  const inactiveCount     = providers.filter((pw) => pw.provider.status === "inactive").length;
+export function ServiceSection({ endpointType, displayName, providers, eligibilityById, children }: Props) {
+  // Summarize by routing eligibility (the operator question), not raw lifecycle.
+  const states = providers.map(
+    (pw) => eligibilityById[pw.provider.providerId]?.state ?? "unconfigured",
+  );
+  const routableCount  = states.filter((s) => s === "routable").length;
+  const attentionCount = states.filter(
+    (s) => s === "needs_credentials" || s === "no_models" || s === "rate_limited",
+  ).length;
+  const offCount = states.filter(
+    (s) => s === "disabled" || s === "unconfigured" || s === "not_routable",
+  ).length;
 
-  const [expanded, setExpanded] = useState(activeCount > 0);
+  // Open the section when something is usable or needs attention.
+  const [expanded, setExpanded] = useState(routableCount > 0 || attentionCount > 0);
 
   const typeLabel = endpointType === "service"
     ? "MCP"
@@ -93,21 +100,21 @@ export function ServiceSection({ endpointType, displayName, providers, children 
           {displayName}
         </span>
 
-        {/* Status counts */}
+        {/* Eligibility counts */}
         <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
-          {activeCount > 0 && (
-            <span style={{ color: STATUS_COLORS.active }}>
-              {activeCount} active
+          {routableCount > 0 && (
+            <span style={{ color: intentStyle("success").fg }}>
+              {routableCount} routable
             </span>
           )}
-          {unconfiguredCount > 0 && (
-            <span style={{ color: STATUS_COLORS.unconfigured }}>
-              {unconfiguredCount} unconfigured
+          {attentionCount > 0 && (
+            <span style={{ color: intentStyle("warning").fg }}>
+              {attentionCount} need attention
             </span>
           )}
-          {inactiveCount > 0 && (
-            <span style={{ color: STATUS_COLORS.inactive }}>
-              {inactiveCount} inactive
+          {offCount > 0 && (
+            <span style={{ color: intentStyle("neutral").fg }}>
+              {offCount} off
             </span>
           )}
         </span>

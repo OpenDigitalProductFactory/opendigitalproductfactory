@@ -3,16 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { ProviderWithCredential, ProviderModelSummary } from "@/lib/ai-provider-types";
+import type { RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
 import { buildProviderCostView } from "@/lib/inference/ai-provider-cost-view";
 import { DataSourceBadge } from "@/components/ui/DataSourceBadge";
+import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
+import { intentStyle, resolveIntent } from "@/components/ui/report-kit/statusColors";
 import { ModelClassBadges } from "./ModelClassBadge";
 import { ProviderStatusToggle } from "./ProviderStatusToggle";
-
-const STATUS_COLORS: Record<string, string> = {
-  active:       "var(--dpf-success)",
-  unconfigured: "var(--dpf-warning)",
-  inactive:     "var(--dpf-muted)",
-};
 
 const ROUTING_DIMENSION_LABELS: Record<string, string> = {
   reasoning:            "Reasoning",
@@ -80,17 +77,18 @@ const SENSITIVITY_ABBR: Record<string, string> = {
 type Props = {
   pw: ProviderWithCredential;
   modelSummary?: ProviderModelSummary;
+  /**
+   * The single, mutually-exclusive "can routing use this now?" answer, derived
+   * server-side by deriveRoutingEligibility(). Replaces the old muddle of a
+   * status dot + "needs credentials" badge + a billing "Not connected" label.
+   */
+  eligibility: RoutingEligibility;
 };
 
-export function ServiceRow({ pw, modelSummary }: Props) {
+export function ServiceRow({ pw, modelSummary, eligibility }: Props) {
   const { provider, credential } = pw;
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
-
-  // Show actual readiness, not just the DB status field.
-  // A provider marked "active" but with no credential is NOT ready.
-  const needsCredential = provider.authMethod !== "none" && !credential;
-  const effectiveStatus = (provider.status === "active" && needsCredential) ? "needs-credentials" : provider.status;
 
   // D25 (2026-05-23): prefer the tier derived from actually-discovered models
   // over the seeded provider.capabilityTier. The seed value is frequently
@@ -98,11 +96,9 @@ export function ServiceRow({ pw, modelSummary }: Props) {
   // shouldn't render as "basic" because the provider seed never updated.
   const displayedTier = modelSummary?.derivedTier ?? provider.capabilityTier ?? null;
 
-  const STATUS_COLORS_EXT: Record<string, string> = {
-    ...STATUS_COLORS,
-    "needs-credentials": "var(--dpf-warning)",
-  };
-  const statusColor = STATUS_COLORS_EXT[effectiveStatus] ?? "var(--dpf-muted)";
+  // The status dot mirrors the eligibility badge intent so a quick scan down the
+  // left edge of the list reads the same yes/no as the badge text.
+  const statusColor = intentStyle(resolveIntent("routingEligibility", eligibility.state)).fg;
   const typeLabel   = provider.endpointType === "service" ? "MCP" : "LLM";
   const costView = buildProviderCostView({ provider, financeProfile: null, internalUsage: null });
 
@@ -130,9 +126,9 @@ export function ServiceRow({ pw, modelSummary }: Props) {
           transition: "background 0.1s",
         }}
       >
-        {/* Status dot */}
+        {/* Status dot — colored by routing eligibility */}
         <span
-          title={effectiveStatus === "needs-credentials" ? "Active but missing credentials — configure to use" : provider.status}
+          title={eligibility.reason}
           style={{
             width: 7,
             height: 7,
@@ -158,6 +154,17 @@ export function ServiceRow({ pw, modelSummary }: Props) {
           {provider.name}
         </span>
 
+        {/* Routing eligibility — the single "can routing use this now?" answer */}
+        <span title={eligibility.reason} style={{ flexShrink: 0, display: "inline-flex" }}>
+          <StatusBadge
+            domain="routingEligibility"
+            status={eligibility.state}
+            label={eligibility.label}
+            variant="soft"
+            uppercase={false}
+          />
+        </span>
+
         {/* Type badge */}
         <span
           style={{
@@ -174,23 +181,6 @@ export function ServiceRow({ pw, modelSummary }: Props) {
         >
           {typeLabel}
         </span>
-
-        {/* Credential warning */}
-        {needsCredential && (
-          <span
-            style={{
-              fontSize: 9,
-              fontWeight: 600,
-              color: "var(--dpf-warning)",
-              background: "color-mix(in srgb, var(--dpf-warning) 10%, transparent)",
-              padding: "1px 5px",
-              borderRadius: 3,
-              flexShrink: 0,
-            }}
-          >
-            needs credentials
-          </span>
-        )}
 
         {/* Model count — LLM only */}
         {provider.endpointType === "llm" && modelSummary && (
@@ -254,9 +244,10 @@ export function ServiceRow({ pw, modelSummary }: Props) {
           </span>
         )}
 
-        <span className="hidden sm:inline" style={{ color: "var(--dpf-muted)", fontSize: 10, flexShrink: 0 }}>
-          {costView.externalProviderBilling.value}
-        </span>
+        {/* External-billing reconciliation status lives in the expanded detail
+            below (clearly labeled), NOT here — it is a finance signal, not a
+            connectivity one, and rendering it beside the toggle made every
+            provider read "Not connected" (BI-1C4AAE1E). */}
 
         {/* Status toggle */}
         <span

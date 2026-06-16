@@ -14,6 +14,7 @@ const prismaMock = vi.hoisted(() => ({
   taskRunFindMany: vi.fn(),
   buildPhaseRunFindMany: vi.fn(),
   buildPhaseRunUpdateMany: vi.fn(),
+  executeRaw: vi.fn(),
   toolExecutionFindMany: vi.fn(),
   quiescenceRunFindUnique: vi.fn(),
   quiescenceRunUpdate: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("@dpf/db", () => ({
       findMany: (...args: unknown[]) => prismaMock.buildPhaseRunFindMany(...args),
       updateMany: (...args: unknown[]) => prismaMock.buildPhaseRunUpdateMany(...args),
     },
+    $executeRaw: (...args: unknown[]) => prismaMock.executeRaw(...args),
     toolExecution: {
       findMany: (...args: unknown[]) => prismaMock.toolExecutionFindMany(...args),
     },
@@ -68,6 +70,7 @@ beforeEach(() => {
   prismaMock.taskRunFindMany.mockResolvedValue([]);
   prismaMock.buildPhaseRunFindMany.mockResolvedValue([]);
   prismaMock.buildPhaseRunUpdateMany.mockResolvedValue({ count: 0 });
+  prismaMock.executeRaw.mockResolvedValue(0);
   prismaMock.toolExecutionFindMany.mockResolvedValue([]);
   prismaMock.quiescenceRunFindUnique.mockResolvedValue(null);
   prismaMock.quiescenceRunUpdate.mockResolvedValue({});
@@ -286,6 +289,7 @@ describe("reconcileTerminalBuildPhaseRuns", () => {
     const now = new Date("2026-05-31T19:30:00.000Z");
     prismaMock.buildPhaseRunUpdateMany.mockResolvedValueOnce({ count: 3 });
 
+    // count = terminal/abandoned updateMany (3) + advanced-past correlated UPDATE (0).
     await expect(reconcileTerminalBuildPhaseRuns(now)).resolves.toBe(3);
 
     expect(prismaMock.buildPhaseRunUpdateMany).toHaveBeenCalledWith({
@@ -300,6 +304,20 @@ describe("reconcileTerminalBuildPhaseRuns", () => {
       },
       data: { completedAt: now },
     });
+  });
+
+  it("also closes runs the build advanced past (phase ≠ build.phase) and sums both", async () => {
+    const now = new Date("2026-06-16T01:30:00.000Z");
+    prismaMock.buildPhaseRunUpdateMany.mockResolvedValueOnce({ count: 1 });
+    // The correlated UPDATE closed 2 advance-orphans (e.g. a "build" run whose
+    // build had moved on to "review") — the live blocker class from 2026-06-16.
+    prismaMock.executeRaw.mockResolvedValueOnce(2);
+
+    await expect(reconcileTerminalBuildPhaseRuns(now)).resolves.toBe(3);
+
+    // The advance-past close runs as a correlated UPDATE, threading `now`.
+    expect(prismaMock.executeRaw).toHaveBeenCalledOnce();
+    expect(prismaMock.executeRaw.mock.calls[0]).toContain(now);
   });
 });
 
