@@ -101,6 +101,33 @@ jobs:
       - name: Run guard
         run: node scripts/check-bundle-boundaries.mjs
 
+  ux-fit-gate:
+    name: UX-Fit Gate
+    runs-on: ubuntu-latest
+    # Only meaningful on PRs — it diffs against the PR base and reads the PR body.
+    if: github.event_name == 'pull_request'
+    # BI-65DEE968. The un-skippable UX-fit / cognitive-load gate. A UI-impacting
+    # diff (new user-facing form controls, numeric inputs, or routes under
+    # apps/web) must carry a recorded UX-fit decision — a `UX-Fit-Decision:`
+    # trailer in a commit message or the PR body. AGENTS.md §12/§16/§17 had the
+    # rule; nothing enforced it, so #2004 shipped a raw "Context window: 22000
+    # tokens" input a non-technical user can't answer. Surface-agnostic: Claude
+    # Code, Codex, Grok, and Build Studio all land via PR, so all are caught — it
+    # reads the evidence, never which surface produced it (AGENTS.md §17).
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Run UX-fit gate
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/check-ux-fit-decision.mjs
+
   janitor-tests:
     name: Janitor Tests
     runs-on: ubuntu-latest
