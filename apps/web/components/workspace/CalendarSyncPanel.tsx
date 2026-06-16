@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
+import { confirmDialog } from "@/components/ui/Dialog";
 import { useRouter } from "next/navigation";
 import {
   addICalSubscription,
@@ -65,8 +66,16 @@ export function CalendarSyncPanel() {
     });
   }
 
-  function handleRemove() {
-    if (!confirm("Remove external calendar subscription and all imported events?")) return;
+  async function handleRemove() {
+    if (
+      !(await confirmDialog({
+        title: "Remove calendar",
+        message: "Remove external calendar subscription and all imported events?",
+        tone: "danger",
+        confirmLabel: "Remove",
+      }))
+    )
+      return;
     startTransition(async () => {
       const result = await removeICalSubscription();
       if (result.success) {
