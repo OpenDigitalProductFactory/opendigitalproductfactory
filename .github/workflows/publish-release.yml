@@ -1,0 +1,92 @@
+name: Publish GitHub Release
+
+# Promotes each stable version tag (vX.Y.Z) into a published GitHub Release.
+#
+# The maintainer already stamps tags periodically when a build is stable
+# (git describe is the canonical platform version - see version.json and
+# apps/web/lib/platform/version.ts). This workflow turns those tags into
+# official, dated Release entries. Every Release automatically carries the
+# source archives GitHub generates (.zip / .tar.gz), which are downloadable
+# and counted per-asset - so the project finally accrues a real
+# downloads-over-time series instead of relying on uncounted git clones.
+#
+# Docker image publishing is handled separately by publish-image.yml; this
+# workflow is source-distribution only and attaches no custom build assets.
+#
+# Triggers:
+#   - push of a tag matching v*  -> release that tag automatically.
+#   - workflow_dispatch          -> backfill a specific existing tag
+#                                    (defaults to the most recent tag), so a
+#                                    notable pre-existing tag such as v6.4.0
+#                                    can be turned into a Release on demand
+#                                    without re-tagging.
+#
+# Only GitHub built-ins are used (actions/checkout + the preinstalled gh
+# CLI), so no third-party action needs the external-tool evaluation gate.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release (e.g. v6.4.0). Empty = most recent tag."
+        required: false
+        default: ""
+
+# Least-privilege default; the publish job opts up to contents: write.
+permissions:
+  contents: read
+
+concurrency:
+  group: github-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history + tags so git describe / tag verification work.
+          fetch-depth: 0
+
+      - name: Resolve target tag
+        id: resolve
+        env:
+          DISPATCH_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          elif [ -n "${DISPATCH_TAG}" ]; then
+            tag="${DISPATCH_TAG}"
+          else
+            tag="$(git describe --tags --abbrev=0)"
+          fi
+          if ! git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "::error::Tag '${tag}' does not exist in this repository."
+            exit 1
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: ${tag}"
+
+      - name: Publish release if it does not already exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists - nothing to do (idempotent)."
+            exit 0
+          fi
+          gh release create "${TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${TAG}" \
+            --generate-notes \
+            --verify-tag
+          echo "Published GitHub Release ${TAG}."
