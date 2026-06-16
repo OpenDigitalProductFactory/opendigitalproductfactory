@@ -207,7 +207,7 @@
     {
       "professionKey": "finance",
       "label": "Finance",
-      "roles": ["finance-agent", "investment-analysis-agent", "portfolio-rationalization-agent"],
+      "roles": ["finance-agent", "finance-controller", "investment-analysis-agent", "portfolio-rationalization-agent"],
       "contextSlugs": ["finance"],
       "sources": [
         {
@@ -336,7 +336,7 @@
     {
       "professionKey": "legal-compliance",
       "label": "Legal & Compliance",
-      "roles": ["licensing-specialist", "policy-specialist", "policy-enforcement-agent"],
+      "roles": ["compliance-officer", "licensing-specialist", "policy-specialist", "policy-enforcement-agent"],
       "contextSlugs": ["compliance"],
       "sources": [
         {
@@ -449,7 +449,8 @@
         "monitoring-agent",
         "incident-detection-agent",
         "incident-resolution-agent",
-        "service-support-agent"
+        "service-support-agent",
+        "dispatcher"
       ],
       "contextSlugs": ["engineering-flow"],
       "sources": [
@@ -521,6 +522,7 @@
       "label": "Customer Success",
       "roles": [
         "customer-advisor",
+        "storefront-advisor",
         "consumer-onboarding-agent",
         "order-fulfillment-agent",
         "estate-specialist"
@@ -639,7 +641,7 @@
     {
       "professionKey": "documentation-content",
       "label": "Documentation & Content",
-      "roles": ["documentation-specialist"],
+      "roles": ["documentation-specialist", "doc-specialist"],
       "contextSlugs": ["engineering-flow"],
       "sources": [
         {

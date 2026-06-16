@@ -11,7 +11,7 @@
 import { prisma } from "@dpf/db";
 import {
   PROFESSION_REGISTRY,
-  findProfessionFamily,
+  findProfessionFamilyForAgentIdentity,
   professionProfileId,
 } from "@/lib/decision-perspective/resolve-profession-profile";
 import { normalizeVariantAxes } from "./variant-axes";
@@ -135,13 +135,13 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
   // Distinct families present across the roster → their profile ids for defer rates.
   const presentFamilies = new Set<string>();
   for (const agent of agents) {
-    const fam = findProfessionFamily(agent.slugId ?? agent.agentId) ?? findProfessionFamily(agent.agentId);
+    const fam = findProfessionFamilyForAgentIdentity(agent);
     if (fam) presentFamilies.add(fam.professionKey);
   }
   const deferRates = await loadDeferRates([...presentFamilies].map(professionProfileId));
 
   const rows: RosterRow[] = agents.map((agent) => {
-    const fam = findProfessionFamily(agent.slugId ?? agent.agentId) ?? findProfessionFamily(agent.agentId);
+    const fam = findProfessionFamilyForAgentIdentity(agent);
     const cov = fam ? coverage.get(fam.professionKey) : undefined;
     const checklistSize = fam?.coverageChecklist.length ?? 0;
     const coveragePct =

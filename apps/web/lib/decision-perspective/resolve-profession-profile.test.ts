@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import {
   findProfessionFamily,
+  findProfessionFamilyForAgentIdentity,
   professionKeyFromRole,
   professionProfileId,
   PROFESSION_REGISTRY,
@@ -73,6 +74,16 @@ describe("findProfessionFamily", () => {
   it("returns null for an unregistered identifier", () => {
     expect(findProfessionFamily("totally-unknown-agent")).toBeNull();
   });
+
+  it("finds a family from the seeded Agent identity tuple", () => {
+    const family = findProfessionFamilyForAgentIdentity({
+      agentId: "AGT-ORCH-000",
+      slugId: null,
+      name: "coo-orchestrator",
+    });
+
+    expect(family?.professionKey).toBe("strategy-executive");
+  });
 });
 
 describe("professionKeyFromRole", () => {
@@ -110,6 +121,18 @@ describe("resolveProfessionProfile", () => {
     expect(result?.profileId).toBe("wsid-data-architect");
   });
 
+  it("resolves registry-seeded Agent rows by agent_name when agentId is semantic", async () => {
+    const db = fakeDb("wsid-strategy-executive");
+    const result = await resolveProfessionProfile({
+      db,
+      agentId: "AGT-ORCH-000",
+      agentName: "coo-orchestrator",
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.profileId).toBe("wsid-strategy-executive");
+  });
+
   it("returns null for an unbound identifier", async () => {
     const db = emptyDb();
     const result = await resolveProfessionProfile({ db, agentId: "totally-unknown-agent" });
@@ -143,16 +166,12 @@ describe("profession registry coverage lint", () => {
     agents: Array<{ agent_name: string; status?: string }>;
   };
 
-  const activeAgents = agentRegistryData.agents.filter(
-    (a) => !a.status || a.status === "active",
-  );
-
   const allRegisteredRoles = new Set(
     PROFESSION_REGISTRY.families.flatMap((f) => f.roles),
   );
 
-  it("every active registry agent maps to exactly one profession family", () => {
-    const unmapped = activeAgents.filter((a) => !allRegisteredRoles.has(a.agent_name));
+  it("every registry agent seeded into Agent maps to exactly one profession family", () => {
+    const unmapped = agentRegistryData.agents.filter((a) => !allRegisteredRoles.has(a.agent_name));
     expect(unmapped, `Unmapped agents: ${unmapped.map((a) => a.agent_name).join(", ")}`).toHaveLength(0);
   });
 
@@ -192,5 +211,16 @@ describe("profession registry coverage lint", () => {
       }
     }
     expect(invalid).toHaveLength(0);
+  });
+
+  it("every registered profession family has at least one seeded corpus page", () => {
+    const professionsDir = join(__dirname, "../../../../docs/professions");
+    const emptyFamilies = PROFESSION_REGISTRY.families.filter((family) => {
+      const wikiDir = join(professionsDir, family.professionKey, "wiki");
+      if (!existsSync(wikiDir) || !statSync(wikiDir).isDirectory()) return true;
+      return readdirSync(wikiDir).filter((entry) => entry.endsWith(".md") && !entry.startsWith("README")).length === 0;
+    });
+
+    expect(emptyFamilies.map((f) => f.professionKey)).toHaveLength(0);
   });
 });

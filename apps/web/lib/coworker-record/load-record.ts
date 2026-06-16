@@ -16,7 +16,7 @@
 import { prisma } from "@dpf/db";
 import { getAgentGaidMap } from "@/lib/identity/principal-linking";
 import {
-  findProfessionFamily,
+  findProfessionFamilyForAgentIdentity,
   resolveProfessionProfile,
   professionProfileId,
   type ProfessionFamily,
@@ -114,8 +114,7 @@ export async function loadCoworkerRecord(
   const agent = await loadAgentWithRelations(decoded);
   if (!agent) return null;
 
-  const family = findProfessionFamily(agent.slugId ?? agent.agentId)
-    ?? findProfessionFamily(agent.agentId);
+  const family = findProfessionFamilyForAgentIdentity(agent);
 
   const profileId = family ? professionProfileId(family.professionKey) : null;
 
@@ -127,7 +126,9 @@ export async function loadCoworkerRecord(
           // narrow injected-client type (which tests satisfy with a fake); the
           // runtime shape matches exactly.
           db: prisma as unknown as ProfessionProfileClient,
-          agentId: agent.slugId ?? agent.agentId,
+          agentId: agent.agentId,
+          agentName: agent.name,
+          slugId: agent.slugId,
         }).catch(() => null)
       : Promise.resolve(null),
     family ? loadProfessionCoverage(family.professionKey).catch(() => null) : Promise.resolve(null),

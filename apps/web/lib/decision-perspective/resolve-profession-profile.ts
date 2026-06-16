@@ -27,6 +27,13 @@ export type ProfessionRegistry = {
 
 export const PROFESSION_REGISTRY = professionRegistryData as ProfessionRegistry;
 
+export type ProfessionAgentIdentity = {
+  agentId?: string | null;
+  slugId?: string | null;
+  roleSlug?: string | null;
+  name?: string | null;
+};
+
 // ─── DB client surface ───────────────────────────────────────────────────────
 
 type DbProfessionProfile = {
@@ -68,6 +75,36 @@ export function findProfessionFamily(agentIdOrSlug: string): ProfessionFamily | 
   return PROFESSION_REGISTRY.families.find((f) => f.roles.includes(agentIdOrSlug)) ?? null;
 }
 
+function professionIdentityCandidates(identity: ProfessionAgentIdentity): string[] {
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+
+  for (const raw of [identity.roleSlug, identity.slugId, identity.agentId, identity.name]) {
+    const value = raw?.trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    candidates.push(value);
+  }
+
+  return candidates;
+}
+
+/**
+ * Resolve a profession family from the Agent identity tuple persisted by the
+ * seed. Registry-driven agents use AGT-* as Agent.agentId and their role slug
+ * as Agent.name; hardcoded coworkers usually use slugId. Keeping that fallback
+ * in one helper prevents roster/detail pages from drifting apart.
+ */
+export function findProfessionFamilyForAgentIdentity(
+  identity: ProfessionAgentIdentity,
+): ProfessionFamily | null {
+  for (const candidate of professionIdentityCandidates(identity)) {
+    const family = findProfessionFamily(candidate);
+    if (family) return family;
+  }
+  return null;
+}
+
 /**
  * Return the professionKey for a given agent identifier, or `null` when the
  * agent is not registered in any family. Pure function — no DB access needed.
@@ -105,12 +142,16 @@ export function professionProfileId(professionKey: string): string {
 export async function resolveProfessionProfile(input: {
   db: ProfessionProfileClient;
   agentId?: string;
+  agentName?: string | null;
   roleSlug?: string;
+  slugId?: string | null;
 }): Promise<DecisionPerspectiveProfile | null> {
-  const key = input.agentId ?? input.roleSlug;
-  if (!key) return null;
-
-  const family = findProfessionFamily(key);
+  const family = findProfessionFamilyForAgentIdentity({
+    agentId: input.agentId,
+    name: input.agentName,
+    roleSlug: input.roleSlug,
+    slugId: input.slugId,
+  });
   if (!family) return null;
 
   const profileId = professionProfileId(family.professionKey);
