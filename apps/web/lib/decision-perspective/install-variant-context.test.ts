@@ -20,7 +20,7 @@ function fakeDb(category: string | null | undefined, opts: { throws?: boolean } 
 describe("resolveInstallVariantContext", () => {
   it("maps a storefront archetype category to the install archetype", async () => {
     const ctx = await resolveInstallVariantContext(fakeDb("automotive-services"));
-    expect(ctx).toEqual({ archetype: "automotive-services", jurisdiction: null });
+    expect(ctx).toEqual({ archetype: "automotive-services", regional: {} });
   });
 
   it("ignores a category that is not a known PROFESSION_ARCHETYPES slug", async () => {
@@ -28,9 +28,9 @@ describe("resolveInstallVariantContext", () => {
     expect(ctx.archetype).toBeNull();
   });
 
-  it("returns null archetype when no storefront config exists", async () => {
+  it("returns null archetype + empty regional profile when no storefront config exists", async () => {
     const ctx = await resolveInstallVariantContext(fakeDb(undefined));
-    expect(ctx).toEqual({ archetype: null, jurisdiction: null });
+    expect(ctx).toEqual({ archetype: null, regional: {} });
   });
 
   it("fails open to {} on a DB error", async () => {

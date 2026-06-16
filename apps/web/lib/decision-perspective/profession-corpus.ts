@@ -99,17 +99,57 @@ export type ProfessionCorpusClient = {
 };
 
 /**
+ * The install's regional profile. Region is not one tag: an install operates in
+ * some jurisdictions, sells to others, and employs in others — and different
+ * obligations key off different dimensions (sales-tax/marketing-consent off
+ * where the customer is; employment law off where employees work; data
+ * sovereignty off where data subjects are). Each set lists jurisdiction slugs
+ * (PROFESSION_JURISDICTIONS). An empty/omitted set means "not declared" and does
+ * NOT filter that dimension (no regression).
+ */
+export type InstallRegionalProfile = {
+  /** Where the business is established — business licensing, corporate tax/nexus. */
+  operatesIn?: string[];
+  /** Where customers/recipients are — sales tax/VAT, marketing consent, consumer law. */
+  sellsTo?: string[];
+  /** Where employees do the work — employment law, payroll tax, workers' comp. */
+  employsIn?: string[];
+  /** Where data subjects are / data must reside — data sovereignty. */
+  dataResidency?: string[];
+};
+
+/**
  * The install's resolved variant context. Selects which corpus slice a coworker
  * is served. `archetype` defaults to `"universal"` (an install with no business
  * archetype gets only archetype-neutral pages — never another archetype's
- * craft). `jurisdiction` is nullable: `null` means "region not declared yet" and
- * does NOT filter (preserves the full corpus); a concrete value serves
- * global + that jurisdiction and shields the coworker from conflicting doctrine.
+ * craft). `regional` carries the multi-dimensional jurisdiction profile; a
+ * jurisdiction-specific page is served only when the install's set FOR THAT
+ * PAGE'S BASIS includes the page's jurisdiction. `global`-basis pages (e.g.
+ * PCI-DSS) always apply.
  */
 export type ProfessionCorpusInstallContext = {
   archetype?: string | null;
-  jurisdiction?: string | null;
+  regional?: InstallRegionalProfile;
 };
+
+/** Normalised variant axes for a single page (output of normalizeVariantAxes). */
+type PageVariantAxes = { archetypes: string[]; jurisdictions: string[]; basis: string };
+
+/** The install's declared jurisdiction set for a page's basis (empty = undeclared). */
+function installSetForBasis(regional: InstallRegionalProfile, basis: string): string[] {
+  switch (basis) {
+    case "operating":
+      return regional.operatesIn ?? [];
+    case "selling":
+      return regional.sellsTo ?? [];
+    case "employing":
+      return regional.employsIn ?? [];
+    case "data-residency":
+      return regional.dataResidency ?? [];
+    default:
+      return []; // "global" is handled before this is consulted
+  }
+}
 
 // ─── Tunables ─────────────────────────────────────────────────────────────────
 
@@ -155,37 +195,40 @@ type ScoredRow = WikiPageCorpusRow & {
 };
 
 /**
+ * Does this page's jurisdiction apply to the install, given the page's basis?
+ * Region-neutral pages (global basis, or `global` in the jurisdiction list)
+ * always apply. Otherwise the page's jurisdiction must intersect the install's
+ * declared set FOR THAT BASIS — so a US business selling into the EU still gets
+ * EU marketing-consent doctrine (via `sellsTo`) even though it operates only in
+ * the US. An UNDECLARED install dimension (empty set) does not filter (no
+ * regression for installs that haven't captured that part of their profile).
+ */
+function jurisdictionEligible(axes: PageVariantAxes, regional: InstallRegionalProfile): boolean {
+  if (axes.basis === "global" || axes.jurisdictions.includes(JURISDICTION_NEUTRAL)) return true;
+  const installSet = installSetForBasis(regional, axes.basis);
+  if (installSet.length === 0) return true; // dimension not declared → don't filter
+  return axes.jurisdictions.some((j) => installSet.includes(j));
+}
+
+/**
  * Is this page eligible to serve the given install? Archetype-specific pages are
  * served ONLY to a matching install (a retail install never sees HVAC craft);
- * jurisdiction is filtered only when the install declares a concrete region
- * (otherwise the full corpus is preserved — no regression for installs that
- * haven't set a region yet).
+ * jurisdiction-specific pages are filtered per their basis against the install's
+ * regional profile (see {@link jurisdictionEligible}).
  */
 export function pageEligibleForInstall(
-  axes: { archetypes: string[]; jurisdictions: string[] },
+  axes: PageVariantAxes,
   install: ProfessionCorpusInstallContext,
 ): boolean {
   const installArch = install.archetype || ARCHETYPE_NEUTRAL;
   const archOk =
     axes.archetypes.includes(ARCHETYPE_NEUTRAL) || axes.archetypes.includes(installArch);
 
-  const installJur =
-    install.jurisdiction && install.jurisdiction !== JURISDICTION_NEUTRAL
-      ? install.jurisdiction
-      : null;
-  const jurOk =
-    installJur === null
-      ? true
-      : axes.jurisdictions.includes(JURISDICTION_NEUTRAL) || axes.jurisdictions.includes(installJur);
-
-  return archOk && jurOk;
+  return archOk && jurisdictionEligible(axes, install.regional ?? {});
 }
 
 /** Ranking bonus for a page that SPECIFICALLY matches the install's variant. */
-function variantBoostFor(
-  axes: { archetypes: string[]; jurisdictions: string[] },
-  install: ProfessionCorpusInstallContext,
-): number {
+function variantBoostFor(axes: PageVariantAxes, install: ProfessionCorpusInstallContext): number {
   let boost = 0;
   if (
     install.archetype &&
@@ -194,12 +237,10 @@ function variantBoostFor(
   ) {
     boost += 3;
   }
-  if (
-    install.jurisdiction &&
-    install.jurisdiction !== JURISDICTION_NEUTRAL &&
-    axes.jurisdictions.includes(install.jurisdiction)
-  ) {
-    boost += 3;
+  // Jurisdiction boost: the page specifically matches the install's set for its basis.
+  if (axes.basis !== "global" && !axes.jurisdictions.includes(JURISDICTION_NEUTRAL)) {
+    const installSet = installSetForBasis(install.regional ?? {}, axes.basis);
+    if (axes.jurisdictions.some((j) => installSet.includes(j))) boost += 3;
   }
   return boost;
 }

@@ -19,9 +19,11 @@ import {
   PROFESSION_ARCHETYPES,
   PROFESSION_COMPETENCY_LEVELS,
   PROFESSION_JURISDICTIONS,
+  PROFESSION_JURISDICTION_BASES,
   isProfessionArchetype,
   isProfessionCompetencyLevel,
   isProfessionJurisdiction,
+  isProfessionJurisdictionBasis,
 } from "./wiki-taxonomy";
 
 const PROFESSIONS_DIR = join(__dirname, "..", "..", "..", "docs", "professions");
@@ -918,6 +920,21 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
     retrievedAt: "2026-06-16",
   },
 
+  // ── Jurisdiction-basis exemplars (WSID regional-basis model) ──
+  // global basis: PCI DSS applies wherever cards are handled (card-brand
+  // contract, not a regional law).
+  "wikipedia/pci-dss": {
+    sourceType: "reference",
+    title: "Payment Card Industry Data Security Standard",
+    url: "https://en.wikipedia.org/wiki/Payment_Card_Industry_Data_Security_Standard",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "PCI DSS is a global data security standard regulating how entities store, " +
+      "process, and transmit cardholder data; enforced by the card brands by " +
+      "contract, not by a regional government — it applies everywhere cards are handled.",
+    retrievedAt: "2026-06-16",
+  },
+
   // ── HR / people-ops family (WSID wave 7) — jurisdiction split us vs eu ──
   // SHRM BASK is licensed (cluster names used as facts, checklist-only). EEOC
   // and EU Your-Europe are public-domain/open-reuse. US OPM/HHS interview
@@ -1615,7 +1632,7 @@ function tallyVariantCoverage(
   jurisdictionCoverage: Record<string, number>,
   competencyCoverage: Record<string, number>,
   archetypeCoverage: Record<string, number>,
-): { jurisdictions: string[]; competencyLevel: string; archetypes: string[] } {
+): { jurisdictions: string[]; competencyLevel: string; archetypes: string[]; basis: string } {
   const jurisdictions =
     frontmatter.professionJurisdiction && frontmatter.professionJurisdiction.length > 0
       ? frontmatter.professionJurisdiction
@@ -1668,11 +1685,29 @@ function tallyVariantCoverage(
     archetypeCoverage[arch] = (archetypeCoverage[arch] ?? 0) + 1;
   }
 
+  // Jurisdiction basis — which dimension of the install's regional profile
+  // triggers this page. Default: "global" for region-neutral pages, "operating"
+  // for jurisdiction-specific pages that don't declare a basis.
+  const jurisdictionSpecific = !(jurisdictions.length === 1 && jurisdictions[0] === "global");
+  const basis =
+    frontmatter.professionJurisdictionBasis ?? (jurisdictionSpecific ? "operating" : "global");
+  if (!isProfessionJurisdictionBasis(basis)) {
+    throw new Error(
+      "[seedProfessionCorpus] page " +
+        slug +
+        ' declares unknown professionJurisdictionBasis "' +
+        basis +
+        '". Allowed: ' +
+        PROFESSION_JURISDICTION_BASES.join(", ") +
+        ".",
+    );
+  }
+
   // Return the normalized axes so the caller can persist them into
   // WikiPage.metadata for runtime coverage queries (HRIS management surface,
   // and the future gate↔material variant binding). The seed is the single
   // place that has already validated these against the closed registries.
-  return { jurisdictions, competencyLevel: level, archetypes };
+  return { jurisdictions, competencyLevel: level, archetypes, basis };
 }
 
 /**
@@ -1739,7 +1774,7 @@ export async function seedProfessionCorpus(
     const slug = deriveCorpusSlug(file);
     const status = frontmatter.status ?? "published";
 
-    const { jurisdictions, competencyLevel, archetypes } = tallyVariantCoverage(
+    const { jurisdictions, competencyLevel, archetypes, basis } = tallyVariantCoverage(
       slug,
       frontmatter,
       jurisdictionCoverage,
@@ -1751,12 +1786,13 @@ export async function seedProfessionCorpus(
 
     // Persist the validated WSID variant axes into WikiPage.metadata so the
     // HRIS coverage helper, the runtime retrieval service, and the gate variant
-    // binding can query jurisdiction/competency/archetype at runtime without
-    // re-parsing the corpus files.
+    // binding can query jurisdiction/competency/archetype/basis at runtime
+    // without re-parsing the corpus files.
     const metadata = {
       professionJurisdiction: jurisdictions,
       professionCompetencyLevel: competencyLevel,
       professionArchetype: archetypes,
+      professionJurisdictionBasis: basis,
     };
 
     const upserted = (await upsertWikiPage(prisma, {

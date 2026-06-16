@@ -19,9 +19,11 @@ export type InstallVariantClient = {
 
 /**
  * Resolve the install's archetype (from the storefront's archetype category,
- * already a PROFESSION_ARCHETYPES slug) and region. Region is not yet a
- * first-class install setting, so `jurisdiction` stays `null` (unfiltered) until
- * setup notation captures it.
+ * already a PROFESSION_ARCHETYPES slug) and regional profile. The multi-set
+ * regional profile (operatesIn / sellsTo / employsIn / dataResidency) is NOT yet
+ * a first-class install setting, so it resolves empty — every jurisdiction-
+ * specific page stays eligible (no regression) until setup captures the
+ * business's operating / selling / employing jurisdictions.
  */
 export async function resolveInstallVariantContext(
   db: InstallVariantClient,
@@ -33,7 +35,7 @@ export async function resolveInstallVariantContext(
     const category = sf?.archetype?.category ?? null;
     return {
       archetype: category && isProfessionArchetype(category) ? category : null,
-      jurisdiction: null,
+      regional: {},
     };
   } catch {
     return {};
