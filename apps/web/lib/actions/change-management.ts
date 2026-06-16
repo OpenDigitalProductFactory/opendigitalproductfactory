@@ -5,6 +5,11 @@ import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import * as crypto from "crypto";
+import {
+  assertValidTransition,
+  timestampFieldForStatus,
+  makeRfcId,
+} from "@/lib/change-management/lifecycle";
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
@@ -26,49 +31,9 @@ async function requireOpsAccess(): Promise<string> {
 // ─── RFC ID Generation ──────────────────────────────────────────────────────
 
 export async function generateRfcId(): Promise<string> {
-  const year = new Date().getFullYear();
-  const hex = crypto.randomBytes(4).toString("hex").toUpperCase();
-  return `RFC-${year}-${hex}`;
-}
-
-// ─── Status Transition Map ──────────────────────────────────────────────────
-
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  draft: ["submitted", "cancelled"],
-  submitted: ["assessed", "rejected"],
-  assessed: ["approved", "rejected"],
-  approved: ["scheduled", "cancelled"],
-  scheduled: ["in-progress", "cancelled"],
-  "in-progress": ["completed", "rolled-back"],
-  completed: ["closed"],
-  "rolled-back": ["closed"],
-  rejected: ["closed"],
-  cancelled: ["closed"],
-};
-
-function assertValidTransition(currentStatus: string, targetStatus: string): void {
-  const allowed = VALID_TRANSITIONS[currentStatus];
-  if (!allowed || !allowed.includes(targetStatus)) {
-    throw new Error(
-      `Invalid transition: cannot move from "${currentStatus}" to "${targetStatus}". ` +
-        `Allowed transitions from "${currentStatus}": ${allowed?.join(", ") ?? "none"}`
-    );
-  }
-}
-
-// ─── Timestamp field for each status ────────────────────────────────────────
-
-function timestampFieldForStatus(status: string): string | null {
-  const map: Record<string, string> = {
-    submitted: "submittedAt",
-    assessed: "assessedAt",
-    approved: "approvedAt",
-    scheduled: "scheduledAt",
-    "in-progress": "startedAt",
-    completed: "completedAt",
-    closed: "closedAt",
-  };
-  return map[status] ?? null;
+  // Delegates to the shared lifecycle module (single source of truth) while
+  // preserving the async server-action surface this module exposes.
+  return makeRfcId();
 }
 
 // ─── Create RFC ─────────────────────────────────────────────────────────────

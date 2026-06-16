@@ -757,6 +757,7 @@ model ChangeRequest {
   approvedBy             EmployeeProfile?  @relation("ChangeApprovedBy", fields: [approvedById], references: [id])
   executedBy             EmployeeProfile?  @relation("ChangeExecutedBy", fields: [executedById], references: [id])
   deploymentWindow       DeploymentWindow? @relation(fields: [deploymentWindowId], references: [id])
+  selfUpgradeRun         SelfUpgradeRun?   @relation("SelfUpgradeChangeRecord")
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
@@ -5478,6 +5479,13 @@ model SelfUpgradeRun {
   // the summary survives the process restart the swap triggers.
   impactSummaryId       String?
   impactSummary         UpgradeImpactSummary? @relation(fields: [impactSummaryId], references: [id])
+
+  // The change-management record (RFC) this self-upgrade is registered as. Every
+  // self-upgrade is mirrored into the change register as an ITIL standard change
+  // so it is auditable for root-cause analysis. Nullable: no-op skipped ticks
+  // never open a record. See apps/web/lib/self-upgrade/change-record.ts.
+  changeRequestId       String?               @unique
+  changeRequest         ChangeRequest?        @relation("SelfUpgradeChangeRecord", fields: [changeRequestId], references: [id])
 
   @@index([status, createdAt])
   @@index([targetSha])
