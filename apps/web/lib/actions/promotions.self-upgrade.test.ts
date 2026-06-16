@@ -48,6 +48,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   createRun: vi.fn(),
   failRun: vi.fn(),
   getLatestRun: vi.fn(),
+  getLatestSucceededRun: vi.fn(),
 }));
 
 vi.mock("@/lib/self-upgrade/impact", () => ({
@@ -144,7 +145,7 @@ import { prisma } from "@dpf/db";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
-import { createRun, getLatestRun } from "@/lib/self-upgrade/run-store";
+import { createRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
 import { getCurrentImpactSummaryId } from "@/lib/self-upgrade/impact";
 import { isUpgradeWindowOpen, nextUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
@@ -197,6 +198,7 @@ beforeEach(() => {
   vi.mocked(can).mockReturnValue(true);
   vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
   vi.mocked(getLatestRun).mockResolvedValue(null);
+  vi.mocked(getLatestSucceededRun).mockResolvedValue(null);
   vi.mocked(createRun).mockResolvedValue({
     ...mockRun,
     runId: "SUR-QUEUED1",
@@ -346,6 +348,61 @@ describe("getSelfUpgradeStatus", () => {
 
     expect(result.isFresh).toBe(true);
     expect(result.latestRun).toBeNull();
+  });
+
+  // Merge-mode regression: the deployed stamp is the merge-commit identity that
+  // CONTAINS but never EQUALS the upstream target, so strict deployedSha==target
+  // is a permanent false "Update available". The banner must instead read fresh
+  // off the upstream lineage marker (latest succeeded run's targetSha), agreeing
+  // with the worker skip-gate and the impact summary.
+  it("returns isFresh=true via the lineage marker when the deployed merge-commit differs from the target", async () => {
+    const UPSTREAM = "802224ba8308c641c3211e38e4d2036d8b11655f";
+    const MERGE_COMMIT = "d7c7b200bcae825c454617ffe36a5353c2318e86";
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
+    // Running image identity is the merge commit, NOT the upstream target.
+    vi.mocked(getDeployedSha).mockResolvedValue(MERGE_COMMIT);
+    vi.mocked(resolveTargetSha).mockResolvedValue(UPSTREAM);
+    // The latest succeeded run absorbed exactly that upstream target.
+    vi.mocked(getLatestSucceededRun).mockResolvedValue({
+      ...mockRun,
+      targetSha: UPSTREAM,
+      deployedSha: MERGE_COMMIT,
+    } as never);
+    // Real comparator semantics: equal-SHA ⇒ true. deployed≠target ⇒ false;
+    // lineageMarker==target ⇒ true.
+    vi.mocked(isShaFresh).mockImplementation(
+      (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase(),
+    );
+
+    const result = await getSelfUpgradeStatus();
+
+    expect(result.isFresh).toBe(true);
+    expect(result.deployedSha).toBe(MERGE_COMMIT);
+    expect(result.targetSha).toBe(UPSTREAM);
+  });
+
+  it("returns isFresh=false when the lineage marker is still behind the target (genuine update)", async () => {
+    const NEW_TARGET = "ad7e7249cdc1e0a23e43c10b7266ed78457971f5";
+    const OLD_UPSTREAM = "802224ba8308c641c3211e38e4d2036d8b11655f";
+    const MERGE_COMMIT = "d7c7b200bcae825c454617ffe36a5353c2318e86";
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
+    vi.mocked(getDeployedSha).mockResolvedValue(MERGE_COMMIT);
+    vi.mocked(resolveTargetSha).mockResolvedValue(NEW_TARGET);
+    // Last succeeded run absorbed an OLDER upstream than the now-resolved target.
+    vi.mocked(getLatestSucceededRun).mockResolvedValue({
+      ...mockRun,
+      targetSha: OLD_UPSTREAM,
+      deployedSha: MERGE_COMMIT,
+    } as never);
+    vi.mocked(isShaFresh).mockImplementation(
+      (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase(),
+    );
+
+    const result = await getSelfUpgradeStatus();
+
+    expect(result.isFresh).toBe(false);
   });
 
   it("returns isFresh=false and skips isShaFresh when targetSha is null", async () => {
