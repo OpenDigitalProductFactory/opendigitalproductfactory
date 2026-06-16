@@ -424,7 +424,16 @@ export function mergeReviews(r1: ReviewResult, r2: ReviewResult): ReviewResult {
 const TEST_FIRST_LENIENT_KINDS: ReadonlySet<string> = new Set(["chore", "fix", "docs", "doc"]);
 
 /** Matches a reviewer issue that complains about a missing/weak test-first step. */
-const TEST_FIRST_ISSUE_RE = /test[\s-]?first|failing test|real test|test for (logic|behavior)|write (a |the )?(real |failing )?test/i;
+const TEST_FIRST_ISSUE_RE = /test[\s-]?first|(?:failing|real|actual)\s+test|test for (?:logic|behavior)|write (?:a |the )?(?:real |failing )?test/i;
+
+/** Also catch the test-first complaint by its ORDERING essence: a test that
+ *  should exist BEFORE implementation. Reviewer phrasings vary widely ("an
+ *  actual test that would verify X before the mapping is implemented", "a test
+ *  case verifying Y before implementing that logic", "a test ... before such
+ *  handling is coded") and the alternation above misses them — this cue does
+ *  not. Together they make the chore/fix/docs lenience phrasing-robust instead
+ *  of leaking criticals that are worded differently from the seen examples. */
+const TEST_BEFORE_IMPL_RE = /\btest\b[^.]*\bbefore\b[^.]*(?:implement|cod(?:e|ed|ing)|mapping)/i;
 
 /**
  * Deterministic kind-aware lenience for the plan-review gate.
@@ -447,7 +456,7 @@ export function applyTestFirstLenienceForKind(
   if (!kind || !TEST_FIRST_LENIENT_KINDS.has(kind)) return review;
   let changed = false;
   const issues = review.issues.map((i) => {
-    if (i.severity === "critical" && TEST_FIRST_ISSUE_RE.test(i.description)) {
+    if (i.severity === "critical" && (TEST_FIRST_ISSUE_RE.test(i.description) || TEST_BEFORE_IMPL_RE.test(i.description))) {
       changed = true;
       return {
         ...i,

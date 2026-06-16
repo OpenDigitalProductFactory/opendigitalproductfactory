@@ -180,6 +180,35 @@ describe("applyTestFirstLenienceForKind", () => {
     expect(applyTestFirstLenienceForKind(testFirstCritical, undefined).decision).toBe("fail");
   });
 
+  it("downgrades test-first criticals worded by the 'test … before … implemented' ordering (regression)", () => {
+    // These exact phrasings leaked through the original alternation and wedged a
+    // chore at the plan gate (FB-69231490 / BI-4FF277BF) even though sibling
+    // tasks with "real failing test" wording were correctly downgraded.
+    const orderingWorded = {
+      decision: "fail" as const,
+      issues: [
+        { severity: "critical" as const, description: "Task 4 does not specify an actual test that would verify the prefix mapping behavior before the mapping is implemented." },
+        { severity: "critical" as const, description: "Task 5 does not include a test case verifying the null return for unrecognized prefixes before implementing that logic." },
+        { severity: "critical" as const, description: "Task 6 lacks a test that would verify handling of empty strings or malformed inputs before such handling is coded." },
+      ],
+      summary: "test-first, ordering-worded",
+    };
+    const out = applyTestFirstLenienceForKind(orderingWorded, "chore");
+    expect(out.decision).toBe("pass");
+    expect(out.issues.every((i) => i.severity === "minor")).toBe(true);
+  });
+
+  it("still blocks a genuine non-test-first critical that mentions both 'test' and 'before' for a chore", () => {
+    const realBlocker = {
+      decision: "fail" as const,
+      issues: [{ severity: "critical" as const, description: "Task 3 runs the full test suite before the sandbox branch is created, which will error out." }],
+      summary: "ordering bug, not test-first",
+    };
+    const out = applyTestFirstLenienceForKind(realBlocker, "chore");
+    expect(out.decision).toBe("fail");
+    expect(out.issues[0].severity).toBe("critical");
+  });
+
   it("includes task count for reviewer context", () => {
     const prompt = buildPlanReviewPrompt({
       fileStructure: [],
