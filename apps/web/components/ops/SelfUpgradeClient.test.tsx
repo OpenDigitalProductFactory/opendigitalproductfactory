@@ -143,6 +143,23 @@ describe("SelfUpgradeClient – enabled", () => {
     expect(html).toContain("Up to date");
   });
 
+  it("explains the merge-build identity when fresh but the deployed SHA differs from the target", () => {
+    // Merge-mode: fresh, yet deployed (merge commit) ≠ target (upstream). The
+    // banner must say Up to date AND clarify why the two SHAs differ, so it no
+    // longer reads as contradicting the impact summary.
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        isFresh={true}
+        deployedSha="d7c7b200bcae825c454617ffe36a5353c2318e86"
+        targetSha="802224ba8308c641c3211e38e4d2036d8b11655f"
+      />,
+    );
+    expect(html).toContain("Up to date");
+    expect(html).toContain("already contains the target");
+    expect(html).not.toContain("Update available");
+  });
+
   it("shows maintenance window notice when inMaintenanceWindow is true", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient {...baseStatus} inMaintenanceWindow={true} />,
