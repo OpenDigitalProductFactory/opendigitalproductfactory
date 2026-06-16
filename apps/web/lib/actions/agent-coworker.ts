@@ -48,6 +48,7 @@ import { recallWikiContext } from "@/lib/wiki/recall";
 import { recordCoverageGap } from "@/lib/wiki/coverage-gap";
 import { resolveProfessionCorpusContext } from "@/lib/decision-perspective/profession-corpus";
 import { recordProfessionCorpusEvidence } from "@/lib/decision-perspective/profession-corpus-evidence";
+import { resolveInstallVariantContext } from "@/lib/decision-perspective/install-variant-context";
 import {
   classifyPerspective,
   extractPageTopic,
@@ -89,6 +90,7 @@ async function requireAuthUser() {
   if (!user?.id) throw new Error("Unauthorized");
   return user;
 }
+
 
 async function buildPortalContextPromptSection(input: {
   routeContext: string;
@@ -647,10 +649,17 @@ export async function sendMessage(input: {
       }),
     )
     .catch(() => null);
+  // WSID archetype/region axis: resolve the install's variant context so the
+  // coworker is served its archetype's craft (and shielded from another
+  // archetype's) and the right regional doctrine. Fail-open to {} (no filtering).
+  const installVariantContext = await Promise.resolve()
+    .then(() => resolveInstallVariantContext(prisma))
+    .catch(() => ({}));
   const professionCorpus = await resolveProfessionCorpusContext({
     db: prisma,
     identity: professionIdentityRow ?? { agentId: agent.agentId },
     query: trimmedContent,
+    installContext: installVariantContext,
   }).catch((e) => {
     console.warn("[profession-corpus] resolve failed (fail-open):", e);
     return null;

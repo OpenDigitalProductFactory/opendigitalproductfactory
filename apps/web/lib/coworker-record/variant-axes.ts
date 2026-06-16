@@ -6,9 +6,12 @@
 /**
  * Normalize a WikiPage.metadata blob into the WSID variant axes, applying the
  * same defaults the profession-corpus seed uses: omitted jurisdiction = global;
- * omitted competency = practitioner (variants spec §4).
+ * omitted competency = practitioner; omitted archetype = universal
+ * (variants spec §4 + archetype axis addendum 2026-06-16).
  */
-export function normalizeVariantAxes(metadata: unknown): { jurisdictions: string[]; level: string } {
+export function normalizeVariantAxes(
+  metadata: unknown,
+): { jurisdictions: string[]; level: string; archetypes: string[] } {
   const meta = (metadata ?? {}) as Record<string, unknown>;
   const rawJur = meta.professionJurisdiction;
   const jurisdictions =
@@ -17,5 +20,10 @@ export function normalizeVariantAxes(metadata: unknown): { jurisdictions: string
       : ["global"];
   const rawLevel = meta.professionCompetencyLevel;
   const level = typeof rawLevel === "string" ? rawLevel : "practitioner";
-  return { jurisdictions, level };
+  const rawArch = meta.professionArchetype;
+  const archetypes =
+    Array.isArray(rawArch) && rawArch.length > 0
+      ? rawArch.filter((a): a is string => typeof a === "string")
+      : ["universal"];
+  return { jurisdictions, level, archetypes };
 }

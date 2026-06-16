@@ -652,18 +652,25 @@ const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
  * shows no active-TaskRun heartbeat AND whose own start is older than this is a
  * corpse — it must not hold the self-upgrade drain open. 15 min with no
  * observable signal.
+ *
+ * Always-on (no flag). Reaping was originally gated behind
+ * QUIESCENCE_REAP_DEAD_PHASES (default OFF) pending load-testing, but the OFF
+ * default produced the exact false positive the Self-Upgrade panel exists to
+ * prevent. On a live install (2026-06-16) a stalled "build" phase (FB-69231490)
+ * — its TaskRun already marked `stalled` by the watchdog, the build quiet for
+ * ~6h with zero active TaskRuns — was reported as "a Build Studio build phase
+ * was in flight" and skipped every self-upgrade attempt (manual AND scheduled)
+ * until an operator forced an override. The leak: a stall/crash never closes the
+ * phase's BuildPhaseRun row (only the cost-rollup happy path sets completedAt),
+ * and the build's phase stays put, so reconcileTerminalBuildPhaseRuns (which
+ * only closes terminal/abandoned/advanced-past builds) leaves the corpse open.
+ *
+ * The 15-min no-signal window is strictly more conservative than the watchdog's
+ * own build-phase stall threshold (180s), so a reaped phase is by construction
+ * one the watchdog already considers stalled — reaping can never drop
+ * genuinely-live work.
  */
 const DEAD_PHASE_LIVENESS_MS = 15 * 60 * 1000;
-
-/**
- * Flag-gate (default OFF). This changes the self-upgrade DRAIN decision (what
- * counts as "in flight"), so per the spec §6 it is enabled + load-tested
- * deliberately, never blind-shipped to the deploy path. Operator sets
- * QUIESCENCE_REAP_DEAD_PHASES=1 to exercise it under real concurrent load.
- */
-function reapDeadPhasesEnabled(): boolean {
-  return process.env.QUIESCENCE_REAP_DEAD_PHASES === "1";
-}
 
 /**
  * True when an in-flight build phase is a corpse: the most recent observable
@@ -792,25 +799,23 @@ export async function captureActiveSessionBlockers(opts?: {
     select: { buildId: true, phase: true, startedAt: true },
     take: 25,
   });
-  // Dead-phase reaping (flag-gated, default OFF): build a buildId → latest
-  // active-TaskRun heartbeat map from the TaskRuns already fetched above (no
-  // extra query), so a corpse phase (no heartbeat + old start) can be dropped
-  // from the blockers instead of holding the drain open for the full budget.
-  const reapDeadPhases = reapDeadPhasesEnabled();
+  // Dead-phase reaping (always-on): build a buildId → latest active-TaskRun
+  // heartbeat map from the TaskRuns already fetched above (no extra query), so a
+  // corpse phase (no heartbeat + old start) is dropped from the blockers instead
+  // of holding the drain open. A reaped row is ALSO closed (completedAt set)
+  // below, so the repair is permanent: the build UI, cost rollups, and the next
+  // capture all see a settled phase rather than re-evaluating the same corpse.
   const buildLastHeartbeat = new Map<string, Date>();
-  if (reapDeadPhases) {
-    for (const tr of activeTaskRuns) {
-      if (!tr.buildId || !tr.lastHeartbeatAt) continue;
-      const prev = buildLastHeartbeat.get(tr.buildId);
-      if (!prev || tr.lastHeartbeatAt.getTime() > prev.getTime()) {
-        buildLastHeartbeat.set(tr.buildId, tr.lastHeartbeatAt);
-      }
+  for (const tr of activeTaskRuns) {
+    if (!tr.buildId || !tr.lastHeartbeatAt) continue;
+    const prev = buildLastHeartbeat.get(tr.buildId);
+    if (!prev || tr.lastHeartbeatAt.getTime() > prev.getTime()) {
+      buildLastHeartbeat.set(tr.buildId, tr.lastHeartbeatAt);
     }
   }
-  let reapedPhaseCount = 0;
+  const reapedPhases: { buildId: string; phase: string }[] = [];
   for (const row of inFlightPhases) {
     if (
-      reapDeadPhases &&
       isBuildPhaseReapable({
         phaseStartedAt: row.startedAt,
         buildLastHeartbeatAt: buildLastHeartbeat.get(row.buildId) ?? null,
@@ -818,7 +823,7 @@ export async function captureActiveSessionBlockers(opts?: {
         thresholdMs: DEAD_PHASE_LIVENESS_MS,
       })
     ) {
-      reapedPhaseCount++;
+      reapedPhases.push({ buildId: row.buildId, phase: row.phase });
       continue; // corpse — does not block the drain
     }
     const isShipPhase = row.phase === "ship";
@@ -842,9 +847,22 @@ export async function captureActiveSessionBlockers(opts?: {
       },
     });
   }
-  if (reapedPhaseCount > 0) {
+  if (reapedPhases.length > 0) {
+    // Permanently settle the corpses so the same dead rows don't re-trip the
+    // blocker capture every tick. Best-effort: a failure here must never break
+    // blocker capture (worst case the rows are re-evaluated — and re-excluded —
+    // next time). The `completedAt: null` guard keeps it idempotent against a
+    // concurrent close.
+    try {
+      await prisma.buildPhaseRun.updateMany({
+        where: { completedAt: null, OR: reapedPhases },
+        data: { completedAt: now },
+      });
+    } catch (err) {
+      console.warn("[quiescence] failed to close reaped dead build phase(s):", err);
+    }
     console.warn(
-      `[quiescence] reaped ${reapedPhaseCount} dead build phase(s) from the drain (no active heartbeat, started > ${DEAD_PHASE_LIVENESS_MS / 60000} min ago).`,
+      `[quiescence] reaped ${reapedPhases.length} dead build phase(s) from the drain (no active heartbeat, started > ${DEAD_PHASE_LIVENESS_MS / 60000} min ago).`,
     );
   }
 
