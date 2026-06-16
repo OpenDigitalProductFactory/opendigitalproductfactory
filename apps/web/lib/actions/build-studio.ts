@@ -124,7 +124,10 @@ export async function applyLocalModelContext(
   }
   if (contextTokens < OPENCODE_MIN_CONTEXT_TOKENS) {
     // Allowed (operator may know better), but make the consequence explicit.
-    console.warn(`[build-studio] applyLocalModelContext set ${trimmed} to ${contextTokens} (< ${OPENCODE_MIN_CONTEXT_TOKENS} agent floor)`);
+    // Strip control chars from the operator-supplied model id before logging —
+    // neutralizes log injection (CR/LF/control-char forging of log lines).
+    const safeModel = trimmed.replace(/[^a-zA-Z0-9._:@/+-]/g, "");
+    console.warn(`[build-studio] applyLocalModelContext set ${safeModel} to ${contextTokens} (< ${OPENCODE_MIN_CONTEXT_TOKENS} agent floor)`);
   }
 
   const apiRoot = getOllamaApiRoot();
