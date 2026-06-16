@@ -17,6 +17,11 @@ export async function POST(req: NextRequest) {
     revenueModel,
     contactEmail,
     contactPhone,
+    operatesIn,
+    sellsTo,
+    employsIn,
+    dataResidency,
+    handlesCardPayments,
   } = (await req.json()) as {
     description?: string;
     mission?: string;
@@ -26,7 +31,35 @@ export async function POST(req: NextRequest) {
     revenueModel?: string;
     contactEmail?: string;
     contactPhone?: string;
+    operatesIn?: string[];
+    sellsTo?: string[];
+    employsIn?: string[];
+    dataResidency?: string[];
+    handlesCardPayments?: boolean;
   };
+
+  // Compliance scope is captured as a unit: when any dimension is present in the
+  // payload, persist the whole profile and stamp the capture time. Sanitize to
+  // the supported jurisdiction slugs so a stray value can't poison corpus matching.
+  const ALLOWED_JURISDICTIONS = new Set(["us", "eu", "uk", "global"]);
+  const sanitizeJurisdictions = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((j): j is string => typeof j === "string" && ALLOWED_JURISDICTIONS.has(j)) : [];
+  const complianceScopeProvided =
+    operatesIn !== undefined ||
+    sellsTo !== undefined ||
+    employsIn !== undefined ||
+    dataResidency !== undefined ||
+    handlesCardPayments !== undefined;
+  const complianceScope = complianceScopeProvided
+    ? {
+        operatesIn: sanitizeJurisdictions(operatesIn),
+        sellsTo: sanitizeJurisdictions(sellsTo),
+        employsIn: sanitizeJurisdictions(employsIn),
+        dataResidency: sanitizeJurisdictions(dataResidency),
+        handlesCardPayments: handlesCardPayments === true,
+        complianceScopeCapturedAt: new Date(),
+      }
+    : {};
 
   const org = await prisma.organization.findFirst({ select: { id: true } });
   if (!org) {
@@ -57,6 +90,7 @@ export async function POST(req: NextRequest) {
       geographicScope: geographicScope ?? null,
       revenueModel: revenueModel ?? null,
       customerSegments: [],
+      ...complianceScope,
     },
     update: {
       ...(description !== undefined && { description }),
@@ -65,6 +99,7 @@ export async function POST(req: NextRequest) {
       ...(companySize !== undefined && { companySize }),
       ...(geographicScope !== undefined && { geographicScope }),
       ...(revenueModel !== undefined && { revenueModel }),
+      ...complianceScope,
     },
   });
 
