@@ -216,9 +216,24 @@ function formatCompactBlock(family: ProfessionFamily, pages: ProfessionCorpusPag
 
 // ─── Gap suggestion ───────────────────────────────────────────────────────────
 
-/** Normalise a query into a stable, human-readable topic (dedupe basis). */
+/** Trailing characters stripped from a normalised topic (punctuation + space). */
+const CORPUS_TOPIC_TRAILING = "?!. ";
+
+/**
+ * Normalise a query into a stable, human-readable topic (dedupe basis).
+ *
+ * The trailing strip is a linear char-walk, NOT an anchored regex like
+ * `/[?!.]+$/` — that pattern is a polynomial-ReDoS vector on user-controlled
+ * input (CodeQL js/polynomial-redos), the same reason `normalizeGapTopic`
+ * (wiki/coverage-gap.ts) walks instead of matching.
+ */
 export function normalizeCorpusTopic(query: string): string {
-  return query.trim().toLowerCase().replace(/\s+/g, " ").replace(/[?!.]+$/, "").slice(0, 160);
+  const collapsed = query.trim().toLowerCase().replace(/\s+/g, " ");
+  let end = collapsed.length;
+  while (end > 0 && CORPUS_TOPIC_TRAILING.includes(collapsed.charAt(end - 1))) {
+    end--;
+  }
+  return collapsed.slice(0, end).slice(0, 160);
 }
 
 function suggestSourceForFamily(family: ProfessionFamily): string {
