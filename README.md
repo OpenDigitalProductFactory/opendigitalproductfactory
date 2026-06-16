@@ -97,6 +97,8 @@ The installer asks one question — **Ready to go** (pre-built images; Build Stu
 
 **AI toolchain readiness.** If you have Claude Code or Codex CLI installed on the host, the installer wires them automatically — DPF skills, MCP tools, and kernel-tier memory all available on the first turn of every new contributor session. Re-running the installer is a no-op when nothing has drifted. See [Install operations](docs/operations/install.md) for the readiness states and what each one means.
 
+**Releases & versions.** Stable versions are published on the [Releases page](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/releases) — each carries a changelog and downloadable source archives (`.zip` / `.tar.gz`). The install scripts above (which track `main`) remain the recommended path; the Releases page is where you see what changed between versions and pin a specific one. Releases are cut automatically from each `vX.Y.Z` tag.
+
 If you hit a wall — happy-path success stories and "the installer hit a wall at step X" failures are equally useful — open an issue using the [Install verification report template](.github/ISSUE_TEMPLATE/install_verification.md) and attach the bundle produced by `bash install-dpf.sh doctor`.
 
 ---

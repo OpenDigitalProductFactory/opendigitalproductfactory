@@ -392,7 +392,7 @@
       An open, AI-native platform that helps a business run from its own archetype. DPF gives small teams a customer portal, an internal workspace, and purposed AI coworkers that speak the language of the work &mdash; HVAC jobs, clinic appointments, retail stock, nonprofit programs, HOA requests &mdash; while keeping every meaningful action governed end-to-end on your own hardware.
     </p>
     <div class="cta-row">
-      <a class="btn primary" href="#install-on-windows">Install on Windows</a>
+      <a class="btn primary" href="#install">Install</a>
       <a class="btn" href="#what-it-does">See what it does</a>
       <a class="btn" href="#autonomy-wwmd">Autonomy &amp; WWMD</a>
       <a class="btn" href="#audience">Is it for me?</a>
@@ -423,7 +423,7 @@
 <nav class="toc" aria-label="In-page navigation">
   <div class="toc-inner">
     <span class="toc-label">Jump to</span>
-    <a href="#install-on-windows">Install</a>
+    <a href="#install">Install</a>
     <a href="#what-it-does">Capabilities</a>
     <a href="#archetypes">Archetypes</a>
     <a href="#coworkers">Coworkers</a>
@@ -445,25 +445,36 @@
 
 <main class="wrap">
 
-  <section id="install-on-windows">
-    <h2>Install on Windows</h2>
+  <section id="install">
+    <h2>Install</h2>
     <p class="sub">
-      Open PowerShell and paste one of the snippets below. The installer asks a single question &mdash; <strong>Ready to go</strong> (pre-built images and guided portal surfaces) or <strong>Customizable</strong> (full source clone, Build Studio and a local IDE share the same workspace) &mdash; and handles everything else: Docker Desktop, WSL2, hardware detection, AI model selection, credential generation, and auto-start. Use Customizable for serious source edits while Build Studio hardening continues.
+      Windows and macOS are generally available (GA); native Linux and Cloud Single-VM are in early access. Whichever you pick, the installer asks a single question &mdash; <strong>Ready to go</strong> (pre-built images; extend the platform with Build Studio inside the portal) or <strong>Customizable</strong> (full source; Build Studio and your editor work from the same workspace) &mdash; and handles everything else: container runtime, hardware detection, AI model selection, credential generation, and auto-start. Use Customizable for serious source edits while Build Studio hardening continues. Expect 5&ndash;10 minutes for the platform itself, plus additional time for the initial AI model download; login credentials are shown at the end and saved to <code>.admin-credentials</code> in your install directory.
     </p>
     <div class="install">
-      <h3>Recommended: with the GitHub CLI</h3>
-      <pre><code>gh api repos/OpenDigitalProductFactory/opendigitalproductfactory/contents/install-dpf.ps1 -H "Accept: application/vnd.github.raw" &gt; install-dpf.ps1
+      <h3>Windows 10 / 11 &mdash; GA</h3>
+      <p style="color:var(--fg-muted); margin:6px 0 10px; font-size:14px;">The PowerShell installer clones the repo for you. Open PowerShell and paste one snippet.</p>
+      <pre><code># With the GitHub CLI
+gh api repos/OpenDigitalProductFactory/opendigitalproductfactory/contents/install-dpf.ps1 -H "Accept: application/vnd.github.raw" &gt; install-dpf.ps1
 powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
-      <h3 style="margin-top:18px;">Without the GitHub CLI</h3>
-      <pre><code>iwr https://raw.githubusercontent.com/OpenDigitalProductFactory/opendigitalproductfactory/main/install-dpf.ps1 -OutFile install-dpf.ps1
+      <pre><code># Without the GitHub CLI
+iwr https://raw.githubusercontent.com/OpenDigitalProductFactory/opendigitalproductfactory/main/install-dpf.ps1 -OutFile install-dpf.ps1
 powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
+    </div>
+    <div class="install" style="margin-top:18px;">
+      <h3>macOS Apple Silicon &mdash; GA</h3>
+      <p style="color:var(--fg-muted); margin:6px 0 10px; font-size:14px;">Validated end-to-end on real Apple Silicon (M-series, macOS 14+), including the voice STT + native-host TTS path. The Unix installer sources helper libraries from inside the repo, so clone first.</p>
+      <pre><code>git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git
+cd opendigitalproductfactory
+bash install-dpf.sh</code></pre>
       <div class="note">
-        Expect 5&ndash;10 minutes for the platform itself, plus additional time for the initial AI model download. Login credentials are shown at the end of installation and saved to <code>.admin-credentials</code> in your install directory. After installation: <code>dpf-start</code> to start, <code>dpf-stop</code> to stop.
+        See the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/install/macos.md">macOS install guide</a> (including voice setup). After installation: <code>dpf-start</code> to start, <code>dpf-stop</code> to stop.
       </div>
-      <div class="note" style="margin-top:14px;">
-        <strong>macOS Apple Silicon (GA):</strong> validated end-to-end on real Apple Silicon hardware (M-series, macOS 14+), including the voice STT + native-host TTS path &mdash; see the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/install/macos.md">macOS install guide</a>.<br>
-        <strong>Other platforms (early access &mdash; pilots wanted):</strong> the native Linux and Cloud Single-VM (AWS / GCP / Azure, with Terraform modules) installers are code-complete on <code>main</code> with green CI. Real-hardware verification reports are what graduate them from Early Access to GA &mdash; see the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/README.md#quick-start">Quick Start table</a> and the dedicated install runbooks under <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/install">docs/install/</a>.
-      </div>
+    </div>
+    <div class="note" style="margin-top:14px;">
+      <strong>Native Linux &amp; Cloud Single-VM (AWS / GCP / Azure) &mdash; early access, pilots wanted:</strong> both installers (Terraform modules included for the cloud path) are code-complete on <code>main</code> with green CI; real-hardware verification reports are what graduate them from Early Access to GA. See the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/README.md#quick-install">Quick Install table</a> and the per-platform runbooks under <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/install">docs/install/</a>.
+    </div>
+    <div class="note" style="margin-top:14px;">
+      <strong>Releases &amp; versions:</strong> each stable version is published on the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/releases">Releases page</a> with a changelog and downloadable source archives. The installers above remain the recommended path &mdash; Releases are where you see what changed between versions and grab a specific one.
     </div>
   </section>
 
