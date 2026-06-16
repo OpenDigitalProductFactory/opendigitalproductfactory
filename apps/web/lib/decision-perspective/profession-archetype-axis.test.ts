@@ -52,6 +52,7 @@ describe("normalizeVariantAxes — archetype axis", () => {
       jurisdictions: ["us"],
       level: "expert",
       archetypes: ["banking-financial-services"],
+      basis: "operating",
     });
   });
 });

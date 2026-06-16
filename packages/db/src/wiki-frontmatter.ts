@@ -52,6 +52,14 @@ export type WikiPageFrontmatter = {
    * PROFESSION_ARCHETYPES (mirror of ArchetypeCategory).
    */
   professionArchetype?: string[];
+  /**
+   * Which dimension of the install's regional profile triggers this page's
+   * jurisdiction(s): global | operating | selling | employing | data-residency.
+   * Omitted defaults to "operating" when professionJurisdiction is specific, and
+   * is treated as "global" when professionJurisdiction is omitted. Values from
+   * PROFESSION_JURISDICTION_BASES.
+   */
+  professionJurisdictionBasis?: string;
   // ─── Principle-only frontmatter (spec section 9) ───
   // Required-field gating lives in lint detectors per spec section 14, not
   // here. The seed walker accepts incomplete principle data so lint can

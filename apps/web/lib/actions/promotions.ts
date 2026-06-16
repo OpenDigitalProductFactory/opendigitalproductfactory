@@ -11,7 +11,7 @@ import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upg
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
-import { createRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
+import { createRun, failRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
 import { getCurrentImpactSummaryId } from "@/lib/self-upgrade/impact";
 import {
   isStoreOpen,
@@ -645,6 +645,7 @@ export async function getSelfUpgradeStatus() {
   const [
     config,
     latestRun,
+    latestSucceededRun,
     platformVersion,
     deployedSha,
     lastCheckedAt,
@@ -654,6 +655,10 @@ export async function getSelfUpgradeStatus() {
   ] = await Promise.all([
     getSelfUpgradeConfig(),
     getLatestRun(),
+    // The upstream lineage marker for the freshness banner below: the targetSha
+    // of the latest succeeded run is the upstream commit the running build
+    // absorbed (see isFresh).
+    getLatestSucceededRun(),
     loadPlatformVersion(),
     getDeployedSha(),
     getLastCheckedAt(),
@@ -705,7 +710,20 @@ export async function getSelfUpgradeStatus() {
     now,
   });
   const targetSha = await resolveTargetSha(config.channel, config);
-  const isFresh = targetSha ? isShaFresh(deployedSha, targetSha) : false;
+  // Merge-mode-aware freshness. In upstream/merge mode the deployed stamp is the
+  // merge-commit identity, which CONTAINS but never EQUALS the upstream target —
+  // so strict deployedSha===targetSha alone reports "Update available" forever,
+  // even right after a fully successful upgrade (the banner disagreeing with the
+  // impact summary, which already reads the lineage marker). Also treat the
+  // build as fresh when the upstream lineage marker — the targetSha of the
+  // latest succeeded run, i.e. the upstream commit the running build absorbed —
+  // already equals the target. This is the same signal the §5.0 worker skip-gate
+  // (self-upgrade.ts: `lastOk?.targetSha === upstreamSha`) and the impact summary
+  // use, so all three surfaces agree.
+  const isFresh = targetSha
+    ? isShaFresh(deployedSha, targetSha) ||
+      isShaFresh(latestSucceededRun?.targetSha ?? null, targetSha)
+    : false;
 
   return {
     enabled: config.enabled,

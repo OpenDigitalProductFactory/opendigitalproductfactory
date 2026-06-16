@@ -200,32 +200,52 @@ describe("resolveProfessionCorpusContext", () => {
 
 // ─── Archetype / jurisdiction variant selection ───────────────────────────────
 
-function meta(archetypes?: string[], jurisdictions?: string[]): unknown {
+function meta(archetypes?: string[], jurisdictions?: string[], basis?: string): unknown {
   return {
     ...(archetypes ? { professionArchetype: archetypes } : {}),
     ...(jurisdictions ? { professionJurisdiction: jurisdictions } : {}),
+    ...(basis ? { professionJurisdictionBasis: basis } : {}),
   };
 }
 
 describe("pageEligibleForInstall", () => {
-  it("serves universal pages to any install", () => {
-    const axes = { archetypes: ["universal"], jurisdictions: ["global"] };
+  it("serves universal/global pages to any install", () => {
+    const axes = { archetypes: ["universal"], jurisdictions: ["global"], basis: "global" };
     expect(pageEligibleForInstall(axes, {})).toBe(true);
     expect(pageEligibleForInstall(axes, { archetype: "retail-goods" })).toBe(true);
   });
 
   it("serves an archetype-specific page ONLY to the matching install", () => {
-    const axes = { archetypes: ["automotive-services"], jurisdictions: ["global"] };
+    const axes = { archetypes: ["automotive-services"], jurisdictions: ["global"], basis: "global" };
     expect(pageEligibleForInstall(axes, { archetype: "automotive-services" })).toBe(true);
     expect(pageEligibleForInstall(axes, { archetype: "retail-goods" })).toBe(false);
     expect(pageEligibleForInstall(axes, {})).toBe(false); // generic install never sees it
   });
 
-  it("filters jurisdiction only when the install declares a concrete region", () => {
-    const usPage = { archetypes: ["universal"], jurisdictions: ["us"] };
-    expect(pageEligibleForInstall(usPage, {})).toBe(true); // no region declared → no filter
-    expect(pageEligibleForInstall(usPage, { jurisdiction: "us" })).toBe(true);
-    expect(pageEligibleForInstall(usPage, { jurisdiction: "eu" })).toBe(false); // shielded
+  it("a global-basis page (e.g. PCI-DSS) always applies regardless of region", () => {
+    const pci = { archetypes: ["universal"], jurisdictions: ["global"], basis: "global" };
+    expect(pageEligibleForInstall(pci, { regional: { sellsTo: ["us"] } })).toBe(true);
+  });
+
+  it("matches a selling-basis page against sellsTo — a US biz selling into the EU still gets EU rules", () => {
+    const euConsent = { archetypes: ["universal"], jurisdictions: ["eu"], basis: "selling" };
+    // Operates only in the US, but SELLS into the EU → gets EU marketing-consent doctrine.
+    expect(
+      pageEligibleForInstall(euConsent, { regional: { operatesIn: ["us"], sellsTo: ["us", "eu"] } }),
+    ).toBe(true);
+    // Sells only to the US → shielded from EU consent rules.
+    expect(pageEligibleForInstall(euConsent, { regional: { operatesIn: ["us"], sellsTo: ["us"] } })).toBe(false);
+    // sellsTo undeclared → not filtered (no regression).
+    expect(pageEligibleForInstall(euConsent, { regional: {} })).toBe(true);
+  });
+
+  it("matches an employing-basis page against employsIn (where employees do the work)", () => {
+    const euEmployment = { archetypes: ["universal"], jurisdictions: ["eu"], basis: "employing" };
+    expect(pageEligibleForInstall(euEmployment, { regional: { employsIn: ["eu"] } })).toBe(true);
+    // Sells to the EU but employs only in the US → EU employment law does NOT apply.
+    expect(
+      pageEligibleForInstall(euEmployment, { regional: { sellsTo: ["eu"], employsIn: ["us"] } }),
+    ).toBe(false);
   });
 });
 
