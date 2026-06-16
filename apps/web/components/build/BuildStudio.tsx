@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { confirmDialog } from "@/components/ui/Dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { GitBranch } from "lucide-react";
@@ -581,9 +582,17 @@ export function BuildStudio({
               setSidebarOpen(true);
             }}
             onSelectBuildById={selectBuildById}
-            onDeleteBuild={(build) => {
+            onDeleteBuild={async (build) => {
               if (isDevEnvironment) return;
-              if (!confirm(`Delete "${build.title}"?`)) return;
+              if (
+                !(await confirmDialog({
+                  title: "Delete build",
+                  message: `Delete "${build.title}"? This abandons the build and its branch.`,
+                  tone: "danger",
+                  confirmLabel: "Delete",
+                }))
+              )
+                return;
               deleteFeatureBuild(build.buildId).then(() => {
                 if (activeBuild?.buildId === build.buildId) setActiveBuild(null);
                 router.refresh();

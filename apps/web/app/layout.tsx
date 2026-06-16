@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { DialogHost } from "@/components/ui/Dialog";
 
 // All pages in this app require database access at render time.
 // Prevent Next.js from attempting static prerendering during docker build.
@@ -27,6 +28,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           dangerouslySetInnerHTML={{ __html: `window.__DPF_BOOT__=${BOOT_JSON};` }}
         />
         {children}
+        {/* BI-B0E4F3F1 — single host for in-app confirm/alert/prompt dialogs,
+            replacing native window.confirm/alert/prompt (unreachable by automation). */}
+        <DialogHost />
       </body>
     </html>
   );

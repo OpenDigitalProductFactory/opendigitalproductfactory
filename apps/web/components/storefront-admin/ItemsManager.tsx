@@ -1,5 +1,6 @@
 "use client";
 import { useState, useCallback } from "react";
+import { confirmDialog } from "@/components/ui/Dialog";
 import { ItemFormDialog, type ItemFormData } from "./ItemFormDialog";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
@@ -90,7 +91,12 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
   }, [editingItem]);
 
   async function handleDelete(item: Item) {
-    const confirmed = window.confirm(`Delete "${item.name}"? This cannot be undone.`);
+    const confirmed = await confirmDialog({
+      title: "Delete item",
+      message: `Delete "${item.name}"? This cannot be undone.`,
+      tone: "danger",
+      confirmLabel: "Delete",
+    });
     if (!confirmed) return;
 
     const res = await fetch(`/api/storefront/admin/items/${item.id}`, { method: "DELETE" });

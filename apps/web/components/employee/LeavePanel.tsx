@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { promptDialog } from "@/components/ui/Dialog";
 import { useRouter } from "next/navigation";
 import type { LeavePolicyRow, LeaveBalanceRow, LeaveRequestRow } from "@/lib/leave-data";
 import { submitLeaveRequest, approveLeaveRequest, rejectLeaveRequest } from "@/lib/actions/leave";
@@ -58,8 +59,13 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
     });
   }
 
-  function handleReject(requestId: string) {
-    const reason = prompt("Rejection reason:");
+  async function handleReject(requestId: string) {
+    const reason = await promptDialog({
+      title: "Reject leave request",
+      message: "Rejection reason:",
+      required: true,
+      confirmLabel: "Reject",
+    });
     if (!reason) return;
     startTransition(async () => {
       await rejectLeaveRequest(requestId, reason);

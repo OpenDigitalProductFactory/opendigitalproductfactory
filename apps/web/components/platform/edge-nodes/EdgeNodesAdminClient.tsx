@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
 
 import {
   approveEdgeNodeAction,
@@ -323,9 +324,16 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
     });
   }
 
-  function onApprove(node: EdgeNodeRow) {
+  async function onApprove(node: EdgeNodeRow) {
     clearFlash();
-    if (!confirm(`Approve Edge Node "${node.displayName}" (${node.nodeId})?`)) return;
+    if (
+      !(await confirmDialog({
+        title: "Approve Edge Node",
+        message: `Approve Edge Node "${node.displayName}" (${node.nodeId})?`,
+        confirmLabel: "Approve",
+      }))
+    )
+      return;
     startTransition(async () => {
       const result = await approveEdgeNodeAction(node.id);
       setFlash(
@@ -336,11 +344,14 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
     });
   }
 
-  function onQuarantine(node: EdgeNodeRow) {
+  async function onQuarantine(node: EdgeNodeRow) {
     clearFlash();
-    const reason = prompt(
-      `Quarantine "${node.displayName}" — reason (will be recorded for audit):`,
-    );
+    const reason = await promptDialog({
+      title: "Quarantine Edge Node",
+      message: `Quarantine "${node.displayName}" — reason (will be recorded for audit):`,
+      required: true,
+      confirmLabel: "Quarantine",
+    });
     if (!reason?.trim()) return;
     startTransition(async () => {
       const result = await quarantineEdgeNodeAction(node.id, reason.trim());
@@ -352,11 +363,15 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
     });
   }
 
-  function onRevoke(node: EdgeNodeRow) {
+  async function onRevoke(node: EdgeNodeRow) {
     clearFlash();
-    const reason = prompt(
-      `REVOKE "${node.displayName}"? This invalidates its node token immediately. Re-enrollment requires a fresh bootstrap token. Reason:`,
-    );
+    const reason = await promptDialog({
+      title: "Revoke Edge Node",
+      message: `REVOKE "${node.displayName}"? This invalidates its node token immediately. Re-enrollment requires a fresh bootstrap token. Reason:`,
+      tone: "danger",
+      required: true,
+      confirmLabel: "Revoke",
+    });
     if (!reason?.trim()) return;
     startTransition(async () => {
       const result = await revokeEdgeNodeAction(node.id, reason.trim());

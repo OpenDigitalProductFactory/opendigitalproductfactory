@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { confirmDialog } from "@/components/ui/Dialog";
 import {
   disconnectLinkedInAction,
   startLinkedInOAuthAction,
@@ -37,8 +38,16 @@ export function LinkedInConnectPanel({ initialState, defaultRedirectUri }: Props
     });
   }
 
-  function onDisconnect() {
-    if (!confirm("Disconnect the LinkedIn integration? You will need to re-authorize to publish again.")) return;
+  async function onDisconnect() {
+    if (
+      !(await confirmDialog({
+        title: "Disconnect LinkedIn",
+        message: "Disconnect the LinkedIn integration? You will need to re-authorize to publish again.",
+        tone: "danger",
+        confirmLabel: "Disconnect",
+      }))
+    )
+      return;
     startTransition(async () => {
       const result = await disconnectLinkedInAction();
       if (!result.ok) {

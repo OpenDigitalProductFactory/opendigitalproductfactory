@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState, useTransition } from "react";
+import { confirmDialog } from "@/components/ui/Dialog";
 
 import {
   bulkRevokeMyMcpTokens,
@@ -480,8 +481,15 @@ export function McpTokenManager(props: McpTokenManagerProps) {
     });
   }
 
-  function revoke(tokenId: string) {
-    if (!confirm("Revoke this token? Clients using it will fail on their next MCP call.")) {
+  async function revoke(tokenId: string) {
+    if (
+      !(await confirmDialog({
+        title: "Revoke token",
+        message: "Revoke this token? Clients using it will fail on their next MCP call.",
+        tone: "danger",
+        confirmLabel: "Revoke",
+      }))
+    ) {
       return;
     }
     setNotice(null);
@@ -524,10 +532,17 @@ export function McpTokenManager(props: McpTokenManagerProps) {
     setSelectedIds(new Set());
   }
 
-  function bulkRevokeSelected() {
+  async function bulkRevokeSelected() {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
-    if (!confirm(`Revoke ${ids.length} token${ids.length === 1 ? "" : "s"}? Clients using them will fail on their next MCP call.`)) {
+    if (
+      !(await confirmDialog({
+        title: "Revoke tokens",
+        message: `Revoke ${ids.length} token${ids.length === 1 ? "" : "s"}? Clients using them will fail on their next MCP call.`,
+        tone: "danger",
+        confirmLabel: "Revoke",
+      }))
+    ) {
       return;
     }
     setNotice(null);

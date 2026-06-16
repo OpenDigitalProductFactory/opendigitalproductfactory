@@ -24,6 +24,7 @@
     "test:endpoints": "tsx scripts/test-endpoints.ts",
     "verify:preflight": "tsx scripts/dpf-verify-preflight.ts",
     "check:bundle-boundaries": "node scripts/check-bundle-boundaries.mjs",
+    "check:no-native-dialogs": "node scripts/check-no-native-dialogs.mjs",
     "check:architecture-parity": "pnpm --filter web exec tsx scripts/audit-architecture-parity.ts --baseline docs/superpowers/audits/2026-06-14-architecture-parity-baseline.json",
     "security:secrets": "node scripts/security/run-gitleaks-local.mjs --tree",
     "security:secrets:staged": "node scripts/security/run-gitleaks-local.mjs --staged",
