@@ -18,6 +18,7 @@ import { reconcileValueStreams } from "./reconcile-value-streams";
 import { reconcileRoutes } from "./reconcile-routes";
 import { reconcileCodeStructure, type CodeStructureReconcileOpts } from "./reconcile-code-structure";
 import { reconcileProcessModels } from "./reconcile-process";
+import { reconcileSkillToolchain } from "./reconcile-skill-toolchain";
 import type { SysmlSeedResult } from "./sysml-model-seed";
 
 export interface SysmlProjectionsResult {
@@ -27,6 +28,7 @@ export interface SysmlProjectionsResult {
   routes: SysmlSeedResult;
   codeStructure: SysmlSeedResult;
   processModels: SysmlSeedResult;
+  skillToolchain: SysmlSeedResult;
 }
 
 export async function reconcileSysmlProjections(
@@ -38,5 +40,6 @@ export async function reconcileSysmlProjections(
   const routes = await reconcileRoutes({ db: opts.db });
   const codeStructure = await reconcileCodeStructure({ db: opts.db, ...opts.codeGraph });
   const processModels = await reconcileProcessModels({ db: opts.db });
-  return { mcpAuthority, coworkerAuthority, valueStreams, routes, codeStructure, processModels };
+  const skillToolchain = await reconcileSkillToolchain({ db: opts.db });
+  return { mcpAuthority, coworkerAuthority, valueStreams, routes, codeStructure, processModels, skillToolchain };
 }
