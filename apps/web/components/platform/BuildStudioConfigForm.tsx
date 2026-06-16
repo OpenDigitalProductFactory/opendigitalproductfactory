@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
 import { saveBuildStudioConfig, checkLocalEndpoint, applyLocalModelContext } from "@/lib/actions/build-studio";
 import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
@@ -107,6 +107,10 @@ export function BuildStudioConfigForm({
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // BI-E06BB38A: technical knobs (raw context window, manual model, Apply/Test)
+  // live behind this disclosure so the default view never asks for a token count.
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const autoCheckedRef = useRef(false);
 
   const hasClaudeCreds = claudeProviders.some(p => isConfigured(p.status));
   const hasCodexCreds = codexProviders.some(p => isConfigured(p.status));
@@ -177,6 +181,17 @@ export function BuildStudioConfigForm({
       }
     });
   }
+
+  // BI-E06BB38A: auto-preflight the local endpoint once when OpenCode is the
+  // selected engine, so the default view shows the auto-sized context + model
+  // read-only — the operator never has to click "Test" or type a token count.
+  useEffect(() => {
+    if (provider === "opencode" && hasOpencodeProvider && !autoCheckedRef.current) {
+      autoCheckedRef.current = true;
+      runEndpointCheck();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -454,152 +469,153 @@ export function BuildStudioConfigForm({
 
           {provider === "opencode" && (
             <div>
-              <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 6 }}>
-                Runs the open-source OpenCode agent against your install&apos;s own local model
-                endpoint — no API key, nothing leaves your machine. Preview tier until eval
-                evidence on a real local model promotes it.
-              </p>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)", marginBottom: 8 }}>
-                Model:
-                <input
-                  type="text"
-                  value={opencodeModel}
-                  onChange={e => setOpencodeModel(e.target.value)}
-                  disabled={!canWrite}
-                  placeholder="auto (first coding model)"
-                  style={{
-                    width: 200,
-                    fontSize: 11,
-                    padding: "2px 6px",
-                    border: "1px solid var(--dpf-border)",
-                    borderRadius: 4,
-                    background: "var(--dpf-bg)",
-                    color: "var(--dpf-text)",
-                  }}
-                />
-              </label>
-              <p style={{ fontSize: 10, color: "var(--dpf-muted)", marginBottom: 8 }}>
-                Leave blank to use the first <strong>coding</strong> model your endpoint serves
-                (embedding models like nomic-embed are skipped). A coding model with ≥22k context
-                (e.g. a qwen3-coder build) is recommended — set the context window below if your
-                runtime serves it lower.
+              <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 8 }}>
+                Runs the open-source OpenCode agent against your install&apos;s own local
+                model — no API key, nothing leaves your machine. DPF picks a coding model and
+                sizes its context automatically from your hardware.
               </p>
 
-              {/* (a) Per-model served context window — applied to the local runtime
-                  (Docker Model Runner) over HTTP; the operator never touches Docker. */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)" }}>
-                  Context window:
-                  <input
-                    type="number"
-                    min={1024}
-                    step={1024}
-                    value={contextTokens}
-                    onChange={e => setContextTokens(e.target.value)}
-                    disabled={!canWrite}
-                    placeholder="22000"
-                    style={{
-                      width: 110,
-                      fontSize: 11,
-                      padding: "2px 6px",
-                      border: "1px solid var(--dpf-border)",
-                      borderRadius: 4,
-                      background: "var(--dpf-bg)",
-                      color: "var(--dpf-text)",
-                    }}
-                  />
-                  <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>tokens</span>
-                </label>
-                {canWrite && (
-                  <button
-                    type="button"
-                    onClick={applyContext}
-                    disabled={applyingContext || !contextTokens}
-                    style={{
-                      padding: "4px 12px",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      background: "var(--dpf-surface-2)",
-                      color: "var(--dpf-text)",
-                      border: "1px solid var(--dpf-border)",
-                      borderRadius: 6,
-                      cursor: applyingContext ? "wait" : "pointer",
-                    }}
-                  >
-                    {applyingContext ? "Applying…" : "Apply to local runtime"}
-                  </button>
+              {/* BI-E06BB38A: default view is one plain, read-only readiness line. The
+                  context window is auto-derived from the served model — the operator is
+                  never asked to type a token count (progressive disclosure, AGENTS.md §12). */}
+              <div
+                role="status"
+                style={{
+                  fontSize: 12,
+                  color: endpointCheck && !endpointCheck.ok ? "var(--dpf-error)" : "var(--dpf-text)",
+                  background: "var(--dpf-surface-2)",
+                  border: "1px solid var(--dpf-border)",
+                  borderRadius: 6,
+                  padding: "8px 12px",
+                  marginBottom: 8,
+                }}
+              >
+                {checkingEndpoint ? (
+                  "Checking your local model…"
+                ) : endpointCheck?.ok ? (
+                  <>
+                    ✓ Ready — <strong>{endpointCheck.resolvedModel}</strong>
+                    {typeof endpointCheck.servedContextTokens === "number" && endpointCheck.servedContextTokens > 0 ? (
+                      <span style={{ color: "var(--dpf-muted)" }}>
+                        {" "}· context {Math.round(endpointCheck.servedContextTokens / 1000)}k — auto-sized
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--dpf-muted)" }}>{" "}· context auto-sized</span>
+                    )}
+                  </>
+                ) : endpointCheck && !endpointCheck.ok ? (
+                  <>⚠ {endpointCheck.reason}</>
+                ) : (
+                  <>
+                    Local model: <strong>auto</strong> — your best coding model · context auto-sized
+                  </>
                 )}
               </div>
-              {contextResult && (
-                <div role="status" style={{ marginBottom: 8, fontSize: 11, color: contextResult.ok ? "var(--dpf-success)" : "var(--dpf-error)" }}>
-                  {contextResult.ok
-                    ? "✓ Context window applied to the local runtime. It takes effect the next time the model loads."
-                    : <>⚠ {contextResult.reason}</>}
-                </div>
-              )}
-
-              {canWrite && (
-                <button
-                  type="button"
-                  onClick={runEndpointCheck}
-                  disabled={checkingEndpoint}
-                  style={{
-                    padding: "4px 12px",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    background: "var(--dpf-surface-2)",
-                    color: "var(--dpf-text)",
-                    border: "1px solid var(--dpf-border)",
-                    borderRadius: 6,
-                    cursor: checkingEndpoint ? "wait" : "pointer",
-                  }}
-                >
-                  {checkingEndpoint ? "Checking…" : "Test local endpoint"}
-                </button>
-              )}
-              {endpointCheck && (
-                <div
-                  role="status"
-                  style={{
-                    marginTop: 8,
-                    fontSize: 11,
-                    color: endpointCheck.ok ? "var(--dpf-success)" : "var(--dpf-error)",
-                  }}
-                >
-                  {endpointCheck.ok ? (
-                    <>
-                      ✓ Endpoint reachable — will dispatch to{" "}
-                      <strong>{endpointCheck.resolvedModel}</strong>.
-                      {typeof endpointCheck.servedContextTokens === "number" && endpointCheck.servedContextTokens > 0 && (
-                        <span style={{ color: "var(--dpf-muted)" }}>
-                          {" "}Served context: {endpointCheck.servedContextTokens.toLocaleString()} tokens.
-                        </span>
-                      )}
-                      {endpointCheck.models.length > 0 && (
-                        <span style={{ color: "var(--dpf-muted)" }}>
-                          {" "}Models served: {endpointCheck.models.join(", ")}.
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <>⚠ {endpointCheck.reason}</>
-                  )}
-                </div>
-              )}
-              {/* (b) Non-fatal advisories (e.g. embedding model selected). */}
+              {/* Non-fatal advisories (e.g. embedding model selected) stay on the default
+                  view because they need operator attention. */}
               {endpointCheck?.warnings?.map((w, i) => (
-                <div key={i} role="status" style={{ marginTop: 6, fontSize: 11, color: "var(--dpf-warning)" }}>
+                <div key={i} role="status" style={{ marginBottom: 6, fontSize: 11, color: "var(--dpf-warning)" }}>
                   ⚠ {w}
                 </div>
               ))}
 
-              <p style={{ fontSize: 10, color: "var(--dpf-muted)", marginTop: 10 }}>
+              <p style={{ fontSize: 10, color: "var(--dpf-muted)", marginBottom: 8 }}>
                 Running fully offline? Turn on{" "}
                 <Link href="/platform/ai/providers" style={{ color: "var(--dpf-accent)", textDecoration: "underline" }}>
                   local-only inference
                 </Link>{" "}
-                in Providers &amp; Routing so every build phase stays on local with no silent cloud fallback.
+                so every build phase stays on local with no silent cloud fallback.
               </p>
+
+              {/* Advanced: the technical knobs (manual model, raw context window, Apply,
+                  Test) live here for the rare operator who needs them — off the default
+                  view so non-technical users aren&apos;t asked to type token counts. */}
+              {canWrite && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced(v => !v)}
+                    aria-expanded={showAdvanced}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--dpf-muted)",
+                      fontSize: 11,
+                      padding: 0,
+                      marginBottom: showAdvanced ? 8 : 0,
+                    }}
+                  >
+                    <span>{showAdvanced ? "▾" : "▸"}</span> Advanced
+                  </button>
+                  {showAdvanced && (
+                    <div style={{ borderLeft: "2px solid var(--dpf-border)", paddingLeft: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)" }}>
+                        Model:
+                        <input
+                          type="text"
+                          value={opencodeModel}
+                          onChange={e => setOpencodeModel(e.target.value)}
+                          disabled={!canWrite}
+                          placeholder="auto (first coding model)"
+                          style={{ width: 200, fontSize: 11, padding: "2px 6px", border: "1px solid var(--dpf-border)", borderRadius: 4, background: "var(--dpf-bg)", color: "var(--dpf-text)" }}
+                        />
+                      </label>
+                      <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
+                        Leave blank to use the first <strong>coding</strong> model your endpoint
+                        serves (embedding models are skipped). ≥22k context recommended.
+                      </p>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)" }}>
+                          Context window:
+                          <input
+                            type="number"
+                            min={1024}
+                            step={1024}
+                            value={contextTokens}
+                            onChange={e => setContextTokens(e.target.value)}
+                            disabled={!canWrite}
+                            placeholder="auto"
+                            style={{ width: 110, fontSize: 11, padding: "2px 6px", border: "1px solid var(--dpf-border)", borderRadius: 4, background: "var(--dpf-bg)", color: "var(--dpf-text)" }}
+                          />
+                          <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>tokens</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={applyContext}
+                          disabled={applyingContext || !contextTokens}
+                          style={{ padding: "4px 12px", fontSize: 11, fontWeight: 600, background: "var(--dpf-surface-2)", color: "var(--dpf-text)", border: "1px solid var(--dpf-border)", borderRadius: 6, cursor: applyingContext ? "wait" : "pointer" }}
+                        >
+                          {applyingContext ? "Applying…" : "Apply to local runtime"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={runEndpointCheck}
+                          disabled={checkingEndpoint}
+                          style={{ padding: "4px 12px", fontSize: 11, fontWeight: 600, background: "var(--dpf-surface-2)", color: "var(--dpf-text)", border: "1px solid var(--dpf-border)", borderRadius: 6, cursor: checkingEndpoint ? "wait" : "pointer" }}
+                        >
+                          {checkingEndpoint ? "Checking…" : "Test local endpoint"}
+                        </button>
+                      </div>
+                      {contextResult && (
+                        <div role="status" style={{ fontSize: 11, color: contextResult.ok ? "var(--dpf-success)" : "var(--dpf-error)" }}>
+                          {contextResult.ok
+                            ? "✓ Context window applied to the local runtime. It takes effect the next time the model loads."
+                            : <>⚠ {contextResult.reason}</>}
+                        </div>
+                      )}
+                      {endpointCheck?.ok && endpointCheck.models.length > 0 && (
+                        <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>
+                          Models served: {endpointCheck.models.join(", ")}.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </section>
