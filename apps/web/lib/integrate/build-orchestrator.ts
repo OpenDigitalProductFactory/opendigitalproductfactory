@@ -1177,6 +1177,47 @@ export async function runBuildOrchestrator(params: {
     }
   }
 
+  // ─── Pre-flight check: sandbox test toolchain is loadable ────────────────
+  // The shared sandbox (dpf-sandbox-1) reuses node_modules across builds. A
+  // stale/partial install makes vitest fail to LOAD (rolldown native-binding
+  // error, vitest-not-found) and surfaces later as a confusing parse error on a
+  // valid file — the FB-69231490 stall. Heal it BEFORE dispatching tasks so the
+  // QA specialist's verification runs against a sound toolchain; if it cannot be
+  // healed, block LOUD with the structured diagnosis instead of letting a
+  // specialist hang on an opaque failure.
+  try {
+    const { ensureSandboxToolchainHealthy } = await import("./sandbox/sandbox-toolchain-health");
+    const health = await ensureSandboxToolchainHealthy(sandboxContainer);
+    if (health.restored) {
+      await prisma.buildActivity.create({
+        data: {
+          buildId,
+          tool: "sandbox:toolchain-restored",
+          summary: `Sandbox toolchain was unloadable (${health.signature ?? "unknown"}); auto-restored node_modules before dispatch.`,
+        },
+      }).catch(() => {});
+    }
+    if (!health.healthy) {
+      return {
+        content: formatCoworkerOperationalCloseout({
+          status: "blocked before implementation",
+          evidence:
+            `the build sandbox test toolchain is not loadable` +
+            `${health.signature ? ` (${health.signature})` : ""}: ${health.diagnosis ?? "vitest could not load after a clean reinstall."} ` +
+            `This is sandbox state, not a code defect.`,
+          nextAction: "recover the sandbox (diagnose_sandbox / recover_sandbox) or rebuild its node_modules, then retry implementation.",
+          owner: "operator/admin",
+        }),
+        totalTasks: 0, completedTasks: 0, failedTasks: 0,
+        specialistResults: [], totalInputTokens: 0, totalOutputTokens: 0,
+      };
+    }
+  } catch (err) {
+    // A probe failure must not hard-stop the build — log and proceed; the QA
+    // gate still guards the advance.
+    console.warn("[orchestrator] toolchain preflight skipped:", (err as Error)?.message);
+  }
+
   // Build dependency graph from plan
   const phases = buildDependencyGraph(
     normalizedPlan.plan.fileStructure ?? [],
@@ -1335,10 +1376,40 @@ export async function runBuildOrchestrator(params: {
       const { executeTool } = await import("@/lib/mcp-tools");
       const qaContent = qaResult.result.content;
       const verification = parseQAVerification(qaContent);
+
+      // Scope the gate verdict to the build's changed files. A QA specialist may
+      // run a wider pass than the feature's own surface (a stray "run full test
+      // suite" task, or `tsc` over all of apps/web), so a pre-existing failure
+      // ELSEWHERE in the repo would otherwise flip typecheckPassed=false and
+      // block a build whose own files are clean (the FB-69231490 stall).
+      // Neutralize out-of-scope noise here while preserving the full-repo signal.
+      let changedFiles: string[] = [];
+      try {
+        const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
+        const sandboxState = await getSandboxStateForBuild(buildId);
+        changedFiles = sandboxState?.sourceDiffstat.map((entry) => entry.path) ?? [];
+      } catch (err) {
+        console.warn("[orchestrator] could not resolve changed files for gate scoping:", (err as Error)?.message);
+      }
+      const { scopeVerificationOutputForGate } = await import("@/lib/build/scoped-verification");
+      const { normalizeVerificationOutput } = await import("@/lib/build/verification-output");
+      const scoped = scopeVerificationOutputForGate({
+        verification: normalizeVerificationOutput({ ...verification, fullOutput: qaContent }),
+        changedFiles,
+      });
+
       await executeTool("saveBuildEvidence", {
         field: "verificationOut",
         value: {
           ...verification,
+          // Gate-facing fields reflect the changed surface, not the whole repo.
+          typecheckPassed: scoped.typecheckPassed ?? verification.typecheckPassed,
+          testsFailed: scoped.testsFailed ?? verification.testsFailed,
+          testsPassed: scoped.testsPassed ?? verification.testsPassed,
+          outOfScopeNoise: scoped.outOfScopeNoise,
+          globalTestsFailed: scoped.globalTestsFailed,
+          failureAxis: scoped.failureAxis,
+          scopedToChangedFiles: changedFiles,
           fullOutput: qaContent.slice(0, 2000),
           timestamp: new Date().toISOString(),
         },
@@ -1435,8 +1506,31 @@ export async function runBuildOrchestrator(params: {
     const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
     const hasBlockingTasks = allResults.some((r) => r.outcome === "BLOCKED" || r.outcome === "NEEDS_CONTEXT");
     if (!hasBlockingTasks && updatedBuild && updatedBuild.phase === "build" && canTransitionPhase("build", "review")) {
+      // Scope the verification to THIS build's changed files before gating.
+      // A pre-existing typecheck/test failure ELSEWHERE in the repo (e.g. an
+      // unrelated broken test, a stale sandbox) otherwise sets
+      // verificationOut.typecheckPassed=false and stalls EVERY build at
+      // build->review even though the build's OWN files are clean — observed
+      // live: a build's full-suite verification hit an unrelated rolldown parse
+      // error and never advanced. getScopedVerificationForBuild nulls
+      // out-of-scope failures; treat null (out-of-scope only) as a pass, keep an
+      // in-scope failure (false) blocking.
+      let verificationForGate: Record<string, unknown> | unknown = updatedBuild.verificationOut;
+      try {
+        const { getScopedVerificationForBuild } = await import("@/lib/build/scoped-verification");
+        const scoped = await getScopedVerificationForBuild(buildId);
+        if (scoped) {
+          verificationForGate = {
+            ...((updatedBuild.verificationOut ?? {}) as Record<string, unknown>),
+            typecheckPassed: scoped.buildScoped.typecheckPassed ?? true,
+            testsFailed: scoped.buildScoped.testsFailed ?? 0,
+          };
+        }
+      } catch (scopeErr) {
+        console.warn("[orchestrator] scoped verification for gate failed; using raw verificationOut:", (scopeErr as Error)?.message);
+      }
       const gate = checkPhaseGate("build", "review", {
-        verificationOut: updatedBuild.verificationOut,
+        verificationOut: verificationForGate as typeof updatedBuild.verificationOut,
       });
       if (gate.allowed) {
         await prisma.featureBuild.update({ where: { buildId }, data: { phase: "review" } });
