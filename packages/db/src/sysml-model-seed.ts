@@ -68,6 +68,16 @@ export interface SysmlDesiredModel {
   /** When set, existing elements with this infraCiKey prefix that are NOT in the
    *  desired set are soft-removed (mirrorRemoved=true, lifecycleStatus=inactive). */
   softRemovePrefix?: string;
+  /** Cross-LAYER relationships: edges from this model's elements to elements that live
+   *  in OTHER projections, resolved against existing `EaElement.infraCiKey` rather than
+   *  only this model's in-memory keys. This is the bridge that makes impact analysis
+   *  (blast_radius) span layers — e.g. an actual-layer operational/network/integration
+   *  occurrence `allocates`/`traces` to the logical part it realizes. Endpoints are
+   *  resolved in-model first, then against the live graph; an unresolved endpoint is
+   *  logged and counted (never silently dropped) and is linked on a later reconcile once
+   *  its projection exists. relSlugs used here MUST appear in `relTypeSlugs`. Ordinary
+   *  same-projection edges belong in `relationships`, not here. */
+  crossLayerRelationships?: SysmlDesiredRel[];
 }
 
 export interface SysmlSeedResult {
@@ -75,6 +85,10 @@ export interface SysmlSeedResult {
   created: number;
   updated: number;
   removed: number;
+  /** Cross-layer edges resolved + present this run (see `crossLayerRelationships`). */
+  crossLayerLinked?: number;
+  /** Cross-layer edges whose endpoint did not resolve to a live element this run. */
+  crossLayerUnresolved?: number;
 }
 
 export async function applySysmlModel(
@@ -114,6 +128,8 @@ export async function applySysmlModel(
   let created = 0;
   let updated = 0;
   let removed = 0;
+  let crossLayerLinked = 0;
+  let crossLayerUnresolved = 0;
   const idByKey = new Map<string, string>();
 
   for (const el of model.elements) {
@@ -162,6 +178,37 @@ export async function applySysmlModel(
     }
   }
 
+  // Cross-LAYER edges: resolve each endpoint in-model first, then against the live graph
+  // by infraCiKey, so a projection can link to elements another projection owns (the
+  // bridge that lets blast_radius span layers). A miss is logged + counted, never
+  // silently dropped — the next reconcile links it once the target projection exists.
+  if (model.crossLayerRelationships?.length) {
+    const resolveId = async (key: string): Promise<string | null> => {
+      const inModel = idByKey.get(key);
+      if (inModel) return inModel;
+      const found = await db.eaElement.findFirst({ where: { infraCiKey: key }, select: { id: true } });
+      return found?.id ?? null;
+    };
+    for (const rel of model.crossLayerRelationships) {
+      const relationshipTypeId = rtId.get(rel.relSlug);
+      if (!relationshipTypeId) continue;
+      const fromElementId = await resolveId(rel.fromKey);
+      const toElementId = await resolveId(rel.toKey);
+      if (!fromElementId || !toElementId) {
+        crossLayerUnresolved++;
+        console.warn(
+          `[sysml-model-seed] cross-layer ${rel.fromKey} -[${rel.relSlug}]-> ${rel.toKey}: ${!fromElementId ? "from" : "to"} endpoint unresolved — skipping (links on a later reconcile once its projection exists)`,
+        );
+        continue;
+      }
+      const found = await db.eaRelationship.findFirst({ where: { fromElementId, toElementId, relationshipTypeId }, select: { id: true } });
+      if (!found) {
+        await db.eaRelationship.create({ data: { fromElementId, toElementId, relationshipTypeId, notationSlug, properties: { crossLayer: true } } });
+      }
+      crossLayerLinked++;
+    }
+  }
+
   // Conformance issues this model records (idempotent by element + issueType). Only
   // touches the table when the model actually carries issues — so consumers that file
   // none never depend on the eaConformanceIssue delegate.
@@ -197,5 +244,5 @@ export async function applySysmlModel(
   }
 
   const status: SysmlSeedResult["status"] = created === 0 && updated === 0 && removed === 0 ? "noop" : "applied";
-  return { status, created, updated, removed };
+  return { status, created, updated, removed, crossLayerLinked, crossLayerUnresolved };
 }
