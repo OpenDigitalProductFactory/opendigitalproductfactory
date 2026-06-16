@@ -189,6 +189,23 @@ function recoveryPointSummary(run: LatestRun | null): RecoveryPointSummary | nul
   };
 }
 
+// Operator-facing label for a recovery-point member. The derived stores
+// (neo4j, qdrant) are INTENTIONALLY not backed up — they re-derive from
+// postgres + source — so a "skipped" member must read as a deliberate choice,
+// not as a "missing" backup (which looks like a failure sitting next to a
+// "Recovery point: ok" header). And a successful backup's internal runId/cuid
+// means nothing to an operator — "backed up" is what they need to see.
+function recoveryMemberLabel(member: { target: string; status: string }): string {
+  switch (member.status) {
+    case "skipped":
+      return `${member.target}: skipped (re-derived)`;
+    case "failed":
+      return `${member.target}: failed`;
+    default:
+      return `${member.target}: backed up`;
+  }
+}
+
 const DEFAULT_STATUS_STYLE =
   "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] border-[var(--dpf-border)]";
 
@@ -855,7 +872,7 @@ export default function SelfUpgradeClient({
               </div>
               <div className="mt-1 text-[var(--dpf-muted)]">
                 {latestRecoveryPoint.members
-                  .map((member) => `${member.target}:${member.runId ?? "missing"}`)
+                  .map((member) => recoveryMemberLabel(member))
                   .join(" · ")}
               </div>
               {latestRecoveryPoint.rollbackStatus && (
