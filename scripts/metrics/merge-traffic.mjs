@@ -8,7 +8,7 @@
 //
 // Usage: node merge-traffic.mjs <dataDir> <clonesJson> <viewsJson>
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -25,14 +25,19 @@ function mergeSeries(csvPath, jsonPath, key) {
   /** @type {Map<string, {count: number, uniques: number}>} */
   const byDate = new Map();
 
-  // Seed with whatever history already exists on the data branch.
-  if (existsSync(csvPath)) {
-    const lines = readFileSync(csvPath, "utf8").trim().split("\n");
-    for (const line of lines.slice(1)) {
-      if (!line.trim()) continue;
-      const [date, count, uniques] = line.split(",");
-      byDate.set(date, { count: Number(count), uniques: Number(uniques) });
-    }
+  // Seed with whatever history already exists on the data branch. Read
+  // directly and treat a missing file as empty history - avoids the
+  // exists()-then-read() time-of-check/time-of-use race (CodeQL js/file-system-race).
+  let existing = "";
+  try {
+    existing = readFileSync(csvPath, "utf8");
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+  for (const line of existing.trim().split("\n").slice(1)) {
+    if (!line.trim()) continue;
+    const [date, count, uniques] = line.split(",");
+    byDate.set(date, { count: Number(count), uniques: Number(uniques) });
   }
 
   // Overlay the fresh 14-day window; same-date rows are replaced.
