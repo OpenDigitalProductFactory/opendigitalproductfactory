@@ -19,6 +19,7 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
 import { decideStall, type WatchdogCandidate, type StallDecision } from "@/lib/observability/watchdog-detect";
+import { buildStallSurface, mergeVerificationPatch } from "@/lib/observability/stall-surface";
 import { isStallWatchdogEnabled } from "@/lib/shared/feature-flags";
 
 // QUIESCENCE EXEMPTION (BI-QUIESCE-004a + spec §6.1 extension): this
@@ -194,13 +195,33 @@ export const taskrunWatchdog = inngest.createFunction(
       // task user. If neither resolves, skip notification — the StallEvent
       // row is the durable record.
       let notifyUserId: string | null = idEntry.userId ?? null;
+      let buildRow: { createdById: string | null; buildExecState: unknown; verificationOut: unknown } | null = null;
       if (d.candidate.buildId) {
-        const fb = await prisma.featureBuild.findUnique({
+        buildRow = await prisma.featureBuild.findUnique({
           where: { buildId: d.candidate.buildId },
-          select: { createdById: true },
+          select: { createdById: true, buildExecState: true, verificationOut: true },
         });
-        if (fb?.createdById) notifyUserId = fb.createdById;
+        if (buildRow?.createdById) notifyUserId = buildRow.createdById;
       }
+
+      // Surface a build-phase stall as an ACTIONABLE blocked state (failed
+      // checkpoint + failureAxis) so the build no longer sits silently quiet —
+      // the FB-69231490 symptom. Only the build phase: other phases own their
+      // own recovery flows.
+      const stallSurface =
+        d.candidate.buildId && buildRow && d.candidate.phase === "build"
+          ? buildStallSurface({
+              reason: d.reason as import("@/lib/observability/stall-surface").StallReason,
+              phase: d.candidate.phase,
+              heartbeatTimeoutSeconds: d.threshold.heartbeatTimeoutSeconds,
+              totalPhaseTimeoutSeconds: d.threshold.totalPhaseTimeoutSeconds,
+              priorExecState:
+                buildRow.buildExecState && typeof buildRow.buildExecState === "object" && !Array.isArray(buildRow.buildExecState)
+                  ? (buildRow.buildExecState as Record<string, unknown>)
+                  : null,
+              now: now.toISOString(),
+            })
+          : null;
 
       await prisma.$transaction(async (tx) => {
         // 1. Transition TaskRun.
@@ -234,6 +255,22 @@ export const taskrunWatchdog = inngest.createFunction(
               buildId: d.candidate.buildId,
               tool: "watchdog:stall",
               summary: `Watchdog detected stall (${d.reason}) in phase ${d.candidate.phase}`,
+            },
+          });
+        }
+
+        // 3b. Surface the build-phase stall as an actionable failed checkpoint
+        //     so the operator sees Reset/Resume + a failureAxis instead of a
+        //     silently quiet build.
+        if (stallSurface && d.candidate.buildId) {
+          await tx.featureBuild.update({
+            where: { buildId: d.candidate.buildId },
+            data: {
+              buildExecState: stallSurface.execState as import("@dpf/db").Prisma.InputJsonValue,
+              verificationOut: mergeVerificationPatch(
+                buildRow?.verificationOut,
+                stallSurface.verificationPatch,
+              ) as import("@dpf/db").Prisma.InputJsonValue,
             },
           });
         }
