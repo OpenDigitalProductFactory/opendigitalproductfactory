@@ -697,7 +697,18 @@ export default function SelfUpgradeClient({
               <span className="font-mono">{targetSha ?? "unknown"}</span>
             </div>
             {isFresh && (
-              <div className="text-xs text-[var(--dpf-success)]">Up to date</div>
+              <div className="text-xs text-[var(--dpf-success)]" data-up-to-date="true">
+                Up to date
+                {deployedSha &&
+                  targetSha &&
+                  deployedSha.toLowerCase() !== targetSha.toLowerCase() && (
+                    <span className="ml-1 text-[var(--dpf-muted)]">
+                      — the running build already contains the target; the
+                      Deployed id is the merge build that absorbed it, so the two
+                      SHAs differ by design.
+                    </span>
+                  )}
+              </div>
             )}
             {!isFresh && targetSha && deployedShaSource === "content-hash" && (
               <div className="text-xs text-[var(--dpf-warning)]">
