@@ -245,6 +245,20 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     "in-motion": "accent",
     unknown: "neutral",
   },
+  // Provider routing-eligibility (Providers admin surface). Mirrors
+  // RoutingEligibilityState in lib/routing/provider-routing-eligibility.ts —
+  // the single mutually-exclusive answer to "can routing use this now?".
+  // routable=success; the temporary/needs-action states are warning; off/never
+  // and not-a-routing-target are neutral.
+  routingEligibility: {
+    routable: "success",
+    rate_limited: "warning",
+    needs_credentials: "warning",
+    no_models: "warning",
+    disabled: "neutral",
+    unconfigured: "neutral",
+    not_routable: "neutral",
+  },
   // Generic severity ramp, reusable by any surface that has none of its own.
   severity: {
     info: "info",

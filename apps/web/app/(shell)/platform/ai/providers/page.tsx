@@ -11,13 +11,26 @@ import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
 import { SyncProvidersButton } from "@/components/platform/SyncProvidersButton";
 import { ServiceSection } from "@/components/platform/ServiceSection";
 import { ServiceRow } from "@/components/platform/ServiceRow";
-import { getAllCliPoolStatuses } from "@/lib/routing/cli-pool-status";
+import { getAllCliPoolStatuses, type CliPoolState } from "@/lib/routing/cli-pool-status";
 import { CliPoolStatusPanel } from "@/components/platform/CliPoolStatusPanel";
+import { cliAdapterTypeForProvider, deriveRoutingEligibility, type RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
 import { getRecentBudgetEvents, countRecentRejections } from "@/lib/inference/budget-events-data";
 import { AgentBudgetEventsPanel } from "@/components/platform/AgentBudgetEventsPanel";
 import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
 
+
+/**
+ * Short, human reset hint for an exhausted CLI pool, e.g. "in ~5min".
+ * Fills the routing-eligibility "rate_limited" reason on CLI-backed rows.
+ */
+function poolResetHint(pool: CliPoolState): string | null {
+  const s = pool.secondsUntilReset;
+  if (s == null) return null;
+  if (s <= 0) return "any moment";
+  if (s < 60) return `in ~${s}s`;
+  return `in ~${Math.ceil(s / 60)}min`;
+}
 
 export default async function ProvidersPage() {
   const session = await auth();
@@ -61,6 +74,36 @@ export default async function ProvidersPage() {
   ]);
   const aiProviders = providers.filter((pw) => pw.provider.endpointType !== "service");
 
+  // Derive the single routing-eligibility state per provider from data already
+  // loaded above (status + credential + discovered models + CLI pool). This one
+  // answer drives the row badge and the section counts — replacing the old
+  // status-dot / "needs credentials" / billing "Not connected" muddle, and
+  // folding the separate CLI-pool box's signal into each CLI-backed row.
+  const cliPoolByAdapter = new Map(cliPoolStatuses.map((s) => [s.adapterType, s] as const));
+  const nowMs = now.getTime();
+  const eligibilityById: Record<string, RoutingEligibility> = {};
+  for (const pw of aiProviders) {
+    const p = pw.provider;
+    const adapterType = cliAdapterTypeForProvider(p.providerId);
+    const pool = adapterType ? cliPoolByAdapter.get(adapterType) : undefined;
+    const summary = modelSummaries.get(p.providerId);
+    const credentialExpired =
+      !!pw.credential?.tokenExpiresAt &&
+      new Date(pw.credential.tokenExpiresAt).getTime() < nowMs;
+    eligibilityById[p.providerId] = deriveRoutingEligibility({
+      status: p.status,
+      endpointType: p.endpointType,
+      category: p.category,
+      serviceKind: p.serviceKind ?? null,
+      authMethod: p.authMethod,
+      hasCredential: !!pw.credential,
+      credentialExpired,
+      discoveredModelCount: summary?.totalModels ?? 0,
+      cliPoolExhausted: pool?.isExhausted ?? false,
+      cliPoolResetHint: pool ? poolResetHint(pool) : null,
+    });
+  }
+
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
 
   return (
@@ -75,7 +118,10 @@ export default async function ProvidersPage() {
 
       <DetectedServicesBanner detected={detected} />
 
-      {/* EP-COST Phase 4: CLI Pool Status — surface rate-limit state for claude-cli and codex-cli */}
+      {/* CLI pool rate-limit detail (reset times, error snippets). The live gate
+          itself now also shows inline on each CLI-backed provider's row as the
+          "rate_limited" eligibility state (BI-1C4AAE1E); this panel is the
+          drill-down. Only renders when a pool has a recorded 429. */}
       <CliPoolStatusPanel statuses={cliPoolStatuses} />
 
       {/* EP-COST Phase 2: Agent Budget Events — surface warning_95 and rejected threshold crossings */}
@@ -116,9 +162,15 @@ export default async function ProvidersPage() {
               endpointType={group.endpointType}
               displayName={group.displayName}
               providers={group.providers}
+              eligibilityById={eligibilityById}
             >
               {group.providers.map((pw) => (
-                <ServiceRow key={pw.provider.providerId} pw={pw} {...(modelSummaries.has(pw.provider.providerId) ? { modelSummary: modelSummaries.get(pw.provider.providerId)! } : {})} />
+                <ServiceRow
+                  key={pw.provider.providerId}
+                  pw={pw}
+                  eligibility={eligibilityById[pw.provider.providerId]!}
+                  {...(modelSummaries.has(pw.provider.providerId) ? { modelSummary: modelSummaries.get(pw.provider.providerId)! } : {})}
+                />
               ))}
             </ServiceSection>
           ))
