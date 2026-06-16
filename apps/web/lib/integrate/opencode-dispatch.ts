@@ -269,7 +269,7 @@ async function ensureSandboxNodeUser(containerId: string): Promise<void> {
   );
 }
 
-function buildOpencodeInstructions(
+export function buildOpencodeInstructions(
   role: SpecialistRole,
   buildContext: string,
   priorResults?: string,
@@ -317,6 +317,7 @@ Key patterns:
   parts.push(
     "",
     "DPF BUILD DISCIPLINE (MANDATORY):",
+    "- GROUND DOMAIN FACTS IN THE CODEBASE — NEVER INVENT a platform convention: an identifier/prefix format, taxonomy, enum value, naming pattern, or API shape. When a task (or the design) references 'platform conventions', 'the knowledge base', or 'the canonical taxonomy' for a fact you don't have, FIND the real one before writing code — grep the repo for actual usage (existing identifiers, enums, similar utilities) and match it EXACTLY. Example: before classifying/parsing IDs, grep for real ones (e.g. `grep -rohE \"\\b(BI|EP|FB|WC)-[0-9A-F]+\" apps packages | sort -u | head`) instead of assuming a format. A plausible-but-wrong convention is a defect; if you genuinely cannot find the fact, say so in your output rather than guessing.",
     "- For ANY TypeScript work: run `pnpm --filter web typecheck` (or `pnpm exec tsc --noEmit`) and fix errors before finishing.",
     "- For final-task-in-epic or any UI change: ALSO run `cd apps/web && npx next build` and fix errors.",
     "- UI work MUST follow Theme-Aware Styling: ONLY use CSS custom properties (`text-[var(--dpf-text)]`, `bg-[var(--dpf-surface-1)]`, etc.). NEVER hardcode colors, tailwind gray-*, or raw hex.",

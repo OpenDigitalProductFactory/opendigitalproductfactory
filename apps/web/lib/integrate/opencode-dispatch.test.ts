@@ -7,6 +7,7 @@ import {
   buildOpencodeConfig,
   summarizeOpencodeEvent,
   extractOpencodeResult,
+  buildOpencodeInstructions,
 } from "./opencode-dispatch";
 
 describe("sandboxReachableUrl", () => {
@@ -260,5 +261,27 @@ describe("preflightLocalEndpoint — embedding warnings + served context (a/b)",
     const res = await preflightLocalEndpoint("http://localhost:11434/v1", "docker.io/ai/qwen3-coder:latest", fetchImpl, { checkServedContext: true });
     expect(res.ok).toBe(true);
     expect(res.servedContextTokens).toBeNull();
+  });
+});
+
+describe("buildOpencodeInstructions — domain-fact grounding", () => {
+  it("tells the build agent to ground domain facts in the codebase and never invent conventions", () => {
+    // Regression: a local build invented a semantic-ID taxonomy (colon-separated
+    // words) instead of DPF's real BI-/EP-/FB- codes, because the plan deferred
+    // the taxonomy to a knowledge base the build agent can't reach. The fix is a
+    // mandatory grounding instruction — the agent has grep/bash, so it must find
+    // the real convention rather than guess.
+    const instructions = buildOpencodeInstructions("software-engineer", "PROJECT CONTEXT: build a classifier");
+    expect(instructions).toContain("GROUND DOMAIN FACTS");
+    expect(instructions).toMatch(/NEVER INVENT/);
+    expect(instructions).toMatch(/grep/);
+    // it's in the MANDATORY discipline block, applied to every role
+    expect(instructions).toContain("DPF BUILD DISCIPLINE (MANDATORY)");
+  });
+
+  it("includes the grounding rule for every specialist role", () => {
+    for (const role of ["data-architect", "software-engineer", "frontend-engineer", "qa-engineer"] as const) {
+      expect(buildOpencodeInstructions(role, "ctx")).toContain("GROUND DOMAIN FACTS");
+    }
   });
 });
