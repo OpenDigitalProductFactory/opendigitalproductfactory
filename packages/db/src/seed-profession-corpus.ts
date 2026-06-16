@@ -1405,6 +1405,61 @@ const PROFESSION_EXTERNAL_SOURCES_GATED: Record<string, ExternalSourceEntry> = {
       "shortest high-cost-of-delay jobs first. Paraphrased.",
     retrievedAt: "2026-06-13",
   },
+  // ── First-party DPF profession sources for platform-specific families ──
+  "dpf/agents-rulebook": {
+    sourceType: "repository-doc",
+    title: "DPF Agent Rulebook",
+    url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/AGENTS.md",
+    license: "Apache-2.0",
+    abstract:
+      "Canonical operating contract for agents working in the Digital Product Factory.",
+    retrievedAt: "2026-06-16",
+  },
+  "dpf/build-studio-guide": {
+    sourceType: "repository-doc",
+    title: "DPF User Guide: Build Studio",
+    url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/build-studio",
+    license: "Apache-2.0",
+    abstract:
+      "User-facing Build Studio guide covering the five-phase pipeline, sandbox/build runtime, and deployment handoff.",
+    retrievedAt: "2026-06-16",
+  },
+  "dpf/admin-guide": {
+    sourceType: "repository-doc",
+    title: "DPF User Guide: Platform Administration",
+    url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/platform",
+    license: "Apache-2.0",
+    abstract:
+      "User-facing platform administration guide covering AI operations, authority, identity, and tool surfaces.",
+    retrievedAt: "2026-06-16",
+  },
+  "dpf/roles-access-guide": {
+    sourceType: "repository-doc",
+    title: "DPF User Guide: Roles and Access",
+    url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/user-guide/getting-started/roles-and-access.md",
+    license: "Apache-2.0",
+    abstract:
+      "Guide to platform governance roles, capabilities, and the Admin > Access management surface.",
+    retrievedAt: "2026-06-16",
+  },
+  "dpf/developer-setup-guide": {
+    sourceType: "repository-doc",
+    title: "DPF User Guide: Developer Setup",
+    url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/user-guide/getting-started/developer-setup.md",
+    license: "Apache-2.0",
+    abstract:
+      "Developer setup guide covering migrations, seed data, worktree isolation, and local development commands.",
+    retrievedAt: "2026-06-16",
+  },
+  "dpf/install-runbook": {
+    sourceType: "repository-doc",
+    title: "DPF Operations Install Runbook",
+    url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/operations/install.md",
+    license: "Apache-2.0",
+    abstract:
+      "Operations install runbook covering readiness states, bootstrap, and operational setup.",
+    retrievedAt: "2026-06-16",
+  },
 };
 
 /**

@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { parseRoleId, parseAgentTier, parseAgentType } from "./seed-helpers.js";
+import {
+  COWORKER_AGENT_SEEDS,
+  HARDCODED_COWORKER_GRANTS,
+} from "./workforce-seed.js";
 
 describe("seed helpers", () => {
   it("parseRoleId accepts valid HR-xxx codes", () => {
@@ -41,21 +45,44 @@ describe("seed helpers", () => {
 });
 
 describe("coworker seed invariants", () => {
-  const seedSource = readFileSync(new URL("./seed.ts", import.meta.url), "utf8");
+  const professionRegistry = JSON.parse(
+    readFileSync(new URL("../../../docs/professions/registry.json", import.meta.url), "utf8"),
+  ) as { families: Array<{ professionKey: string; roles: string[] }> };
 
   it("includes marketing-specialist in the coworker seed roster", () => {
-    expect(seedSource).toContain('agentId: "marketing-specialist"');
+    expect(COWORKER_AGENT_SEEDS.map((seed) => seed.agentId)).toContain("marketing-specialist");
   });
 
   it("includes storefront-advisor in the coworker seed roster", () => {
-    expect(seedSource).toContain('agentId: "storefront-advisor"');
+    expect(COWORKER_AGENT_SEEDS.map((seed) => seed.agentId)).toContain("storefront-advisor");
   });
 
   it("grants marketing-specialist marketing_read and marketing_write", () => {
-    expect(seedSource).toContain('"marketing-specialist": ["marketing_read", "marketing_write"');
+    expect(HARDCODED_COWORKER_GRANTS["marketing-specialist"]).toEqual(
+      expect.arrayContaining(["marketing_read", "marketing_write"]),
+    );
   });
 
   it("extends customer-advisor with marketing_read", () => {
-    expect(seedSource).toContain('"customer-advisor":     ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read"]');
+    expect(HARDCODED_COWORKER_GRANTS["customer-advisor"]).toContain("marketing_read");
+  });
+
+  it("binds every hardcoded coworker seed to one profession family", () => {
+    const registeredRoles = new Map<string, string>();
+    const duplicates: string[] = [];
+    for (const family of professionRegistry.families) {
+      for (const role of family.roles) {
+        const existing = registeredRoles.get(role);
+        if (existing) duplicates.push(`${role} in both ${existing} and ${family.professionKey}`);
+        registeredRoles.set(role, family.professionKey);
+      }
+    }
+
+    const unmapped = COWORKER_AGENT_SEEDS.filter(
+      (seed) => !registeredRoles.has(seed.slugId) && !registeredRoles.has(seed.agentId),
+    );
+
+    expect(duplicates, `Duplicate profession role bindings: ${duplicates.join("; ")}`).toHaveLength(0);
+    expect(unmapped, `Unmapped hardcoded coworkers: ${unmapped.map((seed) => seed.slugId).join(", ")}`).toHaveLength(0);
   });
 });

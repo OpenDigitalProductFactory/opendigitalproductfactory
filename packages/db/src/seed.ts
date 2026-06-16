@@ -22,7 +22,12 @@ import {
   SYSML_VIEWPOINTS,
 } from "./seed-ea-viewpoints.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
-import { seedWorkforceReferenceData } from "./workforce-seed.js";
+import {
+  COWORKER_AGENT_SEEDS,
+  HARDCODED_COWORKER_GRANTS,
+  ONBOARDING_AGENT_GRANTS,
+  seedWorkforceReferenceData,
+} from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
 import { seedPublicSectorCompliance } from "./seed-public-sector-compliance.js";
 import { seedCooperativeCompliance } from "./seed-cooperative-compliance.js";
@@ -1045,95 +1050,11 @@ async function seedRuntimeTargets(): Promise<void> {
 }
 
 async function seedCoworkerAgents(): Promise<void> {
-  // EP-AI-WORKFORCE-001: Coworker agents with canonical AGT-UI-xxx IDs and slugId aliases
-  const coworkers = [
-    { agentId: "portfolio-advisor", slugId: "portfolio-advisor", name: "Portfolio Analyst", tier: 1, type: "coworker", description: "Investment, risk, and portfolio health analysis", valueStream: "evaluate", sensitivity: "internal" },
-    { agentId: "external-catalog-scout", slugId: "external-catalog-scout", name: "External Catalog Scout", tier: 2, type: "coworker", description: "External coworker archetype reconnaissance and governed backlog suggestion generation from approved outside catalogs", valueStream: "explore", sensitivity: "internal" },
-    { agentId: "inventory-specialist", slugId: "inventory-specialist", name: "Digital Product Estate Specialist", tier: 2, type: "coworker", description: "Lifecycle, maturity, and attribution analysis across the discovered digital product estate", valueStream: "explore", sensitivity: "internal" },
-    { agentId: "ea-architect", slugId: "ea-architect", name: "Enterprise Architect", tier: 2, type: "coworker", description: "Structural analysis, dependency tracing, and architecture governance", valueStream: "cross-cutting", sensitivity: "internal" },
-    { agentId: "hr-specialist", slugId: "hr-specialist", name: "HR Director", tier: 2, type: "coworker", description: "People, roles, accountability chains, and governance compliance", valueStream: "cross-cutting", sensitivity: "confidential" },
-    { agentId: "customer-advisor", slugId: "customer-advisor", name: "Customer Success Manager", tier: 2, type: "coworker", description: "Customer journey, service adoption, and satisfaction analysis", valueStream: "consume", sensitivity: "confidential" },
-    { agentId: "marketing-specialist", slugId: "marketing-specialist", name: "Marketing Strategist", tier: 2, type: "coworker", description: "Acquisition strategy, campaign planning, funnel analysis, and marketing automation readiness", valueStream: "consume", sensitivity: "confidential" },
-    { agentId: "storefront-advisor", slugId: "storefront-advisor", name: "Storefront Operations Manager", tier: 2, type: "coworker", description: "Portal operations, offer presentation, inbox review, and storefront administration", valueStream: "consume", sensitivity: "confidential" },
-    { agentId: "ops-coordinator", slugId: "ops-coordinator", name: "Scrum Master", tier: 2, type: "coworker", description: "Delivery flow, backlog prioritization, and blocker removal", valueStream: "integrate", sensitivity: "internal" },
-    { agentId: "platform-engineer", slugId: "platform-engineer", name: "AI Ops Engineer", tier: 2, type: "coworker", description: "AI infrastructure, provider management, and cost optimization", valueStream: "operate", sensitivity: "confidential" },
-    { agentId: "build-specialist", slugId: "build-specialist", name: "Software Engineer", tier: 2, type: "coworker", description: "Feature development, code generation, and implementation", valueStream: "integrate", sensitivity: "internal" },
-    { agentId: "data-architect", slugId: "data-architect", name: "Data Architect", tier: 2, type: "coworker", description: "Schema design, data modeling (3NF/DAMA-DMBOK), migration validation, inverse relation checks, and index optimization. Validates all Prisma schema changes before migration.", valueStream: "integrate", sensitivity: "internal" },
-    // System Admin: platform configuration + access-control surfaces. Lowered
-    // from `restricted` to `confidential` 2026-05-28 — restricted-tier routing
-    // requires a local-only LLM (govern/activate-provider.ts deriveClearance),
-    // forcing a hard Docker Model Runner dependency for first-run users on a
-    // cloud provider (Anthropic OAuth, OpenAI API). System Admin operations
-    // (RBAC review, provider config, backup status, audit trail) don't
-    // typically include regulated personal data. Operators handling restricted
-    // data can elevate via Admin > Platform Development > AI Providers after
-    // acknowledging their provider's DPA terms.
-    { agentId: "admin-assistant", slugId: "admin-assistant", name: "System Admin", tier: 2, type: "coworker", description: "Access control, security posture, and platform configuration", valueStream: "operate", sensitivity: "confidential" },
-    { agentId: "coo", slugId: "coo", name: "COO", tier: 1, type: "coworker", description: "Cross-cutting oversight, workforce orchestration, and strategic priorities", valueStream: "cross-cutting", sensitivity: "confidential" },
-    { agentId: "doc-specialist", slugId: "doc-specialist", name: "Documentation Specialist", tier: 2, type: "coworker", description: "Mermaid diagram creation/regeneration, documentation structure/consistency, spec and architecture document quality, renderer compatibility awareness", valueStream: "cross-cutting", sensitivity: "internal" },
-    // Compliance + Finance default to 'confidential' — covers most policy and
-    // budget work without locking out cloud providers (which contractually
-    // support confidential data unconditionally per their Enterprise terms).
-    // Operators escalate to 'restricted' per-deployment when these coworkers
-    // genuinely handle PHI/PII/regulated data, after signing the relevant BAA
-    // / ZDR agreement and clearing the destination channel.
-    { agentId: "compliance-officer", slugId: "compliance-officer", name: "Compliance Officer", tier: 2, type: "coworker", description: "Regulatory compliance, policy governance, audit readiness, and risk management", valueStream: "cross-cutting", sensitivity: "confidential" },
-    { agentId: "finance-controller", slugId: "finance-controller", name: "Finance Controller", tier: 2, type: "coworker", description: "Financial controls, budget governance, cost management, and financial reporting", valueStream: "cross-cutting", sensitivity: "confidential" },
-    // Field-dispatch coordinator (F2b of the Field Dispatch capability —
-    // docs/superpowers/specs/2026-06-13-field-dispatch-capability-design.html).
-    // Activated for field-service archetypes; coordinates the field-service-job
-    // lifecycle: scheduling, technician/crew assignment, and customer
-    // notifications (confirm / on-my-way / running-late) proposed for approval.
-    { agentId: "dispatcher", slugId: "dispatcher", name: "Dispatcher", tier: 2, type: "coworker", description: "Field-service dispatch: job scheduling, technician/crew assignment, customer ETA notifications (confirm / on-my-way / running-late), and running-late coordination", valueStream: "operate", sensitivity: "confidential" },
-  ];
-
-  // Tool grants per hardcoded coworker. Every coworker needs explicit grants —
-  // without them, isToolAllowedByGrants() denies every tool and the agent can
-  // only hallucinate tool calls. Grant keys must match TOOL_TO_GRANTS in
-  // apps/web/lib/tak/agent-grants.ts. Registry-driven agents get their grants
-  // from agent_registry.json; these hardcoded ones need them here.
-  const HARDCODED_COWORKER_GRANTS: Record<string, string[]> = {
-    "portfolio-advisor":    ["portfolio_read", "registry_read", "backlog_read"],
-    "external-catalog-scout": ["backlog_read", "backlog_write", "registry_read"],
-    "inventory-specialist": ["portfolio_read", "registry_read", "registry_write", "backlog_read", "backlog_write", "agent_control_read"],
-    "ea-architect":         ["ea_graph_read", "ea_graph_write", "architecture_read", "file_read", "registry_read"],
-    "hr-specialist":        ["registry_read", "consumer_read", "consumer_write"],
-    "customer-advisor":     ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read"],
-    "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read"],
-    "storefront-advisor":   ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read", "marketing_write", "web_search"],
-    "ops-coordinator":      ["backlog_read", "backlog_write", "backlog_triage", "registry_read", "portfolio_read"],
-    "platform-engineer":    ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read"],
-    "build-specialist":     ["file_read", "code_graph_read", "backlog_read", "backlog_write", "architecture_read", "build_plan_write", "registry_read", "sandbox_execute", "deployment_plan_create", "iac_execute", "release_gate_create", "release_plan_create", "release_plan_read", "coworker_screen_read", "coworker_screen_drive"],
-    "data-architect":       ["file_read", "sandbox_execute", "architecture_read", "registry_read"],
-    "admin-assistant":      ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
-    "coo":                  ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read", "email_config"],
-    "doc-specialist":       ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
-    "compliance-officer":   ["policy_write", "data_governance_validate", "file_read", "backlog_read", "backlog_write", "tool_evaluation_create"],
-    "finance-controller":   ["registry_read", "backlog_read", "portfolio_read"],
-    // Reads field-service jobs (WorkItems) + customer contact data; updates job
-    // status; proposes customer notifications for approval. Same grant family as
-    // customer-advisor, plus consumer_write for notification proposals.
-    "dispatcher":           ["backlog_read", "backlog_write", "consumer_read", "consumer_write", "registry_read"],
-  };
-
-  // Grants for onboarding-coo — the agent itself is created by
-  // seedOnboardingAgent() in bootstrap-first-run.ts at portal start. But if
-  // that agent already exists in the DB (re-seed of an initialised cluster),
-  // ensure its grants stay in sync here so the invariant guard always passes.
-  const ONBOARDING_AGENT_GRANTS: Record<string, string[]> = {
-    "onboarding-coo": [
-      "file_read",
-      "web_search",
-      "data_governance_validate",
-      "registry_read",
-      "backlog_read",
-      "portfolio_read",
-      "admin_write",
-    ],
-  };
+  // EP-AI-WORKFORCE-001: Coworker roster and grants live in workforce-seed.ts
+  // so profession coverage invariants can test the seed data directly.
 
   let grantCount = 0;
-  for (const cw of coworkers) {
+  for (const cw of COWORKER_AGENT_SEEDS) {
     const { agentId, slugId, ...rest } = cw;
     const agent = await prisma.agent.upsert({
       where: { agentId },
@@ -1174,7 +1095,7 @@ async function seedCoworkerAgents(): Promise<void> {
     }
   }
 
-  console.log(`Seeded ${coworkers.length} coworker agents with ${grantCount} tool grants`);
+  console.log(`Seeded ${COWORKER_AGENT_SEEDS.length} coworker agents with ${grantCount} tool grants`);
 }
 
 /** EP-AI-WORKFORCE-001: Seed skills for coworker agents */
