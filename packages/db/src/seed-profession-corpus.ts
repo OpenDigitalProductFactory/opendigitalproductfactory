@@ -16,8 +16,10 @@ import { appendRevision, attachSource, linkPages, upsertWikiPage } from "./wiki-
 import { extractWikilinks } from "./wiki-frontmatter";
 import type { WikiPageFrontmatter } from "./wiki-frontmatter";
 import {
+  PROFESSION_ARCHETYPES,
   PROFESSION_COMPETENCY_LEVELS,
   PROFESSION_JURISDICTIONS,
+  isProfessionArchetype,
   isProfessionCompetencyLevel,
   isProfessionJurisdiction,
 } from "./wiki-taxonomy";
@@ -877,6 +879,21 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
     retrievedAt: "2026-06-13",
   },
 
+  // ── Archetype-specific craft (WSID archetype axis, first wave) ──
+  // automotive-services dispatch: ADAS recalibration compliance after glass /
+  // alignment work — an archetype-specific safety gate the dispatcher owns.
+  "wikipedia/adas": {
+    sourceType: "reference",
+    title: "Advanced driver-assistance system",
+    url: "https://en.wikipedia.org/wiki/Advanced_driver-assistance_system",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "ADAS use windshield-mounted cameras/sensors; mechanical alignment or " +
+      "collision/glass work can require recalibration (an automatic reset) to " +
+      "keep the safety systems accurate.",
+    retrievedAt: "2026-06-16",
+  },
+
   // ── HR / people-ops family (WSID wave 7) — jurisdiction split us vs eu ──
   // SHRM BASK is licensed (cluster names used as facts, checklist-only). EEOC
   // and EU Your-Europe are public-domain/open-reuse. US OPM/HHS interview
@@ -1557,6 +1574,8 @@ export type SeedProfessionCorpusResult = {
   jurisdictionCoverage: Record<string, number>;
   /** Page counts by declared competency level (omitted pages count as "practitioner"). */
   competencyCoverage: Record<string, number>;
+  /** Page counts by declared archetype (omitted pages count as "universal"). */
+  archetypeCoverage: Record<string, number>;
 };
 
 /**
@@ -1571,7 +1590,8 @@ function tallyVariantCoverage(
   frontmatter: WikiPageFrontmatter,
   jurisdictionCoverage: Record<string, number>,
   competencyCoverage: Record<string, number>,
-): { jurisdictions: string[]; competencyLevel: string } {
+  archetypeCoverage: Record<string, number>,
+): { jurisdictions: string[]; competencyLevel: string; archetypes: string[] } {
   const jurisdictions =
     frontmatter.professionJurisdiction && frontmatter.professionJurisdiction.length > 0
       ? frontmatter.professionJurisdiction
@@ -1605,11 +1625,30 @@ function tallyVariantCoverage(
   }
   competencyCoverage[level] = (competencyCoverage[level] ?? 0) + 1;
 
+  const archetypes =
+    frontmatter.professionArchetype && frontmatter.professionArchetype.length > 0
+      ? frontmatter.professionArchetype
+      : ["universal"];
+  for (const arch of archetypes) {
+    if (!isProfessionArchetype(arch)) {
+      throw new Error(
+        "[seedProfessionCorpus] page " +
+          slug +
+          ' declares unknown professionArchetype "' +
+          arch +
+          '". Allowed: ' +
+          PROFESSION_ARCHETYPES.join(", ") +
+          ". Add it to PROFESSION_ARCHETYPES in wiki-taxonomy.ts (kept in sync with ArchetypeCategory) before using it.",
+      );
+    }
+    archetypeCoverage[arch] = (archetypeCoverage[arch] ?? 0) + 1;
+  }
+
   // Return the normalized axes so the caller can persist them into
   // WikiPage.metadata for runtime coverage queries (HRIS management surface,
   // and the future gate↔material variant binding). The seed is the single
   // place that has already validated these against the closed registries.
-  return { jurisdictions, competencyLevel: level };
+  return { jurisdictions, competencyLevel: level, archetypes };
 }
 
 /**
@@ -1637,6 +1676,7 @@ export async function seedProfessionCorpus(
       emptyCorpus: true,
       jurisdictionCoverage: {},
       competencyCoverage: {},
+      archetypeCoverage: {},
     };
   }
 
@@ -1658,6 +1698,7 @@ export async function seedProfessionCorpus(
       emptyCorpus: true,
       jurisdictionCoverage: {},
       competencyCoverage: {},
+      archetypeCoverage: {},
     };
   }
 
@@ -1665,6 +1706,7 @@ export async function seedProfessionCorpus(
   const bodies = new Map<string, string>();
   const jurisdictionCoverage: Record<string, number> = {};
   const competencyCoverage: Record<string, number> = {};
+  const archetypeCoverage: Record<string, number> = {};
 
   // Pass 1: upsert wiki pages and append revisions.
   for (const file of wikiFiles) {
@@ -1673,21 +1715,24 @@ export async function seedProfessionCorpus(
     const slug = deriveCorpusSlug(file);
     const status = frontmatter.status ?? "published";
 
-    const { jurisdictions, competencyLevel } = tallyVariantCoverage(
+    const { jurisdictions, competencyLevel, archetypes } = tallyVariantCoverage(
       slug,
       frontmatter,
       jurisdictionCoverage,
       competencyCoverage,
+      archetypeCoverage,
     );
 
     const principlePayload = extractPrinciplePayload(frontmatter);
 
     // Persist the validated WSID variant axes into WikiPage.metadata so the
-    // HRIS coverage helper (and the future gate variant binding) can query
-    // jurisdiction/competency at runtime without re-parsing the corpus files.
+    // HRIS coverage helper, the runtime retrieval service, and the gate variant
+    // binding can query jurisdiction/competency/archetype at runtime without
+    // re-parsing the corpus files.
     const metadata = {
       professionJurisdiction: jurisdictions,
       professionCompetencyLevel: competencyLevel,
+      professionArchetype: archetypes,
     };
 
     const upserted = (await upsertWikiPage(prisma, {
@@ -1767,5 +1812,6 @@ export async function seedProfessionCorpus(
     emptyCorpus: false,
     jurisdictionCoverage,
     competencyCoverage,
+    archetypeCoverage,
   };
 }

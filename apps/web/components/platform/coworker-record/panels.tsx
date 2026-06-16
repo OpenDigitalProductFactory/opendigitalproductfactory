@@ -187,9 +187,12 @@ export function OverviewPanel({ record }: { record: CoworkerRecord }) {
 export function ProfessionPanel({
   record,
   corpusSignals,
+  installArchetype,
 }: {
   record: CoworkerRecord;
   corpusSignals?: { usage: CorpusUsageRollup; gaps: CorpusGapRow[] } | null;
+  /** The install's resolved archetype (selects the corpus slice this coworker is served). */
+  installArchetype?: string | null;
 }) {
   const { profession } = record;
   if (!profession.family) {
@@ -224,8 +227,19 @@ export function ProfessionPanel({
             <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 10 }}>
               {cov.pageCount} corpus page{cov.pageCount !== 1 ? "s" : ""} under{" "}
               <code style={{ fontSize: 10 }}>professions/{fam.professionKey}/</code>
+              {" · "}This install&apos;s archetype:{" "}
+              <strong style={{ color: "var(--dpf-text)" }}>{installArchetype ?? "universal (none set)"}</strong>
             </div>
             <CoverageMatrix coverage={cov} />
+            <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 10 }}>
+              Archetype variants:{" "}
+              {Object.keys(cov.archetype).length > 0
+                ? Object.entries(cov.archetype)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([a, n]) => `${a} (${n})`)
+                    .join(", ")
+                : "universal only"}
+            </div>
           </>
         ) : (
           <EmptyState text="No published corpus pages for this family yet (empty corpus — the rollout demand signal)." />
