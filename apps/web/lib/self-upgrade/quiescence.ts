@@ -686,11 +686,22 @@ export function isBuildPhaseReapable(args: {
 }
 
 /**
- * Repair stale phase-run rows from terminal builds before blocker capture.
- * Abandon/fail paths that predate BI-2CC024DB can leave completedAt null, which
- * otherwise makes quiescence defer forever on work that is no longer active.
+ * Repair stale phase-run rows before blocker capture, so quiescence does not
+ * report a "Build Studio session in flight" for work that is no longer active.
+ * Two classes of orphan, both of which leave completedAt null forever:
+ *
+ *  (1) the parent build is terminal/abandoned (abandon/fail paths predating
+ *      BI-2CC024DB), and
+ *  (2) the parent build has ADVANCED PAST this phase — the run's phase no
+ *      longer matches the build's current phase. Observed on a live install
+ *      (2026-06-16): a "build" phase run sat open for ~6h while its build was
+ *      already in "review" (its build task had completed), blocking a
+ *      self-upgrade with 0 active TaskRuns. The normal phase-advance path is
+ *      expected to close the prior run; this is the always-on safety net for
+ *      any advance that doesn't.
  */
 export async function reconcileTerminalBuildPhaseRuns(now: Date = new Date()): Promise<number> {
+  // (1) Parent build terminal/abandoned — close all its still-open runs.
   const result = await prisma.buildPhaseRun.updateMany({
     where: {
       completedAt: null,
@@ -703,7 +714,20 @@ export async function reconcileTerminalBuildPhaseRuns(now: Date = new Date()): P
     },
     data: { completedAt: now },
   });
-  return result.count;
+
+  // (2) Parent build advanced past this phase. Prisma cannot compare a row
+  // column to a related column in updateMany, so close them with one
+  // correlated UPDATE (the build provably finished any phase it has left).
+  const advanced = await prisma.$executeRaw`
+    UPDATE "BuildPhaseRun" AS bpr
+    SET "completedAt" = ${now}
+    FROM "FeatureBuild" AS fb
+    WHERE bpr."buildId" = fb."buildId"
+      AND bpr."completedAt" IS NULL
+      AND bpr."phase" <> fb."phase"
+  `;
+
+  return result.count + advanced;
 }
 
 /**
