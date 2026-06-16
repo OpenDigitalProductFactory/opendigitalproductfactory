@@ -12,6 +12,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { AgentModelRoutingCard } from "@/components/platform/AgentModelRoutingCard";
 import { loadCoworkerRecord } from "@/lib/coworker-record/load-record";
+import { loadFamilyCorpusSignals } from "@/lib/coworker-record/corpus-signals";
 import { CoworkerRecordTabs, type CoworkerTab } from "@/components/platform/coworker-record/CoworkerRecordTabs";
 import {
   OverviewPanel,
@@ -37,6 +38,12 @@ export default async function AgentDetailPage({
   const record = await loadCoworkerRecord(agentId);
   if (!record) return notFound();
   const { agent, gaid, profession, decisions } = record;
+
+  // WSID Phase 3: per-family runtime corpus signals (usage / misses / growth gaps)
+  // for the Profession & Knowledge tab. Null when the coworker is unmapped.
+  const corpusSignals = profession.family
+    ? await loadFamilyCorpusSignals(profession.family.professionKey)
+    : null;
 
   // Model-routing card data (kept page-side: needs the live provider catalog).
   const [session, modelConfig, lastModelRows, activeProviders] = await Promise.all([
@@ -144,7 +151,7 @@ export default async function AgentDetailPage({
 
       <CoworkerRecordTabs tabs={tabs}>
         <OverviewPanel record={record} />
-        <ProfessionPanel record={record} />
+        <ProfessionPanel record={record} corpusSignals={corpusSignals} />
         <CapabilitiesPanel record={record} routingCard={routingCard} />
         <GovernancePanel record={record} />
         <PerformancePanel record={record} />

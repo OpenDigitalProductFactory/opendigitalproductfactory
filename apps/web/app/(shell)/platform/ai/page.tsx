@@ -4,10 +4,15 @@
 // jurisdiction / lifecycle / coverage-gap) with fitness-for-duty signals,
 // each row linking to that coworker's record.
 import { loadRoster } from "@/lib/coworker-record/roster";
+import { loadProfessionCorpusSignals } from "@/lib/coworker-record/corpus-signals";
 import { RosterView } from "@/components/platform/coworker-record/RosterView";
+import { ProfessionCorpusPanel } from "@/components/platform/coworker-record/ProfessionCorpusPanel";
 
 export default async function PlatformAiPage() {
-  const { rows, facets } = await loadRoster();
+  const [{ rows, facets }, corpusSignals] = await Promise.all([
+    loadRoster(),
+    loadProfessionCorpusSignals(),
+  ]);
 
   const brokenProviders = rows.filter((r) => !r.providerHealthy);
   const coverageGaps = rows.filter((r) => r.unmapped || r.emptyCorpus);
@@ -40,6 +45,8 @@ export default async function PlatformAiPage() {
       ) : (
         <p style={{ fontSize: 12, color: "var(--dpf-muted)" }}>No coworkers registered yet.</p>
       )}
+
+      <ProfessionCorpusPanel signals={corpusSignals} />
     </div>
   );
 }

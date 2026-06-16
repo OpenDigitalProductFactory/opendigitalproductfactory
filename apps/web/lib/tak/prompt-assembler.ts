@@ -28,6 +28,15 @@ export type PromptInput = {
    */
   wikiContext?: string | null;
   /**
+   * WSID Phase 3: the coworker's profession corpus — graded, cited excerpts of
+   * its professional knowledge base, resolved from the agent's profession family
+   * (apps/web/lib/decision-perspective/profession-corpus.ts). Rendered at the TOP
+   * of Block 5, ABOVE generic `wikiContext`, because craft grounding outranks
+   * generic recall for a specialist coworker. Token-bounded by the caller's
+   * context arbitration; pass `null` to omit.
+   */
+  professionContext?: string | null;
+  /**
    * Governed Hermes learning Slice 1: eligible coworker skills.
    * The assembler renders a concise summary alongside domain context so the
    * coworker can pick one without flooding the prompt with full SKILL.md
@@ -150,8 +159,14 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
     dynamicBlocks.push(questionPacketBlock);
   }
 
-  // Block 5: Domain context (+ wiki context per EP-WIKI-001 §7)
+  // Block 5: Domain context (+ profession corpus per WSID Phase 3, + wiki context
+  // per EP-WIKI-001 §7). Profession corpus sits directly under domainContext and
+  // ABOVE generic wiki recall — a specialist grounds craft answers in its own
+  // profession corpus first.
   let domainBlock = input.domainContext;
+  if (input.professionContext) {
+    domainBlock += `\n\n${input.professionContext}`;
+  }
   if (input.wikiContext) {
     domainBlock += `\n\n${input.wikiContext}`;
   }

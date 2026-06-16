@@ -9151,6 +9151,60 @@ model WikiPage {
   @@index([principlePublic])
 }
 
+// ─── Profession corpus runtime (WSID Phase 3 / BI close coverage→usage gap) ──
+// Coverage (corpus pages seeded per family) is NOT usage. These two additive
+// tables record what actually happens at runtime when a coworker assembles a
+// prompt: was its profession corpus injected, or missed — and when missed, the
+// gap becomes a deduplicated growth-backlog item so each corpus grows from real
+// usage. Written fire-and-forget / fail-open from the prompt path so they can
+// never break a coworker response. See
+// docs/superpowers/plans/2026-06-16-profession-corpus-runtime-injection.md.
+
+model ProfessionCorpusGap {
+  id String @id @default(cuid())
+  // Deterministic dedupe key: sha256(professionKey:normalizedTopic:reason)[0:16].
+  // Re-detecting the same gap coalesces (occurrences++) instead of piling up.
+  fingerprint     String  @unique
+  professionKey   String
+  // The coworker that surfaced the gap (Agent.agentId). Null when the agent
+  // mapped to no profession family at all (reason = "unmapped").
+  agentId         String?
+  routeContext    String?
+  // The task/query the coworker could not ground in its profession corpus.
+  query           String  @db.Text
+  // Normalized, human-readable topic (the dedupe basis).
+  missingTopic    String
+  // unmapped | empty-corpus | low-relevance | deferred
+  reason          String
+  // Suggested corpus / source to close the gap (from the registry checklist + sources).
+  suggestedSource String? @db.Text
+  occurrences     Int      @default(1)
+  // open | addressed | dismissed
+  status          String   @default("open")
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @updatedAt
+
+  @@index([professionKey, status])
+  @@index([status])
+  @@index([reason])
+}
+
+model ProfessionCorpusUsageStat {
+  id            String @id @default(cuid())
+  professionKey String
+  // UTC day bucket (YYYY-MM-DD). Bucketing keeps the per-turn upsert at bounded
+  // cardinality (families × days) instead of a row per coworker turn.
+  day           String
+  injectedCount Int      @default(0)
+  missedCount   Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([professionKey, day])
+  @@index([professionKey])
+  @@index([day])
+}
+
 model WikiPageRevision {
   id               String   @id @default(cuid())
   pageId           String

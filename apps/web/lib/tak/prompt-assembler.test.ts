@@ -278,6 +278,48 @@ describe("assembleSystemPrompt", () => {
     expect(boundaryIdx).toBeLessThan(wikiIdx);
   });
 
+  // ─── WSID Phase 3: professionContext injection in Block 5 ──────────────────
+
+  it("omits the profession corpus block when professionContext is null or undefined", async () => {
+    const prompt = await assembleSystemPrompt(fullInput);
+    expect(prompt).not.toContain("PROFESSION CORPUS");
+  });
+
+  it("renders professionContext in Block 5 ABOVE generic wiki recall (corpus outranks wiki)", async () => {
+    const professionBlock =
+      "PROFESSION CORPUS — Software Engineer (your professional knowledge base; cite pages by their slug):";
+    const wikiBlock = "RELEVANT WIKI CONTEXT:\n- entities/x (entity, kernel) — body";
+    const prompt = await assembleSystemPrompt({
+      ...fullInput,
+      professionContext: professionBlock,
+      wikiContext: wikiBlock,
+    });
+
+    const domainIdx = indexOf(prompt, "portfolio tree");
+    const professionIdx = indexOf(prompt, "PROFESSION CORPUS");
+    const wikiIdx = indexOf(prompt, "RELEVANT WIKI CONTEXT");
+    const toolsIdx = indexOf(prompt, "Available domain tools");
+
+    expect(domainIdx).toBeGreaterThanOrEqual(0);
+    expect(professionIdx).toBeGreaterThanOrEqual(0);
+    expect(wikiIdx).toBeGreaterThanOrEqual(0);
+    // domain context → profession corpus → generic wiki recall → domain tools
+    expect(domainIdx).toBeLessThan(professionIdx);
+    expect(professionIdx).toBeLessThan(wikiIdx);
+    expect(wikiIdx).toBeLessThan(toolsIdx);
+  });
+
+  it("places professionContext on the dynamic side of the cache boundary", async () => {
+    const prompt = await assembleSystemPrompt({
+      ...minimalInput,
+      professionContext: "PROFESSION CORPUS — QA Engineer: ...",
+    });
+    const boundaryIdx = indexOf(prompt, "DYNAMIC_BOUNDARY");
+    const professionIdx = indexOf(prompt, "PROFESSION CORPUS");
+    expect(boundaryIdx).toBeGreaterThanOrEqual(0);
+    expect(boundaryIdx).toBeLessThan(professionIdx);
+  });
+
   // ─── Block 5 governed Hermes learning Slice 1: coworker skills ──────────────
 
   it("renders an Available coworker skills block when skills are supplied", async () => {
