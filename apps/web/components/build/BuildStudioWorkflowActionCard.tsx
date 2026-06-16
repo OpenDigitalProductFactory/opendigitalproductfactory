@@ -10,6 +10,7 @@ import {
   resumeBuildImplementation,
   resetBuildExecution,
   retryBuildExecution,
+  rerunPlanReview,
 } from "@/lib/actions/build";
 import { captureDecisionInteraction } from "@/lib/actions/decision-perspective";
 import type { ResumeBuildImplementationOutcome } from "@/lib/build/progress-visibility-types";
@@ -139,6 +140,8 @@ export function BuildStudioWorkflowActionCard({
         return "Resetting build...";
       case "resume-implementation":
         return "Reopening implementation...";
+      case "rerun-plan-review":
+        return "Re-running plan review...";
       case "decompose-now":
         return "Opening decomposition...";
       case "amend-parent-design":
@@ -170,6 +173,14 @@ export function BuildStudioWorkflowActionCard({
         await resetBuildExecution(build.buildId);
       } else if (action.kind === "resume-implementation") {
         setLastOutcome(await resumeBuildImplementation(build.buildId));
+      } else if (action.kind === "rerun-plan-review") {
+        // BI-E1CB0522 — re-run the canonical plan reviewer. A re-run that now
+        // passes auto-advances plan->build server-side; router.refresh() below
+        // picks up the new phase + cleared planReview.
+        const outcome = await rerunPlanReview(build.buildId);
+        if (!outcome.success) {
+          setError(outcome.message);
+        }
       } else if (action.kind === "decompose-now") {
         document.dispatchEvent(
           new CustomEvent("open-build-decomposition", {
