@@ -10,6 +10,9 @@ vi.mock("@dpf/db", () => ({
     modelProfile: {
       count: vi.fn().mockResolvedValue(1),
     },
+    discoveredModel: {
+      aggregate: vi.fn(),
+    },
   },
   syncInfraCI: vi.fn(),
 }));
@@ -33,6 +36,7 @@ import { checkBundledProviders } from "./ollama";
 
 const mockFindFirst = vi.mocked(prisma.modelProvider.findFirst);
 const mockUpdate = vi.mocked(prisma.modelProvider.update);
+const mockDiscoveredAggregate = vi.mocked(prisma.discoveredModel.aggregate);
 const mockAutoDiscover = vi.mocked(autoDiscoverAndProfile);
 const mockQueueEvals = vi.mocked(queueUncalibratedModelEvals);
 const mockSyncInfraCI = vi.mocked(syncInfraCI);
@@ -42,6 +46,9 @@ describe("checkBundledProviders", () => {
     mockFindFirst.mockReset();
     mockUpdate.mockReset();
     mockFetch.mockReset();
+    // Default: local model set was just seen, so the steady-state throttle does
+    // NOT re-enumerate (BI-86CC0266). Stale-case tests override this.
+    mockDiscoveredAggregate.mockReset().mockResolvedValue({ _max: { lastSeenAt: new Date() } } as any);
     mockAutoDiscover.mockReset().mockResolvedValue({ discovered: 2, profiled: 2 });
     mockQueueEvals.mockReset().mockResolvedValue(0);
     mockSyncInfraCI.mockReset();
@@ -164,9 +171,9 @@ describe("checkBundledProviders", () => {
 
     await checkBundledProviders();
 
-    // Profiles already exist (count mocked to 1), so we don't re-run full
-    // discovery — but we DO queue the catch-up calibration eval for any models
-    // still on a seed prior.
+    // Profiles already exist (count mocked to 1) AND the model set was just seen
+    // (throttle default = fresh), so we don't re-run full discovery — but we DO
+    // queue the catch-up calibration eval for any models still on a seed prior.
     expect(mockAutoDiscover).not.toHaveBeenCalled();
     expect(mockQueueEvals).toHaveBeenCalledWith("local");
     // Should update hardware info
@@ -174,5 +181,33 @@ describe("checkBundledProviders", () => {
       expect.objectContaining({ status: "operational" }),
       expect.objectContaining({ modelCount: 1 }),
     );
+  });
+
+  it("re-enumerates in steady state when the local model set is stale (>1h since last seen) — BI-86CC0266", async () => {
+    mockFindFirst.mockResolvedValue({
+      providerId: "local",
+      status: "active",
+      baseUrl: "http://localhost:11434/v1",
+      endpoint: null,
+    } as any);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: [{ id: "ai/gemma4:12B" }] }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: [{ id: "ai/gemma4:12B" }] }),
+    });
+    // Freshest local discovery is 2h old → re-enumerate so a newly-pulled tag
+    // (e.g. gemma4:12B replacing 26B/latest) gets profiled and the gone tag retired.
+    mockDiscoveredAggregate.mockResolvedValue({
+      _max: { lastSeenAt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
+    } as any);
+
+    await checkBundledProviders();
+
+    expect(mockAutoDiscover).toHaveBeenCalledWith("local");
+    // Calibration catch-up still runs alongside the re-discovery.
+    expect(mockQueueEvals).toHaveBeenCalledWith("local");
   });
 });
