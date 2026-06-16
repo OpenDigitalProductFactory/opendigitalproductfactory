@@ -1,0 +1,106 @@
+name: Snapshot Repo Traffic
+
+# GitHub keeps clone/view traffic for only a rolling 14-day window and then
+# deletes it - so a repo accrues no permanent downloads-over-time series. This
+# workflow snapshots the Traffic API on a schedule and UPSERTS each day's
+# numbers (deduped by date) into CSVs on a dedicated 'traffic-stats' data
+# branch, building the history GitHub itself discards.
+#
+# Data branch (not main): the series is machine-generated, append-only
+# telemetry - like a gh-pages branch - so it lives on its own branch and is
+# deliberately outside the code-review PR flow. main stays PR-only.
+#
+# TOKEN REQUIREMENT (important): the Traffic API requires *push* access and
+# returns 403 to read-only callers. The built-in GITHUB_TOKEN cannot be
+# granted the 'Administration' access these endpoints want, so in practice a
+# personal access token is required. Create a fine-grained PAT scoped to this
+# repo with "Administration: read" (or a classic token with the 'repo' scope)
+# and save it as the repo secret TRAFFIC_TOKEN:
+#   Settings > Secrets and variables > Actions > New repository secret.
+# The workflow prefers TRAFFIC_TOKEN and falls back to GITHUB_TOKEN; if the
+# API call 403s it FAILS LOUDLY with this guidance instead of recording zeros.
+#
+# Not covered: GHCR (Docker image) pull counts are not part of the Traffic API
+# and are not captured here.
+
+on:
+  schedule:
+    - cron: "23 6 * * *" # daily at 06:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snapshot-traffic
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    name: Snapshot traffic to data branch
+    runs-on: ubuntu-latest
+    steps:
+      # main checkout provides scripts/metrics/merge-traffic.mjs.
+      - uses: actions/checkout@v6
+
+      - name: Fetch clones + views from the Traffic API
+        env:
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          fetch() {
+            gh api -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/traffic/$1"
+          }
+          if ! fetch clones > "${RUNNER_TEMP}/clones.json" 2> "${RUNNER_TEMP}/err.txt"; then
+            echo "::error::Traffic API call failed - the token lacks the push / Administration:read access these endpoints require (GitHub returns 403)."
+            echo "::error::Fix: create a fine-grained PAT for this repo with 'Administration: read' (or a classic token with 'repo' scope) and save it as the repo secret TRAFFIC_TOKEN, then re-run this workflow."
+            sed 's/^/  api: /' "${RUNNER_TEMP}/err.txt" || true
+            exit 1
+          fi
+          fetch views > "${RUNNER_TEMP}/views.json"
+          echo "Fetched clones + views snapshots."
+
+      - name: Merge snapshot into the traffic-stats data branch
+        env:
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          DATA_DIR="${RUNNER_TEMP}/traffic-data"
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          if git clone --depth 1 --branch traffic-stats "$REMOTE" "$DATA_DIR" 2>/dev/null; then
+            echo "Cloned existing traffic-stats branch."
+          else
+            echo "traffic-stats branch absent - initializing it as an orphan."
+            git clone --depth 1 "$REMOTE" "$DATA_DIR"
+            git -C "$DATA_DIR" checkout --orphan traffic-stats
+            git -C "$DATA_DIR" rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          if [ ! -f "${DATA_DIR}/README.md" ]; then
+            {
+              printf '# Repository traffic snapshots\n\n'
+              printf 'Machine-generated; do not edit by hand. Each row is one day, upserted\n'
+              printf '(deduped by date) from the GitHub Traffic API by\n'
+              printf '`.github/workflows/snapshot-traffic.yml`, because GitHub keeps only the\n'
+              printf 'most recent 14 days.\n\n'
+              printf '- `clones.csv` - daily git clones (`date,count,uniques`)\n'
+              printf '- `views.csv`  - daily page views (`date,count,uniques`)\n'
+            } > "${DATA_DIR}/README.md"
+          fi
+
+          node "${GITHUB_WORKSPACE}/scripts/metrics/merge-traffic.mjs" \
+            "$DATA_DIR" "${RUNNER_TEMP}/clones.json" "${RUNNER_TEMP}/views.json"
+
+          cd "$DATA_DIR"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No new traffic data to commit."
+            exit 0
+          fi
+          git -c user.name="dpf-traffic-bot" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "chore(traffic): snapshot $(date -u +%Y-%m-%d)"
+          git push "$REMOTE" HEAD:traffic-stats
+          echo "Pushed traffic snapshot to traffic-stats."
