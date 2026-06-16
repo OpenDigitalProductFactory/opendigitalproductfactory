@@ -26,6 +26,15 @@
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/lease-guard.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/ux-fit-precheck.mjs\""
+          }
+        ]
       }
     ],
     "PostToolUse": [

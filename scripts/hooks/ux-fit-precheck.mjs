@@ -1,0 +1,83 @@
+#!/usr/bin/env node
+// scripts/hooks/ux-fit-precheck.mjs
+//
+// PreToolUse nudge (BI-65DEE968 defense-in-depth). When a Claude session is about
+// to WRITE a user-facing control into a UI surface (apps/web/**/*.tsx), remind it
+// — before the code exists — to design for cognitive load: run the UX-fit review,
+// keep the default view to plain choices, auto-derive what the platform can
+// compute, and never ask a layman for a raw token count. The HARD enforcement is
+// the UX-Fit Gate CI check (scripts/check-ux-fit-decision.mjs); this hook just
+// moves the prompt left so the agent designs it right up front instead of getting
+// caught at the PR gate.
+//
+// Non-blocking by design: emits additionalContext and ALWAYS allows. Hooks are
+// guidance; CI is the gate. Fails OPEN on any error — a guard must never wedge a
+// session. Wired in .claude/settings.json (PreToolUse, matcher "Write|Edit|
+// MultiEdit"). Claude-Code-only by nature; Codex/Grok have no hooks and are
+// covered by the surface-agnostic CI gate.
+
+import { readFileSync } from "node:fs";
+
+const UI_FILE_RE = /apps[\\/]web[\\/].*\.tsx$/;
+const EXCLUDE_RE = /\.(test|spec|stories)\.tsx$/;
+const UI_CONTROL_RE = /<input\b|<select\b|<textarea\b|type=["'](?:number|range)["']|<form\b/i;
+
+const GUIDANCE =
+  "[ux-fit] This edit adds a user-facing control to a UI surface (apps/web/*.tsx). " +
+  "Before committing, design for cognitive load: run the dpf-ux-fit-review skill and score the options with " +
+  "principle_decide on the human_cognitive_load axis. Prefer progressive disclosure — auto-derive what the " +
+  "platform can compute (model context, hardware limits), keep the default view to 3-5 plain choices, and " +
+  "never ask a layman to type a token count or raw endpoint (AGENTS.md §12/§17). Then attest with a " +
+  "'UX-Fit-Decision:' trailer in a commit message or the PR body — the UX-Fit Gate CI check requires it.";
+
+/**
+ * Pure decision: does this tool call add a user-facing control to a UI file?
+ * Exported for unit tests.
+ * @param {string} toolName
+ * @param {Record<string, any>} toolInput
+ * @returns {{ remind: boolean, file?: string }}
+ */
+export function decide(toolName, toolInput = {}) {
+  if (!["Write", "Edit", "MultiEdit"].includes(toolName)) return { remind: false };
+  const file = String(toolInput.file_path ?? "").replace(/\\/g, "/");
+  if (!UI_FILE_RE.test(file) || EXCLUDE_RE.test(file)) return { remind: false };
+
+  const candidates = [];
+  if (typeof toolInput.content === "string") candidates.push(toolInput.content); // Write
+  if (typeof toolInput.new_string === "string") candidates.push(toolInput.new_string); // Edit
+  if (Array.isArray(toolInput.edits)) {
+    for (const e of toolInput.edits) {
+      if (typeof e?.new_string === "string") candidates.push(e.new_string); // MultiEdit
+    }
+  }
+  const addsControl = candidates.some((t) => UI_CONTROL_RE.test(t));
+  return addsControl ? { remind: true, file } : { remind: false };
+}
+
+function main() {
+  let payload;
+  try {
+    const raw = readFileSync(0, "utf8");
+    payload = raw ? JSON.parse(raw) : {};
+  } catch {
+    process.exit(0); // fail open — never wedge the session on a bad payload
+  }
+
+  const verdict = decide(payload?.tool_name, payload?.tool_input ?? {});
+  if (!verdict.remind) process.exit(0);
+
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        additionalContext: GUIDANCE,
+      },
+    }),
+  );
+  process.exit(0);
+}
+
+const invokedPath = process.argv[1] ? process.argv[1].replace(/\\/g, "/") : "";
+if (invokedPath.endsWith("ux-fit-precheck.mjs")) {
+  main();
+}
