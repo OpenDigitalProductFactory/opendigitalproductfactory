@@ -6,11 +6,19 @@
 
 import Link from "next/link";
 import type { CoworkerRecord } from "@/lib/coworker-record/load-record";
+import type { CorpusGapRow, CorpusUsageRollup } from "@/lib/coworker-record/corpus-signals";
 import {
   PROFESSION_JURISDICTIONS,
   PROFESSION_COMPETENCY_LEVELS,
 } from "@dpf/db/wiki-taxonomy";
 import { LocalTime } from "@/components/ui/LocalTime";
+
+const GAP_REASON_LABEL: Record<string, string> = {
+  unmapped: "Unmapped role",
+  "empty-corpus": "Empty corpus",
+  "low-relevance": "Not covered",
+  deferred: "Deferred",
+};
 
 // ─── Shared primitives ───────────────────────────────────────────────────────
 
@@ -176,7 +184,13 @@ export function OverviewPanel({ record }: { record: CoworkerRecord }) {
 
 // ─── Profession & Knowledge (WSID) ──────────────────────────────────────────
 
-export function ProfessionPanel({ record }: { record: CoworkerRecord }) {
+export function ProfessionPanel({
+  record,
+  corpusSignals,
+}: {
+  record: CoworkerRecord;
+  corpusSignals?: { usage: CorpusUsageRollup; gaps: CorpusGapRow[] } | null;
+}) {
   const { profession } = record;
   if (!profession.family) {
     return (
@@ -215,6 +229,39 @@ export function ProfessionPanel({ record }: { record: CoworkerRecord }) {
           </>
         ) : (
           <EmptyState text="No published corpus pages for this family yet (empty corpus — the rollout demand signal)." />
+        )}
+      </Section>
+
+      <Section title="Runtime usage & gaps (30d)" action={deepLink("/platform/ai", "Workforce signals")}>
+        {corpusSignals ? (
+          <>
+            <InfoGrid>
+              <InfoCard label="Corpus injections" value={String(corpusSignals.usage.injected)} />
+              <InfoCard label="Misses" value={String(corpusSignals.usage.missed)} />
+              <InfoCard
+                label="Injection rate"
+                value={corpusSignals.usage.injectionRatePct === null ? "—" : `${corpusSignals.usage.injectionRatePct}%`}
+              />
+              <InfoCard label="Open growth gaps" value={String(corpusSignals.gaps.length)} />
+            </InfoGrid>
+            {corpusSignals.gaps.length > 0 ? (
+              <ul style={{ margin: "10px 0 0", paddingLeft: 18 }}>
+                {corpusSignals.gaps.slice(0, 8).map((gap) => (
+                  <li key={gap.id} style={{ fontSize: 11, color: "var(--dpf-text-secondary)", marginBottom: 4 }}>
+                    <Chip tone="muted">{GAP_REASON_LABEL[gap.reason] ?? gap.reason}</Chip>{" "}
+                    <span title={gap.missingTopic}>{gap.missingTopic}</span>{" "}
+                    <span style={{ color: "var(--dpf-muted)" }}>×{gap.occurrences}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 8 }}>
+                No corpus gaps recorded — every recent turn was grounded in this corpus.
+              </div>
+            )}
+          </>
+        ) : (
+          <EmptyState text="No runtime usage recorded yet. Once this coworker answers questions, its corpus injection/miss signal and growth gaps appear here." />
         )}
       </Section>
 

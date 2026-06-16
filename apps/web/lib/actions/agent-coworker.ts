@@ -46,6 +46,8 @@ import {
 import { recordSkillUsageEvents } from "@/lib/skills/usage-events";
 import { recallWikiContext } from "@/lib/wiki/recall";
 import { recordCoverageGap } from "@/lib/wiki/coverage-gap";
+import { resolveProfessionCorpusContext } from "@/lib/decision-perspective/profession-corpus";
+import { recordProfessionCorpusEvidence } from "@/lib/decision-perspective/profession-corpus-evidence";
 import {
   classifyPerspective,
   extractPageTopic,
@@ -628,6 +630,35 @@ export async function sendMessage(input: {
   // happen to be tagged with the current route.
   const isCrossCuttingOverlay = agent.agentId === "AGT-ORCH-000";
 
+  // ── WSID Phase 3: profession-corpus retrieval (shared by both prompt paths) ──
+  // Resolve the coworker's profession-family corpus ONCE so every response is
+  // grounded in the right professional knowledge base. Fail-open: a null result
+  // never blocks the response. The registry resolver keys on the PERSISTED Agent
+  // identity tuple (role slug lives in Agent.name for registry agents, slugId for
+  // hardcoded seeds), so fetch that rather than trusting the routing agent shape.
+  // Promise.resolve().then(...) so a synchronous throw (e.g. a partial prisma
+  // mock without `agent.findFirst`) becomes a rejection the .catch() absorbs —
+  // the identity lookup must never break a coworker response.
+  const professionIdentityRow = await Promise.resolve()
+    .then(() =>
+      prisma.agent.findFirst({
+        where: { agentId: agent.agentId },
+        select: { agentId: true, slugId: true, name: true },
+      }),
+    )
+    .catch(() => null);
+  const professionCorpus = await resolveProfessionCorpusContext({
+    db: prisma,
+    identity: professionIdentityRow ?? { agentId: agent.agentId },
+    query: trimmedContent,
+  }).catch((e) => {
+    console.warn("[profession-corpus] resolve failed (fail-open):", e);
+    return null;
+  });
+  // Whether the corpus block actually landed in the final prompt (the unified
+  // path's arbitrator can drop it under a tight token budget). Set per-branch.
+  let professionInjectedIntoPrompt = false;
+
   let populatedPrompt: string;
   // Governed Hermes learning Slice 1: active coworker skill (if any).
   // Set inside the unified-prompt branch when the user message invokes a
@@ -682,9 +713,18 @@ export async function sendMessage(input: {
     const contextSources = [
       // L1: Route-essential context
       { tier: "L1" as const, priority: 0, content: domainBlock, tokenCount: countTokens(domainBlock), source: "domain", compressible: false },
+      // L1: Profession corpus (WSID Phase 3) — the coworker's professional
+      // knowledge base, ranked above generic wiki recall. Priority 1 (just under
+      // route-domain context); compressible to abstracts-only under tight budget.
+      ...(professionCorpus?.promptBlock ? [{
+        tier: "L1" as const, priority: 1, content: professionCorpus.promptBlock,
+        tokenCount: professionCorpus.tokenCount, source: "profession-corpus", compressible: true,
+        compressedContent: professionCorpus.compactBlock ?? "",
+        compressedTokenCount: professionCorpus.compactTokenCount,
+      }] : []),
       ...(portalContextPrompt ? [{
         tier: "L1" as const,
-        priority: 1,
+        priority: 2,
         content: portalContextPrompt,
         tokenCount: countTokens(portalContextPrompt),
         source: "portal-context",
@@ -692,7 +732,7 @@ export async function sendMessage(input: {
       }] : []),
       // L1: User facts — structured memory from prior conversations
       ...(factsContext ? [{
-        tier: "L1" as const, priority: 2, content: factsContext, tokenCount: countTokens(factsContext),
+        tier: "L1" as const, priority: 3, content: factsContext, tokenCount: countTokens(factsContext),
         source: "user-facts", compressible: true,
         compressedContent: factsCompressed ?? "",
         compressedTokenCount: countTokens(factsCompressed ?? ""),
@@ -732,6 +772,10 @@ export async function sendMessage(input: {
     const selectedAttachments = result.selected.find((s) => s.source === "attachments")?.content ?? null;
     const selectedKnowledge = result.selected.find((s) => s.source === "knowledge")?.content ?? null;
     const selectedMemory = result.selected.find((s) => s.source === "semantic-memory")?.content ?? null;
+    // WSID Phase 3: the profession corpus block that survived arbitration (null
+    // if it was dropped under budget — recorded as a usage miss below).
+    const selectedProfessionContext = result.selected.find((s) => s.source === "profession-corpus")?.content ?? null;
+    professionInjectedIntoPrompt = selectedProfessionContext !== null;
 
     // Merge knowledge and semantic memory into domain context if they made the budget
     let finalDomainContext = selectedDomain;
@@ -814,6 +858,7 @@ export async function sendMessage(input: {
       domainTools: [], // Already included in domain block
       routeData: selectedPageData,
       attachmentContext: selectedAttachments,
+      professionContext: selectedProfessionContext,
       wikiContext,
       skills: skillSummaries,
       questionPacket: input.questionPacket ?? null,
@@ -984,7 +1029,35 @@ export async function sendMessage(input: {
       promptSections.push(recalledContext);
     }
 
+    // WSID Phase 3: inject the profession corpus (no arbitration on this legacy
+    // path — bounded by the service's own page/excerpt caps).
+    if (professionCorpus?.promptBlock) {
+      promptSections.push("", professionCorpus.promptBlock);
+      professionInjectedIntoPrompt = true;
+    }
+
     populatedPrompt = promptSections.join("\n");
+  }
+
+  // WSID Phase 3: record corpus usage/miss evidence for this turn — fire-and-
+  // forget, fail-open. `injected` reflects what actually reached the prompt
+  // (the unified arbitrator may have dropped the block under budget); misses and
+  // low-relevance hits also write a deduped growth-gap so the corpus grows from
+  // real usage. Telemetry line mirrors the existing `[tools]`/`[handoff]` style.
+  if (professionCorpus) {
+    console.log(
+      `[profession-corpus] agent=${JSON.stringify(agent.agentId)} ` +
+        `family=${JSON.stringify(professionCorpus.professionKey)} status=${professionCorpus.status} ` +
+        `injected=${professionInjectedIntoPrompt} pages=${professionCorpus.pages.length} ` +
+        `lowRelevance=${professionCorpus.lowRelevance}`,
+    );
+    void recordProfessionCorpusEvidence({
+      context: professionCorpus,
+      query: trimmedContent,
+      agentId: agent.agentId,
+      routeContext: input.routeContext,
+      promptInjected: professionInjectedIntoPrompt,
+    }).catch((e) => console.warn("[profession-corpus] evidence record failed (fail-open):", e));
   }
 
   // Get ALL platform tools (no mode filtering — we filter the merged set below)
