@@ -24,6 +24,9 @@ function projectionResult(overrides: Partial<SysmlProjectionsResult> = {}): Sysm
     codeStructure: healthy,
     processModels: healthy,
     skillToolchain: healthy,
+    operationalGraph: healthy,
+    networkTopology: healthy,
+    integrations: healthy,
     ...overrides,
   };
 }

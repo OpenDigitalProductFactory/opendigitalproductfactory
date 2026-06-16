@@ -327,6 +327,67 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
 }
 
 /**
+ * Advance a build stranded at the build→review boundary, mirroring the
+ * orchestrator's on-completion auto-advance (build-orchestrator.ts ~1518).
+ *
+ * Recomputes the SCOPED verification for the build (out-of-scope failures
+ * elsewhere in the repo are nulled and treated as a pass; an IN-scope failure
+ * stays blocking so a genuinely-broken build is NOT force-advanced), runs the
+ * `build->review` phase gate, and — only if the gate allows AND the row is
+ * still `phase=build` — flips it to `review` and queues review verification.
+ *
+ * Returns `true` iff it advanced. Idempotent: a build already past `build`, or
+ * one whose in-scope verification fails the gate, is a no-op. Non-throwing for
+ * the scoped-verification step (a scope-resolution failure falls back to the
+ * raw verificationOut, exactly like the orchestrator). Exported for tests.
+ */
+export async function advanceStrandedBuildToReview(buildId: string): Promise<boolean> {
+  const { prisma } = await import("@dpf/db");
+  const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
+
+  const build = await prisma.featureBuild.findUnique({ where: { buildId } });
+  if (!build || build.phase !== "build" || !canTransitionPhase("build", "review")) {
+    return false;
+  }
+
+  // Scope the verification to THIS build's changed files before gating — a
+  // pre-existing failure ELSEWHERE in the repo must not block the advance.
+  // getScopedVerificationForBuild nulls out-of-scope failures; treat null
+  // (out-of-scope only) as a pass, keep an in-scope failure (false) blocking.
+  let verificationForGate: unknown = build.verificationOut;
+  try {
+    const { getScopedVerificationForBuild } = await import("@/lib/build/scoped-verification");
+    const scoped = await getScopedVerificationForBuild(buildId);
+    if (scoped) {
+      verificationForGate = {
+        ...((build.verificationOut ?? {}) as Record<string, unknown>),
+        typecheckPassed: scoped.buildScoped.typecheckPassed ?? true,
+        testsFailed: scoped.buildScoped.testsFailed ?? 0,
+      };
+    }
+  } catch {
+    // Fall back to the raw verificationOut, exactly like the orchestrator.
+  }
+
+  const gate = checkPhaseGate("build", "review", {
+    verificationOut: verificationForGate as typeof build.verificationOut,
+  });
+  if (!gate.allowed) return false;
+
+  // Guard the flip on the row still being `build` so two concurrent reconcilers
+  // (or a live advance racing this one) never double-advance.
+  const flipped = await prisma.featureBuild.updateMany({
+    where: { buildId, phase: "build" },
+    data: { phase: "review" },
+  });
+  if (flipped.count === 0) return false;
+
+  const { queueBuildReviewVerification } = await import("@/lib/build-review-verification-trigger");
+  await queueBuildReviewVerification(buildId);
+  return true;
+}
+
+/**
  * FIX 2 (spec §3.1 engine-first) — Restart-resume for stranded build rows. The
  * pipeline is dispatched fire-and-forget (`autoExecuteBuild(...).catch(...)`),
  * so a portal recycle silently kills it mid-flight, leaving a row in the `build`
@@ -358,9 +419,20 @@ export async function resumeStrandedBuildsOnBoot(
      * generator/reviewer pipeline.
      */
     resumePreBuild?: (args: { buildId: string; phase: string; userId: string }) => void;
+    /**
+     * Injectable build->review transition advancer (this fix). Given a build
+     * stranded at the build->review boundary (phase=`build`, step=`complete`,
+     * verification populated), recomputes the SCOPED verification + the
+     * `build->review` phase gate and, if allowed, advances the row to `review`
+     * (the same advance the orchestrator does on normal completion). Returns
+     * whether it advanced. Defaults to {@link advanceStrandedBuildToReview};
+     * injected in tests so the boot reconcile can be asserted without the real
+     * sandbox / scoped-verification chain.
+     */
+    advanceToReview?: (buildId: string) => Promise<boolean>;
   } = {},
   logger: Pick<Console, "log" | "error"> = console,
-): Promise<{ resumed: number; flagged: number } | null> {
+): Promise<{ resumed: number; flagged: number; advanced: number } | null> {
   const staleAfterMs = opts.staleAfterMs ?? 5 * 60 * 1000;
   try {
     const { prisma } = await import("@dpf/db");
@@ -432,8 +504,13 @@ export async function resumeStrandedBuildsOnBoot(
         );
       });
 
+    // Default build->review advancer: the standalone helper that mirrors the
+    // orchestrator's on-completion advance (scoped verification + phase gate).
+    const advanceToReview = opts.advanceToReview ?? advanceStrandedBuildToReview;
+
     let resumed = 0;
     let flagged = 0;
+    let advanced = 0;
     for (const build of candidates) {
       // ── Pre-build phases (ideate/plan/review): no step-machine, but each
       // phase has a canonical generator/reviewer we can re-fire. BI-9257CF19:
@@ -464,10 +541,55 @@ export async function resumeStrandedBuildsOnBoot(
       // ── Build phase: proven step-machine resume (unchanged behavior). ──
       const state = build.buildExecState as ExecStateLike | null;
       // Skip contradictory shapes — the contradictory-recovery reconciler owns
-      // those. Skip null/terminal steps — nothing to resume.
+      // those. (This also excludes the `complete-no-verify` relic, so the
+      // build->review branch below only sees a genuinely verified `complete`.)
       if (classifyContradictoryExecState(state, build.verificationOut) !== null) continue;
       const step = state?.step;
-      if (step == null || step === "complete" || step === "failed") continue;
+
+      // ── Build->review transition strand (this fix). A build whose tasks all
+      // ran and whose verification populated (step=`complete`, non-contradictory)
+      // but whose phase is still `build` was interrupted at the auto-advance
+      // boundary: a self-upgrade swap (or an advance that fired before a gate fix
+      // deployed) killed the orchestrator AFTER it persisted `complete` but
+      // BEFORE it flipped phase->review. Nothing re-fires the advance, so the
+      // build sits in `build` forever, quiet. Re-run the SAME advance the
+      // orchestrator does on normal completion: recompute the SCOPED verification
+      // and the `build->review` gate, and advance only if it passes. A
+      // genuinely-broken build (in-scope failure) leaves the gate disallowed and
+      // is left stranded — we never force-advance it. Observed live: FB-69231490
+      // (3/3 tasks DONE, scoped typecheckPassed=true testsFailed=0, never
+      // advanced for 35+ min).
+      if (step === "complete") {
+        try {
+          const didAdvance = await advanceToReview(build.buildId);
+          if (didAdvance) {
+            logger.log(
+              `[build-resume] ${build.buildId} stranded at build→review transition — advancing (gate passed)`,
+            );
+            await prisma.buildActivity
+              .create({
+                data: {
+                  buildId: build.buildId,
+                  tool: "resumeStrandedBuildsOnBoot",
+                  summary:
+                    "Stranded at the build→review transition after a restart/swap (tasks complete, scoped gate passes) — advancing to review.",
+                },
+              })
+              .catch(() => {});
+            advanced++;
+          }
+        } catch (advErr) {
+          logger.error(
+            "[build-resume] build→review advance failed for %s: %s",
+            JSON.stringify(build.buildId),
+            advErr instanceof Error ? JSON.stringify(advErr.message) : JSON.stringify(String(advErr)),
+          );
+        }
+        continue;
+      }
+
+      // Skip null/terminal steps — nothing to resume.
+      if (step == null || step === "failed") continue;
 
       logger.log(
         `[build-resume] ${build.buildId} stranded at step=${step} (no progress since updatedAt) — re-dispatching pipeline`,
@@ -490,7 +612,10 @@ export async function resumeStrandedBuildsOnBoot(
     if (flagged > 0) {
       logger.log(`[build-resume] auto-resumed ${flagged} pre-build-phase strand(s) (ideate/plan/review)`);
     }
-    return { resumed, flagged };
+    if (advanced > 0) {
+      logger.log(`[build-resume] advanced ${advanced} build→review transition strand(s)`);
+    }
+    return { resumed, flagged, advanced };
   } catch (err) {
     logger.error("[build-resume] failed (non-fatal):", err);
     return null;
