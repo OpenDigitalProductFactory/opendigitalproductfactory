@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { saveBuildStudioConfig, checkLocalEndpoint } from "@/lib/actions/build-studio";
+import { saveBuildStudioConfig, checkLocalEndpoint, applyLocalModelContext } from "@/lib/actions/build-studio";
 import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
 import type { LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
 import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
@@ -99,6 +99,11 @@ export function BuildStudioConfigForm({
   const [opencodeModel, setOpencodeModel] = useState(config.opencodeModel);
   const [endpointCheck, setEndpointCheck] = useState<LocalEndpointPreflight | null>(null);
   const [checkingEndpoint, setCheckingEndpoint] = useState(false);
+  // (a) Per-model served context window (tokens) the operator applies to the
+  // local runtime without touching Docker.
+  const [contextTokens, setContextTokens] = useState("");
+  const [applyingContext, setApplyingContext] = useState(false);
+  const [contextResult, setContextResult] = useState<{ ok: boolean; reason: string | null } | null>(null);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,13 +116,40 @@ export function BuildStudioConfigForm({
   function runEndpointCheck() {
     setCheckingEndpoint(true);
     setEndpointCheck(null);
+    setContextResult(null);
     startTransition(async () => {
       try {
-        setEndpointCheck(await checkLocalEndpoint(opencodeModel));
+        const result = await checkLocalEndpoint(opencodeModel);
+        setEndpointCheck(result);
+        // Prefill the context input with the real served size (or the floor) so
+        // the operator edits from the truth, not a blank box.
+        if (typeof result.servedContextTokens === "number" && result.servedContextTokens > 0) {
+          setContextTokens(String(result.servedContextTokens));
+        } else if (!contextTokens) {
+          setContextTokens("22000");
+        }
       } catch (err) {
         setEndpointCheck({ ok: false, resolvedModel: null, models: [], contextOk: false, reason: (err as Error).message });
       } finally {
         setCheckingEndpoint(false);
+      }
+    });
+  }
+
+  function applyContext() {
+    const model = endpointCheck?.resolvedModel || opencodeModel.trim();
+    const tokens = Number(contextTokens);
+    setContextResult(null);
+    setApplyingContext(true);
+    startTransition(async () => {
+      try {
+        const res = await applyLocalModelContext(model, tokens);
+        setContextResult({ ok: res.ok, reason: res.reason });
+        if (res.preflight) setEndpointCheck(res.preflight);
+      } catch (err) {
+        setContextResult({ ok: false, reason: (err as Error).message });
+      } finally {
+        setApplyingContext(false);
       }
     });
   }
@@ -434,7 +466,7 @@ export function BuildStudioConfigForm({
                   value={opencodeModel}
                   onChange={e => setOpencodeModel(e.target.value)}
                   disabled={!canWrite}
-                  placeholder="auto (first served model)"
+                  placeholder="auto (first coding model)"
                   style={{
                     width: 200,
                     fontSize: 11,
@@ -447,9 +479,65 @@ export function BuildStudioConfigForm({
                 />
               </label>
               <p style={{ fontSize: 10, color: "var(--dpf-muted)", marginBottom: 8 }}>
-                Leave blank to use the first model your local endpoint serves. A coding model
-                with ≥22k context (e.g. a qwen3-coder build) is recommended.
+                Leave blank to use the first <strong>coding</strong> model your endpoint serves
+                (embedding models like nomic-embed are skipped). A coding model with ≥22k context
+                (e.g. a qwen3-coder build) is recommended — set the context window below if your
+                runtime serves it lower.
               </p>
+
+              {/* (a) Per-model served context window — applied to the local runtime
+                  (Docker Model Runner) over HTTP; the operator never touches Docker. */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)" }}>
+                  Context window:
+                  <input
+                    type="number"
+                    min={1024}
+                    step={1024}
+                    value={contextTokens}
+                    onChange={e => setContextTokens(e.target.value)}
+                    disabled={!canWrite}
+                    placeholder="22000"
+                    style={{
+                      width: 110,
+                      fontSize: 11,
+                      padding: "2px 6px",
+                      border: "1px solid var(--dpf-border)",
+                      borderRadius: 4,
+                      background: "var(--dpf-bg)",
+                      color: "var(--dpf-text)",
+                    }}
+                  />
+                  <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>tokens</span>
+                </label>
+                {canWrite && (
+                  <button
+                    type="button"
+                    onClick={applyContext}
+                    disabled={applyingContext || !contextTokens}
+                    style={{
+                      padding: "4px 12px",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      background: "var(--dpf-surface-2)",
+                      color: "var(--dpf-text)",
+                      border: "1px solid var(--dpf-border)",
+                      borderRadius: 6,
+                      cursor: applyingContext ? "wait" : "pointer",
+                    }}
+                  >
+                    {applyingContext ? "Applying…" : "Apply to local runtime"}
+                  </button>
+                )}
+              </div>
+              {contextResult && (
+                <div role="status" style={{ marginBottom: 8, fontSize: 11, color: contextResult.ok ? "var(--dpf-success)" : "var(--dpf-error)" }}>
+                  {contextResult.ok
+                    ? "✓ Context window applied to the local runtime. It takes effect the next time the model loads."
+                    : <>⚠ {contextResult.reason}</>}
+                </div>
+              )}
+
               {canWrite && (
                 <button
                   type="button"
@@ -482,6 +570,11 @@ export function BuildStudioConfigForm({
                     <>
                       ✓ Endpoint reachable — will dispatch to{" "}
                       <strong>{endpointCheck.resolvedModel}</strong>.
+                      {typeof endpointCheck.servedContextTokens === "number" && endpointCheck.servedContextTokens > 0 && (
+                        <span style={{ color: "var(--dpf-muted)" }}>
+                          {" "}Served context: {endpointCheck.servedContextTokens.toLocaleString()} tokens.
+                        </span>
+                      )}
                       {endpointCheck.models.length > 0 && (
                         <span style={{ color: "var(--dpf-muted)" }}>
                           {" "}Models served: {endpointCheck.models.join(", ")}.
@@ -493,6 +586,20 @@ export function BuildStudioConfigForm({
                   )}
                 </div>
               )}
+              {/* (b) Non-fatal advisories (e.g. embedding model selected). */}
+              {endpointCheck?.warnings?.map((w, i) => (
+                <div key={i} role="status" style={{ marginTop: 6, fontSize: 11, color: "var(--dpf-warning)" }}>
+                  ⚠ {w}
+                </div>
+              ))}
+
+              <p style={{ fontSize: 10, color: "var(--dpf-muted)", marginTop: 10 }}>
+                Running fully offline? Turn on{" "}
+                <Link href="/platform/ai/providers" style={{ color: "var(--dpf-accent)", textDecoration: "underline" }}>
+                  local-only inference
+                </Link>{" "}
+                in Providers &amp; Routing so every build phase stays on local with no silent cloud fallback.
+              </p>
             </div>
           )}
         </section>

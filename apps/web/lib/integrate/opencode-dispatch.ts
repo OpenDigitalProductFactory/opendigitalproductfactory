@@ -24,6 +24,7 @@
 
 import type { AssignedTask, SpecialistRole } from "./task-dependency-graph";
 import { getOllamaBaseUrl } from "@/lib/inference/ollama-url";
+import { getServedContextTokens } from "@/lib/inference/dmr-runtime-config";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 
@@ -35,7 +36,7 @@ const OPENCODE_SCHEMA_TASK_TIMEOUT_MS = Number(process.env.OPENCODE_SCHEMA_TASK_
 // Real agent runs consume 39k–156k tokens; a serving context below this fails
 // outright. Advisory floor — /v1/models rarely exposes context length, so this
 // is enforced only when the endpoint reports it (see preflightLocalEndpoint).
-const OPENCODE_MIN_CONTEXT_TOKENS = Number(process.env.OPENCODE_MIN_CONTEXT_TOKENS) || 22_000;
+export const OPENCODE_MIN_CONTEXT_TOKENS = Number(process.env.OPENCODE_MIN_CONTEXT_TOKENS) || 22_000;
 
 export type OpencodeResult = {
   content: string;
@@ -50,7 +51,33 @@ export type LocalEndpointPreflight = {
   models: string[];
   contextOk: boolean;       // false only when the endpoint reports a context below the floor
   reason: string | null;    // BLOCKED-classifiable message when ok === false
+  /**
+   * The authoritative served context window (tokens) read from the local
+   * runtime's runtime-config API, when available. null when the runtime does
+   * not report it. Distinct from the `/v1/models`-advertised context, which on
+   * Docker Model Runner is the artifact default, not the runtime override.
+   */
+  servedContextTokens?: number | null;
+  /**
+   * Non-fatal advisories the operator should see (e.g. an embedding model was
+   * selected, or the served context is below the agent floor). Surfaced in the
+   * Build Runtime UX without forcing ok === false.
+   */
+  warnings?: string[];
 };
+
+// Non-chat model families a local OpenAI-compatible endpoint commonly also
+// serves (embeddings, rerankers, STT/TTS). These cannot run a coding agent
+// loop. Single source of truth for pickDefaultCodingModel + isEmbeddingModelId.
+const NON_CHAT_MODEL_RE = /embed|nomic|bge[-_]|rerank|whisper|\bstt\b|\btts\b|clip|vision-embed|minilm|gte|e5/i;
+
+/**
+ * True when a model id looks like an embedding / non-chat model that cannot run
+ * a coding agent. Used to warn an operator who selected one explicitly.
+ */
+export function isEmbeddingModelId(modelId: string): boolean {
+  return NON_CHAT_MODEL_RE.test(modelId);
+}
 
 /**
  * Rewrite the portal's view of the local endpoint into one the sandbox
@@ -87,8 +114,7 @@ type OpenAiModelsResponse = {
  * then any remaining chat model. Returns null only when nothing usable is served.
  */
 export function pickDefaultCodingModel(models: string[]): string | null {
-  const NON_CHAT_RE = /embed|nomic|bge[-_]|rerank|whisper|\bstt\b|\btts\b|clip|vision-embed|minilm|gte|e5/i;
-  const chatModels = models.filter((m) => !NON_CHAT_RE.test(m));
+  const chatModels = models.filter((m) => !NON_CHAT_MODEL_RE.test(m));
   return (
     chatModels.find((m) => /coder|[-_]code\b|code[-_]/i.test(m)) ??
     chatModels.find((m) => /qwen3/i.test(m)) ??
@@ -101,6 +127,15 @@ export async function preflightLocalEndpoint(
   portalBaseUrl: string,
   requestedModel: string,
   fetchImpl: typeof fetch = fetch,
+  opts?: {
+    /**
+     * Also read the authoritative served context window from the runtime's
+     * configure API (Docker Model Runner `/engines/_configure`) and enforce the
+     * >= OPENCODE_MIN_CONTEXT_TOKENS floor against it. Off by default so the
+     * pure model-list preflight stays a single call.
+     */
+    checkServedContext?: boolean;
+  },
 ): Promise<LocalEndpointPreflight> {
   const base = portalBaseUrl.replace(/\/$/, "");
   const url = `${base}/models`;
@@ -121,32 +156,64 @@ export async function preflightLocalEndpoint(
     return { ok: false, resolvedModel: null, models, contextOk: false, reason: `Local model endpoint ${url} returned no models. Pull a coding model first (e.g. a qwen3-coder build).` };
   }
 
-  const resolvedModel = requestedModel && models.includes(requestedModel)
-    ? requestedModel
-    : requestedModel
+  const requested = requestedModel.trim();
+  const resolvedModel = requested && models.includes(requested)
+    ? requested
+    : requested
       ? null
       : pickDefaultCodingModel(models);
 
   if (!resolvedModel) {
-    return { ok: false, resolvedModel: null, models, contextOk: false, reason: `Requested model "${requestedModel}" is not served by the local endpoint. Available: ${models.join(", ")}.` };
+    // Distinguish "you named a model we don't serve" from "you named nothing
+    // and everything served is an embedding model" — the latter is the
+    // nomic-embed footgun and deserves its own actionable message.
+    if (!requested && models.every(isEmbeddingModelId)) {
+      return { ok: false, resolvedModel: null, models, contextOk: false, reason: `The local endpoint only serves embedding / non-chat models (${models.join(", ")}). Pull a CODING model (e.g. a qwen3-coder build) before running a build.` };
+    }
+    return { ok: false, resolvedModel: null, models, contextOk: false, reason: `Requested model "${requested}" is not served by the local endpoint. Available: ${models.join(", ")}.` };
   }
 
-  // Best-effort context check: only enforced when the endpoint reports a context
-  // length for the resolved model. Most OpenAI-compatible /v1/models responses
-  // omit it, in which case we proceed and rely on the documented model floor.
+  const warnings: string[] = [];
+  // (b) Warn when the operator explicitly selected an embedding model — it
+  // cannot run a coding agent loop, even though it's served.
+  if (requested && isEmbeddingModelId(resolvedModel)) {
+    warnings.push(`"${resolvedModel}" looks like an embedding model — it cannot run a coding agent. Choose a coding model (e.g. a qwen3-coder build).`);
+  }
+
+  // Best-effort /v1/models context check: only enforced when the endpoint
+  // reports a context length for the resolved model. Most OpenAI-compatible
+  // /v1/models responses omit it (Docker Model Runner reports the artifact
+  // default, not the runtime override), in which case we fall through to the
+  // authoritative served-context read below.
   const entry = entries.find((m) => m.id === resolvedModel);
   const reported = entry?.context_length ?? entry?.context_window ?? entry?.max_context_length;
-  if (typeof reported === "number" && reported > 0 && reported < OPENCODE_MIN_CONTEXT_TOKENS) {
+
+  // (a) Authoritative served-context read from the runtime configure API.
+  // This is the real served window (e.g. a `docker model configure
+  // --context-size 32768` override) that /v1/models does NOT reflect.
+  let servedContextTokens: number | null = null;
+  if (opts?.checkServedContext) {
+    const apiRoot = base.replace(/\/(engines\/)?v1\/?$/, "");
+    const served = await getServedContextTokens(apiRoot, resolvedModel, fetchImpl);
+    servedContextTokens = served.contextTokens;
+  }
+
+  // Enforce the floor against the most authoritative number available: the
+  // served-context override wins; otherwise the /v1/models-reported value.
+  const effectiveContext = servedContextTokens ?? (typeof reported === "number" && reported > 0 ? reported : null);
+  if (effectiveContext !== null && effectiveContext < OPENCODE_MIN_CONTEXT_TOKENS) {
     return {
       ok: false,
       resolvedModel,
       models,
       contextOk: false,
-      reason: `Model "${resolvedModel}" serves only ${reported} context tokens; agent runs need >= ${OPENCODE_MIN_CONTEXT_TOKENS}. Pull a longer-context model.`,
+      servedContextTokens,
+      warnings,
+      reason: `Model "${resolvedModel}" serves only ${effectiveContext} context tokens; agent runs need >= ${OPENCODE_MIN_CONTEXT_TOKENS}. Raise the model's context window (Build Runtime > local model > context window) or pull a longer-context model.`,
     };
   }
 
-  return { ok: true, resolvedModel, models, contextOk: true, reason: null };
+  return { ok: true, resolvedModel, models, contextOk: true, servedContextTokens, warnings, reason: null };
 }
 
 /**
@@ -274,9 +341,10 @@ export async function dispatchOpencodeTask(params: {
   const portalBaseUrl = getOllamaBaseUrl().replace(/\/$/, "");
   const sandboxBaseUrl = sandboxReachableUrl(portalBaseUrl);
 
-  // Hard preflight: endpoint reachable + model present. A failure here is an
-  // honest BLOCKED, not a silent degrade.
-  const pre = await preflightLocalEndpoint(portalBaseUrl, params.model ?? "", params.fetchImpl ?? fetch);
+  // Hard preflight: endpoint reachable + model present + served context clears
+  // the agent floor. A failure here is an honest BLOCKED, not a silent degrade
+  // (and not a silent truncation when the served context is too small).
+  const pre = await preflightLocalEndpoint(portalBaseUrl, params.model ?? "", params.fetchImpl ?? fetch, { checkServedContext: true });
   if (!pre.ok || !pre.resolvedModel) {
     return {
       content: `BLOCKED: ${pre.reason ?? "local endpoint preflight failed"}`,

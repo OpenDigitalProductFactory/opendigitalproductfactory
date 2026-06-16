@@ -21,6 +21,7 @@ import {
 } from "@/lib/routing/loader";
 import { routeEndpointV2 } from "@/lib/routing/pipeline-v2";
 import { callWithFallbackChain } from "@/lib/routing/fallback";
+import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { logTokenUsage } from "@/lib/ai-inference";
 import type { RouteDecisionActor } from "@/lib/routing/route-decision-attribution";
 
@@ -189,6 +190,13 @@ export async function routeAndCall(
 ): Promise<RoutedInferenceResult> {
   const taskType = options?.taskType ?? "conversation";
 
+  // Local-only inference (cloud disabled): the operator-set platform switch.
+  // When ON, force residencyPolicy=local_only for EVERY call so routing never
+  // selects a cloud endpoint — it routes local or fails loudly below. This is
+  // authoritative over a task requirement's residency, and the guarantee the
+  // "disable cloud" admin toggle promises (no silent per-phase cloud fallback).
+  const localOnlyInference = await getLocalOnlyInference();
+
   // 1. Infer contract
   const contract = await inferContract(
     taskType,
@@ -203,6 +211,7 @@ export async function routeAndCall(
       requiresComputerUse: options?.requiresComputerUse,
       budgetClass: options?.budgetClass,
       requiredModelClass: options?.requiredModelClass,
+      ...(localOnlyInference ? { residencyPolicy: "local_only" as const } : {}),
     },
   );
 
@@ -289,11 +298,14 @@ export async function routeAndCall(
   // stripping destroys task semantics. Fail fast instead of silently degrading.
   if (!decision.selectedEndpoint && contract.requiresTools) {
     if (options?.requireTools) {
+      const fix = contract.residencyPolicy === "local_only"
+        ? `Local-only inference is ON (cloud disabled), so routing will not fall back to a cloud provider. ` +
+          `Enable a tool-capable LOCAL model (or run the build through the opencode engine, which supplies the tool loop), ` +
+          `or turn off local-only inference in Admin > AI > Providers & Routing.`
+        : `Configure a tool-capable provider (OpenAI, Anthropic, Gemini) or check that existing providers are active.`;
       throw new NoEligibleEndpointsError(
         taskType,
-        `No tool-capable endpoint available. Build Studio requires tool support — ` +
-        `cannot fall back to generic chat. Configure a tool-capable provider (OpenAI, Anthropic, Gemini) ` +
-        `or check that existing providers are active.`,
+        `No tool-capable endpoint available. Build Studio requires tool support — cannot fall back to generic chat. ${fix}`,
         decision.excludedCount,
       );
     }
@@ -311,6 +323,20 @@ export async function routeAndCall(
   }
 
   if (!decision.selectedEndpoint) {
+    // Local-only inference: fail LOUDLY and specifically rather than letting the
+    // generic "no eligible endpoints" mask the real cause (cloud is disabled and
+    // no local model qualified for this task's tier/capability/context).
+    if (contract.residencyPolicy === "local_only") {
+      throw new NoEligibleEndpointsError(
+        taskType,
+        `No eligible LOCAL model for task '${taskType}' (sensitivity '${sensitivity}'). ` +
+        `Local-only inference is ON, so cloud providers are excluded and routing will NOT silently fall back to cloud. ` +
+        `Pull or enable a local model that meets this task's requirements (tool support, context window, quality tier), ` +
+        `raise the model's context window in Build Runtime, or turn off local-only inference in Admin > AI > Providers & Routing. ` +
+        `Router detail: ${decision.reason}`,
+        decision.excludedCount,
+      );
+    }
     throw new NoEligibleEndpointsError(
       taskType,
       decision.reason,

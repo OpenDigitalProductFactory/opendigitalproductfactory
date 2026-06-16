@@ -4,8 +4,10 @@ import { prisma, type Prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
-import { getOllamaBaseUrl } from "@/lib/inference/ollama-url";
-import { preflightLocalEndpoint, type LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
+import { getOllamaBaseUrl, getOllamaApiRoot } from "@/lib/inference/ollama-url";
+import { preflightLocalEndpoint, OPENCODE_MIN_CONTEXT_TOKENS, type LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
+import { setServedContextTokens } from "@/lib/inference/dmr-runtime-config";
+import { getLocalOnlyInference, setLocalOnlyInference } from "@/lib/inference/local-only";
 
 async function requireManageProviders(): Promise<string> {
   const session = await auth();
@@ -86,5 +88,77 @@ export async function checkLocalEndpoint(
 ): Promise<LocalEndpointPreflight> {
   await requireManageProviders();
   const portalBaseUrl = getOllamaBaseUrl().replace(/\/$/, "");
-  return preflightLocalEndpoint(portalBaseUrl, model ?? "");
+  // checkServedContext: read the authoritative runtime context window so the
+  // UX shows the real served size (e.g. a 32768 override) and warns/blocks
+  // below the agent floor — not the misleading /v1/models artifact default.
+  return preflightLocalEndpoint(portalBaseUrl, model ?? "", fetch, { checkServedContext: true });
+}
+
+const MIN_CONTEXT_FLOOR = 1024;
+const MAX_CONTEXT_CEILING = 1_048_576; // 1M — generous upper guard; DMR rejects values a model can't serve
+
+/**
+ * Raise (or lower) the served context window of a local model via Docker Model
+ * Runner's runtime configure API — the operator never touches Docker. Persists
+ * the value to the matching local ModelProfile.maxContextTokens so routing and
+ * the dispatch preflight use the real number, then returns a fresh preflight.
+ *
+ * Gated on manage-providers. The model id is the one `/v1/models` reports
+ * (e.g. "docker.io/ai/qwen3-coder:latest"); DMR matches it leniently.
+ */
+export async function applyLocalModelContext(
+  model: string,
+  contextTokens: number,
+): Promise<{ ok: boolean; reason: string | null; preflight: LocalEndpointPreflight | null }> {
+  await requireManageProviders();
+
+  const trimmed = (model ?? "").trim();
+  if (!trimmed) {
+    return { ok: false, reason: "No model specified. Resolve the served model first (Test local endpoint).", preflight: null };
+  }
+  if (!Number.isFinite(contextTokens) || !Number.isInteger(contextTokens)) {
+    return { ok: false, reason: "Context window must be a whole number of tokens.", preflight: null };
+  }
+  if (contextTokens < MIN_CONTEXT_FLOOR || contextTokens > MAX_CONTEXT_CEILING) {
+    return { ok: false, reason: `Context window must be between ${MIN_CONTEXT_FLOOR} and ${MAX_CONTEXT_CEILING} tokens.`, preflight: null };
+  }
+  if (contextTokens < OPENCODE_MIN_CONTEXT_TOKENS) {
+    // Allowed (operator may know better), but make the consequence explicit.
+    console.warn(`[build-studio] applyLocalModelContext set ${trimmed} to ${contextTokens} (< ${OPENCODE_MIN_CONTEXT_TOKENS} agent floor)`);
+  }
+
+  const apiRoot = getOllamaApiRoot();
+  const applied = await setServedContextTokens(apiRoot, trimmed, contextTokens);
+  if (!applied.ok) {
+    return { ok: false, reason: applied.reason, preflight: null };
+  }
+
+  // Persist to the matching local ModelProfile so routing eligibility + the
+  // dispatch preflight use the real served context (fix-the-seed: the DB row is
+  // the routing source of truth, not the artifact default).
+  await prisma.modelProfile.updateMany({
+    where: { providerId: { in: ["local", "ollama"] }, modelId: trimmed },
+    data: { maxContextTokens: applied.contextTokens ?? contextTokens },
+  });
+
+  const portalBaseUrl = getOllamaBaseUrl().replace(/\/$/, "");
+  const preflight = await preflightLocalEndpoint(portalBaseUrl, trimmed, fetch, { checkServedContext: true });
+  return { ok: true, reason: null, preflight };
+}
+
+/** Read the local-only inference (cloud-disabled) switch. */
+export async function getLocalOnlyInferenceSetting(): Promise<boolean> {
+  await requireManageProviders();
+  return getLocalOnlyInference();
+}
+
+/**
+ * Toggle local-only inference. When ON, every routed inference call is pinned
+ * to the local provider (residencyPolicy=local_only) and fails loudly if no
+ * local model qualifies — no silent cloud fallback.
+ */
+export async function setLocalOnlyInferenceSetting(enabled: boolean): Promise<{ ok: true; enabled: boolean }> {
+  await requireManageProviders();
+  await setLocalOnlyInference(enabled);
+  return { ok: true, enabled };
 }
