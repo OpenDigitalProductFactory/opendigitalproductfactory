@@ -23,6 +23,7 @@ function projectionResult(overrides: Partial<SysmlProjectionsResult> = {}): Sysm
     routes: healthy,
     codeStructure: healthy,
     processModels: healthy,
+    skillToolchain: healthy,
     ...overrides,
   };
 }
