@@ -248,6 +248,47 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.coworkerPrompt).toContain("parent design");
   });
 
+  it("offers a re-run-plan-review action when a non-oscillating plan review failed (BI-E1CB0522)", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        buildPlan: {
+          fileStructure: [{ path: "apps/web/lib/integrate/ollama-url.ts", action: "modify", purpose: "Add a clarifying comment." }],
+          tasks: [{ title: "Add comment", testFirst: "n/a for a comment", implement: "Add the comment", verify: "Read the file" }],
+        },
+        planReview: {
+          decision: "fail",
+          summary: "Missing test-first steps.",
+          issues: [{ severity: "critical", description: "Task lacks a test-first step." }],
+          iteration: { round: 1 },
+        },
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("rerun-plan-review");
+    expect(action.primaryLabel).toBe("Re-run Plan Review");
+    expect(action.targetPhase).toBeNull();
+    expect(action.disabledReason).toBeNull();
+    expect(action.message).toContain("did not pass review");
+  });
+
+  it("does not offer re-run-plan-review when the plan review has not run yet", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        buildPlan: {
+          fileStructure: [{ path: "apps/web/lib/integrate/ollama-url.ts", action: "modify", purpose: "Add a clarifying comment." }],
+          tasks: [{ title: "Add comment", testFirst: "n/a", implement: "Add the comment", verify: "Read the file" }],
+        },
+        planReview: null,
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("advance-phase");
+  });
+
   it("surfaces verification once implementation evidence is ready", () => {
     const action = deriveBuildStudioWorkflowAction({
       build: makeBuild({

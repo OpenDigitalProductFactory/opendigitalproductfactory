@@ -128,6 +128,22 @@ export type BuildStudioWorkflowAction =
     coworkerPrompt: string;
   } & BuildStudioWorkflowActionMetadata)
   | ({
+    // BI-E1CB0522 — first-class "Re-run Plan Review" recovery affordance.
+    // Surfaces in the plan phase when planReview.decision === "fail" so an
+    // operator can refresh a stale/failed review (using the CURRENT reviewer
+    // logic) without dropping to MCP/raw DB. A re-run that now passes (e.g. a
+    // chore whose only criticals are now-lenient test-first items) auto-
+    // advances plan->build through the canonical executeTool path.
+    kind: "rerun-plan-review";
+    title: string;
+    message: string;
+    primaryLabel: string;
+    targetPhase: null;
+    disabledReason: string | null;
+    coworkerLabel: string;
+    coworkerPrompt: string;
+  } & BuildStudioWorkflowActionMetadata)
+  | ({
     kind: "review-only";
     title: string;
     message: string;
@@ -183,6 +199,17 @@ function getPhaseGateReason(
   });
 
   return gate.allowed ? null : (gate.reason ?? "This phase cannot advance yet.");
+}
+
+/**
+ * BI-E1CB0522 — true when a plan review has been run and FAILED. Defensive
+ * against the loosely-typed JSON column: only a persisted review object whose
+ * decision is exactly "fail" counts (a null/absent review is "not yet run",
+ * not "failed", and must not surface the re-run affordance).
+ */
+function isPlanReviewFailed(planReview: FeatureBuildRow["planReview"]): boolean {
+  if (!planReview || typeof planReview !== "object") return false;
+  return (planReview as { decision?: unknown }).decision === "fail";
 }
 
 function describeApprovalGap(build: FeatureBuildRow): string {
@@ -477,6 +504,31 @@ export function deriveBuildStudioWorkflowAction({
         coworkerLabel: "Amend with coworker",
         coworkerPrompt:
           "This child build is oscillating in Plan review. Help me amend the parent design instead of recursively decomposing this child; preserve completed sibling work and call out what must wait for the Phase 8 amendment flow.",
+      };
+    }
+
+    // BI-E1CB0522 — a FAILED (non-oscillating) plan review is otherwise a dead
+    // end in the UI: "Start Implementation" is gated and the only escape is the
+    // coworker chat. Surface a first-class "Re-run Plan Review" action that
+    // re-runs the CANONICAL reviewer (executeTool path, with the #1976/#1998
+    // kind-aware test-first lenience + plan->build auto-advance). This refreshes
+    // a stale failed review after a reviewer-logic fix deploys — e.g. a chore
+    // whose only criticals are now-lenient test-first items will pass and
+    // advance. Oscillating reviews are handled by the decompose/amend branches
+    // above (another review round won't converge), so this only fires when the
+    // plan review failed but is NOT oscillating.
+    if (isPlanReviewFailed(build.planReview)) {
+      return {
+        kind: "rerun-plan-review",
+        title: "Plan Review Failed",
+        message:
+          "The implementation plan did not pass review. Re-run the plan review to refresh the result with the current reviewer logic, or revise the plan with the coworker first. If the blocking issues are resolved (or no longer apply), the re-run passes and Start Implementation unlocks automatically.",
+        primaryLabel: "Re-run Plan Review",
+        targetPhase: null,
+        disabledReason: null,
+        coworkerLabel: "Revise the plan",
+        coworkerPrompt:
+          "The Build Studio plan review failed. Summarize the blocking issues, revise the implementation plan to address them, save the plan with saveBuildEvidence field buildPlan, then re-run reviewBuildPlan and tell me when Start Implementation is unlocked.",
       };
     }
 
