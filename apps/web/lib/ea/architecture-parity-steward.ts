@@ -57,6 +57,9 @@ const DOMAIN_LABELS: Record<ProjectionDomain, string> = {
   codeStructure: "source-code structure",
   processModels: "platform process models",
   skillToolchain: "skill & agent toolchain",
+  operationalGraph: "operational graph (live runtime)",
+  networkTopology: "network topology (discovered)",
+  integrations: "connected-application integrations",
 };
 
 function projectionEntries(result: SysmlProjectionsResult): Array<[ProjectionDomain, ProjectionStatus]> {
