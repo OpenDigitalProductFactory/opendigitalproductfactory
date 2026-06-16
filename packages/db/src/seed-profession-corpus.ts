@@ -880,8 +880,8 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
   },
 
   // ── Archetype-specific craft (WSID archetype axis, first wave) ──
-  // automotive-services dispatch: ADAS recalibration compliance after glass /
-  // alignment work — an archetype-specific safety gate the dispatcher owns.
+  // Dispatch-native compliance gates the dispatcher owns, one per archetype.
+  // automotive-services: ADAS recalibration after glass / alignment work.
   "wikipedia/adas": {
     sourceType: "reference",
     title: "Advanced driver-assistance system",
@@ -891,6 +891,30 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "ADAS use windshield-mounted cameras/sensors; mechanical alignment or " +
       "collision/glass work can require recalibration (an automatic reset) to " +
       "keep the safety systems accurate.",
+    retrievedAt: "2026-06-16",
+  },
+  // trades-maintenance: EPA Section 608 technician certification for refrigerant work.
+  "epa/section-608": {
+    sourceType: "standard",
+    title: "Section 608 Technician Certification Requirements (US EPA)",
+    url: "https://www.epa.gov/section608/section-608-technician-certification-requirements",
+    license: "US-Gov-Public-Domain",
+    abstract:
+      "EPA Clean Air Act §608: technicians who maintain, service, repair, or " +
+      "dispose of refrigerant-containing equipment must be certified (Type I/II/" +
+      "III/Universal); knowingly venting refrigerants is prohibited.",
+    retrievedAt: "2026-06-16",
+  },
+  // moving-and-logistics: FMCSA hours-of-service limits for commercial drivers.
+  "fmcsa/hours-of-service": {
+    sourceType: "reference",
+    title: "Hours of service (FMCSA, via encyclopedia summary)",
+    url: "https://en.wikipedia.org/wiki/Hours_of_service",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "FMCSA hours-of-service limits for commercial motor vehicle drivers: " +
+      "11-hour driving limit, 14-hour on-duty window, 30-minute break, 60/70-hour " +
+      "weekly caps; hours logged via logbook or ELD.",
     retrievedAt: "2026-06-16",
   },
 
