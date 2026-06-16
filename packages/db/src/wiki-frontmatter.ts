@@ -46,6 +46,12 @@ export type WikiPageFrontmatter = {
    * "practitioner". Values from PROFESSION_COMPETENCY_LEVELS.
    */
   professionCompetencyLevel?: string;
+  /**
+   * Business archetypes this page's craft variant is specific to. Omitted =
+   * archetype-neutral (equivalent to ["universal"]). Values from
+   * PROFESSION_ARCHETYPES (mirror of ArchetypeCategory).
+   */
+  professionArchetype?: string[];
   // ─── Principle-only frontmatter (spec section 9) ───
   // Required-field gating lives in lint detectors per spec section 14, not
   // here. The seed walker accepts incomplete principle data so lint can

@@ -293,6 +293,47 @@ export const PROFESSION_COMPETENCY_LEVELS = [
 export type ProfessionCompetencyLevel =
   (typeof PROFESSION_COMPETENCY_LEVELS)[number];
 
+/**
+ * Archetype axis — the business archetype whose practice a page is specific to.
+ * A page omitting `professionArchetype` is archetype-neutral (applies to every
+ * install) — equivalent to `["universal"]`. Archetype-specific doctrine (a
+ * dispatcher's running-late cascade in field trades vs. a storefront order
+ * handoff in retail; ADAS-calibration compliance for automotive vs. EPA-608 for
+ * HVAC) declares the archetypes it governs so an install of that archetype is
+ * served the right craft variant and shielded from the irrelevant one.
+ *
+ * The non-`universal` slugs mirror `ArchetypeCategory`
+ * (packages/storefront-templates/src/types.ts) — the canonical install archetype
+ * taxonomy — so an install's resolved archetype category maps 1:1 onto a corpus
+ * tag. Kept in sync by the `profession-archetype-axis` invariant test; grow only
+ * alongside that union. Like jurisdiction, seed archetype-specific content as
+ * real per-archetype demand appears, not speculatively — but the axis is
+ * complete so any install's archetype can be *noted* at setup from day one.
+ */
+export const PROFESSION_ARCHETYPES = [
+  "universal",
+  "healthcare-wellness",
+  "beauty-personal-care",
+  "trades-maintenance",
+  "professional-services",
+  "software-platform",
+  "education-training",
+  "pet-services",
+  "food-hospitality",
+  "retail-goods",
+  "fitness-recreation",
+  "nonprofit-community",
+  "hoa-property-management",
+  "banking-financial-services",
+  "public-sector",
+  "asset-rental",
+  "real-estate-construction",
+  "automotive-services",
+  "moving-and-logistics",
+  "security-services",
+] as const;
+export type ProfessionArchetype = (typeof PROFESSION_ARCHETYPES)[number];
+
 // ─── Type-narrowing predicates ──────────────────────────────────────────────
 
 /**
@@ -387,6 +428,19 @@ export function isProfessionCompetencyLevel(
   return (
     typeof value === "string" &&
     (PROFESSION_COMPETENCY_LEVELS as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Narrowing predicate for the WSID archetype axis. Gates `professionArchetype`
+ * frontmatter against `PROFESSION_ARCHETYPES`.
+ */
+export function isProfessionArchetype(
+  value: unknown,
+): value is ProfessionArchetype {
+  return (
+    typeof value === "string" &&
+    (PROFESSION_ARCHETYPES as readonly string[]).includes(value)
   );
 }
 

@@ -25,6 +25,8 @@ export type ProfessionCoverage = {
   jurisdiction: Record<string, number>;
   /** Count of corpus pages at each competency level (omitted = practitioner). */
   competency: Record<string, number>;
+  /** Count of corpus pages tagged for each archetype (omitted = universal). */
+  archetype: Record<string, number>;
   /** Coverage-checklist knowledge areas declared by the registry for this family. */
   checklist: string[];
   /** True when the family has a registry entry but no published corpus pages. */
@@ -50,6 +52,9 @@ export async function loadProfessionCoverage(
   const competency: Record<string, number> = Object.fromEntries(
     PROFESSION_COMPETENCY_LEVELS.map((l: string) => [l, 0]),
   );
+  // Archetype counts start empty and grow as archetype-specific pages appear —
+  // most families are still universal-only, so listing all 20 slugs would be noise.
+  const archetype: Record<string, number> = {};
 
   const pages = (await prisma.wikiPage
     .findMany({
@@ -62,11 +67,14 @@ export async function loadProfessionCoverage(
     .catch(() => [])) as PageMetaRow[];
 
   for (const page of pages) {
-    const { jurisdictions, level } = normalizeVariantAxes(page.metadata);
+    const { jurisdictions, level, archetypes } = normalizeVariantAxes(page.metadata);
     for (const jur of jurisdictions) {
       jurisdiction[jur] = (jurisdiction[jur] ?? 0) + 1;
     }
     competency[level] = (competency[level] ?? 0) + 1;
+    for (const arch of archetypes) {
+      archetype[arch] = (archetype[arch] ?? 0) + 1;
+    }
   }
 
   return {
@@ -75,6 +83,7 @@ export async function loadProfessionCoverage(
     pageCount: pages.length,
     jurisdiction,
     competency,
+    archetype,
     checklist: family?.coverageChecklist ?? [],
     emptyCorpus: pages.length === 0,
   };

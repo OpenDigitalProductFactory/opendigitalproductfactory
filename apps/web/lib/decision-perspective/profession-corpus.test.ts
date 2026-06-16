@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   corpusQueryTerms,
   normalizeCorpusTopic,
+  pageEligibleForInstall,
   rankCorpusPages,
   resolveProfessionCorpusContext,
   type ProfessionCorpusClient,
@@ -11,7 +12,14 @@ import { findProfessionFamily } from "./resolve-profession-profile";
 
 // ─── Fake corpus DB ───────────────────────────────────────────────────────────
 
-type Row = { slug: string; title: string; abstract: string | null; body: string };
+type Row = {
+  slug: string;
+  title: string;
+  abstract: string | null;
+  body: string;
+  /** WSID variant metadata; null → universal/global (the seed default). */
+  metadata: unknown;
+};
 
 const SOFTWARE_ENGINEER_PAGES: Row[] = [
   {
@@ -19,18 +27,21 @@ const SOFTWARE_ENGINEER_PAGES: Row[] = [
     title: "OWASP Top Ten Web Application Security Risks",
     abstract: "The ten most critical web application security risks.",
     body: "Injection, broken access control, and cryptographic failures lead the list. Mitigate with validation.",
+    metadata: null,
   },
   {
     slug: "professions/software-engineer/semantic-versioning",
     title: "Semantic Versioning",
     abstract: "MAJOR.MINOR.PATCH version increments convey compatibility.",
     body: "Increment MAJOR for breaking changes, MINOR for features, PATCH for fixes.",
+    metadata: null,
   },
   {
     slug: "professions/software-engineer/code-review-standard",
     title: "The Standard of Code Review",
     abstract: "Approve once a change improves overall code health.",
     body: "Reviewers approve when the change improves code health; perfection is not required.",
+    metadata: null,
   },
 ];
 
@@ -39,7 +50,9 @@ function fakeCorpusDb(rows: Row[]): ProfessionCorpusClient {
     wikiPage: {
       findMany: async (args) => {
         const prefix = (args.where.slug as { startsWith: string }).startsWith;
-        return rows.filter((r) => r.slug.startsWith(prefix));
+        return rows
+          .filter((r) => r.slug.startsWith(prefix))
+          .map((r) => ({ ...r, metadata: r.metadata ?? null }));
       },
     },
   };
@@ -182,5 +195,88 @@ describe("resolveProfessionCorpusContext", () => {
     expect(ctx.status).toBe("injected"); // corpus still injected (always grounded)
     expect(ctx.lowRelevance).toBe(true);
     expect(ctx.suggestedSource).not.toBeNull();
+  });
+});
+
+// ─── Archetype / jurisdiction variant selection ───────────────────────────────
+
+function meta(archetypes?: string[], jurisdictions?: string[]): unknown {
+  return {
+    ...(archetypes ? { professionArchetype: archetypes } : {}),
+    ...(jurisdictions ? { professionJurisdiction: jurisdictions } : {}),
+  };
+}
+
+describe("pageEligibleForInstall", () => {
+  it("serves universal pages to any install", () => {
+    const axes = { archetypes: ["universal"], jurisdictions: ["global"] };
+    expect(pageEligibleForInstall(axes, {})).toBe(true);
+    expect(pageEligibleForInstall(axes, { archetype: "retail-goods" })).toBe(true);
+  });
+
+  it("serves an archetype-specific page ONLY to the matching install", () => {
+    const axes = { archetypes: ["automotive-services"], jurisdictions: ["global"] };
+    expect(pageEligibleForInstall(axes, { archetype: "automotive-services" })).toBe(true);
+    expect(pageEligibleForInstall(axes, { archetype: "retail-goods" })).toBe(false);
+    expect(pageEligibleForInstall(axes, {})).toBe(false); // generic install never sees it
+  });
+
+  it("filters jurisdiction only when the install declares a concrete region", () => {
+    const usPage = { archetypes: ["universal"], jurisdictions: ["us"] };
+    expect(pageEligibleForInstall(usPage, {})).toBe(true); // no region declared → no filter
+    expect(pageEligibleForInstall(usPage, { jurisdiction: "us" })).toBe(true);
+    expect(pageEligibleForInstall(usPage, { jurisdiction: "eu" })).toBe(false); // shielded
+  });
+});
+
+describe("resolveProfessionCorpusContext — variant selection", () => {
+  const PAGES: Row[] = [
+    {
+      slug: "professions/operations/incident-severity",
+      title: "Incident severity classification",
+      abstract: "Classify incidents by impact.",
+      body: "SEV1/SEV2/SEV3 by customer impact and scope.",
+      metadata: meta(), // universal/global
+    },
+    {
+      slug: "professions/operations/automotive-adas-recalibration",
+      title: "ADAS recalibration after auto-glass replacement",
+      abstract: "Windshield work can require ADAS camera recalibration.",
+      body: "After glass replacement, recalibrate ADAS per OEM spec; document compliance.",
+      metadata: meta(["automotive-services"]),
+    },
+  ];
+
+  it("excludes another archetype's craft from a non-matching install", async () => {
+    const ctx = await resolveProfessionCorpusContext({
+      db: fakeCorpusDb(PAGES),
+      identity: { agentId: "operate-orchestrator" },
+      query: "how do I handle this incident",
+      installContext: { archetype: "retail-goods" },
+    });
+    expect(ctx.status).toBe("injected");
+    expect(ctx.pages.map((p) => p.slug)).not.toContain(
+      "professions/operations/automotive-adas-recalibration",
+    );
+  });
+
+  it("includes AND boosts the archetype-specific page for a matching install", async () => {
+    const ctx = await resolveProfessionCorpusContext({
+      db: fakeCorpusDb(PAGES),
+      identity: { agentId: "operate-orchestrator" },
+      query: "recalibration after glass replacement",
+      installContext: { archetype: "automotive-services" },
+    });
+    expect(ctx.status).toBe("injected");
+    expect(ctx.pages[0]!.slug).toBe("professions/operations/automotive-adas-recalibration");
+  });
+
+  it("a generic install (no context) sees only the universal page", async () => {
+    const ctx = await resolveProfessionCorpusContext({
+      db: fakeCorpusDb(PAGES),
+      identity: { agentId: "operate-orchestrator" },
+      query: "incident severity",
+    });
+    expect(ctx.pages.map((p) => p.slug)).toEqual(["professions/operations/incident-severity"]);
   });
 });

@@ -11,15 +11,15 @@ import {
 } from "@/lib/decision-perspective/resolve-profession-profile";
 
 describe("normalizeVariantAxes", () => {
-  it("defaults to global / practitioner when metadata is empty (seed parity)", () => {
-    expect(normalizeVariantAxes(null)).toEqual({ jurisdictions: ["global"], level: "practitioner" });
-    expect(normalizeVariantAxes({})).toEqual({ jurisdictions: ["global"], level: "practitioner" });
+  it("defaults to global / practitioner / universal when metadata is empty (seed parity)", () => {
+    expect(normalizeVariantAxes(null)).toEqual({ jurisdictions: ["global"], level: "practitioner", archetypes: ["universal"] });
+    expect(normalizeVariantAxes({})).toEqual({ jurisdictions: ["global"], level: "practitioner", archetypes: ["universal"] });
   });
 
   it("reads persisted variant axes from metadata", () => {
     expect(
       normalizeVariantAxes({ professionJurisdiction: ["us", "eu"], professionCompetencyLevel: "expert" }),
-    ).toEqual({ jurisdictions: ["us", "eu"], level: "expert" });
+    ).toEqual({ jurisdictions: ["us", "eu"], level: "expert", archetypes: ["universal"] });
   });
 
   it("falls back to global when jurisdiction array is empty", () => {

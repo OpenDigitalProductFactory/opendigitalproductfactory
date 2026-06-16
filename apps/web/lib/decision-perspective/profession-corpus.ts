@@ -29,6 +29,10 @@ import {
   type ProfessionAgentIdentity,
   type ProfessionFamily,
 } from "./resolve-profession-profile";
+import { normalizeVariantAxes } from "@/lib/coworker-record/variant-axes";
+
+const ARCHETYPE_NEUTRAL = "universal";
+const JURISDICTION_NEUTRAL = "global";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -81,15 +85,30 @@ type WikiPageCorpusRow = {
   title: string;
   abstract: string | null;
   body: string;
+  /** WikiPage.metadata blob carrying the WSID variant axes. */
+  metadata: unknown;
 };
 
 export type ProfessionCorpusClient = {
   wikiPage: {
     findMany(args: {
       where: Record<string, unknown>;
-      select: { slug: true; title: true; abstract: true; body: true };
+      select: { slug: true; title: true; abstract: true; body: true; metadata: true };
     }): Promise<WikiPageCorpusRow[]>;
   };
+};
+
+/**
+ * The install's resolved variant context. Selects which corpus slice a coworker
+ * is served. `archetype` defaults to `"universal"` (an install with no business
+ * archetype gets only archetype-neutral pages — never another archetype's
+ * craft). `jurisdiction` is nullable: `null` means "region not declared yet" and
+ * does NOT filter (preserves the full corpus); a concrete value serves
+ * global + that jurisdiction and shields the coworker from conflicting doctrine.
+ */
+export type ProfessionCorpusInstallContext = {
+  archetype?: string | null;
+  jurisdiction?: string | null;
 };
 
 // ─── Tunables ─────────────────────────────────────────────────────────────────
@@ -127,7 +146,63 @@ export function corpusQueryTerms(query: string): string[] {
   return terms;
 }
 
-type ScoredRow = WikiPageCorpusRow & { score: number; matchedTerms: number; checklistHits: number };
+type ScoredRow = WikiPageCorpusRow & {
+  score: number;
+  matchedTerms: number;
+  checklistHits: number;
+  /** Bonus for matching the install's archetype/jurisdiction (ranks tailored doctrine first). */
+  variantBoost: number;
+};
+
+/**
+ * Is this page eligible to serve the given install? Archetype-specific pages are
+ * served ONLY to a matching install (a retail install never sees HVAC craft);
+ * jurisdiction is filtered only when the install declares a concrete region
+ * (otherwise the full corpus is preserved — no regression for installs that
+ * haven't set a region yet).
+ */
+export function pageEligibleForInstall(
+  axes: { archetypes: string[]; jurisdictions: string[] },
+  install: ProfessionCorpusInstallContext,
+): boolean {
+  const installArch = install.archetype || ARCHETYPE_NEUTRAL;
+  const archOk =
+    axes.archetypes.includes(ARCHETYPE_NEUTRAL) || axes.archetypes.includes(installArch);
+
+  const installJur =
+    install.jurisdiction && install.jurisdiction !== JURISDICTION_NEUTRAL
+      ? install.jurisdiction
+      : null;
+  const jurOk =
+    installJur === null
+      ? true
+      : axes.jurisdictions.includes(JURISDICTION_NEUTRAL) || axes.jurisdictions.includes(installJur);
+
+  return archOk && jurOk;
+}
+
+/** Ranking bonus for a page that SPECIFICALLY matches the install's variant. */
+function variantBoostFor(
+  axes: { archetypes: string[]; jurisdictions: string[] },
+  install: ProfessionCorpusInstallContext,
+): number {
+  let boost = 0;
+  if (
+    install.archetype &&
+    install.archetype !== ARCHETYPE_NEUTRAL &&
+    axes.archetypes.includes(install.archetype)
+  ) {
+    boost += 3;
+  }
+  if (
+    install.jurisdiction &&
+    install.jurisdiction !== JURISDICTION_NEUTRAL &&
+    axes.jurisdictions.includes(install.jurisdiction)
+  ) {
+    boost += 3;
+  }
+  return boost;
+}
 
 function slugTail(slug: string): string {
   // `professions/software-engineer/owasp-top-ten` → `owasp top ten`
@@ -145,6 +220,7 @@ export function rankCorpusPages(
   rows: WikiPageCorpusRow[],
   query: string,
   family: ProfessionFamily,
+  install: ProfessionCorpusInstallContext = {},
 ): ScoredRow[] {
   const terms = corpusQueryTerms(query);
   const checklistTokens = new Set(
@@ -174,11 +250,17 @@ export function rankCorpusPages(
       if (checklistTokens.has(term)) checklistHits += 1;
     }
 
-    return { ...row, score, matchedTerms, checklistHits };
+    const variantBoost = variantBoostFor(normalizeVariantAxes(row.metadata), install);
+
+    // `score` stays pure-lexical (drives the low-relevance gap signal); the
+    // variant boost is a separate axis folded into the sort only.
+    return { ...row, score, matchedTerms, checklistHits, variantBoost };
   });
 
   return scored.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
+    const aRank = a.score + a.variantBoost;
+    const bRank = b.score + b.variantBoost;
+    if (bRank !== aRank) return bRank - aRank;
     if (b.matchedTerms !== a.matchedTerms) return b.matchedTerms - a.matchedTerms;
     if (b.checklistHits !== a.checklistHits) return b.checklistHits - a.checklistHits;
     return a.slug.localeCompare(b.slug); // stable, deterministic final tie-break
@@ -277,6 +359,8 @@ export async function resolveProfessionCorpusContext(input: {
   db: ProfessionCorpusClient;
   identity: ProfessionAgentIdentity;
   query: string;
+  /** The install's resolved archetype/jurisdiction — selects the corpus slice. */
+  installContext?: ProfessionCorpusInstallContext;
   maxPages?: number;
   excerptChars?: number;
 }): Promise<ProfessionCorpusContext> {
@@ -290,7 +374,7 @@ export async function resolveProfessionCorpusContext(input: {
         slug: { startsWith: `professions/${family.professionKey}/` },
         status: "published",
       },
-      select: { slug: true, title: true, abstract: true, body: true },
+      select: { slug: true, title: true, abstract: true, body: true, metadata: true },
     });
   } catch {
     return missContext("error", family, input.query);
@@ -298,7 +382,14 @@ export async function resolveProfessionCorpusContext(input: {
 
   if (rows.length === 0) return missContext("missed-empty-corpus", family, input.query);
 
-  const ranked = rankCorpusPages(rows, input.query, family);
+  // Variant selection: keep pages eligible for this install (archetype-specific
+  // craft only to a matching install; jurisdiction filtered only when declared).
+  // Fail-safe: if filtering would starve the coworker, fall back to all pages.
+  const install = input.installContext ?? {};
+  const eligible = rows.filter((r) => pageEligibleForInstall(normalizeVariantAxes(r.metadata), install));
+  const usable = eligible.length > 0 ? eligible : rows;
+
+  const ranked = rankCorpusPages(usable, input.query, family, install);
   const top = ranked.slice(0, input.maxPages ?? DEFAULT_MAX_PAGES);
   const excerptChars = input.excerptChars ?? DEFAULT_EXCERPT_CHARS;
 
