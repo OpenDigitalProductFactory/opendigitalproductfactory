@@ -43,14 +43,16 @@ import {
 beforeEach(() => { vi.clearAllMocks(); });
 
 describe("getProviderModelSummaries", () => {
-  it("aggregates model counts, non-chat classes, and derived tier per provider", async () => {
+  it("aggregates counts, classes, derived tier, and the calibrated routing-score rollup per provider", async () => {
+    // BI-1B46967D: the rollup now also surfaces the calibrated ModelProfile
+    // scores + eval freshness, so the mock carries per-model scores/provenance.
     mockPrisma.modelProfile.findMany.mockResolvedValue([
-      { providerId: "openai", modelId: "gpt-4o", modelClass: "chat", modelStatus: "active" },
-      { providerId: "openai", modelId: "gpt-4o-mini", modelClass: "chat", modelStatus: "active" },
-      { providerId: "openai", modelId: "dall-e-3", modelClass: "image_gen", modelStatus: "active" },
-      { providerId: "openai", modelId: "text-embedding-3", modelClass: "embedding", modelStatus: "retired" },
-      { providerId: "anthropic", modelId: "claude-sonnet-4-6", modelClass: "chat", modelStatus: "active" },
-      { providerId: "anthropic", modelId: "claude-opus-4-7", modelClass: "reasoning", modelStatus: "active" },
+      { providerId: "openai", modelId: "gpt-4o", modelClass: "chat", modelStatus: "active", reasoning: 90, codegen: 85, toolFidelity: 80, evalCount: 3, lastEvalAt: new Date("2026-06-15T00:00:00Z"), profileSource: "evaluated" },
+      { providerId: "openai", modelId: "gpt-4o-mini", modelClass: "chat", modelStatus: "active", reasoning: 70, codegen: 65, toolFidelity: 60, evalCount: 1, lastEvalAt: new Date("2026-06-10T00:00:00Z"), profileSource: "evaluated" },
+      { providerId: "openai", modelId: "dall-e-3", modelClass: "image_gen", modelStatus: "active", reasoning: 50, codegen: 50, toolFidelity: 50, evalCount: 0, lastEvalAt: null, profileSource: "seed" },
+      { providerId: "openai", modelId: "text-embedding-3", modelClass: "embedding", modelStatus: "retired", reasoning: 50, codegen: 50, toolFidelity: 50, evalCount: 0, lastEvalAt: null, profileSource: "seed" },
+      { providerId: "anthropic", modelId: "claude-sonnet-4-6", modelClass: "chat", modelStatus: "active", reasoning: 95, codegen: 92, toolFidelity: 88, evalCount: 0, lastEvalAt: null, profileSource: "catalog" },
+      { providerId: "anthropic", modelId: "claude-opus-4-7", modelClass: "reasoning", modelStatus: "active", reasoning: 96, codegen: 94, toolFidelity: 90, evalCount: 0, lastEvalAt: null, profileSource: "catalog" },
     ]);
 
     const result = await getProviderModelSummaries();
@@ -62,6 +64,12 @@ describe("getProviderModelSummaries", () => {
       // D25: derived from gpt-4o (strong) over gpt-4o-mini (adequate).
       // image_gen / embedding don't contribute to the chat-tier signal.
       derivedTier: "strong",
+      // Representative = strongest active, measured chat model (gpt-4o), with freshness.
+      routingScores: { reasoning: 90, codegen: 85, toolFidelity: 80 },
+      representativeModelId: "gpt-4o",
+      measuredModels: 2, // the two evaluated chat models; image/embedding are seed
+      evaluatedModels: 2,
+      lastEvalAt: "2026-06-15T00:00:00.000Z",
     });
     expect(result.get("anthropic")).toEqual({
       totalModels: 2,
@@ -69,6 +77,12 @@ describe("getProviderModelSummaries", () => {
       nonChatClasses: [],
       // D25: derived from claude-opus-4 (frontier) and claude-sonnet-4 (frontier).
       derivedTier: "frontier",
+      // Both catalog-sourced (measured) but never DPF-evaluated → "baseline" freshness.
+      routingScores: { reasoning: 96, codegen: 94, toolFidelity: 90 },
+      representativeModelId: "claude-opus-4-7",
+      measuredModels: 2,
+      evaluatedModels: 0,
+      lastEvalAt: null,
     });
   });
 
