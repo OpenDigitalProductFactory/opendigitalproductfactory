@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { prisma, Prisma } from "@dpf/db";
+import { safeSyncSelfUpgradeChangeRecord } from "@/lib/self-upgrade/change-record";
 
 export type SelfUpgradeRunStatus =
   | "queued"
@@ -54,31 +55,42 @@ export async function updateRunPlan(
 }
 
 export async function startRun(runId: string) {
-  return prisma.selfUpgradeRun.update({
+  const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
     data: { status: "running", startedAt: new Date() },
   });
+  // Lazily open the paired change record (standard change → in-progress).
+  await safeSyncSelfUpgradeChangeRecord(runId);
+  return updated;
 }
 
 export async function completeRun(runId: string) {
-  return prisma.selfUpgradeRun.update({
+  const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
     data: { status: "succeeded", completedAt: new Date() },
   });
+  await safeSyncSelfUpgradeChangeRecord(runId);
+  return updated;
 }
 
 export async function failRun(runId: string, error: string) {
-  return prisma.selfUpgradeRun.update({
+  const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
     data: { status: "failed", completedAt: new Date(), failureLog: error },
   });
+  await safeSyncSelfUpgradeChangeRecord(runId);
+  return updated;
 }
 
 export async function skipRun(runId: string, reason: string) {
-  return prisma.selfUpgradeRun.update({
+  const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
     data: { status: "skipped", completedAt: new Date(), reason },
   });
+  // A skip is a non-event: no record is opened. The sync only finalizes a
+  // record that already exists (defensive).
+  await safeSyncSelfUpgradeChangeRecord(runId);
+  return updated;
 }
 
 export async function recordRunRecoveryPoint(
@@ -100,10 +112,12 @@ function toJson(value: unknown): Prisma.InputJsonValue {
 }
 
 export async function cancelRun(runId: string) {
-  return prisma.selfUpgradeRun.update({
+  const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
     data: { status: "cancelled", completedAt: new Date() },
   });
+  await safeSyncSelfUpgradeChangeRecord(runId);
+  return updated;
 }
 
 export async function appendLog(runId: string, chunk: string) {
