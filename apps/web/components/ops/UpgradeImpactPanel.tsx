@@ -159,6 +159,18 @@ export default function UpgradeImpactPanel({
 
   if (!enabled) return null;
 
+  // The top-N rows are always rendered. The "show more" disclosure must reveal
+  // only the items NOT already shown above — rendering the full `allItems` here
+  // repeated the entire truncated top-N list instead of extending it. Compute
+  // the remainder as a set-difference by SHA so it is correct regardless of how
+  // `topItems` is ordered relative to `allItems`.
+  const summary = result?.ok ? result.summary : null;
+  const remainingItems = (() => {
+    if (!summary) return [];
+    const shownShas = new Set(summary.topItems.map((i) => i.sha));
+    return summary.allItems.filter((item) => !shownShas.has(item.sha));
+  })();
+
   return (
     <div
       className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-3"
@@ -242,17 +254,19 @@ export default function UpgradeImpactPanel({
             </ul>
           )}
 
-          {result.summary.allItems.length > result.summary.topItems.length && (
+          {remainingItems.length > 0 && (
             <details
               className="text-xs"
               open={showFullList}
               onToggle={(e) => setShowFullList((e.target as HTMLDetailsElement).open)}
             >
               <summary className="cursor-pointer text-[var(--dpf-accent)] hover:underline">
-                Show all {result.summary.allItems.length} changes
+                {showFullList
+                  ? "Show fewer"
+                  : `Show ${remainingItems.length} more change${remainingItems.length === 1 ? "" : "s"}`}
               </summary>
               <ul className="space-y-2 mt-2">
-                {result.summary.allItems.map((item) => (
+                {remainingItems.map((item) => (
                   <ItemRow key={item.sha} item={item} />
                 ))}
               </ul>
