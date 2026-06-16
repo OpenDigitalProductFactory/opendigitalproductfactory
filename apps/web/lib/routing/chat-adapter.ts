@@ -34,10 +34,30 @@ import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls"
 // the fresh-install audit (R1-*-O-001). Cloud providers keep the longer ceiling.
 // Both are env-overridable for operators on slow local hardware / cold model loads.
 const DEFAULT_INFERENCE_TIMEOUT_MS = Number(process.env.DPF_INFERENCE_TIMEOUT_MS) || 180_000;
-const LOCAL_INFERENCE_TIMEOUT_MS = Number(process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS) || 60_000;
+const LOCAL_INFERENCE_TIMEOUT_MS = Number(process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS) || 120_000;
 
 function resolveInferenceTimeoutMs(providerId: string): number {
   return providerId === "local" ? LOCAL_INFERENCE_TIMEOUT_MS : DEFAULT_INFERENCE_TIMEOUT_MS;
+}
+
+// A single-GPU local endpoint (Docker Model Runner / Ollama) serves ONE request
+// at a time. The platform routinely fires inference concurrently — reviewBuildPlan
+// alone dispatches 3 reviewer calls in parallel, on top of the coworker's agentic
+// loop — which makes those calls queue behind each other inside the endpoint,
+// blow past the per-call timeout while still waiting, and 502 the endpoint under
+// load. Observed live: "Both review agents failed to respond" on every local
+// build because both reviewers aborted with "operation was aborted due to timeout".
+// Serialize local inference through a promise chain so each call gets the full GPU
+// and its timeout (created by the caller, inside this lock) covers real inference,
+// not queue-wait. Cloud providers are unaffected — only providerId === "local"
+// goes through the lock.
+let localInferenceChain: Promise<unknown> = Promise.resolve();
+export function withLocalInferenceLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = localInferenceChain.then(fn, fn);
+  // Keep the chain alive regardless of this call's outcome so one failure/timeout
+  // never wedges every subsequent local call.
+  localInferenceChain = run.then(() => undefined, () => undefined);
+  return run;
 }
 
 // ─── Gemini part types ───────────────────────────────────────────────────────
@@ -327,12 +347,16 @@ export const chatAdapter: ExecutionAdapterHandler = {
     const startMs = Date.now();
     let res: Response;
     try {
-      res = await fetch(chatUrl, {
+      // The AbortSignal is created inside the thunk so, for serialized local
+      // calls, the timeout clock starts when the call actually dispatches — not
+      // while it waits its turn in the local-inference lock.
+      const doFetch = () => fetch(chatUrl, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(resolveInferenceTimeoutMs(providerId)),
       });
+      res = providerId === "local" ? await withLocalInferenceLock(doFetch) : await doFetch();
     } catch (e) {
       throw new InferenceError(
         `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
