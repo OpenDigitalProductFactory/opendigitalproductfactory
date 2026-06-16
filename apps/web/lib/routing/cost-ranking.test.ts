@@ -271,6 +271,40 @@ describe("estimateSuccessProbability", () => {
     expect(highProb).toBeCloseTo(1.0);
     expect(lowProb).toBeCloseTo(0.85);
   });
+
+  // BI-DDE007C7: routeAndCall consumes the calibrated per-model ModelProfile
+  // scores (loader → cost-ranking), and a model still on its bootstrap seed prior
+  // (a flat 50/50/50 "unproven" profile) must not be silently trusted. Two
+  // existing mechanisms already enforce that; this locks them as a regression.
+  it("does not silently trust a still-50 (unproven) model — floor + low confidence downrank it", () => {
+    const caps = { ...EMPTY_CAPABILITIES, toolUse: true, structuredOutput: true, streaming: true };
+
+    // (1) Quality floor: a never-measured 50/50/50 model is strongly downranked
+    // for any task needing medium+ reasoning (floor 60 > avg 50 → 0.3), so it
+    // cannot win real work on placeholder scores.
+    const seed50 = makeEndpoint({
+      reasoning: 50, codegen: 50, toolFidelity: 50, instructionFollowing: 50,
+      structuredOutput: 50, conversational: 50, contextRetention: 50,
+      profileSource: "seed", profileConfidence: "low", recentFailureRate: 0, capabilities: caps,
+    });
+    const mediumWork = makeContract({ taskType: "code-gen", reasoningDepth: "medium" }); // floor 60
+    expect(estimateSuccessProbability(seed50, mediumWork)).toBe(0.3);
+
+    // (2) Confidence provenance: even above the floor, at EQUAL scores a still-seed
+    // (low-confidence) profile is ranked below a measured (evaluated, high-confidence)
+    // one — the unproven model is never preferred over a proven peer.
+    const easyWork = makeContract({ taskType: "code-gen", reasoningDepth: "minimal" }); // floor 30
+    const seedAbove = makeEndpoint({
+      codegen: 70, instructionFollowing: 70,
+      profileSource: "seed", profileConfidence: "low", recentFailureRate: 0, capabilities: caps,
+    });
+    const provenAbove = makeEndpoint({
+      codegen: 70, instructionFollowing: 70,
+      profileSource: "evaluated", profileConfidence: "high", recentFailureRate: 0, capabilities: caps,
+    });
+    expect(estimateSuccessProbability(seedAbove, easyWork))
+      .toBeLessThan(estimateSuccessProbability(provenAbove, easyWork));
+  });
 });
 
 // ── averageRelevantDimensions ────────────────────────────────────────────────
