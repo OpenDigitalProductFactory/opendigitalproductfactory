@@ -366,8 +366,12 @@ export async function runSandboxTests(
   let typeCheckPassed = false;
   try {
     typeCheckOutput = await execInSandbox(containerId, "cd /workspace/apps/web && npx tsc --noEmit 2>&1 || true");
-    // Empty output or no TS errors = pass. Help text (no --noEmit) = also no "error TS" = pass.
-    typeCheckPassed = !typeCheckOutput.includes("error TS");
+    // `tsc` typechecks the whole apps/web project graph (no cheap per-file mode),
+    // so a pre-existing type error in an UNRELATED file would block a build whose
+    // own changed files are clean. When we know the changed surface, gate only on
+    // in-scope errors; with no scope hint, any error fails (legacy behavior).
+    const { typecheckPassedForChangedScope } = await import("@/lib/build/scoped-verification");
+    typeCheckPassed = typecheckPassedForChangedScope(typeCheckOutput, opts?.changedFiles ?? []).passed;
   } catch (e) {
     typeCheckOutput = e instanceof Error ? e.message : String(e);
   }

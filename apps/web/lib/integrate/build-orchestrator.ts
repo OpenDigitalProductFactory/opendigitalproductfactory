@@ -1376,10 +1376,40 @@ export async function runBuildOrchestrator(params: {
       const { executeTool } = await import("@/lib/mcp-tools");
       const qaContent = qaResult.result.content;
       const verification = parseQAVerification(qaContent);
+
+      // Scope the gate verdict to the build's changed files. A QA specialist may
+      // run a wider pass than the feature's own surface (a stray "run full test
+      // suite" task, or `tsc` over all of apps/web), so a pre-existing failure
+      // ELSEWHERE in the repo would otherwise flip typecheckPassed=false and
+      // block a build whose own files are clean (the FB-69231490 stall).
+      // Neutralize out-of-scope noise here while preserving the full-repo signal.
+      let changedFiles: string[] = [];
+      try {
+        const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
+        const sandboxState = await getSandboxStateForBuild(buildId);
+        changedFiles = sandboxState?.sourceDiffstat.map((entry) => entry.path) ?? [];
+      } catch (err) {
+        console.warn("[orchestrator] could not resolve changed files for gate scoping:", (err as Error)?.message);
+      }
+      const { scopeVerificationOutputForGate } = await import("@/lib/build/scoped-verification");
+      const { normalizeVerificationOutput } = await import("@/lib/build/verification-output");
+      const scoped = scopeVerificationOutputForGate({
+        verification: normalizeVerificationOutput({ ...verification, fullOutput: qaContent }),
+        changedFiles,
+      });
+
       await executeTool("saveBuildEvidence", {
         field: "verificationOut",
         value: {
           ...verification,
+          // Gate-facing fields reflect the changed surface, not the whole repo.
+          typecheckPassed: scoped.typecheckPassed ?? verification.typecheckPassed,
+          testsFailed: scoped.testsFailed ?? verification.testsFailed,
+          testsPassed: scoped.testsPassed ?? verification.testsPassed,
+          outOfScopeNoise: scoped.outOfScopeNoise,
+          globalTestsFailed: scoped.globalTestsFailed,
+          failureAxis: scoped.failureAxis,
+          scopedToChangedFiles: changedFiles,
           fullOutput: qaContent.slice(0, 2000),
           timestamp: new Date().toISOString(),
         },
