@@ -2,11 +2,11 @@
 
 | Field | Value |
 | ----- | ----- |
-| Status | Phase 1 implemented (PR #1864); Phase 2 in progress — see §15 Implementation Log |
+| Status | SysML substrate implemented; current-state catch-up now led by Parity Engine live projections |
 | Date | 2026-06-14 |
 | Owner | Enterprise Architect, Data Architect, Build Studio platform team |
 | Route family | Existing EA surface (`/ea`) |
-| Backlog state | Live MCP returned 401 and DB fallback refused connection during this thread. Backlog anchoring and runtime validation are deferred to a follow-up thread by operator instruction. |
+| Backlog state | Live MCP is available. `EP-PARITY-ENGINE` now anchors the catch-up backbone; `BI-PARITY-STEWARD` is the active gap for generalized conformance issue stewardship. Runtime/browser validation remains deferred by operator instruction. |
 | References | `docs/Reference/sysml-v2.md`; OMG SysML 2.0, KerML 1.0, Systems Modeling API 1.0 |
 
 ## 1. Problem
@@ -136,7 +136,9 @@ C4, Prisma, code graph, or evidence records.
 ## 8. Current-State Catch-Up Views
 
 The first model-catch-up wave should produce architect-owned EA views for DPF
-itself:
+itself. As of the Parity Engine work, deterministic current-state facts should be
+auto-extracted from source registries/manifests/graphs first; hand-authored SysML is
+reserved for bounded architect judgment, target-state notes, and unresolved gaps.
 
 1. **DPF Platform System Decomposition** - system, major subsystems, services,
    data stores, local AI runtime, MCP plane, Build Studio, portal, and workers.
@@ -352,19 +354,21 @@ validation deferred per §10/§13):
   reusable notation-aware helper `seed-ea-viewpoints.ts` (§11). Cross-notation
   SysML→ArchiMate bridges (`sysml_allocates`/`sysml_traces`/`sysml_verifies`) added
   to `seed-ea-cross-notation.ts`. Unit-tested (idempotent seed + viewpoint resolution).
-- **Phase 2 — DPF current-state catch-up views:** in progress. Three SysML models
-  seeded as EA graph content: **AI Cockpit & Model Routing**
-  (`seed-ea-sysml-ai-cockpit.ts`, target/design model), **AI Agent Authority —
-  Current State** (`seed-ea-sysml-agent-authority.ts`, §8 view #3), and **Data
-  Authority & Projection — Current State** (`seed-ea-sysml-data-authority.ts`, §8
-  view #2, grounded in EP-DATA-ARCH) — each grounded in the real substrate, marking
-  deterministic vs architect-authored facts with source keys and filing conformance
-  issues for the drift found (AuthorizationDecisionLog write-site unconfirmed;
-  vestigial EaElement/EaRelationship.syncedAt Postgres columns). Remaining §8 views
-  (System Decomposition, Build Studio Lifecycle, Deployment/Runtime Contracts,
-  Value-Stream→System, Skill/Toolchain) are next.
-- **Phases 3–5** (Build Studio planning hooks, external-agent convergence, tool
-  evaluation / import-export): not started.
+- **Phase 2 — DPF current-state catch-up views:** in progress, with deterministic
+  catch-up now moving from hand-seeded snapshots to live projections. The Parity
+  Engine has landed extractors for MCP tool authority (PR #1880), coworker authority
+  (PR #1881), value streams (PR #1890), route families (PR #1900), code structure
+  (PR #1911), and platform state-machine BPMN process models (PR #1940). The data
+  authority model remains grounded in EP-DATA-ARCH. Architect-authored views remain
+  valid only where they identify deterministic vs judgment facts and are protected by
+  the architecture parity gate.
+- **Phase 3 — Build Studio planning hooks:** partial. Agent skills and the parity
+  audit exist; mandatory Build Studio Plan/Review enforcement for SysML notes and
+  projection reconcile remains follow-up work.
+- **Phase 4 — External agent convergence:** partial. The
+  `dpf-sysml-architecture-substrate` skill is the shared Codex/Claude/Grok/Build
+  Studio substrate and now points agents at the Parity Engine before hand-modeling.
+- **Phase 5** (tool evaluation / import-export): not started.
 
 Decisions on §14 open questions (defaults, revisable): **Q2** first catch-up view =
 **AI Agent Authority** (governance moat; extends the AI-cockpit model). Q1, Q3, Q4,

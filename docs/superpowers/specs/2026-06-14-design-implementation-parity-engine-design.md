@@ -2,12 +2,12 @@
 
 | Field | Value |
 | ----- | ----- |
-| Status | Draft — Slice 0 (parity gate) implemented; engine roadmap proposed |
+| Status | Implementation in progress — Slices 0-6 auto-extraction backbone landed; generalized steward slice underway |
 | Date | 2026-06-14 |
 | Owner | Enterprise Architect, Data Architect, Build Studio platform team |
 | Builds on | [SysML Architecture Substrate](2026-06-14-sysml-architecture-substrate-design.md) (notation), [Self-Maintaining Data Architecture](2026-06-06-data-architecture-self-maintenance-design.md) (the auto-extraction pattern) |
 | WWMD anchor | **Proposed** kernel principle `remove-avoidable-failure-opportunities` (§8) + existing cluster (`single-source-of-truth`, `fix-the-seed-not-the-runtime`, `make-silent-failures-observable`, `structural-verification-is-not-functional`) |
-| Slice 0 evidence | `apps/web/lib/ea/architecture-parity.ts` + `apps/web/scripts/audit-architecture-parity.ts` + `.github/workflows/audit-architecture-parity.yml` (40 sourceKeys, 0 drift; caught 1 real defect on first run) |
+| Slice evidence | Slice 0 parity gate plus merged extractor PRs for MCP authority, coworker authority, value streams, routes, code structure, and BPMN state-machine processes; `BI-PARITY-STEWARD` closes the generalized steward gap |
 
 ## 1. Problem — drift is the tax on complexity
 
@@ -98,14 +98,14 @@ scheduledReconcile`, from `apps/web/lib/ea/data-model-mirror*.ts`). Each extract
 a machine-readable source to SysML elements with a stable `sourceKey`, so the view
 becomes a live projection. Ranked by leverage (all sources already exist):
 
-| # | Domain | Source of truth | SysML mapping |
-| --- | --- | --- | --- |
-| 1 | **MCP tool authority** | `TOOL_TO_GRANTS` (242 entries, `apps/web/lib/tak/agent-grants.ts`) + `mcp-tools` AST extractor | `action`/`part_usage` per tool; `requirement` per grant; `satisfies`/`allocates`; default-deny as `constraint` |
-| 2 | **Coworkers / personas / delegation** | `packages/db/data/agent_registry.json` (63 agents) | `part_definition` per coworker; `contains` by tier; delegation/escalation edges; `allocates` → value stream |
-| 3 | **Code structure → EA bridge** | existing code-graph facts (routes/tools/Prisma/symbols, `apps/web/lib/integrate/code-graph/`) | bridge the disjoint Neo4j `source-code` graph into EA `part`/`connects` |
-| 4 | **Route families** | `apps/web/app/**` (next-routes extractor) | `part_usage`/`action` per route family; `contains` by segment |
-| 5 | **Value streams (IT4IT)** | `EaReferenceModelElement` (already xlsx-extracted) | SysML overlay; `allocates` persona→value-stream |
-| 6 | **Processes (BPMN)** | lifecycle state machines (e.g. `envelope-state-machine.ts`), value-stream activities | BPMN `process`/`task`/`gateway`; SysML `state`/`action` + verification per gate |
+| # | Domain | Source of truth | SysML/BPMN mapping | Current status |
+| --- | --- | --- | --- | --- |
+| 1 | **MCP tool authority** | `TOOL_TO_GRANTS` + `mcp-tools` AST extractor | `action`/`part_usage` per tool; `requirement` per grant; `satisfies`/`allocates`; default-deny as `constraint` | implemented (PR #1880) |
+| 2 | **Coworkers / personas / delegation** | `packages/db/data/agent_registry.json` | `part_definition` per coworker; `contains` by tier; delegation/escalation edges; `allocates` to value stream | implemented (PR #1881) |
+| 3 | **Value streams (IT4IT)** | `EaReferenceModelElement` | SysML overlay; persona and platform allocations | implemented (PR #1890) |
+| 4 | **Route families** | `apps/web/app/**` (Next routes extractor) | `part_usage`/`action` per route family; `contains` by segment | implemented (PR #1900) |
+| 5 | **Code structure to EA bridge** | code-graph facts (routes/tools/Prisma/symbols) | bridge the disjoint Neo4j `source-code` graph into EA `part`/`connects` | implemented (PR #1911) |
+| 6 | **Processes (BPMN)** | lifecycle state machines plus value-stream and Build Studio process sources | BPMN `process`/`task`/`gateway`; SysML `state`/`action` + verification per gate | state-machine BPMN implemented (PR #1940); value-stream activities and Build Studio phase gates remain follow-up scope |
 
 As each extractor lands, the corresponding hand-seeded view is **replaced** by its
 live projection and deleted — removing the maintenance surface entirely.
@@ -113,9 +113,9 @@ live projection and deleted — removing the maintenance surface entirely.
 ### 4.3 Drift detection + enforcement (systemic, low cognitive load)
 
 - **Detection:** the parity gate (§4.1) for hand-models; for auto-extracted models,
-  the mirror's own `descriptor` diff + a generalized steward (extending
-  `data-architecture-steward.ts`) files `EaConformanceIssue`s on drift — never a
-  silent overwrite (`make-silent-failures-observable`).
+  each mirror's own `descriptor` diff plus the shared conformance issue reconciler
+  files `EaConformanceIssue`s on skipped/unhealthy projections - never a silent
+  overwrite (`make-silent-failures-observable`).
 - **Enforcement points** (the operator's "Build Studio + skills should ensure"):
   - **CI** — the parity audit blocks merges that introduce drift.
   - **Build Studio** — Ideate asks whether architecture/process is affected; Plan
@@ -133,22 +133,23 @@ live projection and deleted — removing the maintenance surface entirely.
 
 "Represent our processes" means BPMN behavior alongside SysML structure over the one EA
 graph (the notation substrate already seeds BPMN 2.0 + cross-notation links). Process
-sources that are already machine-readable: value-stream activities (IT4IT xlsx),
-coworker lifecycle/state machines, Build Studio phase gates. These extract to BPMN
-`process`/`task`/`gateway` and SysML `state`/`action`, with a `verification_case` per
-gate — giving design specificity that drives construction (the goal's first clause).
+sources that are already machine-readable: platform lifecycle/state machines,
+value-stream activities (IT4IT xlsx), coworker lifecycle/state machines, and Build
+Studio phase gates. The first BPMN slice extracts the coworker action envelope and
+backlog lifecycle state machines to BPMN `process`/`task`/`sequence_flow`; value-stream
+activities and Build Studio phase gates remain tracked follow-up scope.
 
 ## 6. Phased delivery
 
 | Slice | Outcome | Status |
 | --- | --- | --- |
 | **0** | Parity gate: self-policing for hand-seeded models (audit + CI + skill/BS-runnable) | **implemented** |
-| 1 | MCP tool-authority extractor → live SysML projection (242 tools/grants) | next |
-| 2 | Coworker/persona/delegation extractor (63 agents) → replaces the hand AI-Agent-Authority view | proposed |
-| 3 | Code-graph → EA bridge (routes/tools/symbols) | proposed |
-| 4 | Build Studio Review gate runs the extractors + parity; Plan requires the SysML note | proposed |
-| 5 | BPMN process extraction (value streams, lifecycle gates) | proposed |
-| 6 | Generalized steward + nightly reconcile for all auto-extracted domains | proposed |
+| 1 | MCP tool-authority extractor to live SysML projection | **implemented** |
+| 2 | Coworker/persona/delegation extractor replacing the hand AI-Agent-Authority view | **implemented** |
+| 3 | Value-stream, route-family, and code-structure projection catch-up | **implemented** |
+| 4 | Build Studio Review gate runs the extractors + parity; Plan requires the SysML note | partial: parity gate exists; Build Studio enforcement remains follow-up |
+| 5 | BPMN process extraction | partial: platform state-machine BPMN implemented; value-stream activities and Build Studio gates remain follow-up |
+| 6 | Generalized steward + nightly reconcile for all auto-extracted domains | **in progress** (`BI-PARITY-STEWARD`) |
 
 ## 7. Verification
 
@@ -160,6 +161,10 @@ gate — giving design specificity that drives construction (the goal's first cl
   conformance-on-conflict, soft-remove; CI parity stays green; runtime EA validation
   in the shared nonprod environment (deferred from the worktree per the substrate
   spec's stance).
+- **Steward slice:** unit tests cover stable conformance issue creation for skipped
+  projection domains, idempotency on repeated skips, and auto-resolution when a
+  projection becomes healthy. Runtime EA/browser validation remains deferred by
+  operator instruction.
 
 ## 8. WWMD anchor — proposed kernel promotion (for operator calibration)
 
@@ -199,8 +204,8 @@ On operator approval, author `docs/founder-kernel/wiki/principles/remove-avoidab
 
 ## 10. Recommended next decision
 
-Approve Slice 1 (MCP tool-authority extractor → live SysML projection of the 242
-tool/grant authority surface), and the §8 kernel-principle promotion. Slice 1 converts
-the highest-leverage, security-critical authority surface from absent/hand-approximated
-into a live, drift-checked projection — the first proof that the parity gap closes by
-extraction, not by hand.
+Close `BI-PARITY-STEWARD`, then split the remaining process scope deliberately:
+value-stream activity BPMN and Build Studio phase-gate BPMN/SysML verification should
+stay under `BI-PARITY-BPMN` or a narrower successor item. The original proof point is
+now established: the parity gap closes by extraction and stewarded conformance issues,
+not by hand-maintained SysML snapshots.
