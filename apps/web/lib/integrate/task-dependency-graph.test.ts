@@ -1,5 +1,44 @@
 import { describe, it, expect } from "vitest";
-import { buildDependencyGraph, type PlanTask, type PlanFileEntry } from "./task-dependency-graph";
+import {
+  buildDependencyGraph,
+  isRedundantVerificationTask,
+  type PlanTask,
+  type PlanFileEntry,
+} from "./task-dependency-graph";
+
+describe("isRedundantVerificationTask", () => {
+  const t = (over: Partial<PlanTask>): PlanTask => ({ title: "", testFirst: "", implement: "", verify: "", ...over });
+
+  it("flags explicit full/entire/all test-suite tasks", () => {
+    expect(isRedundantVerificationTask(t({ title: "Run the full test suite" }))).toBe(true);
+    expect(isRedundantVerificationTask(t({ title: "Run all tests" }))).toBe(true);
+    expect(isRedundantVerificationTask(t({ title: "Full verification" }))).toBe(true);
+    expect(isRedundantVerificationTask(t({ verify: "pnpm test" }))).toBe(true);
+    expect(isRedundantVerificationTask(t({ implement: "pnpm -r test" }))).toBe(true);
+  });
+
+  it("does NOT flag a real implementation/test-writing task", () => {
+    expect(isRedundantVerificationTask(t({ title: "Add classifySemanticId helper", implement: "write the function" }))).toBe(false);
+    expect(isRedundantVerificationTask(t({ title: "Write unit tests for the helper", verify: "tests cover each kind" }))).toBe(false);
+  });
+
+  it("prunes redundant tasks while keeping the synthetic QA phase", () => {
+    const files: PlanFileEntry[] = [
+      { path: "apps/web/lib/utils/semanticIdClassifier.ts", action: "create", purpose: "helper" },
+    ];
+    const tasks: PlanTask[] = [
+      { title: "Add classifySemanticId helper", testFirst: "", implement: "write helper", verify: "" },
+      { title: "Run full test suite", testFirst: "", implement: "pnpm test", verify: "" },
+      { title: "Full verification", testFirst: "", implement: "", verify: "run all tests" },
+    ];
+    const phases = buildDependencyGraph(files, tasks);
+    const allTitles = phases.flatMap((p) => p.tasks.map((tk) => tk.title));
+    expect(allTitles).not.toContain("Run full test suite");
+    expect(allTitles.filter((x) => x === "Full verification: tests + typecheck")).toHaveLength(1);
+    // Exactly one verification phase remains (the synthetic QA one).
+    expect(phases[phases.length - 1]!.tasks[0]!.specialist).toBe("qa-engineer");
+  });
+});
 
 describe("buildDependencyGraph", () => {
   it("puts schema tasks in phase 1, API in phase 2, frontend in phase 3, QA last", () => {
