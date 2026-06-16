@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ProviderRow, ProviderWithCredential } from "@/lib/ai-provider-types";
+import type { ProviderRow, ProviderWithCredential, ProviderModelSummary } from "@/lib/ai-provider-types";
 import type { RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
 
 // ProviderStatusToggle pulls in next/navigation + a server action; stub it so
@@ -71,6 +71,21 @@ const routable: RoutingEligibility = {
   reason: "Reachable and enabled — routing can use it now.",
 };
 
+function summary(overrides: Partial<ProviderModelSummary> = {}): ProviderModelSummary {
+  return {
+    totalModels: 1,
+    activeModels: 1,
+    nonChatClasses: [],
+    derivedTier: null,
+    routingScores: { reasoning: 90, codegen: 100, toolFidelity: 100 },
+    representativeModelId: "docker.io/ai/qwen3-coder:latest",
+    measuredModels: 1,
+    evaluatedModels: 0,
+    lastEvalAt: null,
+    ...overrides,
+  };
+}
+
 describe("ServiceRow eligibility surface (BI-1C4AAE1E)", () => {
   it("an active local provider shows its eligibility and NEVER the bogus billing 'Not connected'", () => {
     const html = renderToStaticMarkup(
@@ -113,5 +128,33 @@ describe("ServiceRow eligibility surface (BI-1C4AAE1E)", () => {
       />,
     );
     expect(html).toContain("Rate-limited");
+  });
+});
+
+describe("ServiceRow calibrated routing scores (BI-1B46967D)", () => {
+  it("renders the calibrated ModelProfile rollup scores, not a placeholder 50", () => {
+    const html = renderToStaticMarkup(
+      <ServiceRow pw={pw(provider())} eligibility={routable} modelSummary={summary()} />,
+    );
+    // Scores come from the rolled-up representative model (via title attrs).
+    expect(html).toContain("Reasoning: 90/100");
+    expect(html).toContain("Codegen: 100/100");
+    expect(html).toContain("Tools: 100/100");
+    // measured-but-not-DPF-evaluated (lastEvalAt null) reads "baseline".
+    expect(html).toContain("baseline");
+    // The whole point: a measured provider never shows the dead seed 50.
+    expect(html).not.toContain("Reasoning: 50/100");
+  });
+
+  it("reads 'not measured' (not a fake 50) when the provider has no measured model", () => {
+    const html = renderToStaticMarkup(
+      <ServiceRow
+        pw={pw(provider())}
+        eligibility={routable}
+        modelSummary={summary({ routingScores: null, representativeModelId: null, measuredModels: 0 })}
+      />,
+    );
+    expect(html).toContain("not measured");
+    expect(html).not.toContain("Reasoning: 50/100");
   });
 });
