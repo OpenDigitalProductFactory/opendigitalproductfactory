@@ -2425,7 +2425,12 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "start_build",
     description: "Initialize the build workspace. Call this ONCE at the start of the build phase. Verifies the sandbox container is running and creates a git branch for this build. If it returns 'not running', call diagnose_sandbox and use the returned recovery actions.",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build. Supply it to drive a specific build when several builds are in-flight (e.g. an autonomous batch)." },
+      },
+    },
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -2919,6 +2924,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       properties: {
         reusabilityScope: { type: "string", enum: ["one_off", "parameterizable", "already_generic"], description: "The user's reusability preference" },
         userContext: { type: "string", description: "Summary of what the user wants, including any answers to clarifying questions" },
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build (the ambient ideate conversation). Supply it to drive a specific build's research when several builds are in-flight (e.g. an autonomous 20-build batch)." },
       },
       required: ["reusabilityScope", "userContext"],
     },
@@ -11806,8 +11812,12 @@ export async function executeTool(
       // ordered by updatedAt" silently mis-targeted whenever multiple
       // builds were in ideate concurrently — the user's request landed on
       // an unrelated build whose updatedAt happened to be newer.
+      // An explicit buildId param wins over the ambient conversation context:
+      // it lets an operator/agent drive a chosen build's research even when
+      // several builds are in-flight (autonomous batch). When omitted, the
+      // exact prior ambient-resolution behavior is preserved.
       const activeBuild = await resolveIdeateBuildForTool({
-        contextBuildId: context?.featureBuildId,
+        contextBuildId: extractBuildIdHint(params) ?? context?.featureBuildId,
         toolName: "start_ideate_research",
       });
       if (!activeBuild.build) {
