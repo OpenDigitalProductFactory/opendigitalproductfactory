@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
 import {
   serverTaskrunRetry,
   serverTaskrunAbandon,
@@ -30,11 +31,15 @@ export function StalledTaskRecoveryActions({
 
   const isShipPhase = phase === "ship";
 
-  const onRetry = () => {
+  const onRetry = async () => {
     if (isShipPhase) {
-      const ok = confirm(
-        "Ship-phase Retry can double-publish (resend emails, re-deploy, etc.). Are you sure you want to retry?",
-      );
+      const ok = await confirmDialog({
+        title: "Retry ship-phase task",
+        message:
+          "Ship-phase Retry can double-publish (resend emails, re-deploy, etc.). Are you sure you want to retry?",
+        tone: "danger",
+        confirmLabel: "Retry",
+      });
       if (!ok) return;
     }
     startTransition(async () => {
@@ -48,8 +53,13 @@ export function StalledTaskRecoveryActions({
     });
   };
 
-  const onAbandon = () => {
-    const ok = confirm("Abandon this stalled task? Live child tasks will also be canceled.");
+  const onAbandon = async () => {
+    const ok = await confirmDialog({
+      title: "Abandon task",
+      message: "Abandon this stalled task? Live child tasks will also be canceled.",
+      tone: "danger",
+      confirmLabel: "Abandon",
+    });
     if (!ok) return;
     startTransition(async () => {
       const result = await serverTaskrunAbandon(taskRunId);
@@ -62,8 +72,12 @@ export function StalledTaskRecoveryActions({
     });
   };
 
-  const onEscalate = () => {
-    const notes = prompt("Optional note for the escalation:") ?? undefined;
+  const onEscalate = async () => {
+    const notes = (await promptDialog({
+      title: "Escalate task",
+      message: "Optional note for the escalation:",
+      confirmLabel: "Escalate",
+    })) ?? undefined;
     startTransition(async () => {
       const result = await serverTaskrunEscalate(taskRunId, notes);
       if (result.ok) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { confirmDialog, alertDialog } from "@/components/ui/Dialog";
 import {
   createCustomBusinessModel,
   updateCustomBusinessModel,
@@ -442,24 +443,40 @@ function ModelCard({
     });
   }
 
-  function handleDeprecate() {
-    if (!confirm(`Deprecate "${model.name}"? No new assignments will be allowed.`)) return;
+  async function handleDeprecate() {
+    if (
+      !(await confirmDialog({
+        title: "Deprecate model",
+        message: `Deprecate "${model.name}"? No new assignments will be allowed.`,
+        tone: "danger",
+        confirmLabel: "Deprecate",
+      }))
+    )
+      return;
     startTransition(async () => {
       try {
         await deprecateBusinessModel(model.modelId);
       } catch (e) {
-        alert(e instanceof Error ? e.message : "Unknown error");
+        await alertDialog(e instanceof Error ? e.message : "Unknown error");
       }
     });
   }
 
-  function handleRetire() {
-    if (!confirm(`Retire "${model.name}"? This is irreversible and requires no active assignments.`)) return;
+  async function handleRetire() {
+    if (
+      !(await confirmDialog({
+        title: "Retire model",
+        message: `Retire "${model.name}"? This is irreversible and requires no active assignments.`,
+        tone: "danger",
+        confirmLabel: "Retire",
+      }))
+    )
+      return;
     startTransition(async () => {
       try {
         await retireBusinessModel(model.modelId);
       } catch (e) {
-        alert(e instanceof Error ? e.message : "Unknown error");
+        await alertDialog(e instanceof Error ? e.message : "Unknown error");
       }
     });
   }

@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID } from "@dpf/db";
 import { randomUUID } from "crypto";
 import { runDataModelMirror } from "@/lib/ea/run-data-model-mirror";
-import { reconcileSysmlProjections } from "@/lib/ea/reconcile-sysml-projections";
+import { runArchitectureParitySteward } from "@/lib/ea/architecture-parity-steward";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import {
   createTaskRunForScheduledTask,
@@ -234,17 +234,19 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
 
   // Parity Engine: the SysML projection reconcile is deterministic — run it
   // directly (re-derives the MCP-authority + coworker-workforce SysML projections
-  // from their source registries), no LLM loop. Mirrors the data-model mirror branch.
+  // from their source registries), then let the steward surface skipped domains as
+  // conformance issues. No LLM loop; mirrors the data-model mirror branch.
   if (task.taskId === SYSML_PROJECTION_TASK_ID) {
     const startedAt = new Date();
     try {
-      const result = await reconcileSysmlProjections();
+      const result = await runArchitectureParitySteward();
       console.info(
-        "[agent-task-scheduler] sysml projections mcp=%s coworker=%s (tools=%d, coworkers=%d)",
-        result.mcpAuthority.status,
-        result.coworkerAuthority.status,
-        result.mcpAuthority.toolCount,
-        result.coworkerAuthority.created + result.coworkerAuthority.updated,
+        "[agent-task-scheduler] sysml projections mcp=%s coworker=%s (tools=%d, coworkers=%d, steward=%d)",
+        result.projections.mcpAuthority.status,
+        result.projections.coworkerAuthority.status,
+        result.projections.mcpAuthority.toolCount,
+        result.projections.coworkerAuthority.created + result.projections.coworkerAuthority.updated,
+        result.steward.created + result.steward.updated + result.steward.resolved,
       );
       const nextRunAt = computeNextCronRun(task.schedule, startedAt);
       await prisma.scheduledAgentTask.update({

@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { promptDialog } from "@/components/ui/Dialog";
 import { useRouter } from "next/navigation";
 import { approveTimesheet, rejectTimesheet } from "@/lib/actions/timesheet";
 import type { TimesheetPeriodRow } from "@/lib/timesheet-data";
@@ -24,8 +25,13 @@ export function TimesheetApprovalPanel({ pendingTimesheets }: Props) {
     });
   }
 
-  function handleReject(periodId: string) {
-    const reason = prompt("Rejection reason:");
+  async function handleReject(periodId: string) {
+    const reason = await promptDialog({
+      title: "Reject timesheet",
+      message: "Rejection reason:",
+      required: true,
+      confirmLabel: "Reject",
+    });
     if (!reason) return;
     startTransition(async () => {
       await rejectTimesheet(periodId, reason);

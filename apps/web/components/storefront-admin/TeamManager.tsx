@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { confirmDialog } from "@/components/ui/Dialog";
 import { ScheduleEditor } from "./ScheduleEditor";
 import { EmailInput } from "@/components/ui/EmailInput";
 import { PhoneInput } from "@/components/ui/PhoneInput";
@@ -189,7 +190,15 @@ export function TeamManager({
   }
 
   async function deleteProvider(p: Provider) {
-    if (!window.confirm(`Delete provider "${p.name}"? This cannot be undone.`)) return;
+    if (
+      !(await confirmDialog({
+        title: "Delete provider",
+        message: `Delete provider "${p.name}"? This cannot be undone.`,
+        tone: "danger",
+        confirmLabel: "Delete",
+      }))
+    )
+      return;
     const res = await fetch(`/api/storefront/admin/providers/${p.id}`, { method: "DELETE" });
     if (res.ok) {
       setProviders((prev) => prev.filter((x) => x.id !== p.id));

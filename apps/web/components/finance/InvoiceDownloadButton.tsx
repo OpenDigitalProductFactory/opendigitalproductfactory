@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { alertDialog } from "@/components/ui/Dialog";
 
 export function InvoiceDownloadButton({ invoiceId }: { invoiceId: string }) {
   const [downloading, setDownloading] = useState(false);
@@ -24,7 +25,11 @@ export function InvoiceDownloadButton({ invoiceId }: { invoiceId: string }) {
       URL.revokeObjectURL(url);
     } catch {
       // Surface the failure — the user needs to know it didn't work
-      alert("PDF generation failed. Please try again.");
+      await alertDialog({
+        title: "Download failed",
+        message: "PDF generation failed. Please try again.",
+        tone: "danger",
+      });
     } finally {
       setDownloading(false);
     }
