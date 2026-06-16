@@ -1435,8 +1435,31 @@ export async function runBuildOrchestrator(params: {
     const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
     const hasBlockingTasks = allResults.some((r) => r.outcome === "BLOCKED" || r.outcome === "NEEDS_CONTEXT");
     if (!hasBlockingTasks && updatedBuild && updatedBuild.phase === "build" && canTransitionPhase("build", "review")) {
+      // Scope the verification to THIS build's changed files before gating.
+      // A pre-existing typecheck/test failure ELSEWHERE in the repo (e.g. an
+      // unrelated broken test, a stale sandbox) otherwise sets
+      // verificationOut.typecheckPassed=false and stalls EVERY build at
+      // build->review even though the build's OWN files are clean — observed
+      // live: a build's full-suite verification hit an unrelated rolldown parse
+      // error and never advanced. getScopedVerificationForBuild nulls
+      // out-of-scope failures; treat null (out-of-scope only) as a pass, keep an
+      // in-scope failure (false) blocking.
+      let verificationForGate: Record<string, unknown> | unknown = updatedBuild.verificationOut;
+      try {
+        const { getScopedVerificationForBuild } = await import("@/lib/build/scoped-verification");
+        const scoped = await getScopedVerificationForBuild(buildId);
+        if (scoped) {
+          verificationForGate = {
+            ...((updatedBuild.verificationOut ?? {}) as Record<string, unknown>),
+            typecheckPassed: scoped.buildScoped.typecheckPassed ?? true,
+            testsFailed: scoped.buildScoped.testsFailed ?? 0,
+          };
+        }
+      } catch (scopeErr) {
+        console.warn("[orchestrator] scoped verification for gate failed; using raw verificationOut:", (scopeErr as Error)?.message);
+      }
       const gate = checkPhaseGate("build", "review", {
-        verificationOut: updatedBuild.verificationOut,
+        verificationOut: verificationForGate as typeof updatedBuild.verificationOut,
       });
       if (gate.allowed) {
         await prisma.featureBuild.update({ where: { buildId }, data: { phase: "review" } });
