@@ -16,6 +16,8 @@ import { CliPoolStatusPanel } from "@/components/platform/CliPoolStatusPanel";
 import { cliAdapterTypeForProvider, deriveRoutingEligibility, type RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
 import { getRecentBudgetEvents, countRecentRejections } from "@/lib/inference/budget-events-data";
 import { AgentBudgetEventsPanel } from "@/components/platform/AgentBudgetEventsPanel";
+import { LocalOnlyInferenceToggle } from "@/components/platform/LocalOnlyInferenceToggle";
+import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
 
@@ -61,7 +63,7 @@ export default async function ProvidersPage() {
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
 
   // Bypass React cache for jobs — syncProviderRegistry() may have mutated the DB above.
-  const [providers, byProvider, byAgent, freshJobs, detected, modelSummaries, cliPoolStatuses, budgetEvents, recentRejections] = await Promise.all([
+  const [providers, byProvider, byAgent, freshJobs, detected, modelSummaries, cliPoolStatuses, budgetEvents, recentRejections, localOnlyInference] = await Promise.all([
     getProviders(),
     getTokenSpendByProvider(currentMonth),
     getTokenSpendByAgent(currentMonth),
@@ -71,6 +73,7 @@ export default async function ProvidersPage() {
     getAllCliPoolStatuses(),
     getRecentBudgetEvents(),
     countRecentRejections(),
+    getLocalOnlyInference(),
   ]);
   const aiProviders = providers.filter((pw) => pw.provider.endpointType !== "service");
 
@@ -126,6 +129,9 @@ export default async function ProvidersPage() {
 
       {/* EP-COST Phase 2: Agent Budget Events — surface warning_95 and rejected threshold crossings */}
       <AgentBudgetEventsPanel events={budgetEvents} recentRejections={recentRejections} />
+
+      {/* Local-only inference (cloud-disabled) guarantee — BI-594E8782 */}
+      <LocalOnlyInferenceToggle initialEnabled={localOnlyInference} canWrite={canWrite} />
 
       <div
         style={{

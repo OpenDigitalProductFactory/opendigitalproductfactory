@@ -3,6 +3,7 @@ import {
   sandboxReachableUrl,
   preflightLocalEndpoint,
   pickDefaultCodingModel,
+  isEmbeddingModelId,
   buildOpencodeConfig,
   summarizeOpencodeEvent,
   extractOpencodeResult,
@@ -180,5 +181,84 @@ describe("extractOpencodeResult", () => {
 
   it("falls back to raw stdout when no recognized events", () => {
     expect(extractOpencodeResult("just text output")).toBe("just text output");
+  });
+});
+
+describe("isEmbeddingModelId", () => {
+  it("flags embedding / non-chat model families", () => {
+    expect(isEmbeddingModelId("docker.io/ai/nomic-embed-text-v1.5:latest")).toBe(true);
+    expect(isEmbeddingModelId("bge-m3")).toBe(true);
+    expect(isEmbeddingModelId("all-minilm:latest")).toBe(true);
+    expect(isEmbeddingModelId("whisper-base")).toBe(true);
+  });
+  it("does not flag coding/chat models", () => {
+    expect(isEmbeddingModelId("docker.io/ai/qwen3-coder:latest")).toBe(false);
+    expect(isEmbeddingModelId("gemma4:12B")).toBe(false);
+  });
+});
+
+// A fetch double that branches on whether the URL is the /models list or the
+// DMR /engines/_configure runtime-config endpoint.
+function urlAwareFetch(opts: {
+  models: string[];
+  configContextSize?: number | null; // null => configure endpoint 404 (unsupported)
+}) {
+  return (async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/engines/_configure")) {
+      if (opts.configContextSize === null || opts.configContextSize === undefined) {
+        return { ok: false, status: 404, json: async () => [], text: async () => "" } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => [{ Backend: "llama.cpp", Model: opts.models[0], Config: { "context-size": opts.configContextSize } }],
+      } as unknown as Response;
+    }
+    // /models list
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: opts.models.map((id) => ({ id })) }),
+    } as unknown as Response;
+  }) as unknown as typeof fetch;
+}
+
+describe("preflightLocalEndpoint — embedding warnings + served context (a/b)", () => {
+  it("warns when an embedding model is explicitly selected", async () => {
+    const fetchImpl = urlAwareFetch({ models: ["docker.io/ai/nomic-embed-text-v1.5:latest", "docker.io/ai/qwen3-coder:latest"] });
+    const res = await preflightLocalEndpoint("http://localhost:11434/v1", "docker.io/ai/nomic-embed-text-v1.5:latest", fetchImpl);
+    expect(res.ok).toBe(true); // served + present, but…
+    expect(res.warnings?.some((w) => /embedding model/i.test(w))).toBe(true);
+  });
+
+  it("gives an actionable message when only embedding models are served", async () => {
+    const fetchImpl = urlAwareFetch({ models: ["docker.io/ai/nomic-embed-text-v1.5:latest", "all-minilm:latest"] });
+    const res = await preflightLocalEndpoint("http://localhost:11434/v1", "", fetchImpl);
+    expect(res.ok).toBe(false);
+    expect(res.reason).toMatch(/embedding/i);
+    expect(res.reason).toMatch(/coding model/i);
+  });
+
+  it("reads the authoritative served context and BLOCKS below the floor", async () => {
+    const fetchImpl = urlAwareFetch({ models: ["docker.io/ai/qwen3-coder:latest"], configContextSize: 4096 });
+    const res = await preflightLocalEndpoint("http://localhost:11434/v1", "docker.io/ai/qwen3-coder:latest", fetchImpl, { checkServedContext: true });
+    expect(res.ok).toBe(false);
+    expect(res.servedContextTokens).toBe(4096);
+    expect(res.reason).toMatch(/context/i);
+  });
+
+  it("passes and reports the served context when it clears the floor", async () => {
+    const fetchImpl = urlAwareFetch({ models: ["docker.io/ai/qwen3-coder:latest"], configContextSize: 32768 });
+    const res = await preflightLocalEndpoint("http://localhost:11434/v1", "docker.io/ai/qwen3-coder:latest", fetchImpl, { checkServedContext: true });
+    expect(res.ok).toBe(true);
+    expect(res.servedContextTokens).toBe(32768);
+  });
+
+  it("degrades gracefully when the runtime has no configure API (404)", async () => {
+    const fetchImpl = urlAwareFetch({ models: ["docker.io/ai/qwen3-coder:latest"], configContextSize: null });
+    const res = await preflightLocalEndpoint("http://localhost:11434/v1", "docker.io/ai/qwen3-coder:latest", fetchImpl, { checkServedContext: true });
+    expect(res.ok).toBe(true);
+    expect(res.servedContextTokens).toBeNull();
   });
 });
