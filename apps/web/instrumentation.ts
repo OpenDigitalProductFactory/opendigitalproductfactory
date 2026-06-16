@@ -348,7 +348,17 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
  * Idempotent and safe to run every boot. Non-fatal. Exported for tests.
  */
 export async function resumeStrandedBuildsOnBoot(
-  opts: { staleAfterMs?: number; dispatch?: (buildId: string) => void } = {},
+  opts: {
+    staleAfterMs?: number;
+    dispatch?: (buildId: string) => void;
+    /**
+     * Injectable pre-build-phase resumer (BI-9257CF19). Fire-and-forget;
+     * defaults to the canonical {@link resumePreBuildPhase} importer. Injected
+     * in tests so the boot reconcile can be asserted without running the real
+     * generator/reviewer pipeline.
+     */
+    resumePreBuild?: (args: { buildId: string; phase: string; userId: string }) => void;
+  } = {},
   logger: Pick<Console, "log" | "error"> = console,
 ): Promise<{ resumed: number; flagged: number } | null> {
   const staleAfterMs = opts.staleAfterMs ?? 5 * 60 * 1000;
@@ -370,8 +380,39 @@ export async function resumeStrandedBuildsOnBoot(
         phase: { in: ["ideate", "plan", "build", "review"] },
         updatedAt: { lt: cutoff },
       },
-      select: { buildId: true, phase: true, buildExecState: true, verificationOut: true },
+      select: { buildId: true, phase: true, buildExecState: true, verificationOut: true, createdById: true },
     });
+
+    // Default pre-build resumer (BI-9257CF19): lazy-imports the canonical
+    // generator/reviewer re-fire and logs the outcome as a BuildActivity row.
+    // Fire-and-forget so one slow re-review never blocks the boot reconcile.
+    const resumePreBuild =
+      opts.resumePreBuild ??
+      ((args: { buildId: string; phase: string; userId: string }) => {
+        void (async () => {
+          const { resumePreBuildPhase } = await import("@/lib/integrate/resume-pre-build-phase");
+          const outcome = await resumePreBuildPhase(args);
+          await prisma.buildActivity
+            .create({
+              data: {
+                buildId: args.buildId,
+                tool: "resumeStrandedBuildsOnBoot",
+                summary: `Pre-build resume (${args.phase}): ${outcome.kind}${
+                  "via" in outcome ? ` via ${outcome.via} — ${outcome.detail}` : ""
+                }${"reason" in outcome ? ` — ${outcome.reason}` : ""}${
+                  "error" in outcome ? ` — ${outcome.error}` : ""
+                }`,
+              },
+            })
+            .catch(() => {});
+        })().catch((err) =>
+          logger.error(
+            "[build-resume] pre-build resume failed for %s: %s",
+            JSON.stringify(args.buildId),
+            err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
+          ),
+        );
+      });
 
     // Default dispatcher lazy-imports the system executor to avoid pulling the
     // server-action module (and its auth wrappers) into the module graph until
@@ -394,23 +435,28 @@ export async function resumeStrandedBuildsOnBoot(
     let resumed = 0;
     let flagged = 0;
     for (const build of candidates) {
-      // ── Pre-build phases (ideate/plan/review): no resumable step-machine.
-      // Surface as recoverable instead of auto-re-dispatching the fragile,
-      // unverified pre-build flow. Full auto-resume of these phases is the
-      // remaining BI-17377D05 / EP-BUILD-4DB1C0 work.
+      // ── Pre-build phases (ideate/plan/review): no step-machine, but each
+      // phase has a canonical generator/reviewer we can re-fire. BI-9257CF19:
+      // auto-resume instead of merely flagging for operator rescue, so an
+      // in-flight build survives a self-upgrade swap (the resume-after half of
+      // the quiescence contract). Re-firing is safe here because the candidate
+      // query already excludes anything updated within the staleness cutoff,
+      // and each underlying dispatcher carries its own idempotency guard. Fire-
+      // and-forget so one slow re-review never blocks the boot reconcile loop.
       if (build.phase !== "build") {
         logger.log(
-          `[build-resume] ${build.buildId} stranded in ${build.phase} phase after restart — flagged for recovery (pre-build phases have no auto-resume)`,
+          `[build-resume] ${build.buildId} stranded in ${build.phase} phase after restart/swap — auto-resuming (BI-9257CF19)`,
         );
         await prisma.buildActivity
           .create({
             data: {
               buildId: build.buildId,
               tool: "resumeStrandedBuildsOnBoot",
-              summary: `Stranded in ${build.phase} phase after a restart/swap — flagged for operator recovery; pre-build phases have no auto-resume yet (BI-17377D05).`,
+              summary: `Stranded in ${build.phase} phase after a restart/swap — auto-resuming the canonical ${build.phase} generator/reviewer (BI-9257CF19).`,
             },
           })
           .catch(() => {});
+        resumePreBuild({ buildId: build.buildId, phase: build.phase, userId: build.createdById });
         flagged++;
         continue;
       }
@@ -442,7 +488,7 @@ export async function resumeStrandedBuildsOnBoot(
       logger.log(`[build-resume] re-dispatched ${resumed} stranded build(s)`);
     }
     if (flagged > 0) {
-      logger.log(`[build-resume] flagged ${flagged} pre-build-phase strand(s) for recovery`);
+      logger.log(`[build-resume] auto-resumed ${flagged} pre-build-phase strand(s) (ideate/plan/review)`);
     }
     return { resumed, flagged };
   } catch (err) {

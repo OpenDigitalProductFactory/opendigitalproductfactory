@@ -1737,3 +1737,59 @@ export async function reviewBuildPlan(buildId: string): Promise<ReviewResult> {
 
   return result;
 }
+
+/**
+ * Operator/coworker-triggered re-run of the canonical plan reviewer (BI-E1CB0522).
+ *
+ * The plain {@link reviewBuildPlan} action above is a DIVERGENT single-reviewer
+ * implementation that does NOT apply the kind-aware test-first lenience (#1976 /
+ * #1998), dual reviewers, iteration-trajectory, or the plan->build auto-advance.
+ * Re-running THAT logic from the UI would leave a stale failed planReview in
+ * place even after a relevant reviewer-logic fix deploys — exactly the
+ * stuck-state observed on FB-69231490 (a chore blocked on now-lenient
+ * test-first criticals).
+ *
+ * This action instead delegates to the SAME `executeTool("reviewBuildPlan")`
+ * path the agentic loop uses (mcp-tools.ts), so a re-run always reflects the
+ * current reviewer logic and auto-advances plan->build when the (now-passing)
+ * gate is satisfied. The cached planReview is refreshed in the same call.
+ *
+ * Dynamic import of mcp-tools avoids a module cycle (mcp-tools imports build
+ * actions). `featureBuildId` routes the tool to this exact build.
+ */
+export async function rerunPlanReview(buildId: string): Promise<{
+  success: boolean;
+  message: string;
+  decision: ReviewResult["decision"] | null;
+}> {
+  const userId = await requireBuildAccess();
+
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: { createdById: true, phase: true, buildPlan: true },
+  });
+  if (!build) throw new Error("Build not found");
+  if (build.createdById !== userId) throw new Error("Forbidden");
+  if (build.phase !== "plan") {
+    throw new Error("Plan review can only be re-run for builds in the plan phase.");
+  }
+  if (!build.buildPlan) {
+    throw new Error("No implementation plan to review. Generate the plan before re-running review.");
+  }
+
+  const { executeTool } = await import("@/lib/mcp-tools");
+  const result = await executeTool(
+    "reviewBuildPlan",
+    { buildId },
+    userId,
+    { featureBuildId: buildId },
+  );
+
+  const review = (result.data as { review?: ReviewResult } | undefined)?.review ?? null;
+  revalidatePath(`/build/${buildId}`);
+  return {
+    success: result.success,
+    message: result.message ?? (result.success ? "Plan review re-run complete." : "Plan review re-run failed."),
+    decision: review?.decision ?? null,
+  };
+}

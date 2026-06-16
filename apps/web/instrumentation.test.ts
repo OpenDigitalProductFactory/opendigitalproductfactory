@@ -399,21 +399,32 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  // BI-17377D05: pre-build phases have no resumable step-machine; surface them
-  // as recoverable instead of auto-re-dispatching the fragile pre-build flow.
-  it("flags ideate/plan/review strands for recovery without auto-dispatch", async () => {
+  // BI-9257CF19: pre-build phases (ideate/plan/review) now AUTO-RESUME via the
+  // canonical generator/reviewer re-fire instead of merely flagging for
+  // operator rescue, so an in-flight build survives a self-upgrade swap. The
+  // `build`-phase step-machine resume is untouched.
+  it("auto-resumes ideate/plan/review strands without using the build-phase dispatch", async () => {
     featureBuildFindManyMock.mockResolvedValueOnce([
-      { buildId: "BLD-IDEATE", phase: "ideate", buildExecState: null, verificationOut: null },
-      { buildId: "BLD-PLAN", phase: "plan", buildExecState: { step: "deps_installed" }, verificationOut: null },
-      { buildId: "BLD-REVIEW", phase: "review", buildExecState: null, verificationOut: null },
+      { buildId: "BLD-IDEATE", phase: "ideate", buildExecState: null, verificationOut: null, createdById: "user-1" },
+      { buildId: "BLD-PLAN", phase: "plan", buildExecState: { step: "deps_installed" }, verificationOut: null, createdById: "user-2" },
+      { buildId: "BLD-REVIEW", phase: "review", buildExecState: null, verificationOut: null, createdById: "user-3" },
     ]);
     const dispatch = vi.fn();
+    const resumePreBuild = vi.fn();
 
-    const result = await resumeStrandedBuildsOnBoot({ dispatch }, { log: vi.fn(), error: vi.fn() });
+    const result = await resumeStrandedBuildsOnBoot(
+      { dispatch, resumePreBuild },
+      { log: vi.fn(), error: vi.fn() },
+    );
 
     expect(result).toEqual({ resumed: 0, flagged: 3 });
-    expect(dispatch).not.toHaveBeenCalled(); // never auto-dispatches pre-build phases
-    expect(buildActivityCreateMock).toHaveBeenCalledTimes(3); // one recovery signal each
+    expect(dispatch).not.toHaveBeenCalled(); // build-phase step-machine only
+    // Each pre-build strand is handed to the canonical resumer with its actor.
+    expect(resumePreBuild).toHaveBeenCalledTimes(3);
+    expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-IDEATE", phase: "ideate", userId: "user-1" });
+    expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-PLAN", phase: "plan", userId: "user-2" });
+    expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-REVIEW", phase: "review", userId: "user-3" });
+    expect(buildActivityCreateMock).toHaveBeenCalledTimes(3); // one resume signal each
   });
 
   it("queries all non-terminal pre-ship phases with a staleAfter cutoff", async () => {
