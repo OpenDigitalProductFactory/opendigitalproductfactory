@@ -243,6 +243,15 @@ export async function routeEndpointV2(
   contract: RequestContract,
   policyRules: PolicyRuleEval[],
   overrides: EndpointOverride[],
+  /**
+   * skipRecipe: skip execution-recipe selection (and its executionPlan build).
+   * The recipe only shapes the executionPlan/provider settings — never the
+   * selected endpoint — and `selectRecipeWithExploration` rolls Math.random()
+   * for the challenger arm. A model-selection PREVIEW must be deterministic and
+   * side-effect-free, so it routes with skipRecipe=true: same winner, no roll,
+   * executionPlan omitted. The live `routeAndCall` path leaves it false.
+   */
+  opts?: { skipRecipe?: boolean },
 ): Promise<RouteDecision> {
   const timestamp = new Date();
   const allCandidates: CandidateTrace[] = [];
@@ -443,13 +452,19 @@ export async function routeEndpointV2(
     }
   }
 
-  // EP-INF-005b/006: Recipe lookup with exploration selection
-  const { recipe, explorationMode } = await selectRecipeWithExploration(
-    winner.endpoint.providerId, winner.endpoint.modelId, contract,
-  );
+  // EP-INF-005b/006: Recipe lookup with exploration selection.
+  // skipRecipe (preview) short-circuits this: no recipe, no challenger roll,
+  // no executionPlan — the winner above is already fully determined.
+  const { recipe, explorationMode } = opts?.skipRecipe
+    ? { recipe: null, explorationMode: "champion" as const }
+    : await selectRecipeWithExploration(
+        winner.endpoint.providerId, winner.endpoint.modelId, contract,
+      );
   const executionPlan = recipe
     ? buildPlanFromRecipe(recipe, contract)
-    : buildDefaultPlan(winner.endpoint, contract);
+    : opts?.skipRecipe
+      ? undefined
+      : buildDefaultPlan(winner.endpoint, contract);
 
   // Build full candidate trace (eligible endpoints, with rankScore as fitnessScore)
   const eligibleTraces: CandidateTrace[] = ranked.map(

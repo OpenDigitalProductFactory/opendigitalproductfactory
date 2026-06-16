@@ -35,7 +35,7 @@ const OPENCODE_SCHEMA_TASK_TIMEOUT_MS = Number(process.env.OPENCODE_SCHEMA_TASK_
 // Real agent runs consume 39k–156k tokens; a serving context below this fails
 // outright. Advisory floor — /v1/models rarely exposes context length, so this
 // is enforced only when the endpoint reports it (see preflightLocalEndpoint).
-const OPENCODE_MIN_CONTEXT_TOKENS = Number(process.env.OPENCODE_MIN_CONTEXT_TOKENS) || 22_000;
+export const OPENCODE_MIN_CONTEXT_TOKENS = Number(process.env.OPENCODE_MIN_CONTEXT_TOKENS) || 22_000;
 
 export type OpencodeResult = {
   content: string;
@@ -50,6 +50,13 @@ export type LocalEndpointPreflight = {
   models: string[];
   contextOk: boolean;       // false only when the endpoint reports a context below the floor
   reason: string | null;    // BLOCKED-classifiable message when ok === false
+  /**
+   * Served context window the endpoint reported for the resolved model, in
+   * tokens. null when the endpoint omits it (the common OpenAI-/v1/models case).
+   * Surfaced so the Model Selection & Runtime Health view can show e.g.
+   * "served 4096 / needs >= 22000" rather than just a pass/fail.
+   */
+  reportedContextTokens: number | null;
 };
 
 /**
@@ -86,9 +93,20 @@ type OpenAiModelsResponse = {
  * those classes and prefer an explicit coder model, then a qwen3 family model,
  * then any remaining chat model. Returns null only when nothing usable is served.
  */
+/**
+ * Model-id classes that are NOT chat/coding models — embeddings, rerankers,
+ * STT/TTS, vision-embed. Single source of truth, shared by pickDefaultCodingModel
+ * and the Runtime Health "embedding model first-in-list" check.
+ */
+const NON_CHAT_MODEL_RE = /embed|nomic|bge[-_]|rerank|whisper|\bstt\b|\btts\b|clip|vision-embed|minilm|gte|e5/i;
+
+/** True when a served model id looks like a non-chat model (embedding/rerank/STT/…). */
+export function isLikelyNonChatModel(model: string): boolean {
+  return NON_CHAT_MODEL_RE.test(model);
+}
+
 export function pickDefaultCodingModel(models: string[]): string | null {
-  const NON_CHAT_RE = /embed|nomic|bge[-_]|rerank|whisper|\bstt\b|\btts\b|clip|vision-embed|minilm|gte|e5/i;
-  const chatModels = models.filter((m) => !NON_CHAT_RE.test(m));
+  const chatModels = models.filter((m) => !isLikelyNonChatModel(m));
   return (
     chatModels.find((m) => /coder|[-_]code\b|code[-_]/i.test(m)) ??
     chatModels.find((m) => /qwen3/i.test(m)) ??
@@ -108,17 +126,17 @@ export async function preflightLocalEndpoint(
   try {
     const res = await fetchImpl(url, { method: "GET" });
     if (!res.ok) {
-      return { ok: false, resolvedModel: null, models: [], contextOk: false, reason: `Local model endpoint ${url} returned HTTP ${res.status}. Is the local AI provider running?` };
+      return { ok: false, resolvedModel: null, models: [], contextOk: false, reason: `Local model endpoint ${url} returned HTTP ${res.status}. Is the local AI provider running?`, reportedContextTokens: null };
     }
     body = (await res.json()) as OpenAiModelsResponse;
   } catch (err) {
-    return { ok: false, resolvedModel: null, models: [], contextOk: false, reason: `Local model endpoint ${url} is unreachable: ${(err as Error).message}` };
+    return { ok: false, resolvedModel: null, models: [], contextOk: false, reason: `Local model endpoint ${url} is unreachable: ${(err as Error).message}`, reportedContextTokens: null };
   }
 
   const entries = Array.isArray(body.data) ? body.data : [];
   const models = entries.map((m) => m.id).filter((id): id is string => typeof id === "string");
   if (models.length === 0) {
-    return { ok: false, resolvedModel: null, models, contextOk: false, reason: `Local model endpoint ${url} returned no models. Pull a coding model first (e.g. a qwen3-coder build).` };
+    return { ok: false, resolvedModel: null, models, contextOk: false, reason: `Local model endpoint ${url} returned no models. Pull a coding model first (e.g. a qwen3-coder build).`, reportedContextTokens: null };
   }
 
   const resolvedModel = requestedModel && models.includes(requestedModel)
@@ -128,7 +146,7 @@ export async function preflightLocalEndpoint(
       : pickDefaultCodingModel(models);
 
   if (!resolvedModel) {
-    return { ok: false, resolvedModel: null, models, contextOk: false, reason: `Requested model "${requestedModel}" is not served by the local endpoint. Available: ${models.join(", ")}.` };
+    return { ok: false, resolvedModel: null, models, contextOk: false, reason: `Requested model "${requestedModel}" is not served by the local endpoint. Available: ${models.join(", ")}.`, reportedContextTokens: null };
   }
 
   // Best-effort context check: only enforced when the endpoint reports a context
@@ -143,10 +161,11 @@ export async function preflightLocalEndpoint(
       models,
       contextOk: false,
       reason: `Model "${resolvedModel}" serves only ${reported} context tokens; agent runs need >= ${OPENCODE_MIN_CONTEXT_TOKENS}. Pull a longer-context model.`,
+      reportedContextTokens: reported,
     };
   }
 
-  return { ok: true, resolvedModel, models, contextOk: true, reason: null };
+  return { ok: true, resolvedModel, models, contextOk: true, reason: null, reportedContextTokens: reported ?? null };
 }
 
 /**

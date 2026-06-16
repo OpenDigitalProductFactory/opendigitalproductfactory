@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Model Selection — As-Built Dispatch &amp; Routing Allocation (SysML projection)</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1.2rem; }
+  h1 { font-size: 1.7rem; } h2 { margin-top: 2rem; border-bottom: 1px solid #8884; padding-bottom: .2rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid #8886; padding: .35rem .5rem; text-align: left; vertical-align: top; }
+  code { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: .9em; }
+  pre { background: #8881; padding: 1rem; overflow-x: auto; border-radius: 6px; }
+  pre code { font-size: .85em; line-height: 1.5; }
+  .kw { color: #07d; font-weight: 600; } .com { color: #690; font-style: italic; } .str { color: #a50; }
+  .tag { display: inline-block; font-size: .75em; padding: .05rem .4rem; border: 1px solid #8886; border-radius: 999px; }
+  blockquote { border-left: 3px solid #8886; margin: 1rem 0; padding: .2rem 1rem; color: inherit; }
+  .bad { color: #c0392b; font-weight: 600; } .good { color: #1e8449; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>Model Selection — As-Built Dispatch &amp; Routing Allocation</h1>
+
+<table>
+  <tr><th>Field</th><th>Value</th></tr>
+  <tr><td>Status</td><td><strong>As-built projection (current state)</strong> — documents the system as it exists, plus the observability layer that closes the gap. Not a future design.</td></tr>
+  <tr><td>Date</td><td>2026-06-15</td></tr>
+  <tr><td>Owner</td><td>Enterprise Architect, Build Studio platform team</td></tr>
+  <tr><td>Backlog</td><td><code>BI-768AFB99</code> (Model Selection &amp; Runtime Health)</td></tr>
+  <tr><td>Epics</td><td><code>EP-FULL-OBS</code> (the operator/agent view) · <code>EP-PARITY-ENGINE</code> (this is the missing as-built dispatch/routing projection that epic exists to produce)</td></tr>
+  <tr><td>Builds on</td><td><a href="2026-06-14-sysml-architecture-substrate-design.md">SysML Architecture Substrate</a> (notation), <a href="2026-06-14-interface-surface-governance-design.html">Interface-Surface Governance</a> (the as-built projection pattern), <a href="2026-06-10-local-llm-build-agent-design.md">Local-LLM Build Agent</a> (the opencode dispatch path)</td></tr>
+  <tr><td>WWMD anchor</td><td><code>structural-verification-is-not-functional</code> (a "local" label is not a local run) · <code>evidence-before-diagnosis</code> (resolve ground truth before driving) · Single Source of Truth (one resolver, three surfaces)</td></tr>
+</table>
+
+<h2>1. Problem — model selection is split across three sources with no synthesis</h2>
+
+<p>A "local-model" Build Studio campaign actually ran on <strong>cloud</strong> — nobody noticed
+until the GPU sat idle. The cause is structural: which model/provider/engine executes a build
+phase is decided in three places that nothing reconciles, and no view or tool resolves the
+<em>effective</em> per-phase answer before a run.</p>
+
+<table>
+  <tr><th>#</th><th>Config source</th><th>Admin surface</th><th>Governs</th></tr>
+  <tr><td>1</td><td>V2 routing (<code>routeAndCall</code> → <code>routeEndpointV2</code>)</td><td>Providers &amp; Routing (<code>/platform/ai/providers</code>)</td><td>Every <em>routed</em> phase: plan, design-review, plan-review, ideate-when-opencode, build-when-not-opencode</td></tr>
+  <tr><td>2</td><td>Build dispatch engine (<code>getBuildStudioConfig().provider</code>, <code>PlatformConfig["build-studio-dispatch"]</code>)</td><td>Build Runtime (<code>/platform/ai/build-studio</code>)</td><td>The ideate engine and the build engine (only <code>opencode</code> makes build local)</td></tr>
+  <tr><td>3</td><td>Served context window (<code>preflightLocalEndpoint</code> → <code>/v1/models</code>)</td><td><em>none</em> — invisible to both pages</td><td>Whether the local model can actually run an agent loop (≥ <code>OPENCODE_MIN_CONTEXT_TOKENS</code>)</td></tr>
+</table>
+
+<p>The decisive mechanism is Stage-5b of <code>routeEndpointV2</code>
+(<code>apps/web/lib/routing/pipeline-v2.ts</code>): a stable sort puts
+<code>user_configured</code> (cloud) endpoints <strong>ahead of</strong> <code>bundled</code> (local)
+ones. So on a mixed install a routed phase picks cloud <em>even when a local model is
+available and free</em>. Selecting "Local model (OpenCode)" in Build Runtime makes <strong>only
+the build phase</strong> local; ideate, plan, and both reviews still route to cloud.</p>
+
+<h2>2. As-built per-phase allocation</h2>
+
+<p>The effective dispatch for each phase, verified against the code (call sites cited):</p>
+
+<table>
+  <tr><th>Phase</th><th>Engine governed by</th><th>Mechanism</th><th>Effective provider/model</th><th>Code (as-built)</th></tr>
+  <tr><td><strong>ideate</strong></td><td>Build Runtime <code>provider</code></td><td><code>opencode</code> → <span class="bad">routed</span>; claude/codex/grok → vendor CLI; agentic → unsupported</td><td>opencode path ROUTES (cloud on mixed); CLI path uses the configured vendor</td><td><code>ideate-dispatch.ts:417,444</code>; callers <code>ideate-on-approval.ts:177</code>, <code>agent-coworker.ts:1699</code></td></tr>
+  <tr><td><strong>plan</strong></td><td>Providers &amp; Routing</td><td>routed (<code>conversation</code>, <code>quality_first</code>)</td><td>V2 winner → cloud on mixed</td><td><code>plan-on-approval.ts:276</code></td></tr>
+  <tr><td><strong>design-review</strong></td><td>Providers &amp; Routing</td><td>routed (<code>analysis</code>)</td><td>V2 winner → cloud on mixed</td><td><code>build.ts:1688</code> (<code>callReviewerLLM</code>)</td></tr>
+  <tr><td><strong>plan-review</strong></td><td>Providers &amp; Routing</td><td>routed (<code>analysis</code>)</td><td>V2 winner → cloud on mixed</td><td><code>build.ts:1730</code> (same reviewer)</td></tr>
+  <tr><td><strong>build</strong></td><td>Build Runtime <code>provider</code></td><td><code>opencode</code> → <span class="good">local CLI</span>; else → routed (<code>analysis</code>, <code>requireTools</code>)</td><td>opencode → local model; claude/codex/grok/agentic → V2 winner (the CLI choice does NOT apply to build)</td><td><code>build-pipeline.ts:437</code> (opencode) / <code>:486</code> (agentic loop)</td></tr>
+</table>
+
+<blockquote>Net: with the local engine selected on a mixed install, <strong>4 of 5 phases route to
+cloud</strong> and only the build phase uses the GPU.</blockquote>
+
+<h2>3. The SysML v2 model</h2>
+
+<p>The build lifecycle's model-selection allocation in SysML v2 textual notation — phase
+<code>action</code>s allocated to the dispatch-mechanism <code>part</code>s that realize them,
+each part allocated to its governing config source and its as-built code, with the tier-sort
+recorded as a <code>constraint</code>:</p>
+
+<pre><code><span class="kw">package</span> ModelSelectionAsBuilt {
+
+  <span class="com">// ---- Requirements (what the runtime-health layer must guarantee) ----</span>
+  <span class="kw">requirement def</span> R1_OneAuthoritativeView {
+    <span class="kw">doc</span> <span class="str">/* An operator OR an agent resolves, in one place, which
+           provider/engine/model runs each phase right now. */</span>
+  }
+  <span class="kw">requirement def</span> R2_PredictBeforeRun {
+    <span class="kw">doc</span> <span class="str">/* The answer is available BEFORE a build runs, using the same
+           routing logic the build uses (no drift). */</span>
+  }
+  <span class="kw">requirement def</span> R3_FlagContradictions {
+    <span class="kw">doc</span> <span class="str">/* Where live config contradicts platform guidance is flagged:
+           local-intent-but-cloud-reasoning, context-below-floor,
+           embedding-model-first. */</span>
+  }
+
+  <span class="com">// ---- Config sources (the three split authorities) ----</span>
+  <span class="kw">part def</span> ProvidersAndRouting;   <span class="com">// V2 routing — /platform/ai/providers</span>
+  <span class="kw">part def</span> BuildRuntime;          <span class="com">// dispatch engine — /platform/ai/build-studio</span>
+  <span class="kw">part def</span> DmrServingConfig;      <span class="com">// served context window — no admin surface</span>
+
+  <span class="com">// ---- Dispatch mechanisms (how a phase actually reaches a model) ----</span>
+  <span class="kw">part def</span> RoutedDispatch;        <span class="com">// routeAndCall -> routeEndpointV2</span>
+  <span class="kw">part def</span> VendorCliDispatch;     <span class="com">// claude/codex/grok CLI in the sandbox</span>
+  <span class="kw">part def</span> LocalOpencodeDispatch;  <span class="com">// opencode CLI against the local endpoint</span>
+
+  <span class="com">// ---- The blind-spot constraint: tier-sort dominates ranking ----</span>
+  <span class="kw">constraint def</span> C1_TierSortPrefersCloud {
+    <span class="kw">doc</span> <span class="str">/* routeEndpointV2 Stage-5b stable-sorts user_configured ahead of
+           bundled, so a routed phase picks cloud over an available local
+           model on a mixed install. pipeline-v2.ts. */</span>
+  }
+
+  <span class="com">// ---- Phase actions, allocated to the mechanism that realizes them ----</span>
+  <span class="kw">action def</span> Ideate;        <span class="kw">allocate</span> Ideate      <span class="kw">to</span> RoutedDispatch, VendorCliDispatch;
+  <span class="kw">action def</span> Plan;          <span class="kw">allocate</span> Plan        <span class="kw">to</span> RoutedDispatch;
+  <span class="kw">action def</span> DesignReview;  <span class="kw">allocate</span> DesignReview <span class="kw">to</span> RoutedDispatch;
+  <span class="kw">action def</span> PlanReview;    <span class="kw">allocate</span> PlanReview  <span class="kw">to</span> RoutedDispatch;
+  <span class="kw">action def</span> Build;         <span class="kw">allocate</span> Build       <span class="kw">to</span> LocalOpencodeDispatch, RoutedDispatch;
+
+  <span class="com">// ---- Mechanism -> governing source, and the tier-sort it inherits ----</span>
+  <span class="kw">allocate</span> RoutedDispatch       <span class="kw">to</span> ProvidersAndRouting;
+  <span class="kw">allocate</span> VendorCliDispatch    <span class="kw">to</span> BuildRuntime;
+  <span class="kw">allocate</span> LocalOpencodeDispatch <span class="kw">to</span> BuildRuntime, DmrServingConfig;
+  <span class="kw">satisfy</span> C1_TierSortPrefersCloud <span class="kw">by</span> RoutedDispatch;
+
+  <span class="com">// ---- As-built code allocations (the projection's authority) ----</span>
+  <span class="kw">allocate</span> RoutedDispatch <span class="kw">to</span>
+    <span class="str">"apps/web/lib/inference/routed-inference.ts#routeAndCall"</span>,
+    <span class="str">"apps/web/lib/routing/pipeline-v2.ts#routeEndpointV2"</span>;
+  <span class="kw">allocate</span> VendorCliDispatch <span class="kw">to</span>
+    <span class="str">"apps/web/lib/integrate/ideate-dispatch.ts#dispatchIdeateResearch"</span>;
+  <span class="kw">allocate</span> LocalOpencodeDispatch <span class="kw">to</span>
+    <span class="str">"apps/web/lib/integrate/build-pipeline.ts#stepGenerateCode"</span>,
+    <span class="str">"apps/web/lib/integrate/opencode-dispatch.ts#preflightLocalEndpoint"</span>;
+
+  <span class="com">// ---- The runtime-health layer that resolves + flags all of the above ----</span>
+  <span class="kw">action def</span> ResolveModelSelection;  <span class="com">// one resolver, three surfaces</span>
+  <span class="kw">verification def</span> V_PredictionMatchesRun {
+    <span class="kw">doc</span> <span class="str">/* previewRoute (a side-effect-free dry-run of routeEndpointV2)
+           predicts the per-phase winner; verified to match what actually
+           ran by driving a build on the live install. */</span>
+  }
+  <span class="kw">verify</span> R2_PredictBeforeRun <span class="kw">by</span> V_PredictionMatchesRun;
+
+  <span class="kw">allocate</span> ResolveModelSelection <span class="kw">to</span>
+    <span class="str">"apps/web/lib/inference/phase-model-resolution.ts#resolveModelSelectionByPhase"</span>,
+    <span class="str">"apps/web/lib/inference/routed-inference.ts#previewRoute"</span>,
+    <span class="str">"apps/web/lib/mcp-tools.ts#resolve_model_selection"</span>,
+    <span class="str">"apps/web/app/(shell)/platform/ai/runtime-health/page.tsx"</span>;
+  <span class="kw">satisfy</span> R1_OneAuthoritativeView <span class="kw">by</span> ResolveModelSelection;
+  <span class="kw">satisfy</span> R3_FlagContradictions   <span class="kw">by</span> ResolveModelSelection;
+}
+</code></pre>
+
+<h2>4. How the gap is closed — one resolver, three surfaces</h2>
+
+<p>A single resolver,
+<code>apps/web/lib/inference/phase-model-resolution.ts#resolveModelSelectionByPhase</code>,
+computes the per-phase allocation above and the contradiction flags. It reuses the
+<em>real</em> routing logic via <code>previewRoute()</code>
+(<code>routed-inference.ts</code>) — extracted from <code>routeAndCall</code> so the prediction
+runs the identical <code>routeEndpointV2</code> the build uses, with <code>skipRecipe</code> to stay
+deterministic and side-effect-free (no dispatch, no challenger roll, no persisted decision).</p>
+
+<ul>
+  <li><strong>Operator</strong> → the <code>/platform/ai/runtime-health</code> page: a verdict
+  (<code>all-local</code> / <code>all-cloud</code> / <code>mixed</code> / <code>unconfigured</code>),
+  a per-phase table (runs-on, provider/model, mechanism, governed-by, context), and a
+  Mismatches &amp; remediation list.</li>
+  <li><strong>Agent</strong> → the <code>resolve_model_selection</code> MCP tool: the same overview
+  as structured data, so a coworker establishes ground truth in one call <em>before</em> driving a
+  build.</li>
+  <li><strong>Architecture</strong> → this projection: the as-built dispatch/routing allocation the
+  Parity Engine (<code>EP-PARITY-ENGINE</code>) had no source for.</li>
+</ul>
+
+<h2>5. Contradiction flags (realized)</h2>
+
+<table>
+  <tr><th>Code</th><th>Severity</th><th>Fires when</th></tr>
+  <tr><td><code>local-intent-cloud-reasoning</code></td><td>error</td><td>Build engine = opencode but a reasoning phase (ideate/plan/design-review/plan-review) resolves to a cloud provider — the headline blind spot.</td></tr>
+  <tr><td><code>context-too-small</code></td><td>error</td><td>The local endpoint reports a served context below <code>OPENCODE_MIN_CONTEXT_TOKENS</code> (e.g. qwen3-coder at 4096 vs the 22k floor).</td></tr>
+  <tr><td><code>embedding-model-first</code></td><td>warning</td><td>The local <code>/v1/models</code> list leads with a non-chat model (<code>isLikelyNonChatModel</code>), risking an embedding model being picked for code-gen.</td></tr>
+  <tr><td><code>build-engine-not-applied</code></td><td>info</td><td>A claude/codex/grok build engine is selected, but the build phase still routes through the agentic loop — the CLI choice only governs ideate.</td></tr>
+  <tr><td><code>ideate-opencode-routes</code></td><td>info</td><td>Ideate runs through routing even under the local engine (it does not invoke the local runner directly).</td></tr>
+</table>
+
+<h2>6. Verification</h2>
+
+<ul>
+  <li>Pure unit tests for the resolver
+  (<code>apps/web/lib/inference/phase-model-resolution.test.ts</code>): local-but-cloud-reasoning
+  flags on every routed phase, context-below-floor, embedding-first, all-local clean, all-cloud +
+  build-engine-not-applied, agentic-ideate-unsupported, no-providers → unconfigured.</li>
+  <li>Existing routing suites (<code>pipeline-v2.test.ts</code>) confirm the
+  <code>previewRoute</code>/<code>skipRecipe</code> extraction did not change routing behavior.</li>
+  <li><strong>Live functional verification</strong> (<code>V_PredictionMatchesRun</code>): drive a
+  build on the live install and confirm the predicted per-phase provider/model matches what
+  actually ran — closing <code>structural-verification-is-not-functional</code>.</li>
+</ul>
+
+<h2>7. SysML Architecture Note</h2>
+
+<table>
+  <tr><th>Field</th><th>Value</th></tr>
+  <tr><td>Scope</td><td>As-built model-selection allocation across the five build phases; the runtime-health resolver + MCP tool + admin view; the <code>previewRoute</code> extraction.</td></tr>
+  <tr><td>Requirements/constraints</td><td>R1 one-authoritative-view, R2 predict-before-run, R3 flag-contradictions; constraint C1 tier-sort-prefers-cloud (the blind-spot root).</td></tr>
+  <tr><td>Interfaces/ports</td><td>New read-only MCP tool <code>resolve_model_selection</code>; new exported <code>previewRoute()</code> on the inference module; <code>LocalEndpointPreflight</code> gains <code>reportedContextTokens</code>. No external API change.</td></tr>
+  <tr><td>Allocations</td><td>Phase actions → dispatch parts → governing config sources → as-built code (§3). Resolver → page + MCP tool.</td></tr>
+  <tr><td>Verification cases</td><td>Resolver unit tests; routing-suite regression; live build-drive prediction match.</td></tr>
+  <tr><td>Data authority impact</td><td>None new. The overview is a derived projection — no new table, no new element type; uses existing <code>sysml2</code> grammar.</td></tr>
+  <tr><td>EA/current-state catch-up</td><td>This artifact <em>is</em> the catch-up: the dispatch/routing domain now has an as-built SysML projection the Parity Engine can diff future drift against.</td></tr>
+  <tr><td>Open architecture risks</td><td>Ideate-opencode routing (vs the local runner) is a genuine local-intent inconsistency tracked as follow-up, not just observability. Semantic code-graph search ("how is the model chosen per phase") remains a larger, separate lever.</td></tr>
+</table>
+
+<h2>8. Discoverability &amp; relationships</h2>
+
+<p>Indexed by <code>search_specs_and_plans</code> / <code>doc_search</code> so the conceptual question
+— "how is the model chosen per phase", "local or cloud per phase", "model selection per build
+phase" — returns this projection. It complements the <em>runtime</em> answer (the health view + MCP
+tool, current config) with the <em>design-time</em> answer (this allocation, config-independent).
+Parity target for <code>EP-PARITY-ENGINE</code>; observability surface for
+<code>EP-FULL-OBS</code>; embedding-first flag relates to <code>EP-BUILD-391A81</code>.</p>
+
+</body>
+</html>

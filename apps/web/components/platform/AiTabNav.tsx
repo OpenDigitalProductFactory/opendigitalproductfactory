@@ -14,6 +14,7 @@ const TABS = [
   { label: "Capability Needs", href: "/platform/ai/capability-needs" },
   { label: "Providers & Routing", href: "/platform/ai/providers" },
   { label: BUILD_STUDIO_CONFIG_ROUTE_COPY.navLabel, href: "/platform/ai/build-studio" },
+  { label: "Runtime Health", href: "/platform/ai/runtime-health" },
 ];
 
 export function AiTabNav() {
