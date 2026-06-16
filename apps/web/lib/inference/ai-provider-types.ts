@@ -311,6 +311,25 @@ export type ProviderModelSummary = {
    * Null when no models are discovered yet.
    */
   derivedTier: import("@/lib/routing/quality-tiers").QualityTier | null;
+  /**
+   * BI-1B46967D: calibrated routing capability rolled up from `ModelProfile`
+   * (the per-model source of truth the routing pipeline actually reads), NOT
+   * the dead `ModelProvider` seed columns (frozen 50/50/50, ignored by routing
+   * per the 2026-03-19 model-level-routing-profiles design). `routingScores`
+   * is the strongest ACTIVE chat/reasoning model with real (non-seed)
+   * provenance — its reasoning/codegen/toolFidelity. Null when the provider has
+   * only seed placeholders, so the grid renders "not measured" instead of a
+   * misleading 50/50/50.
+   */
+  routingScores: { reasoning: number; codegen: number; toolFidelity: number } | null;
+  /** Model id whose scores `routingScores` reflects (for tooltips). */
+  representativeModelId: string | null;
+  /** Models carrying non-seed provenance (catalog baseline / evaluated / production). */
+  measuredModels: number;
+  /** Models a DPF evaluation has actually run against (`lastEvalAt` set). */
+  evaluatedModels: number;
+  /** ISO timestamp of the most recent evaluation across this provider's models; null if never. */
+  lastEvalAt: string | null;
 };
 
 /** Row shape for activated MCP servers on the providers grid. */
