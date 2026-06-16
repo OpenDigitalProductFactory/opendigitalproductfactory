@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 498,
+  "routeCount": 499,
   "routes": [
     {
       "routePath": "/",
@@ -4498,6 +4498,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/platform/ai/routing/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/runtime-health",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "runtime-health"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/runtime-health/page.tsx"
     },
     {
       "routePath": "/platform/ai/skills",

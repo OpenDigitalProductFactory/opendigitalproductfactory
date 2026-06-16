@@ -9,10 +9,16 @@
  */
 
 import type { ChatMessage } from "@/lib/ai-inference";
-import type { RouteDecision } from "@/lib/routing/types";
+import type {
+  RouteDecision,
+  EndpointManifest,
+  PolicyRuleEval,
+  EndpointOverride,
+} from "@/lib/routing/types";
 import type { RouteSensitivity } from "@/lib/agent-sensitivity";
 import type { ModelClass } from "@/lib/routing/model-card-types";
 import { inferContract } from "@/lib/routing/request-contract";
+import type { RequestContract } from "@/lib/routing/request-contract";
 import {
   loadEndpointManifests,
   loadPolicyRules,
@@ -167,27 +173,33 @@ export interface RouteAndCallOptions {
   mcpSession?: import("@/lib/routing/adapter-types").AdapterMcpSession;
 }
 
-// ─── Main function ──────────────────────────────────────────────────────────
+// ─── Route preparation (shared by routeAndCall + previewRoute) ───────────────
+
+interface PreparedRoute {
+  contract: RequestContract;
+  decision: RouteDecision;
+  manifests: EndpointManifest[];
+  policies: PolicyRuleEval[];
+  overrides: EndpointOverride[];
+  taskType: string;
+}
 
 /**
- * Route and execute an LLM inference call through the V2 pipeline.
+ * The routing half of routeAndCall: contract inference → routing-data load →
+ * V2 endpoint selection. Produces the RouteDecision WITHOUT dispatching. Both
+ * the live path (routeAndCall) and the side-effect-free preview (previewRoute)
+ * go through here, so a prediction can never drift from what actually runs.
  *
- * This is the sole entry point for inference after EP-INF-009b.
- * It replaces `callWithFailover` by running:
- *   1. Contract inference (from task type + messages)
- *   2. Endpoint manifest loading
- *   3. V2 routing (capability filter, cost-per-success ranking, recipes)
- *   4. Fallback chain dispatch
- *
- * Throws `NoEligibleEndpointsError` if no endpoints qualify — no silent
- * degradation to a different routing mechanism.
+ * `skipRecipe` (preview) makes routeEndpointV2 deterministic and skips the
+ * challenger Math.random() roll; the live path leaves it false so the
+ * executionPlan is built for dispatch.
  */
-export async function routeAndCall(
+async function prepareRoute(
   messages: ChatMessage[],
-  systemPrompt: string,
-  sensitivity: RouteSensitivity = "internal",
-  options?: RouteAndCallOptions,
-): Promise<RoutedInferenceResult> {
+  sensitivity: RouteSensitivity,
+  options: RouteAndCallOptions | undefined,
+  prep?: { skipRecipe?: boolean },
+): Promise<PreparedRoute> {
   const taskType = options?.taskType ?? "conversation";
 
   // Local-only inference (cloud disabled): the operator-set platform switch.
@@ -195,6 +207,7 @@ export async function routeAndCall(
   // selects a cloud endpoint — it routes local or fails loudly below. This is
   // authoritative over a task requirement's residency, and the guarantee the
   // "disable cloud" admin toggle promises (no silent per-phase cloud fallback).
+  // Computed in prepareRoute so the per-phase preview (previewRoute) reflects it too.
   const localOnlyInference = await getLocalOnlyInference();
 
   // 1. Infer contract
@@ -232,7 +245,6 @@ export async function routeAndCall(
     }
   }
 
-  // 2. Load routing data
   const [manifests, policies, overrides] = await Promise.all([
     loadEndpointManifests(),
     loadPolicyRules(),
@@ -247,8 +259,84 @@ export async function routeAndCall(
     );
   }
 
-  // 3. V2 routing
-  let decision = await routeEndpointV2(manifests, contract, policies, overrides);
+  const decision = await routeEndpointV2(manifests, contract, policies, overrides, {
+    skipRecipe: prep?.skipRecipe,
+  });
+
+  return { contract, decision, manifests, policies, overrides, taskType };
+}
+
+/** Result of a side-effect-free routing dry-run. */
+export interface RoutePreview {
+  /** The endpoint the live router would select first (selectedEndpoint=null → none eligible). */
+  decision: RouteDecision;
+  /** Full manifest of the selected endpoint, for provider-tier / context inspection. */
+  selectedManifest: EndpointManifest | null;
+  /** The inferred request contract (taskType, sensitivity, budgetClass, …). */
+  contract: RequestContract;
+}
+
+/**
+ * Side-effect-free dry-run of V2 routing: resolves the endpoint that WOULD be
+ * selected for a given task contract, without dispatching, persisting a route
+ * decision, rolling the challenger arm, or building an executionPlan.
+ *
+ * This is the primitive the Model Selection & Runtime Health resolver uses to
+ * predict, per build phase, which provider/model the live routeAndCall path
+ * will pick — answering "local or cloud, per phase?" BEFORE a run rather than
+ * discovering it after the GPU has sat idle. It mirrors routeAndCall's routing
+ * inputs (taskType, sensitivity, budgetClass, tools→requiresTools) so the
+ * predicted winner matches the live one.
+ *
+ * Throws NoEligibleEndpointsError when no providers are configured at all —
+ * callers should catch and surface that as a configuration gap.
+ */
+export async function previewRoute(
+  messages: ChatMessage[],
+  sensitivity: RouteSensitivity = "internal",
+  options?: RouteAndCallOptions,
+): Promise<RoutePreview> {
+  const { contract, decision, manifests } = await prepareRoute(
+    messages,
+    sensitivity,
+    options,
+    { skipRecipe: true },
+  );
+  const selectedManifest = decision.selectedEndpoint
+    ? manifests.find((m) => m.id === decision.selectedEndpoint) ?? null
+    : null;
+  return { decision, selectedManifest, contract };
+}
+
+// ─── Main function ──────────────────────────────────────────────────────────
+
+/**
+ * Route and execute an LLM inference call through the V2 pipeline.
+ *
+ * This is the sole entry point for inference after EP-INF-009b.
+ * It replaces `callWithFailover` by running:
+ *   1. Contract inference (from task type + messages)
+ *   2. Endpoint manifest loading
+ *   3. V2 routing (capability filter, cost-per-success ranking, recipes)
+ *   4. Fallback chain dispatch
+ *
+ * Throws `NoEligibleEndpointsError` if no endpoints qualify — no silent
+ * degradation to a different routing mechanism.
+ */
+export async function routeAndCall(
+  messages: ChatMessage[],
+  systemPrompt: string,
+  sensitivity: RouteSensitivity = "internal",
+  options?: RouteAndCallOptions,
+): Promise<RoutedInferenceResult> {
+  // 1-3. Contract inference, routing-data load, and V2 endpoint selection —
+  // shared with previewRoute() via prepareRoute() so a model-selection
+  // prediction can never drift from what this live path actually picks. The
+  // live path keeps recipe selection (skipRecipe defaults false) so the
+  // executionPlan is built for dispatch below.
+  const prepared = await prepareRoute(messages, sensitivity, options);
+  const { contract, manifests, policies, overrides, taskType } = prepared;
+  let decision = prepared.decision;
   let toolsStripped = false;
 
   // EP-INF-013: Inject effort into the execution plan so adapters can translate it

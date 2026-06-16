@@ -11,15 +11,11 @@ import { intentStyle, resolveIntent } from "@/components/ui/report-kit/statusCol
 import { ModelClassBadges } from "./ModelClassBadge";
 import { ProviderStatusToggle } from "./ProviderStatusToggle";
 
-const ROUTING_DIMENSION_LABELS: Record<string, string> = {
-  reasoning:            "Reasoning",
-  codegen:              "Codegen",
-  toolFidelity:         "Tools",
-  instructionFollowing: "Instruct",
-  structuredOutput:     "Structure",
-  conversational:       "Convo",
-  contextRetention:     "Context",
-};
+const ROUTING_DIMS = [
+  { key: "reasoning", label: "Reasoning" },
+  { key: "codegen", label: "Codegen" },
+  { key: "toolFidelity", label: "Tools" },
+] as const;
 
 function scoreColor(score: number): string {
   if (score >= 80) return "color-mix(in srgb, var(--dpf-success) 15%, transparent)";
@@ -33,36 +29,81 @@ function scoreTextColor(score: number): string {
   return "var(--dpf-error)";
 }
 
-type RoutingScorePillsProps = {
-  provider: ProviderWithCredential["provider"];
-};
+/** Compact "just now / Xm / Xh / Xd / Xmo ago" for an ISO eval timestamp. */
+function evalAgo(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
 
-function RoutingScorePills({ provider }: RoutingScorePillsProps) {
-  const dimensions = Object.keys(ROUTING_DIMENSION_LABELS) as (keyof typeof ROUTING_DIMENSION_LABELS)[];
-  const scored = dimensions
-    .map((key) => ({ key, label: ROUTING_DIMENSION_LABELS[key], score: provider[key as keyof typeof provider] as number }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+/**
+ * BI-1B46967D: render the CALIBRATED per-model routing scores rolled up from
+ * `ModelProfile` (via `getProviderModelSummaries`) plus evaluation freshness —
+ * NOT the dead `ModelProvider` seed columns the routing pipeline ignores. A
+ * provider with no measured model reads "not measured" instead of a misleading
+ * 50/50/50, so flat placeholders no longer masquerade as real capability.
+ */
+function RoutingScorePills({ summary }: { summary?: ProviderModelSummary }) {
+  const scores = summary?.routingScores ?? null;
+
+  if (!scores) {
+    return (
+      <span
+        className="hidden sm:inline-flex"
+        title="No model evaluated yet — provider capability is unmeasured. Routing ranks on per-model scores, not this placeholder."
+        style={{
+          fontSize: 10,
+          fontFamily: "monospace",
+          color: "var(--dpf-muted)",
+          background: "color-mix(in srgb, var(--dpf-warning) 12%, transparent)",
+          padding: "1px 6px",
+          borderRadius: 3,
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+          alignItems: "center",
+        }}
+      >
+        not measured
+      </span>
+    );
+  }
+
+  const rep = summary?.representativeModelId;
+  const fresh = summary?.lastEvalAt ? `eval ${evalAgo(summary.lastEvalAt)}` : "baseline";
+  const freshTitle = summary?.lastEvalAt
+    ? `Most recent evaluation ${evalAgo(summary.lastEvalAt)}${rep ? ` · strongest model: ${rep}` : ""}`
+    : "Curated family baseline — no DPF evaluation has run yet";
 
   return (
     <span className="hidden sm:flex" style={{ display: "flex", gap: 3, flexShrink: 0, alignItems: "center" }}>
-      {scored.map(({ key, label, score }) => (
-        <span
-          key={key}
-          title={`${label}: ${score}/100`}
-          style={{
-            fontSize: 10,
-            fontFamily: "monospace",
-            background: scoreColor(score),
-            color: scoreTextColor(score),
-            padding: "1px 5px",
-            borderRadius: 3,
-            whiteSpace: "nowrap",
-          }}
-        >
-          {label}: {score}
-        </span>
-      ))}
+      {ROUTING_DIMS.map(({ key, label }) => {
+        const score = scores[key];
+        return (
+          <span
+            key={key}
+            title={`${label}: ${score}/100${rep ? ` (${rep})` : ""}`}
+            style={{
+              fontSize: 10,
+              fontFamily: "monospace",
+              background: scoreColor(score),
+              color: scoreTextColor(score),
+              padding: "1px 5px",
+              borderRadius: 3,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {label}: {score}
+          </span>
+        );
+      })}
+      <span title={freshTitle} style={{ fontSize: 9, color: "var(--dpf-muted)", whiteSpace: "nowrap" }}>
+        {fresh}
+      </span>
     </span>
   );
 }
@@ -226,9 +267,9 @@ export function ServiceRow({ pw, modelSummary, eligibility }: Props) {
           </span>
         )}
 
-        {/* Routing dimension scores — LLM only, hidden on small screens */}
+        {/* Calibrated routing scores + eval freshness (BI-1B46967D) — LLM only, hidden on small screens */}
         {provider.endpointType === "llm" && (
-          <RoutingScorePills provider={provider} />
+          <RoutingScorePills summary={modelSummary} />
         )}
 
         {/* Capability tier — hidden on small screens. Prefers derived tier (D25). */}

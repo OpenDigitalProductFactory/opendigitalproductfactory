@@ -18,15 +18,7 @@ import type {
   ToolInventoryItem,
 } from "./ai-provider-types";
 import { getProviderDisplayNameForSpend } from "./ai-provider-cost-view";
-import { assignTierFromModelId, type QualityTier } from "@/lib/routing/quality-tiers";
-
-// D25: tier ordering for "strongest among discovered" reduction.
-const TIER_RANK: Record<QualityTier, number> = {
-  frontier: 4,
-  strong: 3,
-  adequate: 2,
-  basic: 1,
-};
+import { rollUpProviderModels, type ProfileForRollup } from "./provider-routing-rollup";
 
 /** Mask a secret to `••••••1234` (last 4 chars visible). */
 function maskSecret(value: string | null): string | null {
@@ -243,36 +235,50 @@ export const getModelProfiles = cache(async (providerId: string): Promise<ModelP
 
 // ── EP-INF-010: Platform Services UX queries ────────────────────────────────
 
-/** Aggregate model counts and non-chat capability classes per provider. */
+/**
+ * Aggregate per-provider model summary for the providers grid.
+ *
+ * BI-1B46967D: rolls up the CALIBRATED per-model `ModelProfile` truth (counts,
+ * derived tier, representative routing scores, evaluation freshness) so the grid
+ * reflects what routing actually reads — not the dead `ModelProvider` seed
+ * columns. The fold lives in `provider-routing-rollup.ts` so it stays unit-testable.
+ */
 export const getProviderModelSummaries = cache(
   async (): Promise<Map<string, ProviderModelSummary>> => {
     const profiles = await prisma.modelProfile.findMany({
-      select: { providerId: true, modelId: true, modelClass: true, modelStatus: true },
+      select: {
+        providerId: true,
+        modelId: true,
+        modelClass: true,
+        modelStatus: true,
+        reasoning: true,
+        codegen: true,
+        toolFidelity: true,
+        evalCount: true,
+        lastEvalAt: true,
+        profileSource: true,
+      },
     });
-    const map = new Map<string, ProviderModelSummary>();
+    const byProvider = new Map<string, ProfileForRollup[]>();
     for (const p of profiles) {
-      const s = map.get(p.providerId) ?? {
-        totalModels: 0,
-        activeModels: 0,
-        nonChatClasses: [],
-        derivedTier: null as QualityTier | null,
+      const list = byProvider.get(p.providerId);
+      const row: ProfileForRollup = {
+        modelId: p.modelId,
+        modelClass: p.modelClass,
+        modelStatus: p.modelStatus,
+        reasoning: p.reasoning,
+        codegen: p.codegen,
+        toolFidelity: p.toolFidelity,
+        evalCount: p.evalCount,
+        lastEvalAt: p.lastEvalAt,
+        profileSource: p.profileSource,
       };
-      s.totalModels++;
-      if (p.modelStatus === "active") s.activeModels++;
-      if (!["chat", "reasoning"].includes(p.modelClass) && !s.nonChatClasses.includes(p.modelClass)) {
-        s.nonChatClasses.push(p.modelClass);
-      }
-      // D25: derive tier from the model id family rather than trust seed data.
-      // Only count chat/reasoning models for the build-relevant tier signal —
-      // image_gen / embedding / etc. don't drive the "can this provider serve
-      // a coworker" question.
-      if (["chat", "reasoning"].includes(p.modelClass)) {
-        const modelTier = assignTierFromModelId(p.modelId);
-        if (s.derivedTier === null || TIER_RANK[modelTier] > TIER_RANK[s.derivedTier]) {
-          s.derivedTier = modelTier;
-        }
-      }
-      map.set(p.providerId, s);
+      if (list) list.push(row);
+      else byProvider.set(p.providerId, [row]);
+    }
+    const map = new Map<string, ProviderModelSummary>();
+    for (const [providerId, list] of byProvider) {
+      map.set(providerId, rollUpProviderModels(list));
     }
     return map;
   },
