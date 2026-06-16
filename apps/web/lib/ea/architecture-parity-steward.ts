@@ -56,6 +56,7 @@ const DOMAIN_LABELS: Record<ProjectionDomain, string> = {
   routes: "Next.js route tree",
   codeStructure: "source-code structure",
   processModels: "platform process models",
+  skillToolchain: "skill & agent toolchain",
 };
 
 function projectionEntries(result: SysmlProjectionsResult): Array<[ProjectionDomain, ProjectionStatus]> {
