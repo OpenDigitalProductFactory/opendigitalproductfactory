@@ -15,14 +15,22 @@ const MODEL: SysmlDesiredModel = {
 
 type ExistingEl = { id: string; infraCiKey: string; properties: Record<string, unknown> };
 
-function makeDb(existing: ExistingEl[] = [], opts: { notation?: boolean; relExists?: boolean; viewExists?: boolean } = {}) {
+function makeDb(
+  existing: ExistingEl[] = [],
+  opts: { notation?: boolean; relExists?: boolean; viewExists?: boolean; crossTargets?: Record<string, string> } = {},
+) {
   return {
     eaNotation: { findUnique: vi.fn().mockResolvedValue(opts.notation === false ? null : { id: "n" }) },
     eaElementType: { findUniqueOrThrow: vi.fn(async (a: { where: { notationId_slug: { slug: string } } }) => ({ id: `et-${a.where.notationId_slug.slug}` })) },
     eaRelationshipType: { findUniqueOrThrow: vi.fn(async (a: { where: { notationId_slug: { slug: string } } }) => ({ id: `rt-${a.where.notationId_slug.slug}` })) },
     eaElement: {
       findMany: vi.fn().mockResolvedValue(existing),
-      findFirst: vi.fn().mockResolvedValue(null),
+      // Resolves a cross-layer target by infraCiKey when opts.crossTargets maps it;
+      // otherwise null (the prior behaviour every existing test relies on).
+      findFirst: vi.fn(async (a: { where: { infraCiKey: string } }) => {
+        const id = opts.crossTargets?.[a.where.infraCiKey];
+        return id ? { id } : null;
+      }),
       create: vi.fn(async (a: { data: { infraCiKey: string } }) => ({ id: `el-${a.data.infraCiKey}` })),
       update: vi.fn(async (a: { where: { id: string } }) => ({ id: a.where.id })),
     },
@@ -124,5 +132,49 @@ describe("applySysmlModel", () => {
     await applySysmlModel({ ...MODEL, softRemovePrefix: undefined }, { db: db as never });
     expect(db.eaConformanceIssue.findFirst).not.toHaveBeenCalled();
     expect(db.eaConformanceIssue.create).not.toHaveBeenCalled();
+  });
+
+  const crossModel: SysmlDesiredModel = {
+    ...MODEL,
+    softRemovePrefix: undefined,
+    relTypeSlugs: ["contains", "allocates"],
+    crossLayerRelationships: [{ fromKey: "x:a", toKey: "other:logical", relSlug: "allocates" }],
+  };
+
+  it("links a cross-layer edge to an element another projection owns (resolved by infraCiKey)", async () => {
+    const db = makeDb([], { crossTargets: { "other:logical": "el-other" } });
+    const r = await applySysmlModel(crossModel, { db: db as never });
+    expect(r.crossLayerLinked).toBe(1);
+    expect(r.crossLayerUnresolved).toBe(0);
+    const xcall = db.eaRelationship.create.mock.calls.find(
+      ([a]) => (a as { data: { toElementId: string } }).data.toElementId === "el-other",
+    );
+    expect(xcall).toBeTruthy();
+    const data = (xcall![0] as { data: { fromElementId: string; relationshipTypeId: string; properties: { crossLayer: boolean } } }).data;
+    expect(data.fromElementId).toBe("el-x:a"); // resolved in-model
+    expect(data.relationshipTypeId).toBe("rt-allocates");
+    expect(data.properties.crossLayer).toBe(true);
+  });
+
+  it("counts a cross-layer edge as unresolved (never silent) when the target is absent", async () => {
+    const db = makeDb([], {}); // no crossTargets → target won't resolve
+    const r = await applySysmlModel(
+      { ...crossModel, crossLayerRelationships: [{ fromKey: "x:a", toKey: "missing:logical", relSlug: "allocates" }] },
+      { db: db as never },
+    );
+    expect(r.crossLayerUnresolved).toBe(1);
+    expect(r.crossLayerLinked).toBe(0);
+    const xcall = db.eaRelationship.create.mock.calls.find(
+      ([a]) => (a as { data: { toElementId: string } }).data.toElementId === "el-missing:logical",
+    );
+    expect(xcall).toBeFalsy(); // no phantom edge created
+  });
+
+  it("is idempotent for cross-layer edges: counts linked but creates no duplicate", async () => {
+    const db = makeDb([], { crossTargets: { "other:logical": "el-other" } });
+    db.eaRelationship.findFirst.mockResolvedValue({ id: "rx" }); // every edge already present
+    const r = await applySysmlModel(crossModel, { db: db as never });
+    expect(r.crossLayerLinked).toBe(1);
+    expect(db.eaRelationship.create).not.toHaveBeenCalled();
   });
 });
