@@ -233,8 +233,38 @@ describe("SelfUpgradeClient – succeeded", () => {
       />,
     );
     expect(html).toContain("Recovery point: ok");
-    expect(html).toContain("postgres:BR-PG");
+    expect(html).toContain("postgres: backed up");
     expect(html).toContain("Restore recovery point");
+  });
+
+  it("labels intentionally-skipped derived stores as re-derived, not 'missing'", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("succeeded", {
+          completionEvidence: {
+            recoveryPoint: {
+              schemaVersion: 1,
+              status: "ok",
+              trigger: "pre-upgrade-recovery",
+              // The default postgres-only recovery point: postgres backed up,
+              // the derived stores skipped (they re-derive from source).
+              members: [
+                { target: "postgres", runId: "BR-PG", status: "ok" },
+                { target: "neo4j", runId: null, status: "skipped" },
+                { target: "qdrant", runId: null, status: "skipped" },
+              ],
+            },
+          },
+        })}
+      />,
+    );
+    expect(html).toContain("Recovery point: ok");
+    expect(html).toContain("postgres: backed up");
+    expect(html).toContain("neo4j: skipped (re-derived)");
+    expect(html).toContain("qdrant: skipped (re-derived)");
+    // The deliberate skip must never read as a failure/gap.
+    expect(html).not.toContain("missing");
   });
 
   it("does not show rollback button after recovery point rollback succeeds", () => {
