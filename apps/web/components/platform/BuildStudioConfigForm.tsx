@@ -115,7 +115,7 @@ export function BuildStudioConfigForm({
       try {
         setEndpointCheck(await checkLocalEndpoint(opencodeModel));
       } catch (err) {
-        setEndpointCheck({ ok: false, resolvedModel: null, models: [], contextOk: false, reason: (err as Error).message });
+        setEndpointCheck({ ok: false, resolvedModel: null, models: [], contextOk: false, reason: (err as Error).message, reportedContextTokens: null });
       } finally {
         setCheckingEndpoint(false);
       }

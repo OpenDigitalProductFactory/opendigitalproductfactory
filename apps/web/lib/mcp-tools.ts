@@ -2391,6 +2391,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["ideate", "plan", "build", "review"],
   },
   {
+    name: "resolve_model_selection",
+    description:
+      "Model Selection & Runtime Health — resolve which model/provider/engine WILL run each Build Studio phase (ideate, plan, design-review, plan-review, build) given current config, and flag where live config contradicts platform guidance. Answers 'local or cloud, per phase?' and 'how is the model chosen per phase?' in ONE call, BEFORE a build runs — establish ground truth here rather than discovering after the GPU sat idle. Model selection is split across three sources with no other synthesis: Providers & Routing (routeAndCall/V2 routing; user-configured cloud endpoints outrank the bundled local model), Build Runtime (the dispatch engine), and the local endpoint's served context window (DMR). Returns per-phase { mechanism, engine, providerId, modelId, isLocal, providerTier, contextTokens, rationale, flags } plus an overall verdict (all-local | all-cloud | mixed | unconfigured) and remediation. Read-only; runs a side-effect-free routing dry-run (no dispatch, no model call).",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
     name: "check_sandbox",
     description: "Check whether the sandbox container (dpf-sandbox-1) is running. Returns status: 'running', 'stopped', or 'not_found'. If the result is not_found or detached, call diagnose_sandbox for governed recovery guidance.",
     inputSchema: { type: "object", properties: {} },
@@ -7945,6 +7959,18 @@ export async function executeTool(
         entityId: buildId,
         message: `Dispatch history loaded for ${buildId}: ${history.length} attempt(s).`,
         data: { buildId, attempts: history },
+      };
+    }
+
+    case "resolve_model_selection": {
+      const { resolveModelSelectionByPhase } = await import(
+        "@/lib/inference/phase-model-resolution"
+      );
+      const overview = await resolveModelSelectionByPhase();
+      return {
+        success: true,
+        message: `Model selection (${overview.verdict}): ${overview.summary}`,
+        data: overview as unknown as Record<string, unknown>,
       };
     }
 
