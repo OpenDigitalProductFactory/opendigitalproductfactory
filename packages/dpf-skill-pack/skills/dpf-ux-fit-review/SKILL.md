@@ -1,7 +1,7 @@
 ---
 # Single fields shared by both surfaces
 name: dpf-ux-fit-review
-description: "Use when reviewing, planning, or implementing UI-impacting DPF work for UX/IA fit before code or PR handoff. Triggers on UX fit, UI fit, design fit, feature fit, new route, new tab, first viewport, guided work, dashboard, cockpit, metric tile, KPI, status badge, card, coworker launcher, empty state, navigation change, portal UX, customer/workspace/business/platform surface, or any feature that could add another dashboard, tab row, component family, or confusing portal entry point."
+description: "Use when reviewing, planning, or implementing UI-impacting DPF work for UX/IA fit before code or PR handoff. Triggers on UX fit, UI fit, design fit, feature fit, new route, new tab, first viewport, guided work, dashboard, cockpit, metric tile, KPI, status badge, card, coworker launcher, empty state, navigation change, portal UX, customer/workspace/business/platform surface, OR any config / settings / admin screen, form, or field a user fills in — a setting, preference, toggle, wizard, credential picker, per-model or per-provider option, or a numeric/text input such as a context-window or token value — or any feature that could add another dashboard, tab row, component family, confusing portal entry point, or an over-exposed control a non-technical user cannot answer. The 'operator-configurable / admin UX' framing counts: a config form is a UI surface."
 
 # Agent Skills standard fields (Surface A - Claude Code / Codex)
 disable-model-invocation: false
@@ -13,7 +13,7 @@ category: governance
 assignTo: ["ea-architect", "build-specialist", "platform-engineer"]
 capability: null
 taskType: review
-triggerPattern: "UX fit|UI fit|design fit|feature fit|new route|new tab|first viewport|guided work|dashboard|cockpit|metric tile|KPI|status badge|card|coworker launcher|empty state|navigation change|portal UX|customer surface|workspace surface|business surface|platform surface"
+triggerPattern: "UX fit|UI fit|design fit|feature fit|new route|new tab|first viewport|guided work|dashboard|cockpit|metric tile|KPI|status badge|card|coworker launcher|empty state|navigation change|portal UX|customer surface|workspace surface|business surface|platform surface|config(uration)? (screen|form|ux|tab)|settings (page|screen|form|ux)|admin (screen|panel|form|ux)|preference|form field|input field|number input|numeric input|text field|operator.configurable|per-model|per-provider|context window|token (count|limit|window)|toggle|wizard|setup screen|credential (matrix|picker|source)"
 userInvocable: true
 agentInvocable: true
 allowedTools: ["Read", "Grep", "Glob", "Bash", "mcp__dpf__search_specs_and_plans", "mcp__dpf__search_design_intelligence", "mcp__dpf__wiki_query", "mcp__dpf__list_epics", "mcp__dpf__list_backlog_items"]
