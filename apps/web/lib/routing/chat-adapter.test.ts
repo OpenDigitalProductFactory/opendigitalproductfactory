@@ -143,7 +143,7 @@ vi.mock("@/lib/ai-inference", () => {
 
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
-import { chatAdapter } from "./chat-adapter";
+import { chatAdapter, withLocalInferenceLock } from "./chat-adapter";
 import { InferenceError } from "@/lib/ai-inference";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -782,5 +782,38 @@ describe("chatAdapter", () => {
 
   it("adapter type is 'chat'", () => {
     expect(chatAdapter.type).toBe("chat");
+  });
+});
+
+describe("withLocalInferenceLock — single-GPU serialization", () => {
+  it("runs local calls strictly one at a time (never concurrent)", async () => {
+    const order: string[] = [];
+    let active = 0;
+    let maxActive = 0;
+    const task = (id: string, ms: number) => () =>
+      new Promise<string>((resolve) => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        order.push(`start${id}`);
+        setTimeout(() => {
+          active--;
+          order.push(`end${id}`);
+          resolve(id);
+        }, ms);
+      });
+    // Shorter tasks queued after a longer one must still wait their turn.
+    await Promise.all([
+      withLocalInferenceLock(task("A", 20)),
+      withLocalInferenceLock(task("B", 5)),
+      withLocalInferenceLock(task("C", 1)),
+    ]);
+    expect(maxActive).toBe(1);
+    expect(order).toEqual(["startA", "endA", "startB", "endB", "startC", "endC"]);
+  });
+
+  it("a rejected/timed-out call does not wedge subsequent local calls", async () => {
+    await expect(withLocalInferenceLock(() => Promise.reject(new Error("aborted due to timeout")))).rejects.toThrow();
+    // The chain must still advance — the next call runs and resolves.
+    await expect(withLocalInferenceLock(() => Promise.resolve("ok"))).resolves.toBe("ok");
   });
 });
