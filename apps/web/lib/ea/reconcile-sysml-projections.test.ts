@@ -11,6 +11,7 @@ describe("reconcileSysmlProjections", () => {
     const db = {
       eaNotation: { findUnique: vi.fn().mockResolvedValue(null) },
       eaReferenceModel: { findUnique: vi.fn().mockResolvedValue(null) },
+      skillDefinition: { findMany: vi.fn().mockResolvedValue([]) },
     };
     const getFreshness = vi.fn().mockResolvedValue({ available: false, indexStatus: "missing", warnings: [], summary: "" });
     const r = await reconcileSysmlProjections({ db: db as never, codeGraph: { getFreshness: getFreshness as never } });
@@ -20,6 +21,7 @@ describe("reconcileSysmlProjections", () => {
     expect(r.routes.status).toBe("skipped");
     expect(r.codeStructure.status).toBe("skipped");
     expect(r.processModels.status).toBe("skipped");
+    expect(r.skillToolchain.status).toBe("skipped"); // no SkillDefinition rows → skipped before notation
     // mcp + coworker + routes (sysml2) + process (bpmn20) are notation-backed;
     // value-streams checks the reference model first; code-structure checks graph
     // freshness first.
