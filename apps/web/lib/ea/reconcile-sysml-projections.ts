@@ -19,6 +19,9 @@ import { reconcileRoutes } from "./reconcile-routes";
 import { reconcileCodeStructure, type CodeStructureReconcileOpts } from "./reconcile-code-structure";
 import { reconcileProcessModels } from "./reconcile-process";
 import { reconcileSkillToolchain } from "./reconcile-skill-toolchain";
+import { reconcileOperationalGraph } from "./reconcile-operational-bridge";
+import { reconcileNetworkTopology } from "./reconcile-network-bridge";
+import { reconcileIntegrations } from "./reconcile-integration-bridge";
 import type { SysmlSeedResult } from "./sysml-model-seed";
 
 export interface SysmlProjectionsResult {
@@ -29,6 +32,10 @@ export interface SysmlProjectionsResult {
   codeStructure: SysmlSeedResult;
   processModels: SysmlSeedResult;
   skillToolchain: SysmlSeedResult;
+  // Living-graph operational-reality bridges (EP-ARCH-GRAPH-LIVE).
+  operationalGraph: SysmlSeedResult;
+  networkTopology: SysmlSeedResult;
+  integrations: SysmlSeedResult;
 }
 
 export async function reconcileSysmlProjections(
@@ -41,5 +48,11 @@ export async function reconcileSysmlProjections(
   const codeStructure = await reconcileCodeStructure({ db: opts.db, ...opts.codeGraph });
   const processModels = await reconcileProcessModels({ db: opts.db });
   const skillToolchain = await reconcileSkillToolchain({ db: opts.db });
-  return { mcpAuthority, coworkerAuthority, valueStreams, routes, codeStructure, processModels, skillToolchain };
+  const operationalGraph = await reconcileOperationalGraph({ db: opts.db });
+  const networkTopology = await reconcileNetworkTopology({ db: opts.db });
+  const integrations = await reconcileIntegrations({ db: opts.db });
+  return {
+    mcpAuthority, coworkerAuthority, valueStreams, routes, codeStructure, processModels, skillToolchain,
+    operationalGraph, networkTopology, integrations,
+  };
 }

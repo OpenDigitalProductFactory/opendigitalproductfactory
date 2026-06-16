@@ -8,10 +8,16 @@ import { reconcileSysmlProjections } from "./reconcile-sysml-projections";
 // forks-pool bleed).
 describe("reconcileSysmlProjections", () => {
   it("runs every domain reconcile and threads their results", async () => {
+    const empty = { findMany: vi.fn().mockResolvedValue([]) };
     const db = {
       eaNotation: { findUnique: vi.fn().mockResolvedValue(null) },
       eaReferenceModel: { findUnique: vi.fn().mockResolvedValue(null) },
       skillDefinition: { findMany: vi.fn().mockResolvedValue([]) },
+      // Living-graph bridges skip on empty source tables (before notation lookup).
+      runtimeTarget: empty,
+      edgeNode: empty,
+      inventoryEntity: empty,
+      integrationCredential: empty,
     };
     const getFreshness = vi.fn().mockResolvedValue({ available: false, indexStatus: "missing", warnings: [], summary: "" });
     const r = await reconcileSysmlProjections({ db: db as never, codeGraph: { getFreshness: getFreshness as never } });
@@ -22,6 +28,9 @@ describe("reconcileSysmlProjections", () => {
     expect(r.codeStructure.status).toBe("skipped");
     expect(r.processModels.status).toBe("skipped");
     expect(r.skillToolchain.status).toBe("skipped"); // no SkillDefinition rows → skipped before notation
+    expect(r.operationalGraph.status).toBe("skipped"); // no RuntimeTarget rows
+    expect(r.networkTopology.status).toBe("skipped"); // no EdgeNode/InventoryEntity rows
+    expect(r.integrations.status).toBe("skipped"); // no IntegrationCredential rows
     // mcp + coworker + routes (sysml2) + process (bpmn20) are notation-backed;
     // value-streams checks the reference model first; code-structure checks graph
     // freshness first.
