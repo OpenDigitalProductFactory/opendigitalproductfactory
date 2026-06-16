@@ -16,19 +16,71 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Detects whether a PR touches anything beyond documentation. A docs-only PR
+  # (every changed file under docs/ or ending .md/.mdx) skips the expensive
+  # build/test/typecheck WORK while the required status checks still report
+  # success — the jobs run but short-circuit after this gate. A workflow-level
+  # `paths:` filter cannot be used: a skipped REQUIRED check stays "pending"
+  # forever under branch protection and blocks the merge. Fails safe to
+  # heavy=true on any non-PR event (push to main, future merge_group) or if the
+  # diff cannot be computed. SHAs are passed via env, never interpolated into
+  # the script body (actions-injection-safe).
+  changes:
+    name: Detect change scope
+    runs-on: ubuntu-latest
+    outputs:
+      heavy: ${{ steps.decide.outputs.heavy }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Decide whether heavy CI is needed
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "Non-PR event ($EVENT_NAME) -> full CI."
+            echo "heavy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch --no-tags --quiet origin "$BASE_SHA" 2>/dev/null || true
+          if ! changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null)"; then
+            echo "Could not compute diff -- failing safe to full CI."
+            echo "heavy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Changed files:"
+          printf '%s\n' "$changed"
+          # Heavy unless EVERY changed file is documentation (docs/ or *.md|*.mdx).
+          if printf '%s\n' "$changed" | grep -qvE '(^docs/|\.mdx?$)'; then
+            echo "-> non-docs changes present: full CI."
+            echo "heavy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "-> docs-only change: skipping heavy jobs."
+            echo "heavy=false" >> "$GITHUB_OUTPUT"
+          fi
+
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
+    needs: changes
     steps:
       - uses: actions/checkout@v6
 
       - name: Setup pnpm with cache
+        if: needs.changes.outputs.heavy == 'true'
         uses: ./.github/actions/setup-pnpm
 
       - name: Generate Prisma client
+        if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter @dpf/db exec prisma generate
 
       - name: Typecheck all workspaces
+        if: needs.changes.outputs.heavy == 'true'
         run: pnpm typecheck
 
   stall-detection-write-guard:
@@ -215,6 +267,7 @@ jobs:
   test-web:
     name: Unit Tests (web shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    needs: changes
     strategy:
       # Surface every shard's failures, don't cancel siblings on first red.
       fail-fast: false
@@ -241,20 +294,25 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Setup pnpm with cache
+        if: needs.changes.outputs.heavy == 'true'
         uses: ./.github/actions/setup-pnpm
 
       - name: Generate Prisma client
+        if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter @dpf/db exec prisma generate
 
       - name: Apply migrations
+        if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter @dpf/db exec prisma migrate deploy
 
       - name: Run web unit tests (shard ${{ matrix.shard }}/4)
+        if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter web exec vitest run --shard=${{ matrix.shard }}/4
 
   test-packages:
     name: Unit Tests (packages)
     runs-on: ubuntu-latest
+    needs: changes
     services:
       postgres:
         image: postgres:16-alpine
@@ -276,12 +334,15 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Setup pnpm with cache
+        if: needs.changes.outputs.heavy == 'true'
         uses: ./.github/actions/setup-pnpm
 
       - name: Generate Prisma client
+        if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter @dpf/db exec prisma generate
 
       - name: Apply migrations
+        if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter @dpf/db exec prisma migrate deploy
 
       # Every workspace EXCEPT web (sharded in test-web above) AND the root
@@ -293,6 +354,7 @@ jobs:
       # suites from racing on this job's single Postgres (BI-335D7B54);
       # --no-bail keeps every suite's pass/fail visible even if one fails.
       - name: Run non-web unit tests
+        if: needs.changes.outputs.heavy == 'true'
         run: pnpm -r --if-present --filter '!web' --filter '!dpf' --workspace-concurrency=1 --no-bail test
 
   # Stable aggregate status. Humans (and any future branch-protection rule)
@@ -318,13 +380,16 @@ jobs:
   build:
     name: Production Build
     runs-on: ubuntu-latest
+    needs: changes
     steps:
       - uses: actions/checkout@v6
 
       - name: Setup pnpm with cache
+        if: needs.changes.outputs.heavy == 'true'
         uses: ./.github/actions/setup-pnpm
 
       - name: Generate Prisma client
+        if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter @dpf/db exec prisma generate
 
       # Restore Turbopack's filesystem cache (written under .next/cache when
@@ -333,6 +398,7 @@ jobs:
       # most recent build for the same deps. NOTE: hashFiles does NOT support
       # brace globs ({ts,tsx}), so each extension is a separate arg.
       - name: Cache Turbopack build cache
+        if: needs.changes.outputs.heavy == 'true'
         uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/apps/web/.next/cache
@@ -341,6 +407,7 @@ jobs:
             nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
       - name: Build web (Next.js production)
+        if: needs.changes.outputs.heavy == 'true'
         # Experimental Turbopack build FS cache, scoped to this verification
         # gate only — the Docker release build does not set this env.
         env:
@@ -382,7 +449,11 @@ jobs:
   adp-integration-tests:
     name: ADP Integration Tests
     runs-on: ubuntu-latest
-    needs: typecheck
+    # Not a required context, so it can be skipped at job level on docs-only PRs
+    # (the integration harness only exercises code paths). needs typecheck for
+    # ordering; needs changes for the heavy gate.
+    needs: [changes, typecheck]
+    if: needs.changes.outputs.heavy == 'true'
     env:
       AUTH_SECRET: ci-placeholder
       CREDENTIAL_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
