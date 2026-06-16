@@ -125,6 +125,33 @@ function classifyFromTask(task: PlanTask): SpecialistRole {
   return "software-engineer";
 }
 
+// --- Redundant verification task pruning -------------------------------------
+//
+// buildDependencyGraph ALWAYS appends a synthetic QA phase ("Full verification:
+// tests + typecheck", run via scoped run_sandbox_tests). When the LLM planner
+// ALSO emits explicit "run the full test suite" / "full verification" tasks, the
+// build runs the whole monorepo suite redundantly — slow, brittle, and the exact
+// over-decomposition that let an unrelated broken test stall FB-69231490. Those
+// tasks duplicate the synthetic QA phase, so prune them.
+
+const FULL_SUITE_VERIFICATION_PATTERNS: RegExp[] = [
+  /\bfull(?:\s+|-)test\s+suite\b/i,
+  /\bentire\s+test\s+suite\b/i,
+  /\brun\s+(?:the\s+)?(?:full|entire|all|complete|whole)\s+(?:test\s+suite|tests)\b/i,
+  /\bfull\s+verification\b/i,
+  /\bpnpm\s+(?:-r\s+|--filter\s+\S+\s+)?test\b/i,
+  /\bregression\s+suite\b/i,
+];
+
+/**
+ * True when a planner task merely re-runs the whole suite / re-verifies — work
+ * the always-appended synthetic QA phase already does. Pure + testable.
+ */
+export function isRedundantVerificationTask(task: PlanTask): boolean {
+  const text = [task.title, task.testFirst, task.implement, task.verify].join(" ");
+  return FULL_SUITE_VERIFICATION_PATTERNS.some((p) => p.test(text));
+}
+
 // --- Dependency Ordering -----------------------------------------------------
 
 const ROLE_PRIORITY: Record<SpecialistRole, number> = {
@@ -163,8 +190,19 @@ export function buildDependencyGraph(
       })
     : [];
 
+  // Prune redundant full-suite/verification tasks — the synthetic QA phase
+  // below always runs scoped verification, so these only add slow, brittle
+  // whole-monorepo runs. Right-sizes an over-decomposed plan.
+  const prunableTasks = safeTasks.filter((task) => !isRedundantVerificationTask(task));
+  const prunedCount = safeTasks.length - prunableTasks.length;
+  if (prunedCount > 0) {
+    console.log(
+      `[task-graph] pruned ${prunedCount} redundant full-suite/verification task(s); the synthetic QA phase covers verification.`,
+    );
+  }
+
   // Assign specialists to tasks
-  const assigned = safeTasks.map((task, i) => assignSpecialist(task, i, safeFiles));
+  const assigned = prunableTasks.map((task, i) => assignSpecialist(task, i, safeFiles));
 
   // Group by priority level
   const byPriority = new Map<number, AssignedTask[]>();
