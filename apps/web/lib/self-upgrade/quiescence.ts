@@ -456,15 +456,13 @@ async function withSwapSignalRetry(
       return;
     } catch (err) {
       lastErr = err;
-      // printf-style positional substitution (safe-log.ts / PR #999 convention):
-      // CodeQL models `%s` args + the registered sanitizer natively, so taint is
-      // broken unambiguously — clearer than a template literal for the dataflow.
+      // Wrap the full template literal (matches the working
+      // agent-coworker.ts / assurance.ts pattern). The printf-with-%s shape
+      // splits args across multiple call-edges and CodeQL js/log-injection
+      // does not propagate the sanitiser through them — alert #276.
+      const errMsg = err instanceof Error ? err.message : String(err);
       console.warn(
-        "[quiescence] %s attempt %d/%d failed: %s",
-        sanitizeForLog(label),
-        i + 1,
-        attempts,
-        sanitizeForLog(err instanceof Error ? err.message : String(err)),
+        sanitizeForLog(`[quiescence] ${label} attempt ${i + 1}/${attempts} failed: ${errMsg}`),
       );
       if (i < attempts - 1) await sleep(500 * (i + 1));
     }

@@ -139,8 +139,10 @@ class FilesystemMediaDriver implements MediaStorageDriver {
 
     try {
       // Bytes reach this sink only after prepareMediaBlobContentForStorage has
-      // probed type and size; the path is content-addressed and root-confined.
-      // codeql[js/http-to-file-access]
+      // probed type and size and re-typed them as ValidatedMediaBlobContent;
+      // the path is content-addressed and root-confined. The validator is
+      // registered as a CodeQL sanitiser in
+      // .github/codeql/dpf-sanitizers/dpf-sanitizers.model.yml — alert #269.
       await fs.writeFile(temporaryPath, buffer, { flag: "wx" });
       await fs.rename(temporaryPath, absolutePath);
     } catch (error) {
