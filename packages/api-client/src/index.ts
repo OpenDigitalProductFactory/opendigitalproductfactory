@@ -12,6 +12,7 @@ import { notificationsEndpoints } from "./endpoints/notifications";
 import { dynamicEndpoints } from "./endpoints/dynamic";
 import { uploadEndpoints } from "./endpoints/upload";
 import { workItemsEndpoints } from "./endpoints/work-items";
+import { financeEndpoints } from "./endpoints/finance";
 
 export function createApiClient(config: ApiClientConfig) {
   const client = new DpfClient(config);
@@ -28,6 +29,7 @@ export function createApiClient(config: ApiClientConfig) {
     dynamic: dynamicEndpoints(client),
     upload: uploadEndpoints(client),
     workItems: workItemsEndpoints(client),
+    finance: financeEndpoints(client),
   };
 }
 

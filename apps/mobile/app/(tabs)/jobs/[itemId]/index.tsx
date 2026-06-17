@@ -7,9 +7,10 @@ import {
   Pressable,
   ActivityIndicator,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTheme } from "@/src/lib/theme";
 import { useJobsStore } from "@/src/features/jobs/jobs.store";
+import { useInvoicesStore } from "@/src/features/invoices/invoices.store";
 import type { WorkItemStatus } from "@dpf/types";
 
 // Field check-in/out actions available from each status (server enforces too).
@@ -31,8 +32,10 @@ export default function JobDetailScreen() {
   const { colors } = theme;
   const styles = useMemo(() => makeStyles(theme), [theme.colors]);
   const { itemId } = useLocalSearchParams<{ itemId: string }>();
+  const router = useRouter();
   const { detail, isLoading, isUpdating, error, fetchDetail, updateStatus } =
     useJobsStore();
+  const beginInvoiceDraft = useInvoicesStore((s) => s.beginDraft);
 
   useEffect(() => {
     if (itemId) fetchDetail(itemId);
@@ -59,6 +62,17 @@ export default function JobDetailScreen() {
 
   const actions = ACTIONS[detail.status] ?? [];
 
+  // Once a job is completed, the field tech bills the customer. Seed the
+  // draft with the job title as a single line so the tech only has to set
+  // the price; the invoice screen lets them refine before submit.
+  const goToInvoice = (): void => {
+    beginInvoiceDraft({
+      workItemId: detail.itemId,
+      seedLines: [{ description: detail.title, quantity: 1, unitPrice: 0 }],
+    });
+    router.push(`/jobs/${encodeURIComponent(detail.itemId)}/invoice`);
+  };
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Text style={styles.title}>{detail.title}</Text>
@@ -75,22 +89,31 @@ export default function JobDetailScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <View style={styles.actions}>
-        {actions.length === 0 ? (
+        {actions.length === 0 && detail.status !== "completed" ? (
           <Text style={styles.meta}>No further actions.</Text>
-        ) : (
-          actions.map((a) => (
-            <Pressable
-              key={a.to}
-              style={[styles.button, isUpdating && styles.buttonDisabled]}
-              disabled={isUpdating}
-              onPress={() => updateStatus(detail.itemId, a.to)}
-              accessibilityRole="button"
-              testID={`action-${a.to}`}
-            >
-              <Text style={styles.buttonText}>{a.label}</Text>
-            </Pressable>
-          ))
-        )}
+        ) : null}
+        {actions.map((a) => (
+          <Pressable
+            key={a.to}
+            style={[styles.button, isUpdating && styles.buttonDisabled]}
+            disabled={isUpdating}
+            onPress={() => updateStatus(detail.itemId, a.to)}
+            accessibilityRole="button"
+            testID={`action-${a.to}`}
+          >
+            <Text style={styles.buttonText}>{a.label}</Text>
+          </Pressable>
+        ))}
+        {detail.status === "completed" ? (
+          <Pressable
+            style={styles.button}
+            onPress={goToInvoice}
+            accessibilityRole="button"
+            testID="action-draft-invoice"
+          >
+            <Text style={styles.buttonText}>Draft invoice</Text>
+          </Pressable>
+        ) : null}
       </View>
     </ScrollView>
   );
