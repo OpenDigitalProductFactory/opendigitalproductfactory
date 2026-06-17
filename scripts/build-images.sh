@@ -25,6 +25,10 @@ echo "[build-images] Stamping images with DPF_VERSION=$sha"
 
 # Real platform version from the repo's git release tags (e.g. "5.6.0" or
 # "5.6.0-35-gbcaa30a8"). This is the authoritative version shown in the portal.
+# BI-145214F0 — refresh tags first so a stale local tag cache doesn't silently
+# bake the wrong release-line label into the image (the DPF_VERSION SHA stamp
+# is unaffected by this; only the human-readable describe). Best-effort.
+git fetch --tags --force origin 2>/dev/null || true
 platform_version="$(git describe --tags --always 2>/dev/null | sed 's/^v//' || true)"
 if [ -n "$platform_version" ]; then
   export DPF_PLATFORM_VERSION="$platform_version"
