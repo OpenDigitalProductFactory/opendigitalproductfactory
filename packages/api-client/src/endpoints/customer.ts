@@ -3,6 +3,7 @@ import type {
   ContactWithRoles,
   CreateContactRequest,
   CustomerAccount,
+  InvoiceDetail,
   PaginatedResponse,
   SimilarContact,
   UpdateContactRequest,
@@ -58,5 +59,21 @@ export function customerEndpoints(client: DpfClient) {
       client.get<PaginatedResponse<ContactWithRoles>>(
         `/api/v1/customer/contacts?search=${encodeURIComponent(query)}`,
       ),
+
+    /**
+     * "My invoices" for the signed-in customer. Scoped server-side to the
+     * customer's CustomerAccount.accountId via requireCustomerAuth — a
+     * workforce caller hitting this gets 403.
+     */
+    myInvoices: (params?: { cursor?: string; limit?: number; status?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.cursor) qs.set("cursor", params.cursor);
+      if (params?.limit) qs.set("limit", String(params.limit));
+      if (params?.status) qs.set("status", params.status);
+      const query = qs.toString();
+      return client.get<PaginatedResponse<InvoiceDetail>>(
+        `/api/v1/customer/invoices${query ? `?${query}` : ""}`,
+      );
+    },
   };
 }

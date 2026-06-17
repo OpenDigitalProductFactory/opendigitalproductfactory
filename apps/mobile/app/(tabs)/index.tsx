@@ -10,6 +10,8 @@ import {
 import { colors, spacing } from "@/src/lib/theme";
 import { DashboardTile } from "@/src/components/DashboardTile";
 import { useWorkspaceStore } from "@/src/features/workspace/workspace.store";
+import { useAppConfigStore } from "@/src/lib/appConfig";
+import { CustomerInvoicesPanel } from "@/src/features/customer-invoices/CustomerInvoicesPanel";
 import type { ActivityItem, DashboardTile as TileType } from "@dpf/types";
 
 function TilesGrid({ tiles }: { tiles: TileType[] }) {
@@ -45,6 +47,9 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 }
 
 export default function HomeScreen() {
+  const persona = useAppConfigStore((s) => s.persona);
+  const isCustomer = persona?.kind === "customer";
+
   const {
     tiles,
     activityFeed,
@@ -56,12 +61,23 @@ export default function HomeScreen() {
   } = useWorkspaceStore();
 
   const refresh = useCallback(async () => {
+    // The operator dashboard requires workforce auth; skip the calls when
+    // the customer surface is mounted to avoid auth-noise 403s in the panel.
+    if (isCustomer) return;
     await Promise.all([fetchDashboard(), fetchActivity()]);
-  }, [fetchDashboard, fetchActivity]);
+  }, [fetchDashboard, fetchActivity, isCustomer]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  if (isCustomer) {
+    return (
+      <View style={styles.screen} testID="customer-home">
+        <CustomerInvoicesPanel />
+      </View>
+    );
+  }
 
   const lastSyncedText = lastSynced
     ? `Last synced: ${new Date(lastSynced).toLocaleTimeString()}`
