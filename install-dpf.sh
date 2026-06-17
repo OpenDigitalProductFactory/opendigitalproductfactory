@@ -797,6 +797,13 @@ if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -d .git ]; then
   fi
   # Real platform version from git release tags (e.g. "5.6.0"); shown in the
   # portal instead of the stale version.json baseline.
+  # BI-145214F0 — refresh tags first. A long-running install whose local tag
+  # cache stopped at e.g. v5.6.0 while upstream cut v6.0..v6.4 will otherwise
+  # silently bake the wrong release-line label into the portal image (the SHA
+  # stamp above stays honest; only the human-readable describe falls back to
+  # the nearest old tag and counts every new commit forward). Best-effort: an
+  # offline / network fetch failure must not abort the install.
+  git fetch --tags --force origin 2>/dev/null || true
   if DPF_PLATFORM_VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//')" && [ -n "$DPF_PLATFORM_VERSION" ]; then
     export DPF_PLATFORM_VERSION
     ok "Stamping local build with DPF_PLATFORM_VERSION=$DPF_PLATFORM_VERSION"
@@ -818,7 +825,7 @@ ok "docker compose up returned"
 #      Skipped on macOS, which uses the native-host sidecar above.
 if [ "$DPF_PLATFORM" != "darwin" ]; then
   _tts_vram="$(printf '%s' "${DPF_HOST_PROFILE:-}" | sed -nE 's/.*"vramGB"[[:space:]]*:[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/p')"
-  if [ -n "$_tts_vram" ] && awk "BEGIN{exit !(${_tts_vram} >= 6)}" 2>/dev/null; then
+  if [ -n "$_tts_vram" ] && awk 'BEGIN{exit !('"$_tts_vram"' >= 6)}' 2>/dev/null; then
     step "Voice / TTS sidecar (NVIDIA GPU)"
     if docker compose "${DPF_COMPOSE_FILES[@]}" --profile tts up -d dpf-tts; then
       ok "Voice TTS container started (dpf-tts) — spoken output works out of the box"

@@ -100,6 +100,13 @@ fi
 export DPF_PLATFORM_VERSION=""
 if [[ $_dry_run -eq 0 ]]; then
   git config --global --add safe.directory '*' 2>/dev/null || true
+  # BI-145214F0 — refresh tags before describe (same root cause as
+  # install-dpf.sh). PROMOTE_SOURCE is the host source mount inside the
+  # dpf-promoter container; without this the promoter inherits whatever
+  # stale tag cache the host had and stamps every rebuilt portal image
+  # with an out-of-date release-line label. Best-effort: failure (offline,
+  # auth, etc.) must not abort the upgrade — the SHA stamp is still honest.
+  git -C "$PROMOTE_SOURCE" fetch --tags --force origin 2>/dev/null || true
   DPF_PLATFORM_VERSION="$(git -C "$PROMOTE_SOURCE" describe --tags --always 2>/dev/null | sed 's/^v//' || true)"
   export DPF_PLATFORM_VERSION
 fi
