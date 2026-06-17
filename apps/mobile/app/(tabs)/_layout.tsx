@@ -2,7 +2,7 @@ import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/src/lib/theme";
 import { useAppConfigStore } from "@/src/lib/appConfig";
-import { resolveVisibleTabs } from "@/src/lib/navigation";
+import { resolveDefaultTab, resolveVisibleTabs } from "@/src/lib/navigation";
 
 export default function TabsLayout() {
   const { colors } = useTheme();
@@ -12,19 +12,24 @@ export default function TabsLayout() {
 
   // Which tabs the connected install exposes for this persona. With no manifest
   // loaded this returns the full operator set, so the default app is unchanged.
-  const visible = new Set(
-    resolveVisibleTabs({
-      persona,
-      capabilities,
-      manifestTabs: navigation?.tabs,
-    }),
-  );
+  const visibleTabs = resolveVisibleTabs({
+    persona,
+    capabilities,
+    manifestTabs: navigation?.tabs,
+  });
+  const visible = new Set(visibleTabs);
   // `href: null` hides a tab from the bar; `undefined` leaves it visible.
   const hiddenHref = (name: string): null | undefined =>
     visible.has(name) ? undefined : null;
+  // Landing tab: a field tech lands on Jobs, customer/operator land on Home.
+  const initialRouteName = resolveDefaultTab({
+    manifestDefault: navigation?.defaultTab,
+    visibleTabs,
+  });
 
   return (
     <Tabs
+      initialRouteName={initialRouteName}
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,

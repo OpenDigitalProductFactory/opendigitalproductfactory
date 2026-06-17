@@ -4,6 +4,8 @@ import {
   activationToCapabilities,
   buildInstanceDescriptor,
   buildAppConfigManifest,
+  resolveAppPersona,
+  resolveAppNavigation,
 } from "./manifest";
 
 describe("normalizeBrandingTokens", () => {
@@ -118,5 +120,91 @@ describe("buildAppConfigManifest", () => {
     });
     expect(m.designTokens).toBeUndefined();
     expect(m.org.archetype).toBeUndefined();
+  });
+
+  it("emits the navigation block when provided", () => {
+    const m = buildAppConfigManifest({
+      orgName: "Acme HVAC",
+      persona: { kind: "employee", mode: "field" },
+      capabilities: ["field-dispatch", "work-items"],
+      navigation: { tabs: [], defaultTab: "jobs" },
+    });
+    expect(m.navigation).toEqual({ tabs: [], defaultTab: "jobs" });
+  });
+
+  it("omits navigation when not provided", () => {
+    const m = buildAppConfigManifest({
+      orgName: "Acme",
+      persona: { kind: "operator" },
+      capabilities: ["notifications"],
+    });
+    expect(m.navigation).toBeUndefined();
+  });
+});
+
+describe("resolveAppPersona", () => {
+  it("returns customer for a customer principal", () => {
+    expect(
+      resolveAppPersona({ userType: "customer", employeeId: null, capabilities: [] }),
+    ).toEqual({ kind: "customer" });
+  });
+
+  it("returns employee:field when the workforce user has an employee profile and the install has field-dispatch", () => {
+    expect(
+      resolveAppPersona({
+        userType: "admin",
+        employeeId: "emp_1",
+        capabilities: ["field-dispatch", "work-items"],
+      }),
+    ).toEqual({ kind: "employee", mode: "field" });
+  });
+
+  it("returns plain employee for a workforce user with an employee profile but no field-dispatch", () => {
+    expect(
+      resolveAppPersona({
+        userType: "admin",
+        employeeId: "emp_1",
+        capabilities: ["notifications"],
+      }),
+    ).toEqual({ kind: "employee" });
+  });
+
+  it("returns operator for a workforce user with no employee profile (platform operator)", () => {
+    expect(
+      resolveAppPersona({
+        userType: "admin",
+        employeeId: null,
+        capabilities: ["notifications"],
+      }),
+    ).toEqual({ kind: "operator" });
+  });
+});
+
+describe("resolveAppNavigation", () => {
+  it("lands a field employee on Jobs", () => {
+    expect(
+      resolveAppNavigation({
+        persona: { kind: "employee", mode: "field" },
+        capabilities: ["field-dispatch", "work-items"],
+      }),
+    ).toEqual({ tabs: [], defaultTab: "jobs" });
+  });
+
+  it("falls back to Home for operator / admin / non-field employee", () => {
+    for (const persona of [
+      { kind: "operator" as const },
+      { kind: "admin" as const },
+      { kind: "employee" as const },
+    ]) {
+      expect(
+        resolveAppNavigation({ persona, capabilities: ["notifications"] }),
+      ).toEqual({ tabs: [], defaultTab: "index" });
+    }
+  });
+
+  it("lands a customer on Home (customer surface lights up post-P5)", () => {
+    expect(
+      resolveAppNavigation({ persona: { kind: "customer" }, capabilities: [] }),
+    ).toEqual({ tabs: [], defaultTab: "index" });
   });
 });

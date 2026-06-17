@@ -15,14 +15,16 @@ import { getCompositeActivationProfile } from "@/lib/storefront/archetype-activa
 import {
   buildAppConfigManifest,
   activationToCapabilities,
+  resolveAppPersona,
+  resolveAppNavigation,
 } from "@/lib/mobile/manifest";
-import type { AppPersona, AppConfigManifest } from "@dpf/types";
+import type { AppConfigManifest } from "@dpf/types";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    const { user } = await authenticateRequest(request);
+    const { user, authContext } = await authenticateRequest(request);
 
     const org = await prisma.organization.findFirst({ select: { name: true } });
     if (!org) {
@@ -48,10 +50,12 @@ export async function GET(request: Request) {
         : null,
     );
 
-    // v1 persona: customers get the customer surface; workforce gets operator.
-    // Richer employee/field resolution lands with the use-case work (P4/P5).
-    const persona: AppPersona =
-      user.type === "customer" ? { kind: "customer" } : { kind: "operator" };
+    const persona = resolveAppPersona({
+      userType: user.type,
+      employeeId: authContext.employeeId,
+      capabilities,
+    });
+    const navigation = resolveAppNavigation({ persona, capabilities });
 
     const manifest = buildAppConfigManifest({
       orgName: org.name,
@@ -59,6 +63,7 @@ export async function GET(request: Request) {
       persona,
       brandingTokensRaw: branding?.tokens ?? null,
       capabilities,
+      navigation,
     });
 
     return apiSuccess<AppConfigManifest>(manifest);

@@ -1,4 +1,4 @@
-import { resolveVisibleTabs, type TabSpec } from "./navigation";
+import { resolveDefaultTab, resolveVisibleTabs, type TabSpec } from "./navigation";
 
 describe("resolveVisibleTabs", () => {
   it("defaults to the full operator tab set when nothing is loaded", () => {
@@ -81,5 +81,35 @@ describe("resolveVisibleTabs", () => {
         capabilities: ["work-items"],
       }),
     ).toEqual(["index", "ops", "jobs", "customers", "more"]);
+  });
+});
+
+describe("resolveDefaultTab", () => {
+  it("honors the manifest default when it's a visible tab", () => {
+    expect(
+      resolveDefaultTab({
+        manifestDefault: "jobs",
+        visibleTabs: ["index", "ops", "jobs", "customers", "more"],
+      }),
+    ).toBe("jobs");
+  });
+
+  it("falls back to the first visible tab when the manifest default is hidden", () => {
+    expect(
+      resolveDefaultTab({
+        manifestDefault: "jobs",
+        visibleTabs: ["index", "customers", "more"],
+      }),
+    ).toBe("index");
+  });
+
+  it("falls back to the first visible tab when the manifest gave no default", () => {
+    expect(resolveDefaultTab({ visibleTabs: ["customers", "more"] })).toBe(
+      "customers",
+    );
+  });
+
+  it("ultimate fallback to 'index' when nothing is visible", () => {
+    expect(resolveDefaultTab({ visibleTabs: [] })).toBe("index");
   });
 });
