@@ -27,6 +27,7 @@ import { getOllamaBaseUrl } from "@/lib/inference/ollama-url";
 import { getServedContextTokens } from "@/lib/inference/dmr-runtime-config";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 
 const DEFAULT_SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -446,7 +447,14 @@ export async function dispatchOpencodeTask(params: {
       { timeout: 5_000 },
     );
 
-    console.log(`[opencode-dispatch] Starting task "${task.title}" with local/${model} in ${containerId} (timeout: ${timeoutMs / 1000}s, endpoint: ${sandboxBaseUrl})`);
+    // task.title and the model id originate from operator-authored BIs and the
+    // build config, so they're CWE-117 sources. sanitizeForLog (CodeQL-registered)
+    // strips C0 + DEL before the line lands.
+    console.log(
+      sanitizeForLog(
+        `[opencode-dispatch] Starting task "${task.title}" with local/${model} in ${containerId} (timeout: ${timeoutMs / 1000}s, endpoint: ${sandboxBaseUrl})`,
+      ),
+    );
 
     const { stdout, durationMs: elapsed } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
       const proc = spawnCb("docker", ["exec", "--user", "node", containerId, runnerScript]);
@@ -478,7 +486,11 @@ export async function dispatchOpencodeTask(params: {
         } else if (code === 0 || stdout.trim()) {
           resolve({ stdout, durationMs: d });
         } else {
-          console.error(`[opencode-dispatch] Task "${task.title}" stderr: ${stderrBuf.slice(0, 500)}`);
+          console.error(
+            sanitizeForLog(
+              `[opencode-dispatch] Task "${task.title}" stderr: ${stderrBuf.slice(0, 500)}`,
+            ),
+          );
           reject(Object.assign(new Error(`Exit code ${code}`), { stdout, code, stderr: stderrBuf }));
         }
       });
@@ -489,7 +501,11 @@ export async function dispatchOpencodeTask(params: {
     });
 
     const content = extractOpencodeResult(stdout);
-    console.log(`[opencode-dispatch] Task "${task.title}" completed in ${(elapsed / 1000).toFixed(1)}s (${content.length} chars)`);
+    console.log(
+      sanitizeForLog(
+        `[opencode-dispatch] Task "${task.title}" completed in ${(elapsed / 1000).toFixed(1)}s (${content.length} chars)`,
+      ),
+    );
 
     await recordBuildDispatchAttempt({
       buildId: params.buildId,

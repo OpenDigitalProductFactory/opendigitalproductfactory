@@ -22,7 +22,7 @@
 // human_cognitive_load axis). v1 is a conscious-attestation MVP; a follow-up can
 // verify a persisted DecisionInteraction record (BI-65DEE968 §5).
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 const ATTESTATION_RE = /UX-Fit-Decision:/i;
 
@@ -33,19 +33,44 @@ const ROUTE_FILE_RE = /app\/.*\/page\.tsx$/;
 // Don't gate test/story scaffolding — those controls aren't user-facing.
 const EXCLUDE_RE = /\.(test|spec|stories)\.tsx$/;
 
-function sh(cmd) {
+// Refs reach us from CI env vars (BASE_SHA) and from git's own output. Pin the
+// set of characters we accept so a forged value cannot smuggle shell metachars
+// or git option flags through to execFile. (js/indirect-command-line-injection.)
+const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
+// Repo-relative paths git emits in --name-only. Reject anything that could be
+// reinterpreted as a flag or escape the worktree.
+const PATH_RE = /^[A-Za-z0-9._\-/]+$/;
+
+function assertSafeRef(ref, label) {
+  if (!REF_RE.test(ref) || ref.startsWith("-")) {
+    throw new Error(`[ux-fit-gate] refusing unsafe ${label}: ${JSON.stringify(ref)}`);
+  }
+  return ref;
+}
+
+function assertSafePath(path) {
+  if (!PATH_RE.test(path) || path.startsWith("-")) {
+    throw new Error(`[ux-fit-gate] refusing unsafe path: ${JSON.stringify(path)}`);
+  }
+  return path;
+}
+
+// execFile with arg array — bypasses the shell entirely, so individual args
+// containing $, `, ;, &, |, etc. are inert. The first-arg validator above
+// guards against `--upload-pack`-style git option injection on the ref.
+function git(...args) {
   try {
-    return execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   } catch (e) {
     return (e.stdout && e.stdout.toString()) || "";
   }
 }
 
-const base = process.env.BASE_SHA || "origin/main";
+const base = assertSafeRef(process.env.BASE_SHA || "origin/main", "BASE_SHA");
 // Ensure the base ref is present (CI checks out a shallow tree).
-sh(`git fetch --no-tags --depth=1 origin main`);
+git("fetch", "--no-tags", "--depth=1", "origin", "main");
 
-const changed = sh(`git diff --name-only ${base}...HEAD -- "apps/web/**/*.tsx"`)
+const changed = git("diff", "--name-only", `${base}...HEAD`, "--", "apps/web/**/*.tsx")
   .split("\n")
   .map((s) => s.trim())
   .filter(Boolean)
@@ -57,7 +82,7 @@ if (changed.length === 0) {
 }
 
 const addedFiles = new Set(
-  sh(`git diff --name-only --diff-filter=A ${base}...HEAD -- "apps/web/**/*.tsx"`)
+  git("diff", "--name-only", "--diff-filter=A", `${base}...HEAD`, "--", "apps/web/**/*.tsx")
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean),
@@ -65,13 +90,14 @@ const addedFiles = new Set(
 
 const impacting = [];
 for (const f of changed) {
-  const isNewRoute = ROUTE_FILE_RE.test(f) && addedFiles.has(f);
-  const added = sh(`git diff ${base}...HEAD -- "${f}"`)
+  const safePath = assertSafePath(f);
+  const isNewRoute = ROUTE_FILE_RE.test(safePath) && addedFiles.has(safePath);
+  const added = git("diff", `${base}...HEAD`, "--", safePath)
     .split("\n")
     .filter((l) => l.startsWith("+") && !l.startsWith("+++"));
   const addsControl = added.some((l) => UI_CONTROL_RE.test(l));
   if (isNewRoute || addsControl) {
-    impacting.push(f + (isNewRoute ? " (new route)" : " (adds a user-facing control)"));
+    impacting.push(safePath + (isNewRoute ? " (new route)" : " (adds a user-facing control)"));
   }
 }
 
@@ -80,7 +106,7 @@ if (impacting.length === 0) {
   process.exit(0);
 }
 
-const commits = sh(`git log ${base}..HEAD --format=%B`);
+const commits = git("log", `${base}..HEAD`, "--format=%B");
 const prBody = process.env.PR_BODY || "";
 const attested = ATTESTATION_RE.test(commits) || ATTESTATION_RE.test(prBody);
 

@@ -62,6 +62,19 @@ extensions:
       # forge a log line. Breaks taint flow for js/log-injection (CWE-117).
       - ["safe-log", "Module", "Member[sanitizeForLog]", "Argument[0]", "ReturnValue", "taint", "manual"]
 
+  # ─── media-storage — js/http-to-file-access sanitiser ───────────────────
+  - addsTo:
+      pack: codeql/javascript-all
+      extensible: summaryModel
+    data:
+      # prepareMediaBlobContentForStorage validates the buffer's mime type
+      # (probeImage rejects anything outside DEFAULT_MEDIA_BLOB_MIME_TYPES)
+      # AND enforces DEFAULT_MEDIA_BLOB_MAX_BYTES before returning a branded
+      # ValidatedMediaBlobContent. Bytes reaching writeMediaBlob/fs.writeFile
+      # have cleared both gates — the network → file dataflow is no longer
+      # arbitrary file upload (CWE-434/CWE-912). Closes alert #269.
+      - ["media-storage", "Module", "Member[prepareMediaBlobContentForStorage]", "Argument[0]", "ReturnValue", "taint", "manual"]
+
   # ─── safe-property — js/remote-property-injection guard ──────────────────
   - addsTo:
       pack: codeql/javascript-all

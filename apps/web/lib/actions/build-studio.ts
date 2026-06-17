@@ -8,6 +8,7 @@ import { getOllamaBaseUrl, getOllamaApiRoot } from "@/lib/inference/ollama-url";
 import { preflightLocalEndpoint, OPENCODE_MIN_CONTEXT_TOKENS, type LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
 import { setServedContextTokens } from "@/lib/inference/dmr-runtime-config";
 import { getLocalOnlyInference, setLocalOnlyInference } from "@/lib/inference/local-only";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 
 async function requireManageProviders(): Promise<string> {
   const session = await auth();
@@ -124,10 +125,15 @@ export async function applyLocalModelContext(
   }
   if (contextTokens < OPENCODE_MIN_CONTEXT_TOKENS) {
     // Allowed (operator may know better), but make the consequence explicit.
-    // Strip control chars from the operator-supplied model id before logging —
-    // neutralizes log injection (CR/LF/control-char forging of log lines).
-    const safeModel = trimmed.replace(/[^a-zA-Z0-9._:@/+-]/g, "");
-    console.warn(`[build-studio] applyLocalModelContext set ${safeModel} to ${contextTokens} (< ${OPENCODE_MIN_CONTEXT_TOKENS} agent floor)`);
+    // sanitizeForLog (the CodeQL-registered sanitizer) strips C0 + DEL so a
+    // CR/LF in the operator-supplied model id cannot forge a downstream log
+    // line (CWE-117). contextTokens is already Number.isInteger above, so it
+    // safely composes into the same sanitized line.
+    console.warn(
+      sanitizeForLog(
+        `[build-studio] applyLocalModelContext set ${trimmed} to ${contextTokens} (< ${OPENCODE_MIN_CONTEXT_TOKENS} agent floor)`,
+      ),
+    );
   }
 
   const apiRoot = getOllamaApiRoot();
