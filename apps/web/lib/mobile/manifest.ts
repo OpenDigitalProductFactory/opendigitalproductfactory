@@ -12,6 +12,7 @@
  */
 import type {
   AppConfigManifest,
+  AppNavigation,
   AppPersona,
   BrandingPalette,
   BrandingThemeTokens,
@@ -153,6 +154,7 @@ export function buildAppConfigManifest(input: {
   brandingTokensRaw?: unknown;
   capabilities: string[];
   vocabulary?: Record<string, string>;
+  navigation?: AppNavigation;
 }): AppConfigManifest {
   const manifest: AppConfigManifest = {
     schemaVersion: "1",
@@ -168,5 +170,57 @@ export function buildAppConfigManifest(input: {
   if (input.vocabulary && Object.keys(input.vocabulary).length > 0) {
     manifest.vocabulary = input.vocabulary;
   }
+  if (input.navigation) manifest.navigation = input.navigation;
   return manifest;
+}
+
+/**
+ * Persona resolver — the install side of "who am I, mobile?". Today the auth
+ * layer distinguishes only `customer` from workforce (`admin`); within the
+ * workforce we tell a real employee apart from a platform operator by whether
+ * an `EmployeeProfile` is linked, and within employees we promote the persona
+ * to field-tech `mode: "field"` when the install carries the `field-dispatch`
+ * capability (the same axis-derived signal the manifest already projects).
+ *
+ * Lives next to the manifest builders so the wire shape and the resolution
+ * rules stay co-located.
+ */
+export interface ResolvePersonaInput {
+  userType: "admin" | "customer";
+  employeeId: string | null;
+  capabilities: string[];
+}
+
+export function resolveAppPersona(input: ResolvePersonaInput): AppPersona {
+  if (input.userType === "customer") return { kind: "customer" };
+  if (input.employeeId) {
+    if (input.capabilities.includes("field-dispatch")) {
+      return { kind: "employee", mode: "field" };
+    }
+    return { kind: "employee" };
+  }
+  return { kind: "operator" };
+}
+
+/**
+ * Navigation resolver — which tab the app opens on after login. The mobile
+ * shell already resolves the visible tab *set* from persona × capabilities
+ * (apps/mobile/src/lib/navigation.ts); this picks the *landing* tab so a field
+ * tech opens on Jobs instead of the operator Home. We leave `tabs` empty so
+ * the client keeps owning the order until per-archetype overrides land.
+ */
+export interface ResolveNavigationInput {
+  persona: AppPersona;
+  capabilities: string[];
+}
+
+export function resolveAppNavigation(input: ResolveNavigationInput): AppNavigation {
+  if (
+    input.persona.kind === "employee" &&
+    input.persona.mode === "field" &&
+    input.capabilities.includes("work-items")
+  ) {
+    return { tabs: [], defaultTab: "jobs" };
+  }
+  return { tabs: [], defaultTab: "index" };
 }

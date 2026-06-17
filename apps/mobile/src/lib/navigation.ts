@@ -66,3 +66,26 @@ export function resolveVisibleTabs(input: ResolveTabsInput): string[] {
     .filter(capAllowed)
     .map((t) => t.key);
 }
+
+const FALLBACK_DEFAULT_TAB = "index";
+
+export interface ResolveDefaultTabInput {
+  /** Server-emitted landing tab (manifest.navigation.defaultTab). */
+  manifestDefault?: string;
+  /** The visible tab set this persona/install can actually mount. */
+  visibleTabs: string[];
+}
+
+/**
+ * Pick the tab the app opens on after login. Honors the install's preference
+ * (`manifest.navigation.defaultTab`) as long as it's actually mountable for
+ * this persona; otherwise falls back to the first visible tab so the app
+ * never opens onto a hidden route.
+ */
+export function resolveDefaultTab(input: ResolveDefaultTabInput): string {
+  const { manifestDefault, visibleTabs } = input;
+  if (manifestDefault && visibleTabs.includes(manifestDefault)) {
+    return manifestDefault;
+  }
+  return visibleTabs[0] ?? FALLBACK_DEFAULT_TAB;
+}
