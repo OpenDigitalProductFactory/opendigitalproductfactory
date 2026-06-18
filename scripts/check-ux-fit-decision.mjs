@@ -38,8 +38,12 @@ const EXCLUDE_RE = /\.(test|spec|stories)\.tsx$/;
 // or git option flags through to execFile. (js/indirect-command-line-injection.)
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
 // Repo-relative paths git emits in --name-only. Reject anything that could be
-// reinterpreted as a flag or escape the worktree.
-const PATH_RE = /^[A-Za-z0-9._\-/]+$/;
+// reinterpreted as a flag or escape the worktree. The character set must include
+// Next.js route-segment punctuation — route groups `(shell)` and dynamic/
+// catch-all segments `[id]` / `[[...slug]]` — which appear in legitimate
+// apps/web/app paths. These chars are inert: execFile uses an arg array (no
+// shell), and the leading-`-` guard below still blocks option injection.
+const PATH_RE = /^[A-Za-z0-9._\-/()[\]]+$/;
 
 function assertSafeRef(ref, label) {
   if (!REF_RE.test(ref) || ref.startsWith("-")) {
