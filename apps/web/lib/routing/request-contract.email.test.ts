@@ -31,10 +31,13 @@ describe("inferContract honours task-requirement routing-posture defaults", () =
     expect(c.residencyPolicy).toBeUndefined();
   });
 
-  it("unknown task type falls back to balanced + medium, no residency", async () => {
+  it("unknown task type falls back to balanced posture, no residency; depth from content (BI-08CE1ADF)", async () => {
     const c = await inferContract("totally-unknown-task-xyz", MSGS);
     expect(c.budgetClass).toBe("balanced");
-    expect(c.reasoningDepth).toBe("medium");
+    // No declared depth for this task type → classified from content. MSGS is a
+    // bare "hello" greeting, so the classifier returns minimal (was a blanket
+    // "medium" before the content classifier landed).
+    expect(c.reasoningDepth).toBe("minimal");
     expect(c.residencyPolicy).toBeUndefined();
   });
 });
