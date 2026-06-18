@@ -9,8 +9,6 @@ export type DocPage = {
   title: string;
   area: string;           // e.g. "getting-started"
   order: number;
-  lastUpdated: string;    // ISO date string
-  updatedBy: string;
   content: string;        // markdown body (no frontmatter)
   relatedSpecs: string[];
   roles: string[];

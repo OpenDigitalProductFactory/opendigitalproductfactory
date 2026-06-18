@@ -2,8 +2,6 @@
 title: "AI Workforce"
 area: ai-workforce
 order: 1
-lastUpdated: 2026-04-24
-updatedBy: Codex
 ---
 
 ## Overview

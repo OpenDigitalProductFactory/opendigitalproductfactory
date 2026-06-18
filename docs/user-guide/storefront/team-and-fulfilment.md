@@ -2,8 +2,6 @@
 title: "Team And Fulfilment"
 area: storefront
 order: 6
-lastUpdated: 2026-04-25
-updatedBy: Codex
 ---
 
 ## Use This Doc For

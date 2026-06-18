@@ -90,7 +90,7 @@ function DocContent({
   doc,
   sourceRoute,
 }: {
-  doc: { title: string; content: string; lastUpdated: string; updatedBy: string; area: string };
+  doc: { title: string; content: string; area: string };
   sourceRoute?: string;
 }) {
   const areaLabel = AREA_META[doc.area]?.label ?? doc.area;
@@ -104,10 +104,7 @@ function DocContent({
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
         <span className="text-xs text-[var(--dpf-text)]">{doc.title}</span>
       </div>
-      <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-1">{doc.title}</h1>
-      <p className="text-[10px] text-[var(--dpf-muted)] mb-6">
-        Updated {doc.lastUpdated} by {doc.updatedBy}
-      </p>
+      <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-6">{doc.title}</h1>
       <DocRenderer content={doc.content} currentArea={doc.area} />
     </div>
   );

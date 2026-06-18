@@ -2,8 +2,6 @@
 title: OpenAI Codex
 area: ai-workforce
 order: 4
-lastUpdated: "2026-03-22"
-updatedBy: "Claude (COO)"
 ---
 
 ## Overview

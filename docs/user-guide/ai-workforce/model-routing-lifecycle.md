@@ -2,8 +2,6 @@
 title: "Model Routing & Lifecycle"
 area: ai-workforce
 order: 3
-lastUpdated: 2026-03-30
-updatedBy: Claude (Platform Engineer)
 ---
 
 ## How Models Enter the System

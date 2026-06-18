@@ -2,8 +2,6 @@
 title: "AI Coworker"
 area: getting-started
 order: 3
-lastUpdated: 2026-05-26
-updatedBy: Codex
 ---
 
 ## The Short Version
