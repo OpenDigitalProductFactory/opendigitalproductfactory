@@ -446,6 +446,21 @@ jobs:
           done < <(find . -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' \) -not -path './node_modules/*' -not -path './.git/*' -print0)
           exit $fail
 
+  compose-image-pins:
+    name: Compose Image Pins
+    runs-on: ubuntu-latest
+    # Guards against the failure mode in BI-C8164664: a third-party image on
+    # `:latest` is both unpinned (no reproducibility / review gate) AND
+    # invisible to Dependabot (no version to bump), so it silently drifts.
+    # inngest/inngest:latest rotted onto a broken 1.26.0 and pinned the
+    # scheduler at ~55% CPU for 9 days. Every third-party image must carry an
+    # explicit version (or digest) so Dependabot's docker ecosystem can track
+    # it. Burn down the allowlist in scripts/check-compose-image-pins.sh.
+    steps:
+      - uses: actions/checkout@v6
+      - name: Assert third-party compose images are pinned
+        run: bash scripts/check-compose-image-pins.sh docker-compose.yml
+
   adp-integration-tests:
     name: ADP Integration Tests
     runs-on: ubuntu-latest
