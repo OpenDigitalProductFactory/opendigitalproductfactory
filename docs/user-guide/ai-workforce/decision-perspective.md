@@ -17,6 +17,11 @@ The naming: **WWMD** is "What Would Mark Do" — the first profile, seeded for t
 
 There is a third scope in the same family. **WSID** is "What Should I Do" — the *profession* profile. Where WWMD encodes founder/platform doctrine and WWWD encodes organization doctrine, WSID encodes what a competent professional in a given role should do. Each coworker role family gets its own profile (`WSID-DATA-ARCHITECT`, `WSID-FINANCE`, `WSID-MARKETING`, …) backed by a source-traced professional corpus, reusing the same profile + corpus + retrieval + gate architecture. See [The Profession Scope (WSID)](#the-profession-scope-wsid) below.
 
+> **Want to see it work, not just read what it is?** [Decision Perspective in
+> Practice](decision-perspective-in-practice.md) walks a real question end-to-end through the gate for
+> each scope (WWMD / WWWD / WSID) — the options framed, the decision vectors scored, the outcome
+> returned, and the ledger row written — plus how HITL and the immutable ledger wrap every one.
+
 The full design lives in three specs:
 
 - `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md` — the kernel
