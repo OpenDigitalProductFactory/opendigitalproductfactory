@@ -935,18 +935,55 @@ bash install-dpf.sh</code></pre>
       </tbody>
     </table>
 
+    <h3 style="margin-top:24px; font-size:16px;">A worked example: one question, scored end-to-end</h3>
+    <p class="sub" style="margin-top:0;">
+      Abstractly, &ldquo;weighted vectors&rdquo; is hard to picture. Concretely, it is a column you can add up. During the Dale HVAC dogfood install, the <code>build-specialist</code> coworker built an &ldquo;overdue jobs&rdquo; widget and hit an open product question before shipping it &mdash; <em>should this be generalized for the Hive Mind, or kept local to one install?</em> The gate framed two options and scored each against the principles in scope. Every cell below is a <em>contribution</em> (<code>tier&nbsp;weight &times; alignment</code>); the composite is the column sum.
+    </p>
+    <table class="guide" style="margin-top:8px;">
+      <thead>
+        <tr>
+          <th style="width:46%;">Principle (tier &middot; weight)</th>
+          <th>Option A &mdash; keep local</th>
+          <th>Option B &mdash; parameterize for the hive</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Learnings belong in the shared commons (<strong>commandment &middot; 1.0</strong>)</td><td>+0.10</td><td><strong>+0.85</strong></td></tr>
+        <tr><td>Architecture over shortcuts (<strong>core &middot; 0.4</strong>)</td><td>+0.12</td><td><strong>+0.32</strong></td></tr>
+        <tr><td>Speed to value (<strong>contextual &middot; 0.1</strong>)</td><td><strong>+0.09</strong></td><td>+0.05</td></tr>
+        <tr><td><strong>Composite</strong></td><td><strong>0.31</strong></td><td><strong>1.22</strong></td></tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:10px;">
+      Winner <strong>B</strong> by a margin of <strong>0.91</strong> &mdash; far above the tie threshold, so confidence is <em>high</em>. Note what the tiers do: the contextual &ldquo;ship faster&rdquo; pull toward keeping it local is real, but at weight <code>0.1</code> it can never overrule a commandment-tier reusability pull at weight <code>1.0</code>. The gate returns <strong>recommend Option B</strong> with that contribution ledger attached &mdash; the coworker still owns execution and approval. <strong>See the same loop run for an organization business decision (WWWD, which escalates) and a profession craft question (WSID, which blocks the tempting-wrong answer) in the deep dive:</strong> <a href="/user-guide/ai-workforce/decision-perspective-in-practice">Decision Perspective in Practice</a>.
+    </p>
+
     <p class="note">
-      Why this matters: every unanswered or low-confidence WWMD question is a chance to improve the kernel. Over time, repeated human resolutions become reviewed wiki and perspective material, which lets coworkers handle more decisions safely without losing the audit trail. See the deeper architecture note: <a href="/architecture/autonomy-and-wwmd">Autonomy, WWMD, and trusted coworker decisions</a>.
+      Why this matters: every unanswered or low-confidence WWMD question is a chance to improve the kernel. Over time, repeated human resolutions become reviewed wiki and perspective material, which lets coworkers handle more decisions safely without losing the audit trail. See the deeper architecture note: <a href="/architecture/autonomy-and-wwmd">Autonomy, WWMD, and trusted coworker decisions</a>, and the worked walkthrough for all three scopes: <a href="/user-guide/ai-workforce/decision-perspective-in-practice">Decision Perspective in Practice</a>.
     </p>
 
     <h3 style="margin-top:24px; font-size:16px;">The organization corpus (WWWD): your business, not just the founder kernel</h3>
     <p class="sub" style="margin-top:0;">
       WWMD draws on the shared founder-kernel principles. WWWD &mdash; the organization knowledge corpus &mdash; is the org-specific complement: a governed, single-org knowledge base built from onboarding context, uploaded business documents, market Q&amp;A, and approved AI research. Every source &mdash; data entry, document upload, scheduled research, integrations, coverage-gap detection &mdash; flows through one enrichment contract that handles idempotency, provenance, and trust grading (first-party, derived, researched). Material lands <em>draft-by-default</em> regardless of source; human review promotes it to authoritative before it influences anything. Reviewed material projects into the decision profile that feeds the WWMD gate and coworker recall, and a freshness-governance layer supersedes stale material and re-enqueues research when coverage gaps appear.
     </p>
+    <p class="sub" style="margin-top:8px;">
+      <strong>In practice:</strong> a customer asks the <code>customer-advisor</code> coworker to approve net-60 terms instead of the standard net-15 on a $12k job. If the organization hasn&rsquo;t yet encoded a credit-terms policy, the gate finds <em>zero</em> applicable org material &mdash; and the non-inherit boundary means it must <strong>not</strong> borrow DPF&rsquo;s platform doctrine as authority for a customer&rsquo;s business decision. So it <strong>escalates</strong> to the business owner rather than guessing. The owner&rsquo;s resolution is captured as draft WWWD material; once reviewed and promoted, the <em>next</em> such question can resolve with the org&rsquo;s own policy as the cited source. A customer&rsquo;s business judgment is the customer&rsquo;s to author.
+    </p>
 
     <h3 style="margin-top:24px; font-size:16px;">The profession corpus (WSID): what a competent professional in this role should do</h3>
     <p class="sub" style="margin-top:0;">
       WWMD answers <em>&ldquo;what would the founder/platform do?&rdquo;</em> and WWWD answers <em>&ldquo;what would this organization do?&rdquo;</em> &mdash; but a coworker doing a specialist&rsquo;s job also needs a governed source for <em>what a competent professional in that role should do</em>. WSID (&ldquo;What Should I Do?&rdquo;) is the third scope in the same family, reusing the same architecture &mdash; a versioned profile, a source-traced corpus, weighted retrieval, and an audited gate &mdash; but scoped to the <strong>profession</strong> rather than the founder or the org. Each coworker role family gets its own profile (<code>WSID-DATA-ARCHITECT</code>, <code>WSID-FINANCE</code>, <code>WSID-MARKETING</code>, &hellip;) backed by a corpus distilled from <em>fetched, verifiable sources</em> &mdash; DAMA-DMBOK and ANSI SQL and OWASP for a data architect, GAAP and SOX control concepts for finance, the AMA body of knowledge and CAN-SPAM / GDPR consent rules for marketing &mdash; never authored from model memory. When a coworker hits a craft question, the gate resolves against its profession profile first, then falls back through role &rarr; org WWWD &rarr; DPF doctrine &rarr; defer-with-gap-capture. The contract is full-roster: WSID is designed to scope <em>every</em> coworker on the platform, with data-architect, finance, and marketing as the pilot three that prove the pipeline.
+    </p>
+    <p class="sub" style="margin-top:8px;">
+      <strong>In practice:</strong> mid-build, the <code>build-data-architect</code> coworker must choose how to store a money column &mdash; <code>FLOAT</code>, <code>DECIMAL(12,2)</code>, or integer cents. It resolves against the <code>WSID-DATA-ARCHITECT</code> corpus (DAMA-DMBOK, ANSI&nbsp;SQL exact-numeric types) and <strong>recommends <code>DECIMAL</code></strong> with the source pages cited. The interesting part is the guardrail: <code>FLOAT</code> trips a <em>commandment conflict</em> &mdash; a commandment-tier principle contributes strongly negatively to it &mdash; so even if the underlying model were nudged toward <code>FLOAT</code> &ldquo;for performance,&rdquo; the gate flags it as violating professional doctrine. The judgment is source-traced, not LLM folklore.
+    </p>
+
+    <h3 style="margin-top:24px; font-size:16px;">Human-in-the-loop and the immutable decision ledger</h3>
+    <p class="sub" style="margin-top:0;">
+      The four outcomes are not a fixed automation level &mdash; they are inputs to the calling coworker&rsquo;s autonomy policy and HITL tier. Two rules keep this honest rather than theatrical: <strong>high risk overrides confidence</strong> (a <em>high</em> or <em>critical</em> risk tier raises a human surface even when the math looks strong &mdash; that is partly why the WWWD example above escalates), and <strong>HITL tiers bound autonomy independently of the gate</strong> (Tier&nbsp;0 executive oversight through Tier&nbsp;3 informational gate whether a coworker may <em>act</em>; the gate only decides what it <em>recommends</em>). Confidence itself is earned in drops and lost in buckets &mdash; a recommendation made, observed, and human-confirmed raises it slowly; one contradicted or stale rationale pulls it back fast.
+    </p>
+    <p class="sub" style="margin-top:8px;">
+      None of this is trustworthy unless it is reconstructable. <strong>Every</strong> gate call &mdash; <em>recommend</em>, <em>arbitrate</em>, <em>escalate</em>, and even <em>defer</em> &mdash; writes an append-only <code>DecisionInteraction</code> row: the profile and its version, the domain class, the outcome, confidence before/after, the cited sources, the rationale, the resolved profile chain, and whether a human follow-up was captured. Nothing is edited in place &mdash; a profile change snapshots a new version, so an old decision always resolves against the doctrine that was live when it ran. That ledger is one strand of the platform&rsquo;s broader append-only authorization decision log and chain-of-custody traces (principal &rarr; agent &rarr; tool call &rarr; approval &rarr; outcome). Full walkthrough, including ledger fields per scope: <a href="/user-guide/ai-workforce/decision-perspective-in-practice">Decision Perspective in Practice</a>.
     </p>
   </section>
 
