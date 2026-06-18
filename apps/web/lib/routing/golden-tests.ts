@@ -4,6 +4,7 @@
  * These are the primary authority for capability scores.
  */
 import type { BuiltinDimension } from "./types";
+import { getDimensionsForTask, KNOWN_TASK_TYPES } from "./task-dimension-map";
 
 export type ScoringMethod =
   | "exact"        // exact string match
@@ -382,3 +383,35 @@ export const GOLDEN_TESTS: GoldenTest[] = [
 export function getTestsForDimension(dimension: BuiltinDimension): GoldenTest[] {
   return GOLDEN_TESTS.filter((t) => t.dimension === dimension);
 }
+
+/**
+ * BI-6F42465E: per-archetype (per-task-type) golden set. Assembles the golden
+ * tests relevant to a given task archetype by following the shared
+ * task-type → dimension mapping, so evals can be scoped to "the capabilities
+ * this kind of task actually exercises" rather than re-running the entire
+ * dimension suite. This is the bridge from the task classifier's archetypes
+ * (BI-08CE1ADF) to the eval corpus — the analogue of tying SimpleQA to
+ * factuality rather than to a generic benchmark.
+ *
+ * Returns tests for the task's mapped dimensions, de-duplicated and ordered by
+ * the mapping weight (primary-dimension tests first). An unknown task type
+ * yields an empty set (caller falls back to the full dimension sweep).
+ */
+export function getTestsForTaskType(taskType: string): GoldenTest[] {
+  const mappings = getDimensionsForTask(taskType);
+  if (mappings.length === 0) return [];
+  const ordered = [...mappings].sort((a, b) => b.weight - a.weight);
+  const seen = new Set<string>();
+  const tests: GoldenTest[] = [];
+  for (const { dimension } of ordered) {
+    for (const test of getTestsForDimension(dimension)) {
+      if (seen.has(test.id)) continue;
+      seen.add(test.id);
+      tests.push(test);
+    }
+  }
+  return tests;
+}
+
+/** The task archetypes that have a golden set (those with a dimension mapping). */
+export const GOLDEN_TEST_TASK_TYPES: string[] = KNOWN_TASK_TYPES;
