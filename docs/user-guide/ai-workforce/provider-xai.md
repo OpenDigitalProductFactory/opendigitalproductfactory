@@ -2,8 +2,6 @@
 title: "xAI / Grok"
 area: ai-workforce
 order: 6
-lastUpdated: "2026-06-11"
-updatedBy: "Claude"
 ---
 
 ## Overview

@@ -2,8 +2,6 @@
 title: "Setup And Launch"
 area: storefront
 order: 5
-lastUpdated: 2026-04-25
-updatedBy: Codex
 ---
 
 ## Use This Doc For

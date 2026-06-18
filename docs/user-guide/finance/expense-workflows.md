@@ -2,8 +2,6 @@
 title: "Expense Workflows"
 area: finance
 order: 6
-lastUpdated: 2026-04-25
-updatedBy: Codex
 ---
 
 ## Use This Doc For

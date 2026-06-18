@@ -2,8 +2,6 @@
 title: "AI Cost Governance"
 area: ai-workforce
 order: 4
-lastUpdated: 2026-05-21
-updatedBy: Claude (docs)
 ---
 
 ## What This Covers

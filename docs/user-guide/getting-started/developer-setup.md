@@ -2,8 +2,6 @@
 title: "Developer Setup"
 area: getting-started
 order: 4
-lastUpdated: 2026-04-18
-updatedBy: Claude (COO)
 ---
 
 ## Developer Setup (IDE + Hot-Reload)

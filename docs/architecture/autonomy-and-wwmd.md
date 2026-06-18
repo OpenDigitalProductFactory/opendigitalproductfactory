@@ -1,8 +1,6 @@
 ---
 title: Autonomy, WWMD, and trusted coworker decisions
 description: How DPF uses the founder-kernel wiki, principle vectors, decision profiles, and audit ledgers to let AI coworkers answer ambiguity without silently overreaching.
-lastUpdated: 2026-05-26
-updatedBy: Codex
 ---
 
 DPF is not trying to make AI coworkers autonomous by removing humans from the loop. It is trying to make autonomy gradual, inspectable, and recoverable.
