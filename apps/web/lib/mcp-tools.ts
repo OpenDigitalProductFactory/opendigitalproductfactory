@@ -842,7 +842,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "claim_capsule_scope",
-    description: "Claim path/module/package/route/skill/prompt scope for a Work Capsule. Repeated claims refresh the existing scope entry.",
+    description: "Claim path/module/package/route/skill/prompt scope for a Work Capsule. Repeated claims refresh the existing scope entry. Rejected with error=scope_conflict if another active Work Capsule already holds an overlapping edit claim — coordinate, claim different scope, or pass force=true to deliberately co-claim.",
     inputSchema: {
       type: "object",
       properties: {
@@ -860,6 +860,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
           },
           description: "Scope claims to add or refresh.",
         },
+        force: { type: "boolean", description: "Deliberately co-claim scope despite an active overlap on another Work Capsule (default false). The override is recorded on the capsule activity log." },
       },
       required: ["capsuleId", "claims"],
     },
