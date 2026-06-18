@@ -31,25 +31,30 @@ export const evalBackground = inngest.createFunction(
       return runDimensionEval(endpointId, modelId, userId);
     });
 
-    // Record completion in ScheduledJob for UI visibility
-    await step.run("record-completion", async () => {
-      const { prisma } = await import("@dpf/db");
-      await prisma.scheduledJob.upsert({
-        where: { jobId: `eval-${modelId}` },
-        create: {
-          jobId: `eval-${modelId}`,
-          name: `Eval: ${modelId}`,
-          schedule: "manual",
-          lastRunAt: new Date(),
-          lastStatus: "completed",
-          nextRunAt: null,
-        },
-        update: {
-          lastRunAt: new Date(),
-          lastStatus: "completed",
-        },
+    // BI-C8164664: don't stamp ScheduledJob as completed when the eval was
+    // skipped by the in-flight guard — that would mask the real status of the
+    // last successful eval and make stuck retry loops invisible.
+    if (!result.skipped) {
+      // Record completion in ScheduledJob for UI visibility
+      await step.run("record-completion", async () => {
+        const { prisma } = await import("@dpf/db");
+        await prisma.scheduledJob.upsert({
+          where: { jobId: `eval-${modelId}` },
+          create: {
+            jobId: `eval-${modelId}`,
+            name: `Eval: ${modelId}`,
+            schedule: "manual",
+            lastRunAt: new Date(),
+            lastStatus: "completed",
+            nextRunAt: null,
+          },
+          update: {
+            lastRunAt: new Date(),
+            lastStatus: "completed",
+          },
+        });
       });
-    });
+    }
 
     return result;
   },

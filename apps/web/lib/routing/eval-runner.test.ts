@@ -6,6 +6,10 @@ const evalState = vi.hoisted(() => ({
   profileUpdates: [] as Array<Record<string, unknown>>,
   callCount: 0,
   errorMessage: "The operation was aborted due to timeout",
+  // BI-C8164664: in-flight + reaper guard test fixtures
+  inflightRun: null as { runId: string; startedAt: Date } | null,
+  createCount: 0,
+  reapedCount: 0,
 }));
 
 vi.mock("@/lib/ai-inference", () => {
@@ -38,8 +42,23 @@ vi.mock("@dpf/db", () => ({
       findUnique: vi.fn(async () => ({ authMethod: "none", name: "Local" })),
     },
     endpointTestRun: {
-      create: vi.fn(async () => ({})),
+      // BI-C8164664: serve the recent-in-flight fixture; assert that runs older
+      // than the guard window are reaped rather than re-counted as in-flight.
+      findFirst: vi.fn(async () => evalState.inflightRun),
+      create: vi.fn(async () => {
+        evalState.createCount++;
+        return {};
+      }),
       update: vi.fn(async () => ({})),
+      updateMany: vi.fn(async (args: { where: { startedAt?: { lte?: Date } } }) => {
+        // Test reaper: pretend one stale row was reaped whenever the where clause
+        // includes the `lte` cutoff filter the eval-runner uses.
+        if (args.where?.startedAt?.lte) {
+          evalState.reapedCount++;
+          return { count: 1 };
+        }
+        return { count: 0 };
+      }),
     },
   },
 }));
@@ -207,6 +226,9 @@ describe("runDimensionEval — whole-endpoint short-circuit", () => {
     evalState.profileUpdates.length = 0;
     evalState.callCount = 0;
     evalState.errorMessage = "The operation was aborted due to timeout";
+    evalState.inflightRun = null;
+    evalState.createCount = 0;
+    evalState.reapedCount = 0;
   });
 
   it("stops after the first timed-out probe instead of grinding every test", async () => {
@@ -242,5 +264,64 @@ describe("runDimensionEval — whole-endpoint short-circuit", () => {
       (u) => u.modelStatus === "retired",
     );
     expect(retired).toBe(false);
+  });
+});
+
+// BI-C8164664 — in-flight + recency guard
+//
+// Background: an Inngest scheduler lease error retried ai/eval.run forever,
+// stacking dimension evals against the local LLM until 184 EndpointTestRun rows
+// were stuck in "running" and the model burned its GPU on the golden corpus.
+// These tests pin the guard so the loop cannot recur.
+describe("runDimensionEval — in-flight + recency guard (BI-C8164664)", () => {
+  beforeEach(() => {
+    evalState.profileUpdates.length = 0;
+    evalState.callCount = 0;
+    evalState.errorMessage = "The operation was aborted due to timeout";
+    evalState.inflightRun = null;
+    evalState.createCount = 0;
+    evalState.reapedCount = 0;
+  });
+
+  it("skips when a recent in-flight run exists, without hitting the provider or creating a new row", async () => {
+    evalState.inflightRun = {
+      runId: "DE-INFLIGHT",
+      startedAt: new Date(Date.now() - 30_000), // 30s ago — well inside the 10-min guard
+    };
+
+    const result = await runDimensionEval("local", "docker.io/ai/qwen3.6:latest", "test");
+
+    expect(result.skipped).toBe(true);
+    expect(result.testRunId).toBe("DE-INFLIGHT");
+    expect(evalState.callCount).toBe(0);  // no provider calls — model untouched
+    expect(evalState.createCount).toBe(0); // no new EndpointTestRun row
+  });
+
+  it("returns a structured EvalRunResult on skip so callers can branch on result.skipped", async () => {
+    evalState.inflightRun = {
+      runId: "DE-INFLIGHT",
+      startedAt: new Date(Date.now() - 30_000),
+    };
+
+    const result = await runDimensionEval("local", "docker.io/ai/qwen3.6:latest", "test");
+
+    // Callers (eval-background.ts) MUST be able to detect a skip so they don't
+    // stamp ScheduledJob as completed for an eval that didn't actually run.
+    expect(result.skipped).toBe(true);
+    expect(result.dimensions).toEqual([]);
+    expect(result.hasDrift).toBe(false);
+    expect(result.hasSevereDrift).toBe(false);
+    expect(result.firstError).toMatch(/Skipped.*DE-INFLIGHT/);
+  });
+
+  it("reaps stale 'running' rows and proceeds with a fresh eval when no recent in-flight exists", async () => {
+    // No recent in-flight row, but the reaper still fires unconditionally to
+    // clean up any rows older than the guard window. The eval then proceeds.
+    evalState.inflightRun = null;
+
+    await runDimensionEval("local", "docker.io/ai/qwen3.6:latest", "test");
+
+    expect(evalState.reapedCount).toBe(1); // reaper called with the lte cutoff
+    expect(evalState.createCount).toBe(1); // a fresh EndpointTestRun was created
   });
 });

@@ -328,7 +328,18 @@ export interface EvalRunResult {
   hasSevereDrift: boolean;
   /** First error message encountered across all tests, if any. Null when all tests succeeded. */
   firstError: string | null;
+  /** True when the eval was short-circuited because another run was already in
+   *  flight for (endpointId, modelId). Callers (e.g. eval-background.ts) should
+   *  not stamp ScheduledJob as completed on a skipped result. */
+  skipped?: true;
 }
+
+/** Maximum age of an in-flight EndpointTestRun before it is reaped as failed
+ *  and a new eval is allowed to start. Tuned to be longer than a healthy full
+ *  dimension eval (~90s for the bundled local model with 7 dimensions × ~10
+ *  tests × <1s each) but short enough that an Inngest function timeout doesn't
+ *  pin the model out of evals for hours. BI-C8164664. */
+const EVAL_INFLIGHT_GUARD_MS = 10 * 60 * 1000;
 
 /**
  * Run a full dimension evaluation for one endpoint/model pair.
@@ -361,6 +372,67 @@ export async function runDimensionEval(
     throw new Error(
       `${provider.name ?? providerId} uses user-delegated OAuth — evals require an API key or service credentials. ` +
       `Connect via a direct API key provider instead.`,
+    );
+  }
+
+  // BI-C8164664: in-flight + recency guard. Without this, Inngest retries (or
+  // any rapid-fire enqueue path — first-boot, page-load checkBundledProviders,
+  // model-discovery refresh) can stack dozens of parallel dimension evals
+  // against the same model. Each eval fires the full golden-test corpus, which
+  // on a local Apple Silicon model runner pins the Metal GPU at 76+ t/s
+  // continuously and creates EndpointTestRun(status="running") rows that may
+  // never complete if the step is cut off mid-eval. Snapshot from the live
+  // investigation: 184 stuck "running" rows in 24h, 0 completions, qwen3.6
+  // serving 364k tasks — pure capability-eval traffic.
+  const guardCutoff = new Date(Date.now() - EVAL_INFLIGHT_GUARD_MS);
+  const inflightRecent = await prisma.endpointTestRun.findFirst({
+    where: {
+      endpointId: providerId,
+      modelId,
+      taskType: "dimension-eval",
+      status: "running",
+      startedAt: { gt: guardCutoff },
+    },
+    select: { runId: true, startedAt: true },
+    orderBy: { startedAt: "desc" },
+  });
+  if (inflightRecent) {
+    console.log(
+      `[eval-runner] Skipping ${providerId}/${modelId}: run ${inflightRecent.runId} already in flight (started ${inflightRecent.startedAt.toISOString()})`,
+    );
+    return {
+      endpointId: providerId,
+      modelId,
+      dimensions: [],
+      testRunId: inflightRecent.runId,
+      hasDrift: false,
+      hasSevereDrift: false,
+      firstError: `Skipped: run ${inflightRecent.runId} already in flight`,
+      skipped: true,
+    };
+  }
+
+  // Reap stale "running" rows older than the guard window so they don't pile
+  // up forever. The most common cause is an Inngest step timeout that cuts the
+  // function off after callProvider() has fired but before the terminal
+  // endpointTestRun.update() runs. Treat these as failed so operators can see
+  // them in the test-run history rather than silently disappearing.
+  const reaped = await prisma.endpointTestRun.updateMany({
+    where: {
+      endpointId: providerId,
+      modelId,
+      taskType: "dimension-eval",
+      status: "running",
+      startedAt: { lte: guardCutoff },
+    },
+    data: {
+      status: "failed",
+      completedAt: new Date(),
+    },
+  });
+  if (reaped.count > 0) {
+    console.warn(
+      `[eval-runner] Reaped ${reaped.count} stale "running" eval run(s) for ${providerId}/${modelId} older than ${EVAL_INFLIGHT_GUARD_MS / 60_000}min`,
     );
   }
 
