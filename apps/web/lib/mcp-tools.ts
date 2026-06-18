@@ -1149,7 +1149,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "update_backlog_item_status",
-    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table in apps/web/lib/backlog/transitions.ts; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic. NOTE: this only changes the status field — it does NOT start work. For a triageOutcome=build item, starting the work means promote_to_build_studio (creates the FeatureBuild + Build Studio Ideate); flipping such an item to in-progress returns an advisory and does not build anything.",
+    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table in apps/web/lib/backlog/transitions.ts; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic. Moving an item to in-progress ACQUIRES its work claim and is rejected with error=claim_conflict if another session already holds a fresh active claim (pass force=true to take it over); the claim is released when the item leaves in-progress. NOTE: this only changes the status field — it does NOT start work. For a triageOutcome=build item, starting the work means promote_to_build_studio (creates the FeatureBuild + Build Studio Ideate); flipping such an item to in-progress returns an advisory and does not build anything.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1157,6 +1157,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         status: { type: "string", enum: ["triaging", "open", "in-progress", "done", "deferred"], description: "Target status. 'triaging' from a triaged status is allowed and clears the prior triage decision." },
         reason: { type: "string", description: "Free-text rationale captured in the activity row. Required when status=triaging from a triaged status." },
         resolution: { type: "string", description: "Outcome summary, required when status=done" },
+        force: { type: "boolean", description: "When moving to in-progress, take over a claim already held by another active session (default false). The takeover is recorded on the status_change activity row." },
       },
       required: ["itemId", "status"],
     },
@@ -6369,7 +6370,18 @@ export async function executeTool(
       // (Reason is checked against the *current* status below, after the item is loaded.)
       const item = await prisma.backlogItem.findUnique({
         where: { itemId: itemIdRaw },
-        select: { id: true, status: true, epicId: true, triageOutcome: true, effortSize: true, activeBuildId: true },
+        select: {
+          id: true,
+          status: true,
+          epicId: true,
+          triageOutcome: true,
+          effortSize: true,
+          activeBuildId: true,
+          claimStatus: true,
+          claimedById: true,
+          claimedByAgentId: true,
+          claimedAt: true,
+        },
       });
       if (!item)
         return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
@@ -6385,6 +6397,42 @@ export async function executeTool(
           error: "illegal_transition",
           message: `cannot move ${itemIdRaw} from ${item.status} to ${target}`,
         };
+
+      // Claim-on-start gate (capsule-first enforcement): moving a BI to
+      // in-progress is the "I am starting this" signal on the direct-build path.
+      // Acquire the BacklogItem claim atomically and refuse if another active
+      // session already holds a FRESH claim — this is what stops two concurrent
+      // sessions from independently building the same BI (the EP-F7E35344
+      // collision). A claim older than STALE_BACKLOG_CLAIM_MS is treated as
+      // abandoned (a dead session) and is reclaimable; force=true overrides a
+      // live conflict deliberately. Releasing happens when the item leaves
+      // in-progress (mirrors the Build Studio claim/release in actions/build.ts).
+      const STALE_BACKLOG_CLAIM_MS = 12 * 60 * 60 * 1000;
+      const forceClaim = params["force"] === true;
+      if (target === "in-progress") {
+        const claimAgeMs = item.claimedAt ? Date.now() - new Date(item.claimedAt).getTime() : Infinity;
+        const claimIsFresh = claimAgeMs < STALE_BACKLOG_CLAIM_MS;
+        const ownedByCaller =
+          (item.claimedById != null && item.claimedById === userId) ||
+          (item.claimedByAgentId != null && item.claimedByAgentId === (context?.agentId ?? null));
+        const activelyClaimedByOther =
+          item.claimStatus === "active" && claimIsFresh && !ownedByCaller &&
+          (item.claimedById != null || item.claimedByAgentId != null);
+        if (activelyClaimedByOther && !forceClaim) {
+          return {
+            success: false,
+            error: "claim_conflict",
+            message:
+              `${itemIdRaw} is already claimed (active, ${Math.round(claimAgeMs / 60000)}m ago) by another session. ` +
+              "Coordinate with the holder, pick different work, or pass force=true to take it over.",
+            data: {
+              claimedById: item.claimedById,
+              claimedByAgentId: item.claimedByAgentId,
+              claimedAt: item.claimedAt,
+            },
+          };
+        }
+      }
       if (item.status === target) {
         return {
           success: true,
@@ -6410,6 +6458,18 @@ export async function executeTool(
             status: target,
             ...(target === "done" ? { completedAt: new Date(), resolution } : {}),
             ...(isRetriage ? { triageOutcome: null, effortSize: null, completedAt: null } : {}),
+            // Acquire the claim on entering in-progress; release it on leaving.
+            ...(target === "in-progress"
+              ? {
+                  claimStatus: "active",
+                  claimedById: userId,
+                  claimedByAgentId: context?.agentId ?? null,
+                  claimedAt: new Date(),
+                }
+              : {}),
+            ...(item.status === "in-progress" && target !== "in-progress"
+              ? { claimStatus: "released" }
+              : {}),
           },
           select: { itemId: true, status: true, epicId: true, completedAt: true },
         });
@@ -6430,6 +6490,11 @@ export async function executeTool(
                     clearedEffortSize: item.effortSize ?? null,
                   }
                 : {}),
+              ...(target === "in-progress"
+                ? { claimAction: "acquired", forcedClaim: forceClaim }
+                : item.status === "in-progress"
+                  ? { claimAction: "released" }
+                  : {}),
             },
             recordedById: userId,
             recordedByAgentId: context?.agentId ?? null,

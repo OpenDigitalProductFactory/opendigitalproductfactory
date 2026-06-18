@@ -757,4 +757,144 @@ describe("backlog MCP tool execution", () => {
       }),
     );
   });
+
+  describe("update_backlog_item_status claim-on-start gate", () => {
+    const FRESH = new Date().toISOString();
+    const STALE = new Date(Date.now() - 13 * 60 * 60 * 1000).toISOString();
+
+    function openRow(overrides: Record<string, unknown> = {}) {
+      return {
+        id: "claim-row-1",
+        itemId: "BI-CLAIM01",
+        status: "open",
+        epicId: null,
+        triageOutcome: "build",
+        effortSize: "small",
+        activeBuildId: null,
+        claimStatus: null,
+        claimedById: null,
+        claimedByAgentId: null,
+        claimedAt: null,
+        ...overrides,
+      };
+    }
+
+    it("acquires the claim when moving an unclaimed item to in-progress", async () => {
+      mockPrisma.backlogItem.findUnique.mockResolvedValue(openRow());
+      mockPrisma.backlogItem.update.mockResolvedValue({ itemId: "BI-CLAIM01", status: "in-progress", epicId: null, completedAt: null });
+
+      const result = await executeTool(
+        "update_backlog_item_status",
+        { itemId: "BI-CLAIM01", status: "in-progress" },
+        "user-1",
+        { agentId: "AGT-1" },
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockPrisma.backlogItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: "in-progress",
+            claimStatus: "active",
+            claimedById: "user-1",
+            claimedByAgentId: "AGT-1",
+          }),
+        }),
+      );
+    });
+
+    it("rejects in-progress when another session holds a fresh active claim", async () => {
+      mockPrisma.backlogItem.findUnique.mockResolvedValue(
+        openRow({ claimStatus: "active", claimedById: "user-2", claimedByAgentId: "AGT-2", claimedAt: FRESH }),
+      );
+
+      const result = await executeTool(
+        "update_backlog_item_status",
+        { itemId: "BI-CLAIM01", status: "in-progress" },
+        "user-1",
+        { agentId: "AGT-1" },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("claim_conflict");
+      expect(mockPrisma.backlogItem.update).not.toHaveBeenCalled();
+    });
+
+    it("force=true takes over another session's claim and records it", async () => {
+      mockPrisma.backlogItem.findUnique.mockResolvedValue(
+        openRow({ claimStatus: "active", claimedById: "user-2", claimedByAgentId: "AGT-2", claimedAt: FRESH }),
+      );
+      mockPrisma.backlogItem.update.mockResolvedValue({ itemId: "BI-CLAIM01", status: "in-progress", epicId: null, completedAt: null });
+
+      const result = await executeTool(
+        "update_backlog_item_status",
+        { itemId: "BI-CLAIM01", status: "in-progress", force: true },
+        "user-1",
+        { agentId: "AGT-1" },
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockPrisma.backlogItemActivity.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            payload: expect.objectContaining({ claimAction: "acquired", forcedClaim: true }),
+          }),
+        }),
+      );
+    });
+
+    it("reclaims a stale claim (dead session) without force", async () => {
+      mockPrisma.backlogItem.findUnique.mockResolvedValue(
+        openRow({ claimStatus: "active", claimedById: "user-2", claimedByAgentId: "AGT-2", claimedAt: STALE }),
+      );
+      mockPrisma.backlogItem.update.mockResolvedValue({ itemId: "BI-CLAIM01", status: "in-progress", epicId: null, completedAt: null });
+
+      const result = await executeTool(
+        "update_backlog_item_status",
+        { itemId: "BI-CLAIM01", status: "in-progress" },
+        "user-1",
+        { agentId: "AGT-1" },
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockPrisma.backlogItem.update).toHaveBeenCalled();
+    });
+
+    it("lets the same session re-enter in-progress on its own claim", async () => {
+      mockPrisma.backlogItem.findUnique.mockResolvedValue(
+        openRow({ claimStatus: "active", claimedById: "user-1", claimedByAgentId: "AGT-1", claimedAt: FRESH }),
+      );
+      mockPrisma.backlogItem.update.mockResolvedValue({ itemId: "BI-CLAIM01", status: "in-progress", epicId: null, completedAt: null });
+
+      const result = await executeTool(
+        "update_backlog_item_status",
+        { itemId: "BI-CLAIM01", status: "in-progress" },
+        "user-1",
+        { agentId: "AGT-1" },
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    it("releases the claim when leaving in-progress", async () => {
+      mockPrisma.backlogItem.findUnique.mockResolvedValue(
+        openRow({ status: "in-progress", claimStatus: "active", claimedById: "user-1", claimedByAgentId: "AGT-1", claimedAt: FRESH }),
+      );
+      mockPrisma.backlogItem.update.mockResolvedValue({ itemId: "BI-CLAIM01", status: "done", epicId: null, completedAt: new Date() });
+
+      const result = await executeTool(
+        "update_backlog_item_status",
+        { itemId: "BI-CLAIM01", status: "done", resolution: "Shipped." },
+        "user-1",
+        { agentId: "AGT-1" },
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockPrisma.backlogItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "done", claimStatus: "released" }),
+        }),
+      );
+    });
+  });
 });
