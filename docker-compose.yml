@@ -735,7 +735,16 @@ services:
     # scraping /metrics is the effective health signal.
 
   inngest:
-    image: inngest/inngest:latest
+    # Pinned (was :latest). :latest drifted onto 1.26.0, which has a
+    # self-hosted `inngest start` regression: every queued item fails its
+    # capacity-lease with "missing envID" (itemLeaseConstraintCheck) and
+    # retries up to maxAtts, spinning the scheduler at ~55% CPU and amplifying
+    # every background job (incl. dimension evals → local-LLM GPU churn).
+    # Fixed forward in 1.28/1.29 (#4400 ErrQueueItemExists retries, #4419 set
+    # envid, #4391/#4438 constraint/lease scan). 1.26→1.30 goose migration
+    # validated on a throwaway DB copy (v7→v10, clean). Pin to keep :latest
+    # from silently regressing again. BI-C8164664.
+    image: inngest/inngest:v1.30.0
     restart: unless-stopped
     command: "inngest start"
     ports:
