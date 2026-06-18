@@ -12,6 +12,7 @@
 
 import { randomUUID } from "crypto";
 import type { ModelClass } from "./model-card-types";
+import { classifyTask } from "./task-classifier";
 
 // ── RequestContract type ────────────────────────────────────────────────────
 
@@ -219,9 +220,17 @@ export async function inferContract(
     RequestContract["budgetClass"];
 
   // ── Reasoning depth ───────────────────────────────────────────────────
-  // Requirement default wins, then the per-task-type heuristic, then "medium".
-  const reasoningDepth = (taskReq?.reasoningDepthDefault ?? DEFAULT_REASONING_DEPTH[taskType] ?? "medium") as
-    RequestContract["reasoningDepth"];
+  // Requirement default wins, then the per-task-type heuristic. BI-08CE1ADF:
+  // when the task type carries NO declared depth (e.g. the ubiquitous default
+  // taskType "conversation", which maps to nothing), classify the prompt
+  // CONTENT instead of falling through to a blanket "medium" — DPF's analogue
+  // of Perplexity's "Best" auto-router. This only affects task types that were
+  // already hitting the neutral default; every mapped type is unchanged.
+  const reasoningDepth = (
+    taskReq?.reasoningDepthDefault ??
+    DEFAULT_REASONING_DEPTH[taskType] ??
+    classifyTask(messages).reasoningDepth
+  ) as RequestContract["reasoningDepth"];
 
   // ── Contract family ───────────────────────────────────────────────────
   const contractFamily = `${interactionMode}.${taskType}`;

@@ -154,9 +154,29 @@ describe("inferContract – reasoning depth", () => {
     });
   }
 
-  it("defaults unknown task types to medium", async () => {
+  it("classifies an unmapped task type's depth from content — ordinary ask stays medium", async () => {
     const contract = await inferContract("totally-unknown-task", SIMPLE_MESSAGES);
     expect(contract.reasoningDepth).toBe("medium");
+  });
+
+  // BI-08CE1ADF: for a task type with no declared depth, the classifier reads
+  // the prompt content instead of the old blanket "medium".
+  it("raises an unmapped task type to high for complex content", async () => {
+    const msgs = [textMsg("user", "Investigate the root cause and refactor the scheduler step-by-step")];
+    const contract = await inferContract("conversation", msgs);
+    expect(contract.reasoningDepth).toBe("high");
+  });
+
+  it("lowers an unmapped task type to minimal for a bare greeting", async () => {
+    const contract = await inferContract("conversation", [textMsg("user", "hi")]);
+    expect(contract.reasoningDepth).toBe("minimal");
+  });
+
+  it("does NOT let content classification override a mapped task type's declared depth", async () => {
+    // "summarization" is declared "low" — a complex-sounding prompt must not raise it.
+    const msgs = [textMsg("user", "Investigate the root cause and refactor everything step-by-step")];
+    const contract = await inferContract("summarization", msgs);
+    expect(contract.reasoningDepth).toBe("low");
   });
 });
 
