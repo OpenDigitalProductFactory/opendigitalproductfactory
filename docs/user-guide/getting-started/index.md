@@ -49,4 +49,4 @@ Every page has an AI coworker available via the floating action button in the bo
 - [Market Archetypes And Coworkers](../market-archetypes) — Understand how archetypes, coworkers, and voice fit together
 - [AI Coworker](ai-coworker) — Learn how to work with the AI assistant
 - [Development Workspace](../development-workspace) — Learn how Build Studio, VS Code, policy states, and validation environments fit together
-- [Agent CLI Development Environments](agent-dev-environments) — Set up Claude Code, Codex, and Grok as governed CLI coding agents and run multiple concurrent threads
+- [Agent Development Environments](agent-dev-environments) — Set up Claude, Codex, and Grok (desktop apps or CLI): MCP, skill pack, AGENTS.md, local settings, and managing multiple concurrent threads
