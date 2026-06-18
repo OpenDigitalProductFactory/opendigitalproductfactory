@@ -2,8 +2,6 @@
 title: "Identity And Access"
 area: platform
 order: 4
-lastUpdated: 2026-04-25
-updatedBy: Codex
 ---
 
 ## Use This Doc For

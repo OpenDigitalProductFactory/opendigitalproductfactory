@@ -2,8 +2,6 @@
 title: "Product Inventory"
 area: products
 order: 1
-lastUpdated: 2026-03-21
-updatedBy: Claude (COO)
 ---
 
 ## Overview

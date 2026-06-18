@@ -2,8 +2,6 @@
 title: "Policies And Acknowledgements"
 area: compliance
 order: 7
-lastUpdated: 2026-04-25
-updatedBy: Codex
 ---
 
 ## Use This Doc For

@@ -2,8 +2,6 @@
 title: "Market Archetypes And Coworkers"
 area: getting-started
 order: 2
-lastUpdated: 2026-05-24
-updatedBy: Codex
 ---
 
 ## Why This Page Exists

@@ -2,8 +2,6 @@
 title: "Licensing Readiness"
 area: compliance
 order: 8
-lastUpdated: 2026-05-14
-updatedBy: Codex
 ---
 
 ## Use This Doc For

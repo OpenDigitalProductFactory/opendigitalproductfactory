@@ -2,8 +2,6 @@
 title: "Agent Development Environments — Claude, Codex, Grok"
 area: getting-started
 order: 7
-lastUpdated: 2026-06-18
-updatedBy: Claude (Opus 4.8)
 ---
 
 ## Agent Development Environments — Claude, Codex, Grok

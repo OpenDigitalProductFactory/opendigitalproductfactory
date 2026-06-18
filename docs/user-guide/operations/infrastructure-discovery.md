@@ -2,8 +2,6 @@
 title: "Infrastructure Discovery"
 area: operations
 order: 3
-lastUpdated: 2026-04-03
-updatedBy: Claude (Software Engineer)
 ---
 
 ## Overview
