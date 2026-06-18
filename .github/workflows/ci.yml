@@ -226,6 +226,8 @@ jobs:
           node-version: 24
       - name: Test spec/plan/doc pre-edit hook
         run: node --test scripts/hooks/spec-plan-doc-precheck.test.mjs
+      - name: Conformance — both precheck nudges stay wired in .claude/settings.json
+        run: node --test scripts/hooks/settings-hooks-wired.test.mjs
       - name: Run spec/plan/doc gate
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
