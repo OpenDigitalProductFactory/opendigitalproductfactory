@@ -341,14 +341,31 @@ export interface EvalRunResult {
  *  pin the model out of evals for hours. BI-C8164664. */
 const EVAL_INFLIGHT_GUARD_MS = 10 * 60 * 1000;
 
+/** How recently a model must have been evaluated to skip an automated re-eval.
+ *  The in-flight guard above stops PARALLEL pile-up, but it only spans 10min —
+ *  Inngest retries (the upstream `missing envID` lease bug re-queues each event
+ *  up to maxAtts) land spaced further apart and would otherwise re-run the full
+ *  golden-test corpus against an already-calibrated model indefinitely (~15%
+ *  GPU duty cycle observed on the bundled local runner with evalCount=25). A
+ *  recency cooldown makes those retries no-ops at the GPU level while leaving
+ *  the daily model-discovery refresh and operator-forced re-evals unaffected.
+ *  Override with DPF_EVAL_COOLDOWN_MS. BI-C8164664. */
+const EVAL_RECENCY_COOLDOWN_MS = (() => {
+  const raw = Number(process.env.DPF_EVAL_COOLDOWN_MS);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 6 * 60 * 60 * 1000;
+})();
+
 /**
  * Run a full dimension evaluation for one endpoint/model pair.
  * Updates ModelProfile capability scores and creates an EndpointTestRun record.
+ *
+ * @param opts.force bypass the recency-cooldown guard (operator-initiated runs).
  */
 export async function runDimensionEval(
   providerId: string,
   modelId: string,
   triggeredBy: string,
+  opts: { force?: boolean } = {},
 ): Promise<EvalRunResult> {
   const modelProfile = await prisma.modelProfile.findUnique({
     where: { providerId_modelId: { providerId, modelId } },
@@ -373,6 +390,32 @@ export async function runDimensionEval(
       `${provider.name ?? providerId} uses user-delegated OAuth — evals require an API key or service credentials. ` +
       `Connect via a direct API key provider instead.`,
     );
+  }
+
+  // BI-C8164664: recency cooldown. A model that was evaluated within the
+  // cooldown window does not need re-evaluating on an automated path — and
+  // without this guard, Inngest's lease-failure retries re-run the full golden
+  // suite every cooldown-cycle even though scores barely move once calibrated.
+  // Operator-forced runs (opts.force) and never-evaluated models bypass it.
+  if (
+    !opts.force &&
+    EVAL_RECENCY_COOLDOWN_MS > 0 &&
+    modelProfile.lastEvalAt &&
+    Date.now() - modelProfile.lastEvalAt.getTime() < EVAL_RECENCY_COOLDOWN_MS
+  ) {
+    console.log(
+      `[eval-runner] Skipping ${providerId}/${modelId}: evaluated ${modelProfile.lastEvalAt.toISOString()} (within ${EVAL_RECENCY_COOLDOWN_MS / 60_000}min cooldown)`,
+    );
+    return {
+      endpointId: providerId,
+      modelId,
+      dimensions: [],
+      testRunId: "",
+      hasDrift: false,
+      hasSevereDrift: false,
+      firstError: `Skipped: evaluated within cooldown (last ${modelProfile.lastEvalAt.toISOString()})`,
+      skipped: true,
+    };
   }
 
   // BI-C8164664: in-flight + recency guard. Without this, Inngest retries (or
