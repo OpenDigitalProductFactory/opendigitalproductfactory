@@ -2,8 +2,9 @@
 title: Development Process Spine — Distribution, Enforcement, and Refinement
 authoredAt: 2026-05-30
 authoredBy: claude
-status: draft
+status: active
 specKind: design
+implementationStatus: "Enforcement edge (§6.3 spec/plan review trigger + the spec/plan/doc PR gate) landed 2026-06-18 under EP-PROCESS-SPINE. Remaining P0/P1/P2 items tracked there. See §12 addendum."
 relatedSpecs:
   - docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md
   - docs/superpowers/specs/2026-05-09-deployment-contracts.md
@@ -259,3 +260,50 @@ Per the recursion this spec describes, it was run through the
   than decided here.
 - **Recommended next step:** file the epic + P0–P2 backlog items, promote to
   Build Studio, start with the P0 uncommitted-work guard.
+
+## 12. Addendum — Enforcement edge landed (2026-06-18)
+
+This spec sat as an orphaned `draft` from 2026-05-30: it diagnosed the gap and
+recommended "file the epic + P0–P2 BIs, start with the guard," and then nothing
+closed the loop — `search_specs_and_plans` returned **0 matches** for it and no
+process-spine epic existed. That is itself the §2 failure in miniature: a
+durable design artifact authored by an external client, never turned into
+tracked, enforced work. The 2026-06-18 session resolving the *"Claude/Codex skip
+specs, plans, and docs"* goal closes the first enforcement edge and files the
+epic the spec called for.
+
+**The documentation dimension (extends §6.3/§6.4).** The §6.3 "spec/plan review
+trigger" was a `PostToolUse` reminder. This addendum strengthens it into the
+**Spec/Plan/Doc Gate** — the harness-level (§5.2) PR-chokepoint enforcement,
+modeled exactly on the UX-Fit Gate (BI-65DEE968):
+
+- **Hard PR gate** (`scripts/check-spec-plan-doc.mjs`, wired as the
+  `Spec/Plan/Doc Gate` job in `.github/workflows/ci.yml`). A PR that adds a
+  substantial implementation surface — a new source module/route/migration, or
+  a large in-place rewrite (≥120 added source lines) — must ALSO touch a
+  durable-knowledge artifact (a spec, plan, doc, `AGENTS.md`, a kernel
+  principle, or a `SKILL.md`) **or** carry a `Process-Spine-Decision:`
+  attestation trailer. Surface-agnostic by construction: it reads the evidence,
+  never which surface produced it (§5.1, §5.3; AGENTS.md §17
+  governance-approves-evidence-not-provenance). This is what lifts Claude/Codex
+  to Build Studio's always-on posture for the spec/plan/doc artifact.
+- **Soft interactive nudge** (`scripts/hooks/spec-plan-doc-precheck.mjs`,
+  `PreToolUse` `Write`). Fires when a session creates a new source module and
+  reminds it — before the PR gate — to write the plan and update the docs in the
+  same PR. Non-blocking, fails open (per §8: no hard stop on the interactive
+  surface; the hook is guidance, CI is the gate).
+
+**Decision record.** Guard severity (the §10 open question) was scored with
+`principle_decide` (callingPopulation `external_coding_agent`, governing profile
+`platform`): recommendation **`pr-gate-plus-soft-hook`** — the UX-Fit posture of
+a hard PR gate plus a soft interactive nudge, over hard-block-everywhere or
+nudge-only. Confidence was `low` because the platform decision dimensions are
+not yet seeded with eval data (the known input gap from the Perplexity-lessons
+analysis), but the recommendation matches the operator-ratified UX-Fit
+precedent for the identical failure mode.
+
+**Still open (tracked under EP-PROCESS-SPINE).** The uncommitted-work guard
+(§6.3 first bullet, P0), bootstrap Phase 5 energization (§6.2), the refinement
+promote/digest loop (§6.5), and the versioned-spine conformance test (§6.1)
+remain unbuilt and are filed as backlog items, not done here — this PR is the
+one enforcement edge that directly closes the "skipped specs/plans/docs" goal.
