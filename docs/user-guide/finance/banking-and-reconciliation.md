@@ -2,8 +2,6 @@
 title: "Banking And Reconciliation"
 area: finance
 order: 2
-lastUpdated: 2026-04-25
-updatedBy: Codex
 ---
 
 ## Use This Doc For

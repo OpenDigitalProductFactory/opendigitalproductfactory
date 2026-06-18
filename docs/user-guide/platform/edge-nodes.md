@@ -2,8 +2,6 @@
 title: "Edge Nodes"
 area: platform
 order: 6
-lastUpdated: 2026-05-21
-updatedBy: Claude (docs)
 ---
 
 ## Use This Doc For

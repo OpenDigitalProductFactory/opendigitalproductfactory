@@ -2,8 +2,6 @@
 title: "Claude / Anthropic"
 area: ai-workforce
 order: 3
-lastUpdated: "2026-03-22"
-updatedBy: "Claude (COO)"
 ---
 
 ## Overview

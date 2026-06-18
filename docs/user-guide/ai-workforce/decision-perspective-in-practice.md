@@ -2,8 +2,6 @@
 title: "Decision Perspective in Practice (WWMD / WWWD / WSID)"
 area: ai-workforce
 order: 6
-lastUpdated: 2026-06-18
-updatedBy: Claude
 ---
 
 ## What this page adds

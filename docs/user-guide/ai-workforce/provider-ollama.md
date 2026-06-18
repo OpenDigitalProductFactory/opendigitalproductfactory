@@ -2,8 +2,6 @@
 title: "Local AI — Docker Model Runner"
 area: ai-workforce
 order: 5
-lastUpdated: "2026-04-11"
-updatedBy: "Claude (Truth-Alignment Lead)"
 ---
 
 ## Overview

@@ -2,8 +2,6 @@
 title: "Reporting And Close"
 area: finance
 order: 5
-lastUpdated: 2026-04-25
-updatedBy: Codex
 ---
 
 ## Use This Doc For
