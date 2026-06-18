@@ -9,6 +9,7 @@ import {
   type QuestionPacket,
 } from "./question-packet";
 import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
+import { DECISION_ROUTING_BLOCK } from "./decision-routing-block";
 
 export type PromptInput = {
   hrRole: string;
@@ -113,6 +114,7 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
   const modeSlug = input.mode === "advise" ? "advise-mode" : "act-mode";
   const loaded = await loadPrompts([
     { category: "platform-identity", slug: "identity-block", fallback: IDENTITY_BLOCK },
+    { category: "platform-identity", slug: "decision-routing", fallback: DECISION_ROUTING_BLOCK },
     { category: "platform-identity", slug: modeSlug, fallback: input.mode === "advise" ? ADVISE_MODE_BLOCK : ACT_MODE_BLOCK },
     { category: "platform-mission", slug: "company-mission", fallback: COMPANY_MISSION_FALLBACK },
   ]);
@@ -122,6 +124,11 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
 
   // Block 1: Identity (static)
   staticBlocks.push(loaded.get("platform-identity/identity-block") ?? IDENTITY_BLOCK);
+
+  // Block 1b: Decision routing (static) — proactive governance contract: consult
+  // WWMD/WWWD/WSID before proposing or asking. Surface-uniform with the legacy
+  // path (apps/web/lib/actions/agent-coworker.ts).
+  staticBlocks.push(loaded.get("platform-identity/decision-routing") ?? DECISION_ROUTING_BLOCK);
 
   // Block 3: Mode (static per session — advise or act doesn't change mid-conversation)
   staticBlocks.push(loaded.get(`platform-identity/${modeSlug}`) ?? (input.mode === "advise" ? ADVISE_MODE_BLOCK : ACT_MODE_BLOCK));
