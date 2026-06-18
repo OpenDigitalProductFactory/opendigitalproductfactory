@@ -906,8 +906,17 @@ export async function sendMessage(input: {
     }
   } else {
     // ── Legacy persona-based prompt assembly ──
+    // Proactive decision-routing governance contract (WWMD/WWWD/WSID) — must be
+    // surface-uniform with the unified prompt-assembler path. Without this, a
+    // legacy-path coworker (the install default while USE_UNIFIED_COWORKER is
+    // off) never sees the instruction to consult a decision surface before
+    // proposing or asking, and never sees its decision skills at all.
+    const { loadDecisionRoutingBlock } = await import("@/lib/tak/decision-routing-block");
+    const legacyDecisionRoutingBlock = await loadDecisionRoutingBlock();
     const promptSections = [
       agent.systemPrompt,
+      "",
+      legacyDecisionRoutingBlock,
       "",
       "Current context:",
       `- Route: ${input.routeContext}`,
@@ -1043,6 +1052,46 @@ export async function sendMessage(input: {
     if (professionCorpus?.promptBlock) {
       promptSections.push("", professionCorpus.promptBlock);
       professionInjectedIntoPrompt = true;
+    }
+
+    // Surface the coworker's eligible skills on the legacy path too. The unified
+    // path lists these via assembleSystemPrompt; without this the install default
+    // (USE_UNIFIED_COWORKER off) hides every skill — including the decision-routing
+    // skills (dpf-decision-via-kernel, dpf-retrieve-decision-context,
+    // dpf-record-decision-outcome) the governance block above tells the coworker
+    // to run. Telemetry mirrors the unified path so eligibility is observable.
+    const legacyCoworkerSkills = await getSkillsForAgent(agent.agentId);
+    const legacySkillSummaries = toSkillSummariesForPrompt(legacyCoworkerSkills);
+    if (legacySkillSummaries.length > 0) {
+      let skillsBlock = "Available coworker skills:";
+      for (const skill of legacySkillSummaries) {
+        skillsBlock += `\n- ${skill.skillId}: ${skill.label} - ${skill.description}`;
+      }
+      promptSections.push("", skillsBlock);
+      const legacyEligibleSkillIds = legacySkillSummaries.map((s) => s.skillId);
+      void recordSkillUsageEvents({
+        phase: "eligible",
+        skillIds: legacyEligibleSkillIds,
+        agentId: agent.agentId,
+        userId: user.id ?? null,
+        threadId: input.threadId ?? null,
+        routeContext: input.routeContext,
+      });
+      const legacyCandidateSkillId = extractInvokedSkillId(input.content);
+      activeSkillId =
+        legacyCandidateSkillId && legacyEligibleSkillIds.includes(legacyCandidateSkillId)
+          ? legacyCandidateSkillId
+          : null;
+      if (activeSkillId) {
+        void recordSkillUsageEvents({
+          phase: "invoked",
+          skillIds: [activeSkillId],
+          agentId: agent.agentId,
+          userId: user.id ?? null,
+          threadId: input.threadId ?? null,
+          routeContext: input.routeContext,
+        });
+      }
     }
 
     populatedPrompt = promptSections.join("\n");
