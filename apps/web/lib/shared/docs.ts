@@ -21,10 +21,6 @@ export function parseDocFrontmatter(raw: string): DocPage {
     title: (data.title as string) ?? "Untitled",
     area: (data.area as string) ?? "unknown",
     order: (data.order as number) ?? 99,
-    lastUpdated: data.lastUpdated instanceof Date
-      ? data.lastUpdated.toISOString().slice(0, 10)
-      : (data.lastUpdated as string) ?? "",
-    updatedBy: (data.updatedBy as string) ?? "",
     content: content.trim(),
     relatedSpecs: (data.relatedSpecs as string[]) ?? [],
     roles: (data.roles as string[]) ?? [],

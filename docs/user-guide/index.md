@@ -1,7 +1,6 @@
 ---
 title: "User Guide"
 description: "Day-to-day operating guide for the Open Digital Product Factory platform - market archetypes, AI coworkers, Build Studio, compliance, finance, HR, customers, wiki, workspace, and more."
-lastUpdated: 2026-05-24
 ---
 
 The User Guide is the day-to-day operating manual for everyone who works in the platform. The same pages are bundled into the portal's in-app help at runtime, so what you see here matches what you see when you press the help button inside the product.

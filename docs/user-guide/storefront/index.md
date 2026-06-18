@@ -2,8 +2,6 @@
 title: "Storefront"
 area: storefront
 order: 1
-lastUpdated: 2026-05-24
-updatedBy: Codex
 ---
 
 ## Overview

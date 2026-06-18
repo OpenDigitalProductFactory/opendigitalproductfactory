@@ -2,8 +2,6 @@
 title: "Dev Container Setup"
 area: getting-started
 order: 5
-lastUpdated: 2026-04-18
-updatedBy: Claude (COO)
 ---
 
 ## Dev Container Setup (VS Code)
