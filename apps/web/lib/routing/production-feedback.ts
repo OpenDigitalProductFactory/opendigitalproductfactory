@@ -5,37 +5,19 @@
  * propagate to ModelProvider once threshold is met.
  */
 import { prisma } from "@dpf/db";
-import type { BuiltinDimension } from "./types";
 
 // ── Task-to-Dimension Mapping ────────────────────────────────────────────────
-
-interface DimensionMapping {
-  dimension: BuiltinDimension;
-  weight: number; // 1.0 for primary, 0.5 for secondary
-}
-
-const TASK_DIMENSION_MAP: Record<string, DimensionMapping[]> = {
-  "reasoning":       [{ dimension: "reasoning", weight: 1.0 }],
-  "code-gen":        [{ dimension: "codegen", weight: 1.0 }, { dimension: "instructionFollowing", weight: 0.5 }],
-  "tool-action":     [{ dimension: "toolFidelity", weight: 1.0 }],
-  "data-extraction": [{ dimension: "structuredOutput", weight: 1.0 }],
-  "summarization":   [{ dimension: "instructionFollowing", weight: 1.0 }],
-  "greeting":        [{ dimension: "conversational", weight: 1.0 }],
-  "creative":        [{ dimension: "conversational", weight: 1.0 }, { dimension: "reasoning", weight: 0.5 }],
-  "web-search":      [{ dimension: "toolFidelity", weight: 1.0 }],
-  "status-query":    [{ dimension: "instructionFollowing", weight: 1.0 }],
-};
-
-/** Get the dimension mappings for a task type. Returns empty for unknown. */
-export function getDimensionsForTask(taskType: string): DimensionMapping[] {
-  if (!taskType) return [];
-  return TASK_DIMENSION_MAP[taskType] ?? [];
-}
-
-/** Compute the dimension delta from an orchestrator score (1-5). */
-export function computeObservationDelta(orchestratorScore: number): number {
-  return (orchestratorScore - 3) * 4;
-}
+// The mapping itself now lives in the prisma-free task-dimension-map module so
+// the golden-test archetype grouping can share it (BI-6F42465E). Re-exported
+// here for backward compatibility with existing importers (cost-ranking, tests).
+export {
+  type DimensionMapping,
+  TASK_DIMENSION_MAP,
+  KNOWN_TASK_TYPES,
+  getDimensionsForTask,
+  computeObservationDelta,
+} from "./task-dimension-map";
+import { getDimensionsForTask, computeObservationDelta } from "./task-dimension-map";
 
 // ── Accumulation & Propagation ───────────────────────────────────────────────
 
