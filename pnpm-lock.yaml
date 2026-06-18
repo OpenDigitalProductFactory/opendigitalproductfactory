@@ -283,10 +283,10 @@ importers:
         version: 16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       next-auth:
         specifier: 5.0.0-beta.31
-        version: 5.0.0-beta.31(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@8.0.11)(react@19.2.7)
+        version: 5.0.0-beta.31(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.1)(react@19.2.7)
       nodemailer:
-        specifier: ^8.0.11
-        version: 8.0.11
+        specifier: ^9.0.1
+        version: 9.0.1
       papaparse:
         specifier: ^5.5.3
         version: 5.5.3
@@ -7592,8 +7592,8 @@ packages:
   node-releases@2.0.37:
     resolution: {integrity: sha512-1h5gKZCF+pO/o3Iqt5Jp7wc9rH3eJJ0+nh/CIoiRwjRxde/hAHyLPXYN4V3CqKAbiZPSeJFSWHmJsbkicta0Eg==}
 
-  nodemailer@8.0.11:
-    resolution: {integrity: sha512-nrO/pDAUKl+wXX+lx16tDLbnm0fW6sK/x8mgohaCpg+CdCEl482bD4tCuAZk2DyliruiNTIZxRCoWkDqJEnAiA==}
+  nodemailer@9.0.1:
+    resolution: {integrity: sha512-Gwv8SQewT616ZM/URn0H54b8PWo/Wum7md3EW2aWy1lO27+WZCX+Xyak3J+NlmHUjDh5ME+uesJUDRbR3Ye8Bw==}
     engines: {node: '>=6.0.0'}
 
   normalize-path@3.0.0:
@@ -9811,7 +9811,7 @@ snapshots:
 
   '@asamuzakjp/nwsapi@2.3.9': {}
 
-  '@auth/core@0.41.2(nodemailer@8.0.11)':
+  '@auth/core@0.41.2(nodemailer@9.0.1)':
     dependencies:
       '@panva/hkdf': 1.2.1
       jose: 6.2.3
@@ -9819,7 +9819,7 @@ snapshots:
       preact: 10.24.3
       preact-render-to-string: 6.5.11(preact@10.24.3)
     optionalDependencies:
-      nodemailer: 8.0.11
+      nodemailer: 9.0.1
 
   '@axe-core/playwright@4.11.3(playwright-core@1.60.0)':
     dependencies:
@@ -17897,13 +17897,13 @@ snapshots:
 
   netmask@2.1.1: {}
 
-  next-auth@5.0.0-beta.31(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@8.0.11)(react@19.2.7):
+  next-auth@5.0.0-beta.31(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(nodemailer@9.0.1)(react@19.2.7):
     dependencies:
-      '@auth/core': 0.41.2(nodemailer@8.0.11)
+      '@auth/core': 0.41.2(nodemailer@9.0.1)
       next: 16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react: 19.2.7
     optionalDependencies:
-      nodemailer: 8.0.11
+      nodemailer: 9.0.1
 
   next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
@@ -17950,7 +17950,7 @@ snapshots:
 
   node-releases@2.0.37: {}
 
-  nodemailer@8.0.11: {}
+  nodemailer@9.0.1: {}
 
   normalize-path@3.0.0: {}
 
