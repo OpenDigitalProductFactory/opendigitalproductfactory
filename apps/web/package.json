@@ -61,7 +61,7 @@
     "read-excel-file": "9.2.0",
     "recharts": "^3.8.1",
     "sharp": "^0.35.1",
-    "undici": "^8.4.1",
+    "undici": "^8.5.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
