@@ -9,6 +9,7 @@ import { loadFingerprintCatalogIntoDb, defaultCatalogPath } from "./discovery-fi
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
 import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
 import { seedEaCrossNotation } from "./seed-ea-cross-notation.js";
+import { resolveSeedPrice } from "./model-pricing-brackets.js";
 import { seedEaReferenceModels } from "./seed-ea-reference-models.js";
 import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedEaSysml2 } from "./seed-ea-sysml2.js";
@@ -2083,33 +2084,9 @@ async function seedSpeachesTranscriptionModel(): Promise<void> {
  * admin-tuned prices are preserved.
  */
 async function seedModelPricing(): Promise<void> {
-  // Public API rates (per 1M tokens) as of early 2026.
-  // Pattern matching is substring-on-modelId — new model versions pick
-  // up the right bracket automatically.
-  const priceBrackets: Array<{
-    match: (providerId: string, modelId: string) => boolean;
-    inputPerMToken: number;
-    outputPerMToken: number;
-  }> = [
-    // Anthropic Claude family
-    { match: (p, m) => p === "anthropic-sub" && m.includes("haiku"), inputPerMToken: 1, outputPerMToken: 5 },
-    { match: (p, m) => p === "anthropic-sub" && m.includes("sonnet"), inputPerMToken: 3, outputPerMToken: 15 },
-    { match: (p, m) => p === "anthropic-sub" && m.includes("opus"), inputPerMToken: 15, outputPerMToken: 75 },
-    // Anthropic direct API
-    { match: (p, m) => p === "anthropic" && m.includes("haiku"), inputPerMToken: 1, outputPerMToken: 5 },
-    { match: (p, m) => p === "anthropic" && m.includes("sonnet"), inputPerMToken: 3, outputPerMToken: 15 },
-    { match: (p, m) => p === "anthropic" && m.includes("opus"), inputPerMToken: 15, outputPerMToken: 75 },
-    // OpenAI subscription (codex CLI) + ChatGPT
-    { match: (p, m) => (p === "codex" || p === "chatgpt") && m.includes("codex"), inputPerMToken: 5, outputPerMToken: 20 },
-    { match: (p, m) => (p === "codex" || p === "chatgpt") && m.startsWith("gpt-5"), inputPerMToken: 10, outputPerMToken: 40 },
-    { match: (p, m) => (p === "codex" || p === "chatgpt") && m.startsWith("gpt-4"), inputPerMToken: 5, outputPerMToken: 15 },
-    // OpenAI direct
-    { match: (p, m) => p === "openai" && m.startsWith("gpt-5"), inputPerMToken: 10, outputPerMToken: 40 },
-    { match: (p, m) => p === "openai" && m.startsWith("gpt-4"), inputPerMToken: 5, outputPerMToken: 15 },
-    // Bundled local — always free
-    { match: (p) => p === "local" || p === "ollama", inputPerMToken: 0, outputPerMToken: 0 },
-  ];
-
+  // Public API rates (per 1M tokens) live in model-pricing-brackets.ts as a
+  // pure, unit-tested module (BI-6F42465E). Substring matching means new model
+  // versions pick up the right bracket automatically.
   const profiles = await prisma.modelProfile.findMany({
     select: { id: true, providerId: true, modelId: true, pricing: true },
   });
@@ -2123,8 +2100,8 @@ async function seedModelPricing(): Promise<void> {
       skipped++;
       continue;
     }
-    const bracket = priceBrackets.find((b) => b.match(mp.providerId, mp.modelId));
-    if (!bracket) {
+    const price = resolveSeedPrice(mp.providerId, mp.modelId);
+    if (!price) {
       skipped++;
       continue;
     }
@@ -2133,11 +2110,11 @@ async function seedModelPricing(): Promise<void> {
       data: {
         pricing: {
           ...currentPricing,
-          inputPerMToken: bracket.inputPerMToken,
-          outputPerMToken: bracket.outputPerMToken,
+          inputPerMToken: price.inputPerMToken,
+          outputPerMToken: price.outputPerMToken,
         } as never,
-        inputPricePerMToken: bracket.inputPerMToken,
-        outputPricePerMToken: bracket.outputPerMToken,
+        inputPricePerMToken: price.inputPerMToken,
+        outputPricePerMToken: price.outputPerMToken,
       },
     });
     updated++;
