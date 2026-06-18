@@ -48,7 +48,15 @@ if (-not $sha) {
 $env:DPF_VERSION = $sha
 Write-Host "[build-images] Stamping images with DPF_VERSION=$sha"
 
-# Real platform version from the repo's git release tags (e.g. "5.6.0").
+# Real platform version from the repo's git release tags (e.g. "5.6.0" or
+# "5.6.0-35-gbcaa30a8"). This is the authoritative version shown in the portal.
+# BI-145214F0 - refresh tags first so a stale local tag cache doesn't silently
+# bake the wrong release-line label into the image (the DPF_VERSION SHA stamp
+# is unaffected by this; only the human-readable describe). Best-effort: a
+# fetch failure (offline, auth) must not abort the build. Mirrors build-images.sh.
+# try/catch is the PS equivalent of the bash "|| true": under PS 7.4+ a failed
+# native command throws when ErrorActionPreference=Stop, so swallow it here.
+try { git fetch --tags --force origin 2>$null } catch { }
 $platformVersion = (git describe --tags --always 2>$null) -replace '^v',''
 if ($platformVersion) {
   $env:DPF_PLATFORM_VERSION = $platformVersion
