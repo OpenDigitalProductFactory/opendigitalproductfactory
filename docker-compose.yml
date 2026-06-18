@@ -59,7 +59,7 @@ services:
       start_period: 30s
 
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.18.2
     restart: unless-stopped
     volumes:
       - qdrant_data:/qdrant/storage
@@ -496,7 +496,7 @@ services:
       start_period: 30s
 
   dev-qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.18.2
     restart: unless-stopped
     profiles: ["dev"]
     volumes:
@@ -569,7 +569,7 @@ services:
   # Grafana (power-user tool) available at :3002.
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.12.0
     restart: unless-stopped
     ports:
       - "9090:9090"
@@ -590,7 +590,7 @@ services:
       retries: 3
 
   grafana:
-    image: grafana/grafana-oss:latest
+    image: grafana/grafana-oss:13.0.2
     restart: unless-stopped
     ports:
       - "3002:3000"
@@ -696,7 +696,7 @@ services:
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
 
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:latest
+    image: prometheuscommunity/postgres-exporter:v0.19.1
     restart: unless-stopped
     ports:
       - "9187:9187"
@@ -723,7 +723,7 @@ services:
   # exposes it on :9121/metrics in Prometheus format. Lets the platform Health
   # tab promote the "Redis" tile from "Not scraped" to a real UP/DOWN tile.
   redis-exporter:
-    image: oliver006/redis_exporter:latest
+    image: oliver006/redis_exporter:v1.86.0
     restart: unless-stopped
     command: ["--redis.addr=redis://redis:6379"]
     depends_on:
