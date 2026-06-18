@@ -200,6 +200,40 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node scripts/check-ux-fit-decision.mjs
 
+  spec-plan-doc-gate:
+    name: Spec/Plan/Doc Gate
+    runs-on: ubuntu-latest
+    # Only meaningful on PRs — it diffs against the PR base and reads the PR body.
+    if: github.event_name == 'pull_request'
+    # The process-spine enforcement edge. A PR that adds a substantial
+    # implementation surface (a new source module/route/migration, or a large
+    # in-place rewrite) must ALSO touch a durable-knowledge artifact (a spec,
+    # plan, doc, AGENTS.md, kernel principle, or SKILL.md) OR carry a
+    # `Process-Spine-Decision:` attestation. AGENTS.md §6/§10 + the
+    # dpf-writing-plans / dpf-architecture-review skills had the rule; nothing
+    # enforced it on the external surfaces, so capabilities landed from Claude
+    # Code / Codex with no spec, plan, or doc (the gap diagnosed in
+    # 2026-05-30-development-process-spine-design.md §5.2). Surface-agnostic:
+    # all surfaces land via PR, so all are caught — it reads the evidence, never
+    # which surface produced it (AGENTS.md §17).
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Test spec/plan/doc pre-edit hook
+        run: node --test scripts/hooks/spec-plan-doc-precheck.test.mjs
+      - name: Conformance — both precheck nudges stay wired in .claude/settings.json
+        run: node --test scripts/hooks/settings-hooks-wired.test.mjs
+      - name: Run spec/plan/doc gate
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/check-spec-plan-doc.mjs
+
   janitor-tests:
     name: Janitor Tests
     runs-on: ubuntu-latest
