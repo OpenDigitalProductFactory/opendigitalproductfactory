@@ -166,3 +166,4 @@ flowchart TD
 
 - [Build Studio](build-studio/index)
 - [Build Studio Sandbox](build-studio/sandbox)
+- [Agent CLI Development Environments](getting-started/agent-dev-environments) — Claude Code, Codex, and Grok as governed CLI coding agents, and managing multiple concurrent threads
