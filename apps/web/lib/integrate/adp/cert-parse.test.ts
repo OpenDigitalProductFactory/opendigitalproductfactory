@@ -7,18 +7,17 @@ const validPem = readFileSync(resolve(__dirname, "fixtures/valid-cert.pem"), "ut
 const malformedPem = readFileSync(resolve(__dirname, "fixtures/malformed-cert.pem"), "utf8");
 
 describe("parseCertExpiry", () => {
-  it("extracts a future expiry date from a valid PEM (cert is openssl -days 365)", () => {
+  it("extracts a far-future expiry date from a valid PEM (cert is openssl -days 36500)", () => {
     const result = parseCertExpiry(validPem);
     expect(result).toBeInstanceOf(Date);
-    const msUntilExpiry = result!.getTime() - Date.now();
-    // Cert was generated with `-days 365` at fixture-gen time. Loose bounds so
-    // the test doesn't go flaky as the fixture ages. Valid as long as the
-    // fixture hasn't aged more than ~15 days past generation.
-    const days = msUntilExpiry / (24 * 60 * 60 * 1000);
-    // Fixture is a 365-day cert; loosened lower bound slightly as fixture ages over time
-    // (was >350, now >340 to avoid flakiness while still validating "future" and "<366").
-    expect(days).toBeGreaterThan(340);
-    expect(days).toBeLessThan(366);
+    const days = (result!.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+    // The fixture is regenerated as a ~100-year (`-days 36500`) cert so this test
+    // does NOT decay over time — the previous 365-day fixture drifted below its
+    // lower bound as it aged and went flaky. We assert the expiry is far in the
+    // future (proving the real notAfter was parsed, not now/epoch) with a wide
+    // lower bound that tolerates decades of fixture aging before regeneration.
+    expect(days).toBeGreaterThan(25000); // ~31 years of slack before this could fail
+    expect(days).toBeLessThan(37000);
   });
 
   it("returns null for a malformed PEM (fail-closed)", () => {
