@@ -10,15 +10,16 @@ describe("parseCertExpiry", () => {
   it("extracts a future expiry date from a valid PEM (cert is openssl -days 365)", () => {
     const result = parseCertExpiry(validPem);
     expect(result).toBeInstanceOf(Date);
-    const msUntilExpiry = result!.getTime() - Date.now();
-    // Cert was generated with `-days 365` at fixture-gen time. Loose bounds so
-    // the test doesn't go flaky as the fixture ages. Valid as long as the
-    // fixture hasn't aged more than ~15 days past generation.
-    const days = msUntilExpiry / (24 * 60 * 60 * 1000);
-    // Fixture is a 365-day cert; loosened lower bound slightly as fixture ages over time
-    // (was >350, now >340 to avoid flakiness while still validating "future" and "<366").
-    expect(days).toBeGreaterThan(340);
-    expect(days).toBeLessThan(366);
+    // Assert against the fixture's actual notAfter, not a days-from-now window.
+    // The cert's expiry is fixed (`openssl x509 -enddate` on
+    // fixtures/valid-cert.pem -> "May 24 15:24:15 2027 GMT"), but a relative
+    // day-count bound shrinks every day and aged into flakiness — it was
+    // loosened >350 -> >340 once and then failed again at 339.78. Comparing to
+    // the fixed date is deterministic and still proves we parsed the real
+    // expiry. If the fixture is regenerated, update this expected value.
+    expect(result!.toISOString()).toBe("2027-05-24T15:24:15.000Z");
+    // Sanity: the parsed expiry is genuinely in the future.
+    expect(result!.getTime()).toBeGreaterThan(Date.now());
   });
 
   it("returns null for a malformed PEM (fail-closed)", () => {
