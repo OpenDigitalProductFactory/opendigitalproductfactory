@@ -82,6 +82,28 @@ describe("assembleSystemPrompt", () => {
     expect(prompt).not.toContain("Mode: ACT");
   });
 
+  // Test 2b: Decision-routing governance block is present, positioned between
+  // identity and mode (static, cacheable), and carries the WWMD/WWWD/WSID
+  // routing contract. Regression guard for the coworker decision-routing gap.
+  it("injects the decision-routing governance block between identity and mode", async () => {
+    const prompt = await assembleSystemPrompt(fullInput);
+
+    expect(prompt).toContain("DECISION ROUTING — CONSULT GOVERNANCE BEFORE YOU PROPOSE OR ASK.");
+    // The three surfaces must all be named so the coworker can route.
+    expect(prompt).toContain("principle_decide"); // WWMD / founder kernel
+    expect(prompt).toContain("what would WE do"); // WWWD / org stance
+    expect(prompt).toContain("competent-professional answer for your discipline"); // WSID / craft
+    // Non-inherit boundary: platform doctrine is advisory to a business call.
+    expect(prompt).toContain("platform doctrine is advisory to a business decision, not binding");
+
+    const identityIdx = indexOf(prompt, "digital product management");
+    const routingIdx = indexOf(prompt, "DECISION ROUTING —");
+    const modeIdx = indexOf(prompt, "Mode: ACT");
+    expect(identityIdx).toBeGreaterThanOrEqual(0);
+    expect(identityIdx).toBeLessThan(routingIdx);
+    expect(routingIdx).toBeLessThan(modeIdx);
+  });
+
   // Test 3: Act mode text is injected correctly
   it("injects act mode text when mode is 'act'", async () => {
     const prompt = await assembleSystemPrompt(fullInput);
