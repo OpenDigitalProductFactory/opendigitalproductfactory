@@ -2,8 +2,6 @@
 title: "Provider Integration — Developer Notes"
 area: ai-workforce
 order: 10
-lastUpdated: "2026-03-22"
-updatedBy: "Claude (COO)"
 ---
 
 ## Overview

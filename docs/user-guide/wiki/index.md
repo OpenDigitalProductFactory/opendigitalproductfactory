@@ -2,8 +2,6 @@
 title: "Platform Wiki"
 area: wiki
 order: 1
-lastUpdated: 2026-05-26
-updatedBy: Codex
 ---
 
 ## Use This Doc For

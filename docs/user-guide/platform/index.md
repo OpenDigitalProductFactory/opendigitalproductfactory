@@ -2,8 +2,6 @@
 title: "Platform"
 area: platform
 order: 1
-lastUpdated: 2026-05-14
-updatedBy: Codex
 ---
 
 ## Overview

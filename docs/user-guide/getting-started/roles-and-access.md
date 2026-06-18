@@ -2,8 +2,6 @@
 title: "Roles & Access"
 area: getting-started
 order: 2
-lastUpdated: 2026-03-26
-updatedBy: Claude (COO)
 ---
 
 ## Two-Tier Role Architecture

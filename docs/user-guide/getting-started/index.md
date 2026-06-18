@@ -2,8 +2,6 @@
 title: "Getting Started"
 area: getting-started
 order: 1
-lastUpdated: 2026-05-24
-updatedBy: Codex
 ---
 
 ## Welcome to the Digital Product Factory

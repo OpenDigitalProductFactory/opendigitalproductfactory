@@ -2,8 +2,6 @@
 title: "AI Spend"
 area: finance
 order: 2
-lastUpdated: 2026-04-24
-updatedBy: Codex
 ---
 
 ## Overview
