@@ -25,7 +25,7 @@ export type { FallbackResult } from "./fallback";
 export { runDimensionEval, runAllDimensionEvals, computeNewScore, detectDrift } from "./eval-runner";
 export type { EvalRunResult } from "./eval-runner";
 export { scoreDimension } from "./eval-scoring";
-export { GOLDEN_TESTS, getTestsForDimension } from "./golden-tests";
+export { GOLDEN_TESTS, getTestsForDimension, getTestsForTaskType, GOLDEN_TEST_TASK_TYPES } from "./golden-tests";
 export { updateEndpointDimensionScores } from "./production-feedback";
 export { getBaselineForModel } from "./family-baselines";
 export type { FamilyBaseline } from "./family-baselines";
