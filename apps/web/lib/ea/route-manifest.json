@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 499,
+  "routeCount": 500,
   "routes": [
     {
       "routePath": "/",
@@ -1793,6 +1793,18 @@
         "id"
       ],
       "file": "apps/web/app/api/v1/customer/engagements/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/invoices",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "invoices"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/customer/invoices/route.ts"
     },
     {
       "routePath": "/api/v1/customer/opportunities",
