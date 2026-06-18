@@ -2,8 +2,6 @@
 title: "Operations"
 area: operations
 order: 1
-lastUpdated: 2026-05-24
-updatedBy: Codex
 ---
 
 ## Overview

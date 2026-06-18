@@ -2,8 +2,6 @@
 title: "Build Runtime (Sandbox)"
 area: build-studio
 order: 3
-lastUpdated: 2026-05-24
-updatedBy: Codex
 ---
 
 ## Overview

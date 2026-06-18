@@ -2,8 +2,6 @@
 title: "Connecting AI Providers"
 area: "ai-workforce"
 order: 2
-lastUpdated: "2026-06-11"
-updatedBy: "Claude"
 ---
 
 ## Overview

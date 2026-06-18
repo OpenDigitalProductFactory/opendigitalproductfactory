@@ -2,8 +2,6 @@
 title: "Decision Perspective & Persona Voice"
 area: ai-workforce
 order: 5
-lastUpdated: 2026-06-11
-updatedBy: Claude
 ---
 
 ## What This Covers
