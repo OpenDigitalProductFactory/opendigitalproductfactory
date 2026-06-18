@@ -84,7 +84,12 @@ export interface QualityIssueTriageEvent {
 
 export interface AiEvalRunEvent {
   name: "ai/eval.run";
-  data: { endpointId: string; modelId: string; userId: string };
+  /** force: bypass the recency-cooldown guard in runDimensionEval. Set by the
+   *  operator-initiated "Run Eval" UI action so a manual re-eval always runs;
+   *  left unset on automated enqueue paths (first-boot, page-load
+   *  checkBundledProviders, model-discovery refresh) so a freshly-calibrated
+   *  model isn't re-evaluated on every Inngest retry. BI-C8164664. */
+  data: { endpointId: string; modelId: string; userId: string; force?: boolean };
 }
 
 export interface AiProbeRunEvent {

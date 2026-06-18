@@ -167,12 +167,14 @@ export async function triggerDimensionEval(endpointId: string, modelId?: string)
     throw new Error("Running dimension eval requires manage_capabilities permission");
   }
 
+  // Operator-initiated runs always execute — bypass the recency-cooldown guard
+  // (BI-C8164664) so "Run Eval" is never silently a no-op.
   if (modelId) {
     // Fire-and-forget via Inngest — returns immediately to the UI
     const { inngest } = await import("@/lib/queue/inngest-client");
     await inngest.send({
       name: "ai/eval.run",
-      data: { endpointId, modelId, userId },
+      data: { endpointId, modelId, userId, force: true },
     });
 
     return { queued: true, message: "Eval running in background..." };
@@ -187,7 +189,7 @@ export async function triggerDimensionEval(endpointId: string, modelId?: string)
     for (const p of profiles) {
       await inngest.send({
         name: "ai/eval.run",
-        data: { endpointId, modelId: p.modelId, userId },
+        data: { endpointId, modelId: p.modelId, userId, force: true },
       });
     }
     return { queued: true, message: `${profiles.length} eval(s) running in background...` };

@@ -24,11 +24,11 @@ export const evalBackground = inngest.createFunction(
     const gate = await gateAtEntry(step);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    const { endpointId, modelId, userId } = event.data;
+    const { endpointId, modelId, userId, force } = event.data;
 
     const result = await step.run("run-dimension-eval", async () => {
       const { runDimensionEval } = await import("@/lib/routing/eval-runner");
-      return runDimensionEval(endpointId, modelId, userId);
+      return runDimensionEval(endpointId, modelId, userId, { force: force === true });
     });
 
     // BI-C8164664: don't stamp ScheduledJob as completed when the eval was

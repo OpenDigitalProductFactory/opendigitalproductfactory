@@ -10,6 +10,8 @@ const evalState = vi.hoisted(() => ({
   inflightRun: null as { runId: string; startedAt: Date } | null,
   createCount: 0,
   reapedCount: 0,
+  // BI-C8164664: recency-cooldown fixture
+  lastEvalAt: null as Date | null,
 }));
 
 vi.mock("@/lib/ai-inference", () => {
@@ -32,7 +34,11 @@ vi.mock("@/lib/ai-inference", () => {
 vi.mock("@dpf/db", () => ({
   prisma: {
     modelProfile: {
-      findUnique: vi.fn(async () => ({ evalCount: 0, modelStatus: "active" })),
+      findUnique: vi.fn(async () => ({
+        evalCount: 0,
+        modelStatus: "active",
+        lastEvalAt: evalState.lastEvalAt,
+      })),
       update: vi.fn(async (args: { data: Record<string, unknown> }) => {
         evalState.profileUpdates.push(args.data);
         return {};
@@ -229,6 +235,7 @@ describe("runDimensionEval — whole-endpoint short-circuit", () => {
     evalState.inflightRun = null;
     evalState.createCount = 0;
     evalState.reapedCount = 0;
+    evalState.lastEvalAt = null;
   });
 
   it("stops after the first timed-out probe instead of grinding every test", async () => {
@@ -281,6 +288,7 @@ describe("runDimensionEval — in-flight + recency guard (BI-C8164664)", () => {
     evalState.inflightRun = null;
     evalState.createCount = 0;
     evalState.reapedCount = 0;
+    evalState.lastEvalAt = null;
   });
 
   it("skips when a recent in-flight run exists, without hitting the provider or creating a new row", async () => {
@@ -323,5 +331,65 @@ describe("runDimensionEval — in-flight + recency guard (BI-C8164664)", () => {
 
     expect(evalState.reapedCount).toBe(1); // reaper called with the lte cutoff
     expect(evalState.createCount).toBe(1); // a fresh EndpointTestRun was created
+  });
+});
+
+// BI-C8164664 — recency cooldown
+//
+// The in-flight guard above only spans 10 min. Inngest's lease-failure retries
+// land further apart and would re-run the full golden corpus against an
+// already-calibrated model every cooldown-cycle. The recency cooldown makes
+// those automated retries no-ops at the GPU level while leaving operator-forced
+// runs (force:true) and never-evaluated models unaffected.
+describe("runDimensionEval — recency cooldown (BI-C8164664)", () => {
+  beforeEach(() => {
+    evalState.profileUpdates.length = 0;
+    evalState.callCount = 0;
+    evalState.errorMessage = "The operation was aborted due to timeout";
+    evalState.inflightRun = null;
+    evalState.createCount = 0;
+    evalState.reapedCount = 0;
+    evalState.lastEvalAt = null;
+  });
+
+  it("skips an automated eval when the model was evaluated within the cooldown window", async () => {
+    evalState.lastEvalAt = new Date(Date.now() - 60_000); // 1 min ago
+
+    const result = await runDimensionEval("local", "docker.io/ai/qwen3.6:latest", "system");
+
+    expect(result.skipped).toBe(true);
+    expect(result.firstError).toMatch(/cooldown/i);
+    expect(evalState.callCount).toBe(0);  // model untouched
+    expect(evalState.createCount).toBe(0); // no EndpointTestRun row created
+  });
+
+  it("runs an operator-forced eval even inside the cooldown window", async () => {
+    evalState.lastEvalAt = new Date(Date.now() - 60_000);
+
+    const result = await runDimensionEval(
+      "local",
+      "docker.io/ai/qwen3.6:latest",
+      "operator",
+      { force: true },
+    );
+
+    expect(result.skipped).toBeUndefined(); // not cooldown-skipped
+    expect(evalState.createCount).toBe(1);  // a real run was created
+  });
+
+  it("runs a never-evaluated model (no lastEvalAt) regardless of cooldown", async () => {
+    evalState.lastEvalAt = null;
+
+    await runDimensionEval("local", "docker.io/ai/qwen3.6:latest", "system");
+
+    expect(evalState.createCount).toBe(1);
+  });
+
+  it("runs once the cooldown window has elapsed", async () => {
+    evalState.lastEvalAt = new Date(Date.now() - 7 * 60 * 60 * 1000); // 7h ago (> 6h default)
+
+    await runDimensionEval("local", "docker.io/ai/qwen3.6:latest", "system");
+
+    expect(evalState.createCount).toBe(1);
   });
 });
