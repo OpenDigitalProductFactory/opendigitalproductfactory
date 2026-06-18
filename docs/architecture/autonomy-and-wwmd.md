@@ -169,6 +169,40 @@ Code references:
 - [`persistDecisionInteraction`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision-perspective/persistence.ts)
 - [`DecisionInteraction`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/packages/db/prisma/schema.prisma)
 
+## A worked example
+
+The flow above is abstract until you watch a question move through it. Here is a representative WWMD
+run — the numbers illustrate the real `decide()` math (`composite = Σ principle.weight × alignment`),
+they are not a captured transcript.
+
+A `build-specialist` coworker has built an "overdue jobs" widget for an HVAC dispatcher board and hits
+an open product question before shipping: *should this be generalized into the reusable workspace-home
+primitive library for the Hive Mind, or kept local to this install?* (`domainClass:
+architecture-tradeoff`, `riskTier: medium`).
+
+It frames two options and scores each against the principles in scope. Each cell is a contribution
+(`weight × alignment`); the composite is the column sum.
+
+| Principle (tier, weight) | Option A — keep local | Option B — parameterize for the hive |
+|--------------------------|----------------------:|-------------------------------------:|
+| Learnings belong in the shared commons (commandment, 1.0) | +0.10 | **+0.85** |
+| Architecture over shortcuts (core, 0.4) | +0.12 | **+0.32** |
+| Speed to value (contextual, 0.1) | **+0.09** | +0.05 |
+| **Composite** | **0.31** | **1.22** |
+
+Option B wins with `margin = 0.91`, far above the default `tieMargin` of `0.2`, so `confidence` is
+high; `structuredCoverage` is strong and `commandmentConflict` is false. The contextual "ship faster"
+pull toward Option A is genuine, but at weight `0.1` it cannot overcome a commandment-tier reusability
+pull at weight `1.0` — which is exactly what tier weighting is for. The gate returns `recommend`
+Option B with the full contribution ledger; execution and approval still belong to the caller.
+
+The same engine, pointed at a customer's WWWD corpus or a profession's WSID corpus, produces the
+right *kind* of answer for the kind of doubt it faces — an honest `escalate` when an organization
+hasn't authored a policy yet, or a source-cited `recommend` (with a `commandmentConflict` flag on the
+tempting-wrong option) when a profession corpus has crisp doctrine. The user-guide walkthrough runs all
+three scopes end-to-end with their ledger rows: [Decision Perspective in
+Practice](/user-guide/ai-workforce/decision-perspective-in-practice).
+
 ## The learning loop
 
 The most important output is not only the recommendation. It is the gap signal.
