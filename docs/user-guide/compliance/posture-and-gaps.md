@@ -2,8 +2,6 @@
 title: "Posture And Gaps"
 area: compliance
 order: 4
-lastUpdated: 2026-04-25
-updatedBy: Codex
 ---
 
 ## Use This Doc For

@@ -2,8 +2,6 @@
 title: "Development Workspace"
 area: getting-started
 order: 6
-lastUpdated: 2026-05-26
-updatedBy: Codex
 ---
 
 ## Overview

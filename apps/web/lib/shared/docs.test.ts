@@ -2,13 +2,11 @@ import { describe, it, expect } from "vitest";
 import { parseDocFrontmatter, buildDocsIndex, extractHeadings } from "./docs";
 
 describe("parseDocFrontmatter", () => {
-  it("extracts title, area, order, and lastUpdated from frontmatter", () => {
+  it("extracts title, area, and order from frontmatter", () => {
     const raw = `---
 title: "Getting Started"
 area: getting-started
 order: 1
-lastUpdated: 2026-03-21
-updatedBy: Claude (COO)
 ---
 
 ## Welcome
@@ -19,8 +17,6 @@ This is the getting started guide.`;
     expect(result.title).toBe("Getting Started");
     expect(result.area).toBe("getting-started");
     expect(result.order).toBe(1);
-    expect(result.lastUpdated).toBe("2026-03-21");
-    expect(result.updatedBy).toBe("Claude (COO)");
     expect(result.content).toContain("## Welcome");
     expect(result.content).not.toContain("---");
   });
@@ -30,8 +26,6 @@ This is the getting started guide.`;
 title: "Test"
 area: test
 order: 1
-lastUpdated: 2026-03-21
-updatedBy: System
 ---
 
 Content here.`;
@@ -57,9 +51,9 @@ describe("extractHeadings", () => {
 describe("buildDocsIndex", () => {
   it("groups docs by area and sorts by order", () => {
     const docs = [
-      { slug: "getting-started/roles", title: "Roles", area: "getting-started", order: 2, lastUpdated: "2026-03-21", updatedBy: "System", content: "", relatedSpecs: [], roles: [] },
-      { slug: "getting-started/index", title: "Overview", area: "getting-started", order: 1, lastUpdated: "2026-03-21", updatedBy: "System", content: "", relatedSpecs: [], roles: [] },
-      { slug: "compliance/index", title: "Compliance", area: "compliance", order: 1, lastUpdated: "2026-03-21", updatedBy: "System", content: "", relatedSpecs: [], roles: [] },
+      { slug: "getting-started/roles", title: "Roles", area: "getting-started", order: 2, content: "", relatedSpecs: [], roles: [] },
+      { slug: "getting-started/index", title: "Overview", area: "getting-started", order: 1, content: "", relatedSpecs: [], roles: [] },
+      { slug: "compliance/index", title: "Compliance", area: "compliance", order: 1, content: "", relatedSpecs: [], roles: [] },
     ];
     const index = buildDocsIndex(docs);
     expect(Object.keys(index)).toContain("getting-started");

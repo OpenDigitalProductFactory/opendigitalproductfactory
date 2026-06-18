@@ -2,8 +2,6 @@
 title: "Business Model Roles"
 area: products
 order: 2
-lastUpdated: 2026-03-26
-updatedBy: Claude (COO)
 ---
 
 ## What are Business Model Roles?

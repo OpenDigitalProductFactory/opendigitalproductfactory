@@ -2,8 +2,6 @@
 title: "AI Operations"
 area: platform
 order: 2
-lastUpdated: 2026-05-14
-updatedBy: Codex
 ---
 
 ## Use This Doc For
