@@ -133,4 +133,5 @@ Branch prefixes by intent: `feat/*`, `fix/*`, `chore/*`, `doc/*`, `clean/*`. One
 ### Related
 
 - [Dev Container Setup](dev-container) — fully containerized alternative, no local Node.js required
+- [Agent Development Environments](agent-dev-environments) — set up Claude, Codex, and Grok (desktop apps or CLI): MCP, skill pack, AGENTS.md, local settings, and managing multiple concurrent threads
 - [Development Workspace](../development-workspace) — how Build Studio, VS Code, and production promotion fit together

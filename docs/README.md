@@ -18,6 +18,7 @@ Entry points for people using the platform day-to-day:
 - [Getting Started](user-guide/getting-started/index.md) — what the platform does, how navigation works, and where your AI coworker lives.
 - [Developer Setup](user-guide/getting-started/developer-setup.md) — running the codebase locally with pnpm + Docker sidecars.
 - [Dev Container Setup](user-guide/getting-started/dev-container.md) — fully containerized alternative that needs only Docker Desktop and VS Code.
+- [Agent Development Environments](user-guide/getting-started/agent-dev-environments.md) — set up Claude, Codex, and Grok (desktop apps or CLI) as governed coding agents: MCP, the skill pack, AGENTS.md, local client settings, and running multiple concurrent threads without breaking the portal's processes.
 - [Development Workspace](user-guide/development-workspace.md) — how Build Studio, VS Code, policy states, and validation environments fit together.
 - [AI Coworker](user-guide/getting-started/ai-coworker.md) — working with the context-aware AI assistant on every screen.
 - [Roles & Access](user-guide/getting-started/roles-and-access.md) — platform roles and what each one can do.
