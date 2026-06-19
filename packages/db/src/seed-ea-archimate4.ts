@@ -404,6 +404,29 @@ const TRAVERSAL_PATTERNS: PatternDef[] = [
     ],
   },
   {
+    // Cross-LAYER impact: from a data-model element (a Prisma model the EP-DATA-ARCH
+    // mirror projects, infraCiKey prisma:model:<Model>), follow the Parity Engine
+    // cross-layer `traces` edges INBOUND to the ACTUAL operational/network/integration
+    // elements that realize it. This is the traversal that makes a data-model change's
+    // blast radius span layers — the impact set surfaced by run_traversal_pattern.
+    // Registered under archimate4 (the run_traversal_pattern default notation); the
+    // executor matches relationship/element slugs globally, so it traverses the sysml2
+    // `traces` edges + part_usage/part_definition elements regardless of notation.
+    slug: "cross_layer_impact",
+    name: "Cross-Layer Data-Model Impact",
+    description: "From a data-model element, trace the actual operational, network, and integration elements that realize it via the Parity Engine cross-layer traces edges — the cross-layer blast radius of a data-model change.",
+    patternType: "cross_layer_impact",
+    steps: [
+      { elementTypeSlugs: ["part_usage", "part_definition"], refinementLevel: null, relationshipTypeSlugs: ["traces"], direction: "inbound" },
+      { elementTypeSlugs: ["part_usage", "part_definition"], refinementLevel: null, relationshipTypeSlugs: [],         direction: "terminal" },
+    ],
+    forbiddenShortcuts: [
+      "A data-model element's cross-layer impact is the ACTUAL elements that trace to it, not other data-model elements",
+      "A traces edge records that an actual element is an occurrence of the model type — it is not a runtime dependency",
+      "These cross-layer edges are derived by the Parity Engine bridges, not hand-authored — verify against the live projection",
+    ],
+  },
+  {
     slug: "governance_audit",
     name: "Information Governance and Audit Evidence",
     description: "Trace an information object through its governing controls to evidence and responsible actors.",
