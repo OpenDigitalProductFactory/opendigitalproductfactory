@@ -214,13 +214,13 @@ export function parseSandboxChangedFiles(output: string): string[] {
     .filter(Boolean);
 }
 
-async function resetSandboxGitIndex(containerId: string): Promise<void> {
-  await execInSandbox(containerId, `cd ${SANDBOX_WORKSPACE} && git reset >/dev/null 2>&1 || true`);
+async function resetSandboxGitIndex(containerId: string, workspace: string = SANDBOX_WORKSPACE): Promise<void> {
+  await execInSandbox(containerId, `cd ${workspace} && git reset >/dev/null 2>&1 || true`);
 }
 
-async function stageSandboxWorkspaceChanges(containerId: string): Promise<void> {
-  await resetSandboxGitIndex(containerId);
-  await execInSandbox(containerId, buildSandboxStageCommand());
+async function stageSandboxWorkspaceChanges(containerId: string, workspace: string = SANDBOX_WORKSPACE): Promise<void> {
+  await resetSandboxGitIndex(containerId, workspace);
+  await execInSandbox(containerId, buildSandboxStageCommand(workspace));
 }
 
 export async function listReleasableSandboxFiles(
@@ -460,22 +460,26 @@ export async function getSandboxLogs(containerId: string, tail: number = 50): Pr
 
 export async function extractDiff(
   containerId: string,
-  opts?: { baseRef?: string },
+  opts?: { baseRef?: string; workspace?: string },
 ): Promise<string> {
-  await stageSandboxWorkspaceChanges(containerId);
+  // Per-build working dir: the build's worktree when isolation is on, else
+  // /workspace (default — byte-identical). The diff is `--cached`, i.e. the
+  // per-worktree index, so it must run in the build's own tree. BI-98B723C0 2c.
+  const workspace = opts?.workspace ?? SANDBOX_WORKSPACE;
+  await stageSandboxWorkspaceChanges(containerId, workspace);
   try {
     const changedFiles = await execInSandbox(
       containerId,
-      buildSandboxListReleasableFilesCommand(SANDBOX_WORKSPACE, opts?.baseRef),
+      buildSandboxListReleasableFilesCommand(workspace, opts?.baseRef),
     );
     const files = parseSandboxChangedFiles(changedFiles);
     if (files.length === 0) return "";
     return execInSandbox(
       containerId,
-      buildSandboxDiffForFilesCommand(files, SANDBOX_WORKSPACE, opts?.baseRef),
+      buildSandboxDiffForFilesCommand(files, workspace, opts?.baseRef),
     );
   } finally {
-    await resetSandboxGitIndex(containerId);
+    await resetSandboxGitIndex(containerId, workspace);
   }
 }
 

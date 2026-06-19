@@ -31,7 +31,15 @@ export type SandboxGateResult = {
   ranAt: string;
 };
 
-export const SANDBOX_TYPECHECK_COMMAND = "cd /workspace && pnpm --filter web typecheck 2>&1";
+// Default working dir when a build is not running in its own worktree.
+const VERIFY_WORKSPACE_DEFAULT = "/workspace";
+
+// Typecheck/build gate commands for a build's working directory: the build's own
+// worktree when isolation is on, else /workspace (default — byte-identical to the
+// prior string constants). BI-98B723C0 Phase 2c.
+export function sandboxTypecheckCommand(workdir: string = VERIFY_WORKSPACE_DEFAULT): string {
+  return `cd ${workdir} && pnpm --filter web typecheck 2>&1`;
+}
 // The sandbox container ships with NODE_ENV=development so the in-container Next
 // dev server behaves like local dev. Production builds must NOT inherit that:
 // Next.js emits a "non-standard NODE_ENV" warning and then crashes prerendering
@@ -39,8 +47,12 @@ export const SANDBOX_TYPECHECK_COMMAND = "cd /workspace && pnpm --filter web typ
 // when client-component code is run through the dev-mode React runtime during
 // the prerender pass. Force NODE_ENV=production for the build gate only — the
 // dev-server launch in sandbox.ts is unaffected.
-export const SANDBOX_BUILD_COMMAND =
-  "cd /workspace && NODE_ENV=production pnpm --filter web build 2>&1";
+export function sandboxBuildCommand(workdir: string = VERIFY_WORKSPACE_DEFAULT): string {
+  return `cd ${workdir} && NODE_ENV=production pnpm --filter web build 2>&1`;
+}
+// Back-compat string constants (default /workspace) for non-per-build callers.
+export const SANDBOX_TYPECHECK_COMMAND = sandboxTypecheckCommand();
+export const SANDBOX_BUILD_COMMAND = sandboxBuildCommand();
 
 const OUTPUT_TAIL_LIMIT = 15_000;
 
@@ -103,14 +115,17 @@ async function runCheck(
 export async function runSandboxTypecheckBuildGate(
   containerId: string,
   exec: ExecImpl = execInSandbox,
+  workdir: string = VERIFY_WORKSPACE_DEFAULT,
 ): Promise<SandboxGateResult> {
   const ranAt = new Date().toISOString();
-  const typecheck = await runCheck(containerId, "typecheck", SANDBOX_TYPECHECK_COMMAND, exec);
+  const typecheckCommand = sandboxTypecheckCommand(workdir);
+  const buildCommand = sandboxBuildCommand(workdir);
+  const typecheck = await runCheck(containerId, "typecheck", typecheckCommand, exec);
   const build: SandboxCheckResult = typecheck.passed
-    ? await runCheck(containerId, "build", SANDBOX_BUILD_COMMAND, exec)
+    ? await runCheck(containerId, "build", buildCommand, exec)
     : {
         name: "build",
-        command: SANDBOX_BUILD_COMMAND,
+        command: buildCommand,
         passed: false,
         exitCode: null,
         stdoutTail: "Build skipped — typecheck failed. Fix typecheck errors first.",
