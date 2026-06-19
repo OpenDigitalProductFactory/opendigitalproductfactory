@@ -95,6 +95,16 @@ export function isEmbeddingModelId(modelId: string): boolean {
  * Docker-internal hostnames (e.g. model-runner.docker.internal) already resolve
  * from sibling containers and are left as-is. Override with
  * OPENCODE_SANDBOX_BASE_URL when the topology differs.
+ *
+ * @example
+ * // Portal loopback rewritten for a sibling sandbox container:
+ * sandboxReachableUrl("http://localhost:11434/v1");
+ * // → "http://host.docker.internal:11434/v1"
+ *
+ * @example
+ * // Docker-internal hostnames already resolve and pass through unchanged:
+ * sandboxReachableUrl("http://model-runner.docker.internal/v1");
+ * // → "http://model-runner.docker.internal/v1"
  */
 export function sandboxReachableUrl(portalUrl: string): string {
   if (process.env.OPENCODE_SANDBOX_BASE_URL) return process.env.OPENCODE_SANDBOX_BASE_URL;
