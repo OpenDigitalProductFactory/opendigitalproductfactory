@@ -28,6 +28,7 @@ import { getServedContextTokens } from "@/lib/inference/dmr-runtime-config";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 import { sanitizeForLog } from "@/lib/security/safe-log";
+import { resolveBuildWorkdir } from "./sandbox/build-branch";
 
 const DEFAULT_SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -361,6 +362,11 @@ export async function dispatchOpencodeTask(params: {
   const providerId = params.providerId ?? "local";
   const role = task.specialist;
   const containerId = params.containerId ?? DEFAULT_SANDBOX_CONTAINER;
+  // Per-build working dir: the build's own worktree when isolation is ON, else
+  // the shared /workspace (default — identical to prior behaviour). Container
+  // ops (chown, docker exec target) stay container-rooted; only this build's
+  // file ops run here. (BI-98B723C0 Phase 2c.)
+  const workdir = resolveBuildWorkdir(params.buildId);
   const startedAt = new Date();
   const startMs = Date.now();
 
@@ -401,7 +407,7 @@ export async function dispatchOpencodeTask(params: {
   const taskPrompt = [
     instructions,
     "",
-    "CRITICAL: This is a pnpm monorepo. The Next.js app is at apps/web/. All file paths MUST use the full monorepo-relative path (e.g. apps/web/lib/... not lib/...). The FILES section below has the authoritative paths — use those exactly. Working directory is /workspace (the monorepo root).",
+    `CRITICAL: This is a pnpm monorepo. The Next.js app is at apps/web/. All file paths MUST use the full monorepo-relative path (e.g. apps/web/lib/... not lib/...). The FILES section below has the authoritative paths — use those exactly. Working directory is ${workdir} (the monorepo root).`,
     "",
     `TASK: ${task.title}`,
     "",
@@ -440,12 +446,12 @@ export async function dispatchOpencodeTask(params: {
       "set -e",
       `cleanup() { rm -f ${promptFile} ${runnerScript} 2>/dev/null || true; }`,
       "trap cleanup EXIT INT TERM",
-      "cd /workspace",
+      `cd ${workdir}`,
       "export OPENCODE_LOCAL_KEY=local", // dummy key; local servers ignore auth
       // POSIX: the result of $(...) expansion assigned to PROMPT is NOT re-expanded
       // when referenced as "$PROMPT", so code containing $ or backticks is safe.
       `PROMPT=$(cat ${promptFile})`,
-      `opencode run --dir /workspace -m local/${model} --format json --dangerously-skip-permissions "$PROMPT"`,
+      `opencode run --dir ${workdir} -m local/${model} --format json --dangerously-skip-permissions "$PROMPT"`,
       "cleanup",
     ].join("\n");
     const scriptB64 = Buffer.from(script).toString("base64");
