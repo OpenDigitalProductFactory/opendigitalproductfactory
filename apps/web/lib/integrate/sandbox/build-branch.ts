@@ -243,6 +243,17 @@ export function buildSandboxGitCommitPrunedArtifactsCommand(
 
 function sandboxGitPrelude(): string {
   return [
+    // The sandbox /workspace is the dedicated BUILD tree — NOT the host
+    // merge/release clone that the root-clone pre-commit guard (.githooks,
+    // check-root-clone.sh) protects. That guard ships in the repo (so it also
+    // runs inside the sandbox image) and refuses a commit whenever the working
+    // tree sits on a feat/*|fix/*|chore/*|doc/*|clean/* branch. If the sandbox is
+    // ever left on such a branch (e.g. a dev branch got checked out), it silently
+    // fails start_build's baseline commit for EVERY subsequent build. Set the
+    // guard's sanctioned override here so legitimate in-sandbox build commits
+    // never trip the host-oriented guard. (BI-98B723C0 follow-up — observed
+    // blocking a re-dispatch when the sandbox sat on feat/bs-local-gpu-serialize.)
+    `export DPF_ALLOW_ROOT_CLONE_COMMIT=1`,
     `if [ -f "${GIT_INDEX_LOCK}" ]; then for _dpf_git_wait in 1 2 3 4 5; do if ! pgrep -x git >/dev/null 2>&1; then break; fi; sleep 1; done; if [ -f "${GIT_INDEX_LOCK}" ] && ! pgrep -x git >/dev/null 2>&1; then rm -f "${GIT_INDEX_LOCK}"; fi; fi`,
     `git config --global --add safe.directory "${WORKSPACE}" >/dev/null 2>&1 || true`,
   ].join(" && ");

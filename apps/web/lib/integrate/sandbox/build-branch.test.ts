@@ -68,6 +68,16 @@ describe("wrapSandboxGitCommand", () => {
     );
   });
 
+  it("exempts in-sandbox commits from the host-oriented root-clone pre-commit guard", () => {
+    // The sandbox /workspace is the build tree, not the host merge/release clone
+    // the root-clone guard protects. Without this override a baseline/build
+    // commit silently fails start_build whenever the sandbox sits on a
+    // feat/*|fix/*|… branch (BI-98B723C0 — observed live blocking a re-dispatch).
+    expect(wrapSandboxGitCommand('git -C /workspace commit -m "sandbox baseline"')).toContain(
+      "export DPF_ALLOW_ROOT_CLONE_COMMIT=1",
+    );
+  });
+
   it("stops preview processes and removes app-local next artifacts before switching branches", () => {
     const command = buildSandboxBranchSwitchPrepCommand();
 
