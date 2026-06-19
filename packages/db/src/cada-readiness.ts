@@ -16,6 +16,12 @@ import {
   type CadaAssuranceLevel,
   CADA_LEVEL_LABELS,
 } from "./sovereignty-assessment";
+import {
+  regulationApplies,
+  CADA_APPLICABILITY,
+  type RegionProfile,
+  type ApplicabilityResult,
+} from "./regulation-applicability";
 
 /**
  * Facts the platform cannot reliably infer about its own deployment and that the
@@ -59,6 +65,9 @@ export function buildInstallSovereigntyInput(
 }
 
 export interface InstallCadaReadiness {
+  /** Whether CADA applies to this org at all, given its region footprint + archetype. */
+  applicable: boolean;
+  applicability: ApplicabilityResult;
   localOnlyInference: boolean;
   input: SovereigntyInput;
   assessment: SovereigntyAssessment;
@@ -67,22 +76,37 @@ export interface InstallCadaReadiness {
   summary: string;
 }
 
-/** Compute the install's current CADA posture and (optionally) compare to a target. */
+/**
+ * Compute the install's CADA posture — but first gate on region/archetype
+ * APPLICABILITY: CADA is region-specific, so an org with no EU operating/selling
+ * nexus is out of scope and is not assigned a tier. When `regionProfile` is
+ * omitted, applicability is not evaluated (assumed in scope) for backward
+ * compatibility. Optionally compares the achieved level to a target.
+ */
 export function computeInstallCadaReadiness(
   declared: InstallSovereigntyDeclaration,
   localOnly: boolean,
   target?: CadaAssuranceLevel,
+  regionProfile?: RegionProfile,
 ): InstallCadaReadiness {
+  const applicability: ApplicabilityResult = regionProfile
+    ? regulationApplies(CADA_APPLICABILITY, regionProfile)
+    : { applies: true, reason: "applicability not evaluated (no region profile supplied)", matchedBasis: [] };
   const input = buildInstallSovereigntyInput(declared, localOnly);
   const assessment = assessAssuranceLevel(input);
   const meetsTarget = target == null ? undefined : assessment.level >= target;
+  const summary = applicability.applies
+    ? summarizeReadiness(assessment, target)
+    : `CADA does not apply to this organization — ${applicability.reason}. No assurance-level assessment performed.`;
   return {
+    applicable: applicability.applies,
+    applicability,
     localOnlyInference: localOnly,
     input,
     assessment,
     target,
     meetsTarget,
-    summary: summarizeReadiness(assessment, target),
+    summary,
   };
 }
 
