@@ -70,7 +70,19 @@ A pure module `apps/web/lib/tak/context-pressure.ts` (`estimateContextTokens` + 
 
 ## 5. Deferred follow-ups (tracked as backlog items)
 
-These were deferred deliberately. Several change autonomous-loop or Build-Studio behavior and so should be validated by Build Studio while it is being tuned, rather than landed blind; they build on the measurement/wiring this program added.
+These were deferred deliberately. Several change autonomous-loop or Build-Studio behavior and so should be validated by Build Studio while it is being tuned, rather than landed blind; they build on the measurement/wiring this program added. Each is filed as a governed backlog item under its natural existing epic:
+
+| BI | Follow-up | Epic |
+|---|---|---|
+| `BI-9679EB1A` | Tier-aware compaction + real-window pressure ratio (gap 2) | EP-COST-001 |
+| `BI-564D68F7` | Risk-gated intent confirmation (gap 4) | EP-9FC5D2FD |
+| `BI-0A67ABEC` | Build-level self-iteration on gate/UX failure (gap 5) | EP-9FC5D2FD |
+| `BI-02B98843` | Adversarial / edge-case verification (gap 6) | EP-9FC5D2FD |
+| `BI-655507BA` | Crash-durable ExecutionPlan (gap 7) | EP-REDUCTION-GEAR-ARCH |
+| `BI-9EA09823` | Automatic failure capture (gap 8) | EP-LEARNING-COMMONS |
+| `BI-62ABDD8C` | Deliberation branch content generation (gap 9) | EP-BUILD-65837F |
+
+The detail for each:
 
 1. **Tier-aware compaction + real-window pressure ratio (gap 2 behavior half).** Thread the resolved model's `maxContextTokens` into the loop; size compaction from a fraction of the real window (never below today's floor); turn the gauge's heuristic bands into a precise ratio-of-window signal. Consider enabling `enableExecutionPlan` on the build path.
 2. **Risk-gated intent confirmation (gap 4).** In `prompts/build-phase/ideate.prompt.md`, when `riskProfile.level==="high"` OR brief `confidence==="low"`, surface the brief's existing `openQuestions` and require an answer before `start_ideate_research`. Reuses `business-build-brief.ts` substrate; keeps the layman-fast path for low-risk work.
