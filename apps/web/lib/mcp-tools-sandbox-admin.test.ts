@@ -310,6 +310,31 @@ describe("sandbox admin MCP and coworker messaging", () => {
     }));
   });
 
+  it("blocks contribute_to_hive when hive contributions are paused (master pause overrides contributionMode)", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValueOnce({
+      buildId: "FB-PAUSE-1",
+      createdById: "user-1",
+    });
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValueOnce({
+      contributionMode: "contribute_all",
+      upstreamRemoteUrl: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git",
+      dcoAcceptedAt: new Date("2026-05-22T12:00:00.000Z"),
+      gitRemoteUrl: null,
+      hiveContributionsPaused: true,
+    });
+
+    const result = await executeTool("contribute_to_hive", {
+      buildId: "FB-PAUSE-1",
+    }, "user-1", { agentId: "AGT-ORCH-PAUSE" });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Hive contributions are paused.");
+    // The master pause must short-circuit before any PR prerequisite or PR machinery.
+    expect(mockResolveHiveToken).not.toHaveBeenCalled();
+    expect(mockDiagnoseSandboxReadiness).not.toHaveBeenCalled();
+    expect(mockCreateBranchAndPR).not.toHaveBeenCalled();
+  });
+
   it("blocks create_portal_pr when the captured diff misses files promised by the build plan", async () => {
     mockPrisma.featureBuild.findUnique
       .mockResolvedValueOnce({
