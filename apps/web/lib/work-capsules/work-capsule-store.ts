@@ -456,6 +456,26 @@ function intentsConflict(a: ScopeClaim["intent"], b: ScopeClaim["intent"]): bool
   return a === "edit" || b === "edit";
 }
 
+// Normalize a path scope value so separators and trailing slashes don't defeat
+// containment checks ("src/", "src", and "src\\x" must compare consistently).
+function normalizePathScope(value: string): string {
+  return value.replace(/\\/g, "/").replace(/\/+$/g, "");
+}
+
+// Two scope values overlap when they claim the same resource. For `path` kinds a
+// directory claim covers its whole subtree, so an ancestor/descendant pair
+// overlaps; the trailing-"/" boundary keeps siblings that merely share a string
+// prefix (src/foo.ts vs src/foobar.ts) from colliding. All other kinds are
+// exact-match scopes.
+function scopeValuesOverlap(kind: ScopeClaim["kind"], a: string, b: string): boolean {
+  if (a === b) return true;
+  if (kind !== "path") return false;
+  const na = normalizePathScope(a);
+  const nb = normalizePathScope(b);
+  if (na === nb) return true;
+  return na.startsWith(`${nb}/`) || nb.startsWith(`${na}/`);
+}
+
 /**
  * Find active claims on OTHER capsules that conflict with `claims`. "Active" =
  * not archived, not in a terminal status, and (for lease-backed executors) the
@@ -470,9 +490,7 @@ export async function detectScopeConflicts(args: {
   claims: ScopeClaimInput[];
   now?: Date;
 }): Promise<ScopeConflict[]> {
-  const incomingByKey = new Map<string, ScopeClaimInput>();
-  for (const claim of args.claims) incomingByKey.set(`${claim.kind}:${claim.value}`, claim);
-  if (incomingByKey.size === 0) return [];
+  if (args.claims.length === 0) return [];
 
   const now = args.now ?? new Date();
   const others = await args.db.workCapsule.findMany({
@@ -493,8 +511,18 @@ export async function detectScopeConflicts(args: {
   const conflicts: ScopeConflict[] = [];
   for (const other of others ?? []) {
     for (const existing of parseScopeClaims(other.scopeClaims)) {
-      const incoming = incomingByKey.get(`${existing.kind}:${existing.value}`);
-      if (incoming && intentsConflict(existing.intent, incoming.intent)) {
+      // A `path` claim covers its whole subtree, so a directory claim conflicts
+      // with a file/dir beneath it (and vice-versa) even though the kind:value
+      // strings differ — without this, `path:dir/` and `path:dir/file.ts` were
+      // treated as disjoint and two sessions could both "own" overlapping edit
+      // scope. Non-path kinds keep exact-value matching.
+      const incoming = args.claims.find(
+        (c) =>
+          c.kind === existing.kind &&
+          scopeValuesOverlap(existing.kind, existing.value, c.value) &&
+          intentsConflict(existing.intent, c.intent),
+      );
+      if (incoming) {
         conflicts.push({
           capsuleId: other.capsuleId,
           title: other.title,

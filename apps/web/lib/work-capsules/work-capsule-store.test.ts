@@ -488,6 +488,55 @@ describe("work capsule store", () => {
       expect(activityArg.data.payload.forcedOverConflicts).toHaveLength(1);
     });
 
+    it("rejects an edit on a file beneath another capsule's directory path claim", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workCapsule.findMany.mockResolvedValueOnce([
+        otherCapsule({
+          scopeClaims: [{ kind: "path", value: "apps/web/lib/", intent: "edit", recordedAt: "2026-06-18T00:00:00.000Z", recordedByPrincipalId: "PRN-2" }],
+        }),
+      ]);
+
+      await expect(
+        claimWorkCapsuleScope({
+          db: capsuleDb(),
+          capsuleId: "WC-MINE001",
+          claims: [{ kind: "path", value: "apps/web/lib/foo.ts", intent: "edit" }],
+          actor,
+        }),
+      ).rejects.toBeInstanceOf(ScopeOverlapError);
+      expect(db.workCapsule.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects an edit directory claim that contains another capsule's file claim", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workCapsule.findMany.mockResolvedValueOnce([otherCapsule({})]); // holds apps/web/lib/foo.ts (edit)
+
+      await expect(
+        claimWorkCapsuleScope({
+          db: capsuleDb(),
+          capsuleId: "WC-MINE001",
+          claims: [{ kind: "path", value: "apps/web", intent: "edit" }],
+          actor,
+        }),
+      ).rejects.toBeInstanceOf(ScopeOverlapError);
+    });
+
+    it("does not treat a sibling path sharing a string prefix as overlapping", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workCapsule.findMany.mockResolvedValueOnce([otherCapsule({})]); // holds apps/web/lib/foo.ts (edit)
+      db.workCapsule.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
+      db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "act-1" });
+
+      const result = await claimWorkCapsuleScope({
+        db: capsuleDb(),
+        capsuleId: "WC-MINE001",
+        claims: [{ kind: "path", value: "apps/web/lib/foobar.ts", intent: "edit" }],
+        actor,
+      });
+      expect(result.capsuleId).toBe("WC-MINE001");
+      expect(db.workCapsule.update).toHaveBeenCalledTimes(1);
+    });
+
     it("scopes the conflict query to active, non-terminal, unexpired, non-self capsules", async () => {
       db.workCapsule.findMany.mockResolvedValueOnce([]);
       const now = new Date("2026-06-18T12:00:00.000Z");
