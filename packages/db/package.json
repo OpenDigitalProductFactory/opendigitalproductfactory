@@ -20,6 +20,7 @@
     "./location-normalize": "./src/location-normalize.ts",
     "./eu-jurisdictions": "./src/eu-jurisdictions.ts",
     "./sovereignty-assessment": "./src/sovereignty-assessment.ts",
+    "./cada-readiness": "./src/cada-readiness.ts",
     "./seed-deliberation": "./src/seed-deliberation.ts",
     "./edge-node-types": "./src/edge-node-types.ts",
     "./wiki-taxonomy": "./src/wiki-taxonomy.ts",
