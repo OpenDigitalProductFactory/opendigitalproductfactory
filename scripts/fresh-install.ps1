@@ -11,7 +11,8 @@
 #   4. Runs migrations + seed + full DB restore
 
 param(
-    [switch]$SkipDocker
+    [switch]$SkipDocker,
+    [switch]$WithEdge
 )
 
 $ErrorActionPreference = "Stop"
@@ -303,6 +304,12 @@ Write-Host "========================================================"
 #   the local installer for the DPF host's own Edge Node")
 Write-Step "Edge Node bootstrap"
 
+# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design §5).
+# A fresh install no longer bundles a local Edge Node by default; pass
+# -WithEdge to bundle + auto-enroll one (the choice is the consent).
+if (-not $WithEdge) {
+    Write-Ok "Skipped -- Edge Node is opt-in. Re-run with -WithEdge to bundle a local node, or add a node on another machine from Admin > Platform Development > Edge Nodes."
+} else {
 $edgeComposeArgs = @(
     "-f", "docker-compose.yml",
     "-f", "docker-compose.override.yml",
@@ -392,6 +399,7 @@ if (-not $portalReady) {
             Write-Warn "  Inspect: docker compose -f docker-compose.yml -f docker-compose.edge.yml logs edge-node --tail 50"
         }
     }
+}
 }
 
 Write-Host "========================================================"

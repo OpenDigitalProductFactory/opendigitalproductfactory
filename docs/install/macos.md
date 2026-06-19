@@ -121,10 +121,11 @@ single-tree mode persists — current behavior, full back-compat.
    derives the compose mode (customer → release images; contributor →
    source build) unless `--release`/`--dev` forces one.
 4. **Compose chain** — assembles `docker-compose.yml` +
-   `docker-compose.macos.yml` + `docker-compose.edge.yml` (+
-   `docker-compose.release.yml` in release/customer mode). The Edge Node
-   container is bundled by default for single-host installs; pass
-   `--no-edge` to skip it.
+   `docker-compose.macos.yml` (+ `docker-compose.release.yml` in
+   release/customer mode). The Edge Node is **opt-in**: pass
+   `--with-edge` to also bundle a local `docker-compose.edge.yml`
+   node. By default no Edge Node is installed — map a network from
+   another machine instead via Admin > Platform Development > Edge Nodes.
 5. **Docker Desktop** — installs the `.dmg` if missing
    (`hdiutil attach` + `cp -R /Applications`), then starts it and waits
    for the daemon.
@@ -150,7 +151,7 @@ single-tree mode persists — current behavior, full back-compat.
 11. **`docker compose up -d`** on the macOS overlay.
 12. **Health check** — polls `http://localhost:3000/api/health` for up
     to 5 minutes (configurable via `DPF_HEALTH_TIMEOUT`).
-13. **Edge Node bootstrap** (unless `--no-edge`) — mints a single-use
+13. **Edge Node bootstrap** (only with `--with-edge`) — mints a single-use
     auto-approve bootstrap token, writes it to `.env` as
     `DPF_BOOTSTRAP_TOKEN`, restarts the `edge-node` container so it
     enrolls. The new EdgeNode lands directly in `trustState=trusted`
