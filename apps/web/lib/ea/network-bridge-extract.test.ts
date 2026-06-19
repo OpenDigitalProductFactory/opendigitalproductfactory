@@ -49,7 +49,15 @@ describe("buildNetworkTopologyModel", () => {
 
   it("declares rule-valid types and a soft-remove prefix", () => {
     expect(model.elementTypeSlugs).toEqual(["package", "part_definition", "part_usage"]);
-    expect(model.relTypeSlugs).toEqual(["contains", "connects"]);
+    expect(model.relTypeSlugs).toEqual(["contains", "connects", "traces"]);
     expect(model.softRemovePrefix).toBe("network:");
+  });
+
+  it("traces each host/entity to its data-model element (cross-layer)", () => {
+    expect(model.crossLayerRelationships).toEqual([
+      { fromKey: "network:host:n1", toKey: "prisma:model:EdgeNode", relSlug: "traces" },
+      { fromKey: "network:entity:e1", toKey: "prisma:model:InventoryEntity", relSlug: "traces" },
+      { fromKey: "network:entity:e2", toKey: "prisma:model:InventoryEntity", relSlug: "traces" },
+    ]);
   });
 });

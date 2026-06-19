@@ -40,8 +40,18 @@ describe("buildOperationalGraphModel", () => {
 
   it("declares rule-valid types and a soft-remove prefix", () => {
     expect(model.elementTypeSlugs).toEqual(["package", "part_definition", "part_usage"]);
-    expect(model.relTypeSlugs).toEqual(["contains"]);
+    expect(model.relTypeSlugs).toEqual(["contains", "traces"]);
     expect(model.softRemovePrefix).toBe("operational:");
+  });
+
+  it("traces each actual instance to the RuntimeTarget data-model element (cross-layer)", () => {
+    // one traces edge per instance → prisma:model:RuntimeTarget; resolved by the applier
+    expect(model.crossLayerRelationships).toEqual([
+      { fromKey: "operational:instance:d", toKey: "prisma:model:RuntimeTarget", relSlug: "traces" }, // service "edge"
+      { fromKey: "operational:instance:a", toKey: "prisma:model:RuntimeTarget", relSlug: "traces" },
+      { fromKey: "operational:instance:b", toKey: "prisma:model:RuntimeTarget", relSlug: "traces" },
+      { fromKey: "operational:instance:c", toKey: "prisma:model:RuntimeTarget", relSlug: "traces" },
+    ]);
   });
 
   it("serviceOf falls back to kind when serviceName is blank", () => {

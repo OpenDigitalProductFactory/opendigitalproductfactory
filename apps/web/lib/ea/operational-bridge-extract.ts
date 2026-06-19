@@ -33,6 +33,14 @@ export interface RuntimeTargetFact {
 
 export const OPERATIONAL_PACKAGE_KEY = "operational:pkg";
 
+// Cross-LAYER target: the data-model element the EP-DATA-ARCH Prisma→EA mirror projects
+// for the RuntimeTarget table (it stamps `infraCiKey = prisma:model:<Model>`). Every
+// runtime instance IS a RuntimeTarget row, so each instance `traces` to that model —
+// the real, by-construction edge that lets a data-model change's blast_radius reach the
+// live operational instances. Resolved by the applier against the live graph; if the
+// data-model mirror has not run yet it is counted unresolved and links on a later pass.
+export const RUNTIME_TARGET_MODEL_KEY = "prisma:model:RuntimeTarget";
+
 /** The logical deployable service a runtime target belongs to (serviceName, else kind). */
 export function serviceOf(t: RuntimeTargetFact): string {
   return (t.serviceName && t.serviceName.trim()) || t.kind || "service";
@@ -41,6 +49,7 @@ export function serviceOf(t: RuntimeTargetFact): string {
 export function buildOperationalGraphModel(targets: RuntimeTargetFact[]): SysmlDesiredModel {
   const elements: SysmlDesiredModel["elements"] = [];
   const relationships: SysmlDesiredModel["relationships"] = [];
+  const crossLayerRelationships: SysmlDesiredModel["relationships"] = [];
 
   elements.push({
     sysmlKey: OPERATIONAL_PACKAGE_KEY,
@@ -95,6 +104,8 @@ export function buildOperationalGraphModel(targets: RuntimeTargetFact[]): SysmlD
         },
       });
       relationships.push({ fromKey: serviceKey, toKey: instanceKey, relSlug: "contains" });
+      // Cross-layer: this actual instance traces to the RuntimeTarget data-model type.
+      crossLayerRelationships.push({ fromKey: instanceKey, toKey: RUNTIME_TARGET_MODEL_KEY, relSlug: "traces" });
     }
   }
 
@@ -102,7 +113,7 @@ export function buildOperationalGraphModel(targets: RuntimeTargetFact[]): SysmlD
     elements,
     relationships,
     elementTypeSlugs: ["package", "part_definition", "part_usage"],
-    relTypeSlugs: ["contains"],
+    relTypeSlugs: ["contains", "traces"],
     view: {
       name: "Operational Graph — Live Projection",
       description: "Live, system-maintained projection of running platform services and their instances.",
@@ -110,5 +121,6 @@ export function buildOperationalGraphModel(targets: RuntimeTargetFact[]): SysmlD
       scopeRef: "operational-graph",
     },
     softRemovePrefix: "operational:",
+    crossLayerRelationships,
   };
 }
