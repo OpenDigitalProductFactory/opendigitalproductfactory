@@ -1,0 +1,21 @@
+# DPF private paths — proprietary boundary for the contribution pipeline.
+#
+# Files and directories matching a pattern here are NEVER included in an
+# upstream contribution diff, regardless of a change's share/keep disposition.
+# This is the structural complement to the per-change disposition: disposition
+# decides "share this change or not"; this file decides "these paths never
+# leave the box, period."
+#
+# Syntax: one gitignore-style glob per line. `#` starts a comment; blank lines
+# are ignored. Matching is conservative — a directory pattern also matches
+# everything beneath it. Edit here, or via Admin > Platform Development (which
+# writes PrivatePathRule overrides that merge with this file).
+#
+# This file ships intentionally empty of active patterns so it changes no
+# platform behavior by default. Add your business-proprietary paths below.
+#
+# Examples (uncomment / adapt to your install):
+# proprietary/
+# **/*.secret
+# apps/web/lib/pricing/private-rates.ts
+# config/customer-overrides/

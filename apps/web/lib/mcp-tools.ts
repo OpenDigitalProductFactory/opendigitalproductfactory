@@ -10380,6 +10380,23 @@ export async function executeTool(
       const diff = (build.diffPatch ?? "") as string;
       if (!diff.trim()) return { success: false, error: "No diff available.", message: "Run deploy_feature first to extract the diff." };
 
+      // Private-paths boundary (Phase 1 of Private/Public Change Segregation):
+      // local records keep the full diff, but any OUTBOUND PR diff must never
+      // carry a path the operator marked proprietary. The `.dpf/private-paths`
+      // manifest ships empty → no-op until opted in. Spec:
+      // docs/superpowers/specs/2026-06-18-private-public-change-segregation-design.md
+      const { loadPrivatePathPatterns: _loadPriv, compilePrivatePathMatcher: _compilePriv, stripPrivatePathsFromDiff: _stripPriv } =
+        await import("@/lib/integrate/private-paths");
+      const shareableDiff = _stripPriv(diff, _compilePriv(await _loadPriv())).kept;
+      if (!shareableDiff.trim()) {
+        return {
+          success: false,
+          error: "Only private paths.",
+          message:
+            "This change only affects parts of your system you've marked private (see .dpf/private-paths or Admin > Platform Development), so there is nothing to share upstream.",
+        };
+      }
+
       const { buildSandboxStateFromRecord, assertSandboxReadyForPromotion, serializePlanDocument } = await import("@/lib/build/sandbox-state");
       const sandboxState = buildSandboxStateFromRecord({
         buildBranch: build.buildBranch,
@@ -10443,7 +10460,7 @@ export async function executeTool(
 
       // Run pre-PR gates
       const { runPrePRGates, formatGateReport } = await import("@/lib/integrate/pre-pr-gates");
-      const gateResult = runPrePRGates(diff);
+      const gateResult = runPrePRGates(shareableDiff);
 
       // If gates block, return the report without creating a PR
       if (!gateResult.canProceed) {
@@ -10519,7 +10536,7 @@ export async function executeTool(
         baseRepo: repoName,
         branchName,
         commitMessage,
-        diff,
+        diff: shareableDiff,
         prTitle,
         prBody,
         labels,
@@ -11375,6 +11392,23 @@ export async function executeTool(
       const diff = (build.diffPatch ?? "") as string;
       if (!diff.trim()) return { success: false, error: "No diff available.", message: "Run deploy_feature first to extract the diff." };
 
+      // Private-paths boundary (Phase 1 of Private/Public Change Segregation):
+      // local records keep the full diff, but any OUTBOUND PR diff must never
+      // carry a path the operator marked proprietary. The `.dpf/private-paths`
+      // manifest ships empty → no-op until opted in. Spec:
+      // docs/superpowers/specs/2026-06-18-private-public-change-segregation-design.md
+      const { loadPrivatePathPatterns: _loadPriv, compilePrivatePathMatcher: _compilePriv, stripPrivatePathsFromDiff: _stripPriv } =
+        await import("@/lib/integrate/private-paths");
+      const shareableDiff = _stripPriv(diff, _compilePriv(await _loadPriv())).kept;
+      if (!shareableDiff.trim()) {
+        return {
+          success: false,
+          error: "Only private paths.",
+          message:
+            "This change only affects parts of your system you've marked private (see .dpf/private-paths or Admin > Platform Development), so there is nothing to share upstream.",
+        };
+      }
+
       const { buildSandboxStateFromRecord, assertSandboxReadyForPromotion, serializePlanDocument } = await import("@/lib/build/sandbox-state");
       const sandboxState = buildSandboxStateFromRecord({
         buildBranch: build.buildBranch,
@@ -11507,7 +11541,7 @@ export async function executeTool(
 
             const prTitle = `feat: ${build.title}`;
             const { submitBuildAsPR } = await import("@/lib/contribution-pipeline");
-            const securityScan = (await import("@/lib/security-scan")).scanDiffForSecurityIssues(diff);
+            const securityScan = (await import("@/lib/security-scan")).scanDiffForSecurityIssues(shareableDiff);
             const prBody = [
               "## Summary",
               "",
@@ -11536,7 +11570,7 @@ export async function executeTool(
               baseRepo: upstreamMatch[2],
               branchName,
               commitMessage,
-              diff,
+              diff: shareableDiff,
               prTitle,
               prBody,
               labels,
@@ -11561,7 +11595,7 @@ export async function executeTool(
                     repoOwner: upstreamMatch[1],
                     repoName: upstreamMatch[2],
                     token: hiveToken,
-                    diff,
+                    diff: shareableDiff,
                   });
                   logBuildActivity(buildId, "contribution_review", `Merge readiness: ${reviewResult.mergeReadiness}. Verticals: ${reviewResult.verticals.applicableVerticals.filter((v) => v.relevance !== "unlikely").map((v) => v.category).join(", ") || "none"}`);
                 } catch (reviewErr) {
