@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildInstallSovereigntyInput,
   computeInstallCadaReadiness,
+  summarizeControlCoverage,
 } from "./cada-readiness";
 
 describe("cada-readiness", () => {
@@ -57,5 +58,24 @@ describe("cada-readiness", () => {
     expect(r.summary).toMatch(/Below target Level 4/);
     const r2 = computeInstallCadaReadiness({ operatorJurisdiction: "DE", dataInEea: true }, true, 3);
     expect(r2.meetsTarget).toBe(true);
+  });
+
+  it("summarizes control coverage, excluding not-applicable from the denominator", () => {
+    const empty = summarizeControlCoverage([]);
+    expect(empty.total).toBe(0);
+    expect(empty.summary).toMatch(/No CADA controls/);
+
+    const cov = summarizeControlCoverage([
+      { implementationStatus: "implemented" },
+      { implementationStatus: "implemented" },
+      { implementationStatus: "in-progress" },
+      { implementationStatus: "planned" },
+      { implementationStatus: "not-applicable" },
+    ]);
+    expect(cov.implemented).toBe(2);
+    expect(cov.inProgress).toBe(1);
+    expect(cov.planned).toBe(1);
+    // applicable = 4 (excludes the not-applicable); 2/4 = 50%
+    expect(cov.pctImplemented).toBe(50);
   });
 });
