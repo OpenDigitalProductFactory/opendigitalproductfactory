@@ -107,13 +107,15 @@ Flags:
                 Skip the LaunchAgent / systemd-user autostart install
                 step. The platform comes up but won't auto-start at
                 login / boot.
-  --no-edge     Skip bundling the Edge Node container alongside the
-                Authority Core. Use this for cloud / Authority-only
-                deployments where Edge Nodes will be added later from
-                separate hosts (docker-compose.edge-standalone.yml).
-                Default: Edge Node IS bundled for single-host installs.
-                The bundled node auto-approves at enrollment per spec
-                § Approval policy.
+  --with-edge   Bundle a local Edge Node alongside the Authority Core
+                (network discovery from this host). OPT-IN: the Edge Node
+                is NOT installed by default. A node added this way
+                auto-approves at enrollment (choosing it is the consent).
+                To map a network from a different machine instead, add a
+                node from Admin > Platform Development > Edge Nodes
+                (docker-compose.edge-standalone.yml).
+  --no-edge     Force-skip the local Edge Node even if a prior install
+                enabled it (Edge is already off by default).
   -h, --help    Show this help.
 
 Status: Phase 6+ vertical slice. Full end-user install (Docker
@@ -133,7 +135,7 @@ DPF_MODE_EXPLICIT=0     # 1 once --dev/--release is passed, so the install-mode
                         # prompt does not override an explicit compose choice.
 DPF_INSTALL_MODE=""     # customer | contributor — resolved in "Install mode".
 DPF_AUTOSTART=1
-DPF_INCLUDE_EDGE="${DPF_INCLUDE_EDGE:-1}"   # 1 = bundle Edge Node; 0 = skip
+DPF_INCLUDE_EDGE="${DPF_INCLUDE_EDGE:-}"    # opt-in; resolved after state init (BI-72CFF89D). Empty = decide via dpf_resolve_edge_enabled (default OFF).
 # BI-0856A4CE Phase 1 — optional contributor-only path that, when distinct from
 # the install path, becomes the worktree base. Empty = single-tree mode (current
 # behavior). Future phases will turn this into a hard install/dev separation.
@@ -151,6 +153,7 @@ while [ $# -gt 0 ]; do
     --dev-workspace-path)   shift; DPF_DEV_WORKSPACE_PATH_ARG="${1:-}" ;;
     --dev-workspace-path=*) DPF_DEV_WORKSPACE_PATH_ARG="${1#*=}" ;;
     --no-autostart)         DPF_AUTOSTART=0 ;;
+    --with-edge)            DPF_INCLUDE_EDGE=1 ;;
     --no-edge)              DPF_INCLUDE_EDGE=0 ;;
     --force-unsupported-host)
                             DPF_FORCE_UNSUPPORTED_HOST=1
@@ -280,6 +283,15 @@ if [ "$DPF_DRY_RUN" != "1" ]; then
 fi
 ok "Install mode: $DPF_INSTALL_MODE (compose mode: $DPF_MODE)"
 
+# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design §5).
+# Resolve whether to bundle the local Edge Node BEFORE assembling the chain:
+# explicit --with-edge/--no-edge wins, else the recorded choice in
+# install-state.json, else grandfather a pre-flip install that already has a
+# bundled node, else default OFF. Exported so compose.sh includes the overlay
+# only when chosen; the resolved choice is recorded to state post-dry-run.
+DPF_INCLUDE_EDGE="$(dpf_resolve_edge_enabled "$REPO_ROOT")"
+export DPF_INCLUDE_EDGE
+
 # 3. Resolve the compose -f chain (per-platform via compose.sh).
 step "Compose chain"
 dpf_compose_files "$DPF_MODE"
@@ -308,6 +320,11 @@ case "$rc" in
      dpf_state_write dockerEndpoint "$(dpf_docker_endpoint)" 2>/dev/null || true
      dpf_state_write dockerContext "$(dpf_docker_context)" 2>/dev/null || true
      dpf_state_write_json composeFiles "$(dpf_compose_files_json)" 2>/dev/null || true
+     if [ "$DPF_INCLUDE_EDGE" = "1" ]; then
+       dpf_state_write_json edge '{"enabled":true,"mode":"local"}' 2>/dev/null || true
+     else
+       dpf_state_write_json edge '{"enabled":false,"mode":null}' 2>/dev/null || true
+     fi
      dpf_preflight_docker_memory ;;
   75) # Docker was just installed; operator must log out / newgrp
       echo ""
@@ -943,7 +960,7 @@ if [ "$DPF_INCLUDE_EDGE" = "1" ]; then
     rm -f "$EDGE_TOKEN_LOG" 2>/dev/null || true
   fi
 else
-  info "Edge Node bundling skipped (--no-edge). Add Edge Nodes later from separate hosts via docker-compose.edge-standalone.yml."
+  info "Edge Node not bundled (opt-in; pass --with-edge to add a local node). Map a network from another machine via Admin > Platform Development > Edge Nodes (docker-compose.edge-standalone.yml)."
 fi
 
 # 13. Voice / TTS sidecar (Apple Silicon only).

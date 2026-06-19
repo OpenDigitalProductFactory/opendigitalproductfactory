@@ -22,8 +22,20 @@ Describe "Windows installer Edge Node compose chain" {
         Get-Command Set-DPFEnvFileValue -ErrorAction Stop | Should -Not -BeNullOrEmpty
     }
 
-    It "builds the base, override, and Edge Node compose chain in order" {
+    It "builds the base, override, and Edge Node compose chain in order when edge is opted in" {
         $installRoot = Join-Path $TestDrive "dpf"
+        New-Item -ItemType Directory -Path $installRoot | Out-Null
+        Set-Content -Path (Join-Path $installRoot "docker-compose.yml") -Value "services: {}"
+        Set-Content -Path (Join-Path $installRoot "docker-compose.override.yml") -Value "services: {}"
+        Set-Content -Path (Join-Path $installRoot "docker-compose.edge.yml") -Value "services: {}"
+
+        $composeArgs = Get-DPFComposeArgs -InstallDir $installRoot -IncludeEdge:$true
+
+        ($composeArgs -join "|") | Should -Be "-f|docker-compose.yml|-f|docker-compose.override.yml|-f|docker-compose.edge.yml"
+    }
+
+    It "omits the Edge Node overlay by default (opt-in; BI-72CFF89D)" {
+        $installRoot = Join-Path $TestDrive "dpf-default-edge"
         New-Item -ItemType Directory -Path $installRoot | Out-Null
         Set-Content -Path (Join-Path $installRoot "docker-compose.yml") -Value "services: {}"
         Set-Content -Path (Join-Path $installRoot "docker-compose.override.yml") -Value "services: {}"
@@ -31,7 +43,7 @@ Describe "Windows installer Edge Node compose chain" {
 
         $composeArgs = Get-DPFComposeArgs -InstallDir $installRoot
 
-        ($composeArgs -join "|") | Should -Be "-f|docker-compose.yml|-f|docker-compose.override.yml|-f|docker-compose.edge.yml"
+        ($composeArgs -join "|") | Should -Be "-f|docker-compose.yml|-f|docker-compose.override.yml"
     }
 
     It "can omit the Edge Node overlay for core-only startup" {

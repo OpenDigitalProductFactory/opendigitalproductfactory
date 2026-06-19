@@ -71,6 +71,7 @@ dpf_state_init() {
   "stateDir": "${state_dir}",
   "installMode": null,
   "composeFiles": [],
+  "edge": { "enabled": false, "mode": null },
   "imageTag": null,
   "llmProvider": null,
   "resourceLabels": { "dpf": "true" },
@@ -235,4 +236,41 @@ PY
   fi
   echo "dpf_state_write_json: needs jq or python3 to update JSON object/array values" >&2
   return 1
+}
+
+# Resolve whether the bundled local Edge Node overlay should be active for
+# THIS install (the deploy gate, BI-72CFF89D / edge-topology design §5).
+# Edge deployment is OPT-IN: default OFF unless explicitly chosen or
+# grandfathered. Precedence:
+#   1. explicit DPF_INCLUDE_EDGE=0|1 in the environment (flags set this)
+#   2. recorded choice in install-state.json (.edge.enabled)
+#   3. grandfather: no recorded choice but .env carries a bundled-node
+#      bootstrap token (a pre-flip install) -> keep it ON so an upgrade
+#      never silently removes a running node (design §5.3)
+#   4. default OFF
+# Echoes "1" (include) or "0" (skip). $1 = install/repo root (for .env).
+dpf_resolve_edge_enabled() {
+  local root="${1:-${REPO_ROOT:-.}}"
+  case "${DPF_INCLUDE_EDGE:-}" in
+    0|1) echo "${DPF_INCLUDE_EDGE}"; return 0 ;;
+  esac
+  local path enabled=""
+  path="$(dpf_state_path)"
+  if [ -f "$path" ]; then
+    if command -v jq >/dev/null 2>&1; then
+      enabled="$(jq -r '.edge.enabled // empty' "$path" 2>/dev/null)"
+    elif command -v python3 >/dev/null 2>&1; then
+      enabled="$(python3 -c "import json;d=json.load(open('$path'));e=d.get('edge') or {};v=e.get('enabled');print('' if v is None else ('1' if v else '0'))" 2>/dev/null)"
+    fi
+  fi
+  case "$enabled" in
+    true|1)  echo 1; return 0 ;;
+    false|0) echo 0; return 0 ;;
+  esac
+  # No recorded choice — grandfather a pre-flip install that already has a
+  # bundled node (its .env carries the installer-issued bootstrap token).
+  if [ -f "$root/.env" ] && grep -qE '^DPF_BOOTSTRAP_TOKEN=dpf' "$root/.env" 2>/dev/null; then
+    echo 1; return 0
+  fi
+  echo 0
 }
