@@ -127,3 +127,39 @@ shared builder preserves the prior `: connected` + event-shape contract; consume
 bodies are unchanged. Tunables (`DPF_SSE_HEARTBEAT_MS`, the 40s client watchdog) bound behavior.
 Revert = restore the per-route `ReadableStream` blocks and the raw `EventSource` in the two migrated
 consumers.
+
+## 7. Post-merge regression — full-page reload loop (BI-864E83B0-followup)
+
+**Symptom (operator-reported):** after the always-on consumers were migrated to
+`useResilientEventSource`, the whole page reloaded every ~1-2 seconds.
+
+**Cause:** the hook carried a dormant `detectStaleBundle()` that ran `window.location.reload()` on
+**every (re)connect** when the boot identity didn't match the server's. That code had never executed
+before because no component used the hook; migrating the always-mounted `PlatformBanner` armed it.
+It then looped because the two identities are derived from **divergent env sources**:
+
+- `__DPF_BOOT__.bundleHash` (`app/layout.tsx`) read `PORTAL_BUNDLE_HASH ?? PORTAL_GIT_SHA ?? "unknown"`
+  — none of which the container sets → `"unknown"`.
+- `/api/internal/quiescence-state.bundleHash` reads `getDeployedSha()` → `DEPLOYED_SHA`, which the
+  Dockerfile **always** seeds on a built image → the real SHA.
+
+`"<sha>" !== "unknown"` is permanently true, so the hook reloaded, the page re-booted to the same
+`"unknown"`, and it reloaded again — a tight loop.
+
+**Fix (two parts):**
+
+1. **The transport hook never reloads the page.** Removed `detectStaleBundle()`, the
+   `stale-bundle-reload` status, and the `window.location.reload()` from `useResilientEventSource`.
+   Reconnecting a stream is a transport concern; reloading after a deploy is an application concern.
+   This makes the loop impossible on any install regardless of env config.
+2. **The identities now agree.** `__DPF_BOOT__.bundleHash` derives from `DEPLOYED_SHA` first — the
+   same source `getDeployedSha()` uses — so the comparison is meaningful (equal when not upgraded).
+
+The legitimate post-upgrade soft-reload is unchanged and still owned by `PlatformBanner`'s
+`detectBundleMismatchAndReload`, which fires **only** on the explicit `system:quiescence`
+"succeeded" event (once per upgrade), not on every connect.
+
+**Lesson:** adopting a shared hook means owning *all* of its side effects. A page-reload buried in a
+"resilient EventSource" wrapper, fed by two independently-maintained identity sources, was a latent
+trap; the heartbeat/watchdog design was sound but the wholesale hook adoption was not vetted for
+on-connect behavior.
