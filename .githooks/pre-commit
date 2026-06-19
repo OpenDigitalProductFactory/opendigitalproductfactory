@@ -23,6 +23,22 @@
 #
 # Set up: `git config core.hooksPath .githooks` (done automatically at repo setup).
 
+# ─── Guard 0: root clone is read-only for feature work ──────────────────────
+# Refuse feature-branch commits in the primary (non-linked) working tree so two
+# concurrent sessions never share one clone (the EP-F7E35344 collision vector).
+# Linked worktrees and non-feature branches (main/releases) pass. Logic lives in
+# a standalone, unit-tested script. Override (verified maintenance only):
+# DPF_ALLOW_ROOT_CLONE_COMMIT=1.
+
+ROOT_CLONE_GUARD=".githooks/lib/check-root-clone.sh"
+if [ -f "$ROOT_CLONE_GUARD" ]; then
+  GUARD_GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || echo "")
+  GUARD_BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo "")
+  if ! sh "$ROOT_CLONE_GUARD" "$GUARD_GIT_DIR" "$GUARD_BRANCH"; then
+    exit 1
+  fi
+fi
+
 # ─── Guard 1: migration immutability ────────────────────────────────────────
 
 MIGRATIONS_DIR="packages/db/prisma/migrations"
