@@ -11,6 +11,10 @@ import {
   buildSandboxCommitInFlightWorkCommand,
   buildSandboxGitCommitPrunedArtifactsCommand,
   buildSandboxGitPruneTrackedArtifactsCommand,
+  buildWorktreePath,
+  buildSandboxWorktreeAddCommand,
+  buildSandboxWorktreeRemoveCommand,
+  BUILD_WORKTREE_ROOT_SEGMENT,
   getClientIdentity,
   wrapSandboxGitCommand,
 } from "./build-branch";
@@ -104,6 +108,52 @@ describe("wrapSandboxGitCommand", () => {
     expect(command).toContain("if ! git diff --cached --quiet --exit-code; then git commit -m 'chore: untrack sandbox generated artifacts'; fi");
     expect(command).toContain(".next");
     expect(command).toContain("node_modules");
+  });
+});
+
+// ─── Per-build worktree primitives (BI-98B723C0 Phase 2) ─────────────────────
+
+describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
+  it("derives a per-build worktree path under the .builds root", () => {
+    expect(BUILD_WORKTREE_ROOT_SEGMENT).toBe(".builds");
+    expect(buildWorktreePath("FB-ABCD1234")).toBe("/workspace/.builds/FB-ABCD1234");
+    // honors a non-default workspace so the path can be threaded per dispatcher
+    expect(buildWorktreePath("FB-ABCD1234", "/ws")).toBe("/ws/.builds/FB-ABCD1234");
+  });
+
+  it("creates an isolated worktree on the build branch with shared node_modules symlinks", () => {
+    const cmd = buildSandboxWorktreeAddCommand("FB-ABCD1234", "build/FB-ABCD1234");
+    // idempotent: clears any stale worktree first, then prunes the registry
+    expect(cmd).toContain(
+      "git worktree remove --force /workspace/.builds/FB-ABCD1234 2>/dev/null || true",
+    );
+    expect(cmd).toContain("git worktree prune");
+    // attaches the build branch into the worktree
+    expect(cmd).toContain(
+      "git worktree add --force /workspace/.builds/FB-ABCD1234 build/FB-ABCD1234",
+    );
+    // node_modules shared by symlink — NOT reinstalled (verified live in dpf-sandbox-1)
+    expect(cmd).toContain(
+      "ln -s /workspace/node_modules /workspace/.builds/FB-ABCD1234/node_modules",
+    );
+    expect(cmd).toContain(
+      "ln -s /workspace/apps/web/node_modules /workspace/.builds/FB-ABCD1234/apps/web/node_modules",
+    );
+    expect(cmd).toContain(
+      "ln -s /workspace/packages/db/node_modules /workspace/.builds/FB-ABCD1234/packages/db/node_modules",
+    );
+    // never runs an install in the worktree — the symlinks are the whole point
+    expect(cmd).not.toContain("pnpm install");
+  });
+
+  it("tears down a build's worktree best-effort without touching the shared install", () => {
+    const cmd = buildSandboxWorktreeRemoveCommand("FB-ABCD1234");
+    expect(cmd).toContain(
+      "git worktree remove --force /workspace/.builds/FB-ABCD1234 2>/dev/null || true",
+    );
+    expect(cmd).toContain("git worktree prune");
+    // teardown must not rm -rf anything — node_modules are symlinks, removal is git's job
+    expect(cmd).not.toContain("rm -rf");
   });
 });
 
