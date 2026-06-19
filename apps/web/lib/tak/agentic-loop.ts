@@ -30,6 +30,7 @@ import {
   planCompletionGate,
   planProgress,
 } from "./execution-plan";
+import { estimateContextTokens, classifyContextPressure } from "./context-pressure";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern
@@ -1129,6 +1130,7 @@ export async function runAgenticLoop(params: {
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
   let inferenceCallCount = 0;
+  let ctxPeakTokens = 0; // Peak assembled context (est. tokens) this turn — dumb-zone gauge.
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
   let previousResponseId: string | undefined; // Responses API conversation chaining
 
@@ -1147,7 +1149,8 @@ export async function runAgenticLoop(params: {
         `route=${JSON.stringify(routeContext)} provider=${provider} model=${model} ` +
         `dispatches=${inferenceCallCount} nudges=${continuationNudges} ` +
         `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} ` +
-        `totalMs=${Date.now() - startTime}`,
+        `totalMs=${Date.now() - startTime} ` +
+        `ctxPeakTokens=${ctxPeakTokens} ctxZone=${classifyContextPressure(ctxPeakTokens).zone}`,
       ),
     );
     // BI-47443B67: persist the same rollup durably so the regression detector
@@ -1326,6 +1329,22 @@ export async function runAgenticLoop(params: {
 
     // EP-INF-009b: All inference goes through V2 routing pipeline
     inferenceCallCount++;
+    // Assemble the compacted, plan-reminded context once (it was built twice,
+    // once per heartbeat branch below) and gauge its pressure. Observability
+    // only — the array is sent unchanged; this just makes context fill visible
+    // per dispatch (the autonomous loop is the run most likely to drift into
+    // the dumb zone). See ./context-pressure.
+    const assembledMessages = withPlanReminder(compactAgenticMessages(messages));
+    const ctxPressure = classifyContextPressure(estimateContextTokens(assembledMessages, systemPrompt));
+    if (ctxPressure.estimatedTokens > ctxPeakTokens) ctxPeakTokens = ctxPressure.estimatedTokens;
+    if (ctxPressure.zone !== "sharp") {
+      console.log(
+        sanitizeForLog(
+          `[context-pressure] thread=${JSON.stringify(threadId)} iteration=${iteration} ` +
+            `estTokens=${ctxPressure.estimatedTokens} zone=${ctxPressure.zone} messages=${assembledMessages.length}`,
+        ),
+      );
+    }
     let result: RoutedInferenceResult;
     try {
       // BI-e299d4d3 — wrap the slow inference with withHeartbeatTicker.
@@ -1338,7 +1357,7 @@ export async function runAgenticLoop(params: {
         const { withHeartbeatTicker } = await import("@/lib/observability/heartbeat");
         result = await withHeartbeatTicker(taskRunId, () =>
           routeAndCall(
-            withPlanReminder(compactAgenticMessages(messages)),
+            assembledMessages,
             systemPrompt,
             sensitivity,
             { ...enrichedRouteOptions, previousResponseId },
@@ -1346,7 +1365,7 @@ export async function runAgenticLoop(params: {
         );
       } else {
         result = await routeAndCall(
-          withPlanReminder(compactAgenticMessages(messages)),
+          assembledMessages,
           systemPrompt,
           sensitivity,
           { ...enrichedRouteOptions, previousResponseId },

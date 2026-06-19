@@ -2,7 +2,9 @@
 param(
     [string]$InstallDir,
     [string]$Version = "latest",
-    [switch]$LibraryOnly
+    [switch]$LibraryOnly,
+    [switch]$WithEdge,
+    [switch]$NoEdge
 )
 $ErrorActionPreference = "Stop"
 
@@ -298,7 +300,7 @@ function Get-DPFDockerStorageRecommendation {
 function Get-DPFComposeArgs {
     param(
         [Parameter(Mandatory)][string]$InstallDir,
-        [bool]$IncludeEdge = $true,
+        [bool]$IncludeEdge = $false,   # Edge is opt-in (BI-72CFF89D); both call sites pass this explicitly.
         [bool]$IncludeOverride = $true
     )
 
@@ -363,16 +365,40 @@ function Get-DPFStartScriptContent {
     return @'
 param(
     [string]$DPF_DIR = $PSScriptRoot,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$WithEdge,
+    [switch]$NoEdge
 )
 
 Set-Location $DPF_DIR
+
+# Edge Node deploy gate (opt-in). Include the local Edge Node overlay only when
+# this install enabled it: -WithEdge/-NoEdge override; else the recorded
+# install-state.json choice (.edge.enabled); else grandfather a pre-flip install
+# whose .env carries the bootstrap token; else OFF.
+$includeEdge = $false
+if ($WithEdge) { $includeEdge = $true }
+elseif (-not $NoEdge) {
+    $statePath = Join-Path $HOME ".dpf\install-state.json"
+    $recorded = $null
+    if (Test-Path -LiteralPath $statePath) {
+        try { $recorded = (Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json).edge.enabled } catch {}
+    }
+    if ($null -ne $recorded) {
+        $includeEdge = [bool]$recorded
+    } else {
+        $envPath = Join-Path $DPF_DIR ".env"
+        if ((Test-Path -LiteralPath $envPath) -and (Select-String -Path $envPath -Pattern '^DPF_BOOTSTRAP_TOKEN=dpf' -Quiet)) {
+            $includeEdge = $true
+        }
+    }
+}
 
 $composeArgs = @("-f", "docker-compose.yml")
 if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
     $composeArgs += @("-f", "docker-compose.override.yml")
 }
-if (Test-Path (Join-Path $DPF_DIR "docker-compose.edge.yml")) {
+if ($includeEdge -and (Test-Path (Join-Path $DPF_DIR "docker-compose.edge.yml"))) {
     $composeArgs += @("-f", "docker-compose.edge.yml")
 }
 
@@ -1953,12 +1979,28 @@ if (-not (Test-StepDone "mcp_seed")) {
     Write-OK "Already running"
 }
 
-if (-not (Test-StepDone "edge_bootstrap")) {
+# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design §5).
+# A local Edge Node is bundled + auto-enrolled ONLY when -WithEdge is passed
+# (or a prior install already enabled it -- .env carries the bootstrap token);
+# -NoEdge forces it off. Default OFF. Map a network from a different machine
+# instead via Admin > Platform Development > Edge Nodes.
+$dpfEdgeOptIn = $false
+if ($WithEdge) {
+    $dpfEdgeOptIn = $true
+} elseif (-not $NoEdge) {
+    $dpfEnvPath = Join-Path $DPF_DIR ".env"
+    if ((Test-Path -LiteralPath $dpfEnvPath) -and (Select-String -Path $dpfEnvPath -Pattern '^DPF_BOOTSTRAP_TOKEN=dpf' -Quiet)) {
+        $dpfEdgeOptIn = $true
+    }
+}
+if ($dpfEdgeOptIn -and (-not (Test-StepDone "edge_bootstrap"))) {
     if (Invoke-DPFEdgeNodeBootstrap -InstallDir $DPF_DIR) {
         Save-Progress "edge_bootstrap"
     } else {
         Write-Warn "Bundled Edge Node bootstrap did not complete. The portal remains usable."
     }
+} elseif (-not $dpfEdgeOptIn) {
+    Write-OK "Edge Node not bundled (opt-in). Re-run with -WithEdge to add a local node, or add a node on another machine from Admin > Platform Development > Edge Nodes."
 }
 
 # --- Step 7: Wait for AI Model -------------------------------------------------
