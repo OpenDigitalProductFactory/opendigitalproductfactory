@@ -8,6 +8,7 @@ import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import { projectPersistedTaskProgressEvents } from "@/lib/tak/task-stream-projection";
+import { createSseResponse } from "@/lib/sse/sse-stream";
 import { prisma } from "@dpf/db";
 
 export const dynamic = "force-dynamic";
@@ -100,48 +101,26 @@ export async function GET(request: NextRequest): Promise<Response> {
     return new Response("threadId required", { status: 400 });
   }
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      // Replay latest progress from active TaskRuns so cross-process
-      // workers (Inngest) are visible on reconnect.
-      const replayEvents = await loadReplayEvents(threadId);
+  // Replay latest progress from active TaskRuns so cross-process workers
+  // (Inngest) are visible on reconnect. Loaded before the stream opens so the
+  // shared SSE builder (which adds the liveness heartbeat) can stay synchronous.
+  const replayEvents = await loadReplayEvents(threadId);
+
+  return createSseResponse({
+    signal: request.signal,
+    start: (sse) => {
       for (const event of replayEvents) {
-        try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-        } catch {
-          // Stream closed before we finished replay
-          return;
-        }
+        if (!sse.send(event)) return; // client disconnected mid-replay
       }
 
       const unsub = agentEventBus.subscribe(threadId, (event) => {
-        const data = `data: ${JSON.stringify(event)}\n\n`;
-        try {
-          controller.enqueue(encoder.encode(data));
-        } catch {
-          // Stream already closed — unsubscribe
-          unsub();
-        }
+        sse.send(event);
         if (event.type === "done") {
           unsub();
-          try { controller.close(); } catch { /* already closed */ }
+          sse.close();
         }
       });
-
-      // Clean up on client disconnect
-      request.signal.addEventListener("abort", () => {
-        unsub();
-        try { controller.close(); } catch { /* already closed */ }
-      });
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
+      return unsub;
     },
   });
 }

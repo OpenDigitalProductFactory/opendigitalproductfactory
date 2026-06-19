@@ -25,6 +25,7 @@
  * is a UX enhancement, not a security boundary.
  */
 import { useEffect, useState } from "react";
+import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
 
 export type PlatformReadyState = {
   ready: boolean;
@@ -53,9 +54,14 @@ export function usePlatformReady(): PlatformReadyState {
         // Fail open — assume ready. The middleware 503 will catch any
         // actual mid-drain attempts.
       });
+  }, []);
 
-    const source = new EventSource("/api/agent/system-stream");
-    source.onmessage = (msg) => {
+  // Resilient SSE (BI-864E83B0): shares the same /api/agent/system-stream
+  // source as PlatformBanner and gains the heartbeat watchdog so it can't
+  // become a zombie connection after a portal rebuild. Transient disconnects
+  // keep the last known level — the hook reconnects underneath.
+  useResilientEventSource("/api/agent/system-stream", {
+    onMessage: (msg) => {
       let event: SystemQuiescenceEvent;
       try {
         event = JSON.parse(msg.data) as SystemQuiescenceEvent;
@@ -70,15 +76,8 @@ export function usePlatformReady(): PlatformReadyState {
       } else if (event.level === "cleared") {
         setState({ ready: true, level: "normal" });
       }
-    };
-    source.onerror = () => {
-      // Don't change state on transient disconnect — last known state
-      // is the safer assumption. EventSource auto-reconnects.
-    };
-    return () => {
-      source.close();
-    };
-  }, []);
+    },
+  });
 
   return state;
 }
