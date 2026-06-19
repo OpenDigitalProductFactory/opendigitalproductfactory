@@ -16,7 +16,10 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  *  dash-joined sentence still counts as long. */
 export function toProse(s: string): string {
   return String(s)
-    .replace(/<[^>]+>/g, " ")
+    // Strip HTML tags. The inner class excludes `<` (not just `>`) so the match
+    // can't re-scan across many leading `<` — keeps this linear (no polynomial
+    // ReDoS on input like "<<<<<<…"). Well-formed tags contain no inner `<`.
+    .replace(/<[^<>]+>/g, " ")
     .replace(/&[a-z]+;|&#\d+;/gi, " ")
     .replace(/[—–]/g, " ")
     .replace(/[`*_>#]/g, " ")
