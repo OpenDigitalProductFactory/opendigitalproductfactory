@@ -565,6 +565,43 @@ async function ensureClientBranch(identity: ClientIdentity): Promise<void> {
 // ─── Build Branch Lifecycle ──────────────────────────────────────────────────
 
 /**
+ * Provision a build's isolated worktree (the isolation-ON path of
+ * startBuildBranch). Ensures the build branch exists — created from the client
+ * branch with `git branch` (NOT `checkout`, so the shared /workspace tree stays
+ * on the client branch) — then creates the worktree on it with node_modules
+ * shared by symlink. This is what makes concurrent builds non-contaminating:
+ * each runs in its own tree, so no branch switch in /workspace can scrub another
+ * build's work (BI-98B723C0).
+ */
+async function provisionBuildWorktree(args: {
+  buildId: string;
+  branchName: string;
+  clientBranch: string;
+}): Promise<void> {
+  const { buildId, branchName, clientBranch } = args;
+  await execSandboxGit(
+    `git -C ${WORKSPACE} branch --list "${branchName}" | grep -q . || git -C ${WORKSPACE} branch "${branchName}" "${clientBranch}"`,
+  );
+  await execSandboxGit(buildSandboxWorktreeAddCommand(buildId, branchName));
+  console.log(
+    `[build-branch] Provisioned isolated worktree for ${JSON.stringify(branchName)} at ${JSON.stringify(buildWorktreePath(buildId))}`,
+  );
+}
+
+/**
+ * Tear down a build's worktree (isolation-ON cleanup on promote/abandon).
+ * Best-effort — the symlinked node_modules are not real files so removal never
+ * touches the shared install, and a missing worktree is not an error.
+ */
+async function teardownBuildWorktree(buildId: string): Promise<void> {
+  await execSandboxGit(buildSandboxWorktreeRemoveCommand(buildId)).catch((err) => {
+    console.warn(
+      `[build-branch] worktree teardown skipped (non-fatal): ${(err as Error).message?.slice(0, 200)}`,
+    );
+  });
+}
+
+/**
  * Creates (or re-uses) a build branch for this feature.
  * Branch is forked from the client branch: client/<clientId>
  * Updates FeatureBuild with sandboxId/sandboxPort so deploy_feature,
@@ -665,28 +702,39 @@ export async function startBuildBranch(buildId: string): Promise<SandboxSourceCu
 
   const branchName = `build/${buildId}`;
 
-  const branchExists = await execSandboxGit(
-    `git -C ${WORKSPACE} branch --list "${branchName}" | grep -q . && echo yes || echo no`,
-  ).catch(() => "no");
-
-  if (branchExists.trim() === "yes") {
-    await execSandboxGit(
-      `git -C ${WORKSPACE} checkout "${branchName}"`,
-    );
-    await normalizeSandboxBranchArtifacts(branchName);
-    await refreshCurrentBranchFromTarget({
+  if (isBuildWorktreeIsolationEnabled()) {
+    // Isolation ON: this build runs in its OWN worktree; /workspace stays on the
+    // client branch so a concurrent build can never scrub this one's tree.
+    await provisionBuildWorktree({
       buildId,
       branchName,
-      targetRef: identity.clientBranch,
-      blockUnknown: true,
+      clientBranch: identity.clientBranch,
     });
-    console.log(`[build-branch] Resumed build branch: ${JSON.stringify(branchName)}`);
   } else {
-    await execSandboxGit(
-      `git -C ${WORKSPACE} checkout -b "${branchName}"`,
-    );
-    await normalizeSandboxBranchArtifacts(branchName);
-    console.log(`[build-branch] Created build branch: ${JSON.stringify(branchName)} from ${JSON.stringify(identity.clientBranch)}`);
+    // Isolation OFF (default): the shared-tree checkout path — unchanged.
+    const branchExists = await execSandboxGit(
+      `git -C ${WORKSPACE} branch --list "${branchName}" | grep -q . && echo yes || echo no`,
+    ).catch(() => "no");
+
+    if (branchExists.trim() === "yes") {
+      await execSandboxGit(
+        `git -C ${WORKSPACE} checkout "${branchName}"`,
+      );
+      await normalizeSandboxBranchArtifacts(branchName);
+      await refreshCurrentBranchFromTarget({
+        buildId,
+        branchName,
+        targetRef: identity.clientBranch,
+        blockUnknown: true,
+      });
+      console.log(`[build-branch] Resumed build branch: ${JSON.stringify(branchName)}`);
+    } else {
+      await execSandboxGit(
+        `git -C ${WORKSPACE} checkout -b "${branchName}"`,
+      );
+      await normalizeSandboxBranchArtifacts(branchName);
+      console.log(`[build-branch] Created build branch: ${JSON.stringify(branchName)} from ${JSON.stringify(identity.clientBranch)}`);
+    }
   }
   const finalSourceCurrency = await inspectCurrentSandboxSourceCurrency(
     upstreamVerified ? "origin/main" : identity.clientBranch,
@@ -762,6 +810,12 @@ export async function promoteBuildBranch(buildId: string): Promise<void> {
     ].join(" && "),
   );
 
+  // Isolation ON: the merge reads build/<id> from git regardless of which tree
+  // holds it, so the now-merged worktree can be torn down.
+  if (isBuildWorktreeIsolationEnabled()) {
+    await teardownBuildWorktree(buildId);
+  }
+
   console.log(`[build-branch] Promoted ${branchName} → ${identity.clientBranch}`);
 }
 
@@ -772,6 +826,12 @@ export async function promoteBuildBranch(buildId: string): Promise<void> {
 export async function abandonBuildBranch(buildId: string): Promise<void> {
   const identity = await getClientIdentity();
   try {
+    // Isolation ON: the build lived in its own worktree, so /workspace is
+    // already on the client branch (checkout is a harmless no-op) — just drop
+    // the worktree. The branch itself is preserved in git for audit/recovery.
+    if (isBuildWorktreeIsolationEnabled()) {
+      await teardownBuildWorktree(buildId);
+    }
     await execSandboxGit(
       `cd ${WORKSPACE} && git checkout "${identity.clientBranch}"`,
     );
