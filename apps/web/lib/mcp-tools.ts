@@ -7866,8 +7866,14 @@ export async function executeTool(
       // normal phase-transition behavior even if they send schema-extra params.
       const { toPhase, autoAdvance } = resolveSavePhaseHandoffTransition(params, context, latestBuild.phase);
 
-      // Write the handoff record
-      await prisma.phaseHandoff.create({
+      // Write the handoff record with a structured evidence manifest derived
+      // from the build's own evidence columns, so the next phase reads a
+      // one-line-per-field digest (rendered by agent-coworker's "Context from
+      // Previous Phase" block) instead of relying on the free-text summary
+      // alone. gateResult is filled on auto-advance below, once the gate runs.
+      const { buildPhaseHandoffEvidence } = await import("@/lib/feature-build-types");
+      const handoffEvidence = buildPhaseHandoffEvidence(latestBuild);
+      const createdHandoff = await prisma.phaseHandoff.create({
         data: {
           buildId: latestBuild.buildId,
           fromPhase: latestBuild.phase,
@@ -7878,8 +7884,8 @@ export async function executeTool(
           decisionsMade: Array.isArray(params["decisionsMade"]) ? (params["decisionsMade"] as string[]).map(String) : [],
           openIssues: Array.isArray(params["openIssues"]) ? (params["openIssues"] as string[]).map(String) : [],
           userPreferences: Array.isArray(params["userPreferences"]) ? (params["userPreferences"] as string[]).map(String) : [],
-          evidenceFields: [],
-          evidenceDigest: {},
+          evidenceFields: handoffEvidence.evidenceFields,
+          evidenceDigest: handoffEvidence.evidenceDigest,
           gateResult: {},
         },
       });
@@ -7945,6 +7951,21 @@ export async function executeTool(
               happyPathState,
             },
           );
+          // Record the gate outcome on the handoff (the gate that allowed —
+          // or blocked — advancement). Best-effort; never fail the handoff.
+          await prisma.phaseHandoff
+            .update({
+              where: { id: createdHandoff.id },
+              data: {
+                gateResult: {
+                  allowed: gate.allowed,
+                  reason: gate.reason ?? null,
+                  fromPhase: latestBuild.phase,
+                  toPhase,
+                } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+              },
+            })
+            .catch(() => {});
           if (gate.allowed) {
             await prisma.featureBuild.update({ where: { buildId: latestBuild.buildId }, data: { phase: toPhase } });
             if (toPhase === "review") {
