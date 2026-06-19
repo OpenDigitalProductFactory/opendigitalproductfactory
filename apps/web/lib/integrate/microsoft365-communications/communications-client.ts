@@ -282,5 +282,7 @@ export async function probeMicrosoft365Communications(
 
 function stripHtml(value: unknown): string {
   if (typeof value !== "string") return "";
-  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  // Inner class excludes `<` (not just `>`) to keep tag-stripping linear — no
+  // polynomial ReDoS on input like "<<<<…". Equivalent for well-formed tags.
+  return value.replace(/<[^<>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
