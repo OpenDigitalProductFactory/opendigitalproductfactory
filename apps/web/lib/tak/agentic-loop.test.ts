@@ -1813,3 +1813,113 @@ describe("runAgenticLoop interactionMode gate (Phase J)", () => {
     expect(zeroToolCall).toBeUndefined();
   });
 });
+
+// BI-2AC48661 — persistent ExecutionPlan in the agentic loop.
+describe("runAgenticLoop — execution plan", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(prisma.agentModelConfig.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.toolExecution.create).mockResolvedValue({} as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      isSuperuser: true,
+      groups: [{ platformRole: { roleId: "ceo" } }],
+    } as never);
+    vi.mocked(governedExecuteTool).mockImplementation(async (args: any) =>
+      executeTool(args.toolName, args.rawParams, args.userId, args.context as any) as any,
+    );
+  });
+
+  const planParams = {
+    chatHistory: [{ role: "user" as const, content: "do a multi-step task" }],
+    systemPrompt: "You are a helpful assistant.",
+    sensitivity: "internal" as const,
+    // No sideEffect/build tools → fabrication detection won't fire on text-only.
+    tools: [{ name: "search_project_files", description: "Search", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false }],
+    toolsForProvider: [{ type: "function", function: { name: "search_project_files", description: "Search", parameters: {} } }],
+    userId: "user-1",
+    routeContext: "/work",
+    agentId: "software-engineer",
+    threadId: "thread-plan",
+  };
+
+  it("exposes no plan tools and carries no plan when enableExecutionPlan is off", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockResolvedValueOnce(mockResult({ content: "Hi there, how can I help?", providerId: "anthropic-sub" }) as never);
+
+    const result = await runAgenticLoop({ ...planParams });
+
+    expect(result.content).toBe("Hi there, how can I help?");
+    expect(result.executionPlan ?? null).toBeNull();
+    // The provider tool list passed to routeAndCall has only the base tool.
+    const optsArg = mockRoute.mock.calls[0]![3] as { tools?: Array<{ function?: { name?: string } }> };
+    const names = (optsArg.tools ?? []).map((t) => t.function?.name);
+    expect(names).toEqual(["search_project_files"]);
+  });
+
+  it("exposes the plan tools to the model when enabled", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    // Reply ends in "?" → treated as a clarifying question, so the loop accepts
+    // it without nudging and we get a single deterministic dispatch to inspect.
+    mockRoute.mockResolvedValueOnce(mockResult({ content: "What would you like me to tackle first?", providerId: "anthropic-sub" }) as never);
+
+    await runAgenticLoop({ ...planParams, enableExecutionPlan: true });
+
+    const optsArg = mockRoute.mock.calls[0]![3] as { tools?: Array<{ function?: { name?: string } }> };
+    const names = (optsArg.tools ?? []).map((t) => t.function?.name);
+    expect(names).toContain("record_execution_plan");
+    expect(names).toContain("update_execution_plan_step");
+  });
+
+  it("intercepts plan tools (never dispatches them) and returns the final plan", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "",
+        toolCalls: [{ id: "t1", name: "record_execution_plan", arguments: { goal: "g", steps: ["a", "b"] } }],
+      }) as never)
+      .mockResolvedValueOnce(mockResult({
+        content: "",
+        toolCalls: [
+          { id: "t2", name: "update_execution_plan_step", arguments: { stepId: "s1", status: "done" } },
+          { id: "t3", name: "update_execution_plan_step", arguments: { stepId: "s2", status: "done" } },
+        ],
+      }) as never)
+      .mockResolvedValueOnce(mockResult({ content: "Everything is wrapped up." }) as never);
+
+    const result = await runAgenticLoop({ ...planParams, enableExecutionPlan: true });
+
+    // Plan tools are loop-intrinsic — governedExecuteTool is never called for them.
+    const dispatched = vi.mocked(governedExecuteTool).mock.calls.map((c: any) => c[0].toolName);
+    expect(dispatched).not.toContain("record_execution_plan");
+    expect(dispatched).not.toContain("update_execution_plan_step");
+
+    expect(result.content).toBe("Everything is wrapped up.");
+    expect(result.executionPlan?.steps.map((s) => s.status)).toEqual(["done", "done"]);
+  });
+
+  it("bounces a premature text-only stop while plan steps remain open", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "",
+        toolCalls: [{ id: "t1", name: "record_execution_plan", arguments: { goal: "g", steps: ["a", "b"] } }],
+      }) as never)
+      // Premature stop at iteration 1 — plan still has open steps → gate nudges.
+      .mockResolvedValueOnce(mockResult({ content: "Standing by." }) as never)
+      .mockResolvedValueOnce(mockResult({
+        content: "",
+        toolCalls: [
+          { id: "t2", name: "update_execution_plan_step", arguments: { stepId: "s1", status: "done" } },
+          { id: "t3", name: "update_execution_plan_step", arguments: { stepId: "s2", status: "skipped" } },
+        ],
+      }) as never)
+      .mockResolvedValueOnce(mockResult({ content: "All wrapped up now." }) as never);
+
+    const result = await runAgenticLoop({ ...planParams, enableExecutionPlan: true });
+
+    // The premature stop forced an extra dispatch (4 total, not 2).
+    expect(mockRoute.mock.calls.length).toBe(4);
+    expect(result.content).toBe("All wrapped up now.");
+    expect(result.executionPlan && (result.executionPlan.steps.every((s) => s.status === "done" || s.status === "skipped"))).toBe(true);
+  });
+});

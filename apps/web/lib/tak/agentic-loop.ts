@@ -20,6 +20,16 @@ import {
 import { extractToolCalls } from "@/lib/routing/extract-tool-calls";
 import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
 import type { UserContext } from "@/lib/permissions";
+import {
+  type ExecutionPlan,
+  EXECUTION_PLAN_TOOL_NAMES,
+  executionPlanProviderTools,
+  applyPlanToolCall,
+  renderPlanReminder,
+  renderNoPlanReminder,
+  planCompletionGate,
+  planProgress,
+} from "./execution-plan";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern
@@ -731,6 +741,13 @@ export type AgenticResult = {
   executedTools: ExecutedTool[];
   /** If a proposal tool was called, return it for approval card rendering */
   proposal: { name: string; arguments: Record<string, unknown>; content: string } | null;
+  /**
+   * BI-2AC48661: the execution plan as it stood when the loop returned, when
+   * `enableExecutionPlan` was set. Null when planning was off or the model
+   * never recorded one. Carried out for observability and for the streamed-plan
+   * UX (BI-95C0835E).
+   */
+  executionPlan?: ExecutionPlan | null;
 };
 
 async function resolveUserContext(userId: string): Promise<UserContext> {
@@ -991,6 +1008,16 @@ export async function runAgenticLoop(params: {
    * the join key and the UI badge degrades to provider-name-only.
    */
   agentMessageId?: string | null;
+  /**
+   * BI-2AC48661 (EP-F7E35344): opt into the persistent ExecutionPlan. When
+   * true, two loop-intrinsic tools (record_execution_plan,
+   * update_execution_plan_step) are appended to the model's tool list, the
+   * current plan is rendered into the prompt every iteration (outside the
+   * compacted window, so it never scrolls away), and a text-only "done" reply
+   * is gated on all plan steps being closed. Default false — every existing
+   * caller is byte-for-byte unchanged until it opts in.
+   */
+  enableExecutionPlan?: boolean;
 }): Promise<AgenticResult> {
   const {
     chatHistory,
@@ -1056,6 +1083,41 @@ export async function runAgenticLoop(params: {
     mcpSession: { userId, agentId, threadId, routeContext },
   };
 
+  // BI-2AC48661: persistent execution plan. When enabled, expose the two
+  // plan tools to the model and keep the plan in loop state (never in the
+  // compacted message array). MAX_PLAN_NUDGES caps how many times a text-only
+  // "done" with open steps is bounced back to work before we accept the stop,
+  // mirroring the existing one-shot continuation-nudge discipline.
+  const planEnabled = params.enableExecutionPlan === true;
+  const MAX_PLAN_NUDGES = 2;
+  let executionPlan: ExecutionPlan | null = null;
+  let planNudges = 0;
+  if (planEnabled) {
+    const planProviderTools = executionPlanProviderTools();
+    routeOptions.tools = [
+      ...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? []),
+      ...planProviderTools,
+    ];
+  }
+
+  // Append the current plan as an ephemeral reminder to the messages handed to
+  // the model. NOT stored in `messages`, so it is regenerated from live plan
+  // state every iteration and can never be compacted away — this is the
+  // "reads the plan outside the compacted window" mechanism. No-op when off.
+  const withPlanReminder = (msgs: ChatMessage[]): ChatMessage[] => {
+    if (!planEnabled) return msgs;
+    const reminder = executionPlan ? renderPlanReminder(executionPlan) : renderNoPlanReminder();
+    const block = `[System notice]\n${reminder}`;
+    // Merge into a trailing user message to avoid two consecutive user turns
+    // (some providers reject that); otherwise append after the assistant/tool
+    // tail, which is a valid alternation.
+    const last = msgs[msgs.length - 1];
+    if (last && last.role === "user" && typeof last.content === "string") {
+      return [...msgs.slice(0, -1), { ...last, content: `${last.content}\n\n${block}` }];
+    }
+    return [...msgs, { role: "user" as const, content: block }];
+  };
+
   let messages = [...chatHistory];
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -1077,7 +1139,7 @@ export async function runAgenticLoop(params: {
   // meant hand-stitching timestamps across un-correlated [cli-adapter] /
   // [agentic-loop] lines while a concurrent coworker's logs interleaved. See
   // the Portfolio Analyst latency investigation, 2026-06-04.
-  const toolsAttachedForTurn = Boolean(toolsForProvider && toolsForProvider.length > 0);
+  const toolsAttachedForTurn = Boolean((toolsForProvider && toolsForProvider.length > 0) || planEnabled);
   const logTurnSummary = (provider: string, model: string): void => {
     console.log(
       sanitizeForLog(
@@ -1276,7 +1338,7 @@ export async function runAgenticLoop(params: {
         const { withHeartbeatTicker } = await import("@/lib/observability/heartbeat");
         result = await withHeartbeatTicker(taskRunId, () =>
           routeAndCall(
-            compactAgenticMessages(messages),
+            withPlanReminder(compactAgenticMessages(messages)),
             systemPrompt,
             sensitivity,
             { ...enrichedRouteOptions, previousResponseId },
@@ -1284,7 +1346,7 @@ export async function runAgenticLoop(params: {
         );
       } else {
         result = await routeAndCall(
-          compactAgenticMessages(messages),
+          withPlanReminder(compactAgenticMessages(messages)),
           systemPrompt,
           sensitivity,
           { ...enrichedRouteOptions, previousResponseId },
@@ -1594,7 +1656,7 @@ export async function runAgenticLoop(params: {
         continuationNudges,
         iteration,
         maxIterations: MAX_ITERATIONS,
-        hasTools: !!(toolsForProvider && toolsForProvider.length > 0),
+        hasTools: !!(toolsForProvider && toolsForProvider.length > 0) || planEnabled,
         executedToolCount: executedTools.length,
         responseLength: trimmed.length,
         responseText: trimmed,
@@ -1732,6 +1794,27 @@ export async function runAgenticLoop(params: {
         continue;
       }
 
+      // BI-2AC48661: plan completion gate. The model's text-only reply is its
+      // natural "done" signal — but with an execution plan that still has open
+      // steps, "done" is premature. Bounce it back to the next open step
+      // (capped at MAX_PLAN_NUDGES so a model that refuses to mark steps can
+      // still terminate). Skipped when tools were stripped (degraded mode) —
+      // a tool-less model can't work the plan and must be allowed to answer.
+      if (planEnabled && !result.toolsStripped) {
+        const gate = planCompletionGate({ plan: executionPlan, planNudges, maxPlanNudges: MAX_PLAN_NUDGES });
+        if (gate.action === "nudge" && gate.nudge) {
+          planNudges++;
+          console.log(`[agentic-loop] plan-incomplete nudge (${planNudges}/${MAX_PLAN_NUDGES})`);
+          if (trimmed.length > bestPreNudgeContent.length) bestPreNudgeContent = trimmed;
+          messages = [
+            ...messages,
+            ...(trimmed.length > 0 ? [{ role: "assistant" as const, content: result.content }] : []),
+            { role: "user" as const, content: gate.nudge },
+          ];
+          continue;
+        }
+      }
+
       // If the final response is empty but we had a good pre-nudge response,
       // use that instead of returning nothing. This prevents quality-gate
       // failures when the nudge causes the model to return empty.
@@ -1751,6 +1834,7 @@ export async function runAgenticLoop(params: {
         totalOutputTokens,
         executedTools,
         proposal: null,
+        executionPlan,
       };
     }
 
@@ -1761,6 +1845,20 @@ export async function runAgenticLoop(params: {
     }> = [];
 
     for (const tc of result.toolCalls) {
+      // BI-2AC48661: plan tools are loop-intrinsic. Intercept them here — they
+      // mutate loop state and return a synthetic result; they never reach
+      // governedExecuteTool, take no capability grant, and write no audit row.
+      if (planEnabled && EXECUTION_PLAN_TOOL_NAMES.has(tc.name)) {
+        const applied = applyPlanToolCall(executionPlan, tc.name, tc.arguments, iteration);
+        executionPlan = applied.plan;
+        console.log(
+          `[agentic-tool] PLAN iter=${iteration} tool=${tc.name} success=${applied.result.success}` +
+          (executionPlan ? ` progress=${planProgress(executionPlan).done}/${planProgress(executionPlan).total}` : ""),
+        );
+        iterationResults.push({ tc, toolResult: applied.result });
+        continue;
+      }
+
       const toolDef = tools.find((t) => t.name === tc.name);
 
       // Proposal tools (side-effecting, need approval) — break the loop and return
@@ -1955,5 +2053,6 @@ export async function runAgenticLoop(params: {
     totalOutputTokens,
     executedTools,
     proposal: null,
+    executionPlan,
   };
 }
