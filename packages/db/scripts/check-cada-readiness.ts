@@ -6,7 +6,10 @@
  * Operator utility AND the functional-verification harness for the readiness
  * logic against real platform state.
  *
- * Run: cd packages/db && npx tsx scripts/check-cada-readiness.ts [--operator <ISO2>] [--target <1-4>]
+ * Run: cd packages/db && npx tsx scripts/check-cada-readiness.ts [--operates-in eu,us] [--operator <ISO2>] [--data-in-eea] [--target <1-4>]
+ *
+ * CADA is region-specific: the assessment first gates on applicability (does the
+ * org operate in / sell to the EU?) and only assigns a tier if CADA applies.
  */
 import { PrismaClient } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -38,7 +41,10 @@ async function main() {
   const localOnly = !!(localOnlyRow?.value && typeof localOnlyRow.value === "object" && (localOnlyRow.value as { enabled?: boolean }).enabled === true);
 
   const bc = await prisma.businessContext.findFirst({ orderBy: { createdAt: "asc" } });
-  const operatesIn = bc?.operatesIn ?? [];
+  const operatesInArg = arg("--operates-in");
+  const operatesIn = operatesInArg ? operatesInArg.split(",").map((s) => s.trim().toLowerCase()) : (bc?.operatesIn ?? []);
+  const sellsTo = bc?.sellsTo ?? [];
+  const employsIn = bc?.employsIn ?? [];
   const dataResidency = bc?.dataResidency ?? [];
   const dataInEea =
     process.argv.includes("--data-in-eea") ||
@@ -52,22 +58,29 @@ async function main() {
   const target = targetArg ? (Number(targetArg) as CadaAssuranceLevel) : undefined;
 
   const declared: InstallSovereigntyDeclaration = { operatorJurisdiction, dataInEea };
-  const readiness = computeInstallCadaReadiness(declared, localOnly, target);
+  const regionProfile = { operatesIn, sellsTo, employsIn, dataResidency };
+  const readiness = computeInstallCadaReadiness(declared, localOnly, target, regionProfile);
 
   console.log("\n═══════════════════════════════════════════════════════════");
   console.log("CADA readiness — current install posture");
   console.log("═══════════════════════════════════════════════════════════");
   console.log(`local-only inference: ${localOnly ? "ON" : "off"}  (PlatformConfig:${LOCAL_ONLY_KEY})`);
-  console.log(`operatesIn:           ${JSON.stringify(operatesIn)}`);
+  console.log(`operatesIn:           ${JSON.stringify(operatesIn)}${operatesInArg ? " (override)" : ""}`);
+  console.log(`sellsTo:              ${JSON.stringify(sellsTo)}`);
   console.log(`dataResidency:        ${JSON.stringify(dataResidency)}  → dataInEea=${dataInEea}`);
-  console.log(`operatorJurisdiction: ${operatorJurisdiction}  (${operatorOverride ? "override" : derived.note})`);
-  console.log(`\nLevel: ${readiness.assessment.level}`);
-  console.log(readiness.summary);
-  console.log("\nrationale:");
-  for (const r of readiness.assessment.rationale) console.log(`  • ${r}`);
-  if (readiness.assessment.gaps.length) {
-    console.log("gaps:");
-    for (const g of readiness.assessment.gaps) console.log(`  • ${g}`);
+  console.log(`\napplicable: ${readiness.applicable ? "YES" : "NO"}  — ${readiness.applicability.reason}`);
+  if (readiness.applicable) {
+    console.log(`operatorJurisdiction: ${operatorJurisdiction}  (${operatorOverride ? "override" : derived.note})`);
+    console.log(`\nLevel: ${readiness.assessment.level}`);
+    console.log(readiness.summary);
+    console.log("\nrationale:");
+    for (const r of readiness.assessment.rationale) console.log(`  • ${r}`);
+    if (readiness.assessment.gaps.length) {
+      console.log("gaps:");
+      for (const g of readiness.assessment.gaps) console.log(`  • ${g}`);
+    }
+  } else {
+    console.log(readiness.summary);
   }
 
   // Governance-evidence lens: CADA control implementation coverage (seed-cada-regulation.ts).

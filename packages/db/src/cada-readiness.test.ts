@@ -78,4 +78,31 @@ describe("cada-readiness", () => {
     // applicable = 4 (excludes the not-applicable); 2/4 = 50%
     expect(cov.pctImplemented).toBe(50);
   });
+
+  it("does NOT assess when CADA is out of region scope (no EU nexus)", () => {
+    const r = computeInstallCadaReadiness(
+      { operatorJurisdiction: "US", dataInEea: false },
+      false,
+      undefined,
+      { operatesIn: ["us"], sellsTo: [], employsIn: [], dataResidency: [] },
+    );
+    expect(r.applicable).toBe(false);
+    expect(r.summary).toMatch(/does not apply/i);
+  });
+
+  it("assesses when CADA applies via an EU operating nexus", () => {
+    const r = computeInstallCadaReadiness(
+      { operatorJurisdiction: "DE", dataInEea: true },
+      true,
+      undefined,
+      { operatesIn: ["eu"], sellsTo: [], employsIn: [], dataResidency: [] },
+    );
+    expect(r.applicable).toBe(true);
+    expect(r.assessment.level).toBe(3);
+  });
+
+  it("is backward-compatible: no region profile → applicability not gated", () => {
+    const r = computeInstallCadaReadiness({ operatorJurisdiction: "DE", dataInEea: true }, true);
+    expect(r.applicable).toBe(true);
+  });
 });
