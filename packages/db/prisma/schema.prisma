@@ -4482,6 +4482,12 @@ model PlatformIssueReport {
   triggerKind         String?
   supportSessionId    String?
   source              String        @default("manual")
+  // BI-3E0EE3BA: self-fix-feasibility class for escalations raised by an
+  // autonomous producer (Build Studio) that gave up self-repairing. One of
+  // auto-recoverable | needs-human | needs-external-capability. Null for
+  // ordinary issue reports. Lets hive learning (BI-76B4317F) key off the
+  // failure class and support-tier routing (BI-5090F4AA) route by it.
+  selfFixClass        String?
   // BI-5FE8656F (EP-FULL-OBS Tier 2): stable idempotency key for automated
   // producers (the log-signature scanner files `log-sig:<service>:<sigId>`).
   // A partial UNIQUE index — open rows only — lives in the migration (Prisma
