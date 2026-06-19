@@ -1531,22 +1531,16 @@ model ModelProvider {
   codegen                  Int                       @default(50)
   contextRetention         Int                       @default(50)
   conversational           Int                       @default(50)
-  customScores             Json                      @default("{}")
-  evalCount                Int                       @default(0)
   instructionFollowing     Int                       @default(50)
-  lastCallAt               DateTime?
-  lastEvalAt               DateTime?
   maxContextTokens         Int?
   maxOutputTokens          Int?
   modelRestrictions        String[]                  @default([])
-  profileConfidence        String                    @default("low")
   profileSource            String                    @default("seed")
   reasoning                Int                       @default(50)
   recentFailureRate        Float                     @default(0)
   retiredAt                DateTime?
   retiredReason            String?
   structuredOutput         Int                       @default(50)
-  supportedModalities      Json                      @default("{\"input\": [\"text\"], \"output\": [\"text\"]}")
   supportsStreaming        Boolean                   @default(true)
   supportsStructuredOutput Boolean                   @default(false)
   supportsToolUse          Boolean                   @default(false)
@@ -2924,8 +2918,6 @@ model BusinessContext {
   // Derived from archetype (auto-populated)
   industry    String?
   ctaType     String?
-  /// @deprecated Read StorefrontConfig.archetypeId. Column kept until next migration cycle.
-  archetypeId String?
 
   // Per-org Digital Product Portfolio decomposition (BI-2D452667, spec
   // docs/superpowers/specs/2026-06-07-business-operating-model-portfolio-wiring-design.md §3/§8 Phase 0).
