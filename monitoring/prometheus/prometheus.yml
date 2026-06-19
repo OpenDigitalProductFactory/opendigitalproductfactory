@@ -51,12 +51,16 @@ scrape_configs:
     static_configs:
       - targets: ["inngest:8288"]
 
-  # ─── ADP (payroll/HRIS MCP) ─────────────────────────────────
-  # GET /metrics added in services/adp/src/server.ts. Default-process
-  # metrics + per-tool latency histogram + error counter.
-  - job_name: "adp"
-    static_configs:
-      - targets: ["adp:8600"]
+  # ─── ADP (payroll/HRIS MCP) — opt-in (integrations-adp profile) ─────────────
+  # adp is no longer default-on (it runs only under the `integrations-adp`
+  # compose profile), so it is intentionally NOT scraped by default — otherwise
+  # the ContainerDown alert (`up == 0`) would fire CRITICAL for a service that is
+  # absent on purpose. Re-enable this job when you turn on the integrations-adp
+  # profile to restore adp's /metrics (per-tool latency histogram + error counter
+  # from services/adp/src/server.ts).
+  # - job_name: "adp"
+  #   static_configs:
+  #     - targets: ["adp:8600"]
 
   # ─── Redis (via redis-exporter sidecar) ─────────────────────
   # The redis-exporter container scrapes redis:6379 INFO and exposes it on

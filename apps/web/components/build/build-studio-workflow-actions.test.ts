@@ -107,6 +107,64 @@ function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
   };
 }
 
+// A review-phase non-UI build (UX verification skipped) whose whole-repo
+// verification reported out-of-scope test noise (typecheck passed, 88 failures
+// elsewhere). `affectedTests` controls whether any failure is in the build's
+// own changed surface. Used to prove the action layer mirrors checkPhaseGate:
+// out-of-scope noise is advisory; an in-scope failure still blocks.
+function reviewBuildWithScopedSurface(affectedTests: string[]): {
+  build: FeatureBuildRow;
+  progressVisibility: BuildProgressVisibility;
+} {
+  const build = makeBuild({
+    phase: "review",
+    draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+    uxVerificationStatus: "skipped",
+    uxTestResults: [],
+    buildPlan: {
+      fileStructure: [{ path: "apps/web/lib/utils/string-helpers.ts", action: "create", purpose: "truncateMiddle helper." }],
+      tasks: [{ title: "Add truncateMiddle", testFirst: "write test", implement: "write helper", verify: "run tests" }],
+    },
+    planReview: { decision: "pass", summary: "Ready.", issues: [] },
+    verificationOut: {
+      testsPassed: 50780,
+      testsFailed: 88,
+      typecheckPassed: true,
+      failureAxis: "test-failure",
+      fullOutput: "88 unrelated failures elsewhere in the repo",
+      timestamp: "2026-06-19T16:46:14Z",
+    } as unknown as FeatureBuildRow["verificationOut"],
+    acceptanceMet: [
+      { criterion: "returns length 7", met: true },
+      { criterion: "returns original when short", met: true },
+    ] as unknown as FeatureBuildRow["acceptanceMet"],
+  });
+  const progressVisibility = {
+    buildId: "FB-9B19098C",
+    generatedAt: "2026-06-19T16:58:00.000Z",
+    statusHeading: { operatorAction: "Run scoped verification for this build", failureAxis: "test-failure" },
+    progress: { primary: { source: "db-task-results", completed: 1, total: 1, observedAt: "2026-06-19T16:46:14Z" }, conflicts: [] },
+    tasks: {
+      completedTasks: 1,
+      totalTasks: 1,
+      source: { source: "db-task-results", completed: 1, total: 1, observedAt: "2026-06-19T16:46:14Z" },
+      tasks: [{ taskIndex: -1, title: "Full verification: tests + typecheck", specialist: "qa-engineer", outcome: "DONE_WITH_CONCERNS", durationMs: 333383, summary: "ran the full suite", files: [] }],
+    },
+    staleChatSnapshots: [],
+    sandbox: null,
+    dispatchHistory: [],
+    verification: {
+      source: "verification",
+      observedAt: "2026-06-19T16:46:14Z",
+      buildScoped: { typecheckPassed: true, testsPassed: 50780, testsFailed: 88, failureAxis: "test-failure", affectedFiles: ["apps/web/lib/utils/string-helpers.ts"], affectedTests },
+      globalHealth: { testsFailed: 88, outputExcerpt: null },
+    },
+    quietAgent: { quiet: true, minutesQuiet: 5, lastObservableSignalAt: "2026-06-19T16:46:14Z" },
+    phaseRuns: [],
+  } satisfies BuildProgressVisibility;
+  return { build, progressVisibility };
+}
+
 describe("deriveBuildStudioWorkflowAction", () => {
   it("surfaces start approval even when a linked backlog build has already reached planning", () => {
     const action = deriveBuildStudioWorkflowAction({
@@ -352,6 +410,40 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.kind).toBe("resume-implementation");
     expect(action.primaryLabel).toBe("Resume Implementation");
     expect(action.message).toContain("healthy sandbox");
+  });
+
+  it("does not force Resume Implementation on a review build whose scoped surface is clean despite out-of-scope test noise (BI-2F10D6D3 follow-up)", () => {
+    // The truncateMiddle strand's second-order blocker: review-verification was
+    // skipped (non-UI), typecheck passed, and the 88 failures are all outside
+    // the changed surface (affectedTests === []). The action layer must mirror
+    // checkPhaseGate (typecheck-only) and advance instead of looping Resume.
+    const { build, progressVisibility } = reviewBuildWithScopedSurface([]);
+    const action = deriveBuildStudioWorkflowAction({
+      build,
+      governedBacklogEnabled: true,
+      progressVisibility,
+    });
+
+    expect(action.kind).not.toBe("resume-implementation");
+    expect(action.primaryLabel).not.toBe("Resume Implementation");
+    expect(action.kind).toBe("advance-phase");
+    expect(action.primaryLabel).toBe("Continue to Release");
+    expect(action.targetPhase).toBe("ship");
+    expect(action.disabledReason).toBeNull();
+  });
+
+  it("still forces Resume Implementation when a failing test IS in the build's changed surface", () => {
+    const { build, progressVisibility } = reviewBuildWithScopedSurface([
+      "apps/web/lib/utils/string-helpers.test.ts",
+    ]);
+    const action = deriveBuildStudioWorkflowAction({
+      build,
+      governedBacklogEnabled: true,
+      progressVisibility,
+    });
+
+    expect(action.kind).toBe("resume-implementation");
+    expect(action.primaryLabel).toBe("Resume Implementation");
   });
 
   it("names the resume action and failure axis for blocked usage-limit tasks", () => {

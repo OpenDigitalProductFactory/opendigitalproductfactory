@@ -35,6 +35,19 @@ function createLeaseId() {
   return `NPEL-${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`;
 }
 
+/**
+ * Prisma throws PrismaClientKnownRequestError { code: "P2002" } when a unique
+ * index rejects a write. Duck-typed so this module stays decoupled from the
+ * client import and the check is trivially mockable in unit tests.
+ */
+function isUniqueConstraintViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { code?: unknown }).code === "P2002"
+  );
+}
+
 export async function listActiveNonprodEnvironmentLeases(input: {
   db?: LeaseDb;
   now?: Date;
@@ -67,34 +80,71 @@ export async function claimNonprodEnvironmentLease(input: {
   now?: Date;
 }) {
   const db = input.db ?? prisma;
+  const now = input.now ?? new Date();
+
+  // Fast path: an already-active, unexpired lease for this key is a conflict.
   const active = await db.nonProductionEnvironmentLease.findFirst({
     where: {
       environmentKey: input.environmentKey,
       status: "active",
-      expiresAt: { gt: input.now ?? new Date() },
+      expiresAt: { gt: now },
     },
   });
   if (active) return { status: "conflict" as const, active };
 
-  const lease = await db.nonProductionEnvironmentLease.create({
-    data: {
-      leaseId: createLeaseId(),
+  // Self-heal: free any lapsed-but-still-"active" row for this key so its
+  // single-active slot (activeKey) is released before we claim. Without this,
+  // the unique index would block a legitimate claim on an env whose previous
+  // holder already expired but has not been reaped yet.
+  await db.nonProductionEnvironmentLease.updateMany({
+    where: {
       environmentKey: input.environmentKey,
-      ownerProvider: input.ownerProvider,
-      ownerSessionId: input.ownerSessionId,
-      purpose: input.purpose,
-      url: input.url,
-      ports: input.ports,
-      // Cap the hold window (BI-4043A64B); longer holds require heartbeat renew.
-      expiresAt: clampLeaseExpiry(input.now ?? new Date(), input.expiresAt),
-      worktreePath: input.worktreePath,
-      branchName: input.branchName,
-      buildId: input.buildId,
-      taskRunId: input.taskRunId,
-      cleanupCommand: input.cleanupCommand,
+      status: "active",
+      expiresAt: { lte: now },
     },
+    data: { status: "expired", activeKey: null, releasedAt: now },
   });
-  return { status: "claimed" as const, lease };
+
+  // The create is the atomic gate: a UNIQUE index on `activeKey` (= the env key
+  // while active) means only ONE concurrent claim can succeed. The findFirst
+  // above is a fast path, not the guarantee — two sessions can both pass it,
+  // but only one create wins. The loser catches P2002 and reports the conflict
+  // instead of a 500. This closes the claim TOCTOU on the single shared nonprod
+  // instance (two sessions both believing they own :3001 / active-candidate).
+  try {
+    const lease = await db.nonProductionEnvironmentLease.create({
+      data: {
+        leaseId: createLeaseId(),
+        environmentKey: input.environmentKey,
+        activeKey: input.environmentKey,
+        ownerProvider: input.ownerProvider,
+        ownerSessionId: input.ownerSessionId,
+        purpose: input.purpose,
+        url: input.url,
+        ports: input.ports,
+        // Cap the hold window (BI-4043A64B); longer holds require heartbeat renew.
+        expiresAt: clampLeaseExpiry(now, input.expiresAt),
+        worktreePath: input.worktreePath,
+        branchName: input.branchName,
+        buildId: input.buildId,
+        taskRunId: input.taskRunId,
+        cleanupCommand: input.cleanupCommand,
+      },
+    });
+    return { status: "claimed" as const, lease };
+  } catch (err) {
+    if (isUniqueConstraintViolation(err)) {
+      const winner = await db.nonProductionEnvironmentLease.findFirst({
+        where: {
+          environmentKey: input.environmentKey,
+          status: "active",
+          expiresAt: { gt: now },
+        },
+      });
+      if (winner) return { status: "conflict" as const, active: winner };
+    }
+    throw err;
+  }
 }
 
 export async function releaseNonprodEnvironmentLease(input: {
@@ -108,6 +158,8 @@ export async function releaseNonprodEnvironmentLease(input: {
     data: {
       status: "released",
       releasedAt: input.now ?? new Date(),
+      // Free the single-active slot so a new claim for this env can succeed.
+      activeKey: null,
     },
   });
 }
@@ -161,7 +213,8 @@ export async function reapExpiredNonprodEnvironmentLeases(input: {
   const now = input.now ?? new Date();
   const res = await db.nonProductionEnvironmentLease.updateMany({
     where: { status: "active", expiresAt: { lt: now }, releasedAt: null },
-    data: { status: "expired", releasedAt: now },
+    // Free the single-active slot (activeKey) as part of reaping.
+    data: { status: "expired", releasedAt: now, activeKey: null },
   });
   return { reaped: res.count };
 }

@@ -60,6 +60,27 @@ describe("autoDispatchShipForCompletedVerification — actor resolution", () => 
     expect(state.ownerResolveCount).toBe(0);
   });
 
+  it("forwards a 'skipped' verification status so non-UI builds ship instead of stranding", async () => {
+    // The FB-FD850A2C strand: a non-UI build skips browser UX verification and
+    // must auto-dispatch ship with verificationStatus="skipped" (not "complete"),
+    // mirroring the complete path so it advances to ship rather than looping.
+    state.build = { createdById: "usr_creator" };
+
+    await autoDispatchShipForCompletedVerification("build-skip", "skipped");
+
+    expect(state.dispatchCalls).toHaveLength(1);
+    expect(state.dispatchCalls[0]?.verificationStatus).toBe("skipped");
+    expect(state.dispatchCalls[0]?.userId).toBe("usr_creator");
+  });
+
+  it("defaults the verification status to 'complete' when omitted", async () => {
+    state.build = { createdById: "usr_creator" };
+
+    await autoDispatchShipForCompletedVerification("build-default");
+
+    expect(state.dispatchCalls[0]?.verificationStatus).toBe("complete");
+  });
+
   it("resolves the install owner (never a 'system' sentinel) when createdById is null", async () => {
     // Regression guard for the latent FK violation: a null createdById used to
     // fall back to userId:"system", which has no matching User row and fails
