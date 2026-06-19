@@ -21,17 +21,18 @@
 
 The edge node is the right architecture for **remote network visibility**: a host-resident agent that enrolls against a DPF Authority Core (the portal) and submits LAN/device/topology observations. The implementation is mature — TypeScript container + Go native binary, a full enrollment/heartbeat/discovery wire contract, customer/site-scoped fleet binding, and standalone/TLS/SNMP/air-gap compose overlays all exist today.
 
-But the **deployment topology** around it is not yet described as one coherent, supportable, testable architecture, and its default posture is wrong for the product. The founder's direction names five concrete gaps:
+But the **deployment topology** around it is not yet described as one coherent, supportable, testable architecture, and its default posture is wrong for the product. The founder's direction names six concrete gaps:
 
 1. **It is bundled and active by default; it must be opt-in.** Every install — `install-dpf.sh` and Windows `fresh-install.ps1` — bundles the edge-node container, **auto-issues a bootstrap token (`--auto-approve`)**, writes it to `.env`, and force-recreates the container so the local node **auto-enrolls and auto-trusts**. `[D]` This is silent default-on. Where the platform is installed, running an edge node should be a deliberate operator choice.
 2. **There is no *easy* way to put an edge node on separate hardware and connect it to the portal.** The capability exists (`docker-compose.edge-standalone.yml`, the multi-host runbook), but the path requires cloning the whole monorepo onto the second host just for a compose file, hand-editing `.env`, copying a token out-of-band, and re-approving in the portal. `[D]` That is a developer runbook, not an operator experience.
 3. **The edge install does not need everything the portal has — but that minimal footprint is not a described contract.** The standalone compose is already lean (no portal/postgres/neo4j/qdrant/LLM), and the Go binary is a single static executable. `[D]` Yet "what an edge node needs vs. what an Authority Core needs" is nowhere stated as a first-class footprint contract we can support and test against. `[J]`
 4. **The architecture is not described uniformly across documentation, SysML, and specifications.** Docs exist but are scattered (multi-host, air-gapped, deployment-contracts Contract 5, user guide). The edge node is **not yet in the SysML/EA graph** (it is the planned-but-unbuilt "network topology bridge", Phase D of [EP-ARCH-GRAPH-LIVE]). `[D]` There is no single deployment-topology description tying local/remote/fleet together.
 5. **Some archetypes deploy *many* edge nodes in different contexts, and that is not a base-architecture concept.** MSPs run an edge node per customer per site (the customer/site-binding spec already models the data boundary). Retail runs one per store/warehouse/HQ. `[D for MSP data model; J for the topology framing]` The "one Authority Core, a fleet of edge nodes across many contexts" pattern must be a base-architecture consideration and then specialized per archetype — not an MSP-only special case.
+6. **The operational risk envelope is under-specified.** The draft describes how to deploy nodes, but not enough about the fan-in bottleneck at the Authority Core, site-to-site data sovereignty, telemetry cardinality, token exposure in generated commands, Prometheus/Grafana boundaries, or how a fleet is upgraded, quarantined, and observed without turning the edge node into a second management platform. `[J]`
 
-This spec consolidates the deployment topology, flips the default posture to opt-in, defines the easy-remote provisioning experience and the minimal-footprint contract, models the system in SysML, gives a per-topology verification matrix, and adds the multi-node fleet consideration to the base architecture and to the retail and MSP archetypes.
+This spec consolidates the deployment topology, flips the default posture to opt-in, defines the easy-remote provisioning experience and the minimal-footprint contract, models the system in SysML, gives a per-topology verification matrix, adds the multi-node fleet consideration to the base architecture and to the retail and MSP archetypes, and makes the operational/security/observability constraints first-class.
 
-**This spec introduces no new identity-bearing tables.** It reuses `EdgeNode`, `BootstrapToken`, `EdgeNodeCapability`, and the `customerAccountId`/`customerSiteId` scope already on those models (Principal convergence preserved — §10). The work is posture, packaging, UX, description, and verification — not new substrate.
+**This spec introduces no new identity-bearing tables.** It reuses `EdgeNode`, `BootstrapToken`, `EdgeNodeCapability`, and the `customerAccountId`/`customerSiteId` scope already on those models (Principal convergence preserved by the Data-Model Stewardship section). The work is posture, packaging, UX, description, operational management, and verification — not new identity substrate.
 
 ---
 
@@ -48,6 +49,10 @@ A substrate sweep (code + specs + scripts + live backlog, 2026-06-19) found the 
 | Remote deploy | `docker-compose.edge-standalone.yml` (complete on its own — no portal/db), `-standalone-tls.yml`, `-snmp.yml`, `.macvlan.yml`. Multi-host + air-gapped runbooks. | Replace "clone the monorepo + hand-edit .env" with a portal-generated, copy-paste / single-artifact provisioning flow. |
 | Fleet scoping | `BootstrapToken.targetCustomerAccountId/SiteId` → copied to `EdgeNode.customerAccountId/SiteId` at enrollment; adapters + discovery runs filtered by authenticated scope. | Elevate "fleet across contexts" to base architecture; add retail; document operator UX for many nodes. |
 | Identity | `Principal(kind="edge_node")` + `PrincipalAlias` + `EdgeNode` side table. | Unchanged — reused. |
+| Authorization boundary | Edge routes authenticate the node token and derive scope from `resolveEdgeNodeAuth`; binding spec forbids identity/scope from request bodies. | Pull the binding spec's auth invariants into this topology so provisioning, observability, and fleet UX never bypass them. |
+| Observability | Portal-side Prometheus/Grafana already monitor local platform services; edge `metrics-loop.ts` pushes SNMP interface metrics to `/api/v1/edge/metrics`. | Define the rule: Prometheus/Grafana visualize accepted Authority data; they do not become inbound scrape dependencies for remote customer-site nodes. |
+| Data sovereignty | Founder-kernel principle exists; estate-sovereignty spec tracks per-element posture work. | Treat customer/site/location-scoped observations as sovereignty-relevant evidence; preserve locality, scope, retention, and operator-jurisdiction metadata. |
+| Scale / bottlenecks | Heartbeats, discovery submissions, and metrics all fan into the Authority Core. | Add quotas, jitter, backpressure, retention, async projection, cardinality budgets, and fleet SLOs before calling the topology ready. |
 | Admin UX | `/platform/edge-nodes`: issue token, approve, quarantine, revoke. | Add a guided "add a node on another machine / another site" flow; fleet grouping by customer/site. |
 | SysML / EA | **Absent.** Planned as the Phase D "network topology bridge" of the living-architecture graph. | Author the SysML architecture note now (§9) and define the extractor. |
 | Verification | `scripts/verify-install-edge.sh`, `scripts/verify-edge-node-air-gap.sh`, `services/edge-node/scripts/verify-lifecycle.ts`, multi-host runbook §6. | Unify into a per-topology verification matrix (§11). |
@@ -67,9 +72,13 @@ A substrate sweep (code + specs + scripts + live backlog, 2026-06-19) found the 
 - G1. Edge node deployment is **opt-in** where the platform is installed: default OFF, an explicit operator choice turns it on, identical on Windows / macOS / Linux.
 - G2. An operator can add an edge node on **separate hardware** and connect it to the portal **without cloning the repo or hand-editing files** — a portal-driven flow that yields a single copy-paste command (or downloadable minimal bundle) with the enrollment token pre-bound.
 - G3. The **minimal edge footprint** is a described, testable contract — what an edge node requires, and explicitly what it does *not* (no DB, no LLM, no web app, outbound-only to the Authority URL).
-- G4. The architecture is described coherently in **documentation, SysML, and specification** form, each pointing to the others (single source of truth, §10).
+- G4. The architecture is described coherently in **documentation, SysML, and specification** form, each pointing to the others as a single source-of-truth chain.
 - G5. "One Authority Core, a **fleet** of edge nodes across many contexts" is a **base-architecture** concept, specialized for **retail** (per location) and **MSP** (per customer × site).
 - G6. A per-topology **verification matrix** lets us test each deployment shape on its real substrate.
+- G7. Remote deployment preserves **data sovereignty and tenant/estate separation**: observations, raw adapter payloads, metrics, logs, and dashboards are scoped to the Authority-issued customer/site/location boundary and governed by retention.
+- G8. Network and auth are explicit: remote nodes use **outbound-only HTTPS** to Authority Core; token issuance is one-time, short-TTL, audit-logged, redacted, and scope-bound; authorization never trusts edge-submitted identity or scope.
+- G9. Operational management covers **fleet scale**: rollout, rotation, quarantine, missed-heartbeat reaping, ingest backpressure, async projection, and per-node/per-scope quotas are part of the topology, not follow-up polish.
+- G10. Prometheus/Grafana are integrated as **Authority-side observability surfaces** with bounded labels and provisioned dashboards; they do not scrape remote customer nodes directly or create a parallel source of truth.
 
 **Non-Goals**
 
@@ -77,6 +86,8 @@ A substrate sweep (code + specs + scripts + live backlog, 2026-06-19) found the 
 - No mTLS / client-cert work (that is the binding spec's Phase 1+ / T4 track).
 - No new customer-estate modeling beyond the existing customer/site scope.
 - No removal of the developer runbooks; they remain the substrate the easy flow wraps.
+- No edge-hosted Prometheus/Grafana requirement. A customer site may already run local observability, but this topology does not require or manage a second monitoring stack at the edge.
+- No remote-support/control-plane tunneling in this slice. Discovery and telemetry are observation flows; any future remote-control action needs explicit customer consent and a separate authorization review.
 
 ---
 
@@ -124,6 +135,19 @@ The edge node runs on a **different machine** from the Authority Core — a box 
 
 Situation B repeated N times, grouped by the context that matters to the business. The Authority Core is the single pane; each node is scoped so its inventory, adapter credentials, and discovery evidence stay in their lane. This is where archetypes diverge (§7).
 
+### 4.4 Planes and failure domains
+
+The topology is easier to reason about if it is split into four planes. The edge node participates in all four, but Authority Core remains the owner of meaning and policy.
+
+| Plane | Flow | Owner of truth | Failure posture |
+| --- | --- | --- | --- |
+| **Provisioning** | Operator UI → bootstrap token → generated command/bundle → enrollment | Authority Core (`BootstrapToken`, `EdgeNode`, audit) | Token expires or is consumed once; operator can re-issue without touching remote state. |
+| **Control** | Heartbeat, capability enablement, trust-state changes, token rotation | Authority Core policy + `EdgeNode.trustState` | Edge node denies privileged capabilities when policy is stale beyond its allowed soft-fail window. |
+| **Data** | Discovery runs, adapter observations, inventory relationships | Authority Core persistence + scope fields | Submissions are idempotent by `runKey`; projection to graph/reporting is async and retryable. |
+| **Telemetry** | Health, interface metrics, ingest errors, version drift, queue/backlog gauges | Authority Core observability store; Prometheus/Grafana are views | Metrics are lossy/bounded where appropriate; missing heartbeat and ingest failure are alertable. |
+
+This split prevents two architectural traps: (1) treating the edge node as a small second portal, and (2) treating Prometheus/Grafana as the source of edge truth. Edge nodes observe and submit; Authority Core authenticates, scopes, persists, decides, and presents.
+
 ---
 
 ## 5. Opt-In Posture (G1)
@@ -168,6 +192,7 @@ The edge node is **not a portal**. Stating the bill-of-materials as a contract i
 | Compute/footprint | multi-container stack | one process / one container; static Go binary or the lean edge image |
 | Required inputs | install env, secrets | `DPF_AUTHORITY_URL`, one-time `DPF_BOOTSTRAP_TOKEN`, a state dir, (optional) a CA bundle for TLS |
 | Capabilities | n/a | `NET_RAW`/`NET_ADMIN` only when the active-sweep collectors are enabled |
+| Observability | Prometheus, Grafana, local platform discovery | local process logs + outbound heartbeat/metrics; no required inbound `/metrics` endpoint |
 
 **Footprint contract (testable):**
 
@@ -175,6 +200,9 @@ The edge node is **not a portal**. Stating the bill-of-materials as a contract i
 - FP2. An edge node persists **only** `state.json` (node token + intervals + capabilities) — no relational/graph/vector store. (Verified by the lifecycle harness + image inspection.)
 - FP3. An edge node performs **no LLM inference**. (Verified by image bill-of-materials: no model runtime, no provider keys required.)
 - FP4. The remote artifact is installable **without a monorepo clone** — a single binary or a single compose file fetched by URL. (Verified by the remote-provisioning test, §11.)
+- FP5. The remote artifact does **not** expose a Prometheus scrape endpoint by default. Authority-side observability is derived from authenticated heartbeats, `/api/v1/edge/metrics`, accepted discovery runs, and local process logs uploaded only under an explicit support workflow.
+- FP6. Local state, logs, and command output redact `dpfboot_*`, `dpfedge_*`, SNMP community strings, adapter secrets, and customer/site labels that could identify a regulated estate outside the Authority UI.
+- FP7. Metrics and discovery payloads are bounded: per-node batch size, payload size, queue depth, retry horizon, and label cardinality are enforced before data hits Postgres, Neo4j projection, Prometheus, or Grafana.
 
 The footprint is the same across archetypes; what varies per archetype is *how many* nodes and *how they are scoped* (§7), never what one node carries.
 
@@ -229,11 +257,69 @@ The design principle: **the operator never leaves the portal and never edits a f
 
 ---
 
+## 8A. Critical Architecture Review — sovereignty, scale, network, auth, observability
+
+This section is intentionally stricter than the happy-path topology. These are the constraints that keep a useful deployment flow from becoming an insecure remote-agent sprawl.
+
+### 8A.1 Data sovereignty and estate boundaries
+
+Edge observations are not generic telemetry. A discovered MAC address, hostname, SSID, VLAN, payment terminal, camera, controller IP, or SNMP interface label can identify a real site and may become regulated evidence. The sovereignty posture therefore follows the **operator/control boundary**, not just where bytes are stored:
+
+- Authority Core is the only durable system of record. The edge node stores only its node credential, heartbeat/interval state, local retry queue, and capability hints needed to survive short outages.
+- Every persisted operational record derived from an edge node must carry the authenticated scope: organization, and where applicable customer account, customer site, retail location, edge node id, capability, observed time, and source adapter. Scope comes from `resolveEdgeNodeAuth`, never from edge-submitted JSON.
+- Raw adapter payloads (`rawData`, SNMP labels, controller metadata) need explicit retention classes: short-lived raw evidence, normalized inventory, and aggregate metrics. Do not project raw customer-site payloads into Grafana labels, logs, or alert annotations.
+- Managed/SaaS observability export is not allowed by default for sovereign deployments. If a customer deliberately exports edge data to a third-party monitoring SaaS, that is a lower-assurance deployment choice recorded in the estate-sovereignty posture, not a hidden platform behavior.
+- The estate-sovereignty program remains authoritative for per-element jurisdiction/operator fields. This topology must feed it with scoped edge facts; it must not invent a separate compliance register.
+
+### 8A.2 Network boundary and authentication/authorization
+
+The network rule is simple: remote nodes call home; Authority Core does not call into a customer LAN.
+
+- Remote nodes use outbound HTTPS to `DPF_AUTHORITY_URL`. HTTP is acceptable only for a local development harness or an explicitly documented private-network bootstrap; production remote provisioning defaults to HTTPS and supports operator CA bundles.
+- Generated commands must treat the bootstrap token as a visible secret. The portal shows it once, redacts it in audit/log output, gives it a short TTL, binds it to the intended scope, and records who issued it. Re-rendering means re-issuing a new token, not recovering the old one.
+- `dpfboot_*` is one-time enrollment material. `dpfedge_*` is node credential material. Neither can authorize a human, a coworker, an MCP client, an A2A peer, or another node. Capability scopes remain the closed vocabulary in the binding edge-node spec.
+- Authorization is per request and server-side: route handlers derive `edgeNodeId`, `principalId`, trust state, customer/site/location scope, and enabled capabilities from the authenticated node record. Request-body identity fields are rejected or ignored.
+- Remote-control, remote-shell, reverse tunnel, MCP gateway, and A2A gateway capabilities are outside this topology slice. Adding them later requires consent, least-privilege capability flags, explicit audit rows, and a fresh security review.
+- Quarantine must be effective at the route layer: quarantined nodes may heartbeat so operators can see them, but discovery/metrics/gateway submissions are rejected or diverted to a forensic holding path.
+
+### 8A.3 Operational management and fleet scale
+
+The Authority Core is the fan-in point. That is architecturally correct, but it becomes the bottleneck unless the fleet contract is explicit.
+
+| Bottleneck | Failure mode | Required control |
+| --- | --- | --- |
+| Heartbeats | Thousands of nodes synchronize on the same interval and spike the portal/database. | Server-assigned intervals with jitter; per-scope concurrency caps; alert on missed heartbeat rate, not only per-node misses. |
+| Discovery submissions | Large sweeps create write bursts and graph-projection lag. | Payload caps, `runKey` idempotency, per-node rate limits, async projection to Neo4j/Qdrant/reporting, and visible ingest backlog gauges. |
+| Metrics cardinality | Per-interface/per-node labels explode Prometheus series count and slow Grafana dashboards. | Bounded label set; rollups by scope/version/status; high-cardinality details stay in queryable inventory tables, not metric labels. |
+| Adapter credentials | Every trusted node polling every adapter duplicates work and leaks access across sites. | `targetEdgeNodeId` / customer / site filtering before decryption; fleet UI must show which node owns each adapter. |
+| Upgrade/version drift | A fleet runs mixed binaries and wire-contract versions. | Signed releases, staged rollout by scope, version compatibility window, rollback path, and dashboarded version skew. |
+| Offline/air-gapped queue | A site outage stores unbounded local data then floods Authority on recovery. | Bounded queue, drop-oldest policy by evidence class, recovery backoff, and operator-visible "data lost due to retention cap" evidence. |
+
+Operationally, a node has a lifecycle independent of deployment: `created → pending → trusted → degraded → quarantined → revoked → retired`. "Degraded" is not a trust state in the current schema, but the UI/observability layer needs the concept for nodes that are trusted yet behind on version, missing capabilities, failing a collector, exceeding cardinality budget, or operating from stale policy.
+
+### 8A.4 Prometheus and Grafana posture
+
+DPF should keep Prometheus/Grafana where they are strongest: Authority-side platform and fleet observability. They are not the remote edge protocol.
+
+- **Authority Core Prometheus** scrapes local/platform targets it can reach and may scrape an Authority-side exporter that exposes accepted edge fleet metrics. It must not require inbound scrape access to remote customer-site edge nodes.
+- **Edge metrics ingestion** remains the authenticated push path: edge node → `/api/v1/edge/metrics` → Authority persistence/aggregation → optional Prometheus exporter/recording rules → Grafana dashboards.
+- **No Pushgateway-as-event-store.** Discovery runs, lifecycle events, token issuance, approvals, quarantine, and support actions stay in Postgres/audit tables. Prometheus stores numeric time series and alerts on operational symptoms.
+- **Grafana dashboards are views, not governance records.** Dashboards must be provisioned from version-controlled files, filtered by organization/customer/site/location/node scope, and backed by DPF authorization in the portal for operator actions. Grafana links may deep-link back to `/platform/edge-nodes`, but approval/quarantine/revoke happens in DPF.
+- **Required dashboards/alerts:** fleet overview (trusted/pending/quarantined/revoked), missed-heartbeat rate by scope, ingest error rate, discovery payload rejection rate, metrics cardinality budget, version skew, stale pending tokens/nodes, token reuse attempts, quarantine attempts, and graph-projection lag.
+
+Future support for a customer's existing Prometheus at a site can be additive: either the edge node summarizes selected local Prometheus data through the authenticated edge metrics endpoint, or a site-local Prometheus remote-writes to a governed Authority receiver. It must still carry DPF scope, encryption, authentication, cardinality limits, and sovereignty classification.
+
+### 8A.5 Critical verdict
+
+The topology is directionally right only if these constraints land with it. The weak version is "generate a command that starts agents." The strong version is "operate a scoped, sovereign, observable, upgradable fleet without opening customer networks or creating a parallel monitoring/control plane." This spec should be treated as the strong version.
+
+---
+
 ## 9. SysML Description (G4)
 
 The edge node is **not yet in the EA/SysML graph**; it is the planned Phase D "network topology bridge" of [EP-ARCH-GRAPH-LIVE] / [EP-PARITY-ENGINE]. This spec ships the **hand-authored SysML architecture note** now (architect judgment over current state) and defines how the later extractor projects live `EdgeNode` rows, so the two converge instead of competing.
 
-- **Note (now):** [`docs/architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md`](../../architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md) — package `PKG-EDGE-TOPO`, requirements REQ-EDGE-1…10, constraint CON-EDGE-1 (footprint + outbound-only + scope-from-token), parts for Authority Core / edge agent / enrollment service / fleet registry, interfaces (`/api/v1/edge/*`), state machines (deploy gate, trust lifecycle), verification cases mapped to §11. Follows the AI-cockpit note pattern (`[D]`/`[J]`, traceability, allocations to real code).
+- **Note (now):** [`docs/architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md`](../../architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md) — package `PKG-EDGE-TOPO`, requirements REQ-EDGE-1…14 (the opt-in/remote/footprint/fleet posture plus the §8A operational envelope: sovereignty/scope, network-auth boundary, fleet scale/backpressure, Authority-side observability), constraints CON-EDGE-1 (footprint + outbound-only + scope-from-token) and CON-EDGE-2 (observability cardinality + sovereignty redaction), parts for Authority Core / edge agent / enrollment / fleet registry / deploy-gate / provisioning / ingestion / fleet-ops / observability, interfaces (`/api/v1/edge/*` + provisioning + fleet-metrics exporter), state machines (deploy gate, trust lifecycle, enrollment, operational lifecycle incl. `degraded`), and verification cases mapped to §11.2. Follows the AI-cockpit note pattern (`[D]`/`[J]`, traceability, allocations to real code).
 - **Extractor (later, Phase D):** a `buildEdgeTopologyModel(facts) → SysmlDesiredModel` extractor reads `EdgeNode`/`BootstrapToken`/`EdgeNodeCapability` and projects each node as a SysML `part_usage` with `layer="network"`, `refinementLevel="actual"`, `sysmlKey="runtime:edge-node:<nodeId>"`, allocated to the logical `PART-EDGE-agent` definition and `traces`-linked to its `prisma:model:EdgeNode` data element — exactly the cross-layer edge pattern PR #2073 established. Reuses the existing EA tables (no new EA substrate).
 
 The note is the architect's source of truth until the extractor makes it self-maintaining; the extractor is filed against EP-ARCH-GRAPH-LIVE so it lands in that program, not as a parallel effort.
@@ -247,8 +333,16 @@ Remote-agent enrollment + fleet management is a mature pattern; we benchmark the
 - **Tailscale** (mesh agent). *Adopted:* one-line install that bakes an auth key into the command the control plane hands you — the model for §8's copy-paste artifact; pre-authorized vs. manual-approve keys map to our auto-approve (local) vs. pending (remote) trust gate. *Rejected:* a coordination server in the data path — DPF edge is outbound-only to the Authority, no relay.
 - **NinjaOne / ConnectWise (RMM/PSA)** — already benchmarked in the customer/site-binding spec. *Adopted:* installer carries org/location target so the agent lands in the right scope; policy applies at org/location/device tiers. *Rejected:* endpoint self-asserting its organization — DPF binds scope in the authority-issued token, never the request body.
 - **NetBox tenancy** — already benchmarked there. *Adopted:* customer ownership is a first-class relation, not a metadata label. *Rejected:* assigning every shared object to a tenant — DPF keeps organization-scoped nodes for the non-MSP/base case.
-- **Prometheus node_exporter / Datadog Agent** (host agents). *Adopted:* a deliberately thin host agent with a tiny local footprint and a single config surface — validates §6 (no DB, no UI, outbound to a collector). *Rejected:* a pull model where the server scrapes the agent (inbound to the host) — DPF edge is push/outbound-only (FP1), which is what makes it safe to drop into a customer site behind NAT.
+- **Prometheus node_exporter / Prometheus remote-write / Datadog Agent** (host metrics patterns). *Adopted:* a deliberately thin host agent/exporter with a tiny local footprint, stable labels, and a central observability view — validates §6 and §8A.4. *Rejected:* making remote customer-site nodes reachable scrape targets. DPF edge is push/outbound-only (FP1); Prometheus/Grafana visualize accepted Authority data, not unauthenticated remote endpoints.
 - **HashiCorp Nomad/Consul client agents** (fleet-of-clients to one control plane). *Adopted:* the "one control plane, N thin clients, each scoped" mental model is exactly §7.1; clients hold only their own token + local state. *Rejected:* gossip between clients — DPF nodes never talk to each other, only to the Authority (smaller blast radius per FP1).
+
+**External standards checked (2026-06-19):**
+
+- [Prometheus overview](https://prometheus.io/docs/introduction/overview/) and [scrape configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/) confirm the normal scrape-target model and the need to configure target auth/TLS when scraping. DPF adopts this inside Authority Core where targets are reachable.
+- [Prometheus pushing guidance](https://prometheus.io/docs/practices/pushing/) and the [Pushgateway project guidance](https://github.com/prometheus/pushgateway) reinforce that push paths are narrow and should not become event/audit storage. DPF keeps lifecycle and discovery events in Authority tables.
+- [Prometheus remote-write specification](https://prometheus.io/docs/specs/prw/remote_write_spec/) is the relevant pattern if DPF later accepts metrics from a site-local Prometheus; any such receiver still needs DPF scope, auth, limits, and sovereignty classification.
+- [Grafana provisioning documentation](https://grafana.com/docs/grafana/latest/administration/provisioning/) supports version-controlled dashboards/data sources; DPF should provision fleet dashboards rather than hand-create them per install.
+- [OpenTelemetry Collector configuration](https://opentelemetry.io/docs/collector/configuration/) and [configuration security best practices](https://opentelemetry.io/docs/security/config-best-practices/) are the reference if DPF introduces a generic telemetry collector: encryption and authentication are required, not optional.
 
 **Anti-pattern identified:** shipping the *capability* (standalone compose, multi-host runbook) and calling remote deployment "supported" while the only path is a developer runbook. The benchmark across all five is that the control plane *generates the install artifact*; that is the gap §8 closes.
 
@@ -261,6 +355,9 @@ Remote-agent enrollment + fleet management is a mature pattern; we benchmark the
 - **No new identity tables.** Reuse `EdgeNode`, `BootstrapToken`, `EdgeNodeCapability`; identity stays on `Principal`/`PrincipalAlias` (kernel: principal-convergence).
 - **Reuse existing scope columns** (`customerAccountId`/`customerSiteId`/`scopePolicy`) for MSP. For **retail**, prefer extending the existing site concept rather than a new "location" table — substrate-audit before any schema add (file as a retail-fleet BI; do not pre-commit a table here).
 - **`install-state.json`** gains an `edge` record (not a DB table) — the source of truth for whether *this install* runs a local node, read by both start scripts and surfaced in the portal.
+- **Scope every operational record.** Discovery runs, adapter fetches, metrics envelopes, ingest failures, quarantine attempts, token issuance/consumption, and fleet actions must carry authenticated organization/customer/site/location/node scope where applicable. The edge request body cannot supply or override those fields.
+- **Retain raw evidence deliberately.** `rawData`, SNMP labels, controller metadata, and generated logs may expose customer networks. Store short-lived raw evidence separately from normalized inventory and aggregate metrics; do not put raw payloads in Prometheus labels, Grafana annotations, or long-lived audit text.
+- **Keep observability cardinality bounded.** Prometheus labels use stable, low-cardinality identifiers (scope ids, node id, capability, trust state, version family). High-cardinality details such as interface names, MACs, hostnames, VLAN labels, and controller object names stay in inventory/query tables.
 - No change to the wire contract, ingestion controls, or token namespaces.
 
 ### 11.2 Verification matrix
@@ -274,7 +371,11 @@ Remote-agent enrollment + fleet management is a mature pattern; we benchmark the
 | B — easy provisioning | Portal-generated command enrolls a node **without repo clone / file edit** | new test for the §8 flow (binary + container forms) |
 | C — fleet scoping (MSP) | Two nodes under different customer/site scopes keep inventory/adapters/evidence separate | extend with customer/site-binding assertions |
 | C — fleet scoping (retail) | Two nodes under different locations keep posture separate | new, after retail site model lands |
-| Footprint FP1–FP4 | Outbound-only egress; state-only persistence; no LLM; no-clone install | `verify-edge-node-air-gap.sh` (egress) + image BoM inspection + §8 test |
+| Footprint FP1–FP7 | Outbound-only egress; state-only persistence; no LLM; no-clone install; no default scrape endpoint; redaction; bounded payloads/cardinality | `verify-edge-node-air-gap.sh` (egress) + image BoM inspection + §8 test |
+| Network/auth boundary | Token is one-use/short-TTL/redacted; route auth derives identity/scope from token; quarantined node cannot submit discovery/metrics | lifecycle harness + route tests from binding edge-node spec |
+| Scale / fan-in | Heartbeat jitter, per-node rate limits, payload caps, idempotent `runKey`, async graph/reporting projection, visible ingest backlog | new synthetic fleet load harness with 100/1,000-node profiles |
+| Observability | Authority-side Prometheus exporter/dashboards show fleet health without scraping remote nodes; labels stay within budget | Prometheus rule test + Grafana provisioning smoke test |
+| Sovereignty / scope leakage | Raw customer-site identifiers are absent from metric labels/logs; records carry authenticated scope; SaaS export is disabled by default | schema/query tests + log/metric redaction assertions |
 | Air-gapped | Enroll + replay across an Authority outage, drop-oldest | `verify-edge-node-air-gap.sh` (exists) |
 
 Each row maps to a verification case in the SysML note (§9). Runtime-bound rows run on the canonical install or the shared local-CI convergence sandbox (AGENTS.md §5), never a worktree harness.
@@ -292,6 +393,9 @@ Each row maps to a verification case in the SysML note (§9). Runtime-bound rows
 | `2026-05-22-edge-node-customer-site-binding-design.md` | edit (xref) | Add a topology cross-reference; it remains authoritative for the MSP data boundary |
 | `docs/personas/marisol-retail.md` | edit | Add the per-location edge-node consideration |
 | `docs/install/edge-node-multi-host.md` | edit (note) | Point to the easy-provisioning flow as the operator path; this runbook is the developer substrate beneath it |
+| `docs/user-guide/operations/infrastructure-discovery.md` | edit | Clarify Prometheus/Grafana role: Authority-side monitoring and dashboards over accepted edge data, not remote-node scraping |
+| `docs/edge-node/fleet-operations.md` | new | Operator runbook for rollout, rotation, quarantine, decommission, missed heartbeat, ingest backlog, version skew |
+| `docs/edge-node/security-and-sovereignty.md` | new | Token handling, redaction, raw evidence retention, customer/site/location scope, third-party observability export posture |
 
 Every new artifact links the others (single-source-of-truth): docs → spec → SysML note → code/scripts.
 
@@ -306,12 +410,16 @@ Candidate BIs:
 1. **Opt-in default flip + cross-surface parity** — `install-dpf.sh`/`fresh-install.ps1` default off + `--with-edge`/`-WithEdge`; both `dpf-start.ps1` + `dpf-start.sh` read `install-state.json`; grandfather migration (§5.3). `workType=feature`.
 2. **Setup + portal opt-in UX** — the setup choice and the `/platform/edge-nodes` "Add an edge node here" action (UX-fit reviewed). `workType=feature`.
 3. **Easy remote provisioning flow** — portal "Add on another machine" → copy-paste command (binary default + container fallback), Authority-side token issuance. Depends on EP-BUILD-D78835. `workType=feature`.
-4. **Minimal-footprint contract tests** — FP1–FP4 harness rows (§11). `workType=test/chore`.
+4. **Minimal-footprint contract tests** — FP1–FP7 harness rows (§11). `workType=chore`.
 5. **Edge node SysML extractor (Phase D)** — `buildEdgeTopologyModel` → EA graph; **link to EP-ARCH-GRAPH-LIVE**. `workType=feature`.
 6. **Retail per-location fleet** — substrate-audit the retail site model; scope retail edge nodes by location; fleet-by-location view. `workType=feature` (may link EP-ARCH-8D4F2A).
 7. **Docs** — deployment-topology operator doc + Contract 5 edit + persona/runbook xrefs (this spec ships the first cut). `workType=doc`.
+8. **Fleet observability and Grafana/Prometheus posture** — Authority-side edge fleet exporter/recording rules, provisioned Grafana dashboards, alerts for missed heartbeat, ingest failures, version skew, stale pending nodes, and projection lag. `workType=feature`.
+9. **Network/auth hardening tests** — token redaction, one-use/TTL enforcement, quarantine route matrix, request-body identity rejection, HTTPS/CA validation, no inbound listener assertions. `workType=chore`.
+10. **Sovereignty and raw-evidence retention guards** — scope-required persistence, raw payload retention classes, metric/log redaction, SaaS export default-off posture linked to EP-ESTATE-SOVEREIGNTY. `workType=feature`.
+11. **Synthetic fleet fan-in harness** — 100/1,000-node heartbeat + discovery + metrics load profiles with cardinality budget and backpressure evidence. `workType=tool`.
 
-Sequence: 7 (this PR) → 1 → 2 → 3 → 5 → 4 → 6.
+Sequence: 7 (this PR) → 1 → 9 → 2 → 3 → 8 → 10 → 11 → 5 → 4 → 6.
 
 ---
 
@@ -322,9 +430,14 @@ Sequence: 7 (this PR) → 1 → 2 → 3 → 5 → 4 → 6.
 3. **Binary distribution + signing.** Making the Go binary the default remote artifact means a trustworthy download (checksum/signature) and platform-matched builds. Scope with the release-artifact contract (Contract 1), don't hand-roll.
 4. **Retail site model gap.** Retail lacks MSP's customer/site scoping; §7.2 is `[J]` until a site/location model is audited and (if needed) extended. Do not assume a table — file the substrate audit first.
 5. **SysML note vs. extractor drift.** The hand-authored note (§9) is correct only until the Phase D extractor lands; the note must be marked as the interim source and the extractor BI linked so it converges.
+6. **Bootstrap-token exposure in generated commands.** A copy-paste install command is intentionally easy, but it can leak through shell history, screenshots, ticket comments, browser history, or logs. Mitigate with short TTL, one-use semantics, redaction, one-time display, and a "revoke/re-issue" path that is easier than recovering a token.
+7. **Authority Core fan-in bottleneck.** A successful fleet can overload the portal database, graph projection, or observability layer. The synthetic fleet harness and backpressure controls are not optional before broad MSP/retail rollout.
+8. **Prometheus cardinality blow-up.** Per-interface/per-host labels are tempting and can silently degrade the local monitoring stack. Keep high-cardinality details in inventory tables and expose only bounded rollups to Prometheus/Grafana.
+9. **Sovereignty leakage through observability.** Metrics labels, alert annotations, screenshots, and support bundles can leak customer-site identifiers even when primary data storage is scoped correctly. Redaction and retention tests must cover observability outputs, not only API payloads.
+10. **Remote-control scope creep.** Once an edge node exists, operators will ask for remote support, tunnels, MCP gatewaying, and remediation. Those are valid future capabilities, but they must not sneak into this topology under "provisioning"; each needs consent, least privilege, audit, and a security review.
 
 ---
 
 ## 15. Summary
 
-The edge node is mature; its *deployment architecture* was undescribed and defaulted the wrong way. This spec makes the local node **opt-in**, defines the **easy remote provisioning** experience and the **minimal-footprint contract**, makes **"one Authority Core, a fleet of edge nodes across contexts"** a base-architecture concept specialized for **retail** (per location) and **MSP** (per customer × site), and describes the whole in **documentation, SysML, and specification** with a per-topology **verification matrix** — all on the existing substrate, no new identity tables.
+The edge node is mature; its *deployment architecture* was undescribed and defaulted the wrong way. This spec makes the local node **opt-in**, defines the **easy remote provisioning** experience and the **minimal-footprint contract**, makes **"one Authority Core, a fleet of edge nodes across contexts"** a base-architecture concept specialized for **retail** (per location) and **MSP** (per customer × site), and describes the whole in **documentation, SysML, and specification** with a per-topology **verification matrix**. The critical addition is operational discipline: remote nodes stay outbound-only, Authority Core remains the auth/data/observability source of truth, Prometheus/Grafana visualize accepted scoped data rather than scrape customer LANs, and fleet scale is gated by backpressure, cardinality, sovereignty, and lifecycle controls — all on the existing substrate, no new identity tables.
