@@ -9,7 +9,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { groups, pages, pagesByGroup, groupMock, coreMessage } from "./_content.mjs";
+import { groups, pages, pagesByGroup, groupMock } from "./_content.mjs";
 import { analyze, band, TIERS } from "./_readability.mjs";
 
 // Target reading level for BUSINESS-FACING copy — the "archetype" tier of the
