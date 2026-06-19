@@ -34,8 +34,8 @@
 
   <section aria-label="The bigger picture">
     <div class="callout">
-      <p class="ck">The bigger picture</p>
-      <p>One DPF install becomes a <b>governed vertical operating system</b>: the archetype shapes the business, <b>TAK</b> governs every agent action, and <b>GAID</b> makes agent identity and evidence inspectable.</p>
+      <p class="ck">In plain terms</p>
+      <p>One install gives you a <b>website your customers can use</b>, a <b>place to run the work</b>, and <b>AI coworkers that already speak your line of work</b>. You approve the important moves, and everything stays on your own computers.</p>
     </div>
   </section>
 
@@ -69,7 +69,7 @@
   </defs>
 
   <rect x="16" y="14" width="688" height="30" rx="8" class="lane"/>
-  <text x="360" y="29" text-anchor="middle" font-size="11.5" font-weight="600" class="muted">Governed end-to-end · governed end-to-end — approved &amp; audited</text>
+  <text x="360" y="29" text-anchor="middle" font-size="11.5" font-weight="600" class="muted">You approve every step · you approve every step — and it's all logged</text>
 
   <rect x="24" y="92" width="150" height="92" rx="12" class="node"/>
   <text x="99" y="112" text-anchor="middle" class="eb a">CUSTOMER</text>
@@ -236,14 +236,22 @@
       </div>
     </section>
 
-  <section id="archetype-engine" aria-label="The archetype engine">
-    <p class="section-eyebrow">The architectural invention</p>
-    <h2>One archetype generates the whole operating model</h2>
-    <p class="sub"><code>StorefrontConfig.archetypeId</code> is the single source of truth for industry behaviour. From it, DPF generates the storefront language, scheduling defaults, finance assumptions, compliance hints, AI-coworker vocabulary, and the direction of the mobile manifest — which is how one platform covers 19 business types without a bespoke app for each.</p>
+  <section id="for-builders" aria-label="For builders, resellers and architects">
+    <div style="border-top:1px solid var(--border); padding-top:30px;">
+      <p class="section-eyebrow">For builders, resellers &amp; architects</p>
+      <h2>Under the hood</h2>
+      <p class="sub">Everything above is for the people running a business. The rest is the technical detail for those who extend, resell, or evaluate the platform.</p>
+    </div>
+  </section>
+
+  <section id="archetype-engine" aria-label="How it's built">
+    <p class="section-eyebrow">How it's built</p>
+    <h2>One business type generates the whole setup</h2>
+    <p class="sub">The business type you pick at setup is the single source of truth (<code>StorefrontConfig.archetypeId</code> in the data model). From it, DPF generates the website wording, scheduling defaults, finance assumptions, licence hints, the words each AI coworker uses, and the direction of the mobile app — which is how one platform covers 19 business types without a custom app for each. <em>(For builders, the precise internal term is the “archetype”.)</em></p>
     <div class="pipeline">
-      <div class="pipe-stage src"><span class="pk">SOURCE OF TRUTH</span><span class="pl">Business archetype</span><code>StorefrontConfig.archetypeId</code></div>
+      <div class="pipe-stage src"><span class="pk">SOURCE OF TRUTH</span><span class="pl">Business type</span><code>StorefrontConfig.archetypeId</code></div>
       <div class="pipe-arrow" aria-hidden="true"></div>
-      <div class="pipe-stage"><span class="pk">DERIVES</span><span class="pl">Generated operating model</span><code>activationProfile · axes · vocabulary</code></div>
+      <div class="pipe-stage"><span class="pk">DERIVES</span><span class="pl">Generated setup</span><code>activationProfile · axes · vocabulary</code></div>
       <div class="pipe-arrow" aria-hidden="true"></div>
       <div class="pipe-out">
         <div class="o">Storefront<span>intake, CTAs, sections</span></div>

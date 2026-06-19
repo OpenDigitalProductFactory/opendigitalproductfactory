@@ -17,8 +17,8 @@ Mean Grade: **6.9** · within target: **19/19**
 | retail-and-goods | 7.6 | 53.7 | 7.3 | high-school (plain) |
 | food-and-hospitality | 7.5 | 53.6 | 7.1 | high-school (plain) |
 | equipment-and-storage-rental | 7.3 | 54.5 | 6.5 | high-school (plain) |
-| trades-and-home-services | 6.8 | 61.5 | 8.6 | high-school (plain) |
 | fitness-and-recreation | 6.8 | 58.4 | 6.7 | high-school (plain) |
+| trades-and-home-services | 6.5 | 63.8 | 8.8 | high-school (plain) |
 | moving-and-logistics | 6.5 | 62.3 | 7.9 | high-school (plain) |
 | beauty-and-personal-care | 6.5 | 61.3 | 7.3 | high-school (plain) |
 | pet-services | 5.8 | 66 | 7 | very easy |
