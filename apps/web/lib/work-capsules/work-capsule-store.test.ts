@@ -6,10 +6,13 @@ vi.mock("@/lib/portal-context/invalidation", () => ({
 
 import {
   adoptWorktreeCapsule,
+  claimWorkCapsuleScope,
   createWorkCapsule,
+  detectScopeConflicts,
   heartbeatWorkCapsule,
   planCapsuleWorkspace,
   recordWorkCapsuleEvidence,
+  ScopeOverlapError,
   type CapsuleDb,
 } from "./work-capsule-store";
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
@@ -19,6 +22,7 @@ const db = {
     create: vi.fn(),
     findFirst: vi.fn(),
     findUnique: vi.fn(),
+    findMany: vi.fn(),
     update: vi.fn(),
   },
   workCapsuleActivity: {
@@ -32,6 +36,7 @@ function resetDbMocks() {
   db.workCapsule.create.mockReset();
   db.workCapsule.findFirst.mockReset();
   db.workCapsule.findUnique.mockReset();
+  db.workCapsule.findMany.mockReset();
   db.workCapsule.update.mockReset();
   db.workCapsuleActivity.create.mockReset();
   db.$transaction.mockReset();
@@ -370,6 +375,145 @@ describe("work capsule store", () => {
       });
 
       expect(result.headBranch).toBe("feat/owned-elsewhere-2");
+    });
+  });
+
+  describe("claimWorkCapsuleScope scope-overlap rejection", () => {
+    const actor = { userId: "user-1", agentId: "agent-1", principalId: "PRN-1" };
+
+    function otherCapsule(overrides: Record<string, unknown>) {
+      return {
+        capsuleId: "WC-OTHER01",
+        title: "Other session",
+        leaseHolderPrincipalId: "PRN-2",
+        scopeClaims: [
+          {
+            kind: "path",
+            value: "apps/web/lib/foo.ts",
+            intent: "edit",
+            recordedAt: "2026-06-18T00:00:00.000Z",
+            recordedByPrincipalId: "PRN-2",
+          },
+        ],
+        ...overrides,
+      };
+    }
+
+    it("rejects an edit claim that overlaps another active capsule's edit claim", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workCapsule.findMany.mockResolvedValueOnce([otherCapsule({})]);
+
+      await expect(
+        claimWorkCapsuleScope({
+          db: capsuleDb(),
+          capsuleId: "WC-MINE001",
+          claims: [{ kind: "path", value: "apps/web/lib/foo.ts", intent: "edit" }],
+          actor,
+        }),
+      ).rejects.toBeInstanceOf(ScopeOverlapError);
+
+      // The conflicting write must never reach the DB.
+      expect(db.workCapsule.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects an edit claim that overlaps another capsule's read claim (edit is exclusive)", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workCapsule.findMany.mockResolvedValueOnce([
+        otherCapsule({ scopeClaims: [{ kind: "module", value: "routing", intent: "read", recordedAt: "2026-06-18T00:00:00.000Z", recordedByPrincipalId: "PRN-2" }] }),
+      ]);
+
+      await expect(
+        claimWorkCapsuleScope({
+          db: capsuleDb(),
+          capsuleId: "WC-MINE001",
+          claims: [{ kind: "module", value: "routing", intent: "edit" }],
+          actor,
+        }),
+      ).rejects.toBeInstanceOf(ScopeOverlapError);
+    });
+
+    it("allows two read claims on the same scope (read is non-exclusive)", async () => {
+      db.workCapsule.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workCapsule.findMany.mockResolvedValueOnce([
+        otherCapsule({ scopeClaims: [{ kind: "path", value: "apps/web/lib/foo.ts", intent: "read", recordedAt: "2026-06-18T00:00:00.000Z", recordedByPrincipalId: "PRN-2" }] }),
+      ]);
+      db.workCapsule.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
+      db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "act-1" });
+
+      await expect(
+        claimWorkCapsuleScope({
+          db: capsuleDb(),
+          capsuleId: "WC-MINE001",
+          claims: [{ kind: "path", value: "apps/web/lib/foo.ts", intent: "read" }],
+          actor,
+        }),
+      ).resolves.toBeDefined();
+      expect(db.workCapsule.update).toHaveBeenCalledTimes(1);
+    });
+
+    it("allows a claim when no other capsule holds overlapping scope", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workCapsule.findMany.mockResolvedValueOnce([]);
+      db.workCapsule.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
+      db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "act-1" });
+
+      const result = await claimWorkCapsuleScope({
+        db: capsuleDb(),
+        capsuleId: "WC-MINE001",
+        claims: [{ kind: "path", value: "apps/web/lib/bar.ts", intent: "edit" }],
+        actor,
+      });
+      expect(result.capsuleId).toBe("WC-MINE001");
+      expect(db.workCapsule.update).toHaveBeenCalledTimes(1);
+    });
+
+    it("force=true co-claims despite a conflict and records the override on the activity log", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workCapsule.findMany.mockResolvedValueOnce([otherCapsule({})]);
+      db.workCapsule.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
+      db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "act-1" });
+
+      await claimWorkCapsuleScope({
+        db: capsuleDb(),
+        capsuleId: "WC-MINE001",
+        claims: [{ kind: "path", value: "apps/web/lib/foo.ts", intent: "edit" }],
+        actor,
+        force: true,
+      });
+
+      expect(db.workCapsule.update).toHaveBeenCalledTimes(1);
+      const activityArg = db.workCapsuleActivity.create.mock.calls[0]![0] as {
+        data: { payload: { forcedOverConflicts?: unknown[] } };
+      };
+      expect(activityArg.data.payload.forcedOverConflicts).toHaveLength(1);
+    });
+
+    it("scopes the conflict query to active, non-terminal, unexpired, non-self capsules", async () => {
+      db.workCapsule.findMany.mockResolvedValueOnce([]);
+      const now = new Date("2026-06-18T12:00:00.000Z");
+
+      await detectScopeConflicts({
+        db: capsuleDb(),
+        capsuleId: "WC-MINE001",
+        claims: [{ kind: "path", value: "apps/web/lib/foo.ts", intent: "edit" }],
+        now,
+      });
+
+      const where = db.workCapsule.findMany.mock.calls[0]![0].where;
+      expect(where.capsuleId).toEqual({ not: "WC-MINE001" });
+      expect(where.archivedAt).toBeNull();
+      expect(where.status.notIn).toEqual(expect.arrayContaining(["complete", "abandoned", "archived"]));
+      expect(where.OR).toEqual([{ leaseExpiresAt: null }, { leaseExpiresAt: { gt: now } }]);
+    });
+
+    it("returns no conflicts for an empty claim list without querying", async () => {
+      const conflicts = await detectScopeConflicts({
+        db: capsuleDb(),
+        capsuleId: "WC-MINE001",
+        claims: [],
+      });
+      expect(conflicts).toEqual([]);
+      expect(db.workCapsule.findMany).not.toHaveBeenCalled();
     });
   });
 });

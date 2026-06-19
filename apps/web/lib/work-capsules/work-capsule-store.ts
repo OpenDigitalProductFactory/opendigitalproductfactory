@@ -34,6 +34,7 @@ export type CapsuleDb = {
     create(args: unknown): Promise<any>;
     findFirst(args: unknown): Promise<any>;
     findUnique(args: unknown): Promise<any>;
+    findMany(args: unknown): Promise<any[]>;
     update(args: unknown): Promise<any>;
   };
   workCapsuleActivity: {
@@ -413,17 +414,128 @@ export async function recordWorkCapsuleEvidence(args: {
   });
 }
 
+/**
+ * A scope claim on another active capsule that conflicts with an incoming
+ * claim — same `kind:value`, with at least one side claiming `edit` intent.
+ */
+export type ScopeConflict = {
+  capsuleId: string;
+  title: string;
+  kind: ScopeClaim["kind"];
+  value: string;
+  existingIntent: ScopeClaim["intent"];
+  incomingIntent: ScopeClaim["intent"];
+  leaseHolderPrincipalId: string | null;
+};
+
+/**
+ * Thrown by claimWorkCapsuleScope when an incoming claim overlaps an active
+ * claim held by another capsule. Carries the conflicts so the MCP boundary can
+ * surface them to the caller (who must coordinate, pick different scope, or pass
+ * force to deliberately co-claim).
+ */
+export class ScopeOverlapError extends Error {
+  readonly conflicts: ScopeConflict[];
+  constructor(conflicts: ScopeConflict[]) {
+    super(
+      `Scope overlap with ${conflicts.length} active claim(s) on other Work Capsule(s): ` +
+        conflicts.map((c) => `${c.kind}:${c.value} (held by ${c.capsuleId})`).join(", "),
+    );
+    this.name = "ScopeOverlapError";
+    this.conflicts = conflicts;
+  }
+}
+
+// A capsule in one of these statuses no longer holds its scope — its claims are
+// inert and never conflict with a fresh claim.
+const TERMINAL_CAPSULE_STATUSES: WorkCapsuleStatus[] = ["complete", "abandoned", "archived"];
+
+// `edit` is an exclusive intent: two `edit` claims on the same scope conflict, as
+// does an `edit` against a `read`. Two `read` claims coexist (non-exclusive).
+function intentsConflict(a: ScopeClaim["intent"], b: ScopeClaim["intent"]): boolean {
+  return a === "edit" || b === "edit";
+}
+
+/**
+ * Find active claims on OTHER capsules that conflict with `claims`. "Active" =
+ * not archived, not in a terminal status, and (for lease-backed executors) the
+ * lease has not expired — an expired-lease capsule has released its hold, so its
+ * scope is reclaimable. Conflict detection is done in JS over the parsed
+ * scopeClaims JSON (the active-capsule population is small), mirroring how the
+ * rest of this store reasons about scope.
+ */
+export async function detectScopeConflicts(args: {
+  db: CapsuleDb;
+  capsuleId: string;
+  claims: ScopeClaimInput[];
+  now?: Date;
+}): Promise<ScopeConflict[]> {
+  const incomingByKey = new Map<string, ScopeClaimInput>();
+  for (const claim of args.claims) incomingByKey.set(`${claim.kind}:${claim.value}`, claim);
+  if (incomingByKey.size === 0) return [];
+
+  const now = args.now ?? new Date();
+  const others = await args.db.workCapsule.findMany({
+    where: {
+      capsuleId: { not: args.capsuleId },
+      archivedAt: null,
+      status: { notIn: TERMINAL_CAPSULE_STATUSES },
+      OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { gt: now } }],
+    },
+    select: {
+      capsuleId: true,
+      title: true,
+      scopeClaims: true,
+      leaseHolderPrincipalId: true,
+    },
+  });
+
+  const conflicts: ScopeConflict[] = [];
+  for (const other of others ?? []) {
+    for (const existing of parseScopeClaims(other.scopeClaims)) {
+      const incoming = incomingByKey.get(`${existing.kind}:${existing.value}`);
+      if (incoming && intentsConflict(existing.intent, incoming.intent)) {
+        conflicts.push({
+          capsuleId: other.capsuleId,
+          title: other.title,
+          kind: existing.kind,
+          value: existing.value,
+          existingIntent: existing.intent,
+          incomingIntent: incoming.intent,
+          leaseHolderPrincipalId: other.leaseHolderPrincipalId ?? null,
+        });
+      }
+    }
+  }
+  return conflicts;
+}
+
 export async function claimWorkCapsuleScope(args: {
   db: CapsuleDb;
   capsuleId: string;
   claims: ScopeClaimInput[];
   actor: WorkCapsuleActor;
   now?: Date;
+  /** Deliberately co-claim despite an overlap with another active capsule. */
+  force?: boolean;
 }) {
   const capsule = await args.db.workCapsule.findUnique({
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+
+  // Capsule-first enforcement: refuse to claim scope already held by another
+  // active capsule unless the caller explicitly forces it. This is the lock that
+  // stops two sessions from building the same BI / editing the same files.
+  const conflicts = await detectScopeConflicts({
+    db: args.db,
+    capsuleId: args.capsuleId,
+    claims: args.claims,
+    now: args.now,
+  });
+  if (conflicts.length > 0 && !args.force) {
+    throw new ScopeOverlapError(conflicts);
+  }
 
   const recordedAt = (args.now ?? new Date()).toISOString();
   const nextClaims = new Map<string, ScopeClaim>();
@@ -456,8 +568,15 @@ export async function claimWorkCapsuleScope(args: {
     await recordActivity(tx, {
       workCapsuleId: capsule.id,
       kind: "scope-claimed",
-      summary: `Claimed ${added.length} new scope item(s); refreshed ${refreshed.length}.`,
-      payload: { added, refreshed },
+      summary:
+        conflicts.length > 0
+          ? `Force-claimed ${added.length} new scope item(s) over ${conflicts.length} active conflict(s); refreshed ${refreshed.length}.`
+          : `Claimed ${added.length} new scope item(s); refreshed ${refreshed.length}.`,
+      payload: {
+        added,
+        refreshed,
+        ...(conflicts.length > 0 ? { forcedOverConflicts: conflicts } : {}),
+      },
       actor: args.actor,
     });
     return updated;

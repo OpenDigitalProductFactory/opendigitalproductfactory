@@ -26,6 +26,7 @@ import {
   releaseWorkCapsuleScope,
   recordWorkCapsuleEvidence,
   updateWorkCapsuleStatus,
+  ScopeOverlapError,
   type CapsuleDb,
   type WorkCapsuleActor,
 } from "./work-capsule-store";
@@ -280,23 +281,42 @@ export async function claimCapsuleScopeTool(
     };
   }
 
+  const force = params["force"] === true;
   const db = workCapsuleDb();
-  const renewedCapsule = await runAutoRenewedCapsuleWrite({
-    capsuleId,
-    userId,
-    context,
-    write: (currentActor) => claimWorkCapsuleScope({
-      db,
+  let renewedCapsule;
+  try {
+    renewedCapsule = await runAutoRenewedCapsuleWrite({
       capsuleId,
-      claims,
-      actor: currentActor,
-    }),
-  });
+      userId,
+      context,
+      write: (currentActor) => claimWorkCapsuleScope({
+        db,
+        capsuleId,
+        claims,
+        actor: currentActor,
+        force,
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ScopeOverlapError) {
+      return {
+        success: false,
+        error: "scope_conflict",
+        message:
+          `Scope overlaps ${error.conflicts.length} active claim(s) on another Work Capsule. ` +
+          "Coordinate with the holder, claim different scope, or pass force=true to deliberately co-claim.",
+        data: { conflicts: error.conflicts },
+      };
+    }
+    throw error;
+  }
 
   return {
     success: true,
     entityId: renewedCapsule.capsuleId,
-    message: `Claimed ${claims.length} scope item(s) for ${renewedCapsule.capsuleId}.`,
+    message: force
+      ? `Force-claimed ${claims.length} scope item(s) for ${renewedCapsule.capsuleId} despite active conflicts.`
+      : `Claimed ${claims.length} scope item(s) for ${renewedCapsule.capsuleId}.`,
     data: { capsule: renewedCapsule },
   };
 }
