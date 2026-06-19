@@ -620,14 +620,17 @@ async function stepComplete(
 
   const { prisma } = await import("@dpf/db");
   const { extractDiff, listSandboxCommitsAheadOfBase } = await import("./sandbox/sandbox");
-  const { getClientIdentity } = await import("./sandbox/build-branch");
+  const { getClientIdentity, resolveBuildWorkdir } = await import("./sandbox/build-branch");
 
   const identity = await getClientIdentity();
   const baseRef = identity.clientBranch;
+  // Extract the diff from the build's working dir: its own worktree when
+  // isolation is on, else /workspace (default — byte-identical). BI-98B723C0 2c.
+  const buildWorkdir = resolveBuildWorkdir(buildId);
 
   const [fullDiff, commitHashes] = await Promise.all([
-    extractDiff(state.containerId, { baseRef }),
-    listSandboxCommitsAheadOfBase(state.containerId, baseRef),
+    extractDiff(state.containerId, { baseRef, workspace: buildWorkdir }),
+    listSandboxCommitsAheadOfBase(state.containerId, baseRef, buildWorkdir),
   ]);
 
   await prisma.featureBuild.update({
