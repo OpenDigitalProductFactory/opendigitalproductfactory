@@ -15,6 +15,8 @@ import {
   buildSandboxWorktreeAddCommand,
   buildSandboxWorktreeRemoveCommand,
   BUILD_WORKTREE_ROOT_SEGMENT,
+  isBuildWorktreeIsolationEnabled,
+  resolveBuildWorkdir,
   getClientIdentity,
   wrapSandboxGitCommand,
 } from "./build-branch";
@@ -154,6 +156,30 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
     expect(cmd).toContain("git worktree prune");
     // teardown must not rm -rf anything — node_modules are symlinks, removal is git's job
     expect(cmd).not.toContain("rm -rf");
+  });
+
+  it("defaults isolation OFF — resolveBuildWorkdir returns the shared workspace (today's behaviour)", () => {
+    const prev = process.env.DPF_BUILD_WORKTREE_ISOLATION;
+    delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
+    try {
+      expect(isBuildWorktreeIsolationEnabled()).toBe(false);
+      expect(resolveBuildWorkdir("FB-ABCD1234")).toBe("/workspace");
+    } finally {
+      if (prev === undefined) delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
+      else process.env.DPF_BUILD_WORKTREE_ISOLATION = prev;
+    }
+  });
+
+  it("routes the build workdir into the per-build worktree when isolation is enabled", () => {
+    const prev = process.env.DPF_BUILD_WORKTREE_ISOLATION;
+    process.env.DPF_BUILD_WORKTREE_ISOLATION = "1";
+    try {
+      expect(isBuildWorktreeIsolationEnabled()).toBe(true);
+      expect(resolveBuildWorkdir("FB-ABCD1234")).toBe("/workspace/.builds/FB-ABCD1234");
+    } finally {
+      if (prev === undefined) delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
+      else process.env.DPF_BUILD_WORKTREE_ISOLATION = prev;
+    }
   });
 });
 
