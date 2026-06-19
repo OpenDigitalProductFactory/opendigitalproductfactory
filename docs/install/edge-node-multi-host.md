@@ -1,5 +1,10 @@
 # DPF Edge Node — Multi-Host LAN Installation
 
+> **New here? Start with the [Edge Node Deployment Topology guide](../edge-node/deployment-topology.md)**
+> for the operator-level map (local opt-in vs. remote vs. fleet) and the portal-driven
+> "add a node on another machine" flow. This runbook is the manual/developer substrate beneath
+> that flow — use it when you want the step-by-step or the portal flow isn't available.
+
 > **Status:** T2 — multi-host real-LAN deployment. Phase 0
 > ([2026-05-12-edge-node-phase0-roadmap.md](../superpowers/plans/2026-05-12-edge-node-phase0-roadmap.md))
 > covers single-host (Authority + Edge Node on the same machine).
