@@ -121,7 +121,14 @@ export const taskrunWatchdog = inngest.createFunction(
     // before any early-return — they jam the WIP cap and block all new builds, so
     // this must run even when the stall watchdog is flag-off or no thresholds are
     // seeded. Independent of stall detection (which keys off live TaskRuns).
-    const inertBuildsReaped = await reapInertStuckBuilds(new Date());
+    // Best-effort: a reaper error must never abort the tick (quiescence recovery
+    // already ran above; stall detection still follows).
+    let inertBuildsReaped = 0;
+    try {
+      inertBuildsReaped = await reapInertStuckBuilds(new Date());
+    } catch (err) {
+      console.warn("[taskrun-watchdog] inert-build reaper failed:", err);
+    }
 
     if (!(await isStallWatchdogEnabled())) {
       return { skipped: true, reason: "flag-off", quiescenceRecovered, inertBuildsReaped };
