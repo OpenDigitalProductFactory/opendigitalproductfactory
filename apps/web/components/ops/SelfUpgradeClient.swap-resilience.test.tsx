@@ -1,0 +1,240 @@
+// @vitest-environment jsdom
+//
+// Regression coverage for the forced-self-upgrade crash: a forced upgrade
+// bypasses the quiescence drain and swaps the portal out from under the
+// operator's own request, so the server-action response comes back as a
+// non-RSC transport failure (Next error code E394, "An unexpected response was
+// received from the server"). Previously the handlers awaited the actions with
+// no try/catch, so that rejection escalated to the global (shell) error
+// boundary and painted a full-page crash over an upgrade that actually
+// succeeded. The page must instead recognise the expected mid-swap disconnect
+// and hold a calm "reconnecting" state.
+import "@/components/build-studio/test-setup";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+
+vi.mock("@/lib/actions/promotions", () => ({
+  triggerSelfUpgrade: vi.fn(),
+  forceActiveRun: vi.fn(),
+  abortActiveRun: vi.fn(),
+  rollbackSelfUpgrade: vi.fn(),
+}));
+
+// The impact panel loads its own data on mount; keep it out of these behavior
+// tests so they stay focused on the trigger/force handlers.
+vi.mock("@/components/ops/UpgradeImpactPanel", () => ({
+  default: () => null,
+}));
+
+import { triggerSelfUpgrade, forceActiveRun } from "@/lib/actions/promotions";
+import SelfUpgradeClient, { isExpectedDuringSwap } from "./SelfUpgradeClient";
+
+const triggerMock = triggerSelfUpgrade as unknown as ReturnType<typeof vi.fn>;
+const forceMock = forceActiveRun as unknown as ReturnType<typeof vi.fn>;
+
+// The real Next.js E394 transport error: a generic message plus a stable,
+// non-enumerable error code stamped by the server-action reducer.
+function makeE394(): Error {
+  const e = new Error("An unexpected response was received from the server.");
+  Object.defineProperty(e, "__NEXT_ERROR_CODE", {
+    value: "E394",
+    enumerable: false,
+  });
+  return e;
+}
+
+const baseProps = {
+  enabled: true,
+  channel: "stable",
+  inMaintenanceWindow: false,
+  nextScheduledCheckAt: "2026-06-18T18:00:00.000Z",
+  deployedSha: "abc1234",
+  targetSha: "def5678",
+  isFresh: false,
+  latestRun: null,
+  platformVersion: {
+    version: "1.0.0",
+    publishedAt: "2026-06-18T00:00:00.000Z",
+    gitSha: "9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1098",
+    note: "baseline",
+  },
+} as const;
+
+function makeRun(status: string, overrides: Record<string, unknown> = {}) {
+  return {
+    runId: "SUR-0001",
+    status,
+    trigger: "manual",
+    currentSha: "abc1234",
+    targetSha: "def5678",
+    deployedSha: "def5678",
+    reason: null as string | null,
+    startedAt: new Date("2026-06-18T02:00:00Z"),
+    completedAt: null,
+    completionEvidence: null,
+    failureLog: null as string | null,
+    createdAt: new Date("2026-06-18T02:00:00Z"),
+    ...overrides,
+  };
+}
+
+const drainingQuiescence = {
+  level: "draining" as const,
+  runId: "QR-DRAIN",
+  enteredAt: "2026-06-18T01:44:00.000Z",
+  run: {
+    runId: "QR-DRAIN",
+    status: "draining",
+    trigger: "self-upgrade",
+    targetVersion: "abcdef0123456789",
+    targetBundleHash: "abcdef0123456789",
+    deferSurface: null,
+    deferReason: null,
+    budgetMs: 300000,
+    drainStartedAt: "2026-06-18T01:44:00.000Z",
+    lastHeartbeatAt: "2026-06-18T01:44:30.000Z",
+  },
+  blockersCapturedAt: null,
+  blockers: [],
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+// ─── isExpectedDuringSwap (pure) ───────────────────────────────────────────
+
+describe("isExpectedDuringSwap", () => {
+  it("detects the Next E394 transport error by code", () => {
+    expect(isExpectedDuringSwap(makeE394())).toBe(true);
+  });
+
+  it("detects the transport error by message when no code is present", () => {
+    expect(
+      isExpectedDuringSwap(
+        new Error("An unexpected response was received from the server."),
+      ),
+    ).toBe(true);
+  });
+
+  it("detects bare network failures from a severed connection", () => {
+    expect(isExpectedDuringSwap(new TypeError("Failed to fetch"))).toBe(true);
+    expect(
+      isExpectedDuringSwap(new Error("NetworkError when attempting to fetch resource")),
+    ).toBe(true);
+    expect(isExpectedDuringSwap(new Error("connection reset"))).toBe(true);
+  });
+
+  it("does not match ordinary application errors", () => {
+    expect(isExpectedDuringSwap(new Error("Unauthorized"))).toBe(false);
+    expect(isExpectedDuringSwap(new Error("disabled"))).toBe(false);
+    expect(isExpectedDuringSwap(null)).toBe(false);
+    expect(isExpectedDuringSwap(undefined)).toBe(false);
+  });
+});
+
+// ─── Forced trigger severed by the swap ────────────────────────────────────
+
+describe("SelfUpgradeClient – forced upgrade swap resilience", () => {
+  it("shows a reconnecting state (not the crash boundary) when the forced upgrade swaps the portal mid-request", async () => {
+    triggerMock.mockRejectedValue(makeE394());
+
+    render(<SelfUpgradeClient {...baseProps} />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /emergency override/i }));
+    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Applying the upgrade/i)).toBeInTheDocument();
+    });
+
+    // The raw Next transport message must never reach the operator as an error.
+    expect(
+      screen.queryByText(/An unexpected response was received from the server/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Not queued/i)).not.toBeInTheDocument();
+  });
+
+  it("surfaces a genuine (non-swap) trigger failure inline instead of reconnecting", async () => {
+    triggerMock.mockRejectedValue(new Error("Unauthorized"));
+
+    render(<SelfUpgradeClient {...baseProps} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Not queued:/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Unauthorized/i)).toBeInTheDocument();
+    // A real error is not dressed up as a successful "applying" swap.
+    expect(screen.queryByText(/Applying the upgrade/i)).not.toBeInTheDocument();
+  });
+
+  it("treats a severed Force-now request during a drain as applying, not a crash", async () => {
+    forceMock.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    render(
+      <SelfUpgradeClient
+        {...baseProps}
+        latestRun={makeRun("running")}
+        quiescence={drainingQuiescence}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Force upgrade run QR-DRAIN now/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /confirm force/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Applying the upgrade/i)).toBeInTheDocument();
+    });
+  });
+
+  it("clears the reconnecting banner once the swapped-in portal returns fresh data", async () => {
+    triggerMock.mockRejectedValue(makeE394());
+
+    const { rerender } = render(<SelfUpgradeClient {...baseProps} />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /emergency override/i }));
+    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Applying the upgrade/i)).toBeInTheDocument();
+    });
+
+    // The poll reaches the new container: a fresh run is now visible, the
+    // deployed SHA has advanced and the install reports up to date.
+    rerender(
+      <SelfUpgradeClient
+        {...baseProps}
+        deployedSha="def5678"
+        isFresh={true}
+        latestRun={makeRun("succeeded", {
+          completedAt: new Date("2026-06-18T02:05:00Z"),
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Applying the upgrade/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps a normal queued trigger working (no false reconnecting state)", async () => {
+    triggerMock.mockResolvedValue({ queued: true, runId: "SUR-9999" });
+
+    render(<SelfUpgradeClient {...baseProps} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+
+    await waitFor(() => {
+      expect(triggerMock).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByText(/Applying the upgrade/i)).not.toBeInTheDocument();
+  });
+});
