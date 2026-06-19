@@ -11,7 +11,7 @@
 import { PrismaClient } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { loadDbEnv } from "../src/load-env";
-import { computeInstallCadaReadiness, type InstallSovereigntyDeclaration } from "../src/cada-readiness";
+import { computeInstallCadaReadiness, summarizeControlCoverage, type InstallSovereigntyDeclaration } from "../src/cada-readiness";
 import type { CadaAssuranceLevel } from "../src/sovereignty-assessment";
 
 loadDbEnv();
@@ -68,6 +68,21 @@ async function main() {
   if (readiness.assessment.gaps.length) {
     console.log("gaps:");
     for (const g of readiness.assessment.gaps) console.log(`  • ${g}`);
+  }
+
+  // Governance-evidence lens: CADA control implementation coverage (seed-cada-regulation.ts).
+  const reg = await prisma.regulation.findUnique({ where: { regulationId: "REG-CADA-2026" }, select: { id: true } });
+  if (!reg) {
+    console.log("\ngovernance: CADA not registered in this install (run scripts/seed-cada-regulation.ts).");
+  } else {
+    const obls = await prisma.obligation.findMany({ where: { regulationId: reg.id, status: "active" }, select: { id: true } });
+    const links = await prisma.controlObligationLink.findMany({
+      where: { obligationId: { in: obls.map((o) => o.id) } },
+      include: { control: { select: { id: true, implementationStatus: true } } },
+    });
+    const byId = new Map<string, { implementationStatus: string }>();
+    for (const l of links) if (l.control) byId.set(l.control.id, { implementationStatus: l.control.implementationStatus });
+    console.log(`\ngovernance controls: ${summarizeControlCoverage([...byId.values()]).summary}`);
   }
   console.log("═══════════════════════════════════════════════════════════\n");
 

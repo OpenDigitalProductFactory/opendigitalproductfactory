@@ -105,3 +105,38 @@ export function summarizeReadiness(
   }
   return parts.join(" ");
 }
+
+export interface CadaControlCoverage {
+  total: number;
+  implemented: number;
+  inProgress: number;
+  planned: number;
+  notApplicable: number;
+  /** Implemented as a percentage of applicable (non-N/A) controls. */
+  pctImplemented: number;
+  summary: string;
+}
+
+/**
+ * Governance-evidence lens: summarize the implementation status of the CADA
+ * controls registered in the compliance domain (seed-cada-regulation.ts). This
+ * complements the signal-based tier assessment — the tier says "how sovereign is
+ * the deployment", this says "how many of CADA's controls have we implemented".
+ */
+export function summarizeControlCoverage(
+  controls: ReadonlyArray<{ implementationStatus: string }>,
+): CadaControlCoverage {
+  const total = controls.length;
+  const count = (s: string) => controls.filter((c) => c.implementationStatus === s).length;
+  const implemented = count("implemented");
+  const inProgress = count("in-progress");
+  const planned = count("planned");
+  const notApplicable = count("not-applicable");
+  const applicable = total - notApplicable;
+  const pctImplemented = applicable === 0 ? 0 : Math.round((implemented / applicable) * 100);
+  const summary =
+    total === 0
+      ? "No CADA controls registered (run seed-cada-regulation.ts)."
+      : `${implemented}/${applicable} CADA controls implemented (${pctImplemented}%); ${inProgress} in progress, ${planned} planned.`;
+  return { total, implemented, inProgress, planned, notApplicable, pctImplemented, summary };
+}
