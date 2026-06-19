@@ -278,8 +278,6 @@ services:
         condition: service_healthy
       browser-use:
         condition: service_healthy
-      adp:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
       interval: 10s
@@ -439,6 +437,13 @@ services:
       dockerfile: services/adp/Dockerfile
     restart: unless-stopped
     logging: *default-logging
+    # Opt-in (BI architecture-review footprint cut). The ADP payroll/HRIS bridge
+    # is only needed by installs that actually connect ADP — most never do, so it
+    # no longer runs by default. The portal's depends_on no longer waits on it
+    # (an absent profiled dependency would otherwise block `compose up`), and the
+    # ADP integration degrades to "unavailable" until enabled. Turn on with:
+    #   docker compose --profile integrations-adp up -d adp
+    profiles: ["integrations-adp"]
     ports:
       - "8600:8600"
     environment:
@@ -622,6 +627,14 @@ services:
     image: grafana/grafana-oss:13.0.2
     restart: unless-stopped
     logging: *default-logging
+    # Opt-in (BI architecture-review footprint cut). Grafana is the power-user
+    # escape hatch: the platform renders its own context-aware dashboards
+    # (Postgres + Neo4j + Prometheus) on the System Health tab and delivers
+    # alerts via the Inngest poll-bridge, so Grafana is not on the operational or
+    # alerting path. The HEADLESS monitoring stack (prometheus/loki/alloy/
+    # exporters) stays default-on; only this dashboard UI is opt-in. Turn on with:
+    #   docker compose --profile observability-ui up -d grafana
+    profiles: ["observability-ui"]
     ports:
       - "3002:3000"
     volumes:
