@@ -109,6 +109,90 @@ export function buildSandboxCommitInFlightWorkCommand(workspace: string = WORKSP
   ].join(" && ");
 }
 
+// ─── Phase 2: per-build worktree isolation (BI-98B723C0) ─────────────────────
+// commitInFlightWork above is the Phase 1 *mitigation* — it preserves a build's
+// source before the shared /workspace tree is scrubbed for the next build. The
+// durable fix is to stop sharing one tree at all: give each build its OWN git
+// worktree under /workspace/.builds/<buildId> so a concurrent build's branch
+// switch can never scrub or corrupt another build's working tree (the root
+// cause of the data loss — the WWMD kernel chose this over a serial-rebuild
+// shortcut on Architecture-Over-Shortcuts grounds).
+//
+// node_modules is NOT reinstalled per worktree — it is shared from the canonical
+// /workspace install by symlink. Verified live in dpf-sandbox-1 (2026-06-19):
+// with the symlinks below, `tsc`, `react`, and `next` all resolve from the
+// worktree, so a per-build worktree needs no `pnpm install` of its own.
+//
+// These are the lifecycle PRIMITIVES (slice 1). Wiring them into
+// startBuildBranch + threading the per-build workdir through the dispatchers is
+// the follow-up slice; until then nothing calls these, so behaviour is
+// unchanged.
+
+/** Root under which each build's isolated worktree lives. */
+export const BUILD_WORKTREE_ROOT_SEGMENT = ".builds";
+
+/** Absolute path of a build's isolated git worktree inside the sandbox. */
+export function buildWorktreePath(buildId: string, workspace: string = WORKSPACE): string {
+  return `${workspace}/${BUILD_WORKTREE_ROOT_SEGMENT}/${buildId}`;
+}
+
+// node_modules trees shared from the canonical install into each worktree by
+// symlink: the repo root plus the web app and the workspace packages whose
+// node_modules the build/typecheck toolchain resolves through. Adding a new
+// package that a build must compile against means adding its node_modules here.
+const WORKTREE_SHARED_NODE_MODULES = [
+  "node_modules",
+  "apps/web/node_modules",
+  "packages/db/node_modules",
+  "packages/dpf-skill-pack/node_modules",
+  "packages/dpf-bootstrap/node_modules",
+] as const;
+
+/**
+ * Create a build's isolated worktree at buildWorktreePath(buildId), checked out
+ * to `branchRef` (its `build/<buildId>` branch), with node_modules shared from
+ * the canonical /workspace install via symlink — no per-worktree `pnpm install`.
+ * Idempotent: force-removes any stale worktree at the path and prunes the
+ * registry first, so a re-dispatch never trips on a leftover worktree. The
+ * `--force` on `worktree add` lets the same branch be (re)attached after a prior
+ * crash left the registry pointing at a now-gone path.
+ */
+export function buildSandboxWorktreeAddCommand(
+  buildId: string,
+  branchRef: string,
+  workspace: string = WORKSPACE,
+): string {
+  const path = buildWorktreePath(buildId, workspace);
+  const symlinks = WORKTREE_SHARED_NODE_MODULES.map(
+    (rel) => `ln -s ${workspace}/${rel} ${path}/${rel}`,
+  ).join(" && ");
+  return [
+    `cd ${workspace}`,
+    `git worktree remove --force ${path} 2>/dev/null || true`,
+    `git worktree prune`,
+    `git worktree add --force ${path} ${branchRef}`,
+    symlinks,
+  ].join(" && ");
+}
+
+/**
+ * Tear down a build's worktree and prune the registry. Best-effort
+ * (`|| true`) so cleanup of an already-gone worktree never fails a build's
+ * teardown. The symlinked node_modules are not real files, so removing the
+ * worktree never touches the shared install.
+ */
+export function buildSandboxWorktreeRemoveCommand(
+  buildId: string,
+  workspace: string = WORKSPACE,
+): string {
+  const path = buildWorktreePath(buildId, workspace);
+  return [
+    `cd ${workspace}`,
+    `git worktree remove --force ${path} 2>/dev/null || true`,
+    `git worktree prune`,
+  ].join(" && ");
+}
+
 export function buildSandboxGitPruneTrackedArtifactsCommand(): string {
   const cacheFindExpr = SANDBOX_TRACKED_CACHE_FIND_PATHS
     .map((pattern) => `-path '${pattern}'`)
