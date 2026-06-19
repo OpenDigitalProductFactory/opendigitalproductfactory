@@ -3,7 +3,9 @@ import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { PlatformKeysPanel } from "@/components/admin/PlatformKeysPanel";
 import { SocialAuthPanel } from "@/components/admin/SocialAuthPanel";
 import { EmailSettingsPanel } from "@/components/admin/EmailSettingsPanel";
+import { ReadabilityPolicyPanel } from "@/components/admin/ReadabilityPolicyPanel";
 import { getSmtpConfigStatus } from "@/lib/shared/smtp-config";
+import { loadReadabilityPolicy } from "@/lib/readability/policy";
 
 const PLATFORM_KEYS = ["upload_storage_path"];
 const ADMIN_PLATFORM_KEY_CONFIGS = [
@@ -54,6 +56,7 @@ export default async function AdminSettingsPage() {
       />
       <SocialAuthPanel keyData={await getKeyData(SOCIAL_AUTH_KEYS)} />
       <EmailSettingsPanel status={await getSmtpConfigStatus()} />
+      <ReadabilityPolicyPanel policy={await loadReadabilityPolicy()} />
     </div>
   );
 }
