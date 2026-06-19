@@ -9,4 +9,5 @@ export * from "./field-dispatch-notifications";
 export * from "./field-dispatch-warranty";
 export * from "./field-dispatch-assignment";
 export * from "./field-dispatch-policy";
+export * from "./readability";
 export * from "./storefront";

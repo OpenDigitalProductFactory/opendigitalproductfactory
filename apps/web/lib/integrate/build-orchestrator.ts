@@ -4,6 +4,7 @@
 // EP-BUILD-ORCHESTRATOR — "Do what Claude Code does"
 
 import { prisma } from "@dpf/db";
+import { isUsageLimitDispatchOutput } from "@/lib/build/dispatch-attempts";
 import { runAgenticLoop, type AgenticResult } from "@/lib/agentic-loop";
 import { agentEventBus, type AgentEvent } from "@/lib/agent-event-bus";
 import { getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
@@ -1250,6 +1251,14 @@ export async function runBuildOrchestrator(params: {
   // Proper session chaining (sequential between phases) is a future enhancement.
   // For now, each task gets its own fresh session. Context is passed via priorResults text.
 
+  // BI-F72C1044: usage-limit fast-abort. The whole build runs on ONE configured
+  // provider, so once a dispatch reports a usage-limit (subscription cap that
+  // won't clear within the build) every remaining dispatch will fail the same
+  // way. Set once, then stop dispatching for the rest of the build instead of
+  // firing the entire queue into an exhausted cap (the live "~17 dead dispatches
+  // in one build" pattern). Remaining tasks stay pending so a retry after the
+  // cap resets re-dispatches them.
+  let usageLimitAborted = false;
   for (const phase of phases) {
     // Timeout check
     if (Date.now() - startTime > MAX_DURATION_ORCHESTRATOR_MS) {
@@ -1331,6 +1340,31 @@ export async function runBuildOrchestrator(params: {
         content: sr.result.content,
         durationMs: "durationMs" in sr.result ? sr.result.durationMs : undefined,
       })));
+
+      // BI-F72C1044: stop the dispatch storm the moment the provider reports a
+      // usage-limit. Drop the rest of THIS phase's queue and signal the outer
+      // loop to skip remaining phases — the cap applies to the whole build.
+      if (batchResults.some((sr) => isUsageLimitDispatchOutput(sr.result.content))) {
+        usageLimitAborted = true;
+        const dropped = taskQueue.length;
+        taskQueue.length = 0;
+        console.warn(
+          `[orchestrator] usage-limit fast-abort (BI-F72C1044): provider capped — ` +
+            `stopped dispatching ${dropped} remaining task(s) in this phase and skipping ` +
+            `remaining phases for build ${buildId}. They stay pending for a retry once the cap resets.`,
+        );
+        agentEventBus.emit(parentThreadId, {
+          type: "orchestrator:phase_summary",
+          buildId,
+          completed: allResults.filter((r) => r.success).length,
+          total: totalTasks,
+          summary:
+            `Paused: the build provider hit its usage limit. Remaining tasks were not ` +
+            `dispatched (no point firing into an exhausted cap). Retry once the cap resets ` +
+            `or switch the Build Studio provider.`,
+        });
+        break;
+      }
     }
 
     // Collect results and build prior context for next phase
@@ -1365,6 +1399,10 @@ export async function runBuildOrchestrator(params: {
       total: totalTasks,
       summary: `Phase ${phase.phaseIndex + 1} complete.`,
     });
+
+    // BI-F72C1044: the provider is capped for the whole build — don't start the
+    // next phase's dispatches into the same exhausted cap.
+    if (usageLimitAborted) break;
   }
 
   // Save verification evidence and trigger phase advance (build → review)
