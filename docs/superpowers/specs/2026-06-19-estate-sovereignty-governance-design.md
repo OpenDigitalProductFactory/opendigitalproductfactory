@@ -95,7 +95,7 @@ The CSF SOV objectives map onto `Control`s; CADA obligations are the seeded `Obl
 
 ## 9. Phased delivery plan
 
-- **Phase 0 — Knowledge & registration (this PR).** Founder-kernel principle, CADA corpus page, affected-countries reference + test, CADA regulation seed, this spec, the architecture note. Outcome: CADA is referenceable substrate and registered in the governance area for the platform's own operation.
+- **Phase 0 — Knowledge & registration (this PR).** Founder-kernel principle, CADA corpus page, affected-countries reference + test, the **sovereignty assurance-level scoring primitive** (`packages/db/src/sovereignty-assessment.ts`, implementing CON-CADA-1) + test, CADA regulation seed, this spec, the architecture note. Outcome: CADA is referenceable substrate, registered in the governance area for the platform's own operation, and the reusable tier-scoring brain is in place for Phases 1-3.
 - **Phase 1 — Org-level assessment.** `BusinessContext.targetAssuranceLevel`; a coworker-driven "CADA-readiness assessment" that scores the install against the seeded CADA obligations using existing evidence; signed SBOM generation (Level 2). Verifies REQ-CADA-3/6.
 - **Phase 2 — Per-element infrastructure assessment.** Per-element jurisdiction/operator/region fields on `InventoryEntity`/`EdgeNode`; sovereignty `AssuranceFinding` kind + `InventoryEntity` FK; tier scoring; surfaced in `summarize_estate_posture`.
 - **Phase 3 — External-application sovereignty register.** Sovereignty columns on `IntegrationCoverageProvider`; cloud/SaaS discovery beyond the LAN; assess external digital products against the tiers.
@@ -112,7 +112,7 @@ Epic `EP-ESTATE-SOVEREIGNTY` with one backlog item per phase deliverable (filed 
 | CADA regulation, obligations, controls | **Reuse** — compliance domain + seed (done) |
 | CADA knowledge for coworkers/planning/marketing | **Reuse** — corpus page + principle + countries ref (done) |
 | Per-element finding lifecycle | **Reuse** — `AssuranceFinding` (+ small FK) |
-| Tier scoring (L1–L4 / SEAL 0–4) | **Reuse shape** — `CapabilityMaturityAssessment` scoped to element |
+| Tier scoring (L1–L4 / SEAL 0–4) | **Primitive landed + reuse shape** — `sovereignty-assessment.ts` computes the level/gaps/cap; `CapabilityMaturityAssessment` persists it per element |
 | External-app enumeration | **Reuse** — `IntegrationCoverageProvider` |
 | External-app sovereignty metadata | **New** — operator jurisdiction / hosting region / residency / criticality columns |
 | Per-element jurisdiction/operator | **New** — fields on `InventoryEntity` / `EdgeNode` |
