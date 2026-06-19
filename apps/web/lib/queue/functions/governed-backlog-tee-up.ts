@@ -16,13 +16,18 @@ export const governedBacklogTeeUpScheduled = inngest.createFunction(
     return step.run("tee-up-governed-backlog-daily", async () => {
       const { prisma } = await import("@dpf/db");
       const { runGovernedBacklogTeeUp } = await import("@/lib/governed-backlog-tee-up");
+      const { dispatchApprovedIdeateBuilds } = await import("@/lib/integrate/ideate-on-approval");
       const { resolveScheduledOwnerUserId } = await import("../scheduled-owner");
 
-      return runGovernedBacklogTeeUp({
-        prisma,
-        userId: await resolveScheduledOwnerUserId(),
-        trigger: "daily",
-      });
+      const userId = await resolveScheduledOwnerUserId();
+      const teeUp = await runGovernedBacklogTeeUp({ prisma, userId, trigger: "daily" });
+      // BI-3E0EE3BA: complete the autopilot path. The tee-up auto-approves an
+      // eligible draft but never fired its Ideate research (the only caller was
+      // the operator's Approve-Start click), leaving auto-promoted builds
+      // dead-on-arrival in `ideate`. Fire Ideate for the drafts this run promoted
+      // AND recover any older approved-but-undriven drafts in one pass.
+      const ideateDispatch = await dispatchApprovedIdeateBuilds({ userId });
+      return { ...teeUp, ideateDispatch };
     });
   },
 );
@@ -38,13 +43,19 @@ export const governedBacklogTeeUpRequested = inngest.createFunction(
     return step.run("tee-up-governed-backlog-manual", async () => {
       const { prisma } = await import("@dpf/db");
       const { runGovernedBacklogTeeUp } = await import("@/lib/governed-backlog-tee-up");
+      const { dispatchApprovedIdeateBuilds } = await import("@/lib/integrate/ideate-on-approval");
 
-      return runGovernedBacklogTeeUp({
+      const userId = event.data.userId;
+      const teeUp = await runGovernedBacklogTeeUp({
         prisma,
-        userId: event.data.userId,
+        userId,
         trigger: "manual",
         limit: event.data.limit ?? undefined,
       });
+      // BI-3E0EE3BA: fire Ideate for approved drafts this run promoted + recover
+      // older approved-but-undriven drafts (see the scheduled fn for the why).
+      const ideateDispatch = await dispatchApprovedIdeateBuilds({ userId });
+      return { ...teeUp, ideateDispatch };
     });
   },
 );

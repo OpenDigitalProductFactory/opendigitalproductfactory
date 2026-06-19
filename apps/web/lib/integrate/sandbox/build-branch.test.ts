@@ -8,6 +8,7 @@ import {
   buildSandboxGitAddCommand,
   buildSandboxBranchSwitchPrepCommand,
   buildSandboxGitCleanCommand,
+  buildSandboxCommitInFlightWorkCommand,
   buildSandboxGitCommitPrunedArtifactsCommand,
   buildSandboxGitPruneTrackedArtifactsCommand,
   getClientIdentity,
@@ -80,6 +81,20 @@ describe("wrapSandboxGitCommand", () => {
     expect(command).toContain(":!**/.pnpm-store/**");
     expect(command).not.toContain(".next");
     expect(command).not.toContain("tsbuildinfo");
+  });
+
+  it("commits a build branch's in-flight work before the pre-checkout scrub (BI-98B723C0)", () => {
+    const command = buildSandboxCommitInFlightWorkCommand();
+
+    // Acts ONLY on a build/* branch — never client/<id> or a baseline.
+    expect(command).toContain("git rev-parse --abbrev-ref HEAD");
+    expect(command).toContain("grep -q '^build/'");
+    // Stages source via the shared add command (which excludes generated/cache).
+    expect(command).toContain("git add -u");
+    expect(command).toContain(":!**/node_modules/**");
+    // Commits only when there are staged changes; best-effort so a no-op never blocks.
+    expect(command).toContain("git diff --cached --quiet --exit-code");
+    expect(command).toContain("wip: preserve in-flight build work before branch switch");
   });
 
   it("commits branch hygiene when tracked generated artifacts are pruned", () => {
