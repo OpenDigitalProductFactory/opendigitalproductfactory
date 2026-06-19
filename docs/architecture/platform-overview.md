@@ -266,7 +266,7 @@ No single data store has all three. This is why the platform renders its own das
 
 ### Grafana's Role: Power-User Escape Hatch
 
-Grafana is included in the monitoring stack but serves a different audience and purpose:
+Grafana ships as an **opt-in** power-user tool — it is not started by `docker compose up` (enable it with `docker compose --profile observability-ui up -d grafana`). It serves a different audience and purpose than the platform UI:
 
 | | Platform UI | Grafana |
 |---|---|---|
@@ -288,7 +288,7 @@ Grafana is included in the monitoring stack but serves a different audience and 
 
 ### Monitoring Stack Topology
 
-The monitoring stack runs as part of the default Docker Compose stack. All services are headless infrastructure — they feed the platform's native UI and alert pipeline.
+The **headless** monitoring stack (Prometheus, Loki, Alloy, and the metric exporters) runs as part of the default Docker Compose stack — these feed the platform's native UI and alert pipeline. The Grafana **UI** is opt-in (`--profile observability-ui`), since the platform renders its own context-aware dashboards and delivers alerts via the Inngest poll-bridge rather than through Grafana.
 
 ![Monitoring Stack Topology](monitoring-diagrams/svg/02-monitoring-stack-topology.svg)
 

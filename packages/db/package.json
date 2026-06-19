@@ -18,6 +18,8 @@
     "./discovery-collectors-snmp": "./src/discovery-collectors/snmp.ts",
     "./discovery-collectors-unifi": "./src/discovery-collectors/unifi.ts",
     "./location-normalize": "./src/location-normalize.ts",
+    "./eu-jurisdictions": "./src/eu-jurisdictions.ts",
+    "./sovereignty-assessment": "./src/sovereignty-assessment.ts",
     "./seed-deliberation": "./src/seed-deliberation.ts",
     "./edge-node-types": "./src/edge-node-types.ts",
     "./wiki-taxonomy": "./src/wiki-taxonomy.ts",
