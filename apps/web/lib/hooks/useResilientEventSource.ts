@@ -2,8 +2,8 @@
 
 /**
  * useResilientEventSource — drop-in wrapper around the browser's EventSource
- * with three resilience additions on top of the default behavior
- * (BI-QUIESCE-008, spec §7.5):
+ * with four resilience additions on top of the default behavior
+ * (BI-QUIESCE-008 §7.5; heartbeat watchdog added by BI-864E83B0):
  *
  *   1. Minimum 5s reconnect floor — even if the server returns immediate
  *      retry, the hook waits at least 5s. Prevents the upgrade window
@@ -20,12 +20,25 @@
  *      "client reconnected to a new bundle" case the bundle-hash header
  *      would otherwise detect on the next user action.
  *
- * Migration: replaces `new EventSource(url)` in consumers. The 5 v1 SSE
- * consumers can migrate incrementally — this hook ships standalone and
- * the migration is BI-QUIESCE-008-followup. AgentCoworkerPanel et al
- * keep working unchanged until they're migrated.
+ *   4. Heartbeat watchdog (the zombie-reaper) — the server now emits a
+ *      named `dpf-hb` event every ~15s (lib/sse/sse-stream.ts). The hook
+ *      resets a watchdog on every inbound frame; if NOTHING arrives within
+ *      HEARTBEAT_WATCHDOG_MS it treats the connection as dead and force-
+ *      closes + reconnects. This is the fix for the recurring "Chrome
+ *      wedged, had to restart the browser after a portal rebuild" defect:
+ *      a self-upgrade recreates the portal container, the old TCP socket is
+ *      silently stranded (no FIN through the recreated docker-proxy), and
+ *      a plain EventSource never errors on a silent dead socket — so it
+ *      becomes a zombie holding one of the browser's ~6 HTTP/1.1 connection
+ *      slots per origin until the browser is restarted. The watchdog reaps
+ *      that zombie itself, freeing the slot, so the page never wedges.
+ *
+ * Migration: replaces `new EventSource(url)` in consumers. The always-on
+ * consumers (PlatformBanner, usePlatformReady) are migrated; the remaining
+ * transient streams migrate in BI-1AFF530D.
  */
 import { useEffect, useRef, useState } from "react";
+import { SSE_HEARTBEAT_EVENT } from "@/lib/sse/constants";
 
 type BootGlobal = { version: string; bundleHash: string };
 
@@ -36,6 +49,15 @@ declare global {
 }
 
 const MIN_RECONNECT_DELAY_MS = 5_000;
+
+/**
+ * If no frame (heartbeat OR data) arrives within this window, the connection
+ * is presumed dead and the hook force-reconnects. The server heartbeats every
+ * ~15s, so 40s tolerates ~2 missed beats plus jitter/latency before acting —
+ * aggressive enough to self-heal within seconds of a rebuild, slack enough not
+ * to false-trip on a momentarily quiet link.
+ */
+export const HEARTBEAT_WATCHDOG_MS = 40_000;
 
 export type ResilientEventSourceOptions = {
   /**
@@ -51,7 +73,9 @@ export type ResilientEventSourceOptions = {
   onNamed?: Record<string, (event: MessageEvent) => void>;
   /**
    * If true, the hook will not attempt to reconnect after the server
-   * closes the stream cleanly. Default: true (allow reconnect).
+   * closes the stream cleanly. Default: true (allow reconnect). When false,
+   * the heartbeat watchdog is also disabled (a one-shot stream is expected
+   * to fall quiet and end).
    */
   reconnect?: boolean;
 };
@@ -79,16 +103,56 @@ export function useResilientEventSource(
     let closed = false;
     let source: EventSource | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
     let lastConnectAt = 0;
 
-    const connect = (): void => {
+    const watchdogEnabled = optsRef.current.reconnect !== false;
+
+    function clearWatchdog(): void {
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
+    }
+
+    // Reset the liveness watchdog. Called on connect and on every inbound
+    // frame (heartbeat, named event, or data). If it ever fires, the stream
+    // has gone silent past the tolerance → reap and reconnect.
+    function armWatchdog(): void {
+      if (!watchdogEnabled || closed) return;
+      clearWatchdog();
+      watchdogTimer = setTimeout(() => {
+        if (closed) return;
+        // Dead/zombie connection: no traffic for HEARTBEAT_WATCHDOG_MS even
+        // though the server should be heartbeating. Force a clean reconnect.
+        setStatus("reconnecting");
+        source?.close();
+        source = null;
+        scheduleReconnect();
+      }, HEARTBEAT_WATCHDOG_MS);
+    }
+
+    function scheduleReconnect(): void {
+      if (closed) return;
+      clearWatchdog();
+      // Backoff: at least MIN_RECONNECT_DELAY_MS, plus jitter so tabs that
+      // dropped together don't reconnect in lockstep and re-storm the server.
+      const sinceConnect = Date.now() - lastConnectAt;
+      const minWait = Math.max(0, MIN_RECONNECT_DELAY_MS - sinceConnect);
+      const jitter = Math.floor(Math.random() * 1_000);
+      retryTimer = setTimeout(connect, minWait + jitter);
+    }
+
+    function connect(): void {
       if (closed) return;
       lastConnectAt = Date.now();
       setStatus("connecting");
-      source = new EventSource(url);
+      source = new EventSource(url as string);
+      armWatchdog();
 
       source.onopen = () => {
         setStatus("open");
+        armWatchdog();
         // Stale-bundle check on every successful (re)connect.
         void detectStaleBundle().then((stale) => {
           if (stale && !closed) {
@@ -101,12 +165,23 @@ export function useResilientEventSource(
       };
 
       source.onmessage = (event) => {
+        armWatchdog();
         optsRef.current.onMessage(event);
       };
 
+      // Internal liveness listener — resets the watchdog and is never
+      // forwarded to the consumer. This is the frame that keeps an idle
+      // stream (e.g. the system banner) alive between real events.
+      source.addEventListener(SSE_HEARTBEAT_EVENT, () => {
+        armWatchdog();
+      });
+
       if (optsRef.current.onNamed) {
         for (const [name, handler] of Object.entries(optsRef.current.onNamed)) {
-          source.addEventListener(name, handler as EventListener);
+          source.addEventListener(name, ((event: MessageEvent) => {
+            armWatchdog();
+            handler(event);
+          }) as EventListener);
         }
       }
 
@@ -117,28 +192,23 @@ export function useResilientEventSource(
         if (closed) return;
         if (optsRef.current.reconnect === false) {
           closed = true;
+          clearWatchdog();
           source?.close();
           return;
         }
         setStatus("reconnecting");
         source?.close();
         source = null;
-
-        // Compute backoff: at least MIN_RECONNECT_DELAY_MS, plus an
-        // additional delay so jittered tabs don't reconnect in lockstep.
-        const sinceConnect = Date.now() - lastConnectAt;
-        const minWait = Math.max(0, MIN_RECONNECT_DELAY_MS - sinceConnect);
-        const jitter = Math.floor(Math.random() * 1_000);
-        const delay = minWait + jitter;
-        retryTimer = setTimeout(connect, delay);
+        scheduleReconnect();
       };
-    };
+    }
 
     connect();
 
     return () => {
       closed = true;
       if (retryTimer) clearTimeout(retryTimer);
+      clearWatchdog();
       source?.close();
     };
   }, [url]);

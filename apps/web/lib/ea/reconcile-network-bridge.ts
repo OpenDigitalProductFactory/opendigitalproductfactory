@@ -19,23 +19,32 @@ import { applySysmlModel, type SysmlSeedResult } from "./sysml-model-seed";
 export async function reconcileNetworkTopology(opts: { db?: typeof prisma } = {}): Promise<SysmlSeedResult> {
   const db = opts.db ?? prisma;
 
+  // Scope boundary (BI-6C41A9DC): the org-internal architecture graph represents the
+  // PLATFORM's own estate. Customer-scoped discovery (MSP/reseller customer devices —
+  // InventoryEntity.scopeKey `customer:<id>` / an EdgeNode bound to a customerAccountId)
+  // is a per-tenant overlay and must NOT project into this global graph. Filter at the
+  // source — this is the "scope filtering" the extractor header delegates to the shell.
+  const INTERNAL_SCOPE_KEY = "organization:internal";
+
   const [edgeRows, entityRows] = await Promise.all([
     db.edgeNode.findMany({
+      where: { customerAccountId: null },
       select: { nodeId: true, platform: true, installMode: true, version: true, status: true, trustState: true, lastSeenAt: true },
     }),
     db.inventoryEntity.findMany({
+      where: { scopeKey: INTERNAL_SCOPE_KEY },
       select: { id: true, entityKey: true, entityType: true, name: true, technicalClass: true, manufacturer: true, productModel: true, status: true },
     }),
   ]);
 
   if (edgeRows.length === 0 && entityRows.length === 0) {
-    console.warn("[network-topology] no EdgeNode/InventoryEntity rows — skipping");
+    console.warn("[network-topology] no org-internal EdgeNode/InventoryEntity rows — skipping");
     return { status: "skipped", created: 0, updated: 0, removed: 0 };
   }
 
   const idToKey = new Map(entityRows.map((e) => [e.id, e.entityKey]));
   const relRows = entityRows.length
-    ? await db.inventoryRelationship.findMany({ select: { fromEntityId: true, toEntityId: true, relationshipType: true } })
+    ? await db.inventoryRelationship.findMany({ where: { scopeKey: INTERNAL_SCOPE_KEY }, select: { fromEntityId: true, toEntityId: true, relationshipType: true } })
     : [];
 
   const edgeNodes: EdgeNodeFact[] = edgeRows.map((r) => ({

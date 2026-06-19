@@ -96,8 +96,8 @@ Two metrics, both Flesch–Kincaid:
 ### Enforcement points
 
 - **Documentation site (today):** the `/business-types/` generator scores every page's business-facing copy at build time, warns when a page exceeds the target, writes `_readability-report.md`, and prints the grade in each page footer. Architecture and standards sections are excluded by design.
-- **Generated copy (platform):** when an AI coworker writes external/business copy (storefront sections, campaigns, notices), it honours the org's readability target. The target is an **operator-adjustable platform policy stored on the existing `PlatformConfig` / `BusinessContext` surface and set from the existing admin settings — no new admin surface** — injected into the coworker's instructions at prompt-assembly time and consumed alongside the per-archetype `marketingSkillRules.readingLevel`.
-- **Operator visibility:** the readability score is shown to the operator while editing marketing/storefront copy, the way a word processor shows it — so plain language is something the platform **measures**, not just intends.
+- **Generated copy (platform) — implemented (BI-8F8C5F28):** when an AI coworker on a customer-copy surface (marketing, storefront) writes external copy, it is held to the org's readability target. The target is an **operator-adjustable policy stored on the existing `PlatformConfig` key/value table (key `content_readability_policy`) and set from the existing `/admin/settings` page — no new table or admin surface**. It is resolved at runtime (`apps/web/lib/readability/policy.ts`, honouring a per-archetype `marketingSkillRules.readingLevel` override) and injected into the coworker's prompt at **Block 5** of the assembler (`apps/web/lib/tak/prompt-assembler.ts`). The shared Flesch–Kincaid scorer + tiered-policy types live in `@dpf/validators` (`packages/validators/src/readability.ts`).
+- **Operator visibility (planned):** showing the live Flesch–Kincaid score to the operator while they edit marketing/storefront copy, the way a word processor does. The shared scorer (`@dpf/validators`) is ready; surfacing it in the copy editor is the remaining step.
 
 ### Coworker rule
 

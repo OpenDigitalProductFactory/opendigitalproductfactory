@@ -827,6 +827,7 @@ export async function savePlatformApiKey(
   const allowedKeys = [
     "brave_search_api_key",
     "upload_storage_path",
+    "content_readability_policy",
     "google_client_id",
     "google_client_secret",
     "apple_client_id",
