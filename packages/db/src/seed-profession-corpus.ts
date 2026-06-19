@@ -318,6 +318,17 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "minimal) and high-risk provider obligations. Secondary explainer.",
     retrievedAt: "2026-06-13",
   },
+  "eu/cada": {
+    sourceType: "standard",
+    title: "EU Cloud and AI Development Act (CADA) — Commission proposal",
+    url: "https://digital-strategy.ec.europa.eu/en/policies/cloud-and-ai-development-act",
+    license: "open-explainer",
+    abstract:
+      "Commission proposal (3 June 2026) for the EU cloud/AI sovereignty framework: four Union " +
+      "assurance levels gating the top tiers on EU ownership and the absence of third-country interference. " +
+      "Secondary explainer; the Official Journal text is not yet final.",
+    retrievedAt: "2026-06-19",
+  },
   "spdx/license-list": {
     sourceType: "spec",
     title: "SPDX License List",
