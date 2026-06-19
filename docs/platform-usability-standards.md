@@ -74,9 +74,43 @@ Before submitting a component, verify:
 - [ ] No inline hex colors for token roles
 - [ ] Component renders correctly in both light and dark mode (toggle OS preference to verify)
 
+## Readability & Plain Language
+
+Business-facing copy must be understandable by the people who **run** a business, not only the people who build the platform. The platform — and its own marketing — holds business copy to a **high-school reading level**, measured with the **Flesch–Kincaid** tests that word processors like Microsoft Word report. Plain language is a precondition for mass adoption, and a marketing requirement when reaching a non-technical audience.
+
+### Audience tiers
+
+Reading level is tiered by audience — match the copy to the reader. Do **not** flatten everything to one level:
+
+| Audience / surface | Target | Flesch–Kincaid grade | Why |
+|---|---|---|---|
+| Marketing & external (storefront, campaigns, landing copy) | High school | ≤ 9 | Reaches the widest audience; the basis for mass acceptance |
+| A specific archetype / business page | High school | ≤ 9 | Operators read these to run the business |
+| Reseller / partner / integrator material | College | ≤ 13 | Partners and MSPs want robust detail and fit |
+| Architecture & standards (TAK, GAID, system design) | Highest | no cap | Precision for architects and standards reviewers outranks simplicity |
+
+Two metrics, both Flesch–Kincaid:
+- **Grade Level** — approximate U.S. school grade; target ≤ 9 for business copy.
+- **Reading Ease** — 0–100, higher is easier; aim ≥ 55 for business copy ("plain English").
+
+### Enforcement points
+
+- **Documentation site (today):** the `/business-types/` generator scores every page's business-facing copy at build time, warns when a page exceeds the target, writes `_readability-report.md`, and prints the grade in each page footer. Architecture and standards sections are excluded by design.
+- **Generated copy (platform):** when an AI coworker writes external/business copy (storefront sections, campaigns, notices), it honours the org's readability target. The target is an **operator-adjustable platform policy stored on the existing `PlatformConfig` / `BusinessContext` surface and set from the existing admin settings — no new admin surface** — injected into the coworker's instructions at prompt-assembly time and consumed alongside the per-archetype `marketingSkillRules.readingLevel`.
+- **Operator visibility:** the readability score is shown to the operator while editing marketing/storefront copy, the way a word processor shows it — so plain language is something the platform **measures**, not just intends.
+
+### Coworker rule
+
+Every coworker that writes customer-facing copy (marketing-specialist and peers) must:
+- write external/business copy at the org's target reading level (default high school, grade ≤ 9);
+- use short sentences, active voice, and familiar words; avoid jargon in business copy;
+- keep architecture and standards copy precise even when it reads higher;
+- check the Flesch–Kincaid grade before publishing.
+
 ## Standards Referenced
 
 - WCAG 2.2 (W3C Recommendation) — Level AA compliance
 - EN 301 549 (European ICT Accessibility Standard)
 - Section 508 (US Federal Accessibility)
 - CSS Media Queries Level 5 (`prefers-color-scheme`)
+- Flesch Reading Ease & Flesch–Kincaid Grade Level — the readability tests reported by common word processors (e.g. Microsoft Word)
