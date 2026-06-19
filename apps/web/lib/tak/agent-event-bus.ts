@@ -13,6 +13,10 @@ export type AgentEvent =
   | { type: "brief:update"; buildId: string }
   | { type: "evidence:update"; buildId: string; field: string }
   | { type: "iteration"; iteration: number; toolCount: number }
+  // BI-95C0835E: the agentic loop's execution plan changed (recorded or a step
+  // updated). Streamed so the UI can show the plan executing step-by-step —
+  // the perceived-progress + trust mechanism (Perplexity's streamed Pro plan).
+  | { type: "plan:update"; goal: string; steps: Array<{ id: string; description: string; status: string }>; done: number; total: number }
   | { type: "test:step"; stepIndex: number; description: string; screenshot?: string; passed: boolean }
   | { type: "sync:progress"; totalFetched: number; totalUpserted: number; totalNew: number }
   | { type: "done"; agentMessageId?: string; systemMessageId?: string; formAssistUpdate?: Record<string, unknown>; providerInfo?: { providerId: string; modelId: string }; error?: string }

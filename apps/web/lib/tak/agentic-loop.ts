@@ -1855,6 +1855,18 @@ export async function runAgenticLoop(params: {
           `[agentic-tool] PLAN iter=${iteration} tool=${tc.name} success=${applied.result.success}` +
           (executionPlan ? ` progress=${planProgress(executionPlan).done}/${planProgress(executionPlan).total}` : ""),
         );
+        // BI-95C0835E: stream the plan so the UI can render it executing
+        // step-by-step. Only on a successful mutation that left a plan in place.
+        if (applied.result.success && executionPlan) {
+          const { done, total } = planProgress(executionPlan);
+          onProgress?.({
+            type: "plan:update",
+            goal: executionPlan.goal,
+            steps: executionPlan.steps.map((s) => ({ id: s.id, description: s.description, status: s.status })),
+            done,
+            total,
+          });
+        }
         iterationResults.push({ tc, toolResult: applied.result });
         continue;
       }
