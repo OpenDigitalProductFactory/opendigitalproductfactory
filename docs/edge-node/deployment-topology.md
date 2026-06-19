@@ -89,6 +89,11 @@ blur with another's). This is where the archetypes differ:
 - **Other multi-site businesses** — property management (per building), HOAs (per community),
   field-service trades (per yard) follow the same one-node-per-context pattern.
 
+Running more than a handful of nodes is its own discipline — staged rollout, version skew,
+quarantine, missed-heartbeat alerting, and keeping the Authority Core from becoming a bottleneck.
+See [Fleet operations](fleet-operations.md). For how tokens, raw evidence, and customer-site data
+stay scoped and un-leaked across a fleet, see [Security & sovereignty](security-and-sovereignty.md).
+
 ## Decision guide
 
 | If you want to… | Situation | Start here |
@@ -110,6 +115,7 @@ every case is the same shape: the node shows **trusted** with a recent **last se
 
 ## See also
 
+- Operator companions: [Fleet operations](fleet-operations.md) · [Security & sovereignty](security-and-sovereignty.md)
 - [Single-host overlay](../../docker-compose.edge.yml) · [standalone (separate host)](../../docker-compose.edge-standalone.yml) · [TLS overlay](../../docker-compose.edge-standalone-tls.yml) · [SNMP overlay](../../docker-compose.edge-snmp.yml) · [macvlan](../../docker-compose.edge.macvlan.yml)
 - [Event envelope](event-envelope.md) · [UniFi adapter](unifi-adapter.md) · [macvlan deployment](macvlan-deployment.md) · [WSL mirrored networking note](wsl-mirrored-note.md)
 - Deployment doctrine: [`2026-05-09-deployment-contracts.md` Contract 5](../superpowers/specs/2026-05-09-deployment-contracts.md)
