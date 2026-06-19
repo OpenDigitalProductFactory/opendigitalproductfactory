@@ -19,6 +19,7 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { agentEventBus } from "@/lib/agent-event-bus";
+import { createSseResponse } from "@/lib/sse/sse-stream";
 
 export const dynamic = "force-dynamic";
 
@@ -28,46 +29,19 @@ export async function GET(request: NextRequest): Promise<Response> {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      // Initial heartbeat so the client EventSource confirms connection.
-      try {
-        controller.enqueue(encoder.encode(`: connected\n\n`));
-      } catch {
-        return;
-      }
-
-      const unsub = agentEventBus.subscribeSystem((event) => {
-        // Filter to system: events only — broadcastSystem also fans out
-        // to per-thread subscribers, but the system stream should only
-        // carry system-namespace events.
+  // This is the ALWAYS-ON stream (mounted via PlatformBanner in the shell
+  // layout), so it is the connection most prone to becoming a zombie across a
+  // portal rebuild. createSseResponse adds the liveness heartbeat the client
+  // watchdog needs to reap it. See lib/sse/sse-stream.ts for the full rationale.
+  return createSseResponse({
+    signal: request.signal,
+    start: (sse) =>
+      agentEventBus.subscribeSystem((event) => {
+        // Filter to system: events only — broadcastSystem also fans out to
+        // per-thread subscribers, but the system stream should only carry
+        // system-namespace events.
         if (!event.type.startsWith("system:")) return;
-        const data = `data: ${JSON.stringify(event)}\n\n`;
-        try {
-          controller.enqueue(encoder.encode(data));
-        } catch {
-          unsub();
-        }
-      });
-
-      // Clean up on client disconnect.
-      request.signal.addEventListener("abort", () => {
-        unsub();
-        try {
-          controller.close();
-        } catch {
-          /* already closed */
-        }
-      });
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
-    },
+        sse.send(event);
+      }),
   });
 }

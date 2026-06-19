@@ -126,7 +126,9 @@ let addedSourceLines = 0;
 for (const f of changed) {
   if (!SOURCE_LINE_FILE_RE.test(f)) continue;
   const safePath = assertSafePath(f);
-  const added = git("diff", "--numstat", `${base}...HEAD`, "--", safePath)
+  // --literal-pathspecs so a path like [taskId] is matched literally and not
+  // treated as a git pathspec glob (which would silently count zero lines).
+  const added = git("--literal-pathspecs", "diff", "--numstat", `${base}...HEAD`, "--", safePath)
     .split("\n")[0]
     ?.trim();
   if (!added) continue;
