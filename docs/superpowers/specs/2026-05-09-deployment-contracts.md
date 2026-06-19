@@ -117,7 +117,27 @@ configuration from there. The same binary supports Windows, macOS,
 Linux, cloud-hosted Authority Cores, TAPPaaS-hosted Authority Cores,
 and remote managed hosts.
 
-Per `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md`.
+**Opt-in deployment.** Where the platform is installed, no Edge Node
+runs unless the operator chooses it; the choice is identical across
+host OSes and persisted in `install-state.json`. This is the *deploy*
+gate, distinct from the *trust* gate (remote nodes still enroll
+`pending` until approved).
+
+**Minimal footprint.** An Edge Node carries no portal, database,
+graph/vector store, or LLM — it is one process/binary, outbound-only
+to the Authority URL, holding only a small local state file. The
+remote artifact installs without a monorepo clone (a single native
+binary, or a single compose file fetched by URL).
+
+**Fleet topology.** One Authority Core supports a fleet of Edge Nodes
+across many contexts; admin list, discovery evidence, adapter
+credentials, status, and reaping are per-node and scope-qualified.
+Archetypes specialize the fleet: retail one node per location, MSP one
+per customer × site (strict estate separation).
+
+Per `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` and the
+deployment-topology + remote-provisioning design
+`docs/superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md`.
 
 ### 6. Build execution
 

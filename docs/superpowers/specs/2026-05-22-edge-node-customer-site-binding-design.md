@@ -10,6 +10,7 @@
 - `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md`
 - `docs/superpowers/specs/2026-05-19-edge-node-network-telemetry-adapters-design.md`
 - `docs/superpowers/specs/2026-04-23-it-service-provider-msp-archetype-design.md`
+- `docs/superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md` — the *deployment topology* on top of this data boundary: how an MSP provisions one node per customer × site at scale (this spec remains authoritative for the scope model itself)
 
 ## 1. Problem Statement
 
