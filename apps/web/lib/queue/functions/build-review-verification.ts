@@ -113,7 +113,11 @@ export const buildReviewVerification = inngest.createFunction(
         const { prisma } = await import("@dpf/db");
         await prisma.featureBuild.update({
           where: { buildId },
-          data: { uxVerificationStatus: "skipped" },
+          // Clear any stale uxTestResults alongside the status: a build that
+          // previously ran browser-use and recorded a failed step would otherwise
+          // keep that failed array, defeating hasCompletedUxVerification (which
+          // requires every recorded step to pass). A skipped check has no steps.
+          data: { uxVerificationStatus: "skipped", uxTestResults: [] },
         });
         await prisma.buildActivity.create({
           data: {

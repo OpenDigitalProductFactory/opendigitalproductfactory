@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parsePlanJson } from "./plan-on-approval";
+import { parsePlanJson, formatPlanReviewFeedback } from "./plan-on-approval";
 
 const validPlan = {
   fileStructure: [{ path: "apps/web/lib/x.ts", action: "modify" }],
@@ -40,5 +40,30 @@ describe("parsePlanJson", () => {
     // first-brace…last-brace slice must not misfire on these.
     expect(parsePlanJson("[1,2,3]")).toBeNull();
     expect(parsePlanJson("42")).toBeNull();
+  });
+});
+
+describe("formatPlanReviewFeedback (BI-99B06AD1 fix-loop)", () => {
+  it("returns empty string for no prior issues (round 1 = unchanged prompt)", () => {
+    expect(formatPlanReviewFeedback([])).toBe("");
+  });
+
+  it("renders a REVISION instruction listing each blocking issue", () => {
+    const out = formatPlanReviewFeedback([
+      { severity: "critical", description: "Task 3 combines two file edits" },
+      { severity: "important", description: "No test-first step for the migration" },
+    ]);
+    expect(out).toMatch(/REVISION/);
+    expect(out).toMatch(/MUST resolve every one/i);
+    expect(out).toContain("[critical] Task 3 combines two file edits");
+    expect(out).toContain("[important] No test-first step for the migration");
+  });
+
+  it("caps the fed-back issues at 20 to bound prompt growth", () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({ severity: "minor", description: `issue ${i}` }));
+    const out = formatPlanReviewFeedback(many);
+    expect(out).toContain("issue 0");
+    expect(out).toContain("issue 19");
+    expect(out).not.toContain("issue 20");
   });
 });

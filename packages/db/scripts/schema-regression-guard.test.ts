@@ -127,6 +127,19 @@ model AiProviderFinanceProfile {
     expect(found[0]).toMatch(/ownerId/);
   });
 
+  it("skips a field removal on the intentional-removal allowlist", () => {
+    const dropped = BASE.replace(/  ownerId   String\?\n/, "");
+    const found = diffSchemas(parseSchema(BASE), parseSchema(dropped), new Set(["Widget.ownerId"]));
+    expect(found).toEqual([]);
+  });
+
+  it("still flags a non-allowlisted removal when an allowlist is in effect", () => {
+    const dropped = BASE.replace(/  ownerId   String\?\n/, "");
+    const found = diffSchemas(parseSchema(BASE), parseSchema(dropped), new Set(["Widget.somethingElse"]));
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatch(/ownerId/);
+  });
+
   it("flags a changed field type", () => {
     const changed = BASE.replace(/name      String/, "name      Int");
     const found = regressions(BASE, changed);

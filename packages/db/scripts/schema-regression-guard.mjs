@@ -140,7 +140,28 @@ function isOptionalityWidening(baseLine, headLine) {
   return base.suffix === head.suffix;
 }
 
-export function diffSchemas(base, head) {
+// Fields intentionally removed via a steward-reviewed migration (AGENTS.md §11).
+// Each entry is "Model.field". The guard skips these specific removals so an
+// approved schema-convergence migration can land, while still blocking every
+// OTHER (accidental) field drop. Add an entry ONLY alongside the migration that
+// drops the column, in a PR reviewed by the schema steward; prune entries once
+// they have shipped to every environment.
+export const INTENTIONAL_FIELD_REMOVALS = new Set([
+  // 2026-06-19 architecture-convergence: vestigial ModelProvider score columns.
+  // Compiler-oracle-verified zero references — ModelProfile is the live per-model
+  // scoring source. (The ModelProvider score columns still read by the provider
+  // UI are intentionally KEPT until that data layer is migrated to ModelProfile.)
+  "ModelProvider.customScores",
+  "ModelProvider.evalCount",
+  "ModelProvider.lastCallAt",
+  "ModelProvider.lastEvalAt",
+  "ModelProvider.profileConfidence",
+  "ModelProvider.supportedModalities",
+  // 2026-06-19: deprecated duplicate of the canonical StorefrontConfig.archetypeId.
+  "BusinessContext.archetypeId",
+]);
+
+export function diffSchemas(base, head, allowlist = INTENTIONAL_FIELD_REMOVALS) {
   const regressions = [];
 
   // Models
@@ -156,6 +177,10 @@ export function diffSchemas(base, head) {
           isOptionalityWidening(line, headLine),
         );
         if (equivalentWidening) continue;
+        // Sanctioned, steward-reviewed removals are skipped; everything else
+        // (accidental drops) still regresses.
+        const parsed = parseModelFieldLine(line);
+        if (parsed && allowlist.has(`${name}.${parsed.name}`)) continue;
         regressions.push(`model ${name}: removed \`${line}\``);
       }
     }
