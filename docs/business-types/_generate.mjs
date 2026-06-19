@@ -87,7 +87,7 @@ const OP = {
     valueTitle: "Value delivered",
     valueSub: "Money recognised truthfully",
     retain: "The relationship persists & compounds",
-    trust: "governed end-to-end — approved & audited",
+    trust: "you approve every step — and it's all logged",
   },
 };
 
@@ -170,7 +170,7 @@ function operatingModelSVG(groupId, title) {
   </defs>
 
   <rect x="16" y="14" width="${W - 32}" height="30" rx="8" class="lane"/>
-  <text x="${W / 2}" y="29" text-anchor="middle" font-size="11.5" font-weight="600" class="muted">Governed end-to-end · ${esc(o.trust)}</text>
+  <text x="${W / 2}" y="29" text-anchor="middle" font-size="11.5" font-weight="600" class="muted">You approve every step · ${esc(o.trust)}</text>
 
   <rect x="${A.x}" y="${A.y}" width="${A.w}" height="${A.h}" rx="12" class="node"/>
   <text x="${cxA}" y="${A.y + 20}" text-anchor="middle" class="eb a">CUSTOMER</text>
@@ -215,11 +215,11 @@ function vstreamStrip(stages) {
     })
     .join("\n        ");
   return `<div class="vstream-card">
-      <p class="vstream-lane">Trust &amp; compliance — across every stage</p>
+      <p class="vstream-lane">Trust &amp; licence checks — across every step</p>
       <ul class="vstream">
         ${items}
       </ul>
-      <p class="vstream-lane bottom">Your AI coworker — turns demand into work, in your language</p>
+      <p class="vstream-lane bottom">Your AI coworker — turns enquiries into work, in your words</p>
     </div>`;
 }
 
@@ -268,8 +268,8 @@ function footer() {
 // ---- core-message callout --------------------------------------------------
 function calloutHTML() {
   return `<div class="callout">
-      <p class="ck">The bigger picture</p>
-      <p>One DPF install becomes a <b>governed vertical operating system</b>: the archetype shapes the business, <b>TAK</b> governs every agent action, and <b>GAID</b> makes agent identity and evidence inspectable.</p>
+      <p class="ck">In plain terms</p>
+      <p>One install gives you a <b>website your customers can use</b>, a <b>place to run the work</b>, and <b>AI coworkers that already speak your line of work</b>. You approve the important moves, and everything stays on your own computers.</p>
     </div>`;
 }
 
@@ -279,15 +279,15 @@ function surfaceFor(cap) {
   const t = (cap.lead + " " + cap.rest).toLowerCase();
   // Order matters: more-specific surfaces win before the generic "estate" net,
   // so "billing … recorded" → Finance and "KYC … records" → Compliance.
-  if (/dispatch|patrol|\bboard\b|routing|\broute\b|\bcrew\b|real-time|incident/.test(t)) return "Operations board";
+  if (/dispatch|patrol|\bboard\b|routing|\broute\b|\bcrew\b|real-time|incident/.test(t)) return "Work board";
   if (/vocabulary|\bcoworker\b|language|framing/.test(t)) return "AI coworker";
-  if (/invoic|billing|\bfee\b|deposit|\bpayment\b|payout|p&l|chargeable/.test(t)) return "Finance workflow";
-  if (/complian|licens|\bkyc\b|aml|safeguard|\bcert\b|disclosure|consent/.test(t)) return "Compliance flags";
-  if (/recurr|renewal|lifecycle|membership|subscription|recall|retention|patronage/.test(t)) return "Lifecycle signals";
-  if (/storefront|intake|inquir|catalog|cart|checkout|portal|booking|\bbook\b|\bslot|calculator|donation/.test(t)) return "Storefront & intake";
-  if (/record|history|estate|\baccount\b|patient|\bpet\b|\bunit\b|\basset|isolation|per-client|profile/.test(t)) return "Customer estate";
+  if (/invoic|billing|\bfee\b|deposit|\bpayment\b|payout|p&l|chargeable/.test(t)) return "Invoicing & finance";
+  if (/complian|licens|\bkyc\b|aml|safeguard|\bcert\b|disclosure|consent/.test(t)) return "Licence & safety checks";
+  if (/recurr|renewal|lifecycle|membership|subscription|recall|retention|patronage/.test(t)) return "Reminders & renewals";
+  if (/storefront|intake|inquir|catalog|cart|checkout|portal|booking|\bbook\b|\bslot|calculator|donation/.test(t)) return "Website & enquiries";
+  if (/record|history|estate|\baccount\b|patient|\bpet\b|\bunit\b|\basset|isolation|per-client|profile/.test(t)) return "Customer records";
   if (/vocabulary|coworker|language|framing|\bagent\b/.test(t)) return "AI coworker";
-  return "Coworker & workflows";
+  return "AI coworker & workflow";
 }
 
 // ---- audience split (Use it · Resell it · Understand it) --------------------
@@ -313,15 +313,15 @@ function audienceSplit(page) {
       <div class="aud resell">
         <div class="role">Resell it</div>
         <h3>Package it for clients</h3>
-        <p>One archetype-driven platform you install, brand, and support per client — repeatable vertical packaging, not a bespoke app each time.</p>
+        <p>One platform you set up per client — brand it, support it, repeat for the next client. No custom app each time.</p>
         <a class="more" href="#resell">Explore the reseller path &darr;</a>
         <div class="who">For partners, MSPs &amp; consultants</div>
       </div>
       <div class="aud understand">
         <div class="role">Understand it</div>
         <h3>Inspect the architecture</h3>
-        <p>Archetype-driven generation, route-scoped governed coworkers, TAK runtime controls, and GAID-direction identity &amp; evidence — auditable, not a black box.</p>
-        <a class="more" href="#standards">Review the standards posture &darr;</a>
+        <p>How it's built, how every AI action is approved and logged, and where it stands against emerging AI-agent standards — auditable, not a black box.</p>
+        <a class="more" href="#for-builders">See under the hood &darr;</a>
         <div class="who">For architects &amp; standards reviewers</div>
       </div>
     </div>
@@ -331,13 +331,13 @@ function audienceSplit(page) {
 // ---- archetype engine (the architectural invention) ------------------------
 function archetypeEngine(page) {
   return `<section id="archetype-engine" aria-label="The archetype engine">
-    <p class="section-eyebrow">The architectural invention</p>
-    <h2>One archetype generates the whole operating model</h2>
-    <p class="sub"><code>StorefrontConfig.archetypeId</code> is the single source of truth for industry behaviour. From it, DPF generates the public storefront language, scheduling defaults, finance assumptions, compliance hints, AI-coworker vocabulary, and the direction of the mobile manifest — which is how one platform covers many business types without a bespoke app for each.</p>
+    <p class="section-eyebrow">How it's built</p>
+    <h2>One business type generates the whole setup</h2>
+    <p class="sub">The business type you pick at setup is the single source of truth (<code>StorefrontConfig.archetypeId</code> in the data model). From it, DPF generates the public website wording, scheduling defaults, finance assumptions, licence hints, the words each AI coworker uses, and the direction of the mobile app — which is how one platform covers many business types without a custom app for each. <em>(For builders, the precise internal term is the “archetype”.)</em></p>
     <div class="pipeline">
-      <div class="pipe-stage src"><span class="pk">SOURCE OF TRUTH</span><span class="pl">Business archetype</span><code>StorefrontConfig.archetypeId</code></div>
+      <div class="pipe-stage src"><span class="pk">SOURCE OF TRUTH</span><span class="pl">Business type</span><code>StorefrontConfig.archetypeId</code></div>
       <div class="pipe-arrow" aria-hidden="true"></div>
-      <div class="pipe-stage"><span class="pk">DERIVES</span><span class="pl">Generated operating model</span><code>activationProfile · axes · vocabulary</code></div>
+      <div class="pipe-stage"><span class="pk">DERIVES</span><span class="pl">Generated setup</span><code>activationProfile · axes · vocabulary</code></div>
       <div class="pipe-arrow" aria-hidden="true"></div>
       <div class="pipe-out">
         <div class="o">Storefront<span>intake, CTAs, sections</span></div>
@@ -493,18 +493,15 @@ function phoneMock(page) {
   </div></div>`;
 }
 function proofVisuals(page) {
-  return `<section id="proof" aria-label="Product evidence">
+  return `<section id="proof" aria-label="A look at the screens">
     <p class="section-eyebrow">What it looks like</p>
-    <h2>Product evidence, not marketing art</h2>
-    <p class="sub">Representative panels of the surfaces a ${esc(
+    <h2>A look at the real screens</h2>
+    <p class="sub">A few of the screens a ${esc(
       page.display.toLowerCase()
-    )} business actually uses — the work board, a governed coworker proposing an action, and the Authority &amp; Audit view where every agent’s identity, grants, and evidence are inspectable.</p>
+    )} business actually uses — the work board, and an AI coworker proposing the next move. Nothing happens until you approve it.</p>
     <div class="proof-grid">
       ${boardMock(page)}
       ${chatMock(page)}
-    </div>
-    <div style="margin-top:16px;">
-      ${agentCardMock(page)}
     </div>
   </section>`;
 }
@@ -517,7 +514,7 @@ function partnersBand(page) {
     <div class="band">
       <div>
         <h3>Package once, deploy per client.</h3>
-        <p>DPF turns a market archetype into a complete operating model. Instead of building a bespoke app for every client, you install one platform, select the archetype, brand it, and support it — the same way for the next ${esc(
+        <p>DPF turns a business type into a complete, ready-to-run setup. Instead of building a custom app for every client, you install one platform, pick the business type, brand it, and support it — the same way for the next ${esc(
           page.display.toLowerCase()
         )} client and the one after that.</p>
         <a class="btn primary" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/CONTRIBUTING.md">Partner &amp; contribution path</a>
@@ -596,23 +593,20 @@ ${topbar()}
 
 <section class="hero"><div class="wrap">
   <p class="eyebrow"><span class="dot"></span>${esc(g.tag)} · ${esc(g.title)}</p>
-  <h1>${esc(page.display)}, generated from a governed business archetype</h1>
-  <p class="tagline"><span class="lead">A governed vertical operating system</span> — one DPF install becomes your storefront, your back office, and your AI workforce, shaped to how a ${esc(
-    page.display.toLowerCase()
-  )} business actually runs.</p>
+  <h1>${esc(page.display)} — your whole business in one place</h1>
+  <p class="tagline">A public website, your day-to-day office work, and AI coworkers that already speak your line of work — set up for you in minutes, on your own computers.</p>
   <p class="lede">${esc(page.who)}</p>
   <ul class="trust-badges" aria-label="At a glance">
-    <li><span class="d"></span>Archetype-driven</li>
-    <li><span class="d"></span>TAK runtime governance</li>
-    <li><span class="d"></span>GAID-direction agent identity</li>
-    <li><span class="d"></span>Runs on your hardware</li>
+    <li><span class="d"></span>Set up for your business</li>
+    <li><span class="d"></span>You approve every action</li>
+    <li><span class="d"></span>A record of everything</li>
+    <li><span class="d"></span>Runs on your computers</li>
   </ul>
   <ul class="chips">${chips}</ul>
   <div class="cta-row">
     <a class="btn primary" href="/#install">Install the platform</a>
-    <a class="btn" href="#resell">Explore reseller path</a>
-    <a class="btn" href="#archetype-engine">Inspect architecture</a>
-    <a class="btn" href="#standards">Review standards posture</a>
+    <a class="btn" href="#how">See what you get</a>
+    <a class="btn" href="#for-builders">For resellers &amp; builders</a>
   </div>
 </div></section>
 
@@ -624,25 +618,21 @@ ${topbar()}
 
   ${audienceSplit(page)}
 
-  ${archetypeEngine(page)}
-
-  ${standardsSection()}
-
-  <section id="how" aria-label="The business model">
-    <p class="section-eyebrow">For operators · the business model</p>
-    <h2>How a ${esc(page.display.toLowerCase())} business actually works</h2>
+  <section id="how" aria-label="How the work flows">
+    <p class="section-eyebrow">How the work flows</p>
+    <h2>How a ${esc(page.display.toLowerCase())} business works</h2>
     <p class="sub">${esc(page.model)}</p>
     <div class="opmodel">
       <div class="diagram-scroll">${operatingModelSVG(page.group, page.display)}</div>
       <p class="scroll-hint">Scroll the diagram sideways to read every stage →</p>
-      <p class="legend">DPF reshapes itself to this model out of the box — the public storefront, the words your coworker uses, the scheduling rules, the finance assumptions, and the compliance defaults all follow from it.</p>
+      <p class="legend">DPF sets all this up for you out of the box — your public website, the words your AI coworker uses, your scheduling, your pricing, and the licence checks you need all come ready.</p>
     </div>
   </section>
 
   <section aria-label="Value stream">
-    <p class="section-eyebrow">End to end</p>
-    <h2>Your value stream, one stage at a time</h2>
-    <p class="sub">Every business attracts, captures, delivers, settles, and retains. What changes is the stage that makes or breaks <em>this</em> model — highlighted below. Each stage maps to a real surface: storefront &amp; intake, the operations board, the customer estate, finance, and lifecycle signals.</p>
+    <p class="section-eyebrow">Start to finish</p>
+    <h2>Your work, one step at a time</h2>
+    <p class="sub">Every business finds customers, takes the work, does the job, gets paid, and keeps them coming back. What changes is the step that makes or breaks <em>your</em> kind of business — highlighted below.</p>
     ${vstreamStrip(page.stages)}
   </section>
 
@@ -656,7 +646,7 @@ ${topbar()}
         </ul>
       </div>
       <div>
-        <p class="section-eyebrow">Out of the box · each tied to a surface</p>
+        <p class="section-eyebrow">Out of the box · each tied to a part of DPF</p>
         <h2>What DPF gives you</h2>
         <ul class="tlist caps">
           ${caps}
@@ -676,13 +666,32 @@ ${topbar()}
     </div>
   </section>
 
+  <section id="for-builders" aria-label="For builders, resellers and architects">
+    <div style="border-top:1px solid var(--border); padding-top:30px;">
+      <p class="section-eyebrow">For builders, resellers &amp; architects</p>
+      <h2>Under the hood — how DPF builds this</h2>
+      <p class="sub">The rest of this page is the technical detail for people who extend, resell, or evaluate the platform. In one line: one install becomes a governed system for your whole business — the business type shapes everything, every AI action is approved and logged (the <strong>TAK</strong> runtime), and each AI coworker carries a checkable identity and an evidence trail (<strong>GAID</strong>). Most owners can stop above.</p>
+    </div>
+  </section>
+
+  ${archetypeEngine(page)}
+
+  ${standardsSection()}
+
+  <section aria-label="Authority and audit evidence">
+    <p class="section-eyebrow">For architects · the evidence trail</p>
+    <h2>Every AI action is identified and logged</h2>
+    <p class="sub">A supervisor-ready snapshot of any coworker: who it is, what it may touch, the mode it runs in, and the evidence behind its last action.</p>
+    ${agentCardMock(page)}
+  </section>
+
   ${partnersBand(page)}
 
   <section aria-label="Get started">
     <div class="grid">
       <div class="card">
         <h3>Ready to see it for your business?</h3>
-        <p style="margin-bottom:12px;">Install on your own hardware in minutes — the setup asks one question and configures the rest, then reshapes the platform to ${esc(
+        <p style="margin-bottom:12px;">Install on your own computers in minutes — the setup asks one question and sets up everything else for ${esc(
           page.display.toLowerCase()
         )} automatically.</p>
         <a class="btn primary" href="/#install">Install</a>

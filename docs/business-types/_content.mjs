@@ -80,12 +80,12 @@ export const pages = [
       { lead: "The inbox-to-dispatch handoff is manual.", rest: "Your coworker routes and assigns the job in one view." },
     ],
     caps: [
-      { lead: "A storefront that speaks trades", rest: "— jobs, call-outs, technicians, quotes — not “appointments”.", surface: "Storefront & intake" },
-      { lead: "Urgency-aware intake", rest: "captures job type, property, and access details to quote and triage.", surface: "Storefront & intake" },
-      { lead: "A dispatch board", rest: "so the crew knows who / what / where and customers get an ETA.", surface: "Operations board" },
-      { lead: "Job & property history", rest: "every technician sees the site, equipment, and prior visits before they arrive.", surface: "Customer estate" },
-      { lead: "Maintenance-plan tracking", rest: "with renewal recalls and lifecycle signals.", surface: "Lifecycle signals" },
-      { lead: "Field-ready invoicing", rest: "tied to the job, with job-linked expenses.", surface: "Finance workflow" },
+      { lead: "A website that speaks trades", rest: "— jobs, call-outs, technicians, quotes — not “appointments”.", surface: "Website & enquiries" },
+      { lead: "Urgency-aware enquiries", rest: "capture job type, property, and access details so you can quote and triage.", surface: "Website & enquiries" },
+      { lead: "A dispatch board", rest: "so the crew knows who / what / where and customers get an ETA.", surface: "Work board" },
+      { lead: "Job & property history", rest: "every technician sees the site, the kit, and past visits before they arrive.", surface: "Customer records" },
+      { lead: "Maintenance-plan tracking", rest: "with renewal reminders so repeat work doesn’t slip.", surface: "Reminders & renewals" },
+      { lead: "Field-ready invoicing", rest: "tied to the job, with job-linked costs.", surface: "Invoicing & finance" },
     ],
     compliance:
       "Licensed trades surface their gates — electrical (EICR/NICEIC), gas, HVAC refrigerant handling (EPA 608), roofing fall-protection. The coworker flags readiness; it never improvises safety or code advice.",
