@@ -96,8 +96,69 @@ describe("non-production environment leases", () => {
       data: {
         status: "released",
         releasedAt: new Date("2026-05-26T19:00:00.000Z"),
+        activeKey: null,
       },
     });
+  });
+
+  it("stamps activeKey = environmentKey so the DB enforces one active lease per env", async () => {
+    const mockDb = db();
+    await claimNonprodEnvironmentLease({
+      db: mockDb as never,
+      environmentKey: "local-integration-ci",
+      ownerProvider: "claude",
+      ownerSessionId: "s1",
+      purpose: "ci",
+      url: "http://localhost:3001",
+      ports: [3001],
+      expiresAt: new Date("2026-05-26T18:00:00.000Z"),
+    });
+    const data = mockDb.nonProductionEnvironmentLease.create.mock.calls[0][0].data;
+    expect(data.activeKey).toBe("local-integration-ci");
+  });
+
+  it("frees a lapsed-but-active lease for the key before claiming", async () => {
+    const mockDb = db();
+    const at = new Date("2026-06-15T12:00:00.000Z");
+    await claimNonprodEnvironmentLease({
+      db: mockDb as never,
+      environmentKey: "active-candidate",
+      ownerProvider: "codex",
+      ownerSessionId: "s1",
+      purpose: "claim",
+      url: "http://localhost:3001",
+      ports: [3001],
+      expiresAt: new Date(at.getTime() + 60_000),
+      now: at,
+    });
+    expect(mockDb.nonProductionEnvironmentLease.updateMany).toHaveBeenCalledWith({
+      where: { environmentKey: "active-candidate", status: "active", expiresAt: { lte: at } },
+      data: { status: "expired", activeKey: null, releasedAt: at },
+    });
+  });
+
+  it("returns conflict (not a throw) when the unique index rejects a racing claim", async () => {
+    const mockDb = db();
+    // Fast-path findFirst sees no active lease; the create loses the race and the
+    // unique index throws P2002; the recovery findFirst returns the winner.
+    mockDb.nonProductionEnvironmentLease.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ leaseId: "NPEL-WINNER" });
+    mockDb.nonProductionEnvironmentLease.create.mockRejectedValue({ code: "P2002" });
+
+    const result = await claimNonprodEnvironmentLease({
+      db: mockDb as never,
+      environmentKey: "active-candidate",
+      ownerProvider: "claude",
+      ownerSessionId: "s2",
+      purpose: "racing claim",
+      url: "http://localhost:3001",
+      ports: [3001],
+      expiresAt: new Date("2026-05-26T18:00:00.000Z"),
+    });
+
+    expect(result.status).toBe("conflict");
+    expect(result).toMatchObject({ active: { leaseId: "NPEL-WINNER" } });
   });
 });
 
@@ -195,7 +256,7 @@ describe("nonprod lease anti-monopolization (BI-4043A64B)", () => {
     expect(r).toEqual({ reaped: 3 });
     expect(mockDb.nonProductionEnvironmentLease.updateMany).toHaveBeenCalledWith({
       where: { status: "active", expiresAt: { lt: now }, releasedAt: null },
-      data: { status: "expired", releasedAt: now },
+      data: { status: "expired", releasedAt: now, activeKey: null },
     });
   });
 });
