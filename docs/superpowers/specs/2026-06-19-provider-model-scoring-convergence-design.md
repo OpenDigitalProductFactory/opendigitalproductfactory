@@ -52,20 +52,29 @@ dead-end calibration loop**.
   providers/[providerId]/page.tsx`) does **not** render them — it uses the rollup's
   `routingScores`. So `ProviderRow`'s raw scores are vestigial in the UI.
 
-### 1.2 The bug this exposes
+### 1.2 The bug this exposes — CONFIRMED (Phase 0, 2026-06-19)
 
-If the routing pipeline reads `ModelProfile` and **ignores** `ModelProvider`'s scores (as the
-rollup comment asserts), then **`production-feedback.ts` is calibrating a table the router does
-not consult** — production feedback would have **no effect on routing decisions**. That is a
-routing-correctness defect, not merely redundancy: the platform's "learn from production
-outcomes" loop may be a no-op for model selection. This must be confirmed against the live
-routing reads before any column is dropped — it is the load-bearing question of this spec.
+The routing pipeline reads dimension scores from **`ModelProfile`**, never from `ModelProvider`:
+`loadEndpointManifests()` — the sole manifest builder — queries
+`prisma.modelProfile.findMany({ include: { provider: true } })` (`loader.ts:98-111`; comment:
+"each manifest entry represents a specific model, not just a provider"). Dimension scores come
+from the `ModelProfile` row (`mp.reasoning`, …); only genuinely-provider fields come from
+`mp.provider`.
 
-> Two open possibilities, to resolve in Phase 0:
-> (a) `production-feedback` → `ModelProvider` is **orphaned** (router never reads it) — then the
-> loop is dead and should be **retired or re-pointed**; or
-> (b) some routing path still reads `ModelProvider` scores — then the rollup comment is stale and
-> the two systems are genuinely competing. Either way, one canonical target must win.
+The two calibration writers have **diverged**:
+- **DPF evals** correctly write `ModelProfile` (`eval-runner.ts:547,606`) → routing sees them.
+- **Production feedback** (`production-feedback.ts:120`, live — called from
+  `tak/orchestrator-evaluator.ts`) writes `ModelProvider`'s dimension columns and flips
+  `profileSource="production"` → routing **never reads them**.
+
+⇒ **Production feedback's dimension calibration never reaches routing.** The platform's
+"learn from production outcomes" loop is effectively a **no-op for model selection** — a
+routing-correctness defect, not merely redundancy. The §1.2(a) "orphaned writer" case is
+**confirmed**; (b) is ruled out. **This warrants its own BI** independent of the cleanup.
+
+The fix direction is therefore settled: **re-point** production feedback at `ModelProfile`
+(matching the eval path), **not** retire it — production feedback is wanted, it's just writing
+the wrong table.
 
 ## 2. Decision
 
@@ -79,11 +88,10 @@ one fact (a model's capability on a dimension) lives in exactly one place.
 
 ## 3. Plan (phased; each phase independently shippable + verifiable)
 
-**Phase 0 — Confirm the routing read (no code change).** Trace every routing/eligibility/scoring
-read of a capability dimension (`lib/routing/loader.ts`, `scoring.ts`, `task-router.ts`,
-`pipeline*.ts`). Prove they read `ModelProfile` (per-model) and never `ModelProvider`'s
-dimension columns. Output: a one-page evidence note settling §1.2 (a) vs (b). **Gate: do not
-proceed until this is settled.**
+**Phase 0 — Confirm the routing read. ✅ DONE (2026-06-19).** Result in §1.2: the router reads
+`ModelProfile` (`loader.ts:98-111`); evals write `ModelProfile` (`eval-runner.ts:547,606`);
+production feedback writes `ModelProvider` (`production-feedback.ts:120`) → dead-ended. Fix =
+**re-point** production feedback to `ModelProfile` (evals already prove it's the correct target).
 
 **Phase 1 — Re-point or retire `production-feedback`.** If (a): retire the
 `ModelProvider`-score write path; if production feedback should still calibrate, re-point it to
