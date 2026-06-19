@@ -358,14 +358,17 @@ export function outputIndicatesTestFailure(output: string): boolean {
 
 export async function runSandboxTests(
   containerId: string,
-  opts?: { changedFiles?: string[] },
+  opts?: { changedFiles?: string[]; workdir?: string },
 ): Promise<SandboxTestResult> {
+  // Per-build working dir: the build's worktree when isolation is on, else
+  // /workspace (default — byte-identical to prior behaviour). BI-98B723C0 Phase 2c.
+  const workdir = opts?.workdir ?? "/workspace";
   // Typecheck is the primary gate — catches real compilation errors in feature code.
   // Run it first via the web workspace's tsconfig (not bare `tsc` which prints help).
   let typeCheckOutput = "";
   let typeCheckPassed = false;
   try {
-    typeCheckOutput = await execInSandbox(containerId, "cd /workspace/apps/web && npx tsc --noEmit 2>&1 || true");
+    typeCheckOutput = await execInSandbox(containerId, `cd ${workdir}/apps/web && npx tsc --noEmit 2>&1 || true`);
     // `tsc` typechecks the whole apps/web project graph (no cheap per-file mode),
     // so a pre-existing type error in an UNRELATED file would block a build whose
     // own changed files are clean. When we know the changed surface, gate only on
@@ -394,7 +397,7 @@ export async function runSandboxTests(
     const existence = await Promise.all(
       candidates.map(async (p) => {
         try {
-          const out = await execInSandbox(containerId, `test -f "/workspace/${p}" && echo __yes__ || echo __no__`);
+          const out = await execInSandbox(containerId, `test -f "${workdir}/${p}" && echo __yes__ || echo __no__`);
           return out.includes("__yes__") ? p : null;
         } catch {
           return null;
@@ -411,7 +414,7 @@ export async function runSandboxTests(
     let anyFailed = false;
     for (const [pkg, rel] of groupTestFilesByPackage(scopedTestFiles)) {
       const fileArgs = rel.map((r) => `"${r}"`).join(" ");
-      const out = await execInSandbox(containerId, `cd /workspace/${pkg} && npx vitest run ${fileArgs} 2>&1 || true`);
+      const out = await execInSandbox(containerId, `cd ${workdir}/${pkg} && npx vitest run ${fileArgs} 2>&1 || true`);
       sections.push(`# ${pkg}\n${out}`);
       // vitest omits the "failed" segment entirely when zero, so any "N failed"
       // with N>=1 (or a FAIL marker) means the feature's own tests are red.
@@ -425,7 +428,7 @@ export async function runSandboxTests(
     testPassed = !anyFailed;
   } else {
     try {
-      testOutput = await execInSandbox(containerId, "cd /workspace && pnpm test 2>&1 || true");
+      testOutput = await execInSandbox(containerId, `cd ${workdir} && pnpm test 2>&1 || true`);
       testPassed = testOutput.includes("Tests  ") && !testOutput.includes("FAIL");
     } catch (e) {
       testOutput = e instanceof Error ? e.message : String(e);

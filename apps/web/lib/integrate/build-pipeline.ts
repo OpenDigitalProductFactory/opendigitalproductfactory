@@ -571,7 +571,13 @@ async function stepRunTests(
     console.warn("[stepRunTests] could not resolve changed files for scoping:", (err as Error)?.message);
   }
 
-  const results = await runSandboxTests(state.containerId!, { changedFiles });
+  // Run verification in the build's working dir: its own worktree when isolation
+  // is on, else /workspace (default — byte-identical). BI-98B723C0 Phase 2c.
+  const { resolveBuildWorkdir } = await import("./sandbox/build-branch");
+  const results = await runSandboxTests(state.containerId!, {
+    changedFiles,
+    workdir: resolveBuildWorkdir(buildId),
+  });
   const diagnosis = results.passed ? null : diagnoseTestFailures(results);
 
   // Persist test results to the build record.
