@@ -1,11 +1,14 @@
 name: "CodeQL Advanced"
 
 # Advanced-setup CodeQL workflow. Replaces the default setup so that:
-#   1. The query config can be tuned per language.
-#   2. A custom data-extensions model pack (.github/codeql/dpf-sanitizers/)
-#      can teach CodeQL about our security helpers (assertSafeOutboundUrl,
-#      assertAllowedBinary, etc.) so they're recognised as sanitisers
-#      instead of generating false-positive alerts on every caller.
+#   1. The query config can be tuned per language (security-extended suite).
+#   2. Per-language build modes and a weekly scheduled re-scan.
+#
+# NOTE: this workflow does NOT load a custom sanitiser model pack. GitHub code
+# scanning cannot honour a repo-local data-extension pack, and does not support
+# JS/TS model packs at all — see the long note in
+# .github/codeql/codeql-config.yml. JS/TS false positives on DPF's security
+# helpers are dispositioned by dismissal-with-justification in the Security tab.
 #
 # IMPORTANT — activation requires a one-time repo settings change:
 #   Settings → Code security → "Code scanning" → CodeQL → Switch to

@@ -14,9 +14,11 @@ overrides:
   lodash-es: '4.18.0'
   '@tootallnate/once': '3.0.1'
   '@xmldom/xmldom': '0.8.13'
-  # dompurify < 3.4.9: 6 GHSA advisories (template-tag bypass, IN_PLACE clobber,
-  # cross-realm bypass, etc.). Dev-only transitive via @mermaid-js/mermaid-cli.
-  dompurify: '3.4.9'
+  # dompurify <= 3.4.10: GHSA-cmwh-pvxp-8882 permanent ALLOWED_ATTR pollution via
+  # setConfig() (Dependabot #90, medium), on top of the earlier < 3.4.9 cluster
+  # (template-tag bypass, IN_PLACE clobber, cross-realm bypass, etc.). Dev-only
+  # transitive via mermaid / @zenuml/core. Floor to the patched 3.4.11.
+  dompurify: '^3.4.11'
   node-forge: '1.4.0'
   postcss: '^8.5.10'
   uuid: '^14.0.0'
@@ -31,6 +33,12 @@ overrides:
   # of vite/vitest; pin the vulnerable range up to the patched release.
   'esbuild@>=0.17.0 <0.28.1': '^0.28.1'
   fast-uri: '^3.1.2'
+  # @babel/core <= 7.29.0: GHSA-4x5r-pxfx-6jf8 (CVE-2026-49356) arbitrary file
+  # read via a crafted sourceMappingURL comment (Dependabot #73, low). Dev/build-
+  # only transitive of the Expo metro-config toolchain (apps/mobile). Floor to the
+  # patched 7.29.6; the web app already resolves 7.29.7, so this only lifts the
+  # stale instance.
+  '@babel/core': '^7.29.6'
   # hono < 4.12.25: GHSA-88fw-hqm2-52qc CORS-with-credentials wildcard reflection
   # (high) + 4 medium Lambda/edge adapter issues. Runtime dependency.
   hono: '^4.12.25'
