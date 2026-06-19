@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   rollbackSelfUpgrade,
@@ -209,6 +209,28 @@ function recoveryMemberLabel(member: { target: string; status: string }): string
 const DEFAULT_STATUS_STYLE =
   "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] border-[var(--dpf-border)]";
 
+// A forced upgrade intentionally bypasses the quiescence drain and swaps the
+// portal container out from under the very request that triggered it. When the
+// swap lands mid-flight, the operator's own server-action response never returns
+// intact — Next surfaces a non-RSC transport failure ("An unexpected response
+// was received from the server", error code E394), or the browser reports a bare
+// network error. For the self-upgrade page that is the EXPECTED success path of
+// a force, not a crash: the upgrade is applying and the portal is restarting.
+// Recognising it lets the page hold a calm "reconnecting" state instead of
+// letting the rejection escalate to the global (shell) error boundary and paint
+// a full-page "Something went wrong" over an upgrade that actually succeeded.
+// Exported for unit testing.
+export function isExpectedDuringSwap(err: unknown): boolean {
+  if (!err) return false;
+  // Next stamps server-action transport failures with a stable error code.
+  const code = (err as { __NEXT_ERROR_CODE?: unknown }).__NEXT_ERROR_CODE;
+  if (code === "E394") return true;
+  const message = err instanceof Error ? err.message : String(err);
+  return /unexpected response was received|failed to fetch|fetch failed|load failed|networkerror|err_connection|connection (?:refused|reset|closed)|the operation was aborted/i.test(
+    message,
+  );
+}
+
 export default function SelfUpgradeClient({
   enabled,
   channel,
@@ -240,6 +262,13 @@ export default function SelfUpgradeClient({
   const [forceConfirm, setForceConfirm] = useState(false);
   const [abortConfirm, setAbortConfirm] = useState(false);
   const [inFlightError, setInFlightError] = useState<string | null>(null);
+  // A forced upgrade can swap this portal out from under the operator's own
+  // request. `restarting` holds a calm reconnect banner (and keeps the status
+  // poll alive) so a *successful* forced upgrade never paints the global crash
+  // screen. See isExpectedDuringSwap. `restartBaselineRef` snapshots the server
+  // signature at swap time so we know when the new container has answered.
+  const [restarting, setRestarting] = useState(false);
+  const restartBaselineRef = useRef<string | null>(null);
   const [rollbackConfirmation, setRollbackConfirmation] = useState("");
   const [rollbackResult, setRollbackResult] = useState<{
     status: "idle" | "ok" | "error";
@@ -285,21 +314,97 @@ export default function SelfUpgradeClient({
   }, [justQueued]);
 
   useEffect(() => {
-    if (!justQueued && !upgradeInFlight) return;
+    if (!justQueued && !upgradeInFlight && !restarting) return;
     const interval = setInterval(() => router.refresh(), 4_000);
     return () => clearInterval(interval);
-  }, [justQueued, upgradeInFlight, router]);
+  }, [justQueued, upgradeInFlight, restarting, router]);
+
+  // Drop the reconnect banner once the swapped-in portal actually answers with
+  // fresh data. We snapshot the server-derived signature at the moment the swap
+  // severs the request (enterRestarting), then clear as soon as any of those
+  // fields change — the deployed SHA flips, the run reaches a terminal state, or
+  // the drain returns to normal — which only happens after a poll gets through to
+  // the new container. Keying off "the data changed" (not the instantaneous
+  // in-flight flag, which is already false on an idle force) avoids both a
+  // premature flash and a banner that lingers long after the portal is back.
+  useEffect(() => {
+    if (!restarting || restartBaselineRef.current === null) return;
+    if (serverSignature() !== restartBaselineRef.current) {
+      restartBaselineRef.current = null;
+      setRestarting(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    restarting,
+    latestRun?.runId,
+    latestRun?.status,
+    deployedSha,
+    isFresh,
+    quiescence?.level,
+  ]);
+
+  // Safety net: never let the reconnect banner wedge if the portal stays
+  // unreachable (e.g. a swap that genuinely failed). The run-status surfaces
+  // below still tell the operator what happened.
+  useEffect(() => {
+    if (!restarting) return;
+    const timeout = setTimeout(() => {
+      restartBaselineRef.current = null;
+      setRestarting(false);
+    }, 120_000);
+    return () => clearTimeout(timeout);
+  }, [restarting]);
 
   const triggerBusy = isPending || justQueued;
 
+  // A compact fingerprint of the server-derived state. When it changes after a
+  // swap-induced disconnect, the new container has answered and the reconnect
+  // banner can clear.
+  function serverSignature(): string {
+    return [
+      latestRun?.runId ?? "",
+      latestRun?.status ?? "",
+      deployedSha ?? "",
+      isFresh ? "1" : "0",
+      quiescence?.level ?? "",
+    ].join("|");
+  }
+
+  // Enter the calm "applying / reconnecting" state after the swap severed this
+  // page's own request. Snapshot the current signature so the clear effect can
+  // detect when the swapped-in portal returns fresh data, and keep the status
+  // poll alive so the page reconnects on its own.
+  function enterRestarting() {
+    restartBaselineRef.current = serverSignature();
+    setRestarting(true);
+    setJustQueued(true);
+    router.refresh();
+  }
+
   function handleTrigger() {
     setTriggerResult(null);
+    setInFlightError(null);
     const force = override;
     startTransition(async () => {
-      const result = await triggerSelfUpgrade(force ? { force: true } : undefined);
-      setTriggerResult(result);
-      if (result.queued) setJustQueued(true);
-      router.refresh();
+      try {
+        const result = await triggerSelfUpgrade(force ? { force: true } : undefined);
+        setTriggerResult(result);
+        if (result.queued) setJustQueued(true);
+        router.refresh();
+      } catch (err) {
+        // A forced upgrade can swap the portal out from under this request
+        // before its response returns. That's the upgrade applying — hold the
+        // reconnect state instead of crashing the page; a non-swap failure
+        // (e.g. unauthorized) is surfaced inline.
+        if (isExpectedDuringSwap(err)) {
+          enterRestarting();
+        } else {
+          setTriggerResult({
+            queued: false,
+            reason: err instanceof Error ? err.message : "trigger failed",
+          });
+        }
+      }
     });
   }
 
@@ -310,10 +415,21 @@ export default function SelfUpgradeClient({
     if (!runId) return;
     setInFlightError(null);
     startTransition(async () => {
-      const r = await forceActiveRun(runId);
-      setForceConfirm(false);
-      if (!r.ok) setInFlightError(r.error ?? "Force failed");
-      router.refresh();
+      try {
+        const r = await forceActiveRun(runId);
+        setForceConfirm(false);
+        if (!r.ok) setInFlightError(r.error ?? "Force failed");
+        router.refresh();
+      } catch (err) {
+        // Forcing the swap can sever this very request the moment the
+        // coordinator proceeds — the expected outcome, not an error.
+        setForceConfirm(false);
+        if (isExpectedDuringSwap(err)) {
+          enterRestarting();
+        } else {
+          setInFlightError(err instanceof Error ? err.message : "Force failed");
+        }
+      }
     });
   }
 
@@ -324,34 +440,68 @@ export default function SelfUpgradeClient({
     if (!runId) return;
     setInFlightError(null);
     startTransition(async () => {
-      const r = await abortActiveRun(runId);
-      setAbortConfirm(false);
-      if (!r.ok) setInFlightError(r.error ?? "Abort failed");
-      router.refresh();
+      try {
+        const r = await abortActiveRun(runId);
+        setAbortConfirm(false);
+        if (!r.ok) setInFlightError(r.error ?? "Abort failed");
+        router.refresh();
+      } catch (err) {
+        setAbortConfirm(false);
+        if (isExpectedDuringSwap(err)) {
+          enterRestarting();
+        } else {
+          setInFlightError(err instanceof Error ? err.message : "Abort failed");
+        }
+      }
     });
   }
 
   function handleRollback(runId: string) {
     setRollbackResult({ status: "idle", message: "" });
     startRollbackTransition(async () => {
-      const result = await rollbackSelfUpgrade(runId, rollbackConfirmation);
-      if (result.ok) {
-        setRollbackResult({
-          status: "ok",
-          message: "Recovery point restored.",
-        });
-      } else {
-        setRollbackResult({
-          status: "error",
-          message: result.error ?? "Recovery point restore failed.",
-        });
+      try {
+        const result = await rollbackSelfUpgrade(runId, rollbackConfirmation);
+        if (result.ok) {
+          setRollbackResult({
+            status: "ok",
+            message: "Recovery point restored.",
+          });
+        } else {
+          setRollbackResult({
+            status: "error",
+            message: result.error ?? "Recovery point restore failed.",
+          });
+        }
+        router.refresh();
+      } catch (err) {
+        // A restore can restart services; if it severs this request, treat it
+        // as "applying" rather than crashing the page to the error boundary.
+        if (isExpectedDuringSwap(err)) {
+          enterRestarting();
+        } else {
+          setRollbackResult({
+            status: "error",
+            message: err instanceof Error ? err.message : "Recovery point restore failed.",
+          });
+        }
       }
-      router.refresh();
     });
   }
 
   return (
     <div className="space-y-4">
+      {restarting && (
+        <div
+          className="p-3 rounded-lg bg-[var(--dpf-info)]/10 border border-[var(--dpf-info)]/30 text-sm text-[var(--dpf-text)]"
+          role="status"
+          aria-live="polite"
+          data-upgrade-restarting="true"
+        >
+          <span className="font-medium">Applying the upgrade…</span> the portal is
+          restarting to finish the swap. This page reconnects automatically — no
+          need to refresh.
+        </div>
+      )}
       {jobEngine?.status === "degraded" && (
         <div
           className="p-3 rounded-lg bg-[var(--dpf-warning)]/15 border border-[var(--dpf-warning)]/40 text-sm"

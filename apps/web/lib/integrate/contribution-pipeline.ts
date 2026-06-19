@@ -210,8 +210,23 @@ function parseGitHubRepo(remoteUrl: string): { owner: string; repo: string } | n
 export async function submitBuildAsPR(
   input: SubmitBuildAsPRInput,
 ): Promise<PRContribution> {
-  // 1. Run security scan
-  const securityScan = scanDiffForSecurityIssues(input.diffPatch);
+  // 0. Private-paths boundary (Phase 1 of Private/Public Change Segregation).
+  // Strip any file the operator marked proprietary BEFORE the diff can reach a
+  // remote — structural, regardless of disposition. The checked-in
+  // `.dpf/private-paths` manifest ships empty, so this is a no-op until an
+  // operator opts in. Spec:
+  // docs/superpowers/specs/2026-06-18-private-public-change-segregation-design.md
+  const { loadPrivatePathPatterns, compilePrivatePathMatcher, stripPrivatePathsFromDiff } =
+    await import("@/lib/integrate/private-paths");
+  const privatePatterns = await loadPrivatePathPatterns();
+  const { kept: outboundDiff } = stripPrivatePathsFromDiff(
+    input.diffPatch,
+    compilePrivatePathMatcher(privatePatterns),
+  );
+
+  // 1. Run security scan on the OUTBOUND (post-strip) diff — what would
+  // actually be shared, never the private-inclusive original.
+  const securityScan = scanDiffForSecurityIssues(outboundDiff);
 
   // 2. Gather build evidence for PR body
   const build = await prisma.featureBuild.findUnique({
@@ -297,6 +312,14 @@ export async function submitBuildAsPR(
   }
 
   if (targetRepo && token) {
+    // If every changed file was stripped as private, there is nothing to
+    // share — fall back to local review rather than opening an empty PR.
+    if (!outboundDiff.trim()) {
+      return buildLocalContribution(
+        branchName, prTitle, prBody, securityScan, input.impactReport,
+        "This change only affects parts of your system you've marked private, so there is nothing to share upstream.",
+      );
+    }
     // ─── GitHub API Mode: Create PR via REST API (no local git needed) ──
     const { createBranchAndPR } = await import("@/lib/integrate/github-api-commit");
 
@@ -324,7 +347,7 @@ export async function submitBuildAsPR(
         baseRepo: base.repo,
         branchName,
         commitMessage,
-        diff: input.diffPatch,
+        diff: outboundDiff,
         prTitle,
         prBody,
         labels,
