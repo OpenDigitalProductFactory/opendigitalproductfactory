@@ -120,6 +120,28 @@ export function classifyDispatchFailureAxis(args: {
   return args.exitCode === 0 ? "unknown" : "unknown";
 }
 
+/**
+ * BI-F72C1044 — true when a dispatch's output indicates the provider's usage
+ * limit (a subscription cap that will NOT clear within the build) was hit.
+ * The Build Studio orchestrator runs an entire build on ONE configured
+ * provider, so the first such hit means every remaining dispatch to that
+ * provider will fail too — the caller fast-aborts instead of burning the queue
+ * (the live "17 dead `chatgpt` dispatches in one build" pattern). Pure +
+ * unit-tested; reuses classifyDispatchFailureAxis so the detection vocabulary
+ * stays single-sourced.
+ */
+export function isUsageLimitDispatchOutput(content: string | null | undefined): boolean {
+  if (!content) return false;
+  return (
+    classifyDispatchFailureAxis({
+      exitCode: null,
+      stdout: content,
+      stderr: "",
+      timedOut: false,
+    }) === "usage-limit"
+  );
+}
+
 export function buildDispatchAttemptData(args: RecordInput): BuildDispatchAttemptData {
   const sanitizedStdout = sanitizeDispatchOutput(args.stdout);
   const sanitizedStderr = sanitizeDispatchOutput(args.stderr);

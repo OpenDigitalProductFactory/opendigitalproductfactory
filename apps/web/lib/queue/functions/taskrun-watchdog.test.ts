@@ -37,6 +37,8 @@ vi.mock("@/lib/shared/feature-flags", () => ({
 
 import {
   recoverStuckQuiescenceCoordinators,
+  isStuckQuiescingTaskRun,
+  STUCK_QUIESCING_TASKRUN_MS,
   taskrunWatchdog,
 } from "./taskrun-watchdog";
 
@@ -53,6 +55,47 @@ beforeEach(() => {
   setQuiescenceLevelMock.mockReset().mockResolvedValue(undefined);
   inngestSendMock.mockReset().mockResolvedValue(undefined);
   isStallWatchdogEnabledMock.mockReset().mockResolvedValue(true);
+});
+
+describe("isStuckQuiescingTaskRun (BI-8F45BA74)", () => {
+  const now = new Date("2026-06-19T19:00:00.000Z");
+  const ago = (ms: number) => new Date(now.getTime() - ms);
+  const T = STUCK_QUIESCING_TASKRUN_MS;
+
+  it("reaps a row flipped to quiescing long ago whose loop never came back", () => {
+    expect(
+      isStuckQuiescingTaskRun({ quiescedAt: ago(T + 60_000), lastHeartbeatAt: null, now, thresholdMs: T }),
+    ).toBe(true);
+  });
+
+  it("does NOT reap a row that was just flipped (loop is about to cooperatively exit)", () => {
+    expect(
+      isStuckQuiescingTaskRun({ quiescedAt: ago(60_000), lastHeartbeatAt: null, now, thresholdMs: T }),
+    ).toBe(false);
+  });
+
+  it("does NOT reap when a heartbeat arrived after the flip (loop is alive, mid-exit)", () => {
+    // quiescedAt is old, but a recent heartbeat means the loop is still running.
+    expect(
+      isStuckQuiescingTaskRun({ quiescedAt: ago(T + 60_000), lastHeartbeatAt: ago(30_000), now, thresholdMs: T }),
+    ).toBe(false);
+  });
+
+  it("does NOT guess when there is no signal at all", () => {
+    expect(
+      isStuckQuiescingTaskRun({ quiescedAt: null, lastHeartbeatAt: null, now, thresholdMs: T }),
+    ).toBe(false);
+  });
+
+  it("requires strictly older than the window (exactly at the threshold is not reaped)", () => {
+    expect(
+      isStuckQuiescingTaskRun({ quiescedAt: ago(T), lastHeartbeatAt: null, now, thresholdMs: T }),
+    ).toBe(false);
+  });
+
+  it("uses a conservative window (>= the dead-phase liveness window)", () => {
+    expect(STUCK_QUIESCING_TASKRUN_MS).toBeGreaterThanOrEqual(15 * 60 * 1000);
+  });
 });
 
 describe("recoverStuckQuiescenceCoordinators", () => {

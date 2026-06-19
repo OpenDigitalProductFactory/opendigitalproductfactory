@@ -117,3 +117,57 @@ describe("Phase 3 wired commandments", () => {
     expect(d.verdict).toBe("require_confirm");
   });
 });
+
+describe("outbound-actions-require-explicit-go (mcp_tool enforcement)", () => {
+  // Every outbound tool gated by the real principle file. Keep this list in
+  // sync with the principle frontmatter patterns AND the switch cases in
+  // apps/web/lib/mcp-tools.ts — an outbound tool with no pattern is the
+  // loophole the principle exists to close.
+  const OUTBOUND_TOOLS = ["send_marketing_email", "publish_to_linkedin", "place_linkedin_ad"];
+
+  for (const toolName of OUTBOUND_TOOLS) {
+    it(`refuses ${toolName} in an autonomous session`, () => {
+      const p = loadPrinciple("outbound-actions-require-explicit-go");
+      const d = evaluateExecution(
+        { kind: "mcp_tool", toolName, arguments: { draftId: "draft-1" } },
+        "autonomous",
+        [p],
+      );
+      expect(d.verdict).toBe("refuse");
+    });
+
+    it(`requires typed confirmation for ${toolName} in an interactive session`, () => {
+      const p = loadPrinciple("outbound-actions-require-explicit-go");
+      const d = evaluateExecution(
+        { kind: "mcp_tool", toolName, arguments: { draftId: "draft-1" } },
+        "interactive",
+        [p],
+      );
+      expect(d.verdict).toBe("require_confirm");
+    });
+  }
+
+  it("does NOT gate drafting/staging or read-only marketing tools", () => {
+    const p = loadPrinciple("outbound-actions-require-explicit-go");
+    for (const toolName of ["create_marketing_campaign_brief", "refresh_channel_kpis", "suggest_campaign_ideas"]) {
+      const d = evaluateExecution(
+        { kind: "mcp_tool", toolName, arguments: {} },
+        "autonomous",
+        [p],
+      );
+      expect(d).toEqual({ verdict: "allow" });
+    }
+  });
+
+  it("does NOT gate governed infra-deploy tools (self-upgrade / promotion own their flow)", () => {
+    const p = loadPrinciple("outbound-actions-require-explicit-go");
+    for (const toolName of ["apply_platform_update", "deploy_feature", "execute_promotion"]) {
+      const d = evaluateExecution(
+        { kind: "mcp_tool", toolName, arguments: {} },
+        "autonomous",
+        [p],
+      );
+      expect(d).toEqual({ verdict: "allow" });
+    }
+  });
+});
