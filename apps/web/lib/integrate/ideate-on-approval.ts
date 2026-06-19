@@ -258,3 +258,65 @@ export async function dispatchIdeateForApprovedBuild(params: {
     return { kind: "dispatched-failure", error: message, durationMs: 0 };
   }
 }
+
+/**
+ * BI-3E0EE3BA — true when an approved Ideate draft still has no real designDoc,
+ * i.e. its auto-dispatch never fired (the dead-on-arrival pattern). Pure +
+ * unit-tested. Mirrors the idempotency guard inside dispatchIdeateForApprovedBuild
+ * so a build it would skip is never counted as "needs dispatch".
+ */
+export function buildNeedsIdeateDispatch(designDoc: unknown): boolean {
+  const dd = designDoc as { problemStatement?: unknown } | null;
+  return !(
+    dd &&
+    typeof dd.problemStatement === "string" &&
+    dd.problemStatement.trim().length > 0
+  );
+}
+
+/**
+ * BI-3E0EE3BA — recover/auto-drive Ideate for backlog-promoted drafts that were
+ * auto-approved (draftApprovedAt set by the governed tee-up) but never had their
+ * Ideate research fired. The ONLY caller of dispatchIdeateForApprovedBuild was
+ * the operator's "Approve Start" UI click, which an auto-promoted build never
+ * receives — so those drafts sit in `ideate` forever with no designDoc, jamming
+ * the WIP cap (and the inert-build reaper won't touch them: the auto-approve
+ * wrote an `approve_start` activity, so they aren't "inert"). This finds every
+ * approved-but-undriven draft and fires the idempotent, never-throwing dispatch:
+ * it clears the existing dead-on-arrival builds AND completes the autopilot path
+ * for builds the same tee-up run just promoted. Bounded per invocation so a cron
+ * step stays short; the next run drains any remainder. Call after the tee-up.
+ */
+export async function dispatchApprovedIdeateBuilds(params: {
+  userId: string;
+  limit?: number;
+}): Promise<{ candidates: number; dispatched: number; skipped: number }> {
+  const { userId, limit = 5 } = params;
+  // Fetch a window of approved ideate drafts, then filter in app code (avoids
+  // Prisma JSON-null predicate quirks) to those genuinely missing a designDoc.
+  const approved = await prisma.featureBuild.findMany({
+    where: {
+      phase: "ideate",
+      draftApprovedAt: { not: null },
+      abandonedAt: null,
+      parentEpicId: null,
+      originatingBacklogItemId: { not: null },
+    },
+    select: { buildId: true, designDoc: true },
+    orderBy: { draftApprovedAt: "asc" },
+    take: 50,
+  });
+  const pending = approved
+    .filter((b) => buildNeedsIdeateDispatch(b.designDoc))
+    .slice(0, limit);
+
+  let dispatched = 0;
+  let skipped = 0;
+  for (const b of pending) {
+    // dispatchIdeateForApprovedBuild never throws and is idempotent.
+    const outcome = await dispatchIdeateForApprovedBuild({ buildId: b.buildId, userId });
+    if (outcome.kind === "dispatched-success") dispatched += 1;
+    else skipped += 1;
+  }
+  return { candidates: pending.length, dispatched, skipped };
+}

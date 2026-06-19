@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
-    featureBuild: { findUnique: vi.fn() },
+    featureBuild: { findUnique: vi.fn(), findMany: vi.fn() },
     backlogItem: { findUnique: vi.fn() },
     buildActivity: { create: vi.fn() },
   },
@@ -28,7 +28,11 @@ vi.mock("@/lib/mcp-tools", () => ({
   executeTool: mockExecuteTool,
 }));
 
-import { dispatchIdeateForApprovedBuild } from "./ideate-on-approval";
+import {
+  dispatchIdeateForApprovedBuild,
+  buildNeedsIdeateDispatch,
+  dispatchApprovedIdeateBuilds,
+} from "./ideate-on-approval";
 
 describe("dispatchIdeateForApprovedBuild", () => {
   beforeEach(() => {
@@ -253,5 +257,64 @@ describe("dispatchIdeateForApprovedBuild", () => {
     if (outcome.kind === "dispatched-failure") {
       expect(outcome.error).toContain("DB connection lost");
     }
+  });
+});
+
+describe("buildNeedsIdeateDispatch (BI-3E0EE3BA)", () => {
+  it("is true when there is no real designDoc yet (the DOA pattern)", () => {
+    expect(buildNeedsIdeateDispatch(null)).toBe(true);
+    expect(buildNeedsIdeateDispatch(undefined)).toBe(true);
+    expect(buildNeedsIdeateDispatch({})).toBe(true);
+    expect(buildNeedsIdeateDispatch({ problemStatement: "" })).toBe(true);
+    expect(buildNeedsIdeateDispatch({ problemStatement: "   " })).toBe(true);
+  });
+  it("is false once a designDoc with a non-empty problemStatement exists (mirrors the dispatch idempotency guard)", () => {
+    expect(buildNeedsIdeateDispatch({ problemStatement: "Solve X" })).toBe(false);
+  });
+});
+
+describe("dispatchApprovedIdeateBuilds (BI-3E0EE3BA recovery)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.buildActivity.create.mockResolvedValue({});
+  });
+
+  it("fires dispatch only for approved drafts still missing a designDoc, bounded by limit", async () => {
+    mockPrisma.featureBuild.findMany.mockResolvedValue([
+      { buildId: "FB-A", designDoc: null },                         // needs
+      { buildId: "FB-B", designDoc: { problemStatement: "done" } }, // already has → not counted
+      { buildId: "FB-C", designDoc: { problemStatement: "" } },     // needs
+      { buildId: "FB-D", designDoc: null },                         // needs
+    ]);
+    // Inner dispatch returns fast (skipped-no-bi, no LLM) — we're asserting the
+    // recovery's selection + iteration, not the dispatch internals.
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      originatingBacklogItemId: null, designDoc: null, title: "t", description: "",
+    });
+
+    const res = await dispatchApprovedIdeateBuilds({ userId: "u-1", limit: 2 });
+
+    // 3 need dispatch (A, C, D); limit caps attempts at 2.
+    expect(res.candidates).toBe(2);
+    expect(mockPrisma.featureBuild.findUnique).toHaveBeenCalledTimes(2);
+    expect(res.dispatched).toBe(0); // both inner dispatches skipped (no-bi)
+    expect(res.skipped).toBe(2);
+    // Only approved + non-terminal drafts are queried.
+    expect(mockPrisma.featureBuild.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          phase: "ideate",
+          draftApprovedAt: { not: null },
+          abandonedAt: null,
+        }),
+      }),
+    );
+  });
+
+  it("is a no-op when there are no approved drafts", async () => {
+    mockPrisma.featureBuild.findMany.mockResolvedValue([]);
+    const res = await dispatchApprovedIdeateBuilds({ userId: "u-1" });
+    expect(res).toEqual({ candidates: 0, dispatched: 0, skipped: 0 });
+    expect(mockPrisma.featureBuild.findUnique).not.toHaveBeenCalled();
   });
 });
