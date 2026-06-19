@@ -37,6 +37,7 @@ Verification failures **stall** the build; they are never fed back to a coding a
 - Orchestrator: any `BLOCKED`/`NEEDS_CONTEXT` specialist halts auto-advance with no fix attempt — `apps/web/lib/integrate/build-orchestrator.ts:1436-1447`.
 - The only repair that exists is *within* one agentic-loop invocation; there is no **cross-step** repair.
 - **Churn:** the hottest surface — `#2019/#2020/#2023` all scope the build→review gate so unrelated/whole-repo failures stop blocking every build. Because the scoping is regex-on-output (Family 4), it keeps churning.
+- **Shipped (the plan-review sub-case, the live root cause of the WIP jam):** plan review used to **fail and leave the rejected plan saved**, so the idempotency guard blocked regeneration and every reboot's `resumeStrandedBuildsOnBoot` re-failed it forever. `#2090` (BI-99B06AD1) closes the loop — feed the reviewer's blocking issues back into a bounded plan revision (`PLAN_FIX_MAX_ROUNDS`), re-review, then **escalate** instead of churning. When even the bounded loop can't pass, BI-3E0EE3BA (§5) captures it for a human and frees the WIP slot. The *build/codegen* verification→fix loop (P0.1) remains the larger open item.
 
 ### Family 2 — Cloud usage-limits with no fast-abort, failover, or resumable pause
 - Empirically the #1 dispatch killer: 17 dead `chatgpt` dispatches in one build, each returning *"You've hit your usage limit"*, none aborting the storm.
@@ -88,3 +89,26 @@ Ordered by leverage (impact on the 13% completion rate × breadth of churn absor
 - **Pipeline map** (phase-by-phase entry points, durable vs inline, gates): ideate (`integrate/ideate-dispatch.ts`, `actions/build.ts`), plan (`integrate/plan-on-approval.ts`), reviews (`integrate/build-reviewers.ts`, `prompts/reviewer/*.prompt.md`), build (`queue/functions/build-execute.ts` → `integrate/build-orchestrator.ts` / `integrate/build-pipeline.ts`), review-verify (`queue/functions/build-review-verification.ts`), ship (`actions/build.ts`). Two execution paths exist (pipeline single-task vs orchestrator specialist-fan-out) with divergent timeouts/retries/parse logic — a recurring "works one way, breaks the other" source.
 - **LLM call inventory** (prompt source + routeAndCall config + parse fragility) for ideate / plan / decomposition / design-review / plan-review / code-gen / compaction / utility: see §2 Family 4 refs.
 - **Data model:** `FeatureBuild`, `BuildPhaseRun`, `BuildDispatchAttempt` (`packages/db/prisma/schema.prisma`).
+
+---
+
+## 5. When Build Studio can't fix itself — capture, escalate, learn, route
+
+Automating the *removal* of a stuck build (the inert-build reaper, `#2081`) only clears the symptom. A recursively self-improving platform sometimes **cannot fix itself "for obvious reasons"**: the defect is in the dispatch path it runs on, the change is beyond the local model, or it needs capability/expertise the install does not have. Recognizing "I can't fix this" is a first-class, *learnable* outcome — not a failure to suppress. Operator direction (Mark, 2026-06-19).
+
+**The four obligations** when a unit of work exhausts self-repair:
+1. **Capture** a durable escalation record — root cause, what was attempted, why blocked, and a **self-fix-feasibility class**: `auto-recoverable | needs-human | needs-external-capability`.
+2. **Raise** it to humans as an actionable "needs human" item, distinct from auto-recoverable stalls, with the originating work **never silently lost**.
+3. **Feed the hive/commons** the failure *signature* + resolution, so the network learns its own limits and later installs get a known path (`learnings-belong-in-the-shared-commons`).
+4. **Route to a support tier** — customer self-service → **reseller/partner augmentation** (scoped, time-boxed grant to augment a customer who lacks the dev capability/expertise/tools) → upstream/DPF. DPF-as-conduit, sovereignty-aware.
+
+**Shipped now (BI-3E0EE3BA, plan-review sub-case).** On bounded-fix-loop exhaustion, `escalateBuildToHuman()` (`apps/web/lib/build/escalate-build-to-human.ts`), called from `plan-on-approval.ts`, reuses existing substrate rather than adding new machinery:
+- **Capture + raise** via `createPlatformIssueReport()` (`type:"build-stall-escalation"`, build-linked, deduped) — its OPEN rows **auto-project into the backlog/triage intake** (EP-INTAKE-UNIFY), so the escalation surfaces with no new notification plumbing.
+- **Free WIP** by marking the build `abandoned` (the WIP cap counts only `abandonedAt`-null builds) — clearing the jam.
+- **Re-queue without re-stalling** by parking the originating backlog item as **`deferred`** (not `open`, which would auto-re-promote into the same stall) and detaching the build.
+- The one genuinely-new field is `PlatformIssueReport.selfFixClass`, the feasibility class consumed downstream.
+
+**Roadmap (the rest of the dimension):**
+- **BI-76B4317F** — hive learning of self-fix-limit **signatures**: contribute the `(failure signature → resolution, feasibility class)` to the commons so repeated limits become known paths.
+- **BI-5090F4AA** — **tiered support + reseller/partner augmentation** (`EP-PARTNER-CHANNEL`): route `needs-external-capability` escalations to a scoped, time-boxed partner grant; `needs-human` to the operator; `auto-recoverable` stays in-loop.
+- **UI:** a dedicated "Needs human" panel filtering `build-stall-escalation` reports by `selfFixClass` (the data + intake projection already exist; surfacing is the remaining slice).

@@ -26,6 +26,7 @@
 
 import { prisma } from "@dpf/db";
 import { normalizeBuildPlanPaths } from "./build-plan-paths";
+import { escalateBuildToHuman, SELF_FIX_CLASS } from "@/lib/build/escalate-build-to-human";
 
 function logBuildActivity(buildId: string, tool: string, summary: string): Promise<void> {
   return prisma.buildActivity.create({ data: { buildId, tool, summary } }).then(() => void 0).catch(() => void 0);
@@ -267,6 +268,7 @@ export async function dispatchPlanForApprovedBuild(params: {
     const build = await prisma.featureBuild.findUnique({
       where: { buildId },
       select: {
+        id: true,
         phase: true,
         title: true,
         buildPlan: true,
@@ -402,10 +404,24 @@ export async function dispatchPlanForApprovedBuild(params: {
     }
 
     if (review?.decision === "fail") {
-      // Bounded revisions exhausted — surface for human attention instead of an
-      // endless resume-restall churn. Full needs-human escalation (notify + WIP
-      // free + re-queue) is BI-3E0EE3BA; this is the honest stop + signal.
-      await log(`Plan review still failing after ${round} revision round(s) — needs human attention (escalation: BI-3E0EE3BA).`);
+      // Bounded revisions exhausted — Build Studio cannot self-repair this plan.
+      // Escalate to a human (BI-3E0EE3BA): capture a durable issue report (which
+      // auto-surfaces via intake), free the WIP slot (abandon the build), and
+      // park the backlog item as "deferred" so it is never lost AND does not
+      // resume-restall into the same failure. This is the honest stop.
+      await escalateBuildToHuman({
+        buildPk: build.id,
+        buildId,
+        featureTitle: build.title,
+        biTitle,
+        originatingBacklogItemId: build.originatingBacklogItemId,
+        phase: "plan",
+        rounds: round,
+        issues: review.issues,
+        selfFixClass: SELF_FIX_CLASS.NEEDS_HUMAN,
+        log,
+      });
+      return { kind: "dispatched-failure", error: "escalated-to-human", durationMs: Date.now() - t0 };
     }
 
     return {
