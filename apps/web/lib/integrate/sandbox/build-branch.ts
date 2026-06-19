@@ -136,6 +136,33 @@ export function buildWorktreePath(buildId: string, workspace: string = WORKSPACE
   return `${workspace}/${BUILD_WORKTREE_ROOT_SEGMENT}/${buildId}`;
 }
 
+/**
+ * Feature flag for per-build worktree isolation. Default OFF: until the
+ * dispatchers and sandbox helpers are threaded to honor resolveBuildWorkdir,
+ * builds must keep running in the shared /workspace tree, so the worktree path
+ * must NOT be handed out yet. Flip `DPF_BUILD_WORKTREE_ISOLATION=1` only after
+ * the end-to-end worktree build path is live-verified (the follow-up slice).
+ */
+export function isBuildWorktreeIsolationEnabled(): boolean {
+  return process.env.DPF_BUILD_WORKTREE_ISOLATION === "1";
+}
+
+/**
+ * The working directory a build's file-level commands (dispatch, typecheck,
+ * diff) should run in. This is the SINGLE seam the dispatchers + sandbox
+ * helpers route through, so per-build isolation flips with one flag instead of
+ * 30 scattered conditionals:
+ *   - isolation ON  → the build's own worktree (buildWorktreePath)
+ *   - isolation OFF → the shared workspace (identical to today's behaviour)
+ * Container-level operations (the git repo root, docker exec target) stay on
+ * `workspace` and must NOT use this — only per-build *file* operations move.
+ */
+export function resolveBuildWorkdir(buildId: string, workspace: string = WORKSPACE): string {
+  return isBuildWorktreeIsolationEnabled()
+    ? buildWorktreePath(buildId, workspace)
+    : workspace;
+}
+
 // node_modules trees shared from the canonical install into each worktree by
 // symlink: the repo root plus the web app and the workspace packages whose
 // node_modules the build/typecheck toolchain resolves through. Adding a new
