@@ -5,6 +5,11 @@
 
 import { prisma } from "@dpf/db";
 import { isUsageLimitDispatchOutput } from "@/lib/build/dispatch-attempts";
+import {
+  runVerificationRepairLoop,
+  verificationNeedsRepair,
+  VERIFICATION_REPAIR_MAX_ROUNDS,
+} from "@/lib/build/verification-repair";
 import { runAgenticLoop, type AgenticResult } from "@/lib/agentic-loop";
 import { agentEventBus, type AgentEvent } from "@/lib/agent-event-bus";
 import { getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
@@ -1452,6 +1457,101 @@ export async function runBuildOrchestrator(params: {
           timestamp: new Date().toISOString(),
         },
       }, userId, { routeContext: "/build", agentId: "AGT-ORCH-300", threadId: parentThreadId });
+
+      // BI-99B06AD1 — build/codegen verification → bounded fix loop. If THIS
+      // build's own changed surface failed typecheck/tests, don't just stall at
+      // the build→review gate: dispatch a scoped repair coding turn (failing
+      // files + the real error), re-verify directly via runSandboxTests, repeat
+      // up to N rounds, then fall through to the gate (which stalls/escalates as
+      // before). Additive + bounded; the outer catch makes it regression-safe.
+      if (
+        changedFiles.length > 0 &&
+        verificationNeedsRepair({ typecheckPassed: scoped.typecheckPassed, testsFailed: scoped.testsFailed })
+      ) {
+        const repairRole =
+          allResults.find((r) => r.task.specialist !== "qa-engineer")?.task.specialist ??
+          allResults[0]?.task.specialist ??
+          "software-engineer";
+        const containerId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
+        const loop = await runVerificationRepairLoop({
+          initial: {
+            typecheckPassed: scoped.typecheckPassed,
+            testsFailed: scoped.testsFailed,
+            failureAxis: scoped.failureAxis,
+            output: qaContent,
+          },
+          changedFiles,
+          maxRounds: VERIFICATION_REPAIR_MAX_ROUNDS,
+          log: (m) =>
+            agentEventBus.emit(parentThreadId, {
+              type: "orchestrator:task_progress",
+              buildId,
+              taskTitle: "verification-repair",
+              message: m,
+            }),
+          dispatchRepair: async (spec) => {
+            const repairTask: AssignedTask = {
+              taskIndex: allResults.length,
+              title: spec.title,
+              specialist: repairRole,
+              files: spec.failingFiles.map((path) => ({ path, action: "modify" as const, purpose: "fix verification failure" })),
+              task: { title: spec.title, testFirst: "", implement: spec.implement, verify: spec.verify },
+            };
+            const res = await dispatchSpecialist({
+              task: repairTask, userId, platformRole, isSuperuser, buildId, buildContext, parentThreadId,
+            });
+            allResults.push(res);
+            return res.success;
+          },
+          reverify: async () => {
+            const { runSandboxTests } = await import("./coding-agent");
+            const r = await runSandboxTests(containerId, { changedFiles });
+            const fullOutput = `${r.typeCheckOutput}\n${r.testOutput}`;
+            const reNorm = normalizeVerificationOutput({
+              typecheckPassed: r.typeCheckPassed,
+              testsFailed: r.passed ? 0 : 1,
+              testsPassed: r.passed ? 1 : 0,
+              fullOutput,
+            });
+            const reScoped = scopeVerificationOutputForGate({ verification: reNorm, changedFiles });
+            return {
+              typecheckPassed: reScoped.typecheckPassed,
+              testsFailed: reScoped.testsFailed,
+              failureAxis: reScoped.failureAxis,
+              output: fullOutput,
+            };
+          },
+        });
+
+        if (loop.rounds > 0) {
+          // Persist the post-repair verdict so the phase gate evaluates the
+          // repaired state rather than the pre-repair failure.
+          await executeTool("saveBuildEvidence", {
+            field: "verificationOut",
+            value: {
+              ...verification,
+              typecheckPassed: loop.final.typecheckPassed ?? scoped.typecheckPassed,
+              testsFailed: loop.final.testsFailed ?? scoped.testsFailed,
+              testsPassed: loop.repaired ? 1 : (scoped.testsPassed ?? verification.testsPassed),
+              outOfScopeNoise: scoped.outOfScopeNoise,
+              globalTestsFailed: scoped.globalTestsFailed,
+              failureAxis: loop.final.failureAxis,
+              scopedToChangedFiles: changedFiles,
+              fullOutput: (loop.final.output ?? qaContent).slice(0, 2000),
+              timestamp: new Date().toISOString(),
+              verificationRepairRounds: loop.rounds,
+              verificationRepaired: loop.repaired,
+            },
+          }, userId, { routeContext: "/build", agentId: "AGT-ORCH-300", threadId: parentThreadId });
+          await prisma.buildActivity.create({
+            data: {
+              buildId,
+              tool: "build:verification-repair",
+              summary: `Ran ${loop.rounds} scoped verification-repair round(s); repaired=${loop.repaired}. (BI-99B06AD1)`,
+            },
+          }).catch(() => { /* audit best-effort */ });
+        }
+      }
     } catch (err) {
       console.error("[orchestrator] Failed to save verification evidence:", err);
     }
