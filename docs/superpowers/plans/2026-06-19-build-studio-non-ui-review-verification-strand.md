@@ -40,8 +40,23 @@ Two coordinated, surgical changes — keep the browser UX check where it is mean
 - Typecheck: `pnpm --filter web typecheck`.
 - Functional: on the live install, the stranded library builds (FB-FD850A2C truncateMiddle, FB-69231490 classifySemanticId, etc.) reach `ship` (diff extracted, awaiting "Ship to GitHub") after the next review-verification run, instead of looping `0/1`.
 
+## Follow-up (landed same day): progress/resume layer must also honor scoped verification
+
+Deploying the fix above (live on the install via self-upgrade) proved the strand is broken — `review-verification` now logs `"UX verification skipped: build changed no UI surface… advancing to ship"`. But the stranded library builds still didn't reach a ship action, because the **progress/action layer** keyed off the **raw** verification, not the scoped result:
+
+- `getImplementationConcernState` (`build-studio-workflow-actions.ts`) set `hasRecoverableConcern = nonCleanTasks.length > 0 || verificationFailed`, where `verificationFailed` was true whenever `verificationOut.failureAxis === "test-failure"` — i.e. the 88 out-of-scope global failures forced the operator action to "Resume Implementation" even though typecheck passed and `buildScoped.affectedTests === []`. (The scoped gate `checkPhaseGate` already treats test failures as advisory; the action layer did not.)
+- The skip path left a **stale failed `uxTestResults`** array on builds that had previously run browser-use, so `hasCompletedUxVerification` returned false and the build couldn't reach the "Record Acceptance" step.
+
+Fix (second change set, same root):
+1. `getImplementationConcernState` now computes `scopedSurfaceClean` from `progressVisibility.verification.buildScoped` (typecheck passed + `affectedTests` empty). When clean, out-of-scope/global test failures are advisory: `verificationFailed` ignores a `test-failure` axis, and a task that merely `DONE_WITH_CONCERNS` no longer counts as a recoverable concern. Without a scoped projection the stricter legacy behavior is preserved; an in-scope failure (`affectedTests` non-empty) or a typecheck failure still blocks.
+2. `build-review-verification.ts` skip path clears `uxTestResults` to `[]` alongside `uxVerificationStatus = "skipped"`.
+
+With both, a non-UI build flows review → (concern clear) → Record Acceptance → Continue to Release → ship, driven from the BS UX. Tests: `build-studio-workflow-actions.test.ts` (scoped-clean advances; in-scope failure still resumes).
+
+Note: builds that already had `deploy_feature` extract a `diffPatch` before this landed (e.g. FB-FD850A2C) hit the auto-ship idempotency guard ("diff already extracted") and need the operator to drive the ship step; fresh builds flow cleanly.
+
 ## Out of scope (follow-ups)
 
-- Local endpoint throughput / model-swap thrash (gemma4 ↔ qwen3-coder) causing 502s on routed phases — separate config/infra work.
+- Local endpoint throughput / model-swap thrash (gemma4 ↔ qwen3-coder) causing 502s on routed phases — separate config/infra work (largely mitigated: the boot-time 502 storm was stranded builds re-running review-verification, which this strand fix removes).
 - Quality of the browser-use agent on genuine UI builds (BI-4BD81F3B).
-- Shared-sandbox branch contention across concurrent builds.
+- Shared-sandbox branch contention + cross-build untracked-file contamination across concurrent builds.
