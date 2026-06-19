@@ -11331,7 +11331,7 @@ export async function executeTool(
 
       const devConfig = await prisma.platformDevConfig.findUnique({
         where: { id: "singleton" },
-        select: { contributionMode: true, upstreamRemoteUrl: true, dcoAcceptedAt: true, gitRemoteUrl: true },
+        select: { contributionMode: true, upstreamRemoteUrl: true, dcoAcceptedAt: true, gitRemoteUrl: true, hiveContributionsPaused: true },
       });
       const { getPlatformDevPolicyState } = await import("@/lib/platform-dev-policy");
       const policyState = getPlatformDevPolicyState(devConfig);
@@ -11349,6 +11349,21 @@ export async function executeTool(
           error: "Install is configured for private development only.",
           message:
             "This install is configured to keep shipped features private. Change Platform Development settings if you want Build Studio to create upstream contributions.",
+        };
+      }
+
+      // Master pause overrides every contribution type (see
+      // packages/db/src/hive-contribution-settings.ts — "the master pause overrides
+      // everything"). The source/improvement path must honor it the same way the
+      // device-fingerprint (contribute-fingerprint.ts) and feedback-escalation paths
+      // do; otherwise the Admin "Pause all contributions" toggle silently still ships
+      // PRs upstream. Checked before any PR prerequisite work, like the per-type gate.
+      if (devConfig?.hiveContributionsPaused) {
+        return {
+          success: false,
+          error: "Hive contributions are paused.",
+          message:
+            "All contributions to the community are currently paused (Admin → Platform Development → Hive Contributions). Resume contributions there, then retry.",
         };
       }
 
