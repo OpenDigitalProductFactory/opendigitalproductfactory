@@ -18,6 +18,7 @@ import type { AssignedTask } from "./task-dependency-graph";
 import type { SpecialistRole } from "./task-dependency-graph";
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { resolveBuildWorkdir } from "./sandbox/build-branch";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 
 const DEFAULT_SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
@@ -234,6 +235,8 @@ export async function dispatchGrokTask(params: {
 }): Promise<GrokResult> {
   const { task, buildContext, priorResults } = params;
   const providerId = params.providerId ?? "xai";
+  // Per-build working dir: worktree when isolation ON, else /workspace (default).
+  const workdir = resolveBuildWorkdir(params.buildId);
   const model = params.model ?? "";
   const role = task.specialist;
   const containerId = params.containerId ?? DEFAULT_SANDBOX_CONTAINER;
@@ -309,7 +312,7 @@ export async function dispatchGrokTask(params: {
       "set -e",
       `cleanup() { rm -f ${promptFile} ${keyFile} ${runnerScript} 2>/dev/null || true; }`,
       "trap cleanup EXIT INT TERM",
-      "cd /workspace",
+      `cd ${workdir}`,
       // OAuth mode: grok reads the ~/.grok/auth.json injected by ensureGrokAuth (no env needed).
       // API-key mode: export XAI_API_KEY from the per-task key file.
       grokAuth.mode === "apikey"

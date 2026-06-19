@@ -14,6 +14,7 @@ import type { SpecialistRole } from "./task-dependency-graph";
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
+import { resolveBuildWorkdir } from "./sandbox/build-branch";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -165,6 +166,8 @@ export async function dispatchCodexTask(params: {
   const { task, buildContext, priorResults } = params;
   const providerId = params.providerId ?? "chatgpt";
   const model = params.model ?? "";
+  // Per-build working dir: worktree when isolation ON, else /workspace (default).
+  const workdir = resolveBuildWorkdir(params.buildId);
   const role = task.specialist;
   const startedAt = new Date();
 
@@ -245,7 +248,7 @@ export async function dispatchCodexTask(params: {
     }>((resolve, reject) => {
       const proc = spawnCb("docker", [
         "exec", SANDBOX_CONTAINER, "sh", "-c",
-        `cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/codex-prompt.txt`,
+        `cd ${workdir} && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/codex-prompt.txt`,
       ]);
 
       let stdout = "";
