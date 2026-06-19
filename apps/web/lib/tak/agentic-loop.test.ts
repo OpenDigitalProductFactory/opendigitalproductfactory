@@ -1922,4 +1922,33 @@ describe("runAgenticLoop — execution plan", () => {
     expect(result.content).toBe("All wrapped up now.");
     expect(result.executionPlan && (result.executionPlan.steps.every((s) => s.status === "done" || s.status === "skipped"))).toBe(true);
   });
+
+  it("streams plan:update events as the plan is recorded and steps progress (BI-95C0835E)", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "",
+        toolCalls: [{ id: "t1", name: "record_execution_plan", arguments: { goal: "ship it", steps: ["a", "b"] } }],
+      }) as never)
+      .mockResolvedValueOnce(mockResult({
+        content: "",
+        toolCalls: [{ id: "t2", name: "update_execution_plan_step", arguments: { stepId: "s1", status: "done" } }],
+      }) as never)
+      .mockResolvedValueOnce(mockResult({
+        content: "",
+        toolCalls: [{ id: "t3", name: "update_execution_plan_step", arguments: { stepId: "s2", status: "done" } }],
+      }) as never)
+      .mockResolvedValueOnce(mockResult({ content: "Done." }) as never);
+
+    const events: Array<{ type: string; done?: number; total?: number }> = [];
+    await runAgenticLoop({
+      ...planParams,
+      enableExecutionPlan: true,
+      onProgress: (e) => events.push(e as { type: string; done?: number; total?: number }),
+    });
+
+    const planEvents = events.filter((e) => e.type === "plan:update") as Array<{ done: number; total: number }>;
+    // One on record, one per step update = 3 total, with monotonic progress.
+    expect(planEvents.map((e) => `${e.done}/${e.total}`)).toEqual(["0/2", "1/2", "2/2"]);
+  });
 });
