@@ -6,6 +6,7 @@ import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { agentEventBus } from "@/lib/agent-event-bus";
+import { createSseResponse } from "@/lib/sse/sse-stream";
 
 export const dynamic = "force-dynamic";
 
@@ -21,36 +22,17 @@ export async function GET(
 
   const { syncId } = await params;
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    start(controller) {
+  return createSseResponse({
+    signal: request.signal,
+    start: (sse) => {
       const unsub = agentEventBus.subscribe(syncId, (event) => {
-        const data = `data: ${JSON.stringify(event)}\n\n`;
-        try {
-          controller.enqueue(encoder.encode(data));
-        } catch {
-          // Stream already closed — unsubscribe
-          unsub();
-        }
+        sse.send(event);
         if (event.type === "done") {
           unsub();
-          try { controller.close(); } catch { /* already closed */ }
+          sse.close();
         }
       });
-
-      // Clean up on client disconnect
-      request.signal.addEventListener("abort", () => {
-        unsub();
-        try { controller.close(); } catch { /* already closed */ }
-      });
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
+      return unsub;
     },
   });
 }

@@ -34,6 +34,7 @@ import { observeConversation } from "@/lib/process-observer-hook";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPrompt } from "@/lib/prompt-assembler";
+import { resolveReadingLevelForRoute } from "@/lib/readability/policy";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import type { PortalContextEnvelope, PortalObjectAnchor } from "@/lib/portal-context";
@@ -871,6 +872,9 @@ export async function sendMessage(input: {
       wikiContext,
       skills: skillSummaries,
       questionPacket: input.questionPacket ?? null,
+      // BI-8F8C5F28: on customer-copy surfaces, hold the coworker to the org's
+      // reading level (high-school by default). Null on internal surfaces.
+      readingLevel: await resolveReadingLevelForRoute(input.routeContext),
     });
 
     if (eligibleSkillIds.length > 0) {

@@ -66,4 +66,49 @@ describe("runTraversalPattern", () => {
     expect(result.data?.summary.refinementGaps).toHaveLength(1);
     expect(result.data?.summary.refinementGaps[0]).toContain("actual");
   });
+
+  // cross_layer_impact: from a data-model element, follow `traces` INBOUND to the actual
+  // operational/network/integration elements that realize it (the Parity Engine
+  // cross-layer edges). Mirrors the live RuntimeTarget → running-instances case.
+  const CROSS_LAYER_STEPS = [
+    { elementTypeSlugs: ["part_usage", "part_definition"], refinementLevel: null, relationshipTypeSlugs: ["traces"], direction: "inbound" },
+    { elementTypeSlugs: ["part_usage", "part_definition"], refinementLevel: null, relationshipTypeSlugs: [], direction: "terminal" },
+  ];
+
+  it("cross_layer_impact traces a data model inbound to the actual elements that realize it", async () => {
+    vi.mocked(prisma.eaNotation.findUnique).mockResolvedValue({ id: "n-1" } as never);
+    vi.mocked(prisma.eaTraversalPattern.findUnique).mockResolvedValue({ steps: CROSS_LAYER_STEPS, forbiddenShortcuts: [] } as never);
+    vi.mocked(prisma.eaElement.findUnique).mockResolvedValue({
+      id: "model", name: "RuntimeTarget", refinementLevel: null, elementType: { slug: "data_object" },
+    } as never);
+    vi.mocked(prisma.eaRelationship.findMany).mockResolvedValue([
+      { fromElement: { id: "inst1", name: "portal · RT-ROOT-PORTAL", refinementLevel: null, elementType: { slug: "part_usage" } }, toElement: { id: "model", elementType: { slug: "data_object" } }, relationshipType: { slug: "traces" } },
+      { fromElement: { id: "inst2", name: "build-sandbox · RT-X", refinementLevel: null, elementType: { slug: "part_usage" } }, toElement: { id: "model", elementType: { slug: "data_object" } }, relationshipType: { slug: "traces" } },
+      // wrong element type AND wrong relationship type → must be filtered out
+      { fromElement: { id: "other", name: "Component", refinementLevel: null, elementType: { slug: "application_component" } }, toElement: { id: "model", elementType: { slug: "data_object" } }, relationshipType: { slug: "depends_on" } },
+    ] as never);
+
+    const result = await runTraversalPattern({ patternSlug: "cross_layer_impact", startElementIds: ["model"] });
+    expect(result.ok).toBe(true);
+    const path = result.data!.paths[0];
+    expect(path.complete).toBe(true);
+    expect(path.terminationReason).toBe("terminal_step_reached");
+    expect(path.steps.map((s) => s.elementId)).toEqual(["model", "inst1", "inst2"]);
+    expect(path.steps[1].relationshipType).toBe("traces");
+    expect(path.steps[1].direction).toBe("inbound");
+  });
+
+  it("cross_layer_impact returns no_matching_elements when the model has no cross-layer edges yet", async () => {
+    vi.mocked(prisma.eaNotation.findUnique).mockResolvedValue({ id: "n-1" } as never);
+    vi.mocked(prisma.eaTraversalPattern.findUnique).mockResolvedValue({ steps: CROSS_LAYER_STEPS, forbiddenShortcuts: [] } as never);
+    vi.mocked(prisma.eaElement.findUnique).mockResolvedValue({
+      id: "model", name: "RuntimeTarget", refinementLevel: null, elementType: { slug: "data_object" },
+    } as never);
+    vi.mocked(prisma.eaRelationship.findMany).mockResolvedValue([] as never); // not yet reconciled
+
+    const result = await runTraversalPattern({ patternSlug: "cross_layer_impact", startElementIds: ["model"] });
+    const path = result.data!.paths[0];
+    expect(path.terminationReason).toBe("no_matching_elements");
+    expect(path.steps.map((s) => s.elementId)).toEqual(["model"]);
+  });
 });

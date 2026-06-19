@@ -17,12 +17,15 @@ The intent is to make accidental data loss much harder, while keeping intentiona
 
 ## What gets gated
 
-Two commandments ship with runtime enforcement:
+Three commandments ship with runtime enforcement:
 
 1. **`never-wipe-db-for-code-fixes`** — blocks `docker volume rm`, `docker compose down -v`, `prisma migrate reset` (and pnpm-wrapped variants), and `DROP DATABASE dpf`.
 2. **`destructive-actions-require-explicit-go`** — blocks `git push --force / --force-with-lease` to main, `git reset --hard`, and `rm -rf /` on absolute paths.
+3. **`outbound-actions-require-explicit-go`** — blocks the irreversible outbound MCP tools `send_marketing_email`, `publish_to_linkedin`, and `place_linkedin_ad`. A sent email / public post / placed ad cannot be recalled, so an autonomous session is refused outright and an interactive session must type the confirmation phrase. Drafting and staging are not gated — only the send/publish/spend step is.
 
 The full pattern list lives in each principle's frontmatter at `docs/founder-kernel/wiki/principles/`. Engineers can add new commandments by editing the principle file (one line of inline JSON in the frontmatter) — no code change.
+
+**Two enforcement surfaces.** Commandments 1–2 are `shell`/`sql`/`git` patterns enforced by the **shell guard** (`safety-bin` PATH shim) described below. Commandment 3 is an `mcp_tool` pattern enforced *inside the portal* by the MCP dispatcher (`apps/web/lib/mcp-tools.ts` → `runtime-gate.ts`), before the tool body runs — there is no shell command to shim, so the `safety-bin` mechanics in this guide do not apply to it. Both surfaces consult the same principle registry and emit the same `[kernel-gate-trace]` audit line.
 
 ## What you'll see when it fires
 

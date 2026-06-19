@@ -699,6 +699,96 @@ export function canTransitionPhase(from: BuildPhase, to: BuildPhase): boolean {
 
 export type PhaseGateResult = { allowed: boolean; reason?: string };
 
+// ─── Phase-handoff evidence digest ───────────────────────────────────────────
+//
+// A PhaseHandoff row is the structured artifact the next phase reads instead of
+// the raw conversation history. Its evidence half (evidenceFields +
+// evidenceDigest) was historically written empty, so the consumer
+// (agent-coworker.ts "## Context from Previous Phase" block) rendered nothing.
+// This derives a one-line-per-field manifest from the build's own evidence
+// columns. Pure — no I/O — so it is unit-tested directly.
+
+/** The FeatureBuild evidence columns a handoff summarizes. All optional. */
+export type PhaseHandoffEvidenceInput = {
+  designDoc?: unknown;
+  designReview?: unknown;
+  buildPlan?: unknown;
+  planReview?: unknown;
+  verificationOut?: unknown;
+  acceptanceMet?: unknown;
+  uxTestResults?: unknown;
+  uxVerificationStatus?: string | null;
+};
+
+export type PhaseHandoffEvidence = {
+  evidenceFields: string[];
+  evidenceDigest: Record<string, string>;
+};
+
+// Render order for the digest.
+const PHASE_HANDOFF_EVIDENCE_FIELDS: readonly (keyof PhaseHandoffEvidenceInput)[] = [
+  "designDoc",
+  "designReview",
+  "buildPlan",
+  "planReview",
+  "verificationOut",
+  "acceptanceMet",
+  "uxVerificationStatus",
+  "uxTestResults",
+];
+
+const EVIDENCE_ONE_LINER_MAX = 140;
+
+function summarizeEvidenceValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
+
+  const oneLine = (s: string): string | null => {
+    const c = s.replace(/\s+/g, " ").trim();
+    if (c.length === 0) return null;
+    return c.length > EVIDENCE_ONE_LINER_MAX ? `${c.slice(0, EVIDENCE_ONE_LINER_MAX - 1)}…` : c;
+  };
+
+  if (typeof value === "string") return oneLine(value);
+  if (Array.isArray(value)) {
+    return value.length === 0 ? null : `${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    // First populated "verdict-like" key wins; falls back to a key census.
+    for (const key of ["verdict", "decision", "status", "result", "summary", "passed", "title"]) {
+      const inner = obj[key];
+      if (inner === null || inner === undefined) continue;
+      const innerStr = typeof inner === "boolean" ? (inner ? "yes" : "no") : String(inner);
+      const line = oneLine(`${key}: ${innerStr}`);
+      if (line) return line;
+    }
+    const keys = Object.keys(obj);
+    if (keys.length === 0) return null;
+    return oneLine(`present (${keys.length} field${keys.length === 1 ? "" : "s"}: ${keys.slice(0, 6).join(", ")})`);
+  }
+  return null;
+}
+
+/**
+ * Build the structured evidence manifest for a PhaseHandoff from a build's
+ * evidence columns. Only fields that carry signal appear — a field with no
+ * value is omitted from both arrays, so the next phase never sees an empty
+ * "Evidence" line (absence is the marker).
+ */
+export function buildPhaseHandoffEvidence(build: PhaseHandoffEvidenceInput): PhaseHandoffEvidence {
+  const evidenceFields: string[] = [];
+  const evidenceDigest: Record<string, string> = {};
+  for (const field of PHASE_HANDOFF_EVIDENCE_FIELDS) {
+    const digest = summarizeEvidenceValue(build[field]);
+    if (digest === null) continue;
+    evidenceFields.push(field);
+    evidenceDigest[field] = digest;
+  }
+  return { evidenceFields, evidenceDigest };
+}
+
 const DEFAULT_HAPPY_PATH_STATE: HappyPathState = {
   intake: {
     status: "pending",

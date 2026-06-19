@@ -79,14 +79,11 @@ export type ProviderRow = {
   taskTags: string[];
   mcpTransport: string | null;
   maxConcurrency: number | null;
-  // Routing dimension scores (0–100)
-  reasoning: number;
-  codegen: number;
-  toolFidelity: number;
-  instructionFollowing: number;
-  structuredOutput: number;
-  conversational: number;
-  contextRetention: number;
+  // NOTE: per-dimension routing scores (reasoning/codegen/toolFidelity/…) were
+  // removed here — they were read off ModelProvider (seed @default(50)), which
+  // the router IGNORES (it reads the calibrated per-model ModelProfile). The
+  // Providers grid shows the rollup's `routingScores` instead. See
+  // docs/superpowers/specs/2026-06-19-provider-model-scoring-convergence-design.md.
   authorizeUrl: string | null;
   tokenUrl: string | null;
   oauthClientId: string | null;
