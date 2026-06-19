@@ -160,10 +160,10 @@ ok "Database seeded with roles, agents, and default admin user"
 # edge-node service so it enrolls. Spec § Approval policy permits the local
 # installer to auto-approve the host's own Edge Node.
 #
-# Skip if DPF_SKIP_EDGE_BOOTSTRAP=1 — handy when running setup.sh against a
-# host that already has an enrolled Edge Node and the operator just wants
-# to refresh deps / migrations.
-if [ "${DPF_SKIP_EDGE_BOOTSTRAP:-0}" != "1" ]; then
+# Opt-in (BI-72CFF89D / edge-topology design §5): contributor setup no longer
+# bundles a local Edge Node by default. Set DPF_INCLUDE_EDGE=1 to bundle +
+# auto-enroll one. DPF_SKIP_EDGE_BOOTSTRAP=1 still force-skips even when opted in.
+if [ "${DPF_INCLUDE_EDGE:-0}" = "1" ] && [ "${DPF_SKIP_EDGE_BOOTSTRAP:-0}" != "1" ]; then
   step "Edge Node bootstrap"
 
   # Bring up the Edge Node container alongside whatever overlay is in use.

@@ -1,21 +1,41 @@
 param(
     [string]$DPF_DIR = $PSScriptRoot,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$WithEdge,
+    [switch]$NoEdge
 )
 
 Set-Location $DPF_DIR
 
-# Always bring the Edge Node overlay up alongside the platform so the bundled
-# single-host install includes network discovery. The overlay is harmless
-# when no enrolled node exists yet (edge-node will retry enrollment until the
-# operator wires DPF_BOOTSTRAP_TOKEN via .\scripts\fresh-install.ps1 or the
-# Admin > Platform Development > Edge Nodes UI).
-# See docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md.
+# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design §5).
+# Include the local Edge Node overlay ONLY when this install enabled it.
+# -WithEdge / -NoEdge override; otherwise resolve from install-state.json
+# (.edge.enabled), with a grandfather for pre-flip installs that already
+# have a bundled node (.env carries the bootstrap token). Default OFF.
+# See docs/superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md.
+if ($WithEdge)   { $env:DPF_INCLUDE_EDGE = '1' }
+elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
+$includeEdge = $false
+$stateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
+if (-not (Test-Path -LiteralPath $stateLib)) { $stateLib = Join-Path $DPF_DIR "installer\lib\state.ps1" }
+try {
+    if (Test-Path -LiteralPath $stateLib) {
+        . $stateLib
+        $includeEdge = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
+    } else {
+        $includeEdge = ($env:DPF_INCLUDE_EDGE -eq '1')
+    }
+} catch {
+    $includeEdge = ($env:DPF_INCLUDE_EDGE -eq '1')
+}
+
 $composeArgs = @("-f", "docker-compose.yml")
 if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
     $composeArgs += @("-f", "docker-compose.override.yml")
 }
-$composeArgs += @("-f", "docker-compose.edge.yml")
+if ($includeEdge -and (Test-Path (Join-Path $DPF_DIR "docker-compose.edge.yml"))) {
+    $composeArgs += @("-f", "docker-compose.edge.yml")
+}
 
 docker compose @composeArgs up -d
 
