@@ -58,6 +58,7 @@ function Initialize-DpfState {
         installPath                  = $InstallPath
         stateDir                     = $stateDir
         composeFiles                 = @()
+        edge                         = @{ enabled = $false; mode = $null }
         imageTag                     = $null
         llmProvider                  = $null
         resourceLabels               = @{ dpf = "true" }
@@ -145,4 +146,32 @@ function Test-DpfStateSchema {
         return 3
     }
     return 0
+}
+
+# Resolve whether the bundled local Edge Node overlay should be active for THIS
+# install (the deploy gate, BI-72CFF89D / edge-topology design §5). Edge
+# deployment is OPT-IN: default OFF unless explicitly chosen or grandfathered.
+# PowerShell sibling of dpf_resolve_edge_enabled in state.sh. Precedence:
+#   1. explicit $env:DPF_INCLUDE_EDGE=0|1 (callers/flags set this)
+#   2. recorded choice in install-state.json (.edge.enabled)
+#   3. grandfather: no recorded choice but .env carries a bundled-node
+#      bootstrap token (a pre-flip install) -> keep it ON (design §5.3)
+#   4. default OFF
+# Returns [bool]. $InstallDir is the install root (for .env grandfather check).
+function Resolve-DpfEdgeEnabled {
+    param([string]$InstallDir = (Get-Location).Path)
+
+    if ($env:DPF_INCLUDE_EDGE -eq '1') { return $true }
+    if ($env:DPF_INCLUDE_EDGE -eq '0') { return $false }
+
+    $edge = Get-DpfStateValue -Key 'edge'
+    if ($null -ne $edge -and $null -ne $edge.enabled) { return [bool]$edge.enabled }
+
+    $envPath = Join-Path $InstallDir ".env"
+    if (Test-Path -LiteralPath $envPath) {
+        if (Select-String -Path $envPath -Pattern '^DPF_BOOTSTRAP_TOKEN=dpf' -Quiet) {
+            return $true
+        }
+    }
+    return $false
 }
