@@ -64,7 +64,10 @@ const EXCLUDE_RE = /(\.(test|spec|stories)\.(ts|tsx)$|__tests__\/|\.d\.ts$|\/gen
 // Refs reach us from CI env (BASE_SHA) and git output. Pin accepted chars so a
 // forged value cannot smuggle shell metachars or git option flags into execFile.
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
-const PATH_RE = /^[A-Za-z0-9._\-/]+$/;
+// Allow [] so Next.js dynamic-route segments (e.g. app/api/.../[taskId]/route.ts)
+// pass the safety check. Without these chars the gate THREW on any PR that
+// touched a bracketed route file — a crash, not a real "missing doc" failure.
+const PATH_RE = /^[A-Za-z0-9._\-/[\]]+$/;
 
 function assertSafeRef(ref, label) {
   if (!REF_RE.test(ref) || ref.startsWith("-")) {
@@ -121,7 +124,9 @@ let addedSourceLines = 0;
 for (const f of changed) {
   if (!SOURCE_LINE_FILE_RE.test(f)) continue;
   const safePath = assertSafePath(f);
-  const added = git("diff", "--numstat", `${base}...HEAD`, "--", safePath)
+  // --literal-pathspecs so a path like [taskId] is matched literally and not
+  // treated as a git pathspec glob (which would silently count zero lines).
+  const added = git("--literal-pathspecs", "diff", "--numstat", `${base}...HEAD`, "--", safePath)
     .split("\n")[0]
     ?.trim();
   if (!added) continue;
