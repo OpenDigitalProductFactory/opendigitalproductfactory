@@ -48,6 +48,13 @@ export const NETWORK_PACKAGE_KEY = "network:pkg";
 export const NETWORK_HOSTS_KEY = "network:hosts";
 export const NETWORK_DEVICES_KEY = "network:devices";
 
+// Cross-LAYER targets: the data-model elements the EP-DATA-ARCH Prisma→EA mirror projects
+// for the EdgeNode and InventoryEntity tables (`infraCiKey = prisma:model:<Model>`). Each
+// discovered host/device IS a row of those tables, so it `traces` to its model — the real
+// edge that lets a data-model change's blast_radius reach the discovered network elements.
+export const EDGE_NODE_MODEL_KEY = "prisma:model:EdgeNode";
+export const INVENTORY_ENTITY_MODEL_KEY = "prisma:model:InventoryEntity";
+
 function truncate(s: string | undefined, n = 200): string {
   if (!s) return "";
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
@@ -60,6 +67,7 @@ export function buildNetworkTopologyModel(args: {
 }): SysmlDesiredModel {
   const elements: SysmlDesiredModel["elements"] = [];
   const relationships: SysmlDesiredModel["relationships"] = [];
+  const crossLayerRelationships: SysmlDesiredModel["relationships"] = [];
 
   elements.push({
     sysmlKey: NETWORK_PACKAGE_KEY,
@@ -107,6 +115,7 @@ export function buildNetworkTopologyModel(args: {
       },
     });
     relationships.push({ fromKey: NETWORK_HOSTS_KEY, toKey: key, relSlug: "contains" });
+    crossLayerRelationships.push({ fromKey: key, toKey: EDGE_NODE_MODEL_KEY, relSlug: "traces" });
   }
 
   const known = new Set(args.entities.map((e) => e.entityKey));
@@ -129,6 +138,7 @@ export function buildNetworkTopologyModel(args: {
       },
     });
     relationships.push({ fromKey: NETWORK_DEVICES_KEY, toKey: key, relSlug: "contains" });
+    crossLayerRelationships.push({ fromKey: key, toKey: INVENTORY_ENTITY_MODEL_KEY, relSlug: "traces" });
   }
 
   // Inventory dependency edges — only when both endpoints were projected.
@@ -146,7 +156,7 @@ export function buildNetworkTopologyModel(args: {
     elements,
     relationships,
     elementTypeSlugs: ["package", "part_definition", "part_usage"],
-    relTypeSlugs: ["contains", "connects"],
+    relTypeSlugs: ["contains", "connects", "traces"],
     view: {
       name: "Network Topology — Live Projection",
       description: "Live, system-maintained projection of discovered network hosts, devices, and their dependencies.",
@@ -154,5 +164,6 @@ export function buildNetworkTopologyModel(args: {
       scopeRef: "network-topology",
     },
     softRemovePrefix: "network:",
+    crossLayerRelationships,
   };
 }

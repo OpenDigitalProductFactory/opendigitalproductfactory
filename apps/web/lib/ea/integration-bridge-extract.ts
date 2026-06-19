@@ -24,9 +24,16 @@ export interface IntegrationFact {
 
 export const INTEGRATION_PACKAGE_KEY = "integration:pkg";
 
+// Cross-LAYER target: the data-model element the EP-DATA-ARCH Prisma→EA mirror projects
+// for the IntegrationCredential table (`infraCiKey = prisma:model:<Model>`). Each connected
+// application IS an IntegrationCredential row, so it `traces` to that model — the real edge
+// that lets a data-model change's blast_radius reach the connected applications.
+export const INTEGRATION_CREDENTIAL_MODEL_KEY = "prisma:model:IntegrationCredential";
+
 export function buildIntegrationModel(integrations: IntegrationFact[]): SysmlDesiredModel {
   const elements: SysmlDesiredModel["elements"] = [];
   const relationships: SysmlDesiredModel["relationships"] = [];
+  const crossLayerRelationships: SysmlDesiredModel["relationships"] = [];
 
   elements.push({
     sysmlKey: INTEGRATION_PACKAGE_KEY,
@@ -56,13 +63,15 @@ export function buildIntegrationModel(integrations: IntegrationFact[]): SysmlDes
       },
     });
     relationships.push({ fromKey: INTEGRATION_PACKAGE_KEY, toKey: key, relSlug: "contains" });
+    // Cross-layer: this connected application traces to the IntegrationCredential model.
+    crossLayerRelationships.push({ fromKey: key, toKey: INTEGRATION_CREDENTIAL_MODEL_KEY, relSlug: "traces" });
   }
 
   return {
     elements,
     relationships,
     elementTypeSlugs: ["package", "part_definition"],
-    relTypeSlugs: ["contains"],
+    relTypeSlugs: ["contains", "traces"],
     view: {
       name: "Integrations — Live Projection",
       description: "Live, system-maintained projection of the connected external applications the portal integrates with.",
@@ -70,5 +79,6 @@ export function buildIntegrationModel(integrations: IntegrationFact[]): SysmlDes
       scopeRef: "integration-boundary",
     },
     softRemovePrefix: "integration:",
+    crossLayerRelationships,
   };
 }

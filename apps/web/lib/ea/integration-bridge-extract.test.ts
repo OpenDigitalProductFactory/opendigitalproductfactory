@@ -27,7 +27,14 @@ describe("buildIntegrationModel", () => {
 
   it("declares rule-valid types and a soft-remove prefix", () => {
     expect(model.elementTypeSlugs).toEqual(["package", "part_definition"]);
-    expect(model.relTypeSlugs).toEqual(["contains"]);
+    expect(model.relTypeSlugs).toEqual(["contains", "traces"]);
     expect(model.softRemovePrefix).toBe("integration:");
+  });
+
+  it("traces each connected app to the IntegrationCredential data-model element (cross-layer)", () => {
+    expect(model.crossLayerRelationships).toEqual([
+      { fromKey: "integration:app:adp", toKey: "prisma:model:IntegrationCredential", relSlug: "traces" },
+      { fromKey: "integration:app:qb", toKey: "prisma:model:IntegrationCredential", relSlug: "traces" },
+    ]);
   });
 });
