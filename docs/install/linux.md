@@ -103,12 +103,12 @@ single-tree mode — the current default and fully back-compat.
 2. **`~/.dpf/install-state.json`** — initializes or migrates the install
    state file (schema-versioned). Honors `XDG_STATE_HOME`.
 3. **Compose chain** — assembles `docker-compose.yml` +
-   `docker-compose.linux.yml` + `docker-compose.edge.yml` (+
-   `docker-compose.release.yml` if `--release`). The Edge Node
-   container is bundled by default for single-host installs; pass
-   `--no-edge` to skip it for Authority-only deployments (cloud,
-   headless installs where Edge Nodes will be added later from
-   separate hosts).
+   `docker-compose.linux.yml` (+ `docker-compose.release.yml` if
+   `--release`). The Edge Node is **opt-in**: pass `--with-edge` to
+   also bundle a local `docker-compose.edge.yml` node for network
+   discovery from this host. By default no Edge Node is installed —
+   map a network from another machine instead via Admin > Platform
+   Development > Edge Nodes.
 4. **Docker Engine** — installs via distro pkg manager if missing
    (Docker's official `apt`/`dnf` repos), runs `systemctl enable --now
    docker`, adds your user to the `docker` group.
@@ -126,7 +126,7 @@ single-tree mode — the current default and fully back-compat.
     and the matching Prometheus scrape config).
 11. **Health check** — polls `http://localhost:3000/api/health` for up
     to 5 minutes (configurable via `DPF_HEALTH_TIMEOUT`).
-12. **Edge Node bootstrap** (unless `--no-edge`) — mints a single-use
+12. **Edge Node bootstrap** (only with `--with-edge`) — mints a single-use
     auto-approve bootstrap token via
     `apps/web/scripts/issue-edge-bootstrap-token.ts --auto-approve`,
     writes it to `.env` as `DPF_BOOTSTRAP_TOKEN`, restarts the

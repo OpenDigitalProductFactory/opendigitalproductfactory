@@ -89,6 +89,26 @@ export function buildSandboxGitCleanCommand(workspace: string = WORKSPACE): stri
   return `cd ${workspace} && git reset --hard HEAD && git clean -fd -- ${SANDBOX_GIT_CLEAN_EXCLUDES.map(quoteGitPathspec).join(" ")}`;
 }
 
+/**
+ * Preserve a prior build's uncommitted source on ITS OWN branch before the
+ * shared /workspace tree is scrubbed for the next build. Acts ONLY when a
+ * `build/*` branch is checked out (never client/<id> or a baseline), and only
+ * when there are stage-able source changes. Without this, a build whose
+ * generated code had not yet been committed — the agentic loop crashed, or the
+ * next build's startBuildBranch ran mid-flight — lost that work to the
+ * `git clean -fd` scrub below. That was the dominant data-loss path behind
+ * builds stranding with no code (BI-98B723C0). Generated/cache artifacts are
+ * excluded via buildSandboxGitAddCommand's pathspecs, so only real source is
+ * committed; the commit is best-effort (`|| true`) so a no-op never blocks the
+ * build start.
+ */
+export function buildSandboxCommitInFlightWorkCommand(workspace: string = WORKSPACE): string {
+  return [
+    `cd ${workspace}`,
+    `if git rev-parse --abbrev-ref HEAD 2>/dev/null | grep -q '^build/'; then ${buildSandboxGitAddCommand()}; if ! git diff --cached --quiet --exit-code; then git commit -m 'wip: preserve in-flight build work before branch switch' >/dev/null 2>&1 || true; fi; fi`,
+  ].join(" && ");
+}
+
 export function buildSandboxGitPruneTrackedArtifactsCommand(): string {
   const cacheFindExpr = SANDBOX_TRACKED_CACHE_FIND_PATHS
     .map((pattern) => `-path '${pattern}'`)
@@ -453,7 +473,19 @@ export async function startBuildBranch(buildId: string): Promise<SandboxSourceCu
     }
   }
 
-  // Scrub any uncommitted leakage from a prior build before switching branches.
+  // FIRST preserve the currently-checked-out build branch's uncommitted source
+  // by committing it to that branch — otherwise the scrub below destroys a prior
+  // build's not-yet-committed work (BI-98B723C0: the dominant loss path that left
+  // stranded builds, e.g. FB-69231490, with no code). No-op unless a build/*
+  // branch with real source changes is checked out.
+  await execSandboxGit(
+    buildSandboxCommitInFlightWorkCommand(),
+  ).catch((err) => {
+    console.warn(`[build-branch] in-flight commit-before-switch skipped (non-fatal): ${(err as Error).message?.slice(0, 200)}`);
+  });
+
+  // Then scrub any remaining uncommitted leakage from a prior build before
+  // switching branches.
   //
   // Without this, a previous build's working-tree changes (not yet committed —
   // e.g. because deploy_feature never ran, or the run crashed) bleed into

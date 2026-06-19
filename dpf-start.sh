@@ -39,9 +39,11 @@ Flags:
                   overlay). Default if install-state.json records release
                   mode; otherwise dev.
   --dev           Force dev mode (build images locally).
-  --no-edge       Skip bringing up the Edge Node container. Default is
-                  to include it (matches install-dpf.sh's default
-                  bundling). Honors DPF_INCLUDE_EDGE=0 from the env.
+  --with-edge     Bring up the local Edge Node overlay (network discovery
+                  from this host). Opt-in; off unless this install enabled
+                  it. Honors DPF_INCLUDE_EDGE=1 from the env.
+  --no-edge       Force-skip the local Edge Node overlay even if this
+                  install enabled it. Honors DPF_INCLUDE_EDGE=0.
   --no-browser    Don't try to open the portal in a browser after start.
   --dry-run       Print the planned compose command without running it.
   -h, --help      Show this help.
@@ -59,6 +61,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --release)     DPF_MODE="release" ;;
     --dev)         DPF_MODE="dev" ;;
+    --with-edge)   DPF_INCLUDE_EDGE=1 ;;
     --no-edge)     DPF_INCLUDE_EDGE=0 ;;
     --no-browser)  DPF_NO_BROWSER=1 ;;
     --dry-run)     DPF_DRY_RUN=1 ;;
@@ -72,10 +75,12 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-# Export so dpf_compose_files picks it up. The compose helper defaults
-# to including the edge overlay; --no-edge or a pre-set
-# DPF_INCLUDE_EDGE=0 in the environment turns it off.
-export DPF_INCLUDE_EDGE="${DPF_INCLUDE_EDGE:-1}"
+# Resolve the Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology
+# design §5). Precedence: explicit --with-edge/--no-edge or DPF_INCLUDE_EDGE
+# env > recorded install-state.json choice > grandfather a pre-flip install
+# that already has a bundled node > default OFF. Export so dpf_compose_files
+# includes the edge overlay only when this install enabled it.
+export DPF_INCLUDE_EDGE="$(dpf_resolve_edge_enabled "$REPO_ROOT")"
 
 cd "$REPO_ROOT"
 dpf_platform
