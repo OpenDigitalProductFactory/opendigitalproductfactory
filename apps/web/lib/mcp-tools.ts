@@ -10380,23 +10380,6 @@ export async function executeTool(
       const diff = (build.diffPatch ?? "") as string;
       if (!diff.trim()) return { success: false, error: "No diff available.", message: "Run deploy_feature first to extract the diff." };
 
-      // Private-paths boundary (Phase 1 of Private/Public Change Segregation):
-      // local records keep the full diff, but any OUTBOUND PR diff must never
-      // carry a path the operator marked proprietary. The `.dpf/private-paths`
-      // manifest ships empty → no-op until opted in. Spec:
-      // docs/superpowers/specs/2026-06-18-private-public-change-segregation-design.md
-      const { loadPrivatePathPatterns: _loadPriv, compilePrivatePathMatcher: _compilePriv, stripPrivatePathsFromDiff: _stripPriv } =
-        await import("@/lib/integrate/private-paths");
-      const shareableDiff = _stripPriv(diff, _compilePriv(await _loadPriv())).kept;
-      if (!shareableDiff.trim()) {
-        return {
-          success: false,
-          error: "Only private paths.",
-          message:
-            "This change only affects parts of your system you've marked private (see .dpf/private-paths or Admin > Platform Development), so there is nothing to share upstream.",
-        };
-      }
-
       const { buildSandboxStateFromRecord, assertSandboxReadyForPromotion, serializePlanDocument } = await import("@/lib/build/sandbox-state");
       const sandboxState = buildSandboxStateFromRecord({
         buildBranch: build.buildBranch,
@@ -10449,6 +10432,39 @@ export async function executeTool(
 
       if (!repoOwner || !repoName) {
         return { success: false, error: "Cannot determine repository.", message: "No git remote or upstream URL configured." };
+      }
+
+      // Public-egress boundary (Private/Public Change Segregation): the
+      // private/public filter applies ONLY when shipping to the PUBLIC hive. A
+      // PR to the install's OWN repo is its private home and keeps the full
+      // diff (proprietary paths included). This also closes the silent
+      // fall-back-to-public leak — a customer's proprietary build never goes to
+      // the canonical upstream unless that IS the configured target. Spec:
+      // docs/superpowers/specs/2026-06-19-hive-contribution-architecture-and-egress-model.md
+      let shareableDiff = diff;
+      {
+        const _egCfg = await prisma.platformDevConfig.findUnique({
+          where: { id: "singleton" },
+          select: { upstreamRemoteUrl: true },
+        });
+        const { classifyEgress } = await import("@/lib/integrate/contribution-egress");
+        const egress = classifyEgress({ owner: repoOwner, repo: repoName }, _egCfg?.upstreamRemoteUrl);
+        if (egress === "public-hive") {
+          const { loadPrivatePathPatterns, compilePrivatePathMatcher, stripPrivatePathsFromDiff } =
+            await import("@/lib/integrate/private-paths");
+          shareableDiff = stripPrivatePathsFromDiff(
+            diff,
+            compilePrivatePathMatcher(await loadPrivatePathPatterns()),
+          ).kept;
+          if (!shareableDiff.trim()) {
+            return {
+              success: false,
+              error: "Only private paths.",
+              message:
+                "This change only affects parts of your system you've marked private (see .dpf/private-paths or Admin > Platform Development), so there is nothing to share upstream.",
+            };
+          }
+        }
       }
 
       // Resolve token
