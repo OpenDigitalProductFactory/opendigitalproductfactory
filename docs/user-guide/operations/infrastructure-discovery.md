@@ -120,6 +120,19 @@ The Grafana instance at port 3002 provides complementary monitoring views:
 - **Host Network I/O** -- Network traffic across physical interfaces
 - **Active Alerts** -- Firing Prometheus alerts including the HostNetworkInterfaceDown rule
 
+### Edge node fleet metrics — push, not scrape
+
+The discovery and dashboards above describe the **Authority Core's own** monitoring — Prometheus
+scrapes targets it can reach on the platform host. **Edge nodes are different: they are never scrape
+targets.** A remote edge node has no inbound port; it *pushes* health and interface metrics outbound
+to `/api/v1/edge/metrics`, the Authority persists and aggregates them, and Prometheus/Grafana then
+visualize that **accepted, scoped** data. Authority-side Prometheus must not require inbound scrape
+access to a remote customer-site node, and metric labels stay low-cardinality (scope ids, node id,
+capability, trust state, version family) — raw identifiers (MACs, hostnames, SSIDs, VLANs) live in
+inventory tables, not labels. See [edge-node security & sovereignty](../../edge-node/security-and-sovereignty.md)
+and [fleet operations](../../edge-node/fleet-operations.md); design rationale in
+[topology spec §8A.4](../../superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md).
+
 ## OSI Layer Model
 
 The graph organizes infrastructure entities by OSI layer. This is additive -- you can start with just L3 (hosts) and L7 (services) and add L1-L2 details as network monitoring matures.
