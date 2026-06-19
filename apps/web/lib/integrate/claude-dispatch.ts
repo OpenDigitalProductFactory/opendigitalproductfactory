@@ -15,6 +15,7 @@ import type { AssignedTask } from "./task-dependency-graph";
 import type { SpecialistRole } from "./task-dependency-graph";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { resolveBuildWorkdir } from "./sandbox/build-branch";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -159,6 +160,9 @@ export async function dispatchClaudeTask(params: {
   const model = params.model ?? "sonnet";
   const sessionId = params.sessionId;
   const role = task.specialist;
+  // Per-build working dir: the build's worktree when isolation is ON, else
+  // /workspace (default — byte-identical). Container ops stay container-rooted.
+  const workdir = resolveBuildWorkdir(params.buildId);
 
   // Resolve auth credentials (OAuth for Max Plan, or API key for per-token billing)
   let auth: ClaudeAuth;
@@ -250,7 +254,7 @@ export async function dispatchClaudeTask(params: {
     const runnerScript = `/tmp/claude-run-${taskSlug}.sh`;
     const script = [
       "#!/bin/sh",
-      "cd /workspace",
+      `cd ${workdir}`,
       authExportLine,
       `exec claude ${bareFlag}${sessionFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < ${promptFile}`,
     ].join("\n");
