@@ -38,6 +38,23 @@ type PlanDispatchOutcome =
   | { kind: "dispatched-success"; taskCount: number; durationMs: number }
   | { kind: "dispatched-failure"; error: string; durationMs: number };
 
+/** A plan-review blocking issue fed back into a revision round (BI-99B06AD1). */
+export type PlanReviewIssue = { severity: string; description: string };
+
+/**
+ * Format prior plan-review issues into a revision instruction (BI-99B06AD1).
+ * Pure + unit-tested. Returns "" when there are no issues so the prompt is
+ * unchanged on the first generation round.
+ */
+export function formatPlanReviewFeedback(issues: ReadonlyArray<PlanReviewIssue>): string {
+  if (!issues || issues.length === 0) return "";
+  const lines = issues
+    .slice(0, 20)
+    .map((i) => `- [${i.severity}] ${i.description}`)
+    .join("\n");
+  return `\nThis is a REVISION. Your previous plan was REJECTED by review for these blocking issues — the revised plan MUST resolve every one of them:\n${lines}\n`;
+}
+
 /** Build the plan-generation prompt from the design doc. */
 function buildPlanGenerationPrompt(params: {
   title: string;
@@ -45,8 +62,9 @@ function buildPlanGenerationPrompt(params: {
   biTitle: string | null;
   biBody: string | null;
   verifiedPaths?: string[];  // actual paths confirmed to exist in the codebase
+  priorReviewIssues?: ReadonlyArray<PlanReviewIssue>; // BI-99B06AD1: revision feedback
 }): string {
-  const { title, designDoc, biTitle, biBody, verifiedPaths } = params;
+  const { title, designDoc, biTitle, biBody, verifiedPaths, priorReviewIssues } = params;
   const dd = designDoc as {
     problemStatement?: string;
     dataModel?: string;
@@ -66,7 +84,7 @@ function buildPlanGenerationPrompt(params: {
 
 FEATURE: ${title}
 ${biTitle ? `BACKLOG ITEM: ${biTitle}` : ""}
-
+${formatPlanReviewFeedback(priorReviewIssues ?? [])}
 APPROVED DESIGN DOCUMENT:
 Problem: ${dd.problemStatement ?? "See BI body"}
 Data Model: ${dd.dataModel ?? "None"}
@@ -152,6 +170,81 @@ export function parsePlanJson(
   }
   // 3. Raw.
   return tryParse(output);
+}
+
+/**
+ * Generate + parse + validate + normalize a plan via portal inference, with the
+ * existing bounded JSON-parse retry. `priorReviewIssues` (BI-99B06AD1) feeds a
+ * failed review's blocking issues back so the model produces a REVISED plan that
+ * resolves them. Returns the normalized plan or a human-readable error.
+ */
+async function generateNormalizedPlan(args: {
+  title: string;
+  designDoc: Record<string, unknown>;
+  biTitle: string | null;
+  biBody: string | null;
+  verifiedPaths: string[];
+  priorReviewIssues?: ReadonlyArray<PlanReviewIssue>;
+  log: (summary: string) => Promise<void>;
+}): Promise<{ plan: { fileStructure?: unknown[]; tasks?: unknown[] } } | { error: string }> {
+  const { routeAndCall } = await import("@/lib/inference/routed-inference");
+  const prompt = buildPlanGenerationPrompt({
+    title: args.title,
+    designDoc: args.designDoc,
+    biTitle: args.biTitle,
+    biBody: args.biBody,
+    verifiedPaths: args.verifiedPaths,
+    priorReviewIssues: args.priorReviewIssues,
+  });
+
+  const PLAN_GEN_MAX_ATTEMPTS = 2;
+  let planObj: { fileStructure?: unknown[]; tasks?: unknown[] } | null = null;
+  for (let attempt = 1; attempt <= PLAN_GEN_MAX_ATTEMPTS && !planObj; attempt++) {
+    const systemPrompt =
+      attempt === 1
+        ? "You are a senior software engineer creating a precise, actionable implementation plan. Respond with ONLY valid JSON."
+        : "Your previous response was not valid JSON — it was likely truncated mid-array or wrapped in prose. Respond with ONLY the COMPLETE, valid JSON object (both the fileStructure and tasks arrays fully closed). No prose, no markdown fences.";
+    const response = await routeAndCall(
+      [{ role: "user" as const, content: prompt }],
+      systemPrompt,
+      "internal",
+      { budgetClass: "quality_first" },
+    );
+    planObj = parsePlanJson(response.content);
+    if (!planObj) {
+      await args.log(
+        `Plan generation attempt ${attempt}/${PLAN_GEN_MAX_ATTEMPTS} returned unparseable JSON` +
+          (attempt < PLAN_GEN_MAX_ATTEMPTS ? " — retrying" : ""),
+      );
+    }
+  }
+
+  if (!planObj) return { error: `Plan generation returned unparseable JSON after ${PLAN_GEN_MAX_ATTEMPTS} attempts` };
+  if (!Array.isArray(planObj.fileStructure) || !Array.isArray(planObj.tasks)) return { error: "Plan JSON missing fileStructure or tasks arrays" };
+  if (planObj.tasks.length === 0) return { error: "Plan generation returned 0 tasks" };
+
+  const normalized = normalizeBuildPlanPaths(planObj as Parameters<typeof normalizeBuildPlanPaths>[0]);
+  return { plan: normalized.plan };
+}
+
+/** Read the persisted planReview decision + issues after a reviewBuildPlan run. */
+async function readPlanReview(buildId: string): Promise<{ decision: string; issues: PlanReviewIssue[] } | null> {
+  const row = await prisma.featureBuild.findUnique({ where: { buildId }, select: { planReview: true } }).catch(() => null);
+  const pr = row?.planReview as { decision?: string; issues?: PlanReviewIssue[] } | null;
+  if (!pr || typeof pr.decision !== "string") return null;
+  return { decision: pr.decision, issues: Array.isArray(pr.issues) ? pr.issues : [] };
+}
+
+/** Run reviewBuildPlan (dual reviewers + gate + auto-advance-on-pass) for a build. */
+async function runPlanReview(buildId: string, userId: string, log: (s: string) => Promise<void>): Promise<void> {
+  try {
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const reviewResult = await executeTool("reviewBuildPlan", { buildId }, userId, { featureBuildId: buildId });
+    const reviewSummary = typeof reviewResult.message === "string" ? reviewResult.message.slice(0, 200) : "review complete";
+    await log(`Auto-reviewBuildPlan: ${reviewSummary}`);
+  } catch (reviewErr) {
+    await log(`Auto-reviewBuildPlan failed (plan still saved): ${String(reviewErr).slice(0, 200)}`);
+  }
 }
 
 /**
@@ -251,99 +344,73 @@ export async function dispatchPlanForApprovedBuild(params: {
 
     await log("Dispatching plan generation via portal inference");
 
-    // 3. Generate plan via portal-side LLM (no CLI needed for plan generation).
-    const { routeAndCall } = await import("@/lib/inference/routed-inference");
-    const prompt = buildPlanGenerationPrompt({
+    // 3-7. Generate the initial plan (helper handles parse-retry + validate + normalize).
+    const gen = await generateNormalizedPlan({
       title: build.title,
       designDoc: build.designDoc as Record<string, unknown>,
       biTitle,
       biBody,
       verifiedPaths,
+      log,
     });
-
-    // 4. Generate + parse with a bounded retry. A single bare JSON.parse used to
-    //    silently stall the build in `plan` whenever the model wrapped the JSON
-    //    in prose or truncated a large plan mid-array. parsePlanJson handles the
-    //    wrapping; the retry recovers truncation with a fresh, complete response
-    //    (and an explicit corrective instruction on the second attempt).
-    const PLAN_GEN_MAX_ATTEMPTS = 2;
-    let planObj: { fileStructure?: unknown[]; tasks?: unknown[] } | null = null;
-    for (let attempt = 1; attempt <= PLAN_GEN_MAX_ATTEMPTS && !planObj; attempt++) {
-      const systemPrompt =
-        attempt === 1
-          ? "You are a senior software engineer creating a precise, actionable implementation plan. Respond with ONLY valid JSON."
-          : "Your previous response was not valid JSON — it was likely truncated mid-array or wrapped in prose. Respond with ONLY the COMPLETE, valid JSON object (both the fileStructure and tasks arrays fully closed). No prose, no markdown fences.";
-      const response = await routeAndCall(
-        [{ role: "user" as const, content: prompt }],
-        systemPrompt,
-        "internal",
-        { budgetClass: "quality_first" },
-      );
-      planObj = parsePlanJson(response.content);
-      if (!planObj) {
-        await log(
-          `Plan generation attempt ${attempt}/${PLAN_GEN_MAX_ATTEMPTS} returned unparseable JSON` +
-            (attempt < PLAN_GEN_MAX_ATTEMPTS ? " — retrying" : ""),
-        );
-      }
+    if ("error" in gen) {
+      await log(gen.error);
+      return { kind: "dispatched-failure", error: gen.error, durationMs: Date.now() - t0 };
     }
-
-    if (!planObj) {
-      const msg = `Plan generation returned unparseable JSON after ${PLAN_GEN_MAX_ATTEMPTS} attempts`;
-      await log(msg);
-      return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
-    }
-
-    // 5. Validate structure.
-    if (!Array.isArray(planObj.fileStructure) || !Array.isArray(planObj.tasks)) {
-      const msg = "Plan JSON missing fileStructure or tasks arrays";
-      await log(msg);
-      return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
-    }
-    if (planObj.tasks.length === 0) {
-      const msg = "Plan generation returned 0 tasks";
-      await log(msg);
-      return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
-    }
-
-    // 6. Normalize paths (monorepo-relative guard).
-    const normalized = normalizeBuildPlanPaths(planObj as Parameters<typeof normalizeBuildPlanPaths>[0]);
-
-    // 7. Persist as buildPlan evidence.
+    let plan = gen.plan;
     await prisma.featureBuild.update({
       where: { buildId },
-      data: {
-        buildPlan: normalized.plan as unknown as import("@dpf/db").Prisma.InputJsonValue,
-        updatedAt: new Date(),
-      },
+      data: { buildPlan: plan as unknown as import("@dpf/db").Prisma.InputJsonValue, updatedAt: new Date() },
     });
-    await log(`Plan generated: ${normalized.plan.tasks?.length ?? 0} tasks across ${normalized.plan.fileStructure?.length ?? 0} files`);
+    await log(`Plan generated: ${plan.tasks?.length ?? 0} tasks across ${plan.fileStructure?.length ?? 0} files`);
 
-    // 8. Auto-reviewBuildPlan — this already handles: dual reviewers, gate check,
-    //    and auto-advance plan→build if the plan passes. We call it directly through
-    //    the MCP executeTool path so the full reviewer + deliberation pipeline runs.
-    //    We pass a synthetic context with a stable system thread ID for event bus routing.
-    try {
-      const { executeTool } = await import("@/lib/mcp-tools");
-      const reviewResult = await executeTool(
-        "reviewBuildPlan",
-        { buildId },
-        userId,
-        { featureBuildId: buildId }, // routes to correct build
-      );
-      const reviewSummary = typeof reviewResult.message === "string"
-        ? reviewResult.message.slice(0, 200)
-        : "review complete";
-      await log(`Auto-reviewBuildPlan: ${reviewSummary}`);
-    } catch (reviewErr) {
-      // reviewBuildPlan failure is non-fatal for the dispatch — the plan is saved
-      // and the reviewer can be re-run manually from the build chat.
-      await log(`Auto-reviewBuildPlan failed (plan still saved): ${String(reviewErr).slice(0, 200)}`);
+    // 8. Review the plan (dual reviewers; auto-advances plan→build on pass).
+    await runPlanReview(buildId, userId, log);
+
+    // 9. BI-99B06AD1 — verification→fix loop. If the review FAILED, don't leave the
+    //    build stuck with a rejected plan (which then resume-restalls forever — the
+    //    live root cause of WIP-jamming stranded builds). Feed the reviewer's
+    //    blocking issues back into a bounded plan REVISION, re-review, and escalate
+    //    to a human if it still can't pass — instead of churning indefinitely.
+    const PLAN_FIX_MAX_ROUNDS = Number(process.env.PLAN_FIX_MAX_ROUNDS) || 2;
+    let review = await readPlanReview(buildId);
+    let round = 0;
+    while (review?.decision === "fail" && round < PLAN_FIX_MAX_ROUNDS) {
+      round++;
+      await log(`Plan review failed — revising (round ${round}/${PLAN_FIX_MAX_ROUNDS}) against ${review.issues.length} blocking issue(s)`);
+      const revised = await generateNormalizedPlan({
+        title: build.title,
+        designDoc: build.designDoc as Record<string, unknown>,
+        biTitle,
+        biBody,
+        verifiedPaths,
+        priorReviewIssues: review.issues,
+        log,
+      });
+      if ("error" in revised) {
+        await log(`Plan revision round ${round} failed: ${revised.error}`);
+        break;
+      }
+      plan = revised.plan;
+      await prisma.featureBuild.update({
+        where: { buildId },
+        data: { buildPlan: plan as unknown as import("@dpf/db").Prisma.InputJsonValue, updatedAt: new Date() },
+      });
+      await log(`Revised plan: ${plan.tasks?.length ?? 0} tasks across ${plan.fileStructure?.length ?? 0} files`);
+      await runPlanReview(buildId, userId, log);
+      review = await readPlanReview(buildId);
+    }
+
+    if (review?.decision === "fail") {
+      // Bounded revisions exhausted — surface for human attention instead of an
+      // endless resume-restall churn. Full needs-human escalation (notify + WIP
+      // free + re-queue) is BI-3E0EE3BA; this is the honest stop + signal.
+      await log(`Plan review still failing after ${round} revision round(s) — needs human attention (escalation: BI-3E0EE3BA).`);
     }
 
     return {
       kind: "dispatched-success",
-      taskCount: normalized.plan.tasks?.length ?? 0,
+      taskCount: plan.tasks?.length ?? 0,
       durationMs: Date.now() - t0,
     };
   } catch (err) {
