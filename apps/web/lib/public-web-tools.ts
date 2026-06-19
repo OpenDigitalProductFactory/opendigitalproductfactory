@@ -65,7 +65,7 @@ function extractTextExcerpt(html: string): string | null {
     // can't sneak script content past the strip.
     .replace(/<script[\s\S]*?<\/script[^>]*>/gi, " ")
     .replace(/<style[\s\S]*?<\/style[^>]*>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
+    .replace(/<[^<>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   return stripped.length > 0 ? stripped.slice(0, 500) : null;
@@ -306,7 +306,7 @@ function extractContactEmails(html: string): string[] {
     // can't sneak script content past the strip.
     .replace(/<script[\s\S]*?<\/script[^>]*>/gi, " ")
     .replace(/<style[\s\S]*?<\/style[^>]*>/gi, " ")
-    .replace(/<[^>]+>/g, " ");
+    .replace(/<[^<>]+>/g, " ");
   const textMatches = stripped.matchAll(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Z]{2,}\b/gi);
   for (const m of textMatches) {
     add(m[0], false);
@@ -350,7 +350,7 @@ function extractContactPhones(html: string): string[] {
     // can't sneak script content past the strip.
     .replace(/<script[\s\S]*?<\/script[^>]*>/gi, " ")
     .replace(/<style[\s\S]*?<\/style[^>]*>/gi, " ")
-    .replace(/<[^>]+>/g, " ");
+    .replace(/<[^<>]+>/g, " ");
   for (const { pattern } of PHONE_PATTERNS) {
     const match = stripped.match(pattern);
     if (match?.[0]) add(match[0], false);

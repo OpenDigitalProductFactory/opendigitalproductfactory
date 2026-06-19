@@ -15,7 +15,7 @@
 // Strip HTML/markup and normalise to scoreable prose.
 export function toProse(s) {
   return String(s)
-    .replace(/<[^>]+>/g, " ") // tags
+    .replace(/<[^<>]+>/g, " ") // tags (inner class excludes `<` → linear, no ReDoS)
     .replace(/&[a-z]+;|&#\d+;/gi, " ") // entities
     .replace(/[—–]/g, " ") // em/en dash → space (keeps the long sentence long)
     .replace(/[`*_>#]/g, " ") // stray markdown

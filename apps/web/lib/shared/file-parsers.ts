@@ -84,7 +84,7 @@ export async function parseDocx(buffer: Buffer): Promise<ParsedFileContent> {
     let prev = "";
     while (heading !== prev) {
       prev = heading;
-      heading = heading.replace(/<[^>]*>/g, "");
+      heading = heading.replace(/<[^<>]*>/g, "");
     }
     sections.push({ heading, text: "" });
   }
