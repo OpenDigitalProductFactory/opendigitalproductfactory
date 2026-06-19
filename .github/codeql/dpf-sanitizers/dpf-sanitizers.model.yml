@@ -1,5 +1,14 @@
 # DPF security-helper sanitiser declarations.
 #
+# SCOPE — local CodeQL CLI only. These rows take effect when you run
+# `codeql database analyze --additional-packs .github/codeql/dpf-sanitizers
+# --model-packs dpf/sanitizers`. They do NOT take effect in GitHub code
+# scanning: a repo-local pack can't be referenced from `packs:`, and code
+# scanning doesn't honour JS/TS model packs at all. JS/TS false positives in
+# code scanning are dismissed-with-justification instead. Any "Closes alert
+# #NNN" note below describes the local-CLI effect; the corresponding Security-
+# tab alert is resolved by dismissal. See docs/security/codeql-advanced-setup.md.
+#
 # Each entry below tells CodeQL "this function takes a tainted value
 # and returns a sanitised one." The taint flow through the function is
 # broken, so callers stop seeing false-positive alerts for js/request-

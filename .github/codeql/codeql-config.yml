@@ -1,10 +1,5 @@
 # CodeQL configuration for DPF — referenced from .github/workflows/codeql.yml.
 #
-# The dpf/sanitizers model pack (under .github/codeql/dpf-sanitizers/) declares
-# our security helpers as canonical sanitisers, so CodeQL stops flagging every
-# caller of assertSafeOutboundUrl / assertAllowedBinary / etc. as a tainted-
-# flow false positive.
-#
 # Documented in: docs/security/codeql-advanced-setup.md
 
 name: "DPF CodeQL Config"
@@ -15,14 +10,29 @@ name: "DPF CodeQL Config"
 queries:
   - uses: security-extended
 
-# Load our custom data-extensions model pack so the JS sanitiser
-# declarations apply at scan time.
+# NOTE — intentionally NO `packs:` entry for our sanitiser model pack.
 #
-# IMPORTANT — path-based packs must be in the flat list form. The
-# per-language map form (`packs: { javascript: [...] }`) is only for
-# *published* registry packs; path entries are silently rejected with
-# "Invalid CodeQL pack specification" and the pack is ignored. The pack
-# itself declares its target language via `extensionTargets:` in
-# `.github/codeql/dpf-sanitizers/qlpack.yml`.
-packs:
-  - ./.github/codeql/dpf-sanitizers
+# Two independent walls make a repo-local JS/TS model pack unusable in GitHub
+# code scanning, so loading one here is impossible regardless of syntax:
+#
+#   1. The `packs:` key only accepts *published* packs (scope/name@version).
+#      A repository path like `./.github/codeql/dpf-sanitizers` is rejected at
+#      scan time — the analyze log shows:
+#        "WARNING: Invalid CodeQL pack specification: './.github/codeql/
+#         dpf-sanitizers'. Ignoring."
+#      …and the pack is silently dropped (it never breaks taint flow).
+#
+#   2. Even a *published* model pack would not help here: GitHub code scanning
+#      honours data-extension model packs only for C/C++, C#, Java/Kotlin,
+#      Python, Ruby, and Rust. JavaScript/TypeScript is excluded.
+#      Ref: https://docs.github.com/en/code-security/reference/code-scanning/workflow-configuration-options
+#
+# The model pack under .github/codeql/dpf-sanitizers/ is therefore retained ONLY
+# for local CodeQL CLI runs, where data extensions DO apply:
+#   codeql database analyze db \
+#     --additional-packs .github/codeql/dpf-sanitizers --model-packs dpf/sanitizers ...
+#
+# JS/TS false positives on DPF's security helpers (sanitizeForLog,
+# prepareMediaBlobContentForStorage, assertSafeOutboundUrl, assertAllowedBinary,
+# …) are dispositioned by *dismissal with justification* in the Security tab —
+# the documented fallback. See docs/security/codeql-advanced-setup.md.
