@@ -12,7 +12,11 @@ vi.mock("@dpf/db", () => ({
     quiescenceRun: { findMany: (...a: unknown[]) => quiescenceFindManyMock(...a) },
     // Reached only past the flag check; default-empty so the handler short-circuits.
     buildStudioStallThreshold: { findMany: vi.fn().mockResolvedValue([]) },
-    taskRun: { findMany: vi.fn().mockResolvedValue([]) },
+    taskRun: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+    // BI-8F45BA74 inert-build reaper runs every tick before the flag check;
+    // no candidates → no-op (returns 0).
+    featureBuild: { findMany: vi.fn().mockResolvedValue([]) },
+    buildActivity: { count: vi.fn().mockResolvedValue(0) },
   },
 }));
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
