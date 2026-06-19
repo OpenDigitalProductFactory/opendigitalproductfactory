@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildDispatchAttemptData,
   classifyDispatchFailureAxis,
+  isUsageLimitDispatchOutput,
   lineMatchesFailureAxis,
   recomputeRootCauseSummary,
   recordBuildDispatchAttempt,
@@ -24,6 +25,23 @@ beforeEach(() => {
   prismaMock.buildDispatchAttempt.count.mockReset();
   prismaMock.buildDispatchAttempt.create.mockReset();
   prismaMock.buildDispatchAttempt.findMany.mockReset();
+});
+
+describe("isUsageLimitDispatchOutput (BI-F72C1044 fast-abort)", () => {
+  it("detects the live Codex usage-limit message", () => {
+    expect(
+      isUsageLimitDispatchOutput("ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage"),
+    ).toBe(true);
+  });
+  it("is false for an ordinary failure (so we don't abort the build for the wrong reason)", () => {
+    expect(isUsageLimitDispatchOutput("TypeError: cannot read property 'x' of undefined")).toBe(false);
+    expect(isUsageLimitDispatchOutput("rate limit exceeded")).toBe(false); // rate-limit ≠ usage-limit
+  });
+  it("is false for empty/missing output", () => {
+    expect(isUsageLimitDispatchOutput("")).toBe(false);
+    expect(isUsageLimitDispatchOutput(null)).toBe(false);
+    expect(isUsageLimitDispatchOutput(undefined)).toBe(false);
+  });
 });
 
 describe("classifyDispatchFailureAxis", () => {
