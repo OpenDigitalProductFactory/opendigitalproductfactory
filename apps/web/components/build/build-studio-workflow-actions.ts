@@ -239,9 +239,33 @@ function getImplementationConcernState(
   const verification = normalizeVerificationOutput(build.verificationOut);
   const nonCleanTasks = taskResults.tasks.filter((task) => task.outcome !== "DONE");
   const explicitFailureAxis = explicitFailureAxisOrNull(build.verificationOut);
+
+  // Mirror checkPhaseGate's verification policy in the ACTION layer: typecheck is
+  // the only hard verification gate; test failures are ADVISORY unless they land
+  // in the build's own changed surface. A build whose SCOPED surface is clean
+  // (typecheck passed + no in-scope affected-test failures) must not be forced
+  // back to "Resume Implementation" by out-of-scope / whole-repo suite noise —
+  // the same global-failure noise the scoped gate already neutralizes
+  // (BI-4890FDC3). Without a scoped projection we cannot prove cleanliness, so we
+  // preserve the legacy (stricter) behavior.
+  const scoped = progressVisibility?.verification?.buildScoped ?? null;
+  const scopedSurfaceClean =
+    scoped != null
+    && scoped.typecheckPassed !== false
+    && (scoped.affectedTests?.length ?? 0) === 0;
+
   const verificationFailed =
     verification.typecheckPassed === false
-    || explicitFailureAxis != null;
+    || (explicitFailureAxis != null && !scopedSurfaceClean);
+
+  // When the scoped surface is clean, a task that merely COMPLETED WITH CONCERNS
+  // (e.g. a verification task that ran the whole-repo suite and reported
+  // out-of-scope failures) is advisory, not a blocker. Genuinely blocked or
+  // incomplete tasks still count as a recoverable concern.
+  const blockingNonCleanTasks = scopedSurfaceClean
+    ? nonCleanTasks.filter((task) => task.outcome !== "DONE_WITH_CONCERNS")
+    : nonCleanTasks;
+
   const failureAxis =
     progressVisibility?.statusHeading.failureAxis
     ?? deriveFailureAxis(nonCleanTasks, verification, explicitFailureAxis);
@@ -259,7 +283,7 @@ function getImplementationConcernState(
     failureAxis,
     operatorAction: progressVisibility?.statusHeading.operatorAction ?? null,
     resumeMode,
-    hasRecoverableConcern: nonCleanTasks.length > 0 || verificationFailed,
+    hasRecoverableConcern: blockingNonCleanTasks.length > 0 || verificationFailed,
     truthSources: [progressVisibility?.progress.primary ?? taskResults.source],
   };
 }

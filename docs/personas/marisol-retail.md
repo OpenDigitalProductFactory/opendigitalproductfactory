@@ -74,6 +74,21 @@ Related live backlog anchors:
 - `BI-3E8D2CF5` - Vertical workspace home projection service; live status `open`.
 - `BI-4396EFEC` - Dale D38 plan-iteration divergence; live status `triaging`, gating new peer-persona Build Studio sessions.
 
+## Network visibility across locations (edge node fleet)
+
+Marisol's shop is multi-context by nature: two stores plus a back room, each its own small
+network of POS terminals, payment devices, Wi-Fi, and back-office PCs. Retail's edge-node
+topology is therefore **one edge node per location**, each scoped to its store, all reporting to
+one Authority Core (at HQ or in the cloud) — the retail specialization of the base fleet model.
+This keeps each store's network posture (and its PCI/cardholder-data scope) cleanly separated, and
+it is **opt-in**: Marisol's install maps nothing until she chooses to add a node at a location.
+
+This is a deployment consideration for the retail archetype, not a first-feature ask — Marisol's
+day-one need is still the merchandising board. The substrate detail:
+
+- The fleet/topology model and the per-location specialization: [edge-node deployment topology design §7.2](../superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md) and the [operator topology guide](../edge-node/deployment-topology.md).
+- **Substrate gap to file:** retail does not yet have MSP's customer/site scoping wired for a single org; scoping retail edge nodes *by location* needs a site-model audit first (do not assume a new table). Tracked as the retail-fleet BI under EP-EDGE-TOPOLOGY.
+
 ## Source evidence
 
 - Workspace-home anchor: [Vertical Workspace Home design](../superpowers/specs/2026-05-24-vertical-workspace-home-design.md).
