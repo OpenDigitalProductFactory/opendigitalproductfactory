@@ -21,6 +21,7 @@ import { inngest } from "../inngest-client";
 import { decideStall, type WatchdogCandidate, type StallDecision } from "@/lib/observability/watchdog-detect";
 import { buildStallSurface, mergeVerificationPatch } from "@/lib/observability/stall-surface";
 import { isStallWatchdogEnabled } from "@/lib/shared/feature-flags";
+import { reapInertStuckBuilds } from "@/lib/build/inert-build-reaper";
 
 // QUIESCENCE EXEMPTION (BI-QUIESCE-004a + spec §6.1 extension): this
 // function is intentionally NOT wrapped with gateAtEntry. The watchdog
@@ -116,15 +117,28 @@ export const taskrunWatchdog = inngest.createFunction(
     // those returns and so almost never ran — the 4-day Inngest outage.)
     const quiescenceRecovered = await recoverStuckQuiescenceCoordinators(new Date());
 
+    // BI-8F45BA74: reap inert builds (0 activity, stuck non-terminal) every tick,
+    // before any early-return — they jam the WIP cap and block all new builds, so
+    // this must run even when the stall watchdog is flag-off or no thresholds are
+    // seeded. Independent of stall detection (which keys off live TaskRuns).
+    // Best-effort: a reaper error must never abort the tick (quiescence recovery
+    // already ran above; stall detection still follows).
+    let inertBuildsReaped = 0;
+    try {
+      inertBuildsReaped = await reapInertStuckBuilds(new Date());
+    } catch (err) {
+      console.warn("[taskrun-watchdog] inert-build reaper failed:", err);
+    }
+
     if (!(await isStallWatchdogEnabled())) {
-      return { skipped: true, reason: "flag-off", quiescenceRecovered };
+      return { skipped: true, reason: "flag-off", quiescenceRecovered, inertBuildsReaped };
     }
 
     const { prisma } = await import("@dpf/db");
 
     const thresholds = await prisma.buildStudioStallThreshold.findMany();
     if (thresholds.length === 0) {
-      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered };
+      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, inertBuildsReaped };
     }
 
     // Coarse SQL filter using the smallest applicable thresholds across all
@@ -174,7 +188,7 @@ export const taskrunWatchdog = inngest.createFunction(
     }
 
     if (decisions.length === 0) {
-      return { processed: 0, quiescenceRecovered };
+      return { processed: 0, quiescenceRecovered, inertBuildsReaped };
     }
 
     // Batch id-resolution: business taskRunId → cuid id for FK writes.
@@ -307,6 +321,6 @@ export const taskrunWatchdog = inngest.createFunction(
       processed += 1;
     }
 
-    return { processed, quiescenceRecovered };
+    return { processed, quiescenceRecovered, inertBuildsReaped };
   },
 );
