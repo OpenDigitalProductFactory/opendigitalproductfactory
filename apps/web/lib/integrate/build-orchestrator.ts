@@ -1259,6 +1259,21 @@ export async function runBuildOrchestrator(params: {
   // in one build" pattern). Remaining tasks stay pending so a retry after the
   // cap resets re-dispatches them.
   let usageLimitAborted = false;
+  // BI-0F291741: a LOCAL build engine (opencode) runs the model on ONE GPU. The
+  // in-process withLocalInferenceLock (chat-adapter.ts) does NOT cover the
+  // sandbox-CLI path, so two parallel specialists would each spawn a local model
+  // inside the container and collide on the GPU — the "both reviewers timed out"
+  // failure, now in the build phase. Serialize specialist dispatch for a local
+  // engine; cloud subscription CLIs keep concurrency 2 for throughput within
+  // their per-minute caps.
+  let localBuildEngine = false;
+  try {
+    const { getBuildStudioConfig } = await import("@/lib/integrate/build-studio-config");
+    const bsCfg = await getBuildStudioConfig();
+    localBuildEngine = bsCfg.provider === "opencode";
+  } catch {
+    /* default to cloud concurrency if the config read fails */
+  }
   for (const phase of phases) {
     // Timeout check
     if (Date.now() - startTime > MAX_DURATION_ORCHESTRATOR_MS) {
@@ -1288,9 +1303,10 @@ export async function runBuildOrchestrator(params: {
       continue;
     }
 
-    // Dispatch pending tasks with concurrency limit to avoid rate-limiting.
-    // Max 2 concurrent CLI tasks — subscription APIs have per-minute caps.
-    const MAX_CONCURRENT_TASKS = 2;
+    // Dispatch pending tasks with a concurrency limit. Cloud subscription CLIs
+    // allow 2 (per-minute caps); a local engine is serialized to 1 so parallel
+    // specialists don't collide on the single GPU (BI-0F291741).
+    const MAX_CONCURRENT_TASKS = localBuildEngine ? 1 : 2;
     const phaseResults: SpecialistResult[] = [];
     const taskQueue = [...pendingTasks];
 
