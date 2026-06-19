@@ -135,6 +135,17 @@ credentials, status, and reaping are per-node and scope-qualified.
 Archetypes specialize the fleet: retail one node per location, MSP one
 per customer × site (strict estate separation).
 
+**Network & observability boundary.** Remote nodes call home — outbound
+HTTPS to the Authority URL only; the Authority never scrapes or dials
+into a customer LAN. Edge metrics are an authenticated push
+(`/api/v1/edge/metrics`); Prometheus/Grafana (Contract 7) visualize
+accepted, scope-tagged Authority data with bounded label cardinality —
+they are not the edge protocol and never a remote scrape target. Every
+persisted edge-derived record carries authenticated scope; raw
+site-identifying payloads are retained by class and kept out of metric
+labels, dashboards, and long-lived logs (sovereignty per Contract 8 +
+EP-ESTATE-SOVEREIGNTY).
+
 Per `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` and the
 deployment-topology + remote-provisioning design
 `docs/superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md`.
