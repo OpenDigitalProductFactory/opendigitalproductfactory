@@ -5,6 +5,8 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     platformConfig: {
       findMany: vi.fn().mockResolvedValue([]),
+      // loadReadabilityPolicy() reads this key; null → default policy.
+      findUnique: vi.fn().mockResolvedValue(null),
     },
   },
 }));
@@ -19,6 +21,10 @@ vi.mock("@/components/admin/SocialAuthPanel", () => ({
 
 vi.mock("@/components/admin/EmailSettingsPanel", () => ({
   EmailSettingsPanel: () => <div>email-settings-panel</div>,
+}));
+
+vi.mock("@/components/admin/ReadabilityPolicyPanel", () => ({
+  ReadabilityPolicyPanel: () => <div>readability-policy-panel</div>,
 }));
 
 vi.mock("@/components/admin/PlatformKeysPanel", () => ({

@@ -4420,11 +4420,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "run_traversal_pattern",
-    description: "Run a named bounded analysis pattern (e.g. blast_radius, governance_audit, ma_separation) from one or more starting elements. Returns traversal paths and summary.",
+    description: "Run a named bounded analysis pattern (e.g. blast_radius, governance_audit, ma_separation, cross_layer_impact) from one or more starting elements. Returns traversal paths and summary. cross_layer_impact starts from a data-model element and returns the actual operational/network/integration elements that trace to it (the cross-layer blast radius of a data-model change).",
     inputSchema: {
       type: "object",
       properties: {
-        patternSlug:     { type: "string", enum: ["blast_radius", "governance_audit", "architecture_traceability", "ai_oversight", "cost_rollup", "ma_separation", "service_customer_impact"] },
+        patternSlug:     { type: "string", enum: ["blast_radius", "governance_audit", "architecture_traceability", "ai_oversight", "cost_rollup", "ma_separation", "service_customer_impact", "cross_layer_impact"] },
         startElementIds: { type: "array", items: { type: "string" } },
         maxDepth:        { type: "number" },
       },
@@ -11331,7 +11331,7 @@ export async function executeTool(
 
       const devConfig = await prisma.platformDevConfig.findUnique({
         where: { id: "singleton" },
-        select: { contributionMode: true, upstreamRemoteUrl: true, dcoAcceptedAt: true, gitRemoteUrl: true },
+        select: { contributionMode: true, upstreamRemoteUrl: true, dcoAcceptedAt: true, gitRemoteUrl: true, hiveContributionsPaused: true },
       });
       const { getPlatformDevPolicyState } = await import("@/lib/platform-dev-policy");
       const policyState = getPlatformDevPolicyState(devConfig);
@@ -11349,6 +11349,21 @@ export async function executeTool(
           error: "Install is configured for private development only.",
           message:
             "This install is configured to keep shipped features private. Change Platform Development settings if you want Build Studio to create upstream contributions.",
+        };
+      }
+
+      // Master pause overrides every contribution type (see
+      // packages/db/src/hive-contribution-settings.ts — "the master pause overrides
+      // everything"). The source/improvement path must honor it the same way the
+      // device-fingerprint (contribute-fingerprint.ts) and feedback-escalation paths
+      // do; otherwise the Admin "Pause all contributions" toggle silently still ships
+      // PRs upstream. Checked before any PR prerequisite work, like the per-type gate.
+      if (devConfig?.hiveContributionsPaused) {
+        return {
+          success: false,
+          error: "Hive contributions are paused.",
+          message:
+            "All contributions to the community are currently paused (Admin → Platform Development → Hive Contributions). Resume contributions there, then retry.",
         };
       }
 

@@ -64,7 +64,12 @@ const EXCLUDE_RE = /(\.(test|spec|stories)\.(ts|tsx)$|__tests__\/|\.d\.ts$|\/gen
 // Refs reach us from CI env (BASE_SHA) and git output. Pin accepted chars so a
 // forged value cannot smuggle shell metachars or git option flags into execFile.
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
-const PATH_RE = /^[A-Za-z0-9._\-/]+$/;
+// Paths are passed to git as a literal pathspec after `--`, via execFile's arg
+// array (no shell), so `()[]@` are inert here — but they DO occur in real repo
+// paths (Next.js route groups `(shell)`, parallel routes `@slot`, dynamic
+// segments `[id]`). Allow them; the leading-"-" guard below still blocks
+// option-injection. Without this, the gate throws on any (group)/[param] file.
+const PATH_RE = /^[A-Za-z0-9._\-/()[\]@]+$/;
 
 function assertSafeRef(ref, label) {
   if (!REF_RE.test(ref) || ref.startsWith("-")) {

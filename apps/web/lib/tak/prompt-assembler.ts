@@ -10,6 +10,7 @@ import {
 } from "./question-packet";
 import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
 import { DECISION_ROUTING_BLOCK } from "./decision-routing-block";
+import { readingLevelDirective, type ReadingLevel } from "@dpf/validators";
 
 export type PromptInput = {
   hrRole: string;
@@ -50,6 +51,14 @@ export type PromptInput = {
    * authority, tool grants, and mode restrictions remain authoritative.
    */
   questionPacket?: QuestionPacket | null;
+  /**
+   * BI-8F8C5F28: reading-level target for customer-facing copy, resolved from
+   * the platform readability policy (apps/web/lib/readability/policy.ts). When
+   * set (and not "uncapped"), a directive is appended to Block 5 so the coworker
+   * writes external copy at the policy's level. Null/undefined on internal
+   * surfaces where the constraint does not apply.
+   */
+  readingLevel?: ReadingLevel | null;
 };
 
 // ─── Block 1: Identity (static) ─────────────────────────────────────────────
@@ -184,6 +193,14 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
     domainBlock += "\n\nAvailable coworker skills:";
     for (const skill of input.skills) {
       domainBlock += `\n- ${skill.skillId}: ${skill.label} - ${skill.description}`;
+    }
+  }
+  // BI-8F8C5F28: reading-level directive for customer-facing copy (omitted when
+  // the level is "uncapped" or the route is internal — readingLevel is null).
+  if (input.readingLevel) {
+    const directive = readingLevelDirective(input.readingLevel);
+    if (directive) {
+      domainBlock += `\n\n${directive}`;
     }
   }
   dynamicBlocks.push(domainBlock);

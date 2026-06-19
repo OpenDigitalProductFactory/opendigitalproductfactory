@@ -453,4 +453,20 @@ describe("assembleSystemPrompt", () => {
     expect(prompt).toContain("Use this as collaboration context, not as authorization");
     expect(prompt).toContain("- Expected artifact: backlog-item");
   });
+
+  // BI-8F8C5F28: reading-level directive for customer-facing copy.
+  it("injects a reading-level directive when readingLevel is set, and not otherwise", async () => {
+    const capped = await assembleSystemPrompt({ ...minimalInput, readingLevel: "high-school" });
+    expect(capped).toContain("READING LEVEL");
+    expect(capped).toContain("grade 9");
+
+    const college = await assembleSystemPrompt({ ...minimalInput, readingLevel: "college" });
+    expect(college).toContain("grade 13");
+
+    const none = await assembleSystemPrompt({ ...minimalInput, readingLevel: null });
+    expect(none).not.toContain("READING LEVEL");
+
+    const uncapped = await assembleSystemPrompt({ ...minimalInput, readingLevel: "uncapped" });
+    expect(uncapped).not.toContain("READING LEVEL");
+  });
 });
