@@ -4582,6 +4582,11 @@ model NonProductionEnvironmentLease {
   id               String    @id @default(cuid())
   leaseId          String    @unique
   environmentKey   String
+  // Mirrors environmentKey while the lease is active; NULL once released/expired.
+  // The @@unique below makes "at most one active lease per environmentKey" a DB
+  // invariant (Postgres allows many NULLs), closing the claim TOCTOU race where
+  // two sessions could otherwise both win the single shared nonprod slot.
+  activeKey        String?
   status           String    @default("active")
   ownerProvider    String
   ownerSessionId   String
@@ -4599,6 +4604,7 @@ model NonProductionEnvironmentLease {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
+  @@unique([activeKey])
   @@index([environmentKey, status])
   @@index([ownerProvider, ownerSessionId])
   @@index([buildId, createdAt])
