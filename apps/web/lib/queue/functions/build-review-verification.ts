@@ -6,7 +6,12 @@
  * coworker-driven UX verification pipeline end to end:
  *
  *   1. Load build + brief
- *   2. If no acceptance criteria, mark `uxVerificationStatus = "skipped"`
+ *   2. If there are no acceptance criteria, OR the build changed no UI surface
+ *      a browser can drive (pure library/backend/doc change — see
+ *      `shouldRunBrowserUxVerification`), mark `uxVerificationStatus = "skipped"`
+ *      and auto-dispatch ship. UX verification is advisory (non-blocking) per
+ *      the ratified gate policy, so a build with nothing browser-verifiable must
+ *      advance to ship rather than strand in review on a vacuous 0/1 failure.
  *   3. Otherwise call browser-use with `evidence_dir: build_<buildId>`
  *      so screenshots land on the shared /evidence volume
  *   4. Persist UxTestStep[] to `FeatureBuild.uxTestResults` AND set
@@ -21,6 +26,7 @@
 
 import { inngest } from "../inngest-client";
 import { buildPipelineConcurrency } from "../admission";
+import { shouldRunBrowserUxVerification } from "@/lib/build/ui-surface";
 
 export const buildReviewVerification = inngest.createFunction(
   {
@@ -59,6 +65,25 @@ export const buildReviewVerification = inngest.createFunction(
         ? deriveFixUxTestCases(brief?.fixContext)
         : brief?.acceptanceCriteria ?? [];
 
+    // Resolve the build's changed files so we can tell whether there is a
+    // RENDERED UI surface for browser-use to drive. A pure library/backend/doc
+    // build (no .tsx/.jsx) has only code-level acceptance criteria a browser
+    // cannot assert — running browser-use on it returns a vacuous 0/1 failure
+    // that, combined with auto-ship-only-on-"complete", stranded the build in
+    // review forever. Prefer the captured diff; fall back to the plan's declared
+    // files when the diff projection is not yet populated at review time.
+    const changedFiles = await step.run("resolve-changed-files", async () => {
+      const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
+      const sandboxState = await getSandboxStateForBuild(buildId);
+      const diffFiles = sandboxState?.sourceDiffstat.map((entry) => entry.path) ?? [];
+      if (diffFiles.length > 0) return diffFiles;
+      return sandboxState?.expectedPlanFiles.map((file) => file.path) ?? [];
+    });
+    const runBrowserUse = shouldRunBrowserUxVerification({
+      testCaseCount: testCases.length,
+      changedFiles,
+    });
+
     await step.run("start-verification", async () => {
       const { prisma } = await import("@dpf/db");
       await prisma.featureBuild.update({
@@ -75,13 +100,31 @@ export const buildReviewVerification = inngest.createFunction(
       }
     });
 
-    if (testCases.length === 0) {
+    if (!runBrowserUse) {
+      // Either there are no acceptance criteria to assert, or the build changed
+      // no UI surface a browser can drive. Mark UX verification "skipped"
+      // (advisory, non-blocking per the ratified gate policy) and proceed to
+      // ship rather than stranding in review. The "Ship to GitHub" step remains
+      // a human gate downstream — auto-ship only extracts the diff and advances
+      // the phase to `ship`.
+      const skipReason: "no-acceptance-criteria" | "no-ui-surface" =
+        testCases.length === 0 ? "no-acceptance-criteria" : "no-ui-surface";
       await step.run("mark-skipped", async () => {
         const { prisma } = await import("@dpf/db");
         await prisma.featureBuild.update({
           where: { buildId },
           data: { uxVerificationStatus: "skipped" },
         });
+        await prisma.buildActivity.create({
+          data: {
+            buildId,
+            tool: "review-verification",
+            summary:
+              skipReason === "no-ui-surface"
+                ? `UX verification skipped: build changed no UI surface (${changedFiles.length} file(s), none .tsx/.jsx). Browser checks are not applicable to a library/backend change; advancing to ship.`
+                : "UX verification skipped: no acceptance criteria to verify; advancing to ship.",
+          },
+        }).catch(() => {});
         if (build.threadId) {
           const { agentEventBus } = await import("@/lib/agent-event-bus");
           agentEventBus.emit(build.threadId, {
@@ -93,7 +136,14 @@ export const buildReviewVerification = inngest.createFunction(
           });
         }
       });
-      return { status: "skipped", testCount: 0 };
+      // Auto-dispatch ship for the skipped (non-blocking) verification — mirrors
+      // the "complete" path below so non-UI / no-AC builds are not stranded in
+      // review. dispatchShipForVerifiedBuild only extracts the diff and advances
+      // to the ship phase; pushing to GitHub stays a human gate.
+      await step.run("auto-dispatch-ship", () =>
+        autoDispatchShipForCompletedVerification(buildId, "skipped"),
+      );
+      return { status: "skipped", testCount: testCases.length, reason: skipReason };
     }
 
     type UxTestStep = {
@@ -214,6 +264,7 @@ export const buildReviewVerification = inngest.createFunction(
  */
 export async function autoDispatchShipForCompletedVerification(
   buildId: string,
+  verificationStatus: "complete" | "skipped" = "complete",
 ): Promise<{ shipOutcome: string }> {
   const { prisma: db } = await import("@dpf/db");
   const b = await db.featureBuild.findUnique({
@@ -226,7 +277,7 @@ export async function autoDispatchShipForCompletedVerification(
   const outcome = await dispatchShipForVerifiedBuild({
     buildId,
     userId: actorUserId,
-    verificationStatus: "complete",
+    verificationStatus,
   });
   return { shipOutcome: outcome.kind };
 }
