@@ -102,6 +102,106 @@ export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<num
   return recovered;
 }
 
+/**
+ * BI-8F45BA74 — recover orphaned `quiescing` TaskRuns (watchdog blind spot).
+ *
+ * On a self-upgrade drain, `flipActiveTaskRunsToQuiescing` flips every
+ * working/active TaskRun to `quiescing`; each loop is then expected to
+ * cooperatively exit to `paused-for-upgrade` on its NEXT heartbeat
+ * (~30s typical, ~3min worst). A loop that is already DEAD never heartbeats
+ * again, so its row is stranded in `quiescing` forever — silently-lost work
+ * that no surface ever recovers:
+ *   - the stall watchdog deliberately ignores `quiescing` (it expects a clean
+ *     exit imminently — task-states.ts), so it never reaps these;
+ *   - recoverStuckQuiescenceCoordinators reaps the coordinator (QuiescenceRun)
+ *     but NOT the TaskRuns it flipped;
+ *   - a portal reboot resumes builds but leaves these rows untouched
+ *     (observed live 2026-06-19: 32 quiescing rows survived a swap+reboot).
+ *
+ * This reaps a `quiescing` row whose most-recent signal (quiescedAt, or its
+ * heartbeat if it somehow beat after the flip) is older than the liveness
+ * window — the loop is provably dead — transitioning it to `stalled` (the
+ * watchdog's terminal-for-dead-work state: surfaced, operator-retryable, no
+ * longer in limbo). The window matches DEAD_PHASE_LIVENESS_MS (15 min) and is
+ * far longer than the worst-case cooperative-exit, so a loop that is merely
+ * mid-exit is never reaped. Runs every tick before any early-return.
+ */
+export const STUCK_QUIESCING_TASKRUN_MS = 15 * 60 * 1000;
+
+/**
+ * Pure: true when a `quiescing` TaskRun's loop is provably dead (its newest
+ * signal predates the liveness window). A row with no signal at all is left
+ * alone — we never guess. Unit-tested.
+ */
+export function isStuckQuiescingTaskRun(args: {
+  quiescedAt: Date | null;
+  lastHeartbeatAt: Date | null;
+  now: Date;
+  thresholdMs: number;
+}): boolean {
+  const { quiescedAt, lastHeartbeatAt, now, thresholdMs } = args;
+  const newestSignal = Math.max(
+    quiescedAt?.getTime() ?? 0,
+    lastHeartbeatAt?.getTime() ?? 0,
+  );
+  if (newestSignal === 0) return false; // no observable signal — do not guess
+  return now.getTime() - newestSignal > thresholdMs;
+}
+
+export async function recoverStuckQuiescingTaskRuns(now: Date): Promise<number> {
+  const { prisma } = await import("@dpf/db");
+  const cutoff = new Date(now.getTime() - STUCK_QUIESCING_TASKRUN_MS);
+  // Coarse SQL filter (mirrors the stall-detection pattern: cheap WHERE, then a
+  // precise pure check in app code). `quiescedAt` is set the instant the row is
+  // flipped, so it is the primary signal; fall back to startedAt for legacy rows.
+  const candidates = await prisma.taskRun.findMany({
+    where: {
+      status: "quiescing",
+      OR: [
+        { quiescedAt: { lt: cutoff } },
+        { AND: [{ quiescedAt: null }, { startedAt: { lt: cutoff } }] },
+      ],
+    },
+    select: { taskRunId: true, quiescedAt: true, lastHeartbeatAt: true },
+    take: 100,
+  });
+  if (candidates.length === 0) return 0;
+
+  let recovered = 0;
+  for (const c of candidates) {
+    if (
+      !isStuckQuiescingTaskRun({
+        quiescedAt: c.quiescedAt,
+        lastHeartbeatAt: c.lastHeartbeatAt,
+        now,
+        thresholdMs: STUCK_QUIESCING_TASKRUN_MS,
+      })
+    ) {
+      continue; // a recent heartbeat means the loop is alive and mid-exit
+    }
+    try {
+      // Guard against a race: only transition if it is STILL quiescing.
+      const res = await prisma.taskRun.updateMany({
+        where: { taskRunId: c.taskRunId, status: "quiescing" },
+        data: { status: "stalled", completedAt: now },
+      });
+      recovered += res.count;
+    } catch (err) {
+      console.warn(
+        `[taskrun-watchdog] failed to recover orphaned quiescing TaskRun ${c.taskRunId}:`,
+        err,
+      );
+    }
+  }
+  if (recovered > 0) {
+    console.warn(
+      `[taskrun-watchdog] recovered ${recovered} orphaned quiescing TaskRun(s) → stalled ` +
+        `(loop died during a drain; never cooperatively exited). (BI-8F45BA74)`,
+    );
+  }
+  return recovered;
+}
+
 export const taskrunWatchdog = inngest.createFunction(
   {
     id: "ops/taskrun-watchdog",
@@ -117,6 +217,17 @@ export const taskrunWatchdog = inngest.createFunction(
     // those returns and so almost never ran — the 4-day Inngest outage.)
     const quiescenceRecovered = await recoverStuckQuiescenceCoordinators(new Date());
 
+    // BI-8F45BA74: recover orphaned `quiescing` TaskRuns (dead loops that never
+    // cooperatively exited a drain) every tick, before any early-return — they
+    // are silently-lost work the stall watchdog deliberately ignores and a
+    // reboot does not clear. Best-effort: a failure must never abort the tick.
+    let quiescingTaskRunsRecovered = 0;
+    try {
+      quiescingTaskRunsRecovered = await recoverStuckQuiescingTaskRuns(new Date());
+    } catch (err) {
+      console.warn("[taskrun-watchdog] quiescing-taskrun recovery failed:", err);
+    }
+
     // BI-8F45BA74: reap inert builds (0 activity, stuck non-terminal) every tick,
     // before any early-return — they jam the WIP cap and block all new builds, so
     // this must run even when the stall watchdog is flag-off or no thresholds are
@@ -131,14 +242,14 @@ export const taskrunWatchdog = inngest.createFunction(
     }
 
     if (!(await isStallWatchdogEnabled())) {
-      return { skipped: true, reason: "flag-off", quiescenceRecovered, inertBuildsReaped };
+      return { skipped: true, reason: "flag-off", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped };
     }
 
     const { prisma } = await import("@dpf/db");
 
     const thresholds = await prisma.buildStudioStallThreshold.findMany();
     if (thresholds.length === 0) {
-      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, inertBuildsReaped };
+      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped };
     }
 
     // Coarse SQL filter using the smallest applicable thresholds across all
@@ -188,7 +299,7 @@ export const taskrunWatchdog = inngest.createFunction(
     }
 
     if (decisions.length === 0) {
-      return { processed: 0, quiescenceRecovered, inertBuildsReaped };
+      return { processed: 0, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped };
     }
 
     // Batch id-resolution: business taskRunId → cuid id for FK writes.
@@ -321,6 +432,6 @@ export const taskrunWatchdog = inngest.createFunction(
       processed += 1;
     }
 
-    return { processed, quiescenceRecovered, inertBuildsReaped };
+    return { processed, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped };
   },
 );

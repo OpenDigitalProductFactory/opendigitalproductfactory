@@ -4,6 +4,7 @@ import {
   projectAgentEventToTaskEvents,
   projectPersistedTaskProgressEvents,
 } from "@/lib/tak/task-stream-projection";
+import { createSseResponse } from "@/lib/sse/sse-stream";
 import { prisma } from "@dpf/db";
 
 export const dynamic = "force-dynamic";
@@ -97,60 +98,27 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     return new Response("Not Found", { status: 404 });
   }
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    start(controller) {
-      const writeEvent = (event: AgentEvent): boolean => {
-        try {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
-          );
-          return true;
-        } catch {
-          return false;
-        }
-      };
+  const threadId = task.threadId;
 
+  return createSseResponse({
+    signal: request.signal,
+    start: (sse) => {
       for (const event of toReplayEvents(task)) {
-        if (!writeEvent(event)) {
-          return;
-        }
+        if (!sse.send(event)) return; // client disconnected mid-replay
       }
 
-      if (!task.threadId) {
-        try {
-          controller.close();
-        } catch {
-          // already closed
-        }
+      if (!threadId) {
+        // No live thread to follow — replay only, then close.
+        sse.close();
         return;
       }
 
-      const unsub = agentEventBus.subscribe(task.threadId, (event) => {
+      const unsub = agentEventBus.subscribe(threadId, (event) => {
         for (const taskEvent of matchesTaskEvent(event, task.taskRunId)) {
-          if (!writeEvent(taskEvent)) {
-            unsub();
-            return;
-          }
+          sse.send(taskEvent);
         }
       });
-
-      request.signal.addEventListener("abort", () => {
-        unsub();
-        try {
-          controller.close();
-        } catch {
-          // already closed
-        }
-      });
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
+      return unsub;
     },
   });
 }

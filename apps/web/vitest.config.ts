@@ -79,6 +79,10 @@ export default defineConfig({
         find: "@dpf/finance-templates",
         replacement: resolve(rootDir, "packages/finance-templates/src/index.ts"),
       },
+      {
+        find: "@dpf/validators",
+        replacement: resolve(rootDir, "packages/validators/src/index.ts"),
+      },
       { find: "server-only", replacement: resolve(webDir, "test-support/server-only.ts") },
       ...buildNodeModuleAliases({ webDir, rootDir }),
     ],

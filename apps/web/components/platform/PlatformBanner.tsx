@@ -28,6 +28,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
+import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
 
 type BannerState =
   | { kind: "hidden" }
@@ -58,10 +59,12 @@ export function PlatformBanner(): React.ReactElement | null {
   const [state, setState] = useState<BannerState>({ kind: "hidden" });
   const [collapsed, setCollapsed] = useState(false);
 
-  useEffect(() => {
-    const source = new EventSource("/api/agent/system-stream");
-
-    source.onmessage = (msg) => {
+  // Resilient SSE: the shared hook adds the heartbeat watchdog that reaps a
+  // zombie connection after a portal rebuild (BI-864E83B0). Transient
+  // disconnects don't change banner state — the previous state persists and
+  // the hook reconnects underneath.
+  useResilientEventSource("/api/agent/system-stream", {
+    onMessage: (msg) => {
       let event: SystemQuiescenceEvent;
       try {
         event = JSON.parse(msg.data) as SystemQuiescenceEvent;
@@ -90,17 +93,8 @@ export function PlatformBanner(): React.ReactElement | null {
           setTimeout(() => setState({ kind: "hidden" }), 60_000);
         }
       }
-    };
-
-    source.onerror = () => {
-      // EventSource auto-reconnects. Don't change state — the previous
-      // banner state should persist across transient disconnects.
-    };
-
-    return () => {
-      source.close();
-    };
-  }, []);
+    },
+  });
 
   useEffect(() => {
     if (state.kind === "hidden") setCollapsed(false);
