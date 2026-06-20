@@ -1558,7 +1558,10 @@ if (-not (Test-StepDone "hardware")) {
     Write-OK $hwSummary
 
     # Select the largest strong tool-calling model that fits available VRAM/RAM.
-    # Mirrors the tiers in bootstrap-first-run.ts + detect-hardware-host.ts.
+    # Mirrors the CANONICAL tiers in apps/web/lib/inference/local-model-policy.ts
+    # (LOCAL_MODEL_TIERS) — PowerShell cannot import TS, so keep this in sync.
+    # The Providers UX over-commit guard (same module) catches any drift that
+    # leaves a host with more than one generation model installed.
     # We now prefer the Qwen3.6 35B-A3B (what the Docker UI calls ai/qwen3.6:latest
     # when you have plenty of memory) for the top tier. It is the current best
     # published option in the ai/ runner namespace for agentic work.

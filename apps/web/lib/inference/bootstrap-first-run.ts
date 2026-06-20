@@ -4,6 +4,11 @@ import { getOllamaBaseUrl, getOllamaApiRoot } from "./ollama-url";
 import { isFirstRun, createSetupProgress } from "../actions/setup-progress";
 import { activateProvider } from "@/lib/govern/activate-provider";
 import { syncAgentPrincipal } from "@/lib/identity/principal-linking";
+import {
+  recommendGenerationModel,
+  detectLocalModelOverCommit,
+  normaliseModelId,
+} from "./local-model-policy";
 
 /** Check if first-run bootstrap is needed. */
 export async function checkBootstrapNeeded(): Promise<boolean> {
@@ -73,57 +78,20 @@ export async function seedOnboardingAgent(): Promise<void> {
 }
 
 /**
- * Model tiers ordered largest-first for auto-pull on first run (or when
- * the host hardware profile did not pre-pull a strong model).
- * Each entry specifies the exact Docker Model Runner tag published under
- * the `ai/` namespace and the minimum (unified) memory / VRAM required.
+ * Select the largest generation model that fits available VRAM. The canonical
+ * tier list now lives in local-model-policy.ts (shared with the Providers UX and
+ * mirrored by the install scripts); this wrapper only adds the hardware probe.
  *
- * Sizing from the actual published manifests in the ai/ runner catalog.
- * Tags are case-sensitive and must include the quantization suffix.
- *
- *   - ai/qwen3.6:35B-A3B-UD-Q4_K_M  (Qwen3.6 35B-A3B MoE) → ~22 GB  (high-RAM Apple Silicon "plenty of memory" or 24 GB+ GPU)
- *   - ai/qwen3:14B-Q6_K             (14B dense)          → ~12 GB
- *   - ai/qwen3:8B-Q4_K_M            (8B dense)           → ~5  GB
- *   - ai/qwen3:4B-UD-Q4_K_XL        (4B dense)           → ~3  GB (CPU-OK fallback)
- *
- * Qwen (3 / 3.6) is preferred because of strong tool-calling results
- * (F1 0.93+ at 8B, higher at larger sizes) that the DPF coworker routing
- * and Build Studio agents depend on. The 35B-A3B MoE (what Docker surfaces
- * as ai/qwen3.6:latest) is the current top published option for hosts
- * with plenty of unified RAM — direct successor to the prior 30B-A3B,
- * with better agentic coding while keeping the same efficient ~3B active
- * parameter budget.
- *
- * We never use bare :latest tags in automated paths. The specific
- * quant tag gives a known on-disk size and reproducible behaviour.
- */
-const MODEL_TIERS: { model: string; minVramGb: number }[] = [
-  { model: "ai/qwen3.6:35B-A3B-UD-Q4_K_M", minVramGb: 22 }, // Qwen3.6 35B-A3B MoE — high-RAM Apple (128 GB class) or 24 GB+ discrete
-  { model: "ai/qwen3:14B-Q6_K",            minVramGb: 12 }, // 14B dense
-  { model: "ai/qwen3:8B-Q4_K_M",           minVramGb: 6  }, // 8B dense
-  { model: "ai/qwen3:4B-UD-Q4_K_XL",       minVramGb: 0  }, // 4B dense — CPU fallback
-];
-
-/**
- * Select the largest Qwen3 model that fits available VRAM. Walks the tier
- * list top-down and picks the first model whose minimum VRAM requirement
- * is satisfied by the detected hardware.
+ *   - hwInfo present, vramGb n  → largest tier whose floor n satisfies
+ *   - hwInfo present, vramGb 0  → CPU-only host → 4B tier
+ *   - hwInfo missing / exception → undetectable → broadly-compatible 8B default
  */
 async function selectModelForHardware(baseUrl: string): Promise<string> {
   try {
     const hwInfo = await getOllamaHardwareInfo(baseUrl);
-    const vram = hwInfo?.vramGb ?? 0;
-
-    for (const tier of MODEL_TIERS) {
-      if (vram >= tier.minVramGb) {
-        return tier.model;
-      }
-    }
-    // Should never reach here (last tier has minVramGb=0), but be safe
-    return "ai/qwen3:4B-UD-Q4_K_XL";
+    return recommendGenerationModel(hwInfo?.vramGb ?? 0);
   } catch {
-    // Can't detect hardware — use the broadly compatible mid-range default
-    return "ai/qwen3:8B-Q4_K_M";
+    return recommendGenerationModel(null);
   }
 }
 
@@ -197,6 +165,24 @@ export async function executeFirstRunBootstrap(
           trigger: "bootstrap",
           skipDiscovery: true,
         });
+
+        // Drift guard: the local runtime keeps only ONE generation model
+        // resident, and two large models over-commit the GPU. Warn (best-effort)
+        // if more than one generation model is already installed so the operator
+        // can prune in the Providers UX. See local-model-policy.ts.
+        try {
+          const installed = (tagsData.models ?? []).map((m) => normaliseModelId(m.name));
+          const hw = await getOllamaHardwareInfo(baseUrl);
+          const verdict = detectLocalModelOverCommit({
+            installedModelIds: installed,
+            vramGb: hw?.vramGb ?? null,
+          });
+          if (verdict.overCommitted) {
+            console.warn(`[bootstrap] Local model over-commit — ${verdict.reason}`);
+          }
+        } catch {
+          // best-effort — never block setup on the drift check
+        }
       } else {
         console.warn("[bootstrap] Ollama not reachable — proceeding without local AI");
       }

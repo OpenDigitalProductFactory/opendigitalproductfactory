@@ -25,6 +25,7 @@
 import type { AssignedTask, SpecialistRole } from "./task-dependency-graph";
 import { getOllamaBaseUrl } from "@/lib/inference/ollama-url";
 import { getServedContextTokens } from "@/lib/inference/dmr-runtime-config";
+import { NON_CHAT_MODEL_RE, isEmbeddingModelId } from "@/lib/inference/local-model-policy";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 import { sanitizeForLog } from "@/lib/security/safe-log";
@@ -76,18 +77,10 @@ export type LocalEndpointPreflight = {
   warnings?: string[];
 };
 
-// Non-chat model families a local OpenAI-compatible endpoint commonly also
-// serves (embeddings, rerankers, STT/TTS). These cannot run a coding agent
-// loop. Single source of truth for pickDefaultCodingModel + isEmbeddingModelId.
-const NON_CHAT_MODEL_RE = /embed|nomic|bge[-_]|rerank|whisper|\bstt\b|\btts\b|clip|vision-embed|minilm|gte|e5/i;
-
-/**
- * True when a model id looks like an embedding / non-chat model that cannot run
- * a coding agent. Used to warn an operator who selected one explicitly.
- */
-export function isEmbeddingModelId(modelId: string): boolean {
-  return NON_CHAT_MODEL_RE.test(modelId);
-}
+// Embedding / non-chat classification is owned by the canonical local-model
+// policy module (imported above). Re-exported here so existing importers (tests,
+// the Runtime Health view) and this file's own callers keep their import path.
+export { isEmbeddingModelId };
 
 /**
  * Rewrite the portal's view of the local endpoint into one the sandbox
