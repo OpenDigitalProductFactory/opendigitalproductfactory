@@ -139,11 +139,13 @@ export function recommendKeepGenerationModel(
   const coder = generationModelIds.find((m) => /coder|[-_]code\b|code[-_]/i.test(m));
   if (coder) return coder;
 
-  const recommended = recommendGenerationModel(vramGb);
-  const recNorm = normaliseModelId(recommended);
-  const matchesRecommended = generationModelIds.find(
-    (m) => normaliseModelId(m) === recNorm || m.includes(recNorm.split(":")[0] ?? ""),
-  );
+  // Exact tier match, tolerating a missing/added `ai/` vendor prefix and the
+  // docker.io/ + :latest decorations normaliseModelId strips. Must NOT match on
+  // family alone — every qwen3 tier shares the `ai/qwen3` prefix, so a substring
+  // match would wrongly keep the first (often smallest) tier.
+  const stripVendor = (s: string) => normaliseModelId(s).replace(/^ai\//, "");
+  const recKey = stripVendor(recommendGenerationModel(vramGb));
+  const matchesRecommended = generationModelIds.find((m) => stripVendor(m) === recKey);
   if (matchesRecommended) return matchesRecommended;
 
   // Largest that fits the budget (or just largest when budget unknown).
