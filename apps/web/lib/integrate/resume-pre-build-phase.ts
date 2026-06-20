@@ -26,6 +26,13 @@
 //     reviewer logic (e.g. the #1976/#1998 chore test-first lenience), so a
 //     review that failed pre-fix can pass on resume.
 //   - Never throws; returns a structured outcome for BuildActivity logging.
+//   - Decompose-gate park (BI-BD4F2D0D): an ideate build whose design PASSED
+//     review but is sized `decompose-required` with no override is parked at the
+//     Phase-4b decomposition gate, not stranded. The resume path detects this
+//     and refuses to re-dispatch ideate / re-run reviewDesignDoc (both just
+//     re-fire the gate and loop, burning cloud AI spend). It instead proposes
+//     decomposition candidates ONCE so the operator can approve_decomposition or
+//     record_decomposition_override, then parks. See isParkedAtDecomposeGate.
 //
 // There is no session on boot, so the caller passes the build's createdById as
 // the actor for the dispatch/review calls.
@@ -44,6 +51,44 @@ function hasPlanTasks(buildPlan: unknown): boolean {
 
 function hasDesignDoc(designDoc: unknown): boolean {
   return designDoc != null && typeof designDoc === "object" && Object.keys(designDoc as object).length > 0;
+}
+
+/** Subset of the persisted designReview JSON the decompose-gate guard reads. */
+type DesignReviewForGate = {
+  decision?: string;
+  sizeAssessment?: { decision?: string } | null;
+  decompositionOverride?: unknown;
+  decompositionCandidates?: { latest?: unknown } | null;
+} | null;
+
+/**
+ * True when a build's persisted designReview shows it is parked at the Phase-4b
+ * `decompose-required` gate: the design PASSED review, the deterministic size
+ * assessment is `decompose-required`, and no operator override was recorded.
+ * This mirrors the exact gate condition in reviewDesignDoc
+ * (apps/web/lib/mcp-tools.ts — `decomposeDecision === "decompose-required" &&
+ * !hasOverride`) so the resume path and the gate agree on what "parked" means.
+ *
+ * Such a build is NOT stranded — it is waiting on a human (`approve_decomposition`
+ * or `record_decomposition_override`). Re-dispatching ideate (≈847s of cloud
+ * ChatGPT/Codex spend) or re-running reviewDesignDoc on it just regenerates /
+ * re-reviews an already-passed design and re-computes the same verdict, re-firing
+ * the gate and looping forever (FB-7930340F burned real AI quota this way for
+ * ~2 days). Only `decompose-required` blocks the gate; `decompose-recommended`
+ * advances to Plan on review, so it is intentionally NOT treated as parked here.
+ */
+function isParkedAtDecomposeGate(dr: DesignReviewForGate): boolean {
+  return (
+    dr?.decision === "pass" &&
+    dr?.sizeAssessment?.decision === "decompose-required" &&
+    dr?.decompositionOverride == null
+  );
+}
+
+/** True when decomposition candidates have already been proposed for this build. */
+function hasDecompositionCandidates(dr: DesignReviewForGate): boolean {
+  const latest = dr?.decompositionCandidates?.latest;
+  return Array.isArray(latest) && latest.length > 0;
 }
 
 /**
@@ -80,6 +125,56 @@ export async function resumePreBuildPhase(params: {
     }
 
     if (phase === "ideate") {
+      // ── Decompose-gate park guard (BI-BD4F2D0D) ──────────────────────────
+      // A build whose design PASSED review but whose deterministic size
+      // assessment is `decompose-required` (with no operator override) is NOT
+      // stranded — it is correctly parked at the Phase-4b decomposition gate,
+      // waiting on a human to call approve_decomposition or
+      // record_decomposition_override. Resuming it the normal way re-dispatches
+      // ideate (≈847s of cloud spend) when the doc is missing, or re-runs
+      // reviewDesignDoc when it is present; either way it regenerates /
+      // re-reviews an already-passed design, re-computes the same
+      // decompose-required verdict, and re-fires the gate — an infinite
+      // resume↔gate-block↔stall loop that burned real ChatGPT/Codex quota for
+      // ~2 days on FB-7930340F. Recognize the parked state up front: ensure the
+      // operator has candidates to act on (propose ONCE, idempotently), then
+      // STOP — never re-run expensive pre-build work for a build whose only
+      // blocker is a pending human decision.
+      const designReviewForGate = build.designReview as DesignReviewForGate;
+      if (isParkedAtDecomposeGate(designReviewForGate)) {
+        if (hasDecompositionCandidates(designReviewForGate)) {
+          return {
+            kind: "skipped",
+            phase,
+            reason:
+              "design passed review but size=decompose-required and candidates already exist — parked awaiting approve_decomposition or record_decomposition_override (NOT re-dispatching ideate or re-running review).",
+          };
+        }
+        // No candidates yet: generate them ONCE so the operator has something to
+        // approve. This is the productive alternative to re-ideating — it never
+        // throws (propose_build_decomposition returns a structured ToolResult)
+        // and is self-idempotent (the branch above short-circuits next time).
+        const { executeTool } = await import("@/lib/mcp-tools");
+        const result = await executeTool(
+          "propose_build_decomposition",
+          { buildId },
+          userId,
+          { featureBuildId: buildId },
+        );
+        const detail = result.success
+          ? `proposed decomposition candidates for operator approval (${
+              typeof result.message === "string" ? result.message.slice(0, 120) : "ok"
+            })`
+          : `propose_build_decomposition produced no candidates (${String(
+              result.error ?? result.message ?? "unknown",
+            ).slice(0, 120)}) — left parked for operator`;
+        return {
+          kind: "skipped",
+          phase,
+          reason: `design passed review but size=decompose-required — ${detail}; parked awaiting approve_decomposition or override (NOT re-dispatching ideate).`,
+        };
+      }
+
       if (!hasDesignDoc(build.designDoc)) {
         // No design doc yet — re-dispatch ideate research to generate it. The
         // dispatcher auto-runs reviewDesignDoc, which advances ideate->plan.

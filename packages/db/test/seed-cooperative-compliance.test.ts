@@ -16,6 +16,11 @@ describe("cooperative compliance pack data", () => {
     expect(total).toBe(8);
     for (const reg of COOPERATIVE_REGULATIONS) {
       expect(reg.industry).toBe("cooperative");
+      if (reg.jurisdiction === "US-federal") {
+        expect(reg.sourceUrl).toMatch(/^https:\/\//);
+      } else {
+        expect(reg.sourceUrl).toBeNull();
+      }
       expect(reg.obligations.length).toBeGreaterThan(0);
     }
   });

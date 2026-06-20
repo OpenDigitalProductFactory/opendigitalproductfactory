@@ -107,14 +107,28 @@ export default async function ObligationDetailPage({ params }: Props) {
       {/* Regulation link */}
       <div className="mb-6">
         <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-2">Regulation</h2>
-        <Link
-          href={`/compliance/regulations/${obligation.regulation.id}`}
-          className="inline-flex items-center gap-2 p-3 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors"
-        >
-          <span className="text-sm font-semibold text-[var(--dpf-text)]">{obligation.regulation.shortName}</span>
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{obligation.regulation.jurisdiction}</span>
-          <span className="text-xs text-[var(--dpf-info)]">View</span>
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href={`/compliance/regulations/${obligation.regulation.id}`}
+            className="inline-flex items-center gap-2 p-3 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors"
+          >
+            <span className="text-sm font-semibold text-[var(--dpf-text)]">{obligation.regulation.shortName}</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{obligation.regulation.jurisdiction}</span>
+            <span className="text-xs text-[var(--dpf-info)]">View</span>
+          </Link>
+          {obligation.regulation.sourceUrl ? (
+            <a
+              href={obligation.regulation.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-[var(--dpf-info)] hover:underline"
+            >
+              Source document
+            </a>
+          ) : (
+            <StatusBadge intent="warning" label="Source needed" variant="soft" uppercase={false} />
+          )}
+        </div>
       </div>
 
       {/* Linked controls */}

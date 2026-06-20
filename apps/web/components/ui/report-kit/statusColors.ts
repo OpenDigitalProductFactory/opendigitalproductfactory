@@ -149,6 +149,11 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     active: "success",
     inactive: "danger",
   },
+  complianceApplicability: {
+    applies: "success",
+    review: "warning",
+    reference: "neutral",
+  },
   // Marketing strategy/work-product lifecycle.
   marketing: {
     draft: "neutral",

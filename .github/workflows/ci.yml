@@ -198,7 +198,7 @@ jobs:
         with:
           node-version: 24
       - name: Test UX-fit pre-edit hook
-        run: node --test scripts/hooks/ux-fit-precheck.test.mjs
+        run: node --test packages/dpf-skill-pack/hooks/ux-fit-precheck.test.mjs
       - name: Run UX-fit gate
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -230,9 +230,11 @@ jobs:
         with:
           node-version: 24
       - name: Test spec/plan/doc pre-edit hook
-        run: node --test scripts/hooks/spec-plan-doc-precheck.test.mjs
-      - name: Conformance — both precheck nudges stay wired in .claude/settings.json
-        run: node --test scripts/hooks/settings-hooks-wired.test.mjs
+        run: node --test packages/dpf-skill-pack/hooks/spec-plan-doc-precheck.test.mjs
+      - name: Test lease-guard hook
+        run: node --test packages/dpf-skill-pack/hooks/lease-guard.test.mjs
+      - name: Conformance — DPF guards stay wired in the dpf-platform plugin (hooks/hooks.json)
+        run: node --test packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs
       - name: Run spec/plan/doc gate
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}

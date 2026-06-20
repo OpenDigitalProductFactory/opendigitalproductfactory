@@ -1,17 +1,30 @@
 import { prisma } from "@dpf/db";
 import { CreateObligationForm } from "@/components/compliance/CreateObligationForm";
+import { ComplianceLibraryScopeNav } from "@/components/compliance/ComplianceLibraryScopeNav";
+import { ObligationLibraryPanel } from "@/components/compliance/ObligationLibraryPanel";
 import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 import Link from "next/link";
+import {
+  DEFAULT_COMPLIANCE_LIBRARY_SCOPE,
+  addObligationApplicability,
+  complianceLibraryContextLabel,
+  countObligationsByComplianceLibraryScope,
+  filterObligationsByComplianceLibraryScope,
+  parseComplianceLibraryScope,
+  resolveComplianceLibraryContext,
+} from "@/lib/compliance-library";
 
 type Props = {
-  searchParams: Promise<{ regulation?: string; category?: string; status?: string; view?: string }>;
+  searchParams: Promise<{ regulation?: string; category?: string; status?: string; scope?: string; view?: string }>;
 };
 
 export default async function ObligationsPage({ searchParams }: Props) {
   const filters = await searchParams;
   const view = parseSurfaceView(filters.view);
+  const scope = parseComplianceLibraryScope(filters.scope);
 
-  const [obligations, regulations, categories] = await Promise.all([
+  const [context, obligations, regulations, categories] = await Promise.all([
+    resolveComplianceLibraryContext(),
     prisma.obligation.findMany({
       where: {
         ...(filters.regulation && { regulationId: filters.regulation }),
@@ -19,7 +32,18 @@ export default async function ObligationsPage({ searchParams }: Props) {
         ...(filters.status ? { status: filters.status } : { status: "active" }),
       },
       include: {
-        regulation: { select: { id: true, shortName: true, jurisdiction: true } },
+        regulation: {
+          select: {
+            id: true,
+            regulationId: true,
+            name: true,
+            shortName: true,
+            jurisdiction: true,
+            industry: true,
+            sourceType: true,
+            sourceUrl: true,
+          },
+        },
         ownerEmployee: { select: { id: true, displayName: true } },
         _count: { select: { controls: true } },
       },
@@ -42,6 +66,13 @@ export default async function ObligationsPage({ searchParams }: Props) {
     .map((c) => c.category)
     .filter((c): c is string => c !== null);
 
+  const classifiedObligations = obligations.map((obligation) =>
+    addObligationApplicability(obligation, context),
+  );
+  const visibleObligations = filterObligationsByComplianceLibraryScope(classifiedObligations, scope);
+  const scopeCounts = countObligationsByComplianceLibraryScope(classifiedObligations);
+  const contextLabel = complianceLibraryContextLabel(context);
+
   // Build filter URL helper
   function filterUrl(key: string, value: string) {
     const p = new URLSearchParams();
@@ -54,6 +85,9 @@ export default async function ObligationsPage({ searchParams }: Props) {
     if (key === "status" && value) p.set("status", value);
     else if (filters.status) p.set("status", filters.status);
 
+    if (scope !== DEFAULT_COMPLIANCE_LIBRARY_SCOPE) p.set("scope", scope);
+    if (filters.view) p.set("view", filters.view);
+
     const qs = p.toString();
     return `/compliance/obligations${qs ? `?${qs}` : ""}`;
   }
@@ -61,7 +95,8 @@ export default async function ObligationsPage({ searchParams }: Props) {
   const activeFilterCount =
     (filters.regulation ? 1 : 0) +
     (filters.category ? 1 : 0) +
-    (filters.status ? 1 : 0);
+    (filters.status ? 1 : 0) +
+    (scope !== DEFAULT_COMPLIANCE_LIBRARY_SCOPE ? 1 : 0);
 
   return (
     <div>
@@ -69,7 +104,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
         <div>
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">Obligations</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-            {obligations.length} result{obligations.length !== 1 ? "s" : ""}
+            {visibleObligations.length} shown - {obligations.length} result{obligations.length !== 1 ? "s" : ""} - {contextLabel}
           </p>
         </div>
         <CreateObligationForm regulations={regulations} />
@@ -77,6 +112,21 @@ export default async function ObligationsPage({ searchParams }: Props) {
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="flex flex-col gap-1">
+          <label className="text-[9px] text-[var(--dpf-muted)] uppercase tracking-widest">Scope</label>
+          <ComplianceLibraryScopeNav
+            basePath="/compliance/obligations"
+            activeScope={scope}
+            counts={scopeCounts}
+            preservedParams={{
+              regulation: filters.regulation,
+              category: filters.category,
+              status: filters.status,
+              view: filters.view,
+            }}
+          />
+        </div>
+
         {/* Regulation filter */}
         <div className="flex flex-col gap-1">
           <label className="text-[9px] text-[var(--dpf-muted)] uppercase tracking-widest">Regulation</label>
@@ -173,39 +223,13 @@ export default async function ObligationsPage({ searchParams }: Props) {
 
       <PlatformGridSection entityType="compliance_obligation" view={view} />
 
-      {!view && (obligations.length === 0 ? (
-        <p className="text-sm text-[var(--dpf-muted)]">No obligations match the current filters.</p>
-      ) : (
-        <div className="space-y-2">
-          {obligations.map((o) => {
-            const coverage = o._count.controls > 0 ? "var(--dpf-success)" : "var(--dpf-error)";
-            return (
-              <Link
-                key={o.id}
-                href={`/compliance/obligations/${o.id}`}
-                className="block p-3 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: coverage }} />
-                      <span className="text-sm text-[var(--dpf-text)]">{o.title}</span>
-                    </div>
-                    <div className="flex gap-2 mt-1">
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{o.regulation.shortName}</span>
-                      {o.category && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{o.category}</span>}
-                    </div>
-                  </div>
-                  <div className="text-right text-xs text-[var(--dpf-muted)]">
-                    <p>{o._count.controls} control{o._count.controls !== 1 ? "s" : ""}</p>
-                    {o.ownerEmployee && <p>{o.ownerEmployee.displayName}</p>}
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      ))}
+      {!view && (
+        <ObligationLibraryPanel
+          rows={visibleObligations}
+          contextLabel={contextLabel}
+          totalCount={classifiedObligations.length}
+        />
+      )}
     </div>
   );
 }

@@ -460,6 +460,7 @@ Amendment is intentionally heavyweight. Cheap amendment would turn the parent co
 | Rollup hides a stalled child | D38 trajectory chips operate per child; parent rollup surfaces `needs-attention`. |
 | Contribution semantics break | Execution-organizational Epic becomes the contribution unit; parent design doc is the narrative, child diffs are the evidence. |
 | D31/D35/D36/D37 runtime cluster | Out of scope. Smaller children reduce exposure window but do not replace those fixes. |
+| Resume reconciler re-runs expensive pre-build work on a gate-parked build (BI-BD4F2D0D) | A build parked at the `decompose-required` gate (design passed review, no override) is *waiting on a human*, not stranded. `resumePreBuildPhase` (the boot + periodic resume reconciler, `apps/web/lib/integrate/resume-pre-build-phase.ts`) must NOT re-dispatch Ideate (~847s of cloud spend) or re-run `reviewDesignDoc` (recomputes the same verdict, re-fires the gate) — it detects the parked state via the same condition as §5.1's gate, proposes decomposition candidates once (idempotently) so the operator can `approve_decomposition`/`record_decomposition_override`, then parks. Live repro: FB-7930340F looped for ~2 days, amplified by the #2156 periodic reconciler. |
 
 ## 9. Reduction-gear framing
 
