@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import type { WeeklySchedule, DaySchedule } from "@/lib/operating-hours-types";
 
 const DAY_ORDER = [
@@ -12,15 +12,71 @@ const DAY_LABELS: Record<string, string> = {
   thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday",
 };
 
+// Used only if the runtime lacks Intl.supportedValuesOf (older engines). Covers
+// UTC + the common North American zones; the operator can still type-search the
+// full list on any modern browser, which is the normal path.
+const FALLBACK_TIMEZONES = [
+  "UTC",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Phoenix",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "Europe/London",
+  "Europe/Paris",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+];
+
+/** The full IANA zone list when available, always including `current`. */
+function listTimeZones(current: string, detected: string | null): string[] {
+  let zones: string[] = [];
+  try {
+    const supported = (
+      Intl as unknown as { supportedValuesOf?: (key: string) => string[] }
+    ).supportedValuesOf;
+    if (typeof supported === "function") zones = supported("timeZone");
+  } catch {
+    zones = [];
+  }
+  if (zones.length === 0) zones = [...FALLBACK_TIMEZONES];
+  // Make sure the currently-stored and detected zones are always selectable even
+  // if a given runtime omits them from the catalog.
+  for (const z of [current, detected]) {
+    if (z && !zones.includes(z)) zones = [z, ...zones];
+  }
+  return zones;
+}
+
+/** The browser's own timezone — the sensible default a layman shouldn't have to type. */
+function detectBrowserTimeZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
+
 type Props = {
   defaultSchedule: WeeklySchedule;
   timezone: string;
-  onSave: (schedule: WeeklySchedule) => Promise<void>;
+  /** Persists the schedule AND the selected operating-hours timezone. */
+  onSave: (schedule: WeeklySchedule, timezone: string) => Promise<void>;
   saving?: boolean;
 };
 
 export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving: externalSaving }: Props) {
   const [schedule, setSchedule] = useState<WeeklySchedule>(defaultSchedule);
+  const detected = useMemo(() => detectBrowserTimeZone(), []);
+  // Default to the stored zone, but when it's still the UTC placeholder fall
+  // back to the browser's detected zone so a fresh install doesn't silently keep
+  // evaluating operating hours (and the maintenance/upgrade window) in UTC.
+  const [tz, setTz] = useState<string>(
+    timezone && timezone !== "UTC" ? timezone : detected ?? timezone,
+  );
+  const zones = useMemo(() => listTimeZones(tz, detected), [tz, detected]);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -61,7 +117,7 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
     setSaved(false);
     startTransition(async () => {
       try {
-        await onSave(schedule);
+        await onSave(schedule, tz);
         setError(null);
         setSaved(true);
       } catch (e) {
@@ -72,8 +128,47 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
 
   return (
     <div className="space-y-4">
-      <div className="text-xs text-[var(--dpf-muted)]">
-        Timezone: {timezone}
+      {/* Timezone — operating hours, bookings, AND the maintenance/upgrade window
+          are all evaluated in this zone. Previously read-only, which left every
+          install on UTC and put the upgrade window in the middle of the open day. */}
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="op-hours-tz" className="text-sm font-medium text-[var(--dpf-text)]">
+            Timezone
+          </label>
+          <select
+            id="op-hours-tz"
+            value={tz}
+            onChange={(e) => {
+              setTz(e.target.value);
+              setSaved(false);
+            }}
+            aria-label="Operating hours timezone"
+            className="px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm"
+          >
+            {zones.map((z) => (
+              <option key={z} value={z} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                {z}
+              </option>
+            ))}
+          </select>
+          {detected && detected !== tz && (
+            <button
+              type="button"
+              onClick={() => {
+                setTz(detected);
+                setSaved(false);
+              }}
+              className="text-xs text-[var(--dpf-accent)] hover:underline"
+            >
+              Use detected ({detected})
+            </button>
+          )}
+        </div>
+        <p className="text-[11px] text-[var(--dpf-muted)]">
+          Bookings, availability, and the platform maintenance / self-upgrade window are all
+          evaluated in this timezone.
+        </p>
       </div>
 
       <div className="space-y-2">

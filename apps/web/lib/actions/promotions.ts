@@ -696,7 +696,7 @@ export async function getSelfUpgradeStatus() {
   // already explains the state).
   const now = new Date();
   const nextWindowStart = hasExplicitWindows
-    ? nextMaintenanceWindowStart(config, now)?.toISOString() ?? null
+    ? nextMaintenanceWindowStart(config, now, timezone)?.toISOString() ?? null
     : inMaintenanceWindow
       ? null
       : nextUpgradeWindowOpen(schedule, now, timezone)?.toISOString() ?? null;
@@ -732,6 +732,10 @@ export async function getSelfUpgradeStatus() {
     windowConfigured,
     windowSource,
     storeOpen,
+    // The IANA timezone the window is evaluated in (store operating-hours zone).
+    // Surfaced so the panel's "next window" is never ambiguous — the symptom that
+    // a UTC-evaluated window read as noon for a US Central store.
+    windowTimezone: timezone,
     nextWindowStart,
     nextScheduledCheckAt: nextScheduledCheckAt?.toISOString() ?? null,
     deployedSha,
