@@ -21,6 +21,11 @@ describe("public-sector compliance pack data", () => {
     expect(total).toBe(18);
     for (const reg of PUBLIC_SECTOR_REGULATIONS) {
       expect(reg.industry).toBe("public-sector");
+      if (reg.jurisdiction === "US-federal") {
+        expect(reg.sourceUrl).toMatch(/^https:\/\//);
+      } else {
+        expect(reg.sourceUrl).toBeNull();
+      }
       expect(reg.obligations.length).toBeGreaterThan(0);
     }
   });

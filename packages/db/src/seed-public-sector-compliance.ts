@@ -30,6 +30,7 @@ type RegulationSeed = {
   jurisdiction: string;
   industry: string;
   sourceType: "external";
+  sourceUrl: string | null;
   notes: string;
   obligations: ObligationSeed[];
 };
@@ -42,6 +43,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-state",
     industry: "public-sector",
     sourceType: "external",
+    sourceUrl: null,
     notes:
       "All 50 US states require open meetings of public bodies: advance public notice, " +
       "published agendas, public attendance, recorded minutes, and limited executive sessions. " +
@@ -103,6 +105,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-state",
     industry: "public-sector",
     sourceType: "external",
+    sourceUrl: null,
     notes:
       "All 50 states + DC grant public access to government records, with response deadlines " +
       "(commonly 3–10 business days), enumerated exemptions, and fee rules. Retention schedules " +
@@ -154,6 +157,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-state",
     industry: "public-sector",
     sourceType: "external",
+    sourceUrl: null,
     notes:
       "State statutes govern municipal budgeting (annual appropriation), audit/filing with the state " +
       "auditor (annual or biennial by size), and procurement (competitive quotes and sealed-bid " +
@@ -226,6 +230,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-federal",
     industry: "public-sector",
     sourceType: "external",
+    sourceUrl: "https://www.epa.gov/sdwa",
     notes:
       "EPA's Safe Drinking Water Act applies to community water systems through state primacy " +
       "agencies: sampling schedules against maximum contaminant levels, annual Consumer Confidence " +
@@ -289,6 +294,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-federal",
     industry: "public-sector",
     sourceType: "external",
+    sourceUrl: "https://www.epa.gov/npdes/npdes-permit-basics",
     notes:
       "Wastewater systems discharge under National Pollutant Discharge Elimination System permits " +
       "(EPA or authorized state). The operating loop is the discharge monitoring report cadence and " +
@@ -411,6 +417,8 @@ export async function seedPublicSectorCompliance(prisma: PrismaClient): Promise<
         shortName: regData.shortName,
         jurisdiction: regData.jurisdiction,
         industry: regData.industry,
+        sourceType: regData.sourceType,
+        sourceUrl: regData.sourceUrl,
         notes: regData.notes,
       },
       create: regData,

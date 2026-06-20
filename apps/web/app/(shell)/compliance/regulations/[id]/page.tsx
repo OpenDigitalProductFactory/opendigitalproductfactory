@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { CreateObligationForm } from "@/components/compliance/CreateObligationForm";
 import { EditRegulationForm } from "@/components/compliance/EditRegulationForm";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge } from "@/components/ui/report-kit";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -39,11 +40,15 @@ export default async function RegulationDetailPage({ params }: Props) {
           <EditRegulationForm id={regulation.id} regulation={regulation} />
         </div>
         <p className="text-sm text-[var(--dpf-muted)]">{regulation.name}</p>
-        {regulation.sourceUrl && (
+        {regulation.sourceUrl ? (
           <a href={regulation.sourceUrl} target="_blank" rel="noopener noreferrer"
             className="text-xs text-[var(--dpf-info)] hover:underline mt-1 inline-block">
             Source document
           </a>
+        ) : (
+          <div className="mt-2">
+            <StatusBadge intent="warning" label="Source needed" variant="soft" uppercase={false} />
+          </div>
         )}
       </div>
 
@@ -85,7 +90,12 @@ export default async function RegulationDetailPage({ params }: Props) {
               <div key={o.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: hasControls ? "var(--dpf-success)" : "var(--dpf-error)" }} />
+                    <StatusBadge
+                      intent={hasControls ? "success" : "warning"}
+                      label={hasControls ? "Covered" : "Needs controls"}
+                      variant="soft"
+                      uppercase={false}
+                    />
                     <span className="text-sm text-[var(--dpf-text)]">{o.title}</span>
                   </div>
                   <div className="flex gap-2 mt-1">

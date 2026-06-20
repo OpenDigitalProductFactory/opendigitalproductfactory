@@ -28,6 +28,7 @@ type RegulationSeed = {
   jurisdiction: string;
   industry: string;
   sourceType: "external";
+  sourceUrl: string | null;
   notes: string;
   obligations: ObligationSeed[];
 };
@@ -40,6 +41,7 @@ export const LAW_ENFORCEMENT_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-state",
     industry: "public-safety",
     sourceType: "external",
+    sourceUrl: null,
     notes:
       "State Peace Officer Standards and Training (POST) commissions set officer " +
       "certification, mandated annual in-service training hours, firearms and use-of-force " +
@@ -102,6 +104,7 @@ export const LAW_ENFORCEMENT_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-state",
     industry: "public-safety",
     sourceType: "external",
+    sourceUrl: null,
     notes:
       "Agencies must issue, update, and obtain officer attestation to core policies, and " +
       "retain body-worn-camera footage per state schedules. Specifics vary by state and " +
@@ -151,6 +154,7 @@ export const LAW_ENFORCEMENT_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-federal",
     industry: "public-safety",
     sourceType: "external",
+    sourceUrl: "https://le.fbi.gov/cjis-division/cjis-security-policy-resource-center",
     notes:
       "The FBI CJIS Security Policy governs any system that stores, processes, or transmits " +
       "criminal justice information (CJI). DPF Phase 1 for law enforcement stores NO CJI. This " +
@@ -235,6 +239,8 @@ export async function seedLawEnforcementCompliance(prisma: PrismaClient): Promis
         shortName: regData.shortName,
         jurisdiction: regData.jurisdiction,
         industry: regData.industry,
+        sourceType: regData.sourceType,
+        sourceUrl: regData.sourceUrl,
         notes: regData.notes,
       },
       create: regData,
