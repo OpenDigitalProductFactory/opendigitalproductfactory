@@ -5,6 +5,7 @@ import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID } from "@dp
 import { randomUUID } from "crypto";
 import { runDataModelMirror } from "@/lib/ea/run-data-model-mirror";
 import { runArchitectureParitySteward } from "@/lib/ea/architecture-parity-steward";
+import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import {
   createTaskRunForScheduledTask,
@@ -20,42 +21,11 @@ import {
 
 // ─── Cron helpers ───────────────────────────────────────────────────────────
 
-/**
- * Compute the next run time from a cron expression.
- * Supports standard 5-field cron: minute hour day-of-month month day-of-week
- * For simplicity, handles the common patterns directly.
- */
-function computeNextCronRun(cronExpr: string, from: Date): Date {
-  const parts = cronExpr.trim().split(/\s+/);
-  if (parts.length !== 5) return new Date(from.getTime() + 24 * 60 * 60_000); // fallback daily
-
-  const [minPart, hourPart, , , dowPart] = parts;
-  const minute = minPart === "*" ? 0 : parseInt(minPart!, 10);
-  const hour = hourPart === "*" ? from.getHours() : parseInt(hourPart!, 10);
-
-  // Start from the next hour boundary
-  const next = new Date(from);
-  next.setSeconds(0, 0);
-  next.setMinutes(minute);
-  next.setHours(hour);
-
-  // If time already passed today, go to tomorrow
-  if (next <= from) {
-    next.setDate(next.getDate() + 1);
-  }
-
-  // Handle day-of-week constraint
-  if (dowPart && dowPart !== "*") {
-    const targetDays = dowPart.split(",").map((d) => parseInt(d, 10));
-    let safety = 0;
-    while (!targetDays.includes(next.getDay()) && safety < 8) {
-      next.setDate(next.getDate() + 1);
-      safety++;
-    }
-  }
-
-  return next;
-}
+// computeNextCronRun + isOneShotCron now live in @/lib/operate/cron-next-run
+// (BI-D72CC945): the previous inline parser dropped the day-of-month and month
+// fields, so the Calendar "Monthly"/"Once" presets fired daily. The extracted
+// module honors all five cron fields and is unit-tested outside this
+// "use server" file.
 
 function getRequiredProceduralToolForScheduledTask(taskId: string): {
   name: string;
@@ -436,8 +406,10 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       });
     }
 
-    // Update task status and schedule next run
-    const nextRunAt = computeNextCronRun(task.schedule, now);
+    // Update task status and schedule next run. A one-shot ("Once") task
+    // deactivates after firing instead of re-arming a year later (BI-D72CC945).
+    const oneShot = isOneShotCron(task.schedule);
+    const nextRunAt = oneShot ? null : computeNextCronRun(task.schedule, now);
     await prisma.scheduledAgentTask.update({
       where: { taskId },
       data: {
@@ -447,6 +419,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         lastThreadId: thread.id,
         taskRunId: taskRunRef.taskRunId,
         nextRunAt,
+        ...(oneShot ? { isActive: false } : {}),
       },
     });
 

@@ -813,6 +813,62 @@ describe("executeScheduledAgentTask — SysML projection reconcile branch", () =
   });
 });
 
+describe("executeScheduledAgentTask one-shot deactivation (BI-D72CC945)", () => {
+  it("deactivates a one-shot (Once) task after it fires instead of re-arming", async () => {
+    arrangeScheduledTask();
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: "agent-task-once1",
+      agentId: "platform-engineer",
+      title: "One-shot scan",
+      prompt: "Do the thing once.",
+      routeContext: "/platform",
+      schedule: "0 9 5 7 *", // Once: July 5
+      timezone: "UTC",
+      isActive: true,
+      ownerUserId: "user-1",
+    });
+    mocks.runAgenticLoop.mockResolvedValue({ content: "Done.", executedTools: [] });
+
+    await executeScheduledAgentTask("agent-task-once1");
+
+    expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { taskId: "agent-task-once1" },
+        data: expect.objectContaining({
+          lastStatus: "ok",
+          isActive: false,
+          nextRunAt: null,
+        }),
+      }),
+    );
+  });
+
+  it("re-arms a recurring (Monthly) task with a real next-run date and leaves it active", async () => {
+    arrangeScheduledTask();
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: "agent-task-monthly1",
+      agentId: "platform-engineer",
+      title: "Monthly scan",
+      prompt: "Do the monthly thing.",
+      routeContext: "/platform",
+      schedule: "0 9 1 * *", // Monthly
+      timezone: "UTC",
+      isActive: true,
+      ownerUserId: "user-1",
+    });
+    mocks.runAgenticLoop.mockResolvedValue({ content: "Done.", executedTools: [] });
+
+    await executeScheduledAgentTask("agent-task-monthly1");
+
+    const okUpdate = mocks.prisma.scheduledAgentTask.update.mock.calls.find(
+      ([arg]) => arg.where.taskId === "agent-task-monthly1" && arg.data.lastStatus === "ok",
+    );
+    expect(okUpdate).toBeDefined();
+    expect(okUpdate?.[0].data.nextRunAt).toBeInstanceOf(Date);
+    expect(okUpdate?.[0].data.isActive).toBeUndefined();
+  });
+});
+
 describe("scheduleAgentTask UTC-only timezone", () => {
   it("rejects non-UTC timezone with an explanatory error", async () => {
     mocks.auth.mockResolvedValue({ user: { id: "user-1" } });
