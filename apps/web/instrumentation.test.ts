@@ -328,6 +328,41 @@ describe("reconcileSelfUpgradeRunsOnBoot", () => {
       expect.stringContaining("dispatch never started"),
     );
   });
+
+  it("on boot, leaves a run 'running' (no false-fail) when still on the pre-upgrade currentSha (swap pending)", async () => {
+    // Mid-swap: the old portal booted on its pre-upgrade SHA before the promoter recreated
+    // it on the target. Must NOT be failed — the swap may still land (SUR-F4209F75 regression).
+    getDeployedShaMock.mockResolvedValueOnce("current-sha");
+    selfUpgradeRunFindManyMock.mockResolvedValueOnce([
+      { runId: "SUR-PENDING", deployedSha: "expected-sha", targetSha: "upstream-sha", currentSha: "current-sha" },
+    ]);
+
+    const result = await reconcileSelfUpgradeRunsOnBoot({ log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ succeeded: 0, failed: 0 });
+    expect(failRunMock).not.toHaveBeenCalled();
+    expect(completeRunMock).not.toHaveBeenCalled();
+  });
+
+  it("in periodic (watchdog) mode, still fails a run stuck on its currentSha past the window", async () => {
+    // The pending-skip is boot-only: a run that never swapped and is still on currentSha after
+    // the staleness window IS a genuine hang and must be reaped.
+    getDeployedShaMock.mockResolvedValueOnce("current-sha");
+    selfUpgradeRunFindManyMock
+      .mockResolvedValueOnce([
+        { runId: "SUR-HUNG", deployedSha: "expected-sha", targetSha: "upstream-sha", currentSha: "current-sha" },
+      ])
+      .mockResolvedValueOnce([]);
+    failRunMock.mockResolvedValueOnce({});
+
+    const result = await reconcileSelfUpgradeRunsOnBoot(
+      { log: vi.fn(), error: vi.fn() },
+      { staleAfterMs: 30 * 60 * 1000, now: () => new Date("2026-06-14T01:00:00.000Z") },
+    );
+
+    expect(result).toEqual({ succeeded: 0, failed: 1 });
+    expect(failRunMock).toHaveBeenCalledWith("SUR-HUNG", expect.stringContaining("watchdog"));
+  });
 });
 
 describe("isStartupModelRevalidationEnabled", () => {
