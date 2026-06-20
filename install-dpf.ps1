@@ -1557,32 +1557,37 @@ if (-not (Test-StepDone "hardware")) {
     if ($gpuName) { $hwSummary += ", $gpuName ($gpuVRAM_GB GB VRAM)" }
     Write-OK $hwSummary
 
-    # Select the largest strong tool-calling model that fits available VRAM/RAM.
-    # Mirrors the CANONICAL tiers in apps/web/lib/inference/local-model-policy.ts
-    # (LOCAL_MODEL_TIERS) — PowerShell cannot import TS, so keep this in sync.
-    # The Providers UX over-commit guard (same module) catches any drift that
-    # leaves a host with more than one generation model installed.
-    # We now prefer the Qwen3.6 35B-A3B (what the Docker UI calls ai/qwen3.6:latest
-    # when you have plenty of memory) for the top tier. It is the current best
-    # published option in the ai/ runner namespace for agentic work.
+    # Select the largest model that fits the GPU's VRAM WITH HEADROOM for the
+    # context window + embedder. Mirrors the canonical headroom-aware logic in
+    # apps/web/lib/inference/local-model-policy.ts (LOCAL_MODEL_TIERS) — PowerShell
+    # cannot import TS, so keep this in sync. The Providers UX over-commit guard
+    # (same module) catches any drift.
     #
-    # Pinned specific quant tag (never bare :latest) for size predictability and
-    # reproducibility. The older 30B-A3B remains available for lower tiers.
-    if ($gpuVRAM_GB -ge 22) {
+    # Thresholds = model weights + ~5 GB headroom (measured: a 30B at a 24k build
+    # context uses ~20.7 GB on a 24 GB card). So a 24 GB 4090 lands on the 30B
+    # coder, NOT the 35B — which would fill the card and over-commit the moment a
+    # build runs. Pinned quant tags (never bare :latest) for reproducible sizes.
+    if ($gpuVRAM_GB -ge 53) {
+        $selectedModel = "ai/qwen3-coder-next"
+        $modelReason = "Qwen3-Coder-Next 80B (MoE) -- top agentic coder, fits your $gpuVRAM_GB GB VRAM with headroom"
+    } elseif ($gpuVRAM_GB -ge 27) {
         $selectedModel = "ai/qwen3.6:35B-A3B-UD-Q4_K_M"
-        $modelReason = "Qwen3.6 35B-A3B (MoE) -- current best agentic model, fits your $gpuVRAM_GB GB VRAM"
-    } elseif ($gpuVRAM_GB -ge 12) {
+        $modelReason = "Qwen3.6 35B-A3B (MoE) -- strong agentic model, fits your $gpuVRAM_GB GB VRAM with headroom"
+    } elseif ($gpuVRAM_GB -ge 21) {
+        $selectedModel = "ai/qwen3-coder"
+        $modelReason = "Qwen3-Coder 30B (MoE) -- serves chat + code, fits your $gpuVRAM_GB GB VRAM with headroom"
+    } elseif ($gpuVRAM_GB -ge 17) {
         $selectedModel = "ai/qwen3:14B-Q6_K"
-        $modelReason = "Qwen3 14B -- top local tool calling (F1 0.97, exceeds Haiku)"
-    } elseif ($gpuVRAM_GB -ge 6) {
+        $modelReason = "Qwen3 14B -- top local tool calling (F1 0.97), fits your $gpuVRAM_GB GB VRAM"
+    } elseif ($gpuVRAM_GB -ge 11) {
         $selectedModel = "ai/qwen3:8B-Q4_K_M"
-        $modelReason = "Qwen3 8B -- matches cloud Haiku tool calling (F1 0.93)"
-    } elseif ($totalRAM_GB -ge 16) {
+        $modelReason = "Qwen3 8B -- matches cloud Haiku tool calling (F1 0.93), fits your $gpuVRAM_GB GB VRAM"
+    } elseif ($gpuVRAM_GB -ge 8) {
         $selectedModel = "ai/qwen3:4B-UD-Q4_K_XL"
-        $modelReason = "Qwen3 4B -- fits your RAM (CPU mode)"
+        $modelReason = "Qwen3 4B -- lightweight, fits your $gpuVRAM_GB GB VRAM"
     } else {
         $selectedModel = "ai/qwen3:4B-UD-Q4_K_XL"
-        $modelReason = "Qwen3 4B -- lightweight, runs on your hardware"
+        $modelReason = "Qwen3 4B -- lightweight, runs on your hardware (CPU / low VRAM)"
     }
     Write-Action "Selected AI model: $selectedModel ($modelReason)"
     Write-Action "Models are managed by Docker Model Runner (built into Docker Desktop)."

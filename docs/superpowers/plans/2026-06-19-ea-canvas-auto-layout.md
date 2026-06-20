@@ -38,3 +38,19 @@ Layout repositions **top-level** nodes only; structured value-stream children fo
 ## Verification
 
 Local: vitest on the adapter; full web suite before push. CI green. Functional: load an auto-generated EA view, click each algorithm, drag a node, reload (persisted), restore a revision, add an element and confirm it nestles by its neighbor.
+
+---
+
+## Addendum — 2026-06-20: shape-aware layouts for large models + 2 UX fixes (BI-20F95B0E)
+
+Live review of the deployed #2151 surfaced that the layouts sprawl into hairballs on large views, plus two UX bugs. Two research passes (web + live-DB) found: the big views are **trees/forests stored as flat "contains" edges** (Application Routes 615n/614e tree; Code Structure 343n star; Data Model 424n/1262e/57 isolated), and the layered path **never set `elk.separateConnectedComponents`**, so disconnected nodes spread. `EaViewElement.parentViewElementId` (containment nesting) is schema-supported but never populated by the generators.
+
+**Shipped (no new dependency — ELK already installed):**
+- Rewrote `apps/web/lib/ea/canvas-layout.ts` to call ELK directly (dropping the swimlane-partitioner detour) with `separateConnectedComponents=true` + component spacing + aspect ratio on every ELK path.
+- Algorithm set is now **`auto` (default) · `organic` (ELK stress, capped iterations) · `tree` (ELK mrtree) · `layered` (ELK, tuned) · `radial` (BFS)** — replaces the old layered/radial/hierarchical trio.
+- `pickAutoAlgorithm` + `computeMetrics` (union-find components + cycle detection + degree stats): tree/forest→tree, star→radial, dense/disconnected→organic, else layered.
+- `EaCanvas` picker → an **Auto-layout** primary button + a layout menu (`▾`) for specific algorithms.
+- **UX fix B:** `proOptions={{ hideAttribution: true }}` removes the React Flow badge (@xyflow/react is MIT).
+- **UX fix C:** added a `← Views` back link (→ `/ea/views`) to the EA top bar, matching the sibling-detail-page pattern.
+
+**Deferred follow-ups (file separately):** populate `parentViewElementId` from "contains" edges + render containment as nested groups (`elk.hierarchyHandling: INCLUDE_CHILDREN` + React Flow parent nodes) — biggest structural ceiling; and move ELK to a Web Worker for 600-node perf.

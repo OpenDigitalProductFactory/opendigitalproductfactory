@@ -18,6 +18,7 @@ export const CONTRIBUTOR_LANE_STATUSES = [
   "ready-for-review",
   "released",
   "stale",
+  "shipped",
 ] as const;
 
 export type ContributorLaneStatus = (typeof CONTRIBUTOR_LANE_STATUSES)[number];

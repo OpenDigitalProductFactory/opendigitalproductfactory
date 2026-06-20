@@ -69,15 +69,31 @@ export default function DraftInvoiceScreen() {
       <Text style={styles.h1}>New invoice</Text>
 
       <Text style={styles.label}>Customer account id</Text>
-      <TextInput
-        value={accountId}
-        onChangeText={setAccountId}
-        style={styles.input}
-        placeholder="ACC-…"
-        placeholderTextColor={theme.colors.textMuted}
-        autoCapitalize="characters"
-        testID="invoice-accountId"
-      />
+      {accountId ? (
+        // Server resolved the account from the WorkItem source — show it as
+        // a read-only confirmation instead of asking the tech to retype it.
+        // Long-press to override (the few legitimate cases: tech notices the
+        // resolved account is wrong, or the source link is stale).
+        <Pressable
+          onLongPress={() => setAccountId("")}
+          accessibilityRole="button"
+          testID="invoice-accountId-readonly"
+          style={[styles.input, styles.readonlyAccount]}
+        >
+          <Text style={styles.readonlyAccountText}>{accountId}</Text>
+          <Text style={styles.readonlyAccountHint}>long-press to change</Text>
+        </Pressable>
+      ) : (
+        <TextInput
+          value={accountId}
+          onChangeText={setAccountId}
+          style={styles.input}
+          placeholder="ACC-…"
+          placeholderTextColor={theme.colors.textMuted}
+          autoCapitalize="characters"
+          testID="invoice-accountId"
+        />
+      )}
 
       <Text style={styles.label}>Due date (YYYY-MM-DD)</Text>
       <TextInput
@@ -226,6 +242,13 @@ function makeStyles({ colors, spacing, borderRadius }: ReturnType<typeof useThem
       fontSize: 15,
     },
     multiline: { minHeight: 70, textAlignVertical: "top" },
+    readonlyAccount: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    readonlyAccountText: { color: colors.text, fontSize: 15, fontWeight: "600" },
+    readonlyAccountHint: { color: colors.textMuted, fontSize: 11 },
     lineRow: {
       backgroundColor: colors.surface2,
       borderColor: colors.border,

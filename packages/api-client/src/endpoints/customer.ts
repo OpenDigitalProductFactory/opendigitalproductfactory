@@ -3,6 +3,7 @@ import type {
   ContactWithRoles,
   CreateContactRequest,
   CustomerAccount,
+  CustomerVisit,
   InvoiceDetail,
   PaginatedResponse,
   SimilarContact,
@@ -73,6 +74,28 @@ export function customerEndpoints(client: DpfClient) {
       const query = qs.toString();
       return client.get<PaginatedResponse<InvoiceDetail>>(
         `/api/v1/customer/invoices${query ? `?${query}` : ""}`,
+      );
+    },
+
+    /**
+     * "My visits" — the signed-in customer's appointments / service visits.
+     * Scoped server-side to the contacts on the customer's account; supply
+     * `upcoming=true` for forward-looking visits only.
+     */
+    myVisits: (params?: {
+      cursor?: string;
+      limit?: number;
+      status?: string;
+      upcoming?: boolean;
+    }) => {
+      const qs = new URLSearchParams();
+      if (params?.cursor) qs.set("cursor", params.cursor);
+      if (params?.limit) qs.set("limit", String(params.limit));
+      if (params?.status) qs.set("status", params.status);
+      if (params?.upcoming) qs.set("upcoming", "true");
+      const query = qs.toString();
+      return client.get<PaginatedResponse<CustomerVisit>>(
+        `/api/v1/customer/visits${query ? `?${query}` : ""}`,
       );
     },
   };

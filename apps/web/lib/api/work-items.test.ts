@@ -94,6 +94,17 @@ describe("toWorkItemSummary / toWorkItemDetail", () => {
     expect(d.dueAt).toBeNull();
     expect(d.teamId).toBeNull();
   });
+  it("account defaults to null when not resolved", () => {
+    expect(toWorkItemDetail(baseRow).account).toBeNull();
+  });
+  it("forwards a resolved customer account onto the wire shape", () => {
+    const account = {
+      id: "acct_cuid",
+      accountId: "ACC-ACME",
+      name: "Acme HVAC Co",
+    };
+    expect(toWorkItemDetail(baseRow, account).account).toEqual(account);
+  });
 });
 
 describe("statusUpdateData", () => {

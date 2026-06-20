@@ -6,6 +6,7 @@
 // tested in work-items.test.ts; the routes own the Prisma calls.
 
 import type {
+  WorkItemAccount,
   WorkItemStatus,
   WorkItemSummary,
   WorkItemDetail,
@@ -88,7 +89,10 @@ export function toWorkItemSummary(row: WorkItemRow): WorkItemSummary {
   };
 }
 
-export function toWorkItemDetail(row: WorkItemRow): WorkItemDetail {
+export function toWorkItemDetail(
+  row: WorkItemRow,
+  account: WorkItemAccount | null = null,
+): WorkItemDetail {
   return {
     ...toWorkItemSummary(row),
     description: row.description ?? "",
@@ -97,6 +101,7 @@ export function toWorkItemDetail(row: WorkItemRow): WorkItemDetail {
     assignedToUserId: row.assignedToUserId ?? null,
     claimedAt: iso(row.claimedAt),
     completedAt: iso(row.completedAt),
+    account,
   };
 }
 
