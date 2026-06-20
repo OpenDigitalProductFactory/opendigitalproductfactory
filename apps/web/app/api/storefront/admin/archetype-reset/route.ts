@@ -9,9 +9,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { targetArchetypeId } = (await req.json()) as {
+  const body = (await req.json()) as {
     targetArchetypeId?: string;
+    // Optional operator-owned identity to apply during the swap (company name,
+    // URL slug, hero tagline). Omitted fields are preserved and reported back in
+    // result.identity / result.warnings so the operator can update them. (#1748)
+    identity?: { orgName?: string; slug?: string; tagline?: string };
   };
+  const { targetArchetypeId, identity } = body;
 
   if (!targetArchetypeId) {
     return NextResponse.json({ error: "targetArchetypeId is required" }, { status: 400 });
@@ -30,6 +35,7 @@ export async function POST(req: NextRequest) {
       organizationId: organization.id,
       targetArchetypeId,
       mode: "replace-seeded-content",
+      ...(identity ? { identity } : {}),
     });
 
     return NextResponse.json({ success: true, result });

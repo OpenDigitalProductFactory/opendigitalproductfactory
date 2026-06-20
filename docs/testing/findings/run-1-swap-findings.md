@@ -18,6 +18,7 @@
 
 **Observed**: After each archetype-reset call, the portal continued showing "Riverside Plumbing Solutions" name, slug, and hero copy. Only service items swapped.
 **Valid scope**: Post-go-live archetype change via admin API only — not first-time install path.
+**Resolution** ([#1748](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/1748)): `resetStorefrontArchetype` now (a) accepts an optional `identity` (`{ orgName, slug, tagline }`) so a caller — e.g. a future "change archetype" UI — can perform a full identity swap, with the slug uniqueness-guarded; and (b) when identity is not supplied, deliberately **preserves** the operator-owned name/slug/tagline (archetypes carry no defaults for these) and returns `result.identity` + `result.warnings` naming exactly what still reflects the prior setup, so the surface can prompt the operator instead of silently presenting the wrong business identity. See `apps/web/lib/storefront/archetype-reset.ts`.
 
 ### AUDIT-R1S-002 · Important · Inquiry form has no archetype-specific fields on any swap archetype
 

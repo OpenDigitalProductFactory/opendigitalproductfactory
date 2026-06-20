@@ -65,4 +65,20 @@ describe("POST /api/storefront/admin/archetype-reset", () => {
       mode: "replace-seeded-content",
     });
   });
+
+  it("passes operator identity through to the reset when supplied", async () => {
+    const identity = {
+      orgName: "Riverside Electric Co.",
+      slug: "riverside-electric",
+      tagline: "Licensed electricians",
+    };
+    const res = await POST(makeReq({ targetArchetypeId: "electrician", identity }));
+    expect(res.status).toBe(200);
+    expect(mockReset).toHaveBeenCalledWith({
+      organizationId: "org_1",
+      targetArchetypeId: "electrician",
+      mode: "replace-seeded-content",
+      identity,
+    });
+  });
 });

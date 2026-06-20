@@ -6,17 +6,35 @@ import { seedBookingScheduleDefaults } from "./seed-booking-defaults";
 
 type ResetMode = "replace-seeded-content";
 
+/** Operator-owned business identity that survives an archetype change. */
+const IDENTITY_FIELDS = ["orgName", "slug", "tagline"] as const;
+type IdentityField = (typeof IDENTITY_FIELDS)[number];
+
 export async function resetStorefrontArchetype(input: {
   organizationId: string;
   targetArchetypeId: string;
   mode: ResetMode;
+  /**
+   * Operator-owned business identity (company name, URL slug, hero tagline).
+   * Archetypes carry NO default values for these, so an archetype swap never
+   * auto-derives them — doing so would clobber the operator's real business
+   * identity (or blank it). When a caller (e.g. a "change archetype" UI) has
+   * collected new values it can pass them here to perform a full swap; anything
+   * omitted is preserved and reported in `result.identity` + `result.warnings`
+   * so the operator can update it themselves. (AUDIT-R1S-001 / #1748)
+   */
+  identity?: {
+    orgName?: string;
+    slug?: string;
+    tagline?: string;
+  };
 }) {
-  const { organizationId, targetArchetypeId, mode } = input;
+  const { organizationId, targetArchetypeId, mode, identity } = input;
 
   return prisma.$transaction(async (tx) => {
     const organization = await tx.organization.findUnique({
       where: { id: organizationId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, slug: true },
     });
 
     if (!organization) {
@@ -25,7 +43,7 @@ export async function resetStorefrontArchetype(input: {
 
     const storefront = await tx.storefrontConfig.findUnique({
       where: { organizationId },
-      select: { id: true, organizationId: true },
+      select: { id: true, organizationId: true, tagline: true },
     });
 
     if (!storefront) {
@@ -48,14 +66,59 @@ export async function resetStorefrontArchetype(input: {
       throw new Error(`Target archetype ${targetArchetypeId} not found`);
     }
 
+    // Resolve operator-owned identity. Only values the caller explicitly
+    // supplied are applied; everything else is preserved and reported below so
+    // the public storefront never silently presents the prior archetype's
+    // identity to customers without the operator being told. (AUDIT-R1S-001)
+    const warnings: string[] = [];
+    const identityUpdated: IdentityField[] = [];
+
+    const organizationData: Prisma.OrganizationUncheckedUpdateInput = {
+      industry: targetArchetype.category,
+    };
+    const storefrontData: Prisma.StorefrontConfigUncheckedUpdateInput = {
+      archetypeId: targetArchetype.id,
+    };
+
+    let finalName = organization.name;
+    let finalSlug = organization.slug;
+    let finalTagline = storefront.tagline ?? null;
+
+    if (identity?.orgName != null && identity.orgName !== organization.name) {
+      organizationData.name = identity.orgName;
+      finalName = identity.orgName;
+      identityUpdated.push("orgName");
+    }
+    if (identity?.tagline != null && identity.tagline !== storefront.tagline) {
+      storefrontData.tagline = identity.tagline;
+      finalTagline = identity.tagline;
+      identityUpdated.push("tagline");
+    }
+    if (identity?.slug != null && identity.slug !== organization.slug) {
+      // slug is @unique — never overwrite another org's slug.
+      const slugTaken = await tx.organization.findFirst({
+        where: { slug: identity.slug, NOT: { id: organizationId } },
+        select: { id: true },
+      });
+      if (slugTaken) {
+        warnings.push(
+          `Requested URL slug "${identity.slug}" is already in use; the storefront still uses "${organization.slug}".`,
+        );
+      } else {
+        organizationData.slug = identity.slug;
+        finalSlug = identity.slug;
+        identityUpdated.push("slug");
+      }
+    }
+
     await tx.storefrontConfig.update({
       where: { id: storefront.id },
-      data: { archetypeId: targetArchetype.id },
+      data: storefrontData,
     });
 
     await tx.organization.update({
       where: { id: organizationId },
-      data: { industry: targetArchetype.category },
+      data: organizationData,
     });
 
     await tx.businessContext.updateMany({
@@ -172,8 +235,20 @@ export async function resetStorefrontArchetype(input: {
       await seedBookingScheduleDefaults(tx, {
         storefrontId: storefront.id,
         archetypeId: targetArchetype.archetypeId,
-        providerName: organization.name ?? "Bookings",
+        providerName: finalName ?? "Bookings",
       });
+    }
+
+    // Identity fields the caller did NOT supply were preserved and may still
+    // reflect the prior archetype/setup — surface them so the operator (or the
+    // calling UI) can update them rather than silently presenting the wrong
+    // business identity to customers. (AUDIT-R1S-001 / #1748)
+    const identityPreserved = IDENTITY_FIELDS.filter((f) => !identityUpdated.includes(f));
+    if (identityPreserved.length > 0) {
+      warnings.push(
+        `Business identity (${identityPreserved.join(", ")}) was preserved across the archetype change and may still reflect your previous setup. ` +
+          `Update it in storefront settings if it no longer fits "${targetArchetype.archetypeId}".`,
+      );
     }
 
     return {
@@ -182,6 +257,14 @@ export async function resetStorefrontArchetype(input: {
       category: targetArchetype.category,
       sectionsCreated,
       itemsCreated,
+      identity: {
+        orgName: finalName,
+        slug: finalSlug,
+        tagline: finalTagline,
+        updated: identityUpdated,
+        preserved: identityPreserved,
+      },
+      warnings,
     };
   });
 }

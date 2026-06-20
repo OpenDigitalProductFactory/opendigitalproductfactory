@@ -196,6 +196,22 @@ The Docker VM is under-provisioned — see [Docker memory](#docker-memory).
 The database migrations may not have completed. Tail the portal-init
 container: `docker compose logs portal-init`.
 
+**Install log says "Docker Model Runner isn't available … skipping the AI
+model download".**
+Expected on Docker Desktop older than 4.40 (the `docker model` CLI isn't
+present). The portal installs and runs normally — only the local AI model
+is skipped, and the installer no longer leaks a raw `docker: 'model' is not
+a docker command` error. Update Docker Desktop and re-run the installer to
+pull the model, or point the portal at an external LLM provider under
+Admin → Providers.
+
+**Install log says an "optional sidecar … image is unavailable upstream".**
+The bundled voice speech-to-text sidecar (`dpf-stt`) is pulled from a
+third-party registry that occasionally prunes its image tag. When that
+happens the installer brings the platform up *without* voice input rather
+than failing the whole install — everything else works. Re-run the
+installer later to pick the image up once it's available again.
+
 **`install-dpf.bat` closed instantly / "running scripts is disabled".**
 Run it from an elevated prompt; the `.bat` launcher passes
 `-ExecutionPolicy Bypass` for you, so you should not need to change the
