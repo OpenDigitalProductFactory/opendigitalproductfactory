@@ -27,8 +27,10 @@ Mark asked: *"should the AI coworker be able to adjust these things live while l
 
 A read-only coworker capability: given a `viewId`, return a structured digest (elements by type, relationships, containment summary, isolated/hub nodes, viewpoint conformance, layout density) so the coworker can **explain or critique** the view ("this view has 57 orphaned data objects; the Auth cluster is dense; consider splitting…").
 
-- **MCP tool** `describe_ea_view(viewId)` (read; authority = `view_ea_modeler`) → JSON digest computed from `getEaView` + `computeMetrics` (already built) + viewpoint rules. No writes.
+- **MCP tool** `describe_ea_view(viewId)` (read; authority = `view_ea_modeler`) → JSON digest computed from `getEaView` + viewpoint rules. No writes.
 - Deliverable: tool + wiring into the EA-architect persona prompt. No canvas change.
+
+**Status: SHIPPED (BI-B9B77BBF).** `describe_ea_view` is registered in `apps/web/lib/mcp-tools.ts` (def + `executeTool` case) and tested in `mcp-tools-ea.test.ts`. The digest returns element/relationship counts by type, connected components, isolated + hub (highest-degree) nodes, containment structure (containers + roots from `contains` edges), viewpoint conformance, and density/shape (tree/forest/mesh). No persona-prompt edit was needed — the EA-architect persona surfaces MCP tools by description rather than an enumerated list, so registration is sufficient for the coworker to discover and use it.
 
 ## Phase 2 — GOVERN-EDIT: apply model & layout changes
 

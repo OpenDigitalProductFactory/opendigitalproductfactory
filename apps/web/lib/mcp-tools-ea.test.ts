@@ -11,7 +11,10 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
+vi.mock("@/lib/ea-data", () => ({ getEaView: vi.fn() }));
+
 import { prisma } from "@dpf/db";
+import { getEaView } from "@/lib/ea-data";
 import { executeTool } from "./mcp-tools";
 
 describe("create_ea_element", () => {
@@ -87,5 +90,44 @@ describe("query_ontology_graph", () => {
     const result = await executeTool("query_ontology_graph", { elementTypeSlugs: ["digital_product"], limit: 5 }, "u-1");
     expect(result.success).toBe(true);
     expect(result.data?.elements).toHaveLength(1);
+  });
+});
+
+describe("describe_ea_view", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it("returns an error when the view is not found", async () => {
+    vi.mocked(getEaView).mockResolvedValue(null as never);
+    const result = await executeTool("describe_ea_view", { viewId: "v-missing" }, "u-1");
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("ViewNotFound");
+  });
+
+  it("summarizes elements, relationships, containment, and shape", async () => {
+    vi.mocked(getEaView).mockResolvedValue({
+      id: "v-1",
+      name: "Routes",
+      notationSlug: "archimate4",
+      viewpoint: { name: "Decomp", allowedElementTypeSlugs: ["package", "part_definition"] },
+      elements: [
+        { viewElementId: "ve-p", element: { name: "Pkg" }, elementType: { slug: "package", name: "Package" } },
+        { viewElementId: "ve-a", element: { name: "PartA" }, elementType: { slug: "part_definition", name: "Part Definition" } },
+        { viewElementId: "ve-b", element: { name: "PartB" }, elementType: { slug: "part_definition", name: "Part Definition" } },
+      ],
+      edges: [
+        { fromViewElementId: "ve-p", toViewElementId: "ve-a", relationshipType: { slug: "contains", name: "Contains" } },
+        { fromViewElementId: "ve-p", toViewElementId: "ve-b", relationshipType: { slug: "contains", name: "Contains" } },
+      ],
+    } as never);
+
+    const result = await executeTool("describe_ea_view", { viewId: "v-1" }, "u-1");
+    expect(result.success).toBe(true);
+    expect(result.data?.elementCount).toBe(3);
+    expect(result.data?.relationshipCount).toBe(2);
+    expect((result.data?.elementsByType as Record<string, number>)["Part Definition"]).toBe(2);
+    expect((result.data?.containment as { roots: number }).roots).toBe(1);
+    expect(result.data?.shape).toBe("tree");
+    expect(result.data?.nonConformingElements).toBe(0);
+    expect((result.data?.hubs as Array<{ name: string; degree: number }>)[0]?.name).toBe("Pkg");
   });
 });
