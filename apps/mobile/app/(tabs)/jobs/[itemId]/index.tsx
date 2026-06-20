@@ -113,14 +113,26 @@ export default function JobDetailScreen() {
           </Pressable>
         ))}
         {detail.status === "completed" ? (
-          <Pressable
-            style={styles.button}
-            onPress={goToInvoice}
-            accessibilityRole="button"
-            testID="action-draft-invoice"
-          >
-            <Text style={styles.buttonText}>Draft invoice</Text>
-          </Pressable>
+          <>
+            <Pressable
+              style={styles.button}
+              onPress={() =>
+                router.push(`/jobs/${encodeURIComponent(detail.itemId)}/complete`)
+              }
+              accessibilityRole="button"
+              testID="action-capture-work"
+            >
+              <Text style={styles.buttonText}>Capture work done</Text>
+            </Pressable>
+            <Pressable
+              style={styles.button}
+              onPress={goToInvoice}
+              accessibilityRole="button"
+              testID="action-draft-invoice"
+            >
+              <Text style={styles.buttonText}>Draft invoice</Text>
+            </Pressable>
+          </>
         ) : null}
       </View>
     </ScrollView>
