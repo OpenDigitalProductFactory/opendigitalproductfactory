@@ -51,6 +51,10 @@ export interface RoutedInferenceResult {
   routeDecision: RouteDecision;
   /** EP-INF-009d: Set when interactionMode is "background". Poll via pollAsyncOperation(). */
   asyncOperationId?: string;
+  /** Resolved endpoint's context window (tokens) when known; null for local /
+   *  unknown. The agentic loop learns this from the first dispatch to size
+   *  compaction + the context-pressure gauge to the real window (BI-9679EB1A). */
+  resolvedMaxContextTokens?: number | null;
 }
 
 // ─── Error ──────────────────────────────────────────────────────────────────
@@ -677,6 +681,7 @@ export async function routeAndCall(
     toolsStripped,
     routeDecision: decision,
     responseId: result.responseId,
+    resolvedMaxContextTokens: selectedManifest?.maxContextTokens ?? null,
   };
 }
 

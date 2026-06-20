@@ -132,11 +132,17 @@ export async function dispatchIdeateForApprovedBuild(params: {
     // Short-circuit to a clean skip with a meaningful BuildActivity row.
     const { getBuildStudioConfig } = await import("@/lib/integrate/build-studio-config");
     const config = await getBuildStudioConfig();
+    // BI-0F291741/local-tuning: resolve per the configured engine. Without the
+    // `opencode` branch this fell through to codexProviderId (cloud chatgpt),
+    // so a fully-local install (provider="opencode", opencodeProviderId="local")
+    // silently ran Ideate research on the cloud instead of the local model.
     const providerId = config.provider === "claude"
       ? config.claudeProviderId
       : config.provider === "grok"
         ? config.grokProviderId
-        : config.codexProviderId;
+        : config.provider === "opencode"
+          ? config.opencodeProviderId
+          : config.codexProviderId;
 
     if (config.provider === "agentic" || !providerId) {
       const outcome: DispatchOutcome = {
@@ -151,7 +157,9 @@ export async function dispatchIdeateForApprovedBuild(params: {
       ? config.claudeModel
       : config.provider === "grok"
         ? config.grokModel
-        : config.codexModel;
+        : config.provider === "opencode"
+          ? config.opencodeModel
+          : config.codexModel;
 
     // The BI body is the canonical context for backlog-promoted drafts.
     // It typically contains problem statement, acceptance criteria, and
