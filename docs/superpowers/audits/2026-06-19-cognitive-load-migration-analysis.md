@@ -153,3 +153,43 @@ For each, migrate the *gather / generate / execute / verify* around the decision
 4. Treat §3.3 (the decision framework) as a reusable lens — candidate for promotion to a kernel principle or a `dpf-` skill ("migrate-to-the-right-tier") if it proves out.
 
 > Note: opportunity file:line specifics were gathered by a 4-agent sweep and the cited files are confirmed to exist; exact line numbers and the precise stabilization thresholds in §6 require the normal substrate-verify + design pass before any build.
+
+---
+
+## 9. Status ledger (as of 2026-06-20)
+
+Honest accounting — most opportunities are **catalogued, not built**. Per `optimize-for-the-whole`, a catalogued opportunity is not "done"; per `structural-verification-is-not-functional`, none of the below is verified-live.
+
+| Opportunity | State |
+|---|---|
+| Cron "Monthly-runs-daily" bug (found dogfooding §6's native bridge) | **Fixed + merged** (PR #2149) |
+| Recurring scan (interim → native) | **Live**: `scheduledAgentTask` agent-task-fe778ee7; client cron retired |
+| #6 Ascent (watchdog / graph-staleness / curator) | **Filed**: BI-A1FC3EBB / BI-12E646D3 / BI-93FE150F (triaging) |
+| #1 Self-driving migration loop (keystone) | **Filed**: BI-A028AA14 (triaging) |
+| Schedule management has no MCP surface | **Filed**: BI-1C44A93A (triaging) |
+| #2 Business-context auto-derivation (highest customer-felt) | Catalogued only |
+| #3 Provider/config eligibility auto-resolve | Catalogued only |
+| #4 Convergence-escalation + pre-review linting | Catalogued only |
+| #5 Watchdog auto-recovery before escalation | Catalogued only |
+| #7 Archetype auto-suggest | Catalogued only |
+| #8 Coworker tool-ification cleanup | Catalogued only (lowest priority) |
+
+The catalogued-only rows — especially #2/#3/#7, the customer-felt surfaces — should be filed as BIs so they are tracked, not prose.
+
+## 10. Instrumentation for self-identification (what makes the loop evidence-based)
+
+The loop in §6 currently depends on an agent **re-reading the codebase each cycle** — an `architecture-over-shortcuts` shortcut. To make future-opportunity detection a *query* rather than a re-derivation, the platform must distill its existing raw events into migration **signals**. `make-silent-failures-observable` (core) makes this mandatory: the "nothing migrated / threshold misfired / nothing stabilized" paths are silent no-ops today, and a silent no-op is invisible work.
+
+**Raw events that already exist** (reuse, don't reinvent — `verify-substrate-before-proposing-new`): `ToolExecution` (every call: agent, tool, params, result, success, durationMs, route), `AdapterRunTelemetry` (token/cost incl. cache), `TaskRun` (phase durations), `SkillMetric` + observation jobs (`skill-metrics-aggregator`, `coworker-regression-detect`, `log-signature-scanner`).
+
+**Signals that do NOT yet exist (the gap):**
+
+| Missing signal | Feeds | Built on | Why (kernel) |
+|---|---|---|---|
+| **Recurrence + output-variance** per (agent × tool-chain × input-shape) | AI→code descent | `ToolExecution` | The "this reasoning has stabilized → codify" trigger; without it, descent candidates are invisible. |
+| **Cost-per-reasoning-pattern** rollup | AI→code ROI ranking | `AdapterRunTelemetry` | Ranks which AI work is most worth codifying (`responsible-capacity-utilization`). |
+| **Per-job misfire / defer counter** | code→AI ascent | scheduled jobs | `make-silent-failures-observable` — a deterministic job that guessed wrong must say so, or ascent candidates can't self-nominate (the three filed were found by hand, not by signal). |
+| **Surface friction** (time-on-field, abandonment) | human→AI/code | `EP-HX-LOOP` (open, unbuilt) | The highest customer-felt tier is the least instrumented; no data ⇒ no nomination. |
+| **Work-tier tag + load-descent trend** | the whole | new lightweight field | `optimize-for-the-whole` — without a tier label + trend, migration is not *measurable over time*; each cycle rediscovers from scratch. |
+
+These belong in **BI-A028AA14's design pass** as its data foundation, with the surface-friction signal routed through **EP-HX-LOOP**. Until those signals exist, "find the next opportunity" remains agent-judgment-over-code (the interim monthly scan), not measurement. Filing the BIs is blocked only by the `dpf` MCP being offline this session; the design is captured here so the build is unambiguous when it resumes.
