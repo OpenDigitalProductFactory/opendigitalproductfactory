@@ -60,8 +60,12 @@ export type BuildProgressVisibility = {
   };
   /** Phase-level cost rollup; empty array when BuildPhaseRun rows don't exist yet */
   phaseRuns: PhaseRunSummary[];
-  /** EP-UNIFIED-TRACKING Phase 1: cross-surface evidence (external-agent, runtime, capsule), newest first. */
-  evidenceTimeline: UnifiedEvidenceTimelineEvent[];
+  /**
+   * EP-UNIFIED-TRACKING Phase 1: cross-surface evidence (external-agent, runtime,
+   * capsule), newest first. Optional so callers constructing a projection literal
+   * (e.g. tests) need not supply it; getBuildProgressVisibility always populates it.
+   */
+  evidenceTimeline?: UnifiedEvidenceTimelineEvent[];
 };
 
 export function buildProgressProjectionFromParts(args: {
