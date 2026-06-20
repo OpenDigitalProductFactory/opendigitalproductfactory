@@ -61,6 +61,7 @@ DPF already has most of the hard plumbing this design needs:
 - Provider/model scoring convergence: [`docs/superpowers/specs/2026-06-19-provider-model-scoring-convergence-design.md`](../superpowers/specs/2026-06-19-provider-model-scoring-convergence-design.md)
 - Situational decision weighting: [`docs/superpowers/specs/2026-06-05-situational-aware-decision-weighting-design.md`](../superpowers/specs/2026-06-05-situational-aware-decision-weighting-design.md)
 - Routing/receipt substrate review: [`docs/architecture/2026-06-14-odysseus-review-depth-pass.md`](../architecture/2026-06-14-odysseus-review-depth-pass.md)
+- Agentic loop execution and iteration ceiling: [`apps/web/lib/tak/agentic-loop.ts`](../../apps/web/lib/tak/agentic-loop.ts)
 
 The design should therefore be written as **consolidate, compile, and surface**, not "create a new AI model-control system."
 
@@ -221,6 +222,22 @@ preference vector
   -> receipt + telemetry + benchmark
 ```
 
+### Control Layers
+
+The compiler spans three layers, and `ModelProfile` is only the first. Most of the triangle's leverage — and almost all of its cost — lives in the layers below the model.
+
+| Layer | Question it answers | Where it lives today | What the triangle compiles into it |
+| --- | --- | --- | --- |
+| Model | "Which engine, at what unit price?" | `ModelProfile` capability scores plus `inputPricePerMToken` / `outputPricePerMToken` | tier floor, candidate set |
+| Per-call posture | "How hard to try on this one call?" | `RequestContract.reasoningDepth`, `RequestContract.budgetClass`, token estimates, tier-floor `minimumDimensions` | effort mode, cost/quality bias |
+| Orchestration / loop | "How many calls, perspectives, retries, verifications?" | No posture-driven home; `agentic-loop.ts` bounds iterations with a hardcoded `MAX_ITERATIONS = 200` safety constant | iteration budget, perspective/review count, retry ceiling, verification depth |
+
+Cost is an execution outcome, not a model attribute:
+
+`cost ≈ unit_price × tokens_per_call × calls × iterations × retries`
+
+`ModelProfile` supplies only the first term. The multipliers live in the orchestration layer (today a constant) and in the realized ledger (`RouteOutcome`, `TokenUsage`, `AdapterRunTelemetry`). A small model in a deep, multi-perspective, verify-and-retry loop can cost more than a single frontier call, so "pull toward Frugal" cannot be read off `costTier`: it must compile into a loop budget and be reconciled against measured spend (the predicted-vs-actual drift of Locked Decision 6).
+
 ### Inputs
 
 - preference vector and preset
@@ -245,6 +262,8 @@ preference vector
 | retry/fallback budget | Routing policy and fallback chain |
 | token/context budget | Cost governance and request contract estimates |
 | escalation/approval policy | Decision Perspective / HITL policy |
+
+The model and per-call-posture rows compile into fields that already exist. The orchestration-layer rows — review/perspective count, verification depth, retry/fallback budget, and especially the iteration budget — have no single configurable home today; they are scattered across workflow policy, fallback config, and a hardcoded loop ceiling. A per-decision **orchestration budget** that bounds the agentic loop and is recorded on the receipt — not a new model registry — is the one new surface the triangle plausibly justifies. The audit confirms or refutes this in Slice 0.
 
 ### Representative Compile Table
 
@@ -424,6 +443,7 @@ Use the requested 20 percent refactor budget here.
 - Confirm whether saved defaults need a new table or can extend an existing profile/settings model.
 - Confirm whether benchmark records should be materialized or initially projected as a read model.
 - Remove or avoid any new entity that duplicates existing routing/cost truth.
+- Confirm there is no per-decision agentic-loop budget today: `apps/web/lib/tak/agentic-loop.ts` bounds iterations with a hardcoded `MAX_ITERATIONS = 200` safety constant, not a posture-driven budget. Decide whether a per-decision **orchestration budget** (iteration ceiling, perspective/review count, retry budget, verification depth) is the one justified new surface, and where it attaches to the route/decision receipt.
 - Define stable TypeScript types for preference input and decoded policy output.
 
 Exit criterion: a one-page substrate delta naming every schema addition and every reused table.
@@ -497,6 +517,7 @@ The design is ready for implementation when:
 5. Should per-decision overrides be available to all users, or only roles with specific tool/authority grants?
 6. How should the TAK draft standard name and validate the preference snapshot, decoded policy, receipt, and feedback objects?
 7. What is the minimum cohort size before hive-derived defaults can influence a local install?
+8. Should the orchestration/loop budget (iteration ceiling, perspective count, retry/verification depth) be a new per-decision surface, or can it be expressed by extending `AgentModelConfig` or workflow policy? Today the loop ceiling is a hardcoded constant, so the triangle cannot move its largest cost/quality lever without resolving this.
 
 ---
 
