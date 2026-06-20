@@ -3,6 +3,8 @@ import {
   isEmbeddingModelId,
   classifyLocalModelRole,
   recommendGenerationModel,
+  recommendGenerationModelForHost,
+  computeMemoryBudgetGb,
   estimateModelVramGb,
   recommendKeepGenerationModel,
   detectLocalModelOverCommit,
@@ -23,19 +25,46 @@ describe("classifyLocalModelRole / isEmbeddingModelId", () => {
   });
 });
 
-describe("recommendGenerationModel", () => {
+describe("recommendGenerationModel (discrete, headroom-aware)", () => {
   it("null VRAM (undetectable) → broadly-compatible 8B default", () => {
     expect(recommendGenerationModel(null)).toBe("ai/qwen3:8B-Q4_K_M");
   });
-  it("0 VRAM (CPU-only host) → 4B tier", () => {
+  it("0 VRAM (CPU-only host) → smallest tier", () => {
     expect(recommendGenerationModel(0)).toBe("ai/qwen3:4B-UD-Q4_K_XL");
   });
-  it("picks the largest tier that fits", () => {
-    expect(recommendGenerationModel(24)).toBe("ai/qwen3.6:35B-A3B-UD-Q4_K_M");
-    expect(recommendGenerationModel(22)).toBe("ai/qwen3.6:35B-A3B-UD-Q4_K_M");
-    expect(recommendGenerationModel(12)).toBe("ai/qwen3:14B-Q6_K");
-    expect(recommendGenerationModel(6)).toBe("ai/qwen3:8B-Q4_K_M");
-    expect(recommendGenerationModel(5)).toBe("ai/qwen3:4B-UD-Q4_K_XL");
+  it("reserves headroom so a recommended model never fills the card", () => {
+    // 24 GB card → 30B (16+5=21 fits), NOT the 35B (22+5=27 > 24). This is the
+    // bug the recalibration fixes: the 35B at build context over-commits a 24 GB card.
+    expect(recommendGenerationModel(24)).toBe("ai/qwen3-coder");
+    expect(recommendGenerationModel(21)).toBe("ai/qwen3-coder");
+    expect(recommendGenerationModel(27)).toBe("ai/qwen3.6:35B-A3B-UD-Q4_K_M");
+    expect(recommendGenerationModel(17)).toBe("ai/qwen3:14B-Q6_K");
+    expect(recommendGenerationModel(12)).toBe("ai/qwen3:8B-Q4_K_M");
+    expect(recommendGenerationModel(11)).toBe("ai/qwen3:8B-Q4_K_M");
+    // budget GPUs land on a model that actually fits, not one that over-commits
+    expect(recommendGenerationModel(8)).toBe("ai/qwen3:4B-UD-Q4_K_XL");
+    expect(recommendGenerationModel(6)).toBe("ai/qwen3:4B-UD-Q4_K_XL");
+  });
+});
+
+describe("recommendGenerationModelForHost (architecture-aware) + computeMemoryBudgetGb", () => {
+  it("discrete card uses VRAM directly → the 4090 lands on the 30B coder", () => {
+    expect(recommendGenerationModelForHost({ architecture: "discrete", vramGb: 24 })).toBe("ai/qwen3-coder");
+    expect(computeMemoryBudgetGb({ architecture: "discrete", vramGb: 24 })).toBe(24);
+  });
+  it("unified Apple Silicon runs a far larger model than the same GB of discrete VRAM", () => {
+    // 128 GB unified Mac → 80B MoE (128 * 0.75 = 96 budget; 48+5 fits).
+    expect(recommendGenerationModelForHost({ architecture: "unified", totalRamGb: 128 })).toBe("ai/qwen3-coder-next");
+    expect(recommendGenerationModelForHost({ architecture: "unified", totalRamGb: 32 })).toBe("ai/qwen3-coder");
+    expect(recommendGenerationModelForHost({ architecture: "unified", totalRamGb: 16 })).toBe("ai/qwen3:8B-Q4_K_M");
+  });
+  it("cpu-only reserves more system RAM for the OS", () => {
+    expect(computeMemoryBudgetGb({ architecture: "cpu", totalRamGb: 16 })).toBe(8);
+    expect(recommendGenerationModelForHost({ architecture: "cpu", totalRamGb: 16 })).toBe("ai/qwen3:4B-UD-Q4_K_XL");
+  });
+  it("a budget 8–12 GB discrete GPU never over-commits", () => {
+    expect(recommendGenerationModelForHost({ architecture: "discrete", vramGb: 12 })).toBe("ai/qwen3:8B-Q4_K_M");
+    expect(recommendGenerationModelForHost({ architecture: "discrete", vramGb: 8 })).toBe("ai/qwen3:4B-UD-Q4_K_XL");
   });
 });
 
@@ -43,6 +72,7 @@ describe("estimateModelVramGb", () => {
   it("estimates known families", () => {
     expect(estimateModelVramGb("ai/nomic-embed-text-v1.5")).toBe(1);
     expect(estimateModelVramGb("qwen3-coder")).toBe(16); // 30B-A3B
+    expect(estimateModelVramGb("ai/qwen3-coder-next")).toBe(48); // 80B MoE
     expect(estimateModelVramGb("ai/qwen3.6:35B-A3B-UD-Q4_K_M")).toBe(22);
     expect(estimateModelVramGb("gemma4:12B")).toBe(8);
     expect(estimateModelVramGb("ai/gemma4")).toBe(20);

@@ -166,53 +166,54 @@ function detectLinux(): HostProfile {
   };
 }
 
-// Model selection mirrors the CANONICAL tiers in
-// apps/web/lib/inference/local-model-policy.ts (LOCAL_MODEL_TIERS). This script
-// runs via tsx in the @dpf/db context and cannot import the apps/web module, so
-// the list is duplicated here — keep it in sync. The Providers UX over-commit
-// guard (same module) catches drift. KNOWN follow-up: the discrete top tier
-// below is 30B-A3B (~16 GB, safe headroom on a 24 GB card) while the canonical
-// top tier is 35B-A3B (~22 GB); reconcile when tier headroom is recalibrated
-// (tracked in BI-0B893092).
-// Qwen3 — NOT Gemma — because the platform's Coworkers catalog tiers Qwen3
-// as `strong + Tool Use` (F1 0.93 @ 8B, 0.97 @ 14B) while Gemma 3/4 tiers
-// as `adequate`. Default coworkers have `minimumTier: strong`, so a Gemma
-// pick fails routing on first install.
+// Model selection MIRRORS the canonical headroom-aware logic in
+// apps/web/lib/inference/local-model-policy.ts (LOCAL_MODEL_TIERS +
+// recommendGenerationModelForHost). This script runs via tsx in the @dpf/db
+// context and cannot import the apps/web module, so the tiers + constants are
+// duplicated here — KEEP IN SYNC. The Providers UX over-commit guard (same
+// module) catches any drift.
 //
-//   discrete VRAM >= 22GB:  ai/qwen3:30B-A3B-Q4_K_M           (30B MoE, prior gen)
-//   discrete VRAM >= 12GB:  ai/qwen3:14B-Q6_K                (14B dense)
-//   discrete VRAM >=  6GB:  ai/qwen3:8B-Q4_K_M               (8B dense)
-//   unified RAM   >= 32GB:  ai/qwen3.6:35B-A3B-UD-Q4_K_M    (Qwen3.6 35B-A3B MoE — best for high-RAM Apple Silicon)
-//   unified RAM   >= 24GB:  ai/qwen3:14B-Q6_K                (Apple Silicon mid)
-//   unified RAM   >= 16GB:  ai/qwen3:8B-Q4_K_M               (Apple Silicon low-mem)
-//   cpu-only / fallback:    ai/qwen3:4B-UD-Q4_K_XL           (4B dense, CPU-OK)
+// Qwen3 — NOT Gemma — the platform tiers Qwen3 as `strong + Tool Use` while
+// Gemma tiers as `adequate`, and default coworkers require `minimumTier:
+// strong`. The `-coder` variants double as the Build Studio code model AND a
+// capable chat model, so one model serves both.
 //
-// With plenty of unified memory (e.g. your 128 GB M-series), the model
-// Docker UI surfaces as "ai/qwen3.6:latest" (pinned as
-// ai/qwen3.6:35B-A3B-UD-Q4_K_M) is the right top-tier choice. It is the
-// direct successor to the old 30B-A3B: newer agentic coding / tool use,
-// same efficient MoE design (~3B active params), ~22 GB on-disk.
-// We always pin the specific quant tag (never bare :latest) so the
-// installer has a known size and reproducible result.
-//
+// Selection = the largest tier whose (weights + headroom) fits the host's
+// MEMORY BUDGET. Budget = dedicated VRAM (discrete), or a fraction of total RAM
+// (unified Apple Silicon shares it with the OS; CPU-only leaves even more aside).
+// Headroom reserves room for the context window + embedder so a recommended
+// model never fills the whole card and then over-commit the moment it runs.
+//   24 GB discrete  → ai/qwen3-coder (30B)        128 GB unified → ai/qwen3-coder-next (80B MoE)
+//   12 GB discrete  → ai/qwen3:8B                  32 GB unified → ai/qwen3-coder (30B)
+//    8 GB discrete  → ai/qwen3:4B                  16 GB unified → ai/qwen3:8B
 // Tags for the ai/ Docker Model Runner namespace are case-sensitive.
+const MODEL_HEADROOM_GB = 5;            // context KV + embedder + overhead (measured on RTX 4090)
+const UNIFIED_USABLE_FRACTION = 0.75;   // Apple Silicon GPU share of unified RAM
+const CPU_USABLE_FRACTION = 0.5;
+const SELECTION_TIERS: { model: string; weightsGb: number }[] = [
+  { model: "ai/qwen3-coder-next", weightsGb: 48 },          // big unified (Apple 128 GB) / 64 GB+ discrete
+  { model: "ai/qwen3.6:35B-A3B-UD-Q4_K_M", weightsGb: 22 },
+  { model: "ai/qwen3-coder", weightsGb: 16 },               // 24 GB-card sweet spot (measured ~20.7 GB @ 24k ctx)
+  { model: "ai/qwen3:14B-Q6_K", weightsGb: 12 },
+  { model: "ai/qwen3:8B-Q4_K_M", weightsGb: 6 },
+  { model: "ai/qwen3:4B-UD-Q4_K_XL", weightsGb: 3 },
+];
+
 function selectModel(p: {
   architecture: Architecture;
   totalGB: number;
   gpu: HostProfile["gpu"];
 }): string {
+  let budgetGb: number;
   if (p.architecture === "discrete" && p.gpu && typeof p.gpu.vramGB === "number") {
-    if (p.gpu.vramGB >= 22) return "ai/qwen3:30B-A3B-Q4_K_M";
-    if (p.gpu.vramGB >= 12) return "ai/qwen3:14B-Q6_K";
-    if (p.gpu.vramGB >= 6) return "ai/qwen3:8B-Q4_K_M";
+    budgetGb = p.gpu.vramGB;
+  } else if (p.architecture === "unified") {
+    budgetGb = p.totalGB * UNIFIED_USABLE_FRACTION;
+  } else {
+    budgetGb = p.totalGB * CPU_USABLE_FRACTION;
   }
-  if (p.architecture === "unified") {
-    // "Plenty of memory" (64 GB+ unified) → current Qwen3.6 35B-A3B MoE.
-    // The 35B total / ~3B active is still very efficient and the strongest
-    // published option for agentic work in the Docker ai/ runner namespace.
-    if (p.totalGB >= 32) return "ai/qwen3.6:35B-A3B-UD-Q4_K_M";
-    if (p.totalGB >= 24) return "ai/qwen3:14B-Q6_K";
-    if (p.totalGB >= 16) return "ai/qwen3:8B-Q4_K_M";
+  for (const tier of SELECTION_TIERS) {
+    if (tier.weightsGb + MODEL_HEADROOM_GB <= budgetGb) return tier.model;
   }
   return "ai/qwen3:4B-UD-Q4_K_XL";
 }

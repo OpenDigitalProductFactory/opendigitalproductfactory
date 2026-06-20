@@ -65,17 +65,36 @@ A new **pure, client-safe** module is the single source of truth:
 - **Codegen classifier** (`opencode-dispatch.ts`): `isEmbeddingModelId` /
   `NON_CHAT_MODEL_RE` now sourced from the policy module (dedupe).
 
-## Deliberately out of scope (follow-ups under BI-0B893092)
+## Headroom + architecture-aware recalibration (2026-06-20)
 
-- **Install-script values are still mirrored, not imported** — shell / the
-  `@dpf/db`-context detector cannot import the apps/web TS module, so
-  `LOCAL_MODEL_TIERS` is duplicated there with a pointer comment. The over-commit
-  guard catches any resulting drift.
-- **Known tier-value divergence:** the detector's discrete top tier is `qwen3:30B-A3B`
-  (~16 GB, safe headroom on a 24 GB card) while the canonical/bootstrap top tier
-  is `qwen3.6:35B-A3B` (~22 GB, which itself nearly fills a 24 GB card). The tier
-  *headroom* (floor ≈ model size, leaving little for KV cache + embedder) should be
-  recalibrated as a separate change so a recommended model never over-commits.
+The original tiers sized each model to ≈ the card's whole VRAM (`minVramGb` ≈
+model size), so a *recommended* model over-committed the moment it ran with a
+real context window — even the first pull on a fresh install. Recalibrated:
+
+- **Headroom:** selection now reserves `MODEL_HEADROOM_GB` (5 GB) on top of model
+  WEIGHTS for the context KV cache + embedder + overhead. Grounded in on-box
+  measurement (RTX 4090, 2026-06-20): qwen3-coder 30B (~16.5 GB weights) at a 24k
+  build context used ~20.7 GB resident. So a 24 GB card now lands on the **30B**,
+  not the 35B (which needs ~27 GB to run).
+- **Architecture-aware budget** (`computeMemoryBudgetGb` / `recommendGenerationModelForHost`):
+  discrete = dedicated VRAM; **unified (Apple Silicon) = total RAM × 0.75** (the
+  GPU's share, leaving the OS + Docker stack the rest); cpu = RAM × 0.5. So a
+  128 GB Mac runs the **80B MoE** (`ai/qwen3-coder-next`) where the 4090 runs the 30B.
+- **New tiers:** added `ai/qwen3-coder` (30B, the 24 GB sweet spot, serves chat +
+  code) and `ai/qwen3-coder-next` (80B MoE, big-unified / 64 GB+ discrete).
+- **All three copies recalibrated together** — the canonical policy, the
+  Mac/Linux detector (`detect-hardware-host.ts`, unified-aware), and the Windows
+  installer (`install-dpf.ps1`) — resolving the prior 30B-vs-35B divergence.
+
+Per-host result: 8 GB GPU → 4B, 12 GB → 8B, 24 GB → 30B, 27 GB+ → 35B, 53 GB+
+discrete or 64 GB+ unified → 80B. None over-commit at build context.
+
+## Still out of scope (follow-ups under BI-0B893092)
+
+- **Install-script tiers are mirrored, not imported** — shell / the
+  `@dpf/db`-context detector cannot import the apps/web TS module, so the tiers +
+  constants are duplicated (now consistent across all three, with pointer
+  comments). The over-commit guard catches any future drift.
 - **Real-time loaded-state in the UX:** `getOllamaRunningModels()` returns `[]` on
   DMR (it predates `docker model ps`); the over-commit check therefore runs on
   *installed* models, which is sufficient for the policy but does not show live
