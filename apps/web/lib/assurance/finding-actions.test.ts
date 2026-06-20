@@ -122,6 +122,7 @@ describe("updateAssuranceFindingStatus", () => {
 
 describe("createBacklogItemFromFinding", () => {
   it("returns alreadyLinked when an existing backlog id is in evidence", async () => {
+    const ingest = vi.fn();
     const db = {
       assuranceFinding: {
         findUnique: vi.fn(async () => findingRow({
@@ -129,14 +130,13 @@ describe("createBacklogItemFromFinding", () => {
         })),
         update: vi.fn(),
       },
-      backlogItem: { create: vi.fn() },
       epic: { findFirst: vi.fn() },
     };
 
     const result = await createBacklogItemFromFinding(db, {
       findingKey: "finding-key-1",
       now: new Date(),
-    });
+    }, ingest);
 
     expect(result).toEqual({
       findingKey: "finding-key-1",
@@ -144,19 +144,17 @@ describe("createBacklogItemFromFinding", () => {
       epicCuid: null,
       alreadyLinked: true,
     });
-    expect(db.backlogItem.create).not.toHaveBeenCalled();
+    expect(ingest).not.toHaveBeenCalled();
   });
 
-  it("creates a backlog item and links it back through finding evidence + planned status", async () => {
+  it("files through the shared front door and links it back through finding evidence + planned status", async () => {
     const now = new Date("2026-05-22T19:00:00.000Z");
     const epicUpdate = vi.fn();
+    const ingest = vi.fn(async () => ({ itemId: "BI-NEW", id: "bi-db-1", created: true }));
     const db = {
       assuranceFinding: {
         findUnique: vi.fn(async () => findingRow()),
         update: vi.fn(async () => ({ id: "af-1" })),
-      },
-      backlogItem: {
-        create: vi.fn(async () => ({ id: "bi-db-1", itemId: "BI-NEW" })),
       },
       epic: {
         findFirst: vi.fn(async () => ({ id: "epic-cuid", epicId: "EP-ASSURANCE-LEDGER", status: "done" })),
@@ -168,7 +166,7 @@ describe("createBacklogItemFromFinding", () => {
       findingKey: "finding-key-1",
       userId: "user-9",
       now,
-    });
+    }, ingest);
 
     expect(result).toEqual({
       findingKey: "finding-key-1",
@@ -177,16 +175,18 @@ describe("createBacklogItemFromFinding", () => {
       alreadyLinked: false,
     });
 
-    expect(db.backlogItem.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    // Filed through the shared front door with the finding origin (not a bespoke create).
+    expect(ingest).toHaveBeenCalledWith(
+      expect.objectContaining({
         title: expect.stringMatching(/^Remediate:/),
-        status: "triaging",
+        workType: "bug",
         source: "automated-detection",
-        epicId: "epic-cuid",
+        proposedOutcome: "build",
+        epicId: "EP-ASSURANCE-LEDGER",
         digitalProductId: "product-1",
+        origin: { kind: "assuranceFinding", id: "finding-key-1" },
       }),
-      select: { id: true, itemId: true },
-    });
+    );
 
     expect(epicUpdate).toHaveBeenCalledWith({
       where: { id: "epic-cuid" },
@@ -211,13 +211,11 @@ describe("createBacklogItemFromFinding", () => {
   });
 
   it("does not flip a non-done epic when linking", async () => {
+    const ingest = vi.fn(async () => ({ itemId: "BI-NEW-2", id: "bi-db-2", created: true }));
     const db = {
       assuranceFinding: {
         findUnique: vi.fn(async () => findingRow()),
         update: vi.fn(async () => ({ id: "af-1" })),
-      },
-      backlogItem: {
-        create: vi.fn(async () => ({ id: "bi-db-2", itemId: "BI-NEW-2" })),
       },
       epic: {
         findFirst: vi.fn(async () => ({ id: "epic-cuid", epicId: "EP-ASSURANCE-LEDGER", status: "in-progress" })),
@@ -228,7 +226,7 @@ describe("createBacklogItemFromFinding", () => {
     await createBacklogItemFromFinding(db, {
       findingKey: "finding-key-1",
       now: new Date(),
-    });
+    }, ingest);
 
     expect(db.epic.update).not.toHaveBeenCalled();
   });
