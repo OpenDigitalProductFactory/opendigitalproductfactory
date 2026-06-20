@@ -10,6 +10,7 @@ import type { BrandDesignSystem } from "@/lib/brand/types";
 import { extractBrandDesignSystemFromTaskResponse } from "@/lib/brand/task-artifacts";
 import { coerceBrandExtractionEvent } from "@/lib/brand/extraction-events";
 import { extractBrandExtractionStatusFromTaskResponse } from "@/lib/brand/task-status";
+import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
 
 type Props = {
   organizationId: string;
@@ -92,57 +93,60 @@ export function BrandExtractionSection({
   }, [initialSystem]);
 
   // Subscribe to SSE for the thread while a run is active.
-  useEffect(() => {
-    const running = status.kind === "queued" || status.kind === "running";
-    if (!running || !threadId) return;
-    const activeTaskRunId = status.taskRunId || null;
+  //
+  // Resilient SSE (BI-1AFF530D): uses the heartbeat watchdog
+  // (lib/hooks/useResilientEventSource) so a portal rebuild mid-extraction
+  // can't strand this stream as a zombie connection (BI-864E83B0). The URL is
+  // non-null only while a run is active; the terminal complete/failed event
+  // flips status.kind out of "running", nulling the URL so the hook tears the
+  // stream down cleanly.
+  const brandRunActive = status.kind === "queued" || status.kind === "running";
+  const activeTaskRunId =
+    status.kind === "queued" || status.kind === "running" ? status.taskRunId || null : null;
+  useResilientEventSource(
+    brandRunActive && threadId ? `/api/agent/stream?threadId=${threadId}` : null,
+    {
+      onMessage: (raw) => {
+        if (!threadId) return; // stream is only active with a threadId; narrows the type
+        try {
+          const event = JSON.parse(raw.data) as SSEEvent;
+          const brandEvent = coerceBrandExtractionEvent(event, activeTaskRunId);
+          if (!brandEvent) {
+            return;
+          }
 
-    const es = new EventSource(`/api/agent/stream?threadId=${threadId}`);
-    es.onmessage = (raw) => {
-      try {
-        const event = JSON.parse(raw.data) as SSEEvent;
-        const brandEvent = coerceBrandExtractionEvent(event, activeTaskRunId);
-        if (!brandEvent) {
-          return;
-        }
-
-        if (brandEvent.type === "brand:extract.progress") {
-          const e = brandEvent;
-          setStatus({
-            kind: "running",
-            taskRunId: e.taskRunId,
-            threadId,
-            stage: e.stage,
-            message: e.message,
-            percent: e.percent,
-          });
-        } else if (brandEvent.type === "brand:extract.complete") {
-          const e = brandEvent;
-          setStatus({ kind: "complete", taskRunId: e.taskRunId, summary: e.summary });
-          void loadLatestDesignSystem(e.taskRunId)
-            .then((nextSystem) => {
-              if (nextSystem) {
-                setSystem(nextSystem);
-              }
-            })
-            .finally(() => {
-              router.refresh();
+          if (brandEvent.type === "brand:extract.progress") {
+            const e = brandEvent;
+            setStatus({
+              kind: "running",
+              taskRunId: e.taskRunId,
+              threadId,
+              stage: e.stage,
+              message: e.message,
+              percent: e.percent,
             });
-        } else if (brandEvent.type === "brand:extract.failed") {
-          const e = brandEvent;
-          setStatus({ kind: "failed", taskRunId: e.taskRunId, error: e.error });
+          } else if (brandEvent.type === "brand:extract.complete") {
+            const e = brandEvent;
+            setStatus({ kind: "complete", taskRunId: e.taskRunId, summary: e.summary });
+            void loadLatestDesignSystem(e.taskRunId)
+              .then((nextSystem) => {
+                if (nextSystem) {
+                  setSystem(nextSystem);
+                }
+              })
+              .finally(() => {
+                router.refresh();
+              });
+          } else if (brandEvent.type === "brand:extract.failed") {
+            const e = brandEvent;
+            setStatus({ kind: "failed", taskRunId: e.taskRunId, error: e.error });
+          }
+        } catch {
+          // Malformed event; ignore.
         }
-      } catch {
-        // Malformed event; ignore.
-      }
-    };
-    es.onerror = () => {
-      es.close();
-    };
-    return () => {
-      es.close();
-    };
-  }, [status.kind, threadId, router]);
+      },
+    },
+  );
 
   useEffect(() => {
     const activeTaskRunId = pollingTaskRunId;
