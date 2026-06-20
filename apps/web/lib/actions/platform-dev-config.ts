@@ -21,6 +21,46 @@ async function requireManagePlatform(): Promise<string> {
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
 
+// Private-paths overrides (EP-1A78BAE1). Operator-managed glob rules that merge
+// with the checked-in `.dpf/private-paths` manifest; matched paths never leave
+// at public-hive egress.
+
+export interface PrivatePathRuleView {
+  id: string;
+  pattern: string;
+  reason: string | null;
+  createdAt: string;
+}
+
+export async function listPrivatePathRules(): Promise<PrivatePathRuleView[]> {
+  await requireManagePlatform();
+  const rows = await prisma.privatePathRule.findMany({ orderBy: { createdAt: "asc" } });
+  return rows.map((r) => ({ id: r.id, pattern: r.pattern, reason: r.reason, createdAt: r.createdAt.toISOString() }));
+}
+
+export async function addPrivatePathRule(pattern: string, reason?: string | null): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireManagePlatform();
+  const p = pattern.trim();
+  if (!p) return { ok: false, error: "Pattern is required." };
+  if (p.length > 200) return { ok: false, error: "Pattern is too long." };
+  try {
+    await prisma.privatePathRule.create({
+      data: { pattern: p, reason: reason?.trim() || null, createdById: userId },
+    });
+  } catch {
+    return { ok: false, error: "That pattern already exists." };
+  }
+  revalidatePath("/admin/platform-development");
+  return { ok: true };
+}
+
+export async function removePrivatePathRule(id: string): Promise<{ ok: boolean }> {
+  await requireManagePlatform();
+  await prisma.privatePathRule.deleteMany({ where: { id } });
+  revalidatePath("/admin/platform-development");
+  return { ok: true };
+}
+
 // 2-state contribution model (EP-1A78BAE1). Per-change sharing is decided by
 // the FeatureBuild disposition (suggest-then-confirm), not by this mode.
 const VALID_MODES = ["private", "contributing"] as const;

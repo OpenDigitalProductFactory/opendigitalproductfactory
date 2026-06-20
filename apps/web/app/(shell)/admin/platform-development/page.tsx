@@ -5,6 +5,7 @@ import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
 import { McpTokenManager } from "@/components/admin/McpTokenManager";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
+import { PrivatePathsEditor } from "@/components/admin/PrivatePathsEditor";
 import TokenExpiryBanner from "@/components/admin/TokenExpiryBanner";
 import {
   getGitHubConnectedState,
@@ -12,6 +13,7 @@ import {
   getUntrackedFeatureCount,
   hasContributionToken,
   hasGitBackupCredential,
+  listPrivatePathRules,
 } from "@/lib/actions/platform-dev-config";
 import { isContributionModelEnabled } from "@/lib/flags/contribution-model";
 import { getDisplayPseudonym } from "@/lib/integrate/identity-privacy";
@@ -25,6 +27,7 @@ export default async function AdminPlatformDevelopmentPage() {
     : 0;
   const hasCredential = await hasGitBackupCredential();
   const hasContribToken = await hasContributionToken();
+  const privatePathRules = await listPrivatePathRules();
   // Pseudonym is only defined once the install has seeded its client identity.
   // Catch: during the first boot the identity may not be ready yet.
   const pseudonym = await getDisplayPseudonym().catch(() => null);
@@ -75,6 +78,9 @@ export default async function AdminPlatformDevelopmentPage() {
         pseudonym={pseudonym}
         initialConnected={initialConnected}
       />
+      <div className="mt-6">
+        <PrivatePathsEditor rules={privatePathRules} />
+      </div>
       <McpTokenManager
         baseUrl={baseUrl}
       />

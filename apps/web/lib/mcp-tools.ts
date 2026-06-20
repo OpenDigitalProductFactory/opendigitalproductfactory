@@ -10152,7 +10152,7 @@ export async function executeTool(
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({
         where: { buildId },
-        select: { sandboxId: true, buildBranch: true, phase: true, createdById: true },
+        select: { sandboxId: true, buildBranch: true, phase: true, createdById: true, designDoc: true },
       });
       if (!build || build.createdById !== userId) {
         return { success: false, error: "Build not found.", message: `No active build ${buildId} was found for this user.` };
@@ -10268,6 +10268,44 @@ export async function executeTool(
           gitCommitHashes: commitHashes,
         },
       });
+
+      // Compute + cache the per-change disposition suggestion (EP-1A78BAE1) so
+      // the ship UI / coworker can prefill Keep vs Share. The human still makes
+      // the final call via set_change_disposition; this only pre-fills.
+      // Non-fatal — a failed suggestion leaves the fail-closed default.
+      try {
+        const { suggestDisposition } = await import("@/lib/integrate/disposition");
+        const { loadPrivatePathPatterns, compilePrivatePathMatcher, stripPrivatePathsFromDiff } =
+          await import("@/lib/integrate/private-paths");
+        const outboundEmpty = !stripPrivatePathsFromDiff(
+          extracted.fullDiff,
+          compilePrivatePathMatcher(await loadPrivatePathPatterns({ prisma })),
+        ).kept.trim();
+        let reusabilityScope: "one_off" | "parameterizable" | "already_generic" | null = null;
+        const dd = build.designDoc as Record<string, unknown> | null;
+        const scope = (dd?.reusabilityAnalysis as { scope?: string } | undefined)?.scope;
+        if (scope === "one_off" || scope === "parameterizable" || scope === "already_generic") {
+          reusabilityScope = scope;
+        }
+        let orgSpecificHits = 0;
+        try {
+          const { runSanitizationScan } = await import("@/lib/integrate/contribution-review");
+          const san = await runSanitizationScan(extracted.fullDiff);
+          orgSpecificHits = san.mustFixCount;
+        } catch { /* sanitization optional */ }
+        const suggestion = suggestDisposition({ reusabilityScope, orgSpecificHits, outboundEmpty });
+        await prisma.featureBuild.update({
+          where: { buildId },
+          data: {
+            dispositionSuggested: suggestion.suggested,
+            dispositionSuggestionReason: suggestion.reason,
+            dispositionSource: "suggested",
+          },
+        });
+        logBuildActivity(buildId, "deploy_feature", `disposition suggestion: ${suggestion.suggested} — ${suggestion.reason}`);
+      } catch (err) {
+        console.warn("[deploy_feature] disposition suggestion failed:", err);
+      }
 
       // Scan migrations for destructive operations
       let destructiveWarnings: string[] = [];
