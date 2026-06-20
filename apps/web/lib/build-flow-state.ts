@@ -305,7 +305,7 @@ async function deriveUpstreamFork(
     where: { id: "singleton" },
     select: { contributionMode: true },
   });
-  if (devConfig?.contributionMode === "fork_only") {
+  if (devConfig?.contributionMode === "private" || devConfig?.contributionMode === "fork_only") {
     return { state: "skipped", prUrl: null, prNumber: null, packId: null, errorMessage: null };
   }
 

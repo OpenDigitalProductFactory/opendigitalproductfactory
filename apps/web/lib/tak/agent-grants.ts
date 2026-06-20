@@ -461,6 +461,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Hive Mind / Platform updates
   assess_contribution:    ["backlog_read"],
   contribute_to_hive:     ["backlog_write"],
+  set_change_disposition: ["backlog_write"],
   apply_platform_update:  ["admin_write"],
   // BI-C26F7EE1: read-only operator preview of the upstream change set —
   // paired with apply_platform_update's admin_write as the read tier.

@@ -1,5 +1,13 @@
 # Contribution Mode & Git Integration Design
 
+> **Superseded (2026-06-19, EP-1A78BAE1):** the three install-level modes
+> described here (`fork_only` / `selective` / `contribute_all`) were collapsed
+> to **two** (`private` / `contributing`); per-change sharing is now a
+> suggest-then-confirm decision (`FeatureBuild.disposition`), not a static mode
+> default. Retained as the historical record of the original three-mode design.
+> Current model:
+> [`docs/superpowers/plans/2026-06-19-contribution-model-2state-suggest-confirm.md`](../plans/2026-06-19-contribution-model-2state-suggest-confirm.md).
+
 | Field | Value |
 |-------|-------|
 | **Epic** | EP-BUILD-HANDOFF-002 (Phase 2e extension) |

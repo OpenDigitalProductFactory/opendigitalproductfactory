@@ -84,6 +84,7 @@ model User {
   businessModelRoleAssignments  BusinessModelRoleAssignment[]
   platformDevConfigs            PlatformDevConfig[]           @relation("PlatformDevConfiguredBy")
   platformDevDcoAcceptances     PlatformDevConfig[]           @relation("PlatformDevDcoAcceptedBy")
+  privatePathRules              PrivatePathRule[]             @relation("PrivatePathRuleCreatedBy")
   platformDevFeedbackOptIns     PlatformDevConfig[]           @relation("PlatformDevUpstreamFeedbackOptInBy")
   agentModelConfigs             AgentModelConfig[]            @relation("AgentModelConfiguredBy")
   knowledgeArticles             KnowledgeArticle[]            @relation("KnowledgeArticleAuthor")
@@ -4650,6 +4651,18 @@ model FeatureBuild {
   claimedAt                DateTime?
   claimStatus              String?
   gitCommitHashes          String[]                 @default([])
+  // Private/Public Change Segregation (EP-1A78BAE1). Per-change disposition,
+  // fail-closed to "private": no public-hive egress unless explicitly
+  // "shareable". `dispositionSuggested`/`Reason` cache the AI suggestion from
+  // review signals; `dispositionSource` is null until a human makes the final
+  // call ("operator") or the suggestion is recorded ("suggested").
+  disposition                  String                @default("private")
+  dispositionReason            String?
+  dispositionSource            String?
+  dispositionDecidedAt         DateTime?
+  dispositionDecidedById       String?
+  dispositionSuggested         String?
+  dispositionSuggestionReason  String?
   uxTestResults            Json?
   uxVerificationStatus     String? // null | "running" | "complete" | "failed" | "skipped"
   deliberationSummary      Json? // compact BuildDeliberationSummary (see apps/web/lib/feature-build-types.ts)
@@ -5516,6 +5529,19 @@ model UpgradeImpactSummary {
 
   @@unique([currentLineageSha, targetSha])
   @@index([targetSha])
+}
+
+// PrivatePathRule — operator-managed overrides that merge with the checked-in
+// `.dpf/private-paths` manifest. Paths matching either source are NEVER
+// included in a public-hive contribution diff (Private/Public Change
+// Segregation, EP-1A78BAE1). gitignore-style glob in `pattern`.
+model PrivatePathRule {
+  id          String   @id @default(cuid())
+  pattern     String   @unique
+  reason      String?
+  createdById String?
+  createdBy   User?    @relation("PrivatePathRuleCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
 }
 
 model PlatformDevConfig {

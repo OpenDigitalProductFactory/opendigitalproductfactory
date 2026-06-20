@@ -20,8 +20,10 @@ export interface ContributionModelBannerProps {
 
 export function ContributionModelBanner(props: ContributionModelBannerProps) {
   if (!props.enabled) return null;
-  // fork_only never pushes anywhere — contributionModel is irrelevant.
-  if (props.contributionMode !== "selective" && props.contributionMode !== "contribute_all") {
+  // A private install never pushes anywhere — contributionModel is irrelevant.
+  // Show only for a contributing install (legacy selective/contribute_all incl.).
+  const m = props.contributionMode;
+  if (m !== "contributing" && m !== "selective" && m !== "contribute_all") {
     return null;
   }
   // Already configured — nothing to surface.

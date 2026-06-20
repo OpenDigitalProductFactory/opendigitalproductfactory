@@ -230,7 +230,7 @@ describe("escalateToUpstreamIssue", () => {
 
     expect(result).toEqual({
       status: "skipped",
-      reason: expect.stringContaining("fork_only"),
+      reason: expect.stringContaining("private"),
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });

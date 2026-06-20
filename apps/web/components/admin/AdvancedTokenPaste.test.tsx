@@ -9,7 +9,7 @@ import { AdvancedTokenPaste } from "@/components/admin/AdvancedTokenPaste";
 
 describe("AdvancedTokenPaste", () => {
   it("renders the disclosure as a <details> element (collapsed by default)", () => {
-    const html = renderToStaticMarkup(<AdvancedTokenPaste mode="selective" />);
+    const html = renderToStaticMarkup(<AdvancedTokenPaste mode="contributing" />);
     // <details> without `open` attribute is collapsed by default in browsers.
     expect(html).toMatch(/^<details[^>]*>/);
     expect(html).not.toMatch(/<details[^>]*\bopen\b/);
@@ -17,7 +17,7 @@ describe("AdvancedTokenPaste", () => {
   });
 
   it("renders the fine-grained PAT section with help copy and an input", () => {
-    const html = renderToStaticMarkup(<AdvancedTokenPaste mode="selective" />);
+    const html = renderToStaticMarkup(<AdvancedTokenPaste mode="contributing" />);
     expect(html).toContain('data-testid="fine-grained-pat-section"');
     expect(html).toMatch(/Fine-grained PAT \(advanced\)/);
     expect(html).toMatch(/fine-grained PAT at github\.com\/settings\/personal-access-tokens/i);
@@ -27,7 +27,7 @@ describe("AdvancedTokenPaste", () => {
   });
 
   it("renders the classic PAT section with the no-expiry warning", () => {
-    const html = renderToStaticMarkup(<AdvancedTokenPaste mode="contribute_all" />);
+    const html = renderToStaticMarkup(<AdvancedTokenPaste mode="private" />);
     expect(html).toContain('data-testid="classic-pat-section"');
     expect(html).toMatch(/Classic PAT \(emergency\)/);
     expect(html).toMatch(/Classic PATs have no expiry/i);
@@ -37,8 +37,8 @@ describe("AdvancedTokenPaste", () => {
   });
 
   it("renders both sections regardless of mode prop", () => {
-    const fork = renderToStaticMarkup(<AdvancedTokenPaste mode="selective" />);
-    const all = renderToStaticMarkup(<AdvancedTokenPaste mode="contribute_all" />);
+    const fork = renderToStaticMarkup(<AdvancedTokenPaste mode="contributing" />);
+    const all = renderToStaticMarkup(<AdvancedTokenPaste mode="private" />);
     expect(fork).toContain('data-testid="fine-grained-pat-section"');
     expect(fork).toContain('data-testid="classic-pat-section"');
     expect(all).toContain('data-testid="fine-grained-pat-section"');
@@ -46,7 +46,7 @@ describe("AdvancedTokenPaste", () => {
   });
 
   it("uses distinct placeholder formats for each token tier", () => {
-    const html = renderToStaticMarkup(<AdvancedTokenPaste mode="selective" />);
+    const html = renderToStaticMarkup(<AdvancedTokenPaste mode="contributing" />);
     // Fine-grained PATs use the github_pat_ prefix; classic PATs use ghp_.
     expect(html).toMatch(/placeholder="github_pat_/);
     expect(html).toMatch(/placeholder="ghp_/);
