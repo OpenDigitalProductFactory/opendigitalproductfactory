@@ -134,7 +134,11 @@ describe("getBuildContextSection", () => {
       plan: null,
       portfolioId: null,
     });
-    expect(section).not.toContain("Intent Confirmation Required");
+    // Assert the gate block's UNIQUE instruction line, not the bare phrase:
+    // getBuildContextSection embeds the ideate phase prompt, whose STEP 0.4
+    // *references* the "--- Intent Confirmation Required ---" header, so that
+    // substring is present in the fast path by design.
+    expect(section).not.toContain("Per STEP 0.4: surface these to the operator");
   });
   it("includes buildId and phase", async () => {
     const section = await getBuildContextSection({
