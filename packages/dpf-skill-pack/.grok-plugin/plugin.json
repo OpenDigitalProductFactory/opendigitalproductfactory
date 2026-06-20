@@ -11,6 +11,7 @@
   "license": "Apache-2.0",
   "skills": "../skills/",
   "mcpConfig": "../grok.mcp.json",
+  "hooks": "../hooks/hooks.json",
   "keywords": [
     "dpf",
     "digital-product-factory",

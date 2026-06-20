@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scripts/hooks/ux-fit-precheck.mjs
+// packages/dpf-skill-pack/hooks/ux-fit-precheck.mjs
 //
 // PreToolUse nudge (BI-65DEE968 defense-in-depth). When a Claude session is about
 // to WRITE a user-facing control into a UI surface (apps/web/**/*.tsx), remind it
@@ -12,9 +12,12 @@
 //
 // Non-blocking by design: emits additionalContext and ALWAYS allows. Hooks are
 // guidance; CI is the gate. Fails OPEN on any error — a guard must never wedge a
-// session. Wired in .claude/settings.json (PreToolUse, matcher "Write|Edit|
-// MultiEdit"). Claude-Code-only by nature; Codex/Grok have no hooks and are
-// covered by the surface-agnostic CI gate.
+// session. Shipped INSIDE the dpf-platform plugin (hooks/hooks.json, matcher
+// "Write|Edit|MultiEdit") so the nudge travels with the plugin to every surface.
+// Codex and Grok adopted the same PreToolUse hook protocol, so the additionalContext
+// nudge fires there too; the surface-agnostic CI gate (check-ux-fit-decision.mjs)
+// remains the hard enforcement.
+// (BI-CA0ED781 moved this from repo .claude/settings.json into the plugin.)
 
 import { readFileSync } from "node:fs";
 

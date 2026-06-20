@@ -2,7 +2,7 @@
 
 DPF-native agent workflows shipped as one **plugin substrate** plus one **coworker seed source**:
 
-1. **Contributor coding clients** — installed as the `dpf-platform` plugin for Claude Code (`.claude-plugin/marketplace.json`) and Codex (`.agents/plugins/marketplace.json` + `.codex-plugin/plugin.json`), invoked as `/dpf-<slug>` / `$dpf-<slug>` or auto-loaded by `description` match. The plugin is the installable unit; skills, MCP server descriptors, future hooks, and runtime assets belong inside it.
+1. **Contributor coding clients** — installed as the `dpf-platform` plugin for Claude Code (`.claude-plugin/marketplace.json`) and Codex (`.agents/plugins/marketplace.json` + `.codex-plugin/plugin.json`), invoked as `/dpf-<slug>` / `$dpf-<slug>` or auto-loaded by `description` match. The plugin is the installable unit; skills, MCP server descriptors, hooks (`hooks/hooks.json`), and runtime assets belong inside it.
 2. **In-portal coworkers** — seeded as `SkillDefinition` + `SkillAssignment` rows by an extended [packages/db/src/seed-skills.ts](../../packages/db/src/seed-skills.ts) loader per [BI-98683E68](../../docs/superpowers/drafts/2026-05-24-dpf-skill-pack-formalization-bi-bundle.md), invoked by `triggerPattern` match or directly by the assigned coworker.
 
 The single-source-of-truth contract is the **superset SKILL.md frontmatter**: Agent Skills open-standard fields (`name`, `description`, `disable-model-invocation`, `user-invocable`, `allowed-tools`) consumed by Claude Code, plus DPF coworker fields (`category`, `assignTo`, `capability`, `taskType`, `triggerPattern`, `userInvocable`, `agentInvocable`, `allowedTools`, `composesFrom`, `contextRequirements`, `riskBand`, `enforces`) consumed by the seed loader. The mirror-field invariant — `user-invocable ↔ userInvocable`, `allowed-tools ↔ allowedTools`, `disable-model-invocation: false ↔ agentInvocable: true` — is asserted by a unit test (BI-98683E68) so divergence between the two field families fails CI.
@@ -76,7 +76,7 @@ When adding a skill to this pack:
 
 ## Plugin manifests
 
-The `.claude-plugin/plugin.json` manifest turns this directory into an installable Claude Code plugin. The `.codex-plugin/plugin.json` manifest exposes the same package to Codex. Both manifests point to the same `skills/` directory and to client-specific DPF MCP descriptors:
+The `.claude-plugin/plugin.json` manifest turns this directory into an installable Claude Code plugin. The `.codex-plugin/plugin.json` manifest exposes the same package to Codex. All three manifests (`.claude-plugin`, `.codex-plugin`, `.grok-plugin`) point to the same `skills/` directory and the same `hooks/hooks.json` — the governance guards (lease-guard + the UX-fit / spec-plan-doc prechecks) that ship to every surface per BI-CA0ED781, since Codex and Grok adopted the Claude `PreToolUse` hook protocol — plus client-specific DPF MCP descriptors:
 
 - `claude.mcp.json` — Claude Code MCP descriptor using `${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}` and `${DPF_MCP_BEARER_TOKEN:-}`.
 - `codex.mcp.json` — Codex MCP descriptor using local `http://127.0.0.1:3000/api/mcp/v1` plus `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`.
