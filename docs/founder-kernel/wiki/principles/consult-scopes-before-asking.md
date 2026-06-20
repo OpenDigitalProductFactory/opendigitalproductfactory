@@ -5,7 +5,9 @@ status: published
 abstract: Before asking a human any question about a portal or platform decision, an agent first consults all three governed decision scopes — WWMD (the founder kernel), WWWD (the organization's recorded doctrine), and WSID (the profession corpus). The human is engaged only for the residue the scopes genuinely cannot resolve, and the consultation result rides with the question — never a cold ask.
 principleTier: commandment
 principleDirection: Prefer resolving a decision through the governed scopes (WWMD, WWWD, WSID) over asking a human; escalate only what they cannot answer, with the consultation ledger attached.
-principleDimensionVector: {"governance_compliance": 0.9, "human_cognitive_load": -0.8, "evidence_density": 0.5, "blast_radius": -0.3}
+principleWeight: 0.3
+principleWeightRationale: "Procedural meta-principle — a MUST (commandment-tier, always in scope) that deliberately carries a low structured decision weight so it does not perturb substantive trade-off decisions (e.g. shortcut-vs-proper-fix) it has no bearing on. Its force is as a followed directive, not a decision-math driver."
+principleDimensionVector: {"human_cognitive_load": -0.9, "governance_compliance": 0.5}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -43,10 +45,10 @@ The signal to listen for: when you are drafting a question to a human and have n
 
 ## Decision Dimensions
 
-- `governance_compliance: 0.9` — the strongest pull. This is the gate that keeps decisions flowing through the governed substrate instead of around it; consulting the scopes first is what makes the decision trail honest and auditable.
-- `human_cognitive_load: -0.8` — a hard budget on operator attention. Cold asks load the human with decisions the substrate could have answered; the principle pulls strongly against that.
-- `evidence_density: 0.5` — consulting the scopes produces a scored ledger that accompanies any escalation, so a human who must decide does so on evidence rather than a bare prompt.
-- `blast_radius: -0.3` — routing through the owning scope contains the impact of a wrong-authority answer (the same containment `[[principles/decisions-belong-to-their-scope]]` protects).
+This is a **procedural** principle: a MUST that is always in scope, but it carries a deliberately low structured weight (`principleWeight: 0.3`) so it does not perturb substantive trade-off decisions (shortcut-vs-proper-fix, cheap-vs-rebuild) it has no bearing on. Its force is as a followed directive, not a decision-math driver — the two core axes below keep its structured pull focused and small.
+
+- `human_cognitive_load: -0.9` — the dominant axis. The principle is fundamentally a budget on operator attention: a cold ask spends the human on a decision the substrate could have answered, so it pulls strongly against loading the human.
+- `governance_compliance: 0.5` — consulting the scopes routes the decision through the governed substrate — a scored ledger, a principle trail — rather than around it, which is what keeps the decision honest and auditable.
 
 ## Examples
 
