@@ -4477,6 +4477,19 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_ea_modeler",
     sideEffect: false,
   },
+  {
+    name: "describe_ea_view",
+    description: "Summarize an EA view so a coworker can explain or critique it (read-only). Returns element counts by type, relationship counts by type, connected components, isolated and highest-degree (hub) nodes, containment structure derived from 'contains' edges, viewpoint conformance, and layout density/shape (tree/forest/mesh). Use before suggesting how to arrange or restructure a view.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        viewId: { type: "string", description: "EaView id to describe" },
+      },
+      required: ["viewId"],
+    },
+    requiredCapability: "view_ea_modeler",
+    sideEffect: false,
+  },
   // ─── Agent Thread Spawning Tools ─────────────────────────────────────────────
   {
     name: "spawn_work_thread",
@@ -14903,6 +14916,104 @@ export async function executeTool(
       });
       if (!result.ok) return { success: false, message: result.error ?? "Traversal failed", error: result.error };
       return { success: true, message: `Traversal complete: ${result.data!.summary.nodesTraversed} nodes`, data: result.data as Record<string, unknown> };
+    }
+
+    case "describe_ea_view": {
+      const viewId = String(params["viewId"] ?? "");
+      if (!viewId) return { success: false, message: "viewId is required", error: "MissingViewId" };
+      const { getEaView } = await import("@/lib/ea-data");
+      const view = await getEaView(viewId);
+      if (!view) return { success: false, message: "View not found", error: "ViewNotFound" };
+
+      const elements = view.elements;
+      const edges = view.edges;
+      const n = elements.length;
+
+      const elementsByType: Record<string, number> = {};
+      for (const el of elements) {
+        elementsByType[el.elementType.name] = (elementsByType[el.elementType.name] ?? 0) + 1;
+      }
+      const relationshipsByType: Record<string, number> = {};
+      for (const e of edges) {
+        relationshipsByType[e.relationshipType.name] = (relationshipsByType[e.relationshipType.name] ?? 0) + 1;
+      }
+
+      // Degree + connected components (union-find) over de-duplicated undirected edges.
+      const index = new Map(elements.map((el, i) => [el.viewElementId, i]));
+      const parent = elements.map((_, i) => i);
+      const find = (x: number): number => {
+        let root = x;
+        while (parent[root] !== root) root = parent[root]!;
+        while (parent[x] !== root) { const next = parent[x]!; parent[x] = root; x = next; }
+        return root;
+      };
+      const degree = new Map<string, number>(elements.map((el) => [el.viewElementId, 0]));
+      const seenPair = new Set<string>();
+      let hasCycle = false;
+      for (const e of edges) {
+        const a = index.get(e.fromViewElementId);
+        const b = index.get(e.toViewElementId);
+        if (a === undefined || b === undefined || a === b) continue;
+        const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+        if (seenPair.has(key)) continue;
+        seenPair.add(key);
+        degree.set(e.fromViewElementId, (degree.get(e.fromViewElementId) ?? 0) + 1);
+        degree.set(e.toViewElementId, (degree.get(e.toViewElementId) ?? 0) + 1);
+        const ra = find(a);
+        const rb = find(b);
+        if (ra === rb) hasCycle = true; else parent[ra] = rb;
+      }
+      const components = new Set(elements.map((_, i) => find(i))).size;
+      const edgeCount = seenPair.size;
+      const nameByVe = new Map(elements.map((el) => [el.viewElementId, el.element.name]));
+      const byDegree = [...degree.entries()].sort((x, y) => y[1] - x[1]);
+      const hubs = byDegree.filter(([, d]) => d > 0).slice(0, 5).map(([ve, d]) => ({ name: nameByVe.get(ve) ?? ve, degree: d }));
+      const isolatedNodes = byDegree.filter(([, d]) => d === 0).length;
+
+      // Containment derived from "contains" edges (parent → child).
+      const childSet = new Set<string>();
+      const containerSet = new Set<string>();
+      for (const e of edges) {
+        if (e.relationshipType.slug !== "contains") continue;
+        containerSet.add(e.fromViewElementId);
+        childSet.add(e.toViewElementId);
+      }
+      const containmentRoots = [...containerSet].filter((id) => !childSet.has(id)).length;
+
+      const allowed = (view.viewpoint as { allowedElementTypeSlugs?: string[] } | null)?.allowedElementTypeSlugs ?? null;
+      const nonConformingElements = allowed
+        ? elements.filter((el) => !allowed.includes(el.elementType.slug)).length
+        : null;
+
+      const density = n > 0 ? Number((edgeCount / n).toFixed(2)) : 0;
+      const shape = edgeCount === 0
+        ? "no relationships"
+        : !hasCycle
+        ? (components === 1 ? "tree" : "forest")
+        : density > 1.5
+        ? "dense mesh"
+        : "general graph";
+
+      return {
+        success: true,
+        message: `View "${view.name}" — ${n} elements, ${edgeCount} relationships, ${components} component(s); shape: ${shape}${isolatedNodes ? `, ${isolatedNodes} isolated` : ""}.`,
+        data: {
+          viewId,
+          name: view.name,
+          viewpoint: view.viewpoint?.name ?? null,
+          elementCount: n,
+          relationshipCount: edgeCount,
+          elementsByType,
+          relationshipsByType,
+          connectedComponents: components,
+          isolatedNodes,
+          hubs,
+          containment: { containerCount: containerSet.size, roots: containmentRoots },
+          nonConformingElements,
+          densityEdgesPerNode: density,
+          shape,
+        },
+      };
     }
 
     // ── EA file tools ─────────────────────────────────────────────────────────
