@@ -2,7 +2,7 @@
 
 | Field | Value |
 | ----- | ----- |
-| Status | Draft - chief architect review applied 2026-06-20; responder WWMD-consult mechanism + unified decision front door (5.7) completed 2026-06-20. No code yet. |
+| Status | Draft - chief architect review applied 2026-06-20; responder WWMD-consult mechanism + unified decision front door (5.7) + trust dial / autopilot maturation (§14, operator doctrine) completed 2026-06-20. Root-cause prevention (planner kernel-lens, BI-C2CB3073) shipped #2195. Receiving loop (BI-0ACD9AB2) is HITL-first per §14. No responder code yet. |
 | Date | 2026-06-20 |
 | Trigger | Operator asked: "what process is working `/admin/issue-reports`, and what progress is made daily?" Live investigation found: no human or agent is actively attending the surface. |
 | Related epic | `EP-INTAKE-UNIFY`, especially BI-EDFBE081, re-scoped here as provenance and routing convergence. This surface is not a redundant backlog queue. |
@@ -405,3 +405,37 @@ This aligns with TAK because authority, tool use, escalation, and evidence are m
 ## 13. Companion Article (after implementation)
 
 Per operator direction (2026-06-20), once implemented this design is the basis for an external write-up. Thesis: a self-building platform must do more than *raise its hand* when it cannot proceed - it must route that escalation through a trusted decision front door before it ever reaches a human. Two queues, one drain: `ingestBacklogItem` for work, WWMD for decisions (5.7). Working title: *"The Trusted Receiving Loop: WWMD as a Decision Front Door."* Draft only after Slices 0-4 are live, so it can cite real before/after evidence: the 19 stalled WWMD builds, the escalation answer rate, and the drop in operator-facing attention volume. The article is a deliverable of this epic, not a side task - it is how the pattern reaches other builders.
+
+---
+
+## 14. Trust Dial and Autopilot Maturation (operator doctrine, 2026-06-20)
+
+This surface is not just an escalation router. The responder (5.3) and the decision front door (5.7) are the first instance of a platform AUTOPILOT with a calibrated trust dial. This section is the operating model for how human involvement *decreases over time without losing oversight* - and it is the load-bearing reason the responder is safe to build.
+
+### 14.1 The dial is the decision's confidence, not a fixed gate
+
+Every governed decision (the responder's, and any coworker's "should I plan vs change directly", "resume vs defer", etc.) runs through WWMD / WWWD / WSID and carries a confidence + margin (`principle_decide`) and an evidenced receipt (5.4). HITL is a *function of that confidence*, not an always-on checkpoint:
+
+- LOW confidence / margin below the tie threshold / commandment conflict / novel context -> HUMAN-IN-THE-LOOP: the decision is *proposed*; the human approves or overrides; the override is recorded as a labeled correction.
+- HIGH confidence, repeatedly correct-in-context -> AUTOPILOT: the decision executes and is recorded; the human reviews *after the fact*, not before.
+
+The dial is per decision-class and per scope. Early on it sits low - the scopes are unproven for this context, so the check often does not produce a firm decision and a human weighs in. As evidence accumulates the dial rises and HITL recedes to genuine novelty and high stakes.
+
+### 14.2 Human as reviewer-of-evidence, not approver-of-each
+
+The human interface shifts from "approve every decision" to "review an evidenced record." The operator does not read every plan-vs-direct or resume-vs-defer call. They see an OVERVIEW - counts, decision classes, outcomes, anomalies - and DRILL IN only when something looks off. Because every decision is on record (what was decided, which scope was consulted, the contribution ledger, the evidence refs, the outcome), a drill-in is always possible and an audit is never reconstructed after the fact. "Acknowledged" is never terminal (5.5); "reviewed-with-evidence" is.
+
+### 14.3 The tuning loop - how the scopes actually get better
+
+The recorded decisions and their outcomes are the training signal for the governed scopes themselves:
+
+- A human OVERRIDE of a proposed/autopilot decision is a labeled correction -> refine the WWMD principle / WWWD doctrine / WSID technique (or its dimensionVector / weight) so the next decision in that context is right.
+- A decision that went AWRY (caught on drill-in) -> feed the failure signature back into the same scope content.
+
+Over a few improvement cycles, performance and certainty rise, the dial rises, and HITL naturally recedes. This closes - for DECISIONS - the same loop DPF already runs for WORK (backlog -> build -> evidence -> learning): decide -> evidence -> outcome -> tune the scope. It is the maturation engine for WWMD/WWWD/WSID, fed by their own use.
+
+### 14.4 What this means for the build (safe by construction)
+
+The responder is therefore built HITL-FIRST: it ships with the dial low - propose-and-review for any consequential outcome - and earns autonomy per decision-class only as its WWMD/WWWD/WSID calls prove correct, never losing the evidenced record or the operator's ability to drill in. Building it is not deploying an unsupervised agent; it is deploying a governed one whose leash lengthens only as the evidence earns it. The trust dial, the decision record, the overview-with-drill-in, and the tuning loop are first-class acceptance criteria for the responder slices, not later polish.
+
+This model is a kernel-candidate in its own right (graduated autonomy via evidenced decisions); it generalizes `do-the-work-dont-task-the-operator`, `decisions-belong-to-their-scope`, `human-in-the-loop-at-phase-boundaries`, and the consult-the-scopes-before-asking-a-human directive into one maturation mechanism.
