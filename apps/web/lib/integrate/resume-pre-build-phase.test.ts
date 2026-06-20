@@ -86,6 +86,88 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect(out).toMatchObject({ kind: "resumed", via: "executeTool:reviewDesignDoc" });
   });
 
+  // ── Decompose-gate park guard (BI-BD4F2D0D) ───────────────────────────────
+  // A design that passed review but is sized `decompose-required` is parked at
+  // the Phase-4b gate, not stranded. Resuming it MUST NOT re-dispatch the
+  // ~847s ideate research nor re-run reviewDesignDoc (both just re-fire the
+  // gate forever, burning cloud AI quota) — it proposes candidates once and parks.
+  it("does NOT re-ideate a decompose-required build that passed review — proposes candidates once and parks", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "pass", sizeAssessment: { decision: "decompose-required" } },
+    });
+    executeToolMock.mockResolvedValue({ success: true, message: "Proposed 3 candidate decomposition(s) for FB-DR." });
+    const out = await resumePreBuildPhase({ buildId: "FB-DR", phase: "ideate", userId: "uDR" });
+
+    // The expensive pre-build paths are NOT taken.
+    expect(dispatchIdeateMock).not.toHaveBeenCalled();
+    expect(dispatchDesignFixMock).not.toHaveBeenCalled();
+    // It proposes decomposition (the productive alternative), NOT reviewDesignDoc.
+    expect(executeToolMock).toHaveBeenCalledWith(
+      "propose_build_decomposition",
+      { buildId: "FB-DR" },
+      "uDR",
+      { featureBuildId: "FB-DR" },
+    );
+    expect(executeToolMock).not.toHaveBeenCalledWith(
+      "reviewDesignDoc",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(out.kind).toBe("skipped");
+    expect((out as { reason: string }).reason).toContain("decompose-required");
+  });
+
+  it("does NOT re-propose (or re-ideate) when a parked decompose-required build already has candidates", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: {
+        decision: "pass",
+        sizeAssessment: { decision: "decompose-required" },
+        decompositionCandidates: { latest: [{ candidateId: "candidate-1", childScopes: [] }] },
+      },
+    });
+    const out = await resumePreBuildPhase({ buildId: "FB-DR2", phase: "ideate", userId: "uDR2" });
+
+    // Pure park: no LLM-bearing work at all (no propose, no review, no ideate).
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(dispatchIdeateMock).not.toHaveBeenCalled();
+    expect(dispatchDesignFixMock).not.toHaveBeenCalled();
+    expect(out.kind).toBe("skipped");
+    expect((out as { reason: string }).reason).toContain("candidates already exist");
+  });
+
+  it("does NOT park a decompose-required build once an operator override is recorded — re-runs review so it can advance", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: {
+        decision: "pass",
+        sizeAssessment: { decision: "decompose-required" },
+        decompositionOverride: { justification: "ship monolithically", at: "2026-06-20" },
+      },
+    });
+    const out = await resumePreBuildPhase({ buildId: "FB-OV", phase: "ideate", userId: "uOV" });
+    expect(executeToolMock).toHaveBeenCalledWith("reviewDesignDoc", { buildId: "FB-OV" }, "uOV", { featureBuildId: "FB-OV" });
+    expect(executeToolMock).not.toHaveBeenCalledWith("propose_build_decomposition", expect.anything(), expect.anything(), expect.anything());
+    expect(out).toMatchObject({ kind: "resumed", via: "executeTool:reviewDesignDoc" });
+  });
+
+  it("does NOT park a decompose-RECOMMENDED build — it is not gate-blocking, so review re-runs and advances", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "pass", sizeAssessment: { decision: "decompose-recommended" } },
+    });
+    const out = await resumePreBuildPhase({ buildId: "FB-REC", phase: "ideate", userId: "uREC" });
+    expect(executeToolMock).toHaveBeenCalledWith("reviewDesignDoc", { buildId: "FB-REC" }, "uREC", { featureBuildId: "FB-REC" });
+    expect(executeToolMock).not.toHaveBeenCalledWith("propose_build_decomposition", expect.anything(), expect.anything(), expect.anything());
+    expect(out).toMatchObject({ kind: "resumed", via: "executeTool:reviewDesignDoc" });
+  });
+
   it("runs the design-review fix loop when an existing designDoc's last review FAILED", async () => {
     findUniqueMock.mockResolvedValue({
       designDoc: { problemStatement: "p" },
