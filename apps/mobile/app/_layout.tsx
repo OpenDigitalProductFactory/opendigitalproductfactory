@@ -19,11 +19,14 @@ function useProtectedRoute() {
   useEffect(() => {
     if (isLoading) return;
 
-    const inAuthRoute = segments[0] === "login";
+    // `connect` is reachable from both states — first-run join AND adding
+    // another business from the in-app switcher — so it bypasses the
+    // protected-route redirects.
+    const inAuthRoute = segments[0] === "login" || segments[0] === "connect";
 
     if (!isAuthenticated && !inAuthRoute) {
       router.replace("/login");
-    } else if (isAuthenticated && inAuthRoute) {
+    } else if (isAuthenticated && segments[0] === "login") {
       router.replace("/(tabs)");
     }
   }, [isAuthenticated, isLoading, segments, router]);
@@ -67,6 +70,7 @@ export default function RootLayout() {
     <View style={styles.root}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="login" />
+        <Stack.Screen name="connect" options={{ headerShown: true, title: "Connect a business" }} />
         <Stack.Screen name="(tabs)" />
       </Stack>
       {isAuthenticated ? <AgentFAB /> : null}

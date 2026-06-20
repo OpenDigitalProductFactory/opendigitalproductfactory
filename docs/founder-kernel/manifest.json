@@ -1,7 +1,7 @@
 {
-  "kernelVersion": "0.3.0",
+  "kernelVersion": "0.4.0",
   "schemaVersion": "0.3.0",
-  "pageCount": 93,
+  "pageCount": 94,
   "sourceCount": 15,
   "embeddingModel": "ai/nomic-embed-text-v1.5",
   "embeddingDims": 768,

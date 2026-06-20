@@ -1,11 +1,10 @@
 import Link from "next/link";
-import {
-  linkCoworkerCapabilityNeedToBacklogAction,
-  resolveCoworkerCapabilityNeedAction,
-} from "@/lib/actions/coworker-capability-needs";
+import { StatusBadge, FilterBar, type FacetOption } from "@/components/ui/report-kit";
+import { reconcileCapabilityNeedBacklog } from "@/lib/coworker-self-assessment/capability-backlog-reconcile";
 import {
   getCoworkerCapabilityNeedReview,
   parseCoworkerCapabilityNeedReviewFilters,
+  type CoworkerCapabilityNeedReview,
   type CoworkerCapabilityNeedReviewItem,
 } from "@/lib/coworker-self-assessment/review-service";
 
@@ -13,17 +12,19 @@ type PageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-const SUMMARY_LABELS = [
-  { key: "total", label: "Total" },
-  { key: "blocker", label: "Blockers" },
-  { key: "submitted", label: "Submitted" },
-  { key: "accepted", label: "Accepted" },
-] as const;
+const BASE_PATH = "/platform/ai/capability-needs";
 
 export default async function CoworkerCapabilityNeedsPage({ searchParams }: PageProps) {
+  // Drain any orphaned need into the backlog before rendering. New needs auto-
+  // file at submission; this backfills legacy / never-filed ones so the view
+  // never shows untracked work. Idempotent + non-fatal. EP-INTAKE-UNIFY Phase 6.
+  await reconcileCapabilityNeedBacklog().catch(() => {});
+
   const params = await searchParams;
   const filters = parseCoworkerCapabilityNeedReviewFilters(params ?? {});
   const review = await getCoworkerCapabilityNeedReview(filters);
+
+  const summary = summarize(review);
 
   return (
     <div className="space-y-6">
@@ -35,60 +36,32 @@ export default async function CoworkerCapabilityNeedsPage({ searchParams }: Page
           <h1 className="mt-1 text-xl font-bold text-[var(--dpf-text)]">Capability Needs</h1>
           <p className="mt-1 max-w-3xl text-sm text-[var(--dpf-muted)]">
             Evidence view for AI coworker self-assessments and capability gaps. Each
-            submitted need is auto-filed to the backlog and prioritized there — the
-            backlog is the one place work is tracked.
+            need is auto-filed to the backlog and triaged there — the backlog is the
+            one place work is tracked. Each row shows its backlog item&apos;s status.
           </p>
         </div>
         <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-xs text-[var(--dpf-muted)]">
-          Review queue
+          Evidence view
         </div>
       </header>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {SUMMARY_LABELS.map((item) => (
-          <div
-            key={item.key}
-            className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
-          >
-            <div className="text-xs text-[var(--dpf-muted)]">{item.label}</div>
-            <div className="mt-1 text-2xl font-semibold text-[var(--dpf-text)]">
-              {summaryValue(item.key, review.summary)}
-            </div>
-          </div>
-        ))}
+        <SummaryCard label="Total" value={summary.total} />
+        <SummaryCard label="Blockers" value={summary.blockers} />
+        <SummaryCard label="Tracked in backlog" value={summary.tracked} />
+        <SummaryCard label="In progress" value={summary.inProgress} />
       </section>
 
-      <section className="flex flex-wrap gap-2">
-        <FilterLink
-          label="All"
-          href="/platform/ai/capability-needs"
-          active={!filters.status && !filters.severity && !filters.kind}
-        />
-        {review.filterOptions.statuses.map((status) => (
-          <FilterLink
-            key={status}
-            label={status}
-            href={`/platform/ai/capability-needs?status=${encodeURIComponent(status)}`}
-            active={filters.status === status}
-          />
-        ))}
-        {review.filterOptions.severities.map((severity) => (
-          <FilterLink
-            key={severity}
-            label={severity}
-            href={`/platform/ai/capability-needs?severity=${encodeURIComponent(severity)}`}
-            active={filters.severity === severity}
-          />
-        ))}
-        {review.filterOptions.kinds.map((kind) => (
-          <FilterLink
-            key={kind}
-            label={kind}
-            href={`/platform/ai/capability-needs?kind=${encodeURIComponent(kind)}`}
-            active={filters.kind === kind}
-          />
-        ))}
-      </section>
+      <FilterBar
+        mode="url"
+        basePath={BASE_PATH}
+        facets={[
+          { kind: "pills", key: "severity", label: "Severity", options: toOptions(review.filterOptions.severities) },
+          { kind: "pills", key: "kind", label: "Kind", options: toOptions(review.filterOptions.kinds) },
+        ]}
+        value={{ severity: filters.severity ?? "", kind: filters.kind ?? "" }}
+        resultCount={review.needs.length}
+      />
 
       <section className="space-y-3">
         {review.needs.map((need) => (
@@ -104,36 +77,25 @@ export default async function CoworkerCapabilityNeedsPage({ searchParams }: Page
   );
 }
 
-function summaryValue(
-  key: typeof SUMMARY_LABELS[number]["key"],
-  summary: Awaited<ReturnType<typeof getCoworkerCapabilityNeedReview>>["summary"],
-) {
-  if (key === "total") return summary.total;
-  if (key === "blocker") return summary.bySeverity.blocker ?? 0;
-  return summary.byStatus[key] ?? 0;
+function summarize(review: CoworkerCapabilityNeedReview) {
+  return {
+    total: review.summary.total,
+    blockers: review.summary.bySeverity.blocker ?? 0,
+    tracked: review.needs.filter((n) => n.linkedBacklogItemId).length,
+    inProgress: review.needs.filter((n) => n.linkedBacklogItemStatus === "in-progress").length,
+  };
 }
 
-function FilterLink({
-  label,
-  href,
-  active,
-}: {
-  label: string;
-  href: string;
-  active: boolean;
-}) {
+function toOptions(values: string[]): FacetOption[] {
+  return values.map((value) => ({ value, label: value }));
+}
+
+function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
-    <Link
-      href={href}
-      className={[
-        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-        active
-          ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent)]/10 text-[var(--dpf-text)]"
-          : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
-      ].join(" ")}
-    >
-      {label}
-    </Link>
+    <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
+      <div className="text-xs text-[var(--dpf-muted)]">{label}</div>
+      <div className="mt-1 text-2xl font-semibold text-[var(--dpf-text)]">{value}</div>
+    </div>
   );
 }
 
@@ -151,10 +113,14 @@ function NeedRow({ need }: { need: CoworkerCapabilityNeedReviewItem }) {
           <h2 className="mt-2 text-base font-semibold text-[var(--dpf-text)]">{need.need}</h2>
           <p className="mt-1 text-sm text-[var(--dpf-muted)]">{need.blocks}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge>{need.severity}</Badge>
           <Badge>{need.kind}</Badge>
-          <Badge>{need.status}</Badge>
+          {need.linkedBacklogItemStatus ? (
+            <StatusBadge domain="backlogItem" status={need.linkedBacklogItemStatus} variant="soft" />
+          ) : (
+            <span className="text-xs italic text-[var(--dpf-muted)]">filing to backlog…</span>
+          )}
         </div>
       </div>
 
@@ -185,91 +151,12 @@ function NeedRow({ need }: { need: CoworkerCapabilityNeedReviewItem }) {
             href={`/ops?itemId=${need.linkedBacklogItemId}`}
             className="text-[var(--dpf-accent)] hover:underline"
           >
-            View backlog {need.linkedBacklogItemId}
+            View backlog item {need.linkedBacklogItemId}
             {need.linkedBacklogItemTitle ? ` - ${need.linkedBacklogItemTitle}` : ""} →
           </Link>
         ) : null}
       </div>
-
-      <ReviewControls need={need} />
     </article>
-  );
-}
-
-function ReviewControls({ need }: { need: CoworkerCapabilityNeedReviewItem }) {
-  return (
-    <div className="mt-4 border-t border-[var(--dpf-border)] pt-4">
-      <div className="mb-2 text-xs font-semibold uppercase text-[var(--dpf-muted)]">Review actions</div>
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]">
-        <div className="flex flex-wrap gap-2">
-          <DecisionForm needId={need.needId} status="accepted" label="Accept" />
-          <DecisionForm needId={need.needId} status="deferred" label="Defer" />
-          <DecisionForm needId={need.needId} status="discarded" label="Discard" />
-        </div>
-
-        <form action={linkCoworkerCapabilityNeedToBacklogAction} className="flex flex-col gap-2 sm:flex-row">
-          <input type="hidden" name="needId" value={need.needId} />
-          <input
-            name="backlogItemId"
-            placeholder="BI-F026ADD0"
-            defaultValue={need.linkedBacklogItemId ?? ""}
-            className="min-w-0 flex-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs text-[var(--dpf-text)]"
-          />
-          <button
-            type="submit"
-            className="rounded-md border border-[var(--dpf-accent)] px-3 py-2 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-accent)]/10"
-          >
-            Link backlog item
-          </button>
-        </form>
-      </div>
-
-      <form action={resolveCoworkerCapabilityNeedAction} className="mt-3 grid gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]">
-        <input type="hidden" name="needId" value={need.needId} />
-        <input type="hidden" name="status" value="duplicate" />
-        <input
-          name="duplicateOfId"
-          placeholder="Canonical need id"
-          defaultValue={need.duplicateOfId ?? ""}
-          className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs text-[var(--dpf-text)]"
-        />
-        <input
-          name="reviewerNote"
-          placeholder="Reviewer note"
-          defaultValue={need.reviewerNote ?? ""}
-          className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs text-[var(--dpf-text)]"
-        />
-        <button
-          type="submit"
-          className="rounded-md border border-[var(--dpf-border)] px-3 py-2 text-xs font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]"
-        >
-          Mark duplicate
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function DecisionForm({
-  needId,
-  status,
-  label,
-}: {
-  needId: string;
-  status: "accepted" | "deferred" | "discarded";
-  label: string;
-}) {
-  return (
-    <form action={resolveCoworkerCapabilityNeedAction}>
-      <input type="hidden" name="needId" value={needId} />
-      <input type="hidden" name="status" value={status} />
-      <button
-        type="submit"
-        className="rounded-md border border-[var(--dpf-border)] px-3 py-2 text-xs font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] hover:bg-[var(--dpf-accent)]/10"
-      >
-        {label}
-      </button>
-    </form>
   );
 }
 

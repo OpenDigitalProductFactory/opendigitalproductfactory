@@ -12,6 +12,7 @@ import { DashboardTile } from "@/src/components/DashboardTile";
 import { useWorkspaceStore } from "@/src/features/workspace/workspace.store";
 import { useAppConfigStore } from "@/src/lib/appConfig";
 import { CustomerInvoicesPanel } from "@/src/features/customer-invoices/CustomerInvoicesPanel";
+import { NearbyPanel } from "@/src/features/nearby/NearbyPanel";
 import { CustomerVisitsPanel } from "@/src/features/customer-visits/CustomerVisitsPanel";
 import type { ActivityItem, DashboardTile as TileType } from "@dpf/types";
 
@@ -85,6 +86,7 @@ export default function HomeScreen() {
           <View>
             <CustomerInvoicesPanel />
             <CustomerVisitsPanel />
+            <NearbyPanel />
           </View>
         }
       />
