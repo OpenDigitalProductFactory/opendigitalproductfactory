@@ -72,3 +72,16 @@ Tests: 30 adapter (6 containment) + 16 EA component + 52 graph/actions/topology 
 ## Addendum — 2026-06-20: fix nested-view edge detachment
 
 Live-review regression on the containment view: cross-cutting edges detached from the boxes (bunched near the canvas origin) and didn't follow a container when moved. Cause: the floating `EaRelationshipEdge` built node geometry from `node.position`, which for nested children is **relative to the container** — fine in flat mode (all nodes top-level) but wrong when nested. Fix: new pure `apps/web/lib/ea/node-geometry.ts` `resolveAbsolutePositions` (sums the parent chain, cycle-guarded, unit-tested); `EaRelationshipEdge` now anchors edges on absolute positions, so they stay attached and track container moves (`useNodes()` re-fires on drag). Tests: +5 node-geometry; web typecheck clean.
+
+---
+
+## Addendum — 2026-06-20: crossing-minimizing layouts + relationship-aware nesting (BI-6333C6BC)
+
+Live review (research-backed): "organic" stays chaotic, and the nested view's inner layout ignored sibling relationships.
+
+- **Crossing minimization (flat):** research confirmed ELK `stress` ("organic") optimizes distance, not crossings; **ELK `layered` (Sugiyama) is the crossing minimizer** and handles cyclic graphs via cycle-breaking. `pickAutoAlgorithm` now routes any non-forest (dependency mesh) to **layered** (not organic); layered tuned with `crossingMinimization.strategy=LAYER_SWEEP`, `nodePlacement=BRANDES_KOEPF`+`bk.edgeStraightening`, `cycleBreaking=GREEDY`, `edgeRouting=ORTHOGONAL`, and `thoroughness` restored to 7 (4 only for n>400). "Organic" relabeled honestly and kept as a manual option.
+- **Edge style from layout:** layered/tree → step (right-angle), organic/radial → straight — driven automatically when a layout runs (curved/bezier looked chaotic on dense graphs).
+- **Relationship-aware nesting (compound):** `computeContainmentLayout` now uses ELK compound (`hierarchyHandling: INCLUDE_CHILDREN`) — children are laid out INSIDE their container by their cross-cutting edges (crossing-minimized; e.g. MCP Tool Authority's 271 Traces among 308 children), containers sized to fit. ELK's parent-relative coords + sizes map straight onto React Flow `parentId`/`extent`/`style`. The shelf packer is retained as a resilient fallback (and for the pure-cycle case). Nested edges render orthogonally (step).
+- **Deferred follow-up:** persist nested manual edits (drag) across reload (canvasState nesting schema) — nodes are draggable in-session today.
+
+Tests: 33 adapter (incl. compound + dense→layered) + 40 component/graph; web typecheck clean. No new dependency.
