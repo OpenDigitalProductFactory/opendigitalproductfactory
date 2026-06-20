@@ -9,6 +9,7 @@ import { ChangeLaneSourceSummary } from "./ChangeLaneSourceSummary";
 import { ChangeLaneTable } from "./ChangeLaneTable";
 
 const TABS = [
+  { id: "all", label: "All work" },
   { id: "active", label: "Active lanes" },
   { id: "handoff", label: "Branches needing handoff" },
   { id: "worktrees", label: "Orphan worktrees" },
@@ -45,7 +46,7 @@ export function ChangeLanesDashboard({
   anySnapshotSourceDegraded?: boolean;
   isAdmin?: boolean;
 }) {
-  const [tab, setTab] = useState<TabId>("active");
+  const [tab, setTab] = useState<TabId>("all");
 
   const filteredLanes = useMemo(() => filterLanes(lanes, tab), [lanes, tab]);
 
@@ -56,11 +57,12 @@ export function ChangeLanesDashboard({
     <div className="space-y-4">
       <header className="space-y-1">
         <h1 className="text-xl font-semibold text-[var(--dpf-text)]">
-          Contributor change lanes
+          Development activity — all surfaces
         </h1>
         <p className="text-sm text-[var(--dpf-muted)]">
-          Branches, worktrees, runtimes, and PRs joined into one view so contributor
-          handoff state is visible — read-only for this slice.
+          Every unit of development work — Build Studio, Claude Code, Codex, and Grok —
+          joined into one view: capsules, branches, worktrees, runtimes, and PRs. Start on
+          All work; the other lenses focus on what needs attention. Read-only.
         </p>
         <p className="text-[10px] text-[var(--dpf-muted)]">
           Snapshot at {generatedAt}
@@ -111,11 +113,13 @@ export function ChangeLanesDashboard({
   );
 }
 
-function filterLanes(
+export function filterLanes(
   lanes: ContributorChangeLane[],
   tab: TabId,
 ): ContributorChangeLane[] {
   switch (tab) {
+    case "all":
+      return lanes;
     case "active":
       return lanes.filter((l) => ACTIVE_STATUSES.has(l.status));
     case "handoff":
