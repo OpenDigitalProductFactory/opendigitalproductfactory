@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
+import { parseOrgAddress, sanitizeOrgAddressInput, serializeOrgAddress } from "@/lib/shared/org-address";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
     employsIn,
     dataResidency,
     handlesCardPayments,
+    address,
   } = (await req.json()) as {
     description?: string;
     mission?: string;
@@ -36,6 +38,7 @@ export async function POST(req: NextRequest) {
     employsIn?: string[];
     dataResidency?: string[];
     handlesCardPayments?: boolean;
+    address?: unknown;
   };
 
   // Compliance scope is captured as a unit: when any dimension is present in the
@@ -61,7 +64,7 @@ export async function POST(req: NextRequest) {
       }
     : {};
 
-  const org = await prisma.organization.findFirst({ select: { id: true } });
+  const org = await prisma.organization.findFirst({ select: { id: true, address: true } });
   if (!org) {
     return NextResponse.json(
       { error: "Organization not found. Complete account setup first." },
@@ -69,12 +72,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Capture the canonical business address (Organization.address per AGENTS.md
+  // S11). Merge non-destructively so any geocoding lat/lng survives; the US state
+  // is mirrored into BusinessContext.stateCode below so the timezone derivation
+  // and public-sector statutory defaults share one captured signal.
+  const sanitizedAddress = address !== undefined ? sanitizeOrgAddressInput(address) : null;
+  const addressJson = sanitizedAddress ? serializeOrgAddress(sanitizedAddress, org.address) : undefined;
+  const addressStateCode = sanitizedAddress?.stateCode;
+
   // industry is derived from archetype.category; set only by /api/storefront/admin/setup
   await prisma.organization.update({
     where: { id: org.id },
     data: {
       ...(contactEmail !== undefined && { email: contactEmail }),
       ...(contactPhone !== undefined && { phone: contactPhone }),
+      ...(addressJson !== undefined && { address: addressJson as unknown as Prisma.InputJsonValue }),
     },
   });
 
@@ -90,6 +102,7 @@ export async function POST(req: NextRequest) {
       geographicScope: geographicScope ?? null,
       revenueModel: revenueModel ?? null,
       customerSegments: [],
+      ...(addressStateCode ? { stateCode: addressStateCode } : {}),
       ...complianceScope,
     },
     update: {
@@ -99,6 +112,7 @@ export async function POST(req: NextRequest) {
       ...(companySize !== undefined && { companySize }),
       ...(geographicScope !== undefined && { geographicScope }),
       ...(revenueModel !== undefined && { revenueModel }),
+      ...(addressStateCode ? { stateCode: addressStateCode } : {}),
       ...complianceScope,
     },
   });
@@ -113,7 +127,7 @@ export async function GET() {
   }
 
   const org = await prisma.organization.findFirst({
-    select: { id: true, email: true, phone: true },
+    select: { id: true, email: true, phone: true, address: true },
   });
   if (!org) {
     return NextResponse.json({ businessContext: null });
@@ -127,5 +141,6 @@ export async function GET() {
     businessContext: bc,
     contactEmail: org.email,
     contactPhone: org.phone,
+    address: parseOrgAddress(org.address),
   });
 }

@@ -10,7 +10,8 @@
 import { prisma } from "@dpf/db";
 import { DEFAULT_OPERATING_HOURS_TIMEZONE, GENERIC_DEFAULTS } from "@/lib/operating-hours-types";
 import type { DaySchedule, WeeklySchedule } from "@/lib/operating-hours-types";
-import { resolveTimezoneFromLocation } from "@/lib/timezone-from-location";
+import { resolveTimezoneFromAddress, resolveTimezoneFromLocation } from "@/lib/timezone-from-location";
+import { parseOrgAddress } from "@/lib/shared/org-address";
 
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 const CLOSED_DAY: DaySchedule = { enabled: false, open: "09:00", close: "17:00" };
@@ -21,13 +22,23 @@ const CLOSED_DAY: DaySchedule = { enabled: false, open: "09:00", close: "17:00" 
  * UTC placeholder). Prefers the precise US state code; falls back to a country
  * code found in the operating jurisdictions. Returns null when nothing resolves.
  * The platform captures these at setup, so the self-upgrade window should follow
- * them rather than silently evaluating in UTC (BI-0C000AB3).
+ * them rather than silently evaluating in UTC (BI-0C000AB3 / BI-AAAA0691).
  */
 export async function deriveTimezoneFromBusinessLocation(): Promise<string | null> {
   // Fail-open: a best-effort default must never throw into the caller (the cron
   // window check or the settings page), and it keeps callers that mock only
   // businessProfile working.
   try {
+    // Precise source: the canonical Organization.address captured at setup. A US
+    // address carries a state code, so it resolves to the correct one of the six
+    // US zones rather than the country-only Eastern default (BI-AAAA0691).
+    const org = await prisma.organization.findFirst({ select: { address: true } });
+    const fromAddress = org ? resolveTimezoneFromAddress(parseOrgAddress(org.address)) : null;
+    if (fromAddress) return fromAddress;
+
+    // Fallback (no regression): BusinessContext.stateCode + the operating
+    // jurisdiction country code, for installs that have those but no captured
+    // address yet.
     const ctx = await prisma.businessContext.findFirst({
       select: { stateCode: true, operatesIn: true },
     });

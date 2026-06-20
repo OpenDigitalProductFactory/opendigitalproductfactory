@@ -2,11 +2,12 @@ import { prisma } from "@dpf/db";
 import { BusinessContextForm } from "@/components/admin/BusinessContextForm";
 import { getSetupContext } from "@/lib/actions/setup-progress";
 import { suggestMission } from "@/lib/onboarding/mission-suggestion";
+import { parseOrgAddress } from "@/lib/shared/org-address";
 
 export default async function StorefrontBusinessSettingsPage() {
   const [org, setupContext, storefrontConfig] = await Promise.all([
     prisma.organization.findFirst({
-      select: { id: true, name: true, email: true, phone: true },
+      select: { id: true, name: true, email: true, phone: true, address: true },
     }),
     getSetupContext(),
     prisma.storefrontConfig.findFirst({
@@ -41,6 +42,7 @@ export default async function StorefrontBusinessSettingsPage() {
     employsIn: businessContext?.employsIn ?? [],
     dataResidency: businessContext?.dataResidency ?? [],
     handlesCardPayments: businessContext?.handlesCardPayments ?? false,
+    address: parseOrgAddress(org?.address),
   };
 
   const missionSuggestion = suggestMission({

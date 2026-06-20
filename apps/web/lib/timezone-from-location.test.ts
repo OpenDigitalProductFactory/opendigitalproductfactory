@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveTimezoneFromLocation } from "./timezone-from-location";
+import { resolveTimezoneFromAddress, resolveTimezoneFromLocation } from "./timezone-from-location";
 
 describe("resolveTimezoneFromLocation", () => {
   it("resolves US states to their predominant zone (state-accurate, six US zones)", () => {
@@ -37,5 +37,22 @@ describe("resolveTimezoneFromLocation", () => {
     expect(resolveTimezoneFromLocation({ stateCode: "ZZ" })).toBeNull();
     expect(resolveTimezoneFromLocation({ stateCode: "", countryCode: "" })).toBeNull();
     expect(resolveTimezoneFromLocation({ countryCode: "ZZ" })).toBeNull();
+  });
+});
+
+describe("resolveTimezoneFromAddress", () => {
+  it("resolves a US address to its state-accurate zone (the precise source)", () => {
+    expect(
+      resolveTimezoneFromAddress({ city: "Chicago", region: "Illinois", stateCode: "IL", countryCode: "US" }),
+    ).toBe("America/Chicago");
+  });
+
+  it("falls back to the country zone for a non-US address with no usable state", () => {
+    expect(resolveTimezoneFromAddress({ city: "London", countryCode: "GB" })).toBe("Europe/London");
+  });
+
+  it("returns null for an address carrying no location codes", () => {
+    expect(resolveTimezoneFromAddress({ line1: "1 Main St", city: "Anytown" })).toBeNull();
+    expect(resolveTimezoneFromAddress({})).toBeNull();
   });
 });
