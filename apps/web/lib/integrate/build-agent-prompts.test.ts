@@ -32,6 +32,11 @@ describe("getBuildPhasePrompt", () => {
     expect(prompt).toContain("suggest_taxonomy_placement");
     expect(prompt).toContain("start_scout_research");
   });
+  it("ideate prompt carries the STEP 0.4 intent-confirmation gate (BI-564D68F7)", async () => {
+    const prompt = await getBuildPhasePrompt("ideate");
+    expect(prompt).toContain("INTENT CONFIRMATION GATE");
+    expect(prompt).toContain("Intent Confirmation Required");
+  });
   it("returns plan prompt for plan phase", async () => {
     const prompt = await getBuildPhasePrompt("plan");
     expect(prompt).toContain("implementation plan");
@@ -105,6 +110,32 @@ describe("SPECIALIST_TOOLS", () => {
 });
 
 describe("getBuildContextSection", () => {
+  it("renders the Intent Confirmation gate when intentConfirmation is set (BI-564D68F7)", async () => {
+    const section = await getBuildContextSection({
+      buildId: "FB-1",
+      phase: "ideate",
+      title: "Billing change",
+      brief: null,
+      plan: null,
+      portfolioId: null,
+      intentConfirmation:
+        "This build is high-risk. Confirm intent with the operator before research.\nOpen questions to resolve:\n  - Who is affected?",
+    });
+    expect(section).toContain("--- Intent Confirmation Required ---");
+    expect(section).toContain("Who is affected?");
+    expect(section).toContain("Per STEP 0.4");
+  });
+  it("omits the Intent Confirmation gate when intentConfirmation is absent (fast path)", async () => {
+    const section = await getBuildContextSection({
+      buildId: "FB-2",
+      phase: "ideate",
+      title: "Low-risk tweak",
+      brief: null,
+      plan: null,
+      portfolioId: null,
+    });
+    expect(section).not.toContain("Intent Confirmation Required");
+  });
   it("includes buildId and phase", async () => {
     const section = await getBuildContextSection({
       buildId: "FB-12345678",

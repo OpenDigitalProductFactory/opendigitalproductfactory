@@ -118,7 +118,12 @@ STEP 0 — INTENT GATE (do this FIRST, before any tools):
     Wait for an answer.
 
   IF sufficient (you have title + description + context):
-    Proceed immediately to STEP 0.5. Do NOT ask generic questions. Do NOT wait for multiple clarifications.
+    Proceed to STEP 0.4 (a no-op unless this build is flagged). Do NOT ask generic questions. Do NOT wait for multiple clarifications.
+
+STEP 0.4 — INTENT CONFIRMATION GATE (only when flagged):
+  CHECK the Build Studio Context for an "--- Intent Confirmation Required ---" section.
+  - IF that section is ABSENT: skip this step. Proceed to STEP 0.5. This is the default fast path for low-risk, high-confidence work — do not invent questions.
+  - IF that section is PRESENT: this build is HIGH RISK or LOW CONFIDENCE. Before any research, surface the open questions it lists to the operator in plain language, in ONE message, and say briefly why (e.g. "Because this touches billing and customers, let me confirm a couple of things first:"). WAIT for the operator's answer. Do NOT call start_scout_research or any tool until they respond. If they answer or say "proceed anyway" / "just build it", continue to STEP 0.5 and carry their answers into the userContext you later pass to start_ideate_research.
 
 STEP 0.5 — START SCOUT RESEARCH (new):
   Extract any URLs the user mentioned in their message. Call start_scout_research:
@@ -165,7 +170,7 @@ RULES:
 - Do NOT ask technical questions. Make reasonable assumptions and act.
 - Do NOT repeat yourself or re-ask questions the user already answered.
 - Maximum 2 sentences per response. Act, don't explain.
-- If the user says "build it" or "do it" or "ok", proceed to the next step immediately.
+- If the user says "build it" or "do it" or "ok", proceed to the next step immediately — UNLESS the STEP 0.4 Intent Confirmation gate is present and unanswered, in which case surface its questions first, then treat "proceed anyway" as explicit consent to continue.
 - If Dev mode is enabled (devMode: true in context), show the full design document and accept feedback.
 
 STEP 4: After the user approves the design, call suggest_taxonomy_placement.
@@ -746,6 +751,10 @@ export type BuildContext = {
   businessContext?: string;
   /** Scout findings: related models, gaps, external structure from fast codebase search. */
   scoutFindings?: string;
+  /** Risk-gated intent-confirmation gate text (BI-564D68F7): present only when
+   *  the business brief is HIGH risk or LOW confidence, instructing the ideate
+   *  coworker (STEP 0.4) to confirm intent before research. Absent = fast path. */
+  intentConfirmation?: string;
   /** Optional one-sentence reason the current phase ran under deliberation
    *  (Deliberation Pattern Framework v1, Step 8.6). Surfaces WHY a debate or
    *  peer review was activated so downstream agents can explain decisions. */
@@ -850,6 +859,13 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
     lines.push("--- Scout Findings (Pre-Design Research) ---");
     lines.push(ctx.scoutFindings);
     lines.push("Use these findings to ask informed clarification questions. Do NOT ask about things already discovered in scout findings.");
+  }
+
+  if (ctx.intentConfirmation) {
+    lines.push("");
+    lines.push("--- Intent Confirmation Required ---");
+    lines.push(ctx.intentConfirmation);
+    lines.push("Per STEP 0.4: surface these to the operator and wait for an answer before research. Do NOT proceed silently.");
   }
 
   if (ctx.brief) {
