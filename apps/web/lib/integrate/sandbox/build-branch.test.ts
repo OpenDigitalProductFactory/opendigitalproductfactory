@@ -78,6 +78,18 @@ describe("wrapSandboxGitCommand", () => {
     );
   });
 
+  it("exempts in-sandbox commits from the pre-commit typecheck (stale-Prisma / out-of-scope false positives)", () => {
+    // The sandbox is the build tree, not a dev clone. Its pre-commit typecheck
+    // runs against a stale/junctioned Prisma client + other pre-existing,
+    // out-of-scope errors that have nothing to do with the build's own diff;
+    // those false positives rejected the mechanical `sandbox baseline` commit
+    // and blocked startBuildBranch for the whole fleet. The build's real
+    // typecheck is the review-phase SCOPED verification + CI on the PR.
+    expect(wrapSandboxGitCommand('git -C /workspace commit -m "sandbox baseline"')).toContain(
+      "export DPF_SKIP_TYPECHECK=1",
+    );
+  });
+
   it("stops preview processes and removes app-local next artifacts before switching branches", () => {
     const command = buildSandboxBranchSwitchPrepCommand();
 
