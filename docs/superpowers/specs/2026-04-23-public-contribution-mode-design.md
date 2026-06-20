@@ -1,5 +1,12 @@
 # Public Contribution Mode — Fork-Based PR Flow
 
+> **Partially superseded (2026-06-19, EP-1A78BAE1):** the install-level
+> `fork_only` / `selective` / `contribute_all` modes referenced here were
+> collapsed to **two** (`private` / `contributing`) with per-change
+> suggest-then-confirm sharing. The fork-vs-direct *push model* described in
+> this doc is unchanged. Current contribution model:
+> [`docs/superpowers/plans/2026-06-19-contribution-model-2state-suggest-confirm.md`](../plans/2026-06-19-contribution-model-2state-suggest-confirm.md).
+
 | Field | Value |
 |-------|-------|
 | **Epic** | EP-BUILD-HANDOFF-002 (Phase 2e extension, public-repo follow-on) |

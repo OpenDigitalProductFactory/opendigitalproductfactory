@@ -179,6 +179,60 @@ export const buildReviewVerification = inngest.createFunction(
       }
     });
 
+    // BI-02B98843: advisory adversarial / edge-case pass. Generate negative
+    // cases from the acceptance criteria + changed surface and drive them
+    // through the same browser-use path, recording the outcome as a
+    // BuildActivity row. ADVISORY ONLY — it does NOT touch uxTestResults or
+    // uxVerificationStatus, so it cannot flip the (heuristic) happy-path ship
+    // gate or disrupt Build Studio while it is being tuned. Failures surface for
+    // the operator + the (future) self-iteration fix loop, not hard-gated.
+    // Opt out with BUILD_ADVERSARIAL_VERIFICATION=0 (it doubles browser-use time
+    // on a UI build, capped at MAX_ADVERSARIAL_CASES cases).
+    await step.run("run-adversarial-tests", async () => {
+      if (process.env.BUILD_ADVERSARIAL_VERIFICATION === "0") return;
+      try {
+        const { buildAdversarialCasePrompt, parseAdversarialCases } = await import("@/lib/build/adversarial-cases");
+        const { routeAndCall } = await import("@/lib/inference/routed-inference");
+        const prompt = buildAdversarialCasePrompt({
+          acceptanceCriteria: brief?.acceptanceCriteria ?? [],
+          changedFiles,
+        });
+        const gen = await routeAndCall(
+          [{ role: "user", content: "Generate the adversarial cases now." }],
+          prompt,
+          "internal",
+          { taskType: "build-review", budgetClass: "minimize_cost" },
+        );
+        const cases = parseAdversarialCases(gen.content);
+        if (cases.length === 0) return;
+        const { resolveSandboxUrl } = await import("@/lib/integrate/sandbox/resolve-sandbox-url");
+        const { runBrowserUseTests } = await import("@/lib/operate/browser-use-client");
+        const sandboxUrl = resolveSandboxUrl(build.sandboxId!, build.sandboxPort!).internal;
+        const advSteps = await runBrowserUseTests(sandboxUrl, cases, { buildId });
+        const failed = advSteps.filter((s) => !s.passed);
+        const { prisma } = await import("@dpf/db");
+        await prisma.buildActivity
+          .create({
+            data: {
+              buildId,
+              tool: "adversarial-verification",
+              summary:
+                `Adversarial pass (advisory): ${advSteps.length - failed.length}/${advSteps.length} handled gracefully` +
+                (failed.length > 0
+                  ? `. Possible weak spots: ${failed.map((s) => s.step).join(" | ").slice(0, 400)}`
+                  : ". No edge-case weaknesses surfaced."),
+            },
+          })
+          .catch(() => {});
+      } catch (err) {
+        // Best-effort, advisory: never fail verification on the adversarial pass.
+        console.warn(
+          "[adversarial-verification] skipped: %s",
+          err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
+        );
+      }
+    });
+
     const allPass = steps.length > 0 && steps.every((s) => s.passed);
     const finalStatus: "complete" | "failed" | "skipped" = allPass ? "complete" : "failed";
 

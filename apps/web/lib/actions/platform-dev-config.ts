@@ -21,7 +21,49 @@ async function requireManagePlatform(): Promise<string> {
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
 
-const VALID_MODES = ["fork_only", "selective", "contribute_all"] as const;
+// Private-paths overrides (EP-1A78BAE1). Operator-managed glob rules that merge
+// with the checked-in `.dpf/private-paths` manifest; matched paths never leave
+// at public-hive egress.
+
+export interface PrivatePathRuleView {
+  id: string;
+  pattern: string;
+  reason: string | null;
+  createdAt: string;
+}
+
+export async function listPrivatePathRules(): Promise<PrivatePathRuleView[]> {
+  await requireManagePlatform();
+  const rows = await prisma.privatePathRule.findMany({ orderBy: { createdAt: "asc" } });
+  return rows.map((r) => ({ id: r.id, pattern: r.pattern, reason: r.reason, createdAt: r.createdAt.toISOString() }));
+}
+
+export async function addPrivatePathRule(pattern: string, reason?: string | null): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireManagePlatform();
+  const p = pattern.trim();
+  if (!p) return { ok: false, error: "Pattern is required." };
+  if (p.length > 200) return { ok: false, error: "Pattern is too long." };
+  try {
+    await prisma.privatePathRule.create({
+      data: { pattern: p, reason: reason?.trim() || null, createdById: userId },
+    });
+  } catch {
+    return { ok: false, error: "That pattern already exists." };
+  }
+  revalidatePath("/admin/platform-development");
+  return { ok: true };
+}
+
+export async function removePrivatePathRule(id: string): Promise<{ ok: boolean }> {
+  await requireManagePlatform();
+  await prisma.privatePathRule.deleteMany({ where: { id } });
+  revalidatePath("/admin/platform-development");
+  return { ok: true };
+}
+
+// 2-state contribution model (EP-1A78BAE1). Per-change sharing is decided by
+// the FeatureBuild disposition (suggest-then-confirm), not by this mode.
+const VALID_MODES = ["private", "contributing"] as const;
 type ContributionMode = (typeof VALID_MODES)[number];
 
 export async function savePlatformDevConfig(mode: ContributionMode) {
@@ -73,8 +115,8 @@ export async function acceptDco(): Promise<{ accepted: boolean; error?: string }
 
   const config = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
 
-  if (config?.contributionMode === "fork_only") {
-    return { accepted: false, error: "DCO is not required for fork_only mode" };
+  if (config?.contributionMode === "private") {
+    return { accepted: false, error: "DCO is not required for a private install" };
   }
 
   // Upsert to handle case where singleton doesn't exist yet (e.g., during onboarding)
@@ -86,7 +128,7 @@ export async function acceptDco(): Promise<{ accepted: boolean; error?: string }
     },
     create: {
       id: "singleton",
-      contributionMode: "selective",
+      contributionMode: "contributing",
       dcoAcceptedAt: new Date(),
       dcoAcceptedById: userId,
       configuredAt: new Date(),
@@ -114,7 +156,7 @@ export async function saveGitRemoteUrl(url: string | null): Promise<void> {
     update: { gitRemoteUrl: url?.trim() || null },
     create: {
       id: "singleton",
-      contributionMode: "fork_only",
+      contributionMode: "private",
       gitRemoteUrl: url?.trim() || null,
       configuredAt: new Date(),
       configuredById: userId,
