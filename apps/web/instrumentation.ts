@@ -850,6 +850,19 @@ export async function register() {
       setInterval(() => void reconcileStuckBackupRuns(), 20 * 60 * 1000);
     })();
 
+    // Backfill the operational value stream (OVSM) EA view for any storefront
+    // that completed setup before the #1798 generator was running on it — those
+    // installs have a StorefrontConfig + archetype but no archetype_value_stream
+    // EaView, so /ea/value-streams shows the empty state forever with nothing to
+    // self-heal it. Cheap when already present (existence check, no projection);
+    // idempotent and non-fatal per org.
+    void (async () => {
+      const { backfillOperationalValueStreamsOnBoot } = await import(
+        "@/lib/storefront/backfill-operational-value-streams"
+      );
+      await backfillOperationalValueStreamsOnBoot();
+    })();
+
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
     // These run unconditionally — they are correctness reconcilers, not optional
     // maintenance — and FIX 1 runs before FIX 2 so contradictory checkpoints are
