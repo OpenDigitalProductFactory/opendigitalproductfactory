@@ -14,7 +14,7 @@ import { saveContributionSetup } from "@/lib/actions/platform-dev-config";
 // detection happens server-side in `validateGitHubToken` via prefix
 // inspection. The labels just steer the user toward the right token type.
 
-type ContributionMode = "fork_only" | "selective" | "contribute_all";
+type ContributionMode = "private" | "contributing";
 
 const FINE_GRAINED_HELP =
   "Create a fine-grained PAT at github.com/settings/personal-access-tokens with Repository Access limited to your fork and Contents: read and write. Expiry: 90 days or more.";

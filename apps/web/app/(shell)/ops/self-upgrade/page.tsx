@@ -4,6 +4,8 @@ import { loadPersistedImpactSummary } from "@/lib/self-upgrade/impact";
 import SelfUpgradeClient from "@/components/ops/SelfUpgradeClient";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { PlatformUpdateApplyPanel } from "@/components/admin/PlatformUpdateApplyPanel";
+import { LocalChangesLedger } from "@/components/ops/LocalChangesLedger";
+import { getLocalChangesLedger } from "@/lib/self-upgrade/local-changes-ledger";
 
 export default async function SelfUpgradePage() {
   // BI-D43EB266: Self-Upgrade is the single operator entry point for "update
@@ -11,10 +13,11 @@ export default async function SelfUpgradePage() {
   // primary path; the source-merge sub-step (PlatformUpdateApplyPanel) is
   // folded in below and surfaces only when the install customises source
   // (updatePending). getPlatformDevConfig can be null on a fresh install.
-  const [status, { runs, nextCursor }, devConfig] = await Promise.all([
+  const [status, { runs, nextCursor }, devConfig, localChanges] = await Promise.all([
     getSelfUpgradeStatus(),
     listSelfUpgradeRuns(),
     getPlatformDevConfig(),
+    getLocalChangesLedger(),
   ]);
 
   // Rehydrate the "What's in this update?" panel from the durable store so a
@@ -49,6 +52,10 @@ export default async function SelfUpgradePage() {
         updatePending={devConfig?.updatePending ?? false}
         pendingVersion={devConfig?.pendingVersion ?? null}
       />
+
+      <div className="mt-6">
+        <LocalChangesLedger result={localChanges} />
+      </div>
     </div>
   );
 }

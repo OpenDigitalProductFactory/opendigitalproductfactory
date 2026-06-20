@@ -32,18 +32,16 @@ const baseProps = {
 };
 
 describe("PlatformDevelopmentForm", () => {
-  it("renders the three contribution-mode options", () => {
+  it("renders the two contribution-mode options", () => {
     const html = renderToStaticMarkup(<PlatformDevelopmentForm {...baseProps} />);
-    expect(html).toContain("Keep everything here");
-    expect(html).toContain("Share selectively");
-    expect(html).toContain("Share everything");
+    expect(html).toContain("Keep everything on my system");
+    expect(html).toContain("Contribute improvements to the community");
   });
 
-  it("does not render the Connect card before mode is contribution and DCO is accepted", () => {
+  it("does not render the Connect card before mode is contributing and DCO is accepted", () => {
     const html = renderToStaticMarkup(<PlatformDevelopmentForm {...baseProps} />);
-    // Default selected is `selective`, but the wizard starts at "mode" until
-    // DCO is accepted — so neither connect card nor advanced paste should be
-    // visible yet.
+    // Default selected is `private` (fail-closed) — the contributing connect
+    // card and advanced paste should not be visible yet.
     expect(html).not.toContain('data-testid="github-connect-block"');
     expect(html).not.toContain('data-testid="connect-github-card"');
   });
@@ -52,7 +50,7 @@ describe("PlatformDevelopmentForm", () => {
     const html = renderToStaticMarkup(
       <PlatformDevelopmentForm
         {...baseProps}
-        currentMode="selective"
+        currentMode="contributing"
         dcoAcceptedAt="2026-04-24T12:00:00Z"
       />,
     );
@@ -70,7 +68,7 @@ describe("PlatformDevelopmentForm", () => {
     const html = renderToStaticMarkup(
       <PlatformDevelopmentForm
         {...baseProps}
-        currentMode="contribute_all"
+        currentMode="contributing"
         dcoAcceptedAt="2026-04-24T12:00:00Z"
       />,
     );
@@ -79,14 +77,14 @@ describe("PlatformDevelopmentForm", () => {
     expect(html).toMatch(/GitHub username will be visible/i);
   });
 
-  it("renders the fork-only backup form when mode=fork_only", () => {
+  it("renders the private-install backup form when mode=private", () => {
     const html = renderToStaticMarkup(
-      <PlatformDevelopmentForm {...baseProps} currentMode="fork_only" />,
+      <PlatformDevelopmentForm {...baseProps} currentMode="private" />,
     );
     expect(html).toContain("Backup your work (optional)");
     expect(html).toContain("Repository URL");
-    // The contribution Connect card is gated on contribution mode; should not
-    // appear in fork_only.
+    // The contribution Connect card is gated on contributing mode; it should
+    // not appear for a private install.
     expect(html).not.toContain('data-testid="github-connect-block"');
   });
 
@@ -94,7 +92,7 @@ describe("PlatformDevelopmentForm", () => {
     const html = renderToStaticMarkup(
       <PlatformDevelopmentForm
         {...baseProps}
-        currentMode="selective"
+        currentMode="contributing"
         dcoAcceptedAt="2026-04-24T12:00:00Z"
         dcoAcceptedByEmail="admin@example.com"
       />,
@@ -108,7 +106,7 @@ describe("PlatformDevelopmentForm", () => {
     const html = renderToStaticMarkup(
       <PlatformDevelopmentForm
         {...baseProps}
-        currentMode="selective"
+        currentMode="contributing"
         dcoAcceptedAt="2026-04-24T12:00:00Z"
         initialConnected={{
           username: "jane-dev",

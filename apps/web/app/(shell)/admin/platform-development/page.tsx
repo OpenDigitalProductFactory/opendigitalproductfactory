@@ -5,6 +5,7 @@ import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
 import { McpTokenManager } from "@/components/admin/McpTokenManager";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
+import { PrivatePathsEditor } from "@/components/admin/PrivatePathsEditor";
 import TokenExpiryBanner from "@/components/admin/TokenExpiryBanner";
 import {
   getGitHubConnectedState,
@@ -12,6 +13,7 @@ import {
   getUntrackedFeatureCount,
   hasContributionToken,
   hasGitBackupCredential,
+  listPrivatePathRules,
 } from "@/lib/actions/platform-dev-config";
 import { isContributionModelEnabled } from "@/lib/flags/contribution-model";
 import { getDisplayPseudonym } from "@/lib/integrate/identity-privacy";
@@ -20,11 +22,12 @@ import type { PlatformDevPolicyState } from "@/lib/platform-dev-policy";
 export default async function AdminPlatformDevelopmentPage() {
   const config = await getPlatformDevConfig();
   const policyState: PlatformDevPolicyState = config?.policyState ?? "policy_pending";
-  const untrackedCount = config?.contributionMode === "fork_only"
+  const untrackedCount = (config?.contributionMode === "private" || config?.contributionMode === "fork_only")
     ? await getUntrackedFeatureCount()
     : 0;
   const hasCredential = await hasGitBackupCredential();
   const hasContribToken = await hasContributionToken();
+  const privatePathRules = await listPrivatePathRules();
   // Pseudonym is only defined once the install has seeded its client identity.
   // Catch: during the first boot the identity may not be ready yet.
   const pseudonym = await getDisplayPseudonym().catch(() => null);
@@ -63,7 +66,7 @@ export default async function AdminPlatformDevelopmentPage() {
       />
       <PlatformDevelopmentForm
         policyState={policyState}
-        currentMode={(config?.contributionMode as "fork_only" | "selective" | "contribute_all") ?? null}
+        currentMode={policyState === "policy_pending" ? null : policyState}
         configuredAt={config?.configuredAt?.toISOString() ?? null}
         configuredByEmail={config?.configuredBy?.email ?? null}
         gitRemoteUrl={config?.gitRemoteUrl ?? null}
@@ -75,6 +78,9 @@ export default async function AdminPlatformDevelopmentPage() {
         pseudonym={pseudonym}
         initialConnected={initialConnected}
       />
+      <div className="mt-6">
+        <PrivatePathsEditor rules={privatePathRules} />
+      </div>
       <McpTokenManager
         baseUrl={baseUrl}
       />

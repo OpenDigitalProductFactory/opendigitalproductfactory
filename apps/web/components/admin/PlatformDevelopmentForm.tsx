@@ -12,28 +12,24 @@ import {
   savePlatformDevConfig,
 } from "@/lib/actions/platform-dev-config";
 
-type ContributionMode = "fork_only" | "selective" | "contribute_all";
+// 2-state contribution model (EP-1A78BAE1). Per-change sharing is decided by a
+// suggestion + your confirmation when you ship, not by an up-front policy.
+type ContributionMode = "private" | "contributing";
 
 // ─── Mode Options ──────────────────────────────────────────────────────────
 
 const MODE_OPTIONS: { value: ContributionMode; label: string; description: string }[] = [
   {
-    value: "fork_only",
-    label: "Keep everything here",
+    value: "private",
+    label: "Keep everything on my system",
     description:
-      "Changes you make in Build Studio stay on your platform only. Nothing is shared externally.",
+      "Everything you build stays on your own system. Nothing is ever shared with the community.",
   },
   {
-    value: "selective",
-    label: "Share selectively",
+    value: "contributing",
+    label: "Contribute improvements to the community",
     description:
-      "After building a feature, the AI will ask if you'd like to share it with the community. You decide each time.",
-  },
-  {
-    value: "contribute_all",
-    label: "Share everything",
-    description:
-      "Features you build are shared with the community by default. You can still keep individual ones private.",
+      "When you ship a change, we suggest whether to keep it on your system or share it — and you make the final call. Nothing is shared unless you confirm.",
   },
 ];
 
@@ -84,12 +80,12 @@ interface PlatformDevelopmentFormProps {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
-  const [selected, setSelected] = useState<ContributionMode>(props.currentMode ?? "selective");
+  const [selected, setSelected] = useState<ContributionMode>(props.currentMode ?? "private");
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
 
   // Wizard state
-  const isContributionMode = selected === "selective" || selected === "contribute_all";
+  const isContributionMode = selected === "contributing";
   const isAlreadySetUp = isContributionMode && !!props.dcoAcceptedAt;
   const [wizardStep, setWizardStep] = useState<WizardStep>(isAlreadySetUp ? "done" : "mode");
   const [dcoError, setDcoError] = useState<string | null>(null);
@@ -101,7 +97,7 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
   const handleModeSelect = (mode: ContributionMode) => {
     setSelected(mode);
     setSaved(false);
-    if (mode === "fork_only") {
+    if (mode === "private") {
       setWizardStep("mode");
     }
   };
@@ -109,7 +105,7 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
   const handleForkOnlySave = () => {
     setSaved(false);
     startTransition(async () => {
-      await savePlatformDevConfig("fork_only");
+      await savePlatformDevConfig("private");
 
       if (gitUrl !== (props.gitRemoteUrl ?? "")) {
         const { saveGitRemoteUrl } = await import("@/lib/actions/platform-dev-config");
@@ -205,8 +201,8 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
         ))}
       </div>
 
-      {/* ─── Fork Only: Git Backup ──────────────────────────────────────── */}
-      {selected === "fork_only" && (
+      {/* ─── Private install: Git Backup ────────────────────────────────── */}
+      {selected === "private" && (
         <div className="space-y-3 rounded-lg border border-[var(--dpf-border)] p-4">
           <div>
             <h3 className="text-sm font-semibold text-[var(--dpf-text)] mb-1">
@@ -326,9 +322,8 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
               repeat contributors, but reveals nothing about you or your organization.
             </p>
             <p>
-              {selected === "selective"
-                ? "You'll be asked each time whether to share or keep a feature private."
-                : "Features are shared by default, but you can keep any individual one private."}
+              When you ship a change, we suggest whether to keep it on your system or share it,
+              and you make the final call. Nothing is shared unless you confirm.
             </p>
           </div>
           <div className="flex justify-between items-center mt-4">
@@ -456,9 +451,8 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
             <div>
               <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Sharing is set up</h3>
               <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
-                {selected === "selective"
-                  ? "When the AI Coworker finishes building a feature, it will ask if you'd like to share it with the community."
-                  : "Features you build will be shared with the community by default. You can keep any individual feature private when asked."}
+                When the AI Coworker finishes a change, it suggests whether to keep it on your
+                system or share it with the community — and you make the final call.
               </p>
             </div>
           </div>

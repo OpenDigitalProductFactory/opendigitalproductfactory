@@ -28,10 +28,17 @@ vi.mock("@/lib/mcp-tools", () => ({
   executeTool: mockExecuteTool,
 }));
 
+const { mockEscalate } = vi.hoisted(() => ({ mockEscalate: vi.fn() }));
+vi.mock("@/lib/build/escalate-build-to-human", () => ({
+  escalateBuildToHuman: mockEscalate,
+  SELF_FIX_CLASS: { AUTO_RECOVERABLE: "auto-recoverable", NEEDS_HUMAN: "needs-human", NEEDS_EXTERNAL_CAPABILITY: "needs-external-capability" },
+}));
+
 import {
   dispatchIdeateForApprovedBuild,
   buildNeedsIdeateDispatch,
   dispatchApprovedIdeateBuilds,
+  dispatchDesignReviewFixLoop,
 } from "./ideate-on-approval";
 
 describe("dispatchIdeateForApprovedBuild", () => {
@@ -107,6 +114,42 @@ describe("dispatchIdeateForApprovedBuild", () => {
     expect(outcome.kind).toBe("skipped-no-provider");
     expect(mockDispatchIdeateResearch).not.toHaveBeenCalled();
     expect(mockExecuteTool).not.toHaveBeenCalled();
+  });
+
+  it("routes Ideate to the LOCAL engine when provider=opencode (not the codex/chatgpt fallback)", async () => {
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({ originatingBacklogItemId: "cmpcuid1", designDoc: null, title: "T", description: "D" })
+      .mockResolvedValueOnce({ designDoc: { problemStatement: "P" } });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body." });
+    mockGetBuildStudioConfig.mockResolvedValue({
+      provider: "opencode",
+      opencodeProviderId: "local",
+      opencodeModel: "docker.io/ai/qwen3-coder:latest",
+      // The codex fallback MUST NOT be used for an opencode install.
+      codexProviderId: "chatgpt",
+      codexModel: "gpt-5.3-codex",
+      claudeProviderId: "", grokProviderId: "", claudeModel: "", grokModel: "",
+    });
+    mockDispatchIdeateResearch.mockResolvedValue({
+      success: true,
+      designDoc: { problemStatement: "P", proposedApproach: "x".repeat(60) },
+      rawOutput: "", durationMs: 1,
+    });
+    mockExecuteTool.mockResolvedValue({ success: true });
+
+    await dispatchIdeateForApprovedBuild({ buildId: "FB-X", userId: "u-1" });
+
+    expect(mockDispatchIdeateResearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: "local",
+        model: "docker.io/ai/qwen3-coder:latest",
+        dispatchEngine: "opencode",
+      }),
+    );
+    // Regression guard: it must NOT fall back to the cloud chatgpt provider.
+    expect(mockDispatchIdeateResearch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "chatgpt" }),
+    );
   });
 
   it("dispatches research and saves designDoc evidence on the happy path", async () => {
@@ -316,5 +359,37 @@ describe("dispatchApprovedIdeateBuilds (BI-3E0EE3BA recovery)", () => {
     const res = await dispatchApprovedIdeateBuilds({ userId: "u-1" });
     expect(res).toEqual({ candidates: 0, dispatched: 0, skipped: 0 });
     expect(mockPrisma.featureBuild.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("dispatchDesignReviewFixLoop (design-review fix loop)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.buildActivity.create.mockResolvedValue({});
+    mockEscalate.mockResolvedValue({ reportId: "PIR-1", wipFreed: true, backlogItemDeferred: true });
+  });
+
+  it("does nothing when the last design review did not fail", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      id: "ck1", title: "T", kind: "feature", originatingBacklogItemId: null,
+      designReview: { decision: "pass", issues: [] },
+    });
+    const res = await dispatchDesignReviewFixLoop({ buildId: "FB-X", userId: "u-1" });
+    expect(res).toMatchObject({ kind: "no-failed-review", rounds: 0 });
+    expect(mockEscalate).not.toHaveBeenCalled();
+    expect(mockDispatchIdeateResearch).not.toHaveBeenCalled();
+  });
+
+  it("escalates a fix build directly — regenerating the designDoc cannot fill a missing fix diagnosis", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      id: "ck2", title: "Bug fix", kind: "fix", originatingBacklogItemId: null,
+      designReview: { decision: "fail", issues: [{ severity: "critical", description: "Incomplete fix diagnosis" }] },
+    });
+    const res = await dispatchDesignReviewFixLoop({ buildId: "FB-Y", userId: "u-1" });
+    expect(res).toMatchObject({ kind: "escalated-fix-diagnosis", rounds: 0 });
+    expect(mockEscalate).toHaveBeenCalledWith(
+      expect.objectContaining({ buildId: "FB-Y", phase: "ideate", selfFixClass: "needs-human" }),
+    );
+    expect(mockDispatchIdeateResearch).not.toHaveBeenCalled(); // never tried to regenerate
   });
 });
