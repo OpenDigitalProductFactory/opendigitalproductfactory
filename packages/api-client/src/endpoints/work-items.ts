@@ -1,5 +1,7 @@
 import type { DpfClient } from "../client";
 import type {
+  AppendJobEvidenceRequest,
+  JobEvidenceResponse,
   PaginatedResponse,
   WorkItemSummary,
   WorkItemDetail,
@@ -29,6 +31,17 @@ export function workItemsEndpoints(client: DpfClient) {
     updateStatus: (itemId: string, input: WorkItemStatusUpdateRequest) =>
       client.patch<WorkItemDetail>(
         `/api/v1/work-items/${encodeURIComponent(itemId)}`,
+        input,
+      ),
+
+    /**
+     * Append one completion photo to the assigned work item's evidence JSON.
+     * Server is the source of truth — the response carries the merged
+     * record after the append.
+     */
+    appendEvidence: (itemId: string, input: AppendJobEvidenceRequest) =>
+      client.post<JobEvidenceResponse>(
+        `/api/v1/work-items/${encodeURIComponent(itemId)}/evidence`,
         input,
       ),
   };
