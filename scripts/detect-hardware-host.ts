@@ -166,8 +166,14 @@ function detectLinux(): HostProfile {
   };
 }
 
-// Model selection mirrors install-dpf.ps1's tiers (verified against the
-// canonical MODEL_TIERS in apps/web/lib/inference/bootstrap-first-run.ts).
+// Model selection mirrors the CANONICAL tiers in
+// apps/web/lib/inference/local-model-policy.ts (LOCAL_MODEL_TIERS). This script
+// runs via tsx in the @dpf/db context and cannot import the apps/web module, so
+// the list is duplicated here — keep it in sync. The Providers UX over-commit
+// guard (same module) catches drift. KNOWN follow-up: the discrete top tier
+// below is 30B-A3B (~16 GB, safe headroom on a 24 GB card) while the canonical
+// top tier is 35B-A3B (~22 GB); reconcile when tier headroom is recalibrated
+// (tracked in BI-0B893092).
 // Qwen3 — NOT Gemma — because the platform's Coworkers catalog tiers Qwen3
 // as `strong + Tool Use` (F1 0.93 @ 8B, 0.97 @ 14B) while Gemma 3/4 tiers
 // as `adequate`. Default coworkers have `minimumTier: strong`, so a Gemma

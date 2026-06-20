@@ -9,6 +9,10 @@ import {
   type OllamaRunningModel,
 } from "@/lib/actions/ollama-management";
 import { discoverModels, profileModels } from "@/lib/actions/ai-providers";
+import {
+  detectLocalModelOverCommit,
+  normaliseModelId,
+} from "@/lib/inference/local-model-policy";
 
 // ── Model Catalog ────────────────────────────────────────────────────────────
 
@@ -137,9 +141,7 @@ function fitsHardware(model: CatalogModel, vramGb: number | null): "fits" | "mar
   return "too-large";
 }
 
-function normaliseModelId(name: string): string {
-  return name.replace(/^docker\.io\//, "").replace(/:latest$/, "");
-}
+// normaliseModelId is imported from local-model-policy (single source of truth).
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -252,6 +254,17 @@ export function OllamaManagement({ canWrite, vramGb, providerId }: Props) {
 
   const installedIds = new Set(models.map((m) => normaliseModelId(m.name)));
 
+  // Single-generation-model policy: flag when more than one generation model is
+  // installed (they over-commit the GPU — one llama-server per model, no DMR
+  // concurrency cap). Source of truth: local-model-policy.ts.
+  const overCommit = detectLocalModelOverCommit({
+    installedModelIds: models.map((m) => normaliseModelId(m.name)),
+    vramGb: vramGb ?? null,
+  });
+  const removeModels = models.filter((m) =>
+    overCommit.removeCandidates.includes(normaliseModelId(m.name)),
+  );
+
   const filteredCatalog = catalogCategory === "all"
     ? CATALOG
     : CATALOG.filter((m) => m.category === catalogCategory);
@@ -322,6 +335,49 @@ export function OllamaManagement({ canWrite, vramGb, providerId }: Props) {
                 <span style={{ color: "var(--dpf-success)", fontWeight: 500 }}>{totalVramGb.toFixed(1)} GB</span>
                 <span style={{ color: "var(--dpf-muted)" }}> ({running.length})</span>
               </span>
+            )}
+          </div>
+        )}
+
+        {/* Over-commit warning: more than one generation model installed. */}
+        {loaded && overCommit.overCommitted && (
+          <div style={{
+            marginBottom: 12,
+            padding: "10px 12px",
+            borderRadius: 5,
+            border: "1px solid color-mix(in srgb, var(--dpf-warning, #d98300) 40%, var(--dpf-border))",
+            background: "color-mix(in srgb, var(--dpf-warning, #d98300) 8%, transparent)",
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 4 }}>
+              ⚠ More than one AI model is installed
+            </div>
+            <div style={{ fontSize: 11, color: "var(--dpf-muted)", lineHeight: 1.5 }}>
+              {overCommit.reason}
+            </div>
+            {removeModels.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8, alignItems: "center" }}>
+                {overCommit.recommendedKeep && (
+                  <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>
+                    Keep <code style={{ color: "var(--dpf-success)" }}>{normaliseModelId(overCommit.recommendedKeep)}</code> ·
+                  </span>
+                )}
+                {canWrite && removeModels.map((m) => (
+                  <button
+                    key={m.name}
+                    type="button"
+                    onClick={() => handleDelete(m.name)}
+                    disabled={isPending}
+                    style={{
+                      fontSize: 10, padding: "3px 8px", borderRadius: 3, cursor: "pointer",
+                      border: "1px solid color-mix(in srgb, var(--dpf-error) 40%, transparent)",
+                      background: "color-mix(in srgb, var(--dpf-error) 12%, transparent)",
+                      color: "var(--dpf-error)",
+                    }}
+                  >
+                    Remove {normaliseModelId(m.name)}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -422,6 +478,11 @@ export function OllamaManagement({ canWrite, vramGb, providerId }: Props) {
                       {isRunning && (
                         <span style={{ fontSize: 9, color: "var(--dpf-success)", padding: "1px 4px", borderRadius: 3, background: "color-mix(in srgb, var(--dpf-success) 15%, transparent)" }}>
                           loaded
+                        </span>
+                      )}
+                      {overCommit.removeCandidates.includes(normId) && (
+                        <span style={{ fontSize: 9, color: "var(--dpf-warning, #d98300)", padding: "1px 4px", borderRadius: 3, background: "color-mix(in srgb, var(--dpf-warning, #d98300) 15%, transparent)" }}>
+                          extra · over-commit
                         </span>
                       )}
                       {catalogEntry && (
