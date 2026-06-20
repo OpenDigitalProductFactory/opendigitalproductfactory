@@ -720,6 +720,28 @@ export async function register() {
       await resumeStrandedBuildsOnBoot();
     })();
 
+    // Periodic build-resume (cron-independent) — the boot reconcile above runs
+    // ONLY once at startup, so any build CREATED or STRANDED after boot (e.g. a
+    // decomposition's child builds, a fresh promote, or a phase that strands
+    // mid-pipeline) sits untouched until the next reboot. Observed live: the 3
+    // children from a decomposition stuck at zero phases 19+ min post-restart,
+    // because resumeStrandedBuildsOnBoot had already run before they existed.
+    // Re-run the SAME reconcilers on an interval so the drain is CONTINUOUS, not
+    // boot-only — mirroring the self-upgrade-reconcile and stale-slot-reclaim
+    // periodic safety nets above. Both reconcilers are idempotent; the resume
+    // uses a LONGER staleness (20 min) than the boot default (5 min) so a
+    // legitimately slow in-flight phase (an ideate dispatch can run ~14 min) is
+    // never re-dispatched out from under itself.
+    setInterval(
+      () => {
+        void (async () => {
+          await recoverContradictoryBuildExecStatesOnBoot();
+          await resumeStrandedBuildsOnBoot({ staleAfterMs: 20 * 60 * 1000 });
+        })();
+      },
+      10 * 60 * 1000,
+    );
+
     const optionalStartupTasksEnabled = areOptionalStartupTasksEnabled();
     if (!optionalStartupTasksEnabled) {
       console.log("[instrumentation] Optional startup maintenance skipped (disabled)");
