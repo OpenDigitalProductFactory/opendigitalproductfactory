@@ -1,0 +1,27 @@
+# Merge-queue DCO shim.
+#
+# The "DCO" required check on pull requests is provided by the third-party DCO
+# GitHub App (a commit status). That app does NOT run on the merge_group event,
+# so a queued PR would hang forever waiting for a "DCO" status that never posts
+# on the merge-queue branch (documented incompatibility — see dcoapp/app).
+#
+# Sign-off is already enforced by the app at PR time, before a PR is allowed
+# into the queue. This workflow therefore re-publishes a passing "DCO" check on
+# the merge_group branch ONLY, to satisfy the required status check inside the
+# queue. It never runs on pull_request, so it can never collide with the app's
+# status on PRs. The required-check context is the job name ("DCO").
+name: DCO (merge queue)
+
+on:
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: DCO
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pass-through
+        run: echo "Sign-off validated by the DCO app at PR time; merge-queue pass-through."
