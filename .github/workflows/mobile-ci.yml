@@ -1,0 +1,66 @@
+# Mobile CI lane — runs only when a PR touches the mobile app or the
+# shared packages mobile consumes. Keeps the iteration loop fast by
+# decoupling from the `apps/web` four-shard vitest matrix + Next.js
+# production build (15-20 min) — those don't need to run for a
+# mobile-only PR, and vice-versa.
+#
+# Native binary builds (.ipa / .aab) DO NOT run here — iOS requires
+# macOS + Xcode, and per the EAS pipeline doctrine they run via
+# `eas build` on Expo's cloud, triggered on merge-to-main / tag /
+# manual dispatch. This lane covers code-level gates only.
+#
+# Plan: docs/superpowers/plans/2026-06-18-ios-app-end-to-end-support.md
+# (Slice 5). Spec: docs/superpowers/specs/2026-06-14-native-mobile-archetype-apps-design.html.
+
+name: Mobile CI
+
+on:
+  pull_request:
+    paths:
+      - "apps/mobile/**"
+      - "packages/api-client/**"
+      - "packages/types/**"
+      - "packages/validators/**"
+      - ".github/workflows/mobile-ci.yml"
+      - "pnpm-workspace.yaml"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: Typecheck (mobile)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter mobile typecheck
+
+  unit-tests:
+    name: Unit tests (mobile jest)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter mobile test:ci
