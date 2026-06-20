@@ -2560,6 +2560,26 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["build", "review"],
   },
   {
+    name: "run_tool_script",
+    description:
+      "Run a short script that calls several READ-only tools and filters their results inside an isolated sandbox, returning only the small filtered result. Use instead of calling many read tools individually when results are large — e.g. scan N records and keep the few that match. The code is the body of an async run: call `await callTool(name, args)` for each tool, then `emit(value)` once with your final small result. Read-only: the script cannot call side-effecting tools. Disabled unless an operator has enabled it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        code: {
+          type: "string",
+          description:
+            "Script body. You have `callTool(name, args)` (returns the tool's data) and `emit(value)` (return your final small result). Example: const r = await callTool('query_backlog', { status: 'open' }); emit(r.items.filter(i => i.priority === 'high').map(i => i.itemId));",
+        },
+        purpose: { type: "string", description: "One line describing what the script does (recorded for audit)." },
+      },
+      required: ["code"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false, // sandbox-isolated; inner calls are read-only + governed per call
+  },
+  {
     name: "describe_model",
     description: "Look up a Prisma model's fields, types, relations, and indexes from the sandbox schema. Use this instead of asking the user about schema structure. Example: describe_model({ model_name: 'User' }) returns all fields with types.",
     inputSchema: {
@@ -9861,6 +9881,20 @@ export async function executeTool(
     case "edit_sandbox_file":
     case "search_sandbox":
     case "list_sandbox_files":
+    case "run_tool_script": {
+      // Programmatic tool calling (R4 / P7): governed read-only code execution.
+      // The handler mints a scoped read-only JWT and runs the model's script in
+      // the sandbox; each inner callTool reenters /api/mcp/v1 → governedExecuteTool
+      // (kernel gate + grants per call). Gated by the tool_script_exec grant
+      // (default-deny) AND the programmatic_tool_calling flag (default-off).
+      const { runToolScript } = await import("@/lib/tak/tool-script");
+      return runToolScript(params, {
+        userId,
+        agentId: context?.agentId,
+        threadId: context?.threadId,
+        routeContext: context?.routeContext,
+      });
+    }
     case "run_sandbox_command": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
