@@ -1861,7 +1861,24 @@ if (-not (Test-StepDone "started")) {
     Write-Action "Starting database and portal..."
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    docker compose @coreComposeArgs up -d
+    # Non-critical sidecars (e.g. dpf-stt voice STT) pull from third-party
+    # registries whose mutable tags get pruned upstream: hwdsl2/whisper-server
+    # re-pushes :latest and prunes the prior index digest, so a pinned digest
+    # eventually 404s ("manifest unknown"). A single such failure would otherwise
+    # abort the WHOLE compose up, taking the portal/db/redis down with it (#1767).
+    # Pre-pull them with failure tolerated and, if one is unavailable, scale it to
+    # 0 so the core platform still comes up -- voice degrades, the install does
+    # not. Nothing depends_on these sidecars, so scaling to 0 is safe.
+    $scaleArgs = @()
+    foreach ($svc in @("dpf-stt")) {
+        docker compose @coreComposeArgs pull $svc 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Optional sidecar '$svc' image is unavailable upstream; bringing up the platform without it."
+            Write-Action "  Voice features needing '$svc' stay inactive until its image returns; re-run the installer to retry."
+            $scaleArgs += @("--scale", "$svc=0")
+        }
+    }
+    docker compose @coreComposeArgs up -d @scaleArgs
     $ErrorActionPreference = $oldEAP
 
     # Voice / TTS sidecar. Spoken output uses the bundled dpf-tts container, but
@@ -2075,11 +2092,13 @@ if (-not (Test-StepDone "model")) {
             if ($listExit -eq 0) { $mrReady = $true; break }
             Start-Sleep -Seconds 2
         }
-        if (-not $mrReady) {
-            Write-Warn "Docker Model Runner did not become ready in 30s. The model pull will likely fail."
-        }
     }
 
+    # Only attempt the pull when Model Runner actually responded. When the
+    # `docker model` CLI is absent (Docker Desktop too old) or not yet running,
+    # attempting it would leak the raw `docker: 'model' is not a docker command`
+    # error and a misleading "may have failed" (#1767); skip cleanly instead.
+    if ($mrReady) {
     Write-Action "Pulling AI model $selectedModel via Docker Model Runner, these may be big..."
     Write-Action "This may take several minutes depending on your internet speed, and size of your video card."
     # Name accuracy: pull with ai/ form; Docker registers under short form (no ai/).
@@ -2131,6 +2150,25 @@ if (-not (Test-StepDone "model")) {
         Write-Warn "You can pull manually later: docker model pull $pullName"
     } else {
         Write-Warn "Model pull reported success but $runtimeModel not listed; retry: docker model pull $pullName"
+    }
+    } else {
+        # Model Runner never became ready. Distinguish "CLI absent" (Docker
+        # Desktop too old) from "present but not started" so we give the right
+        # guidance and never leak the raw `docker: 'model' is not a docker
+        # command` error by attempting a pull that cannot succeed (#1767). The
+        # portal still installs; AI features activate once a model is available.
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        docker model --help 2>&1 | Out-Null
+        $hasModelCmd = ($LASTEXITCODE -eq 0)
+        $ErrorActionPreference = $oldEAP
+        if ($hasModelCmd) {
+            Write-Warn "Docker Model Runner isn't running yet; skipping the AI model download."
+            Write-Warn "Pull it later once Docker Desktop is ready: docker model pull $selectedModel"
+        } else {
+            Write-Warn "Docker Model Runner isn't available (requires Docker Desktop 4.40+); skipping the AI model download."
+            Write-Warn "Update Docker Desktop, then re-run this installer. The portal still works without it."
+        }
     }
     Save-Progress "model"
 } else {
