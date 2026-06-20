@@ -13,6 +13,7 @@ import {
 } from "./model-card-types";
 import { classifyModel } from "./model-classifier";
 import { computeMetadataHash } from "./metadata-hash";
+import { deriveLocalModelCapabilityPrior } from "@dpf/db/local-model-capabilities";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -29,29 +30,15 @@ function extractModelFamily(modelId: string): string | null {
   return colon > 0 ? bare.substring(0, colon) : bare || null;
 }
 
-/**
- * Known model families that support tool/function calling via the
- * OpenAI-compatible API. These models return proper `tool_calls` in
- * their responses when tools are provided in the request.
- *
- * This is necessary because Docker Model Runner and Ollama don't
- * advertise per-model capabilities — we must infer from the model name.
- */
-const TOOL_CAPABLE_FAMILIES = new Set([
-  "llama3.1", "llama3.2", "llama3.3", "llama4",
-  "qwen2.5", "qwen3",
-  "mistral", "mixtral", "mistral-small", "mistral-nemo",
-  "gemma2", "gemma3", "gemma4",
-  "phi4",
-  "command-r",
-  "deepseek-v2", "deepseek-v3",
-]);
-
-function isToolCapableFamily(modelId: string): boolean {
-  const family = extractModelFamily(modelId);
-  if (!family) return false;
-  return TOOL_CAPABLE_FAMILIES.has(family.toLowerCase());
-}
+// Tool/function-calling capability for locally-served models is derived from the
+// SINGLE shared prior `deriveLocalModelCapabilityPrior` (@dpf/db/local-model-capabilities)
+// — the same function the seed uses (packages/db/src/seed.ts). Docker Model Runner
+// and Ollama don't advertise per-model capabilities, so it is inferred from the
+// model family. Keeping ONE prior for both the seed and this discovery adapter
+// closes the seed-vs-runtime fork that wrongly flagged the installed coder model
+// (qwen3-coder) non-tool-capable while leaving the embedding model (nomic-embed)
+// tool-capable (BI-B6DEBFFE). The old local allowlist (qwen2.5/qwen3 but not
+// qwen3-coder; phi4 but not phi3) lived here and disagreed with the prior.
 
 /**
  * Local models are free.
@@ -101,6 +88,7 @@ export const ollamaAdapter: ProviderAdapter = {
     const raw = rawMetadata as Record<string, unknown>;
     const bareId = extractModelFamily(modelId) ?? modelId;
     const created = typeof raw.created === "number" ? new Date(raw.created * 1000) : null;
+    const prior = deriveLocalModelCapabilityPrior(modelId);
 
     return {
       providerId: "ollama",
@@ -123,7 +111,13 @@ export const ollamaAdapter: ProviderAdapter = {
 
       capabilities: {
         ...EMPTY_CAPABILITIES,
-        ...(isToolCapableFamily(modelId) ? { toolUse: true, structuredOutput: true } : {}),
+        // Definitive booleans from the shared prior (never null): a coder/chat model
+        // resolves toolUse=true, an embedding model resolves toolUse=false. Emitting an
+        // explicit false (rather than leaving it null) stops the permissive
+        // provider-floor fallback in metadata-sync from making an embedding model
+        // tool-capable.
+        toolUse: prior.supportsToolUse,
+        structuredOutput: prior.supportsToolUse,
       },
       pricing: { ...LOCAL_FREE_PRICING },
 
