@@ -2847,16 +2847,13 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "proposal",
     sideEffect: true,
     buildPhases: ["ship"],
-    // Skip the proposal card when the user has pre-authorized via `contribute_all`
-    // and accepted the DCO. In that configuration every shipped build is cleared
-    // to contribute upstream; an extra per-build approval step is redundant and
-    // silently stalls autonomous runs (no human is present to click approve).
+    // 2-state model (EP-1A78BAE1): there is no mode-based pre-authorization.
+    // Sharing is a per-change human-in-the-loop decision (the FeatureBuild
+    // disposition, suggest-then-confirm). Until that disposition gate lands,
+    // never auto-approve outbound contribution — fail closed to requiring the
+    // human's final call.
     autoApproveWhen: async () => {
-      const cfg = await prisma.platformDevConfig.findUnique({
-        where: { id: "singleton" },
-        select: { contributionMode: true, dcoAcceptedAt: true },
-      });
-      return cfg?.contributionMode === "contribute_all" && !!cfg.dcoAcceptedAt;
+      return false;
     },
   },
   {
@@ -10319,9 +10316,9 @@ export async function executeTool(
       // Contribution mode awareness (EP-BUILD-HANDOFF-002 Phase 2e extension)
       let contributionModeInfo = "";
       try {
-        const mode = devConfig?.contributionMode ?? "fork_only";
+        const mode = devConfig?.contributionMode ?? "private";
 
-        if (mode === "fork_only" && !devConfig?.gitRemoteUrl) {
+        if ((mode === "private" || mode === "fork_only") && !devConfig?.gitRemoteUrl) {
           // Count untracked shipped features for escalating warning
           const untrackedCount = await prisma.featureBuild.count({
             where: { phase: "complete", gitCommitHashes: { isEmpty: true } },
@@ -11364,12 +11361,12 @@ export async function executeTool(
             "Contribution is blocked until Platform Development is configured in the portal. Finish that setup first, then decide whether this install stays private or contributes governed changes upstream.",
         };
       }
-      if (devConfig?.contributionMode === "fork_only") {
+      if (devConfig?.contributionMode === "private" || devConfig?.contributionMode === "fork_only") {
         return {
           success: false,
-          error: "Install is configured for private development only.",
+          error: "Install is configured to keep everything on this system.",
           message:
-            "This install is configured to keep shipped features private. Change Platform Development settings if you want Build Studio to create upstream contributions.",
+            "This install keeps shipped work on your own system and does not contribute to the community. Switch to a contributing install in Admin > Platform Development if you want to share changes upstream.",
         };
       }
 

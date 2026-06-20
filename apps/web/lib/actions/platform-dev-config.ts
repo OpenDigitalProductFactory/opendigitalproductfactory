@@ -21,7 +21,9 @@ async function requireManagePlatform(): Promise<string> {
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
 
-const VALID_MODES = ["fork_only", "selective", "contribute_all"] as const;
+// 2-state contribution model (EP-1A78BAE1). Per-change sharing is decided by
+// the FeatureBuild disposition (suggest-then-confirm), not by this mode.
+const VALID_MODES = ["private", "contributing"] as const;
 type ContributionMode = (typeof VALID_MODES)[number];
 
 export async function savePlatformDevConfig(mode: ContributionMode) {
@@ -73,8 +75,8 @@ export async function acceptDco(): Promise<{ accepted: boolean; error?: string }
 
   const config = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
 
-  if (config?.contributionMode === "fork_only") {
-    return { accepted: false, error: "DCO is not required for fork_only mode" };
+  if (config?.contributionMode === "private") {
+    return { accepted: false, error: "DCO is not required for a private install" };
   }
 
   // Upsert to handle case where singleton doesn't exist yet (e.g., during onboarding)
@@ -86,7 +88,7 @@ export async function acceptDco(): Promise<{ accepted: boolean; error?: string }
     },
     create: {
       id: "singleton",
-      contributionMode: "selective",
+      contributionMode: "contributing",
       dcoAcceptedAt: new Date(),
       dcoAcceptedById: userId,
       configuredAt: new Date(),
@@ -114,7 +116,7 @@ export async function saveGitRemoteUrl(url: string | null): Promise<void> {
     update: { gitRemoteUrl: url?.trim() || null },
     create: {
       id: "singleton",
-      contributionMode: "fork_only",
+      contributionMode: "private",
       gitRemoteUrl: url?.trim() || null,
       configuredAt: new Date(),
       configuredById: userId,

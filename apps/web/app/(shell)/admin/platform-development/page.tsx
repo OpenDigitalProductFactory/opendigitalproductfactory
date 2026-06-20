@@ -20,7 +20,7 @@ import type { PlatformDevPolicyState } from "@/lib/platform-dev-policy";
 export default async function AdminPlatformDevelopmentPage() {
   const config = await getPlatformDevConfig();
   const policyState: PlatformDevPolicyState = config?.policyState ?? "policy_pending";
-  const untrackedCount = config?.contributionMode === "fork_only"
+  const untrackedCount = (config?.contributionMode === "private" || config?.contributionMode === "fork_only")
     ? await getUntrackedFeatureCount()
     : 0;
   const hasCredential = await hasGitBackupCredential();
@@ -63,7 +63,7 @@ export default async function AdminPlatformDevelopmentPage() {
       />
       <PlatformDevelopmentForm
         policyState={policyState}
-        currentMode={(config?.contributionMode as "fork_only" | "selective" | "contribute_all") ?? null}
+        currentMode={policyState === "policy_pending" ? null : policyState}
         configuredAt={config?.configuredAt?.toISOString() ?? null}
         configuredByEmail={config?.configuredBy?.email ?? null}
         gitRemoteUrl={config?.gitRemoteUrl ?? null}
