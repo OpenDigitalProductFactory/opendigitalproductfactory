@@ -400,6 +400,10 @@ describe("sandbox admin MCP and coworker messaging", () => {
         brief: {},
         diffPatch: "diff --git a/apps/web/lib/inference/ollama-url.ts b/apps/web/lib/inference/ollama-url.ts\n@@ -1 +1,2 @@\n+new\n",
         diffSummary: "summary",
+        // Confirmed shareable so the test reaches the sandbox-promotion-integrity
+        // check it targets (the disposition gate fires first otherwise).
+        disposition: "shareable",
+        dispositionSuggestionReason: null,
         sandboxId: "dpf-sandbox-2",
         portfolioId: null,
         createdById: "user-1",
