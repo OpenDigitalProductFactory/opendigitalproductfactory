@@ -1290,6 +1290,10 @@ async function seedClientIdentity(): Promise<void> {
       id: "singleton",
       clientId,
       gitAgentEmail,
+      // Fail-closed default for a fresh install (EP-1A78BAE1): keep everything
+      // private until the operator opts into contributing. Set explicitly here
+      // rather than via the column default so the 2-state intent is unambiguous.
+      contributionMode: "private",
     },
     update: {
       clientId,

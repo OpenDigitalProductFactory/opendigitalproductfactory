@@ -360,10 +360,10 @@ export async function escalateToUpstreamIssue(
       reason: "platform development policy not configured",
     };
   }
-  if (config.contributionMode === "fork_only") {
+  if (config.contributionMode === "private" || config.contributionMode === "fork_only") {
     return {
       status: "skipped",
-      reason: "contribution mode is fork_only — no upstream escalation",
+      reason: "install is private — no upstream escalation",
     };
   }
   if (!config.upstreamRemoteUrl) {
