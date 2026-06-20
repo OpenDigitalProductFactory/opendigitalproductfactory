@@ -274,4 +274,44 @@ describe("getBuildContextSection", () => {
     });
     expect(section).not.toContain("Feature Brief:");
   });
+
+  it("injects the founder-kernel design standard into the plan phase (BI-C2CB3073)", async () => {
+    const section = await getBuildContextSection({
+      buildId: "FB-KERNEL-1",
+      phase: "plan",
+      title: "WWMD record_outcome tool",
+      brief: null,
+      plan: null,
+      portfolioId: null,
+    });
+    expect(section).toContain("Design Standard (the architecture reviewer WILL hold");
+    expect(section).toContain("never trust input"); // input-validation commandment
+    expect(section).toContain("least privilege"); // authz commandment
+    expect(section).toContain("CONCRETE TEST-FIRST");
+    expect(section).toContain("GROUNDED FILE PATHS");
+    expect(section).toContain("packages/db/prisma/schema.prisma"); // the real path the planner kept missing
+  });
+  it("injects the design standard into the ideate phase too", async () => {
+    const section = await getBuildContextSection({
+      buildId: "FB-KERNEL-2",
+      phase: "ideate",
+      title: "Decision ledger inspector",
+      brief: null,
+      plan: null,
+      portfolioId: null,
+    });
+    expect(section).toContain("Design Standard (the architecture reviewer WILL hold");
+    expect(section).toContain("never trust input");
+  });
+  it("does NOT inject the design standard at build phase (design-time guidance only)", async () => {
+    const section = await getBuildContextSection({
+      buildId: "FB-KERNEL-3",
+      phase: "build",
+      title: "Implement record_outcome",
+      brief: null,
+      plan: null,
+      portfolioId: null,
+    });
+    expect(section).not.toContain("Design Standard (the architecture reviewer WILL hold");
+  });
 });
