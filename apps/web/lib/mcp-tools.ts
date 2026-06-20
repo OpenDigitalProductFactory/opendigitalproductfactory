@@ -9872,6 +9872,24 @@ export async function executeTool(
       };
     }
 
+    case "run_tool_script": {
+      // Programmatic tool calling (R4 / P7): governed read-only code execution.
+      // Standalone case — NOT part of the sandbox-file fall-through group below;
+      // it must return before those labels so they keep sharing the
+      // run_sandbox_command block. The handler mints a scoped read-only JWT and
+      // runs the model's script in the sandbox; each inner callTool reenters
+      // /api/mcp/v1 → governedExecuteTool (kernel gate + grants per call). Gated
+      // by the tool_script_exec grant (default-deny) AND the
+      // programmatic_tool_calling flag (default-off).
+      const { runToolScript } = await import("@/lib/tak/tool-script");
+      return runToolScript(params, {
+        userId,
+        agentId: context?.agentId,
+        threadId: context?.threadId,
+        routeContext: context?.routeContext,
+      });
+    }
+
     // ─── Sandbox File Tools ──────────────────────────────────────────────────
     // Shared auto-init: ensure sandbox is initialized before any file tool runs.
     // Falls through to the specific tool case after initialization.
@@ -9881,20 +9899,6 @@ export async function executeTool(
     case "edit_sandbox_file":
     case "search_sandbox":
     case "list_sandbox_files":
-    case "run_tool_script": {
-      // Programmatic tool calling (R4 / P7): governed read-only code execution.
-      // The handler mints a scoped read-only JWT and runs the model's script in
-      // the sandbox; each inner callTool reenters /api/mcp/v1 → governedExecuteTool
-      // (kernel gate + grants per call). Gated by the tool_script_exec grant
-      // (default-deny) AND the programmatic_tool_calling flag (default-off).
-      const { runToolScript } = await import("@/lib/tak/tool-script");
-      return runToolScript(params, {
-        userId,
-        agentId: context?.agentId,
-        threadId: context?.threadId,
-        routeContext: context?.routeContext,
-      });
-    }
     case "run_sandbox_command": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
