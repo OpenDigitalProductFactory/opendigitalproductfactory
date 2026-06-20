@@ -1,26 +1,18 @@
 "use client";
 
-import Link from "next/link";
-import { useState, useTransition } from "react";
-import type { ImprovementRow } from "@/lib/improvement-data";
-import {
-  reviewImprovement,
-  prioritizeImprovement,
-  startImprovement,
-  completeImprovement,
-  rejectImprovement,
-  verifyImprovement,
-} from "@/lib/actions/improvements";
+// Improvements EVIDENCE view (EP-INTAKE-UNIFY Phase 6, BI-196693D6).
+//
+// An improvement proposal is evidence of observed friction; the WORK is tracked
+// in the backlog. This view is read-only with respect to lifecycle: it shows
+// each proposal's linked BacklogItem status (the single canonical lifecycle) and
+// links to the backlog row, where triage / prioritize / build / defer happen.
+// There is no competing proposed→reviewed→prioritized workflow here anymore.
 
-const STATUS_COLOURS: Record<string, string> = {
-  proposed: "var(--dpf-info)",
-  reviewed: "var(--dpf-accent)",
-  prioritized: "#fb923c",
-  in_progress: "var(--dpf-warning)",
-  implemented: "var(--dpf-success)",
-  verified: "#10b981",
-  rejected: "var(--dpf-error)",
-};
+import Link from "next/link";
+import { useState } from "react";
+
+import { StatusBadge, FilterBar } from "@/components/ui/report-kit";
+import type { ImprovementEvidenceRow } from "@/lib/evaluate/improvement-data";
 
 const CATEGORY_LABELS: Record<string, string> = {
   ux_friction: "UX Friction",
@@ -31,63 +23,53 @@ const CATEGORY_LABELS: Record<string, string> = {
   process: "Process",
 };
 
-const SEVERITY_COLOURS: Record<string, string> = {
-  low: "var(--dpf-muted)",
-  medium: "var(--dpf-info)",
-  high: "#fb923c",
-  critical: "var(--dpf-error)",
-};
-
-const STATUS_FILTERS = ["all", "proposed", "reviewed", "prioritized", "in_progress", "implemented", "verified", "rejected"] as const;
+// The canonical backlog lifecycle (mirrors BACKLOG_STATUS_VALUES). The former
+// improvement-status filter is gone — you filter by where the WORK actually is.
+const BACKLOG_STATUS_OPTIONS = [
+  { value: "triaging", label: "Triaging" },
+  { value: "open", label: "Open" },
+  { value: "in-progress", label: "In progress" },
+  { value: "done", label: "Done" },
+  { value: "deferred", label: "Deferred" },
+];
 
 type Props = {
-  proposals: ImprovementRow[];
+  proposals: ImprovementEvidenceRow[];
 };
 
 export function ImprovementsClient({ proposals }: Props) {
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [rejectId, setRejectId] = useState<string | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
-  const [isPending, startTransition] = useTransition();
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const statusFilter = filters.status ?? "";
 
-  const filtered = statusFilter === "all"
-    ? proposals
-    : proposals.filter((p) => p.status === statusFilter);
-
-  function handleAction(action: () => Promise<unknown>) {
-    startTransition(async () => {
-      await action();
-    });
-  }
+  const filtered = statusFilter
+    ? proposals.filter((p) => (p.backlogStatus ?? "") === statusFilter)
+    : proposals;
 
   return (
     <div>
-      {/* Status filter bar */}
-      <div className="flex gap-1 mb-4 flex-wrap">
-        {STATUS_FILTERS.map((s) => {
-          const count = s === "all" ? proposals.length : proposals.filter((p) => p.status === s).length;
-          return (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStatusFilter(s)}
-              className={[
-                "px-2.5 py-1 text-[11px] rounded-full border transition-colors",
-                statusFilter === s
-                  ? "border-[var(--dpf-accent)] text-[var(--dpf-text)] bg-[var(--dpf-accent)]/20"
-                  : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
-              ].join(" ")}
-            >
-              {s === "all" ? "All" : s.replace("_", " ")} ({count})
-            </button>
-          );
-        })}
-      </div>
+      <FilterBar
+        mode="client"
+        facets={[
+          {
+            kind: "pills",
+            key: "status",
+            label: "Backlog status",
+            options: BACKLOG_STATUS_OPTIONS,
+          },
+        ]}
+        value={filters}
+        onChange={setFilters}
+        resultCount={filtered.length}
+        className="mb-4"
+      />
 
-      {/* Proposals list */}
       {filtered.length === 0 && (
         <p className="text-sm text-[var(--dpf-muted)] py-8 text-center">
-          No improvement proposals {statusFilter !== "all" ? `with status "${statusFilter.replace("_", " ")}"` : "yet"}.
+          No improvement evidence
+          {statusFilter
+            ? ` whose backlog item is "${statusFilter.replace("-", " ")}"`
+            : " yet"}
+          .
         </p>
       )}
 
@@ -100,26 +82,29 @@ export function ImprovementsClient({ proposals }: Props) {
             {/* Header row */}
             <div className="flex items-start justify-between gap-3 mb-2">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] font-mono text-[var(--dpf-muted)]">{p.proposalId}</span>
-                  <span
-                    className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                    style={{ background: `color-mix(in srgb, ${STATUS_COLOURS[p.status] ?? "var(--dpf-muted)"} 13%, transparent)`, color: STATUS_COLOURS[p.status] ?? "var(--dpf-muted)" }}
-                  >
-                    {p.status.replace("_", " ")}
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="text-[10px] font-mono text-[var(--dpf-muted)]">
+                    {p.proposalId}
                   </span>
-                  <span
-                    className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                    style={{ color: SEVERITY_COLOURS[p.severity] ?? "var(--dpf-muted)" }}
-                  >
-                    {p.severity}
-                  </span>
+                  {p.backlogStatus ? (
+                    <StatusBadge domain="backlogItem" status={p.backlogStatus} variant="soft" />
+                  ) : (
+                    <span className="text-[10px] italic text-[var(--dpf-muted)]">
+                      filing to backlog…
+                    </span>
+                  )}
+                  <StatusBadge domain="severity" status={p.severity} variant="outline" />
                 </div>
-                <h3 className="text-sm font-semibold text-[var(--dpf-text)] leading-snug">{p.title}</h3>
+                <h3 className="text-sm font-semibold text-[var(--dpf-text)] leading-snug">
+                  {p.title}
+                </h3>
               </div>
               <span
                 className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                style={{ background: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)", color: "var(--dpf-accent)" }}
+                style={{
+                  background: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)",
+                  color: "var(--dpf-accent)",
+                }}
               >
                 {CATEGORY_LABELS[p.category] ?? p.category}
               </span>
@@ -128,7 +113,7 @@ export function ImprovementsClient({ proposals }: Props) {
             {/* Description */}
             <p className="text-xs text-[var(--dpf-muted)] mb-2 line-clamp-3">{p.description}</p>
 
-            {/* Observed friction */}
+            {/* Observed friction — the evidence */}
             {p.observedFriction && (
               <div className="text-[11px] text-[var(--dpf-muted)] mb-2 pl-3 border-l-2 border-[var(--dpf-border)] italic">
                 {p.observedFriction}
@@ -136,121 +121,26 @@ export function ImprovementsClient({ proposals }: Props) {
             )}
 
             {/* Meta row */}
-            <div className="flex items-center gap-3 text-[10px] text-[var(--dpf-muted)] mb-3">
+            <div className="flex items-center gap-3 text-[10px] text-[var(--dpf-muted)] mb-3 flex-wrap">
               <span>By: {p.submittedByEmail}</span>
               <span>Agent: {p.agentId}</span>
               <span>Page: {p.routeContext}</span>
               <span>{new Date(p.createdAt).toLocaleDateString()}</span>
             </div>
 
-            {/* Rejection reason */}
-            {p.status === "rejected" && p.rejectionReason && (
-              <div className="text-[11px] text-[var(--dpf-error)] mb-2">
-                Rejected: {p.rejectionReason}
-              </div>
-            )}
-
-            {/* Backlog link — the proposal is evidence; the work lives in the backlog. */}
-            {p.backlogItemId && (
-              <div className="text-[11px] mb-2">
-                <Link
-                  href={`/ops?itemId=${p.backlogItemId}`}
-                  className="text-[var(--dpf-accent)] hover:underline"
-                >
-                  View backlog item {p.backlogItemId} →
-                </Link>
-              </div>
-            )}
-
-            {/* Action buttons based on status */}
-            <div className="flex gap-2 flex-wrap">
-              {p.status === "proposed" && (
-                <>
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => handleAction(() => reviewImprovement(p.proposalId))}
-                    className="px-2.5 py-1 text-[11px] rounded border border-purple-500/40 text-purple-400 hover:bg-purple-500/10 transition-colors disabled:opacity-50"
-                  >
-                    Mark Reviewed
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => setRejectId(rejectId === p.proposalId ? null : p.proposalId)}
-                    className="px-2.5 py-1 text-[11px] rounded border border-[var(--dpf-error)]/30 text-[var(--dpf-error)] hover:bg-[var(--dpf-error)]/10 transition-colors disabled:opacity-50"
-                  >
-                    Reject
-                  </button>
-                </>
-              )}
-              {p.status === "reviewed" && (
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => handleAction(() => prioritizeImprovement(p.proposalId))}
-                  className="px-2.5 py-1 text-[11px] rounded border border-orange-500/40 text-orange-400 hover:bg-orange-500/10 transition-colors disabled:opacity-50"
-                >
-                  Prioritize (create backlog item)
-                </button>
-              )}
-              {p.status === "prioritized" && (
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => handleAction(() => startImprovement(p.proposalId))}
-                  className="px-2.5 py-1 text-[11px] rounded border border-[var(--dpf-warning)]/40 text-[var(--dpf-warning)] hover:bg-[var(--dpf-warning)]/10 transition-colors disabled:opacity-50"
-                >
-                  Start Work
-                </button>
-              )}
-              {p.status === "in_progress" && (
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => handleAction(() => completeImprovement(p.proposalId))}
-                  className="px-2.5 py-1 text-[11px] rounded border border-[var(--dpf-success)]/40 text-[var(--dpf-success)] hover:bg-[var(--dpf-success)]/10 transition-colors disabled:opacity-50"
-                >
-                  Mark Implemented
-                </button>
-              )}
-              {p.status === "implemented" && (
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => handleAction(() => verifyImprovement(p.proposalId))}
-                  className="px-2.5 py-1 text-[11px] rounded border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
-                >
-                  Verify (confirm fix works)
-                </button>
-              )}
-            </div>
-
-            {/* Reject reason input */}
-            {rejectId === p.proposalId && (
-              <div className="mt-2 flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Rejection reason..."
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  className="flex-1 px-2 py-1 text-[11px] rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
-                />
-                <button
-                  type="button"
-                  disabled={isPending || !rejectReason.trim()}
-                  onClick={() => {
-                    handleAction(async () => {
-                      await rejectImprovement(p.proposalId, rejectReason.trim());
-                      setRejectId(null);
-                      setRejectReason("");
-                    });
-                  }}
-                  className="px-2.5 py-1 text-[11px] rounded bg-[var(--dpf-error)]/20 border border-[var(--dpf-error)]/40 text-[var(--dpf-error)] disabled:opacity-50"
-                >
-                  Confirm Reject
-                </button>
-              </div>
+            {/* The proposal is evidence; the work lives in the backlog. The only
+                action is to open the canonical backlog row. */}
+            {p.backlogItemId ? (
+              <Link
+                href={`/ops?itemId=${p.backlogItemId}`}
+                className="text-[11px] text-[var(--dpf-accent)] hover:underline"
+              >
+                View backlog item {p.backlogItemId} →
+              </Link>
+            ) : (
+              <span className="text-[11px] text-[var(--dpf-muted)]">
+                Backlog item is being filed…
+              </span>
             )}
           </div>
         ))}
