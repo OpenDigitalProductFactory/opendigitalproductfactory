@@ -2,6 +2,7 @@ import { cron } from "inngest";
 import { inngest } from "../inngest-client";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
+import { resolveAutoUpgradeWindow } from "@/lib/self-upgrade/auto-window";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt, recordCheckedAt, isCheckIntervalElapsed } from "@/lib/self-upgrade/last-check";
 import { buildFetchCommand, buildRemoteHeadCommand } from "@/lib/self-upgrade/version";
@@ -127,15 +128,33 @@ export async function runSelfUpgrade(
   // operating hours) gates ONLY the unattended scheduled poll. A manual operator
   // trigger means "upgrade now" — the operator has explicitly chosen this moment,
   // so it is NOT window-gated (it still drains via quiescence below unless force).
-  // An explicit maintenanceWindows config overrides the derived window for the
-  // scheduled path. force never set by the cron.
+  // force is never set by the cron.
+  //
+  // Effective-window precedence: an explicit operator-configured maintenanceWindows
+  // array wins; otherwise, for an effectively-24/7 store with a known timezone, an
+  // auto-selected low-traffic overnight window (BI-A6382FB9) — without which a 24/7
+  // store would never open a window and scheduled upgrades would never run; otherwise
+  // the operating-hours "store closed" derivation. A 24/7 store with no derivable
+  // timezone can't be scheduled safely (any local hour could be peak), so it skips
+  // with a distinct reason and the Upgrade Center prompts for a timezone — a clean
+  // no-op (no drain, no cooldown), never a silent never-runs.
   if (params.scheduled && !params.force) {
-    const { schedule, timezone } = await resolveOperatingScheduleForSystem();
-    const allowed = isUpgradeWindowOpen({
-      explicitWindows: config.maintenanceWindows,
-      schedule,
-      timeZone: timezone,
-    });
+    const { schedule, timezone, timezoneKnown, lowTrafficWindows } =
+      await resolveOperatingScheduleForSystem();
+    const auto =
+      config.maintenanceWindows.length > 0
+        ? null
+        : resolveAutoUpgradeWindow({ schedule, timeZone: timezone, timezoneKnown, lowTrafficWindows });
+    if (auto?.kind === "needs-timezone") {
+      return await skipAttempt("no-window-needs-timezone");
+    }
+    const explicitWindows =
+      config.maintenanceWindows.length > 0
+        ? config.maintenanceWindows
+        : auto?.kind === "auto-overnight"
+          ? auto.windows
+          : undefined;
+    const allowed = isUpgradeWindowOpen({ explicitWindows, schedule, timeZone: timezone });
     if (!allowed) return await skipAttempt("outside-window");
   }
 

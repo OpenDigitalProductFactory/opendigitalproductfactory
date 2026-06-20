@@ -22,6 +22,10 @@ const NINE_TO_FIVE: WeeklySchedule = {
 const MON_2300_UTC = new Date("2026-05-25T23:00:00Z");
 const MON_1200_UTC = new Date("2026-05-25T12:00:00Z");
 const SAT_1200_UTC = new Date("2026-05-23T12:00:00Z");
+// 17:00 UTC on a Monday = 12:00 NOON in US Central (CDT, -5). This is the exact
+// instant the operator's bug hit: a 9–5 schedule read in UTC "closes" at 17:00
+// UTC, so the upgrade window opened at local noon, mid-business-day.
+const MON_1700_UTC = new Date("2026-05-25T17:00:00Z");
 
 describe("zonedDayAndTime", () => {
   it("derives weekday + HH:mm in the given timezone", () => {
@@ -70,8 +74,38 @@ describe("isUpgradeWindowOpen", () => {
     const windows = [{ dayOfWeek: [0], startTime: "00:00", endTime: "06:00" }];
     expect(isUpgradeWindowOpen({ explicitWindows: windows, schedule: NINE_TO_FIVE, now: MON_2300_UTC })).toBe(false);
   });
+  it("explicit windows are evaluated in the store timezone, not the host clock", () => {
+    // Monday 08:00 UTC = Monday 03:00 in US Central (CDT, -5). An explicit
+    // 02:00–04:00 Monday window should be OPEN in Central but CLOSED if (buggily)
+    // read against the UTC host clock (08:00 is outside 02:00–04:00).
+    const mon0800Utc = new Date("2026-05-25T08:00:00Z");
+    const windows = [{ dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }];
+    expect(
+      isUpgradeWindowOpen({ explicitWindows: windows, timeZone: "America/Chicago", now: mon0800Utc }),
+    ).toBe(true);
+    // Same instant, no timezone → host-local (UTC in CI) → 08:00 is outside.
+    expect(isUpgradeWindowOpen({ explicitWindows: windows, timeZone: "UTC", now: mon0800Utc })).toBe(false);
+  });
   it("no schedule and no windows → allowed (never silently block forever)", () => {
     expect(isUpgradeWindowOpen({ now: MON_1200_UTC })).toBe(true);
+  });
+});
+
+// The exact operator regression: a 9–5 store in US Central must be treated as
+// OPEN at local noon (so the upgrade window does NOT open mid-business-day), and
+// the same instant read in UTC is where the old bug fired.
+describe("US Central noon regression (issues 1 & 2)", () => {
+  it("store is OPEN at noon Central (17:00 UTC) — upgrade window stays closed", () => {
+    expect(isStoreOpen(NINE_TO_FIVE, MON_1700_UTC, "America/Chicago")).toBe(true);
+    expect(isUpgradeWindowOpen({ schedule: NINE_TO_FIVE, timeZone: "America/Chicago", now: MON_1700_UTC })).toBe(false);
+  });
+  it("the same instant read in UTC is the bug — store reads CLOSED at 17:00", () => {
+    expect(isStoreOpen(NINE_TO_FIVE, MON_1700_UTC, "UTC")).toBe(false);
+    expect(isUpgradeWindowOpen({ schedule: NINE_TO_FIVE, timeZone: "UTC", now: MON_1700_UTC })).toBe(true);
+  });
+  it("the next upgrade window opens at 5pm Central (22:00 UTC), not noon", () => {
+    const next = nextUpgradeWindowOpen(NINE_TO_FIVE, MON_1700_UTC, "America/Chicago");
+    expect(next?.toISOString()).toBe("2026-05-25T22:00:00.000Z");
   });
 });
 

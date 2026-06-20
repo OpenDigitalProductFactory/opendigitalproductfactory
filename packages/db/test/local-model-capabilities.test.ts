@@ -28,6 +28,22 @@ describe("detectLocalModelFamily", () => {
   it("detects qwen coder before the generic qwen tier", () => {
     expect(detectLocalModelFamily("ai/qwen2.5-coder:7B")).toBe("qwen-coder");
   });
+
+  it("detects qwen+coder in either order, and requires both", () => {
+    expect(detectLocalModelFamily("ai/coder-qwen:latest")).toBe("qwen-coder");
+    // "coder" alone (no qwen) must not be classified qwen-coder.
+    expect(detectLocalModelFamily("ai/deepseek-coder:6.7b")).toBe("deepseek");
+  });
+
+  it("classifies a pathological repeated-token id in linear time (no ReDoS)", () => {
+    // Guards the js/polynomial-redos fix: an adversarial id of many 'qwen'/'coder'
+    // repetitions must not trigger catastrophic backtracking.
+    const evil = `${"qwen".repeat(50000)}x`;
+    const start = performance.now();
+    expect(detectLocalModelFamily(evil)).toBe("qwen");
+    expect(detectLocalModelAudio(evil)).toBe(false);
+    expect(performance.now() - start).toBeLessThan(50);
+  });
 });
 
 describe("deriveLocalModelCapabilityPrior", () => {

@@ -10,6 +10,13 @@
 
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 import type { MaintenanceWindow } from "./config";
+import { isWithinWindows } from "./windows-eval";
+import { zonedDayAndTime } from "./zoned-time";
+
+// Re-exported for callers/tests that historically imported it from here. The
+// implementation now lives in ./zoned-time so the explicit-window path
+// (config.ts) can share it without a circular import.
+export { zonedDayAndTime } from "./zoned-time";
 
 const DAY_KEYS = [
   "sunday",
@@ -20,42 +27,6 @@ const DAY_KEYS = [
   "friday",
   "saturday",
 ] as const;
-
-const WEEKDAY_INDEX: Record<string, number> = {
-  Sun: 0,
-  Mon: 1,
-  Tue: 2,
-  Wed: 3,
-  Thu: 4,
-  Fri: 5,
-  Sat: 6,
-};
-
-/**
- * Day-of-week (0=Sun) and "HH:mm" for `now` evaluated in `timeZone` (IANA).
- * Falls back to the host local zone if `timeZone` is missing/invalid — operating
- * hours are only meaningful against the store's own clock.
- */
-export function zonedDayAndTime(now: Date, timeZone?: string): { day: number; hhmm: string } {
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: timeZone || undefined,
-      weekday: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(now);
-    const wd = parts.find((p) => p.type === "weekday")?.value ?? "";
-    const hour = parts.find((p) => p.type === "hour")?.value ?? "00";
-    const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
-    const day = WEEKDAY_INDEX[wd] ?? now.getDay();
-    return { day, hhmm: `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}` };
-  } catch {
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mm = String(now.getMinutes()).padStart(2, "0");
-    return { day: now.getDay(), hhmm: `${hh}:${mm}` };
-  }
-}
 
 /**
  * True when the storefront is open at `now` per its weekly schedule. A day with
@@ -69,16 +40,6 @@ export function isStoreOpen(schedule: WeeklySchedule, now: Date, timeZone?: stri
   if (d.open === d.close) return false; // zero-length = treated as closed
   if (d.open < d.close) return hhmm >= d.open && hhmm < d.close;
   return hhmm >= d.open || hhmm < d.close; // overnight
-}
-
-function isInExplicitWindows(windows: MaintenanceWindow[], now: Date): boolean {
-  const day = now.getDay();
-  const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-  return windows.some((w) => {
-    if (!w.dayOfWeek.includes(day)) return false;
-    if (w.startTime <= w.endTime) return hhmm >= w.startTime && hhmm < w.endTime;
-    return hhmm >= w.startTime || hhmm < w.endTime; // overnight
-  });
 }
 
 /**
@@ -96,7 +57,10 @@ export function isUpgradeWindowOpen(args: {
 }): boolean {
   const now = args.now ?? new Date();
   if (args.explicitWindows && args.explicitWindows.length > 0) {
-    return isInExplicitWindows(args.explicitWindows, now);
+    // Evaluated against the store's clock (shared with the explicit-override and
+    // auto-overnight paths) — not the portal container's UTC host zone, which
+    // would fire a "02:00-04:00" window at the wrong real-world time.
+    return isWithinWindows(args.explicitWindows, now, args.timeZone);
   }
   if (args.schedule) {
     return !isStoreOpen(args.schedule, now, args.timeZone);

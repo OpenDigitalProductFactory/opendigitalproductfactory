@@ -10,6 +10,18 @@ import { EmailInput } from "@/components/ui/EmailInput";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { BusinessDocumentUpload } from "@/components/admin/BusinessDocumentUpload";
 import { MarketContextFields } from "@/components/admin/MarketContextFields";
+import {
+  COUNTRY_OPTIONS,
+  US_STATES,
+  countryName,
+  usStateName,
+  type OrgAddress,
+} from "@/lib/shared/org-address";
+import { resolveTimezoneFromAddress } from "@/lib/timezone-from-location";
+
+// Sentinel for the "Other / not listed" country choice — reveals a free-text
+// country input. Kept out of OrgAddress.countryCode, which only holds real codes.
+const OTHER_COUNTRY = "__other__";
 
 const COMPANY_SIZE_OPTIONS = [
   { value: "solo", label: "Solo", description: "Just me" },
@@ -56,6 +68,7 @@ type BusinessContextData = {
   employsIn: string[];
   dataResidency: string[];
   handlesCardPayments: boolean;
+  address: OrgAddress;
 };
 
 type BusinessContextFormProps = {
@@ -92,6 +105,11 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
   const [showCrossBorder, setShowCrossBorder] = useState(
     initial.sellsTo.length > 0 || initial.employsIn.length > 0 || initial.dataResidency.length > 0,
   );
+  // Country picker selection: a real ISO code, OTHER_COUNTRY, or "" (unset).
+  // Tracked locally because OrgAddress.countryCode only ever holds real codes.
+  const [countrySel, setCountrySel] = useState<string>(
+    initial.address.countryCode ?? (initial.address.country ? OTHER_COUNTRY : ""),
+  );
 
   const hasAutoFill = (autoFilledFields?.length ?? 0) > 0;
 
@@ -100,6 +118,54 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
     setEditedFields((prev) => new Set(prev).add(field));
     setSaved(false);
   }
+
+  function setAddress(next: OrgAddress) {
+    setData((prev) => ({ ...prev, address: next }));
+    setEditedFields((prev) => new Set(prev).add("address"));
+    setSaved(false);
+  }
+
+  function updateAddressField(field: keyof OrgAddress, value: string) {
+    const next = { ...data.address };
+    if (value) next[field] = value;
+    else delete next[field];
+    setAddress(next);
+  }
+
+  function onCountryChange(value: string) {
+    setCountrySel(value);
+    const next: OrgAddress = { ...data.address };
+    // A country switch invalidates the previous state/province selection.
+    delete next.stateCode;
+    delete next.region;
+    if (!value) {
+      delete next.countryCode;
+      delete next.country;
+    } else if (value === OTHER_COUNTRY) {
+      delete next.countryCode; // free-text country input fills `country`
+      delete next.country;
+    } else {
+      next.countryCode = value;
+      next.country = countryName(value) ?? value;
+    }
+    setAddress(next);
+  }
+
+  function onStateChange(value: string) {
+    const next: OrgAddress = { ...data.address };
+    if (value) {
+      next.stateCode = value;
+      next.region = usStateName(value) ?? value;
+    } else {
+      delete next.stateCode;
+      delete next.region;
+    }
+    setAddress(next);
+  }
+
+  // Auto-derived from the captured address — shown read-only; the operator
+  // confirms/overrides it in the Operating Hours timezone picker (never typed).
+  const derivedTimezone = resolveTimezoneFromAddress(data.address);
 
   function toggleJurisdiction(field: JurisdictionScopeField, value: string) {
     const cur = data[field];
@@ -174,6 +240,10 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
   const labelStyle: React.CSSProperties = { fontSize: 13 };
   const fieldLabelStyle: React.CSSProperties = { fontWeight: 600, marginBottom: 4 };
   const hintStyle: React.CSSProperties = { fontSize: 11, color: "var(--dpf-muted)", marginTop: 4 };
+  // <option> needs explicit themed colors (AGENTS.md §12) — inline equivalent of
+  // bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] for this style-object form.
+  const optionStyle: React.CSSProperties = { background: "var(--dpf-surface-2)", color: "var(--dpf-text)" };
+  const optionalHint = <span style={{ color: "var(--dpf-muted)", fontWeight: 400 }}>(optional)</span>;
 
   return (
     <div style={{ maxWidth: 560, color: "var(--dpf-text)" }}>
@@ -360,6 +430,131 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
             ))}
           </div>
           {autoFilledFields?.includes("geographicScope") && <AutoFillHint field="geographicScope" editedFields={editedFields} />}
+        </div>
+
+        {/* Business address — canonical Organization.address. Drives invoices,
+            local presence, and (via country + US state) a state-accurate timezone
+            the operator confirms in Operating Hours — never typed (§12/§17). */}
+        <div style={{ borderTop: "1px solid var(--dpf-border)", paddingTop: 14 }}>
+          <div style={fieldLabelStyle}>Business address</div>
+          <div style={hintStyle}>
+            Used for your invoices, local presence, and to set your timezone. We work the timezone
+            out from your address — you never have to type one.
+          </div>
+
+          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+            {/* Country (drives the state picker + timezone) */}
+            <label style={labelStyle}>
+              <div style={fieldLabelStyle}>Country</div>
+              <select value={countrySel} onChange={(e) => onCountryChange(e.target.value)} style={inputStyle}>
+                <option value="" style={optionStyle}>Select country…</option>
+                {COUNTRY_OPTIONS.map((c) => (
+                  <option key={c.code} value={c.code} style={optionStyle}>{c.name}</option>
+                ))}
+                <option value={OTHER_COUNTRY} style={optionStyle}>Other / not listed</option>
+              </select>
+            </label>
+
+            {countrySel === OTHER_COUNTRY && (
+              <label style={labelStyle}>
+                <div style={fieldLabelStyle}>Country name</div>
+                <input
+                  type="text"
+                  value={data.address.country ?? ""}
+                  onChange={(e) => updateAddressField("country", e.target.value)}
+                  placeholder="Country"
+                  style={inputStyle}
+                />
+              </label>
+            )}
+
+            {/* Street */}
+            <label style={labelStyle}>
+              <div style={fieldLabelStyle}>Street address</div>
+              <input
+                type="text"
+                value={data.address.line1 ?? ""}
+                onChange={(e) => updateAddressField("line1", e.target.value)}
+                placeholder="123 Main St"
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>
+              <div style={fieldLabelStyle}>Address line 2 {optionalHint}</div>
+              <input
+                type="text"
+                value={data.address.line2 ?? ""}
+                onChange={(e) => updateAddressField("line2", e.target.value)}
+                placeholder="Suite, unit, floor"
+                style={inputStyle}
+              />
+            </label>
+
+            {/* City + State/Region */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <label style={labelStyle}>
+                <div style={fieldLabelStyle}>City / Town</div>
+                <input
+                  type="text"
+                  value={data.address.city ?? ""}
+                  onChange={(e) => updateAddressField("city", e.target.value)}
+                  placeholder="City"
+                  style={inputStyle}
+                />
+              </label>
+
+              {countrySel === "US" ? (
+                <label style={labelStyle}>
+                  <div style={fieldLabelStyle}>State</div>
+                  <select
+                    value={data.address.stateCode ?? ""}
+                    onChange={(e) => onStateChange(e.target.value)}
+                    style={inputStyle}
+                  >
+                    <option value="" style={optionStyle}>Select state…</option>
+                    {US_STATES.map((s) => (
+                      <option key={s.code} value={s.code} style={optionStyle}>{s.name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <label style={labelStyle}>
+                  <div style={fieldLabelStyle}>State / Province / Region {optionalHint}</div>
+                  <input
+                    type="text"
+                    value={data.address.region ?? ""}
+                    onChange={(e) => updateAddressField("region", e.target.value)}
+                    placeholder="Region"
+                    style={inputStyle}
+                  />
+                </label>
+              )}
+            </div>
+
+            {/* Postal code */}
+            <label style={{ ...labelStyle, maxWidth: 220 }}>
+              <div style={fieldLabelStyle}>Postal / ZIP code</div>
+              <input
+                type="text"
+                value={data.address.postalCode ?? ""}
+                onChange={(e) => updateAddressField("postalCode", e.target.value)}
+                placeholder="ZIP / postcode"
+                style={inputStyle}
+              />
+            </label>
+
+            {/* Read-only derived-timezone hint (confirm under Operating Hours) */}
+            {derivedTimezone && (
+              <div style={{ fontSize: 12, color: "var(--dpf-muted)", display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "var(--dpf-accent)", opacity: 0.7, flexShrink: 0 }} />
+                <span>
+                  Detected timezone:{" "}
+                  <strong style={{ color: "var(--dpf-text)", fontWeight: 600 }}>{derivedTimezone}</strong>
+                  {" "}— confirm or change it under Operating Hours.
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Compliance & regulatory scope — progressive disclosure keeps the

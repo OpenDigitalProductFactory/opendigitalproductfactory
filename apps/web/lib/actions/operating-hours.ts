@@ -4,8 +4,13 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
-import { GENERIC_DEFAULTS, resolveOperatingHoursTimezone } from "@/lib/operating-hours-types";
+import {
+  DEFAULT_OPERATING_HOURS_TIMEZONE,
+  GENERIC_DEFAULTS,
+  resolveOperatingHoursTimezone,
+} from "@/lib/operating-hours-types";
 import type { DaySchedule, WeeklySchedule } from "@/lib/operating-hours-types";
+import { deriveTimezoneFromBusinessLocation } from "@/lib/operating-hours-read";
 
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 type DayName = (typeof DAY_NAMES)[number];
@@ -175,11 +180,19 @@ export async function getOperatingHours(opts?: {
     select: { businessHours: true, timezone: true, hoursConfirmedAt: true },
   });
 
-  // Resolve timezone: confirmed profile > suggested from URL import > UTC fallback.
-  // Shared with the public booking calendar so the two never diverge.
+  // Resolve timezone: confirmed profile > location-derived (state-accurate) >
+  // suggested from URL import (coarse, country-level) > UTC fallback. When the
+  // profile is still on the UTC placeholder, derive from the captured business
+  // location so the editor (and the maintenance window) default to the right
+  // zone instead of UTC. Shared with the public booking calendar so the two
+  // never diverge.
+  const locationTimezone =
+    !profile?.timezone || profile.timezone === DEFAULT_OPERATING_HOURS_TIMEZONE
+      ? await deriveTimezoneFromBusinessLocation()
+      : null;
   const resolvedTimezone = resolveOperatingHoursTimezone(
     profile?.timezone,
-    opts?.suggestedTimezone,
+    locationTimezone ?? opts?.suggestedTimezone,
   );
 
   // Priority 1: Existing confirmed hours

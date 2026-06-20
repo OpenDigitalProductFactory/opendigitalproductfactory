@@ -10,9 +10,15 @@ export default async function StorefrontOperatingHoursPage() {
     suggestedIndustry: setupContext?.suggestedIndustry,
   });
 
-  async function handleSave(newSchedule: Parameters<typeof saveOperatingHours>[0]["schedule"]) {
+  async function handleSave(
+    newSchedule: Parameters<typeof saveOperatingHours>[0]["schedule"],
+    newTimezone: string,
+  ) {
     "use server";
-    await saveOperatingHours({ schedule: newSchedule, timezone });
+    // Persist the timezone the operator selected in the editor — not the
+    // render-time value — so a fresh install on the UTC placeholder can finally
+    // pin its real zone (the maintenance/upgrade window depends on it).
+    await saveOperatingHours({ schedule: newSchedule, timezone: newTimezone || timezone });
   }
 
   return (

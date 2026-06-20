@@ -18,6 +18,11 @@ import {
   isUpgradeWindowOpen,
   nextUpgradeWindowOpen,
 } from "@/lib/self-upgrade/window";
+import {
+  resolveAutoUpgradeWindow,
+  nextAutoWindowOpen,
+  describeWindows,
+} from "@/lib/self-upgrade/auto-window";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import {
@@ -672,34 +677,62 @@ export async function getSelfUpgradeStatus() {
   ]);
 
   // Upgrade timing follows the storefront's open/closed state (single source of
-  // truth: operating hours). inMaintenanceWindow = "upgrades may run now" =
-  // store closed (or inside an explicit override window). storeOpen lets the
-  // panel explain WHY truthfully.
-  const { schedule, timezone } = await resolveOperatingScheduleForSystem();
+  // truth: operating hours). inMaintenanceWindow = "upgrades may run now" = store
+  // closed (or inside an explicit override / auto-overnight window). storeOpen
+  // lets the panel explain WHY truthfully.
+  const { schedule, timezone, timezoneKnown, lowTrafficWindows } =
+    await resolveOperatingScheduleForSystem();
   const hasExplicitWindows = config.maintenanceWindows.length > 0;
   const storeOpen = isStoreOpen(schedule, new Date(), timezone);
+  const now = new Date();
+  // A 24/7 store has no derived "closed" window. With a known timezone we
+  // auto-pick a low-traffic overnight window (observed trough if available, else
+  // ~02:00-04:00 local); with no known timezone we surface a prompt instead of
+  // guessing. Explicit operator windows still win. (BI-A6382FB9)
+  const auto = hasExplicitWindows
+    ? null
+    : resolveAutoUpgradeWindow({ schedule, timeZone: timezone, timezoneKnown, lowTrafficWindows, now });
+  const effectiveWindows = hasExplicitWindows
+    ? config.maintenanceWindows
+    : auto?.kind === "auto-overnight"
+      ? auto.windows
+      : undefined;
   const inMaintenanceWindow = isUpgradeWindowOpen({
-    explicitWindows: config.maintenanceWindows,
+    explicitWindows: effectiveWindows,
     schedule,
     timeZone: timezone,
   });
-  // The window is always defined now (derived from operating hours), so it is
-  // never "unconfigured". windowSource tells the panel which model is in play.
+  // The window is always defined now (operating-hours or auto-overnight), so it
+  // is never "unconfigured". windowSource tells the panel which model is in play;
+  // "needs-timezone" is the only state that asks the operator for input.
   const windowConfigured = true;
-  const windowSource: "explicit" | "operating-hours" = hasExplicitWindows
-    ? "explicit"
-    : "operating-hours";
+  const windowSource: "explicit" | "operating-hours" | "auto-overnight" | "needs-timezone" =
+    hasExplicitWindows
+      ? "explicit"
+      : auto?.kind === "auto-overnight"
+        ? "auto-overnight"
+        : auto?.kind === "needs-timezone"
+          ? "needs-timezone"
+          : "operating-hours";
+  // Friendly "2:00 AM-4:00 AM" summary for the auto-overnight schedule note (display only).
+  const autoWindowSummary =
+    auto?.kind === "auto-overnight" ? describeWindows(auto.windows) : null;
   // Next time the upgrade window opens, so the panel can show WHEN scheduled
-  // upgrades will next be eligible. Explicit windows use their configured start;
-  // the operating-hours model derives it from the next store-close transition
-  // (null only while already in-window or for a 24/7 store, where the panel
-  // already explains the state).
-  const now = new Date();
+  // upgrades will next be eligible. Explicit + auto-overnight windows use their
+  // configured/derived start; the operating-hours model derives it from the next
+  // store-close transition (null while already in-window, or for needs-timezone,
+  // where the panel asks for a timezone instead).
   const nextWindowStart = hasExplicitWindows
-    ? nextMaintenanceWindowStart(config, now)?.toISOString() ?? null
-    : inMaintenanceWindow
-      ? null
-      : nextUpgradeWindowOpen(schedule, now, timezone)?.toISOString() ?? null;
+    ? nextMaintenanceWindowStart(config, now, timezone)?.toISOString() ?? null
+    : auto?.kind === "auto-overnight"
+      ? inMaintenanceWindow
+        ? null
+        : nextAutoWindowOpen(auto.windows, now, timezone)?.toISOString() ?? null
+      : auto?.kind === "needs-timezone"
+        ? null
+        : inMaintenanceWindow
+          ? null
+          : nextUpgradeWindowOpen(schedule, now, timezone)?.toISOString() ?? null;
   const nextWindowStartDate = nextWindowStart ? new Date(nextWindowStart) : null;
   const nextScheduledCheckAt = computeNextScheduledUpgradeCheckAt({
     enabled: config.enabled,
@@ -731,7 +764,13 @@ export async function getSelfUpgradeStatus() {
     inMaintenanceWindow,
     windowConfigured,
     windowSource,
+    // Friendly window-time summary for the auto-overnight note (null otherwise).
+    autoWindowSummary,
     storeOpen,
+    // The IANA timezone the window is evaluated in (store operating-hours zone).
+    // Surfaced so the panel's "next window" is never ambiguous — the symptom that
+    // a UTC-evaluated window read as noon for a US Central store.
+    windowTimezone: timezone,
     nextWindowStart,
     nextScheduledCheckAt: nextScheduledCheckAt?.toISOString() ?? null,
     deployedSha,

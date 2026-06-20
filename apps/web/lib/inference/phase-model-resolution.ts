@@ -368,12 +368,17 @@ async function resolveBuildPhase(
         });
       }
       if (pre.models.length > 0 && isLikelyNonChatModel(pre.models[0]!)) {
+        // Informational, not a failure: when no model is pinned the build resolves
+        // via pickDefaultCodingModel (opencode-dispatch.ts), which filters OUT
+        // non-chat models and prefers a coder — so a leading embedding model is
+        // auto-skipped, never selected for code generation. The served order is a
+        // config nit worth surfacing, not a routing risk (BI-9AAE9C15).
         flags.push({
-          severity: "warning",
+          severity: "info",
           code: "embedding-model-first",
-          message: `The local endpoint lists a non-chat model ("${pre.models[0]}") first. If no model is pinned, an embedding model can be selected for code generation.`,
+          message: `The local endpoint lists a non-chat model ("${pre.models[0]}") first. The build auto-selects a coding model and skips non-chat models, so this is not a failure — pin the OpenCode model in Build Runtime to make the choice explicit.`,
           remediation:
-            "Pin the OpenCode model in Build Runtime, or reorder the served models so a coder model is first.",
+            "Optional: pin the OpenCode model in Build Runtime, or reorder the served models so a coder model is first.",
         });
       }
     } catch (err) {
