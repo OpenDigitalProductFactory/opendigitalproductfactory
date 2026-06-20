@@ -40,6 +40,10 @@ const state = vi.hoisted(() => ({
   reconcileCalls: [] as string[],
   emits: [] as Array<{ threadId: string; evt: Record<string, unknown> }>,
   executeToolCalls: [] as Array<{ tool: string; params: Record<string, unknown> }>,
+  featurePackRow: null as { id: string } | null,
+  productVersionRow: null as { id: string } | null,
+  portfolioRow: { slug: "platform" } as { slug: string } | null,
+  ownerResolveCount: 0,
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -57,7 +61,23 @@ vi.mock("@dpf/db", () => ({
         return {};
       }),
     },
+    featurePack: {
+      findFirst: vi.fn(async () => state.featurePackRow),
+    },
+    productVersion: {
+      findFirst: vi.fn(async () => state.productVersionRow),
+    },
+    portfolio: {
+      findUnique: vi.fn(async () => state.portfolioRow),
+    },
   },
+}));
+
+vi.mock("@/lib/queue/scheduled-owner", () => ({
+  resolveScheduledOwnerUserId: vi.fn(async () => {
+    state.ownerResolveCount++;
+    return "usr_owner";
+  }),
 }));
 
 vi.mock("@/lib/feature-build-types", () => ({
@@ -88,10 +108,16 @@ vi.mock("@/lib/agent-event-bus", () => ({
   },
 }));
 
-import { dispatchShipForVerifiedBuild } from "./ship-on-review-approval";
+import {
+  dispatchShipForVerifiedBuild,
+  autoResolveShipForks,
+  isAutoCompleteEnabled,
+} from "./ship-on-review-approval";
 
-function makeBuild(overrides: Partial<BuildRow> = {}): Record<string, unknown> {
+function makeBuild(overrides: Partial<BuildRow> & { id?: string; portfolioId?: string | null } = {}): Record<string, unknown> {
   return {
+    id: "fb-cuid-1",
+    portfolioId: "pf-1",
     phase: "review",
     diffPatch: "diff --git a/x b/x\n+truncated",
     buildBranch: "build/FB-FD850A2C",
@@ -124,6 +150,11 @@ beforeEach(() => {
   state.reconcileCalls.length = 0;
   state.emits.length = 0;
   state.executeToolCalls.length = 0;
+  state.featurePackRow = null;
+  state.productVersionRow = null;
+  state.portfolioRow = { slug: "platform" };
+  state.ownerResolveCount = 0;
+  delete process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS;
 });
 
 describe("dispatchShipForVerifiedBuild — review→ship loop fix", () => {
@@ -220,5 +251,86 @@ describe("dispatchShipForVerifiedBuild — review→ship loop fix", () => {
 
     expect(out.kind).toBe("skipped");
     expect(state.reconcileCalls).toHaveLength(0); // no completion attempt on a lost race
+  });
+});
+
+describe("isAutoCompleteEnabled — operator opt-in flag (default OFF)", () => {
+  it("is off when the env var is unset", () => {
+    delete process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS;
+    expect(isAutoCompleteEnabled()).toBe(false);
+  });
+
+  it.each(["1", "true", "on", "TRUE", " On "])("is on for %j", (v) => {
+    process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS = v;
+    expect(isAutoCompleteEnabled()).toBe(true);
+  });
+
+  it.each(["0", "false", "off", "", "nope"])("is off for %j", (v) => {
+    process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS = v;
+    expect(isAutoCompleteEnabled()).toBe(false);
+  });
+});
+
+describe("autoResolveShipForks — sets up both ship forks toward autonomous completion", () => {
+  const log = async () => {};
+
+  it("pushes the PR + registers the product, then reconciles, when neither fork exists yet", async () => {
+    state.build = makeBuild({ phase: "ship" });
+    state.featurePackRow = null; // no PR yet
+    state.productVersionRow = null; // not registered yet
+
+    await autoResolveShipForks("FB-SHIP", log);
+
+    const tools = state.executeToolCalls.map((c) => c.tool);
+    expect(tools).toContain("contribute_to_hive");
+    expect(tools).toContain("register_digital_product_from_build");
+    expect(state.reconcileCalls).toContain("FB-SHIP");
+  });
+
+  it("is idempotent — does not re-push the PR when a FeaturePack with a prUrl already exists", async () => {
+    state.build = makeBuild({ phase: "ship" });
+    state.featurePackRow = { id: "pack-1" }; // PR already pushed
+    state.productVersionRow = null;
+
+    await autoResolveShipForks("FB-SHIP", log);
+
+    const tools = state.executeToolCalls.map((c) => c.tool);
+    expect(tools).not.toContain("contribute_to_hive");
+    expect(tools).toContain("register_digital_product_from_build");
+  });
+
+  it("is idempotent — does not re-register when a ProductVersion already exists, but still reconciles", async () => {
+    state.build = makeBuild({ phase: "ship" });
+    state.featurePackRow = { id: "pack-1" };
+    state.productVersionRow = { id: "pv-1" }; // already registered
+
+    await autoResolveShipForks("FB-SHIP", log);
+
+    const tools = state.executeToolCalls.map((c) => c.tool);
+    expect(tools).not.toContain("contribute_to_hive");
+    expect(tools).not.toContain("register_digital_product_from_build");
+    expect(state.reconcileCalls).toContain("FB-SHIP");
+  });
+
+  it("no-ops when the build is not at the ship phase", async () => {
+    state.build = makeBuild({ phase: "review" });
+
+    await autoResolveShipForks("FB-REVIEW", log);
+
+    expect(state.executeToolCalls).toHaveLength(0);
+    expect(state.reconcileCalls).toHaveLength(0);
+  });
+
+  it("resolves the install owner as the actor for an ownerless (system) build", async () => {
+    state.build = makeBuild({ phase: "ship", createdById: null });
+    state.featurePackRow = null;
+    state.productVersionRow = null;
+
+    await autoResolveShipForks("FB-SYS", log);
+
+    expect(state.ownerResolveCount).toBe(1);
+    expect(state.executeToolCalls.map((c) => c.tool)).toContain(
+      "register_digital_product_from_build",
+    );
   });
 });

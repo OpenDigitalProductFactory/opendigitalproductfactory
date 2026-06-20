@@ -233,18 +233,143 @@ export async function advanceReviewedBuildToShip(
     /* best-effort */
   }
 
-  // If the ship forks are already terminal (private/fork-only mode, or the PR
-  // has merged) AND the deployed runtime carries the merge SHA, finish now.
-  try {
-    const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
-    if (await reconcileBuildCompletion(buildId)) {
-      await log("Ship forks terminal + deployed — advanced ship→complete.");
+  // Resolve the ship forks toward completion. When autonomous completion is
+  // enabled (operator opt-in), set up the forks — push the community PR and
+  // register the product/promotion — so the build completes once its merged
+  // code is live via the platform self-upgrade. Otherwise just attempt
+  // completion in case the forks are already resolved (operator-driven ship).
+  if (isAutoCompleteEnabled()) {
+    await autoResolveShipForks(buildId, log);
+  } else {
+    try {
+      const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
+      if (await reconcileBuildCompletion(buildId)) {
+        await log("Ship forks terminal + deployed — advanced ship→complete.");
+      }
+    } catch (err) {
+      await log(
+        `ship→complete check failed: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`,
+      );
     }
-  } catch (err) {
-    await log(
-      `ship→complete check failed: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`,
-    );
   }
 
   return { kind: "dispatched-success", durationMs: Date.now() - t0 };
+}
+
+/**
+ * Autonomous build completion — operator opt-in, DEFAULT OFF.
+ *
+ * When enabled, a verified build that reaches `ship` auto-resolves its ship
+ * forks (pushes the community PR + registers the product/promotion) and
+ * completes once its merged code is live via the platform self-upgrade (the
+ * deploy you already run — NOT the per-build promoter). Off by default so an
+ * operator enables it deliberately and watches the first autonomous delivery
+ * before leaving it on. This is the "auto-push PR + complete-via-self-upgrade"
+ * path chosen by the operator (2026-06-20).
+ *
+ *   DPF_AUTO_COMPLETE_VERIFIED_BUILDS = "1" | "true" | "on"
+ */
+export function isAutoCompleteEnabled(): boolean {
+  const v = (process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "on";
+}
+
+/**
+ * Set up both ship forks for a build at `ship` so it can complete autonomously:
+ *   - upstream (community PR) via `contribute_to_hive` (idempotent: skipped if a
+ *     PR already exists; a no-op/"install is private" result is fine — the
+ *     upstream fork auto-skips in that mode);
+ *   - promote (product + promotion) via `register_digital_product_from_build`
+ *     (idempotent: skipped if a ProductVersion already exists).
+ * Then attempts completion. reconcileBuildCompletion gates on the forks being
+ * terminal AND the merged SHA being live (`isFeatureBuildDeployed`), so this is
+ * a no-op until the PR merges and the next self-upgrade deploys it — the
+ * periodic ship reconciler (instrumentation.ts) finishes it then. Never throws;
+ * any unresolved fork simply parks the build at `ship` for an operator.
+ */
+export async function autoResolveShipForks(
+  buildId: string,
+  log: (summary: string) => Promise<void>,
+): Promise<void> {
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: { id: true, phase: true, title: true, portfolioId: true, createdById: true },
+  });
+  if (!build || build.phase !== "ship") return;
+
+  // Resolve the actor: the build's creator, or the install owner for ownerless
+  // (system-created) builds — mirrors autoDispatchShipForCompletedVerification.
+  let actorUserId = build.createdById;
+  if (!actorUserId) {
+    try {
+      const { resolveScheduledOwnerUserId } = await import("@/lib/queue/scheduled-owner");
+      actorUserId = await resolveScheduledOwnerUserId();
+    } catch {
+      /* fall through to the null guard */
+    }
+  }
+  if (!actorUserId) {
+    await log("auto-complete: no resolvable actor — parked at ship for operator");
+    return;
+  }
+
+  const { executeTool } = await import("@/lib/mcp-tools");
+
+  // ── Upstream fork (community PR) — idempotent: skip if a PR already exists.
+  const existingPack = await prisma.featurePack.findFirst({
+    where: { buildId: build.id, prUrl: { not: null } },
+    select: { id: true },
+  });
+  if (!existingPack) {
+    try {
+      const pr = await executeTool("contribute_to_hive", { buildId }, actorUserId);
+      await log(
+        `auto-complete PR: ${pr.success ? "pushed upstream" : `not pushed — ${String(pr.message ?? pr.error ?? "").slice(0, 140)}`}`,
+      );
+    } catch (err) {
+      await log(`auto-complete PR failed: ${String(err instanceof Error ? err.message : err).slice(0, 140)}`);
+    }
+  }
+
+  // ── Promote fork — register product + promotion. Idempotent: skip if a
+  //    ProductVersion already exists for this build.
+  const existingPv = await prisma.productVersion.findFirst({
+    where: { featureBuildId: build.id },
+    select: { id: true },
+  });
+  if (!existingPv) {
+    let portfolioSlug = "";
+    if (build.portfolioId) {
+      const pf = await prisma.portfolio.findUnique({
+        where: { id: build.portfolioId },
+        select: { slug: true },
+      });
+      portfolioSlug = pf?.slug ?? "";
+    }
+    try {
+      const reg = await executeTool(
+        "register_digital_product_from_build",
+        { buildId, name: build.title, portfolioSlug },
+        actorUserId,
+      );
+      await log(
+        `auto-complete promote: ${reg.success ? "product + promotion registered" : `failed — ${String(reg.message ?? reg.error ?? "").slice(0, 140)}`}`,
+      );
+    } catch (err) {
+      await log(`auto-complete promote failed: ${String(err instanceof Error ? err.message : err).slice(0, 140)}`);
+    }
+  }
+
+  // ── Attempt completion. No-op until the PR is merged AND the self-upgrade
+  //    carries the merge SHA live; the periodic ship reconciler finishes it.
+  try {
+    const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
+    if (await reconcileBuildCompletion(buildId)) {
+      await log("auto-complete: build COMPLETE (merged code live).");
+    } else {
+      await log("auto-complete: forks set up; completes after PR merge + self-upgrade.");
+    }
+  } catch (err) {
+    await log(`auto-complete reconcile failed: ${String(err instanceof Error ? err.message : err).slice(0, 140)}`);
+  }
 }
