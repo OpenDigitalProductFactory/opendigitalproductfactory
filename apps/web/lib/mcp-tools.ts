@@ -6780,6 +6780,35 @@ export async function executeTool(
 
       const buildId = stringValue("buildId") || undefined;
       const taskRunId = stringValue("taskRunId") || undefined;
+
+      // Validate the caller may attach evidence to the supplied build before we
+      // write. Access model is owner-only today, mirroring resolveActiveBuildId /
+      // getFeatureBuildForContext. Without this guard any caller holding the
+      // view_platform grant could write an ExternalEvidenceRecord against an
+      // arbitrary build they do not own (EP-UNIFIED-TRACKING Phase 0 / BI-4196AB21).
+      // taskRunId ownership is intentionally not gated here yet — it folds into the
+      // capsule-linkage work (BI-6357B975), where the canonical owner resolves.
+      if (buildId) {
+        const ownedBuild = await prisma.featureBuild.findUnique({
+          where: { buildId },
+          select: { buildId: true, createdById: true },
+        });
+        if (!ownedBuild) {
+          return {
+            success: false,
+            error: "not_found",
+            message: `Build ${buildId} not found`,
+          };
+        }
+        if (ownedBuild.createdById !== userId) {
+          return {
+            success: false,
+            error: "forbidden",
+            message: `Not authorized to attach external development evidence to build ${buildId}`,
+          };
+        }
+      }
+
       const localIntegration =
         params["localIntegration"] && typeof params["localIntegration"] === "object" && !Array.isArray(params["localIntegration"])
           ? params["localIntegration"] as Record<string, unknown>
