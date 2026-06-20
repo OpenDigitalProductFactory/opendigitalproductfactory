@@ -74,6 +74,24 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "NoSQL injection, OS command injection, and prevention strategies.",
     retrievedAt: "2026-06-10",
   },
+  // Open data-modeling reference for the data-architect family. The licensed BoKs
+  // (DAMA DMBOK2, ISO/IEC 9075) stay checklist-only per spec 7.7; PostgreSQL's
+  // documentation is permissively licensed, authoritative, and the platform's own
+  // database engine, so it grounds the practical/physical side of data modeling and
+  // schema migration (the data-modeling half of the checklist that the existing
+  // SQL-injection-focused pages left uncovered — BI-62F934C9).
+  "postgresql/data-definition": {
+    sourceType: "documentation",
+    title: "PostgreSQL Documentation — Data Definition (DDL)",
+    url: "https://www.postgresql.org/docs/current/ddl.html",
+    license: "PostgreSQL",
+    abstract:
+      "Authoritative reference for defining relational schema in PostgreSQL: tables, " +
+      "columns, data types, default values, primary and foreign keys, check/unique/not-null " +
+      "constraints, inheritance, partitioning, and modifying existing tables (ALTER TABLE) — " +
+      "the physical realization and evolution of a data model.",
+    retrievedAt: "2026-06-20",
+  },
 
   // ── Software-engineer family (WSID wave 2, all open-license) ──
   "owasp/asvs": {
