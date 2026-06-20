@@ -12,16 +12,16 @@ flowchart TD
     cc[Claude Code CLI]
     cx[Codex CLI]
     gk[Grok CLI]
+    wc{{WorkCapsule<br/>the universal unit of work<br/>executor-agnostic, one per effort}}
+    view[Development activity view<br/>all surfaces in one place]
+    tl[Per-effort timeline<br/>progress, evidence, documents, PR + merge]
 
     bs -->|auto-attaches a capsule| wc
     cc -->|records evidence, adopts,<br/>or claims a capsule| wc
     cx -->|records evidence, adopts,<br/>or claims a capsule| wc
     gk -->|records evidence, adopts,<br/>or claims a capsule| wc
-
-    wc{{WorkCapsule<br/>the universal unit of work<br/>executor-agnostic, one per effort}}
-
-    wc --> view[Development activity view<br/>all surfaces in one place]
-    wc --> tl[Per-effort timeline<br/>progress, evidence, documents, PR + merge]
+    wc --> view
+    wc --> tl
 ```
 
 The four surfaces are **peers, not a hierarchy** — none is privileged, and work never depends on any one of them being healthy. They all advance the same evidence‑gated lifecycle (`ideate → plan → build → review → ship`), right‑sized to the work.
