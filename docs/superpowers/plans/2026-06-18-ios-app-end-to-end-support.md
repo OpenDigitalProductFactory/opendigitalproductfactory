@@ -1,7 +1,7 @@
 # Plan — End-to-End iOS App Support (Dual-Persona, Install-Driven)
 
 **Date:** 2026-06-18
-**Status:** In-flight — implementing slice by slice
+**Status:** In-flight — slices merging in sequence
 **Owner:** mobile platform
 **Parent spec:** [`docs/superpowers/specs/2026-06-14-native-mobile-archetype-apps-design.html`](../specs/2026-06-14-native-mobile-archetype-apps-design.html)
 **Related specs:** [Town super-app](../specs/2026-06-14-multi-business-town-super-app-design.html), [Field dispatch contract](../specs/2026-06-14-field-dispatch-mobile-contract-and-warranty-design.html)
@@ -10,7 +10,7 @@
 
 Close the remaining code gaps between today's mobile substrate and a real, shippable, install-driven iOS app serving both **field-tech (employee)** and **customer** personas — the HVAC scenario the founder named (tech captures work → drafts invoice → collects payment) AND the customer-facing flip side (view invoices, see visits, pay).
 
-Owner-only steps (Apple Developer enrollment, Google Play, Expo/EAS account, Firebase + APNs key, physical iPhone, store metadata) are explicitly out of scope for this plan — they cannot be performed by an agent regardless of authorization and are tracked in the parent spec §9.
+Owner-only steps (Apple Developer enrollment, Google Play, Expo/EAS account, Firebase + APNs key, physical iPhone, store metadata) are explicitly out of scope for this plan — they cannot be performed by an agent regardless of authorization. They live in the parent spec §9 and Slice 5's operator checklist below.
 
 ## Architecture (already shipped — context)
 
@@ -31,35 +31,54 @@ What's left — six tightly-scoped slices, each its own PR.
 
 ## Slices
 
-### Slice 1 — `WorkItem` → `CustomerAccount` link end-to-end
+### Slice 1 — `WorkItem` → `CustomerAccount` link
 
-Removes the largest piece of friction in the field-tech flow: the tech had to type the customer's `accountId` on the invoice screen. Server resolves the account from the `WorkItem.sourceType` + `sourceId` link (Engagement / Opportunity / StorefrontBooking / Activity); mobile pre-fills it as read-only.
-
-**Status:** PR opened — #2162.
+Server resolves account from `WorkItem.sourceType` + `sourceId` (Engagement / Opportunity / StorefrontBooking / Activity). Mobile pre-fills the invoice screen's accountId as read-only. **PR #2162.**
 
 ### Slice 2 — Customer "My visits" surface
 
-Customer-side parallel to the employee's My Jobs. Customers see upcoming + recent appointments on Home alongside the My invoices panel. Closed `CustomerVisitStatus` union; `GET /api/v1/customer/visits` scoped two-hop (`account.is.accountId` → contacts → bookings); persona-gated render.
-
-**Status:** PR opened — #2168.
+`GET /api/v1/customer/visits` scoped two-hop (`account.is.accountId` → contacts → bookings). Customers see upcoming + recent appointments on Home alongside the My invoices panel. **PR #2168.**
 
 ### Slice 3 — Job-completion evidence (photos)
 
-Tech captures one-to-many photos of completed work before billing. Stored on `WorkItem.evidence` JSON (additive — no schema migration). Wire shape (`JobEvidencePhoto`, `AppendJobEvidenceRequest`, `JobEvidenceResponse`) lives in `@dpf/types`; persistence in `POST /api/v1/work-items/:itemId/evidence`; client in `@dpf/api-client/workItems.appendEvidence`; mobile feature store + a new `(tabs)/jobs/[itemId]/complete.tsx` screen that lets the tech capture, list, and proceed to Draft invoice.
-
-Signatures + voice notes deferred to a follow-up slice (each needs its own capture primitive — signature canvas via `react-native-signature-canvas`, voice via `expo-av` — both heavier deps deserving their own PR).
-
-**Status:** This slice — in flight.
+`POST /api/v1/work-items/:itemId/evidence` appends to `WorkItem.evidence` JSON. Capture primitive is pluggable (today: a deterministic stub; tomorrow: `expo-image-picker` / `expo-camera`). Signatures + voice notes deferred — each needs its own capture primitive in a follow-up slice. **PR #2181.**
 
 ### Slice 4 — Multi-space switcher UX (Town M2)
 
-`spaces.store` substrate already exists from prior PRs. This slice adds the *UI*: a switcher component, a "connect another business" entry point reusing the existing `serverConfig` connect flow, and a "Town" home-tile listing connected spaces. Foundation for the founder's "3 businesses in one app" vision.
+`SpaceSwitcher` (compact + full variants) + `/connect` flow + More-tab placement. `spaces.store` substrate already exists from prior PRs; this is the UI half. **PR #2182.**
 
-### Slice 5 — EAS pipeline + path-filtered mobile CI lane
+### Slice 5 — EAS pipeline + mobile CI lane
 
-`eas.json` today is a skeleton. This slice fills in the `internal`/`production` profiles for iOS + Android, adds a `.github/workflows/mobile-ci.yml` workflow that runs `pnpm --filter mobile typecheck` + `pnpm --filter mobile test` triggered only on `apps/mobile/**` and shared package paths, and documents the operator-only EAS first-run (Apple Developer enrollment, App Store Connect API key, FCM/APNs setup) as a checklist of owner-actions.
+**Status:** This slice — in flight.
 
-Native binary builds run under EAS cloud — the spec is explicit that `node:24-alpine` Build Studio cannot build iOS (macOS + Xcode only).
+Two artifacts:
+
+1. **`apps/mobile/eas.json`** filled in beyond the skeleton. Four named build profiles (`development`, `preview`, `internal`, `production`) covering iOS + Android, including resource class, simulator/store distribution, autoIncrement on production, and a release-channel env var so the app knows which channel it's running on. Submit config: `internal` → TestFlight + Play Internal track; `production` → Play production track (iOS App Store submit still owner-gated per Apple).
+2. **`.github/workflows/mobile-ci.yml`** path-filtered CI lane — runs `pnpm --filter mobile typecheck` + `pnpm --filter mobile test:ci` on PRs that touch `apps/mobile/**` or the shared `@dpf/api-client` / `@dpf/types` / `@dpf/validators` packages. Path-filtered so mobile-only PRs don't wait on the `apps/web` four-shard vitest matrix + Next build (15-20 min), and web-only PRs don't run mobile jest unnecessarily.
+
+Native binary builds (`.ipa` / `.aab`) DO NOT run in CI — iOS requires macOS + Xcode (Linux cross-compile does not exist for iOS), so binaries are produced by `eas build` on Expo's cloud, triggered on merge-to-main / tag / manual dispatch. CI gates code-level quality only.
+
+#### Operator-action checklist (Slice 5 cannot finish without these)
+
+These cannot be done by an agent — they require the company's legal identity and accounts:
+
+| Action | Why an agent can't | Cost |
+|---|---|---|
+| Enroll **Apple Developer Program** as **Arcamanus LLC** | legal entity, D-U-N-S, 2FA Apple ID, signed agreements | $99/yr |
+| Create **Google Play Console** account (org) | identity verification, signed agreements | $25 one-time |
+| Create **Expo / EAS** account + org | account auth for cloud builds | free to start |
+| Generate **App Store Connect API key** (`.p8`) | Apple account credential | — |
+| Create **Firebase** project + generate **APNs Auth Key** | Google/Apple account-bound credentials | free (push) |
+| Reserve **bundle id** `com.dpf.mobile` (or chosen) on both stores | Apple/Google identity | — |
+| Provide a **physical iPhone + Android** device | hardware for push / biometric / deep-link / store QA | — |
+| TestFlight + Play internal **tester enrollment** | accept builds via your accounts | — |
+| **Privacy policy URL** + **data-safety / nutrition labels** | legal + marketing decisions + hosted page | — |
+
+Once the operator has provided these, the agent can:
+
+- Set the EAS project + slug on the operator's account via `eas init`.
+- Configure GitHub Actions secrets (`EXPO_TOKEN`, `APP_STORE_CONNECT_API_KEY`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`).
+- Wire a release workflow that calls `eas build --profile internal` on merge-to-main and `eas build --profile production` on tag, with `eas submit` follow-on for store submission.
 
 ### Slice 6 — Geo-discovery "Nearby" stub (Town M4)
 
@@ -75,7 +94,7 @@ Lightweight: `useGeolocation` hook (already-installed `expo-location`), a `Nearb
 | `POST /api/v1/upload` (MediaAsset) | Slice 3 — photos upload through it; the new evidence endpoint only links fileIds |
 | `spaces.store` (from earlier PRs) | Slice 4 — UI shell over existing state |
 | `expo-location` (already installed) | Slice 6 — geolocation hook |
-| `eas.json` skeleton | Slice 5 — fill in profiles |
+| `eas.json` skeleton + `apps/mobile/package.json` scripts | Slice 5 — fill in profiles + add CI lane |
 
 ## Risks + open questions
 
