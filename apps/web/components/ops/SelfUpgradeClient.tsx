@@ -78,6 +78,14 @@ type Props = {
   channel: string;
   inMaintenanceWindow: boolean;
   windowConfigured?: boolean;
+  /**
+   * Which model produced the upgrade window. "auto-overnight" = 24/7 store, auto-
+   * picked overnight slot; "needs-timezone" = 24/7 store with no known timezone,
+   * so the panel asks for one instead of guessing. (BI-A6382FB9)
+   */
+  windowSource?: "explicit" | "operating-hours" | "auto-overnight" | "needs-timezone";
+  /** Friendly window-time range (e.g. "2:00 AM-4:00 AM") for the auto-overnight note. */
+  autoWindowSummary?: string | null;
   /** IANA timezone the upgrade window is evaluated in (store operating hours). */
   windowTimezone?: string;
   nextWindowStart?: string | null;
@@ -238,6 +246,8 @@ export default function SelfUpgradeClient({
   channel,
   inMaintenanceWindow,
   windowConfigured,
+  windowSource,
+  autoWindowSummary,
   windowTimezone,
   nextWindowStart,
   nextScheduledCheckAt,
@@ -885,7 +895,15 @@ export default function SelfUpgradeClient({
           data-window-configured={windowConfigured ? "true" : "false"}
         >
           <span className="font-medium text-[var(--dpf-text)]">Schedule:</span>{" "}
-          {!windowConfigured ? (
+          {windowSource === "needs-timezone" ? (
+            <span className="text-[var(--dpf-warning)]" data-window-source="needs-timezone">
+              Your business runs 24/7. Set your timezone in{" "}
+              <a className="underline" href="/storefront/settings/operations">
+                Settings → Operating Hours
+              </a>{" "}
+              so upgrades can run automatically overnight, or choose a maintenance window.
+            </span>
+          ) : !windowConfigured ? (
             <span className="text-[var(--dpf-warning)]">
               No maintenance window configured — scheduled upgrades will not run
               on their own. Use Emergency override to run now.
@@ -922,6 +940,13 @@ export default function SelfUpgradeClient({
             <span className="text-[var(--dpf-muted)]">
               Maintenance window configured.
             </span>
+          )}
+          {windowSource === "auto-overnight" && autoWindowSummary && (
+            <div className="mt-1 text-[var(--dpf-muted)]" data-window-source="auto-overnight">
+              Your business runs 24/7, so upgrades run overnight (around{" "}
+              <span className="font-medium text-[var(--dpf-text)]">{autoWindowSummary}</span>
+              {windowTimezone ? ` ${windowTimezone}` : ""}).
+            </div>
           )}
           {windowTimezone && (
             <div className="mt-1 text-[var(--dpf-muted)]" data-window-timezone={windowTimezone}>
