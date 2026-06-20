@@ -1,274 +1,529 @@
-# The Golden Triangle
+# Golden Triangle Decision Primitive
 
-**A Decision-Making Primitive for the Open Digital Product Factory**
+**Cost | Quality | Time as a governed preference-to-policy compiler for trusted AI agents**
 
-Cost · Quality · Time
-
-> Simple gesture in. Expert settings out. Real cost and human judgment back. Defaults that learn.
-
-*Design Document for Review — v0.1 Draft · June 2026*
+*Chief architect review draft v0.2 - 2026-06-20*
 
 ---
 
-## 1. Purpose & Thesis
+## 0. Architect Verdict
 
-**The product thesis in one sentence:** the Golden Triangle is an abstraction layer over expertise. A non-technical person should never have to know that “extended effort + three reviewer perspectives + a frontier model” is the right combination for a high-stakes decision. They pull toward the dimension they care about, and the platform — which encodes the expertise — translates that gesture into the correct technical settings.
+The core idea is right and worth protecting: a non-technical operator should express intent in human terms, while DPF translates that intent into model routing, review depth, verification, retry posture, and budget controls.
 
-The classic project-management triangle (cost, quality, time — the “iron triangle”) is long-standing PM acumen: you cannot maximize all three; over-investing in one dimension causes the others to suffer. This document turns that intuition into an interactive constraint model that drives real agent behavior, real cost accounting, and a learning feedback loop across the platform.
+The current draft, however, is too greenfield for the DPF substrate that already exists. The triangle must not become a second model registry, a second routing layer, or a pretty control that makes users feel in control while hidden policy does something else. Treat it as a governed **preference-to-policy compiler**:
 
-> **The gap that is the product**
-> - The user sees a left column: “get this right,” “I need this now,” “keep it cheap.”
-> - The platform runs a right column: model tier, effort mode, number of reviewer perspectives, verification depth, retry budget, projected and actual token cost.
-> - That gap — between the simple human intent and the expert execution — is the entire feature. Nobody has to become an expert, because the platform is the expert.
+1. A user chooses a posture: faster, cheaper, or more assured.
+2. The compiler produces explicit policy deltas against existing routing and decision contracts.
+3. Runtime receipts prove what actually happened.
+4. Feedback and telemetry calibrate future defaults.
 
-**Why now.** Keeping current with new models, new ways to call them, and new agent patterns is effectively impossible for any one person through reading alone. The triangle, combined with traced outcomes and a federated benchmark network, lets the platform itself “keep up” empirically — from real usage rather than from blog posts.
+Architectural corrections required before implementation:
 
-## 2. Locked Design Decisions
+- Reuse `ModelProfile` as the canonical per-model capability source. Do not introduce a parallel `ModelRegistryEntry` in v1.
+- Reuse `RequestContract`, `TaskRequirement`, `AgentModelConfig`, `RouteDecisionLog`, `RouteOutcome`, `AdapterRunTelemetry`, `TokenUsage`, and `DecisionInteraction` before adding schema.
+- Split "quality" into **intended assurance posture** and **realized outcome quality**. The triangle sets the first; human and verification feedback measure the second.
+- Treat "Mark / we / I" as authority scopes, not casual labels. They map to WWMD, WWWD/org, and per-decision user override. Customer decisions must not inherit platform-specific founder judgment as authority.
+- Make privacy, provenance, and receipt visibility first-class. A trusted agent control must be auditable and reversible.
+- Build the UI as an accessible control with a textual/numeric equivalent. A draggable triangle alone is not sufficient.
+
+Status: approved product direction; implementation blocked until the substrate audit and policy compiler slice are complete.
+
+---
+
+## 1. Research and Benchmarking
+
+### External Precedent
+
+The Golden Triangle borrows the executive clarity of the classic project-management triangle: time, cost, and quality/scope interact, and pressure on one dimension affects the others. PMI's own discussion of the triple constraint is useful precisely because it warns against treating the model as a deterministic formula. That supports DPF's design choice: use the triangle as an intent surface, not as literal optimization math.
+
+Trusted AI precedent points in the same direction. NIST AI RMF frames trustworthy AI as governed, measured, and managed over time. For DPF, that means every triangle-driven action needs a policy record, telemetry, and a feedback path; a visual knob is not trust by itself.
+
+Observability precedent also matters. OpenTelemetry's trace/metric/log model emphasizes correlated context across telemetry signals. DPF should follow that pattern: the preference snapshot, route decision, model attempt, token cost, feedback verdict, and benchmark record need shared correlation identifiers.
+
+Accessibility precedent is non-negotiable. WAI-ARIA slider guidance requires keyboard support and semantic state for custom controls. A triangular drag control is custom enough that it must provide an equivalent keyboard/numeric control and cannot rely on color or pointer movement alone.
+
+External references:
+
+- PMI, [The Triple Constraint](https://www.pmi.org/learning/library/triple-constraint-erroneous-useless-value-8024)
+- NIST, [AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework)
+- OpenTelemetry, [Overview](https://opentelemetry.io/docs/specs/otel/overview/)
+- W3C WAI-ARIA APG, [Slider Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/slider/)
+
+### DPF Substrate Precedent
+
+DPF already has most of the hard plumbing this design needs:
+
+- Model lifecycle and routing: [`docs/user-guide/ai-workforce/model-routing-lifecycle.md`](../user-guide/ai-workforce/model-routing-lifecycle.md)
+- Request contracts and budget classes: [`apps/web/lib/routing/request-contract.ts`](../../apps/web/lib/routing/request-contract.ts)
+- Cost-per-success ranking: [`apps/web/lib/routing/cost-ranking.ts`](../../apps/web/lib/routing/cost-ranking.ts)
+- Decision scopes and audit ledger: [`docs/user-guide/ai-workforce/decision-perspective.md`](../user-guide/ai-workforce/decision-perspective.md)
+- Cost governance and token telemetry: [`docs/superpowers/specs/2026-05-19-ai-cost-governance.md`](../superpowers/specs/2026-05-19-ai-cost-governance.md)
+- Provider/model scoring convergence: [`docs/superpowers/specs/2026-06-19-provider-model-scoring-convergence-design.md`](../superpowers/specs/2026-06-19-provider-model-scoring-convergence-design.md)
+- Situational decision weighting: [`docs/superpowers/specs/2026-06-05-situational-aware-decision-weighting-design.md`](../superpowers/specs/2026-06-05-situational-aware-decision-weighting-design.md)
+- Routing/receipt substrate review: [`docs/architecture/2026-06-14-odysseus-review-depth-pass.md`](../architecture/2026-06-14-odysseus-review-depth-pass.md)
+
+The design should therefore be written as **consolidate, compile, and surface**, not "create a new AI model-control system."
+
+---
+
+## 2. Purpose
+
+The Golden Triangle is the product-level abstraction that lets a person say:
+
+- "Get this right."
+- "I need this now."
+- "Keep this cheap."
+- "Use the sensible default."
+
+The platform converts that posture into expert settings:
+
+- model quality floor
+- `budgetClass`
+- `reasoningDepth`
+- residency and sensitivity constraints
+- review/perspective count
+- verification depth
+- retry and fallback posture
+- token/context budget
+- approval/escalation behavior
+
+The value is not the triangle graphic. The value is the translation layer and the audit loop behind it. A user should not have to know which model tier, review topology, or routing budget class is appropriate. DPF should know, show what it decided, and learn from the outcome.
+
+---
+
+## 3. Terms
+
+| Term | Meaning |
+| --- | --- |
+| Preference vector | The user's saved or per-decision posture across cost, quality, and time. Stored as weights plus preset/source metadata. |
+| Decoded policy | The concrete route, review, verification, and budget settings compiled from the preference vector. |
+| Assurance posture | What the system intends to do to improve correctness: stronger model, deeper reasoning, more review, more verification. |
+| Realized quality | What actually happened, measured through human verdicts, verification results, acceptance, retries, and downstream outcomes. |
+| Route receipt | Evidence of the actual model/provider/fallback/token path taken for a run. |
+| Benchmark record | A joined learning artifact: intended posture, decoded policy, predicted cost, actual cost/latency, model receipt, task class, and realized outcome. |
+
+---
+
+## 4. Updated Locked Decisions
 
 | # | Decision | Resolution |
-|---|----------|------------|
-| 1 | Weighting model | Soft priority weighting on the visual; a translation layer behind it encodes real-world couplings. Not rigid zero-sum. |
-| 2 | The visual | One draggable priority point inside a triangle (Cost / Quality / Time), with named zones and a live readout. |
-| 3 | Quality definition | Expertise abstraction, operationalized as agent-actionable proxies: review/perspective count, effort mode, model tier, verification/retry depth. |
-| 4 | Where it lives | All three tiers, same canonical component. “What would Mark do?” first; reusable component canonical from day one; “we” / “I” inherit it. |
-| 5 | Model registry | Open and extensible. Seeds with Claude plus other providers and capability-only profiles; users can register new models later. |
-| 6 | Cost | Made real via token traceability. Two ledgers: predicted (budget) and actual, with drift tracked between them. |
-| 7 | Feedback | Human 3-state verdict (thumbs up / mediocre / thumbs down) on outputs at all three tiers, bound to the setting that produced them. |
-| 8 | Storage | Triangle position, telemetry, feedback, and benchmark records are first-class entities in the DPDM / Digital Product Graph. |
-| 9 | Data architecture | Local-first on every install; roll up to project; opt-in anonymized aggregation to a cloud “hive mind.” |
-
-## 3. The Weighting Model: Soft, Not Zero-Sum
-
-A naive design offers three independent sliders, which lets a user cheat by maxing all three. The obvious fix is rigid zero-sum (barycentric coordinates that must sum to a constant). But **rigid zero-sum misrepresents the real decision logic**, and the LLM example shows exactly why.
-
-### 3.1 Why couplings matter
-
-Choosing a higher-tier model raises **cost** and improves **quality** — those two move *together*, not against each other. The genuine sacrifice lands on the third axis: **time**. So the relationship is not “three things that always trade off equally.” Some moves are coupled; the real trade-off is against whichever axis is left.
-
-> **The resolution**
-> - Soft weighting on the front: the triangle expresses priority / emphasis, not three hard-capped dials.
-> - A coupling / translation layer behind it: this layer knows the real couplings (e.g. “prioritize quality” → “higher tier + more perspectives” → which also implies higher cost and slower time).
-> - Result: the visual stays simple; the intelligence lives in how each position translates into actual settings.
-
-**Example.** “Cost is no object” pulls toward the coupled quality-plus-cost region: the system spends freely for fidelity. “I need this now” pulls toward time: a fast mode and a single pass, accepting lower quality and lower cost as the by-product.
-
-## 4. The Visual
-
-The natural representation is a **single draggable priority point inside an equilateral triangle** with Cost, Quality, and Time at the vertices. Position encodes emphasis. The gesture is honest about trade-offs without requiring any explanation:
-
-- Corners — “all-in” on one dimension.
-- Center — balanced / sensible default.
-- Edges — sacrificing the opposite vertex.
-
-Supporting elements:
-
-- **Live numeric readout** (e.g. Cost 50 / Quality 30 / Time 20).
-- **Named preset zones** — “Ship fast,” “Gold-plate it,” “Lean & cheap,” “Balanced.”
-- **Snap-to-preset** for quick selection, plus fine drag for nuance.
-- **Live decode panel** showing the concrete settings the current position resolves to, plus projected token cost.
-
-> **Design principle.** The visual must be designed as a canonical, reusable component from day one — even though it debuts in the “Mark” tier. Whatever criteria and visual we settle on here are reused verbatim at every layer.
-
-## 5. The Three Decision Lenses
-
-The triangle is not a single global setting. It is layered, and the same canonical component renders at each layer:
-
-| Lens | Meaning | Scope |
-|------|---------|-------|
-| What would Mark do? | Your encoded default / philosophy — a saved triangle position plus reasoning. | Platform-level investment decisions. Highest-value; built first. |
-| What would we do? | The team / org consensus position, possibly aggregated. | Shared org default; inherits the component. |
-| What should I do? | Situational; the user sets it per decision. | Per-decision override; inherits the component. |
-
-Layering: a personal default sits under an org default, which a per-decision override can supersede. As the learning loops mature, these defaults stop being hand-tuned and become **data-driven**.
-
-## 6. The Translation Layer (the heart of the feature)
-
-Each triangle position resolves to concrete, agent-actionable settings. This is what makes the triangle do work rather than be decoration. The layer reads from the open model registry so it is never hardcoded to specific models.
-
-### 6.1 Quality, operationalized
-
-Quality is the squishiest axis, so it is defined entirely by measurable proxies the agents can act on:
-
-- **Number of reviews / perspectives** before a decision proceeds (single pass vs. multi-agent cross-examination).
-- **Effort mode** (fast vs. extended / extra-effort thinking).
-- **Model selection** (low → mid → high tier, plus frontier tiers where available).
-- **Verification / citation depth** and **retry budget**.
-
-> **Two mechanisms, kept separate**
-> - Upstream (triangle, automatic): pulling toward quality sets the system to try harder — regardless of outcome. This is the input knob.
-> - Downstream (human, over time): the judgment of whether quality was achieved comes from a person via a 3-state verdict. This is the truth signal.
-> - The gap between intended quality and realized quality is the learning signal.
-
-### 6.2 The expertise translation table
-
-Representative positions. The user sees the first two columns; the platform runs the third.
-
-| User pulls toward | What they mean | What the platform actually does |
-|-------------------|----------------|----------------------------------|
-| Quality (cost no object) | “Get this right.” | Highest available tier, extended effort, 3+ reviewer perspectives, full verification, generous retry budget. Cost↑ Time↑ Quality↑ |
-| Time | “I need this now.” | Fast mode on a low/mid tier, single pass, light checks. Time↓ Cost↓ Quality↓ |
-| Cost | “Keep it cheap.” | Cheapest viable model, standard mode, minimal review. Cost↓ Quality~ Time~ |
-| Balanced (center) | “Sensible default.” | Mid tier, standard effort, 1–2 perspectives. |
-
-*Note: the bindings above are expressed as tier abstractions so they survive future model changes; the current Claude binding is shown in the registry section.*
-
-## 7. The Open Model Registry
-
-The triangle does not care which model is used — it cares about the **capability, cost, and speed profile** a model exposes. The registry makes the platform genuinely model-agnostic, in line with Open DPDM. It seeds with Claude plus other providers, *and* capability-only “future model” profiles so a model that does not exist yet can be slotted in later.
-
-### 7.1 Registry schema (per model)
-
-| Field | Description |
-|-------|-------------|
-| provider | Vendor or source (e.g. Anthropic, or a self-hosted/open-weights source). |
-| model_id / name | Identifier and human label. |
-| tier | Capability class: low / mid / high / frontier. |
-| cost_per_token_in / out | Input and output token pricing — the basis for real cost accounting. |
-| speed_class | Relative latency / throughput profile. |
-| capability_profile | Strengths (reasoning, coding, verification, long-context, tool-use). |
-| modes | Supported effort modes (fast / standard / extended). |
-| status | active / deprecated / capability-only (future, not yet bound). |
-
-### 7.2 Current binding (illustrative seed)
-
-The prototype seeds with current Claude models plus placeholders for other providers and a capability-only future profile. The binding is data, not code — when a user registers another model, it drops straight into the translation layer.
-
-| Tier | Current Claude binding | Typical use under the triangle |
-|------|------------------------|--------------------------------|
-| Low | Haiku-class | Time / cost emphasis; fast, cheap, single pass. |
-| Mid | Sonnet-class | Balanced default. |
-| High | Opus-class | Quality emphasis; extended effort. |
-| Frontier | Mythos-class (where available) | Maximum quality, cost no object. |
-| (other) | Other providers / open-weights | User-registered; profile-matched. |
-| (future) | Capability-only profile | Reserved slot; binds when a real model is registered. |
-
-## 8. Token & Cost Traceability (foundational dependency)
-
-**The cost vertex has been “light at best” because there has been no real token accounting underneath.** For the triangle to be honest, cost must be measured, attributed, and traced. Without this, “pull toward cost” is just a vibe. This makes traceability a foundational dependency of the feature, not a nice-to-have.
-
-### 8.1 What is captured, per decision / agent task
-
-- Tokens in and out, per model call.
-- Cost = tokens × registry price (in/out), per call.
-- Attribution: which agent, which task, which decision, which Digital Product.
-- The triangle position that produced the call.
-- Roll-up: call → task → decision → agent → Digital Product → project.
-
-### 8.2 Two ledgers and the drift between them
-
-| Ledger | Source | Role |
-|--------|--------|------|
-| Predicted (budget) | Effort prediction up front — extend the existing Build Studio mechanism and widen it so any activity gets an estimate. | Budgeting and the cost projection shown before running. |
-| Actual | Real traced token spend after the work runs. | Source of truth; makes cost comparison real. |
-| Drift | Predicted minus actual. | A signal in its own right — tells you how good your effort predictions are and improves them over time. |
-
-> **Design instruction.** Do not invent a new estimator. Extend Build Studio’s existing effort-prediction so it covers all activities, and pair every prediction with the corresponding actual so drift can be computed and learned from.
-
-## 9. The Feedback Hook
-
-Every decision / output at all three tiers carries a lightweight **3-state human verdict: thumbs up / mediocre / thumbs down**. This is the realized-quality truth signal. It binds back to the triangle position, the model used, and the traced cost.
-
-The verdict is captured by people over time as real work is done — no LLM-as-judge is required for v1 (it can be added later as an optional, human-overridable assist). The hook must be unobtrusive enough that it is actually used.
-
-## 10. The Benchmark Record
-
-One object joins everything. It is the unit of learning and the basis for model comparison.
-
-| Field group | Contents |
-|-------------|----------|
-| Intended quality | Triangle position; decoded settings (perspectives, effort mode, tier, verification depth). |
-| Model & predicted cost | Model used (from registry); predicted token cost (Build Studio-style estimate). |
-| Actual cost | Traced tokens in/out; actual cost; drift vs. predicted. |
-| Realized quality | Human 3-state verdict; timestamp; rater context (tier: Mark / we / I). |
-| Classification | Task-class label (shared taxonomy) for comparability across runs and installs. |
-
-> **The whole loop in one object.** Intended quality → model + predicted cost → actual cost → realized quality. This record powers post-hoc model comparison (run the same task N ways, compare cost vs. realized quality) and feeds learned defaults back up to the three lenses.
-
-## 11. The Two Learning Loops
-
-Both loops run on the same benchmark record and both feed future “what would Mark / we / I do” defaults with real history rather than guesses.
-
-| Loop | Compares | Improves |
-|------|----------|----------|
-| Quality loop | Intended quality (triangle) vs. realized quality (human 3-state verdict). | Quality defaults — “we set it to high quality; did we get it?” |
-| Cost loop | Predicted cost (Build Studio estimate) vs. actual cost (traced tokens). | Effort-prediction accuracy; the budget ledger. |
-
-**Closing the largest loop:** learned defaults stop being hand-tuned or even single-user-learned. A new user can start with defaults that already encode hard-won experience — which is the thesis at full scale.
-
-## 12. Federated Data Architecture (local → project → cloud)
-
-This is what elevates the feature from a smart knob to a platform asset: a **federated benchmark network** — local-first collection on every install, with opt-in aggregation to a shared layer that becomes collective intelligence about what settings actually work. The “reading and reading and reading” problem is solved by letting the network be the thing that keeps up.
-
-### 12.1 The three levels
-
-| Level | What lives here | Question it answers |
-|-------|-----------------|---------------------|
-| Local (every install) | Benchmark records live first on the individual environment. Works fully offline; the user owns their data. | “What works for me, on my machine?” |
-| Project | Records roll up to a Digital Product / project view — the team’s own aggregate. | “For this product, what settings deliver value?” |
-| Cloud (hive mind) | Opt-in, anonymized contribution to a shared pool across all installs. | “Across everyone, for this task class, which model/setting wins on cost for equal quality?” |
-
-### 12.2 The three things this architecture lives or dies on
-
-1. **Privacy — what actually leaves the box.** The contribution payload is metadata, not content: the settings, the model, token counts, the 3-state verdict, and a task-class label — never prompts or outputs. The payload is specified explicitly so it is auditable. Opt-in, per-tier, revocable.
-2. **Comparability — a shared task taxonomy.** Aggregation is only meaningful if a “decision” on one install is comparable to one on another. A lightweight task-class classification scheme buckets records correctly.
-3. **Trust of the aggregate — weighting / reputation.** Hive data can be gamed or skewed. Weighting and reputation considerations ensure a single noisy install cannot poison shared defaults.
-
-> **The contribution payload (explicit)**
-> - INCLUDED: triangle position, decoded settings, model id + tier, tokens in/out, predicted & actual cost, drift, 3-state verdict, task-class label, coarse timestamp.
-> - EXCLUDED: prompts, outputs, file contents, identifiable project or customer data, free-text.
-> - CONTROL: opt-in per tier (Mark / we / I), revocable, with a local preview of exactly what would be sent.
-
-## 13. Data Model in the DPDM / Digital Product Graph
-
-All of the following are first-class entities so they are auditable and queryable:
-
-- **TrianglePosition** — attached to a Digital Product (default posture) and to individual decisions (override).
-- **ModelRegistryEntry** — the open, user-extensible model profiles.
-- **CostLedgerEntry** — predicted and actual, with drift, attributed up the roll-up chain.
-- **FeedbackRecord** — the 3-state verdict bound to its decision.
-- **BenchmarkRecord** — the joined object of Section 10.
-- **TaskClass** — the shared taxonomy node enabling comparability.
-
-Each carries the triangle position as a queryable attribute, so the platform can answer questions like “show every quality-weighted decision on this product and its realized verdicts and actual cost.”
-
-## 14. Reuse Contract
-
-The same canonical component and the same criteria are consumed everywhere:
-
-- **Three lenses** (Mark / we / I) render the identical triangle component; only the default source and override scope differ.
-- **17-agent topology** reads the active triangle to bias behavior — review depth, model choice, effort mode, verification, retry budget.
-- **Per Digital Product** carries a default triangle reflecting its strategic posture.
-- **Per decision / task** can override, and every run writes a benchmark record.
-
-## 15. Build Order
-
-1. **Token & cost traceability** — foundational dependency; the cost vertex is meaningless without it. Extend Build Studio for predictions; add actual-token tracing.
-2. **Canonical triangle component + translation layer** driven by the open registry.
-3. **“What would Mark do?” tier first** — the highest-value investment decisions.
-4. **Feedback hook + benchmark record** — close the per-install loop.
-5. **Project roll-up + comparison view** — run-the-same-task-N-ways.
-6. **“we” / “I” tiers** inherit the component.
-7. **Federated cloud (hive mind)** — opt-in, with privacy / comparability / trust specs from Section 12.
-
-## 16. The Interactive Prototype (for review)
-
-To be built alongside this spec once signed off. It will demonstrate:
-
-- A draggable triangle (Cost / Quality / Time) with soft priority, named zones, and a live readout.
-- Binding to a seeded multi-provider registry — Claude plus other providers plus a capability-only future-model example.
-- A live decode panel: the concrete settings the current position resolves to.
-- Predicted-vs-actual cost display, with drift shown.
-- The 3-state feedback control (thumbs up / mediocre / thumbs down).
-- A comparison view: the same task across two or more models, cost vs. realized quality side by side.
-
-## 17. Open Questions for Review
-
-1. **Preset zones** — do the four named presets (Ship fast / Gold-plate / Lean & cheap / Balanced) match how you think, or would you name them differently?
-2. **Task taxonomy** — how granular should the shared task-class scheme be? Coarse buckets aggregate sooner; fine buckets compare more precisely.
-3. **Hive-mind weighting** — should contribution and trust be reputation-weighted from day one, or start equal-weight and add reputation later?
-4. **Frontier tier** — how should the registry handle access-restricted tiers (e.g. where a frontier model is temporarily unavailable) so the translation layer degrades gracefully?
-5. **Effort-prediction reuse** — confirm the Build Studio estimator is the right base to extend, and identify the activities it does not currently cover.
+| --- | --- | --- |
+| 1 | Visual primitive | One draggable point in a triangle remains the primary metaphor, backed by keyboard/numeric controls. |
+| 2 | Weighting model | Soft preference weighting. Do not claim literal zero-sum optimization. The compiler owns real-world couplings. |
+| 3 | Quality | Split into intended assurance posture and realized quality. The triangle only sets intended assurance. |
+| 4 | Routing substrate | Compile to existing routing concepts first: `RequestContract`, `TaskRequirement`, `AgentModelConfig`, `ModelProfile`, and route telemetry. |
+| 5 | Model registry | No new `ModelRegistryEntry` in v1. `ModelProfile` is canonical; provider-level scores are derived rollups. |
+| 6 | Cost | Use real telemetry: `TokenUsage`, `AdapterRunTelemetry`, `RouteOutcome.costUsd`, predicted vs actual drift, and eventually capacity/rate-limit pools. |
+| 7 | Feedback | Human feedback is a lightweight 3-state verdict, but it is only one signal. Also capture acceptance, verification, retry, and latency outcomes. |
+| 8 | Authority scopes | WWMD/platform, WWWD/org, WSID/profession, and per-decision user override must be explicit and auditable. |
+| 9 | Federated learning | Local-first. Hive contribution is opt-in, metadata-only, thresholded, revocable, and reputation-weighted. |
+| 10 | Implementation order | Substrate audit and compiler first; UI second; learning/hive last. |
 
 ---
 
-*End of draft. The prototype is held until sign-off on this spec.*
+## 5. Authority Scopes
+
+The v0.1 "Mark / we / I" framing is directionally right but needs governance language.
+
+| Scope | User-facing idea | Governing source | Default role |
+| --- | --- | --- | --- |
+| WWMD / platform | "What would Mark do?" | Founder/platform kernel and approved DPF decisions | Platform-development default and first implementation slice |
+| WWWD / organization | "What would we do?" | Organization profile, policies, and prior decisions | Customer/org default |
+| WSID / profession | "What should a competent professional do?" | Role/profession corpus | Craft floor for specialist coworkers |
+| Per-decision override | "What do I need here?" | User choice for this decision | Local override within policy limits |
+
+Precedence:
+
+1. Hard safety, residency, tool-grant, and compliance constraints always win.
+2. Task requirements set the minimum floor.
+3. Scope defaults apply next: platform, org, profession, or role.
+4. The triangle can raise assurance, lower cost, or lower latency only within those bounds.
+5. Per-decision override can supersede a default, but it cannot bypass a hard policy.
+
+Critical boundary: customer business decisions must not inherit WWMD as authority by default. DPF product doctrine can be advisory; the customer's WWWD profile governs the customer's business context.
+
+---
+
+## 6. Interaction Model and UI Contract
+
+### Primary Control
+
+The canonical control is a triangular priority surface with vertices:
+
+- Cost
+- Quality
+- Time
+
+The user moves one point. The UI shows:
+
+- active preset name
+- numeric weights
+- decoded policy summary
+- projected token/cost/latency envelope when available
+- whether hard policy limits changed the requested posture
+
+Recommended preset names:
+
+| Preset | Meaning | Reason |
+| --- | --- | --- |
+| Fast | Minimize elapsed time | Clear and non-technical |
+| Frugal | Minimize spend | Better than "cheap" for a trusted product |
+| Assured | Maximize confidence | Better than "gold-plate"; emphasizes trust, not indulgence |
+| Balanced | Sensible default | Neutral center |
+
+### Accessibility and Responsiveness
+
+The triangle may be implemented as SVG/canvas or a positioned HTML control, but the data model must be ordinary state:
+
+```ts
+type GoldenTrianglePreference = {
+  costWeight: number;
+  qualityWeight: number;
+  timeWeight: number;
+  preset: "fast" | "frugal" | "assured" | "balanced" | "custom";
+};
+```
+
+The component must provide:
+
+- keyboard controls for each axis or preset
+- numeric inputs/steppers that can fully reproduce any triangle state
+- visible focus states
+- screen-reader labels for current weights and decoded policy
+- touch target sizes suitable for mobile
+- no color-only encoding
+- reduced-motion behavior
+- stable dimensions so dragging, labels, and dynamic text do not resize the layout
+
+Design system constraints:
+
+- Use DPF theme tokens and report-kit primitives where applicable.
+- Keep the surface quiet and operational, not a marketing hero.
+- Do not place cards inside cards.
+- Avoid decorative gradients/orbs and one-hue palettes.
+- The first implementation should be usable on the first screen, not hidden behind explanatory copy.
+
+---
+
+## 7. Translation Compiler
+
+The compiler is the heart of the feature.
+
+```text
+preference vector
+  + authority scope
+  + task class
+  + sensitivity/residency/tool constraints
+  + available model health/cost/capability
+  + budget and latency envelope
+  -> decoded policy
+  -> route/review/verification execution
+  -> receipt + telemetry + benchmark
+```
+
+### Inputs
+
+- preference vector and preset
+- active authority scope and profile version
+- task type / task class
+- route context: sensitivity, residency, interaction mode, tool needs
+- available model profiles, provider health, pricing, and capability probes
+- current budget/capacity state
+- user and organization policy limits
+
+### Outputs
+
+| Output | Existing destination or likely home |
+| --- | --- |
+| `budgetClass` | `RequestContract.budgetClass` |
+| `reasoningDepth` | `RequestContract.reasoningDepth` |
+| minimum quality tier / dimensions | `TaskRequirement`, `AgentModelConfig`, `minimumDimensions` |
+| residency and sensitivity | `RequestContract` route context |
+| max latency | `RequestContract.maxLatencyMs` |
+| review/perspective count | Build Studio / decision workflow policy, not raw routing |
+| verification depth | Workflow policy / gate configuration |
+| retry/fallback budget | Routing policy and fallback chain |
+| token/context budget | Cost governance and request contract estimates |
+| escalation/approval policy | Decision Perspective / HITL policy |
+
+### Representative Compile Table
+
+| User posture | Decoded intent | Compiler behavior |
+| --- | --- | --- |
+| Assured | "Get this right." | `quality_first`, high reasoning, stronger tier floor, more context, multi-perspective review, deeper verification, generous retry, explicit receipt. Cost and time may rise. |
+| Fast | "I need this now." | Lower latency target, minimal/low reasoning when safe, single pass, shallow verification, tight retries, fastest eligible endpoint. May reduce assurance. |
+| Frugal | "Spend carefully." | `minimize_cost`, smallest capable model, tighter token/context budget, avoid frontier unless policy requires it, prefer cached/local paths when allowed. May increase time if local/cheap routes are slower. |
+| Balanced | "Use the sensible default." | Existing task requirement and agent defaults, with modest review/verification. |
+
+### Coupling Rules
+
+The triangle is not literal zero-sum math:
+
+- Higher quality often increases cost and time together.
+- Lower cost may increase time if the cheapest eligible endpoint is slower.
+- Lower time may lower cost by shortening work, but may increase downstream risk.
+- Hard policy can override all three axes.
+
+The UI must say when policy changed the requested posture. Example: "Frugal requested; restricted data requires local-only routing, so the compiler selected the best local eligible model and raised latency estimate."
+
+### Fail-Closed Behavior
+
+If no route satisfies the decoded policy and hard constraints, the system must not silently choose a weaker unsafe route. It should:
+
+1. explain the conflict in operator-readable language
+2. present the nearest valid alternatives
+3. request approval if an escalation path exists
+4. defer when no governed path exists
+
+---
+
+## 8. Data Model and Single Source of Truth
+
+The v0.1 entity list is directionally useful but over-additive. v1 should add as little schema as possible.
+
+| Concept | Recommendation |
+| --- | --- |
+| Saved triangle defaults | Add or extend a small preference profile table only after auditing existing profile/settings tables. Provisional name: `DecisionPreferenceProfile`. |
+| Per-run triangle position | Store an immutable preference snapshot on the decision/run receipt path. Prefer linking to `DecisionInteraction` or route receipt over a detached `TrianglePosition` table. |
+| Model profiles | Reuse `ModelProfile`. It is the canonical per-model scoring source. Provider scores are derived. |
+| Provider metadata | Reuse `ModelProvider`, discovered models, capability profiles, and provider health. |
+| Task taxonomy | Start with existing `taskType` / `TaskRequirement`. Introduce a new `TaskClass` only if the existing taxonomy cannot support benchmark aggregation. |
+| Cost ledger | Reuse `TokenUsage`, `RouteOutcome`, `AdapterRunTelemetry`, and Build Studio cost rollups. Add fields only where the cost-governance spec already identifies a gap. |
+| Feedback | Reuse `AdapterRunTelemetry.userAccepted` for per-turn acceptance where suitable; add decision-level verdict only where existing feedback cannot represent it. |
+| Benchmark record | First implement as a read model/view joining existing decision, route, telemetry, and feedback rows. Materialize only when query cost or hive contribution requires it. |
+
+Minimum benchmark fields:
+
+- preference snapshot
+- decoded policy snapshot
+- active authority scope and profile version
+- task type/class
+- selected provider/model and fallback chain
+- predicted input/output tokens and cost
+- actual input/output/cache tokens, cost, and latency
+- verification result
+- human verdict
+- accepted/rejected state
+- retry/fallback count
+- timestamp and coarse environment metadata
+
+Do not store prompts, outputs, file contents, customer identifiers, or free text in benchmark rows intended for hive contribution.
+
+---
+
+## 9. Benchmarking and Learning Loops
+
+The benchmark record powers three loops:
+
+| Loop | Compares | Improves |
+| --- | --- | --- |
+| Quality calibration | Intended assurance vs realized quality | Preset defaults, review depth, verification policy |
+| Cost calibration | Predicted cost vs actual cost | Token estimates, context budgets, cost projections |
+| Latency calibration | Requested time posture vs actual elapsed time | Fast/frugal route choices and fallback ordering |
+
+The model-scoring convergence rule is binding: model capability calibration writes to `ModelProfile`, not provider-level score columns. The provider grid may show rollups, but the learning loop must update the model rows the router actually reads.
+
+Human verdicts should remain lightweight:
+
+- positive
+- mixed
+- negative
+
+But the platform should not overfit to satisfaction alone. "The answer sounded good" is not the same as "the answer was correct." Weight realized quality with:
+
+- human verdict
+- task completion / acceptance
+- verification result
+- retry success
+- post-hoc correction or rework
+- downstream incident/defect linkage where available
+
+No LLM-as-judge should be a v1 truth source. It may be added later as an assistive signal, always subordinate to human and deterministic evidence.
+
+---
+
+## 10. Federated Hive Architecture
+
+The hive is strategically valuable, but it is also the highest-risk part of the design. It should ship last.
+
+### Local First
+
+Every install stores its own benchmark history and can learn local defaults without cloud contribution. Local records are the source of truth.
+
+### Project Rollup
+
+Project-level aggregation answers: "For this product and team, what posture works best for this class of work?"
+
+### Cloud Hive
+
+Cloud aggregation answers: "Across opt-in installs, for this task class and sensitivity bucket, which route gives the best outcome for a comparable cost/time posture?"
+
+Contribution contract:
+
+| Included | Excluded |
+| --- | --- |
+| preference weights, decoded policy, task class, model tier/id, provider class, token counts, cost, latency, retry count, coarse verdict, coarse timestamp | prompts, outputs, file contents, customer/project names, user names, free text, attachments, exact timestamps, business identifiers |
+
+Trust controls:
+
+- opt-in by organization and scope
+- local preview before contribution
+- revocation for future contribution
+- cohort thresholds before aggregate defaults are shown
+- outlier suppression
+- reputation weighting over time
+- signed schema version so old payloads do not corrupt current learning
+
+Anti-pattern rejected: uploading raw traces and trying to anonymize them later.
+
+---
+
+## 11. UI Surfaces
+
+Recommended first surfaces:
+
+1. **Decision Perspective / WWMD default editor**: the first saved Golden Triangle profile, scoped to platform decisions.
+2. **Build Studio decision review panel**: show the active preference, decoded policy, and receipt for an actual decision.
+3. **Platform > AI evidence view**: aggregate benchmark records, cost drift, and outcome comparisons.
+
+Do not start with a global model-picker UI. The user should set intent and see receipts. Admins can still manage model/provider substrate in the existing Platform > AI provider and routing surfaces.
+
+The decode panel should have two layers:
+
+- Plain user view: "Assured mode: stronger model, deeper review, higher projected cost."
+- Operator detail: exact `budgetClass`, `reasoningDepth`, tier floor, review count, verification depth, retry budget, model candidates, and policy overrides.
+
+This preserves trust without making every user read infrastructure.
+
+---
+
+## 12. Risks and Issues
+
+| Risk | Why it matters | Mitigation |
+| --- | --- | --- |
+| Illusion of control | A nice triangle can hide opaque routing choices. | Always show decoded policy and actual receipt. |
+| Duplicate substrate | A new model registry or ledger would fork routing truth. | Reuse `ModelProfile`, route telemetry, and token ledgers first. |
+| Quality theater | Users may equate "more expensive" with "correct." | Separate intended assurance from realized quality and verification. |
+| Authority confusion | Mark/we/I can blur platform, customer, and user decision scopes. | Use WWMD/WWWD/WSID/per-decision scope records and profile versions. |
+| Feedback sparsity | Few verdicts can miscalibrate defaults. | Blend verdicts with verification, acceptance, retry, and rework signals. |
+| Hive privacy leakage | Rare task/model/time combinations can identify work even without text. | Metadata minimization, coarse buckets, thresholds, and opt-in preview. |
+| Hive poisoning | Bad or adversarial installs can skew defaults. | Reputation weighting, outlier suppression, and delayed trust. |
+| Cost incompleteness | Token cost is not the whole cost: reviewer labor, latency, subscriptions, and rate limits matter. | Start with tokens, then add capacity/rate-limit and review-cost accounting. |
+| Accessibility gap | Drag-only triangle excludes keyboard/screen-reader users. | Numeric/preset equivalent is required, not optional. |
+| Silent policy override | Hard constraints may change the user's requested posture invisibly. | Explain policy adjustments inline and in receipts. |
+
+---
+
+## 13. Build Order
+
+### Slice 0: Substrate Audit and Refactor Budget
+
+Use the requested 20 percent refactor budget here.
+
+- Verify exact existing fields and gaps across `ModelProfile`, `AgentModelConfig`, `RequestContract`, `TaskRequirement`, route receipts, telemetry, and decision records.
+- Confirm whether saved defaults need a new table or can extend an existing profile/settings model.
+- Confirm whether benchmark records should be materialized or initially projected as a read model.
+- Remove or avoid any new entity that duplicates existing routing/cost truth.
+- Define stable TypeScript types for preference input and decoded policy output.
+
+Exit criterion: a one-page substrate delta naming every schema addition and every reused table.
+
+### Slice 1: Pure Policy Compiler
+
+Build `compileGoldenTrianglePolicy()` as a pure, tested function:
+
+- input: preference vector, task class, authority scope, policy constraints, model availability summary
+- output: decoded policy, policy adjustments, explanation, and blocked/defer state
+
+No UI and no database writes until the compiler is deterministic and covered by unit tests.
+
+### Slice 2: Accessible Canonical Component
+
+Build the reusable component with:
+
+- triangle pointer
+- preset control
+- numeric equivalent
+- decode panel
+- mobile layout
+- keyboard and screen-reader support
+
+### Slice 3: Receipt and Telemetry Join
+
+Wire a real run:
+
+preference snapshot -> decoded policy -> route decision -> model attempt -> token/cost/latency telemetry -> feedback.
+
+### Slice 4: WWMD Default Editor
+
+Ship the first saved profile under WWMD/platform scope. Keep it admin/operator-facing.
+
+### Slice 5: Project and Org Defaults
+
+Add WWWD/org and per-product defaults once the WWMD path proves stable.
+
+### Slice 6: Learning Defaults
+
+Start recommending default adjustments from local benchmark history, with human approval.
+
+### Slice 7: Hive Contribution
+
+Only after local/project learning is useful and the privacy contract is implemented.
+
+---
+
+## 14. Acceptance Criteria
+
+The design is ready for implementation when:
+
+- The spec no longer proposes a v1 `ModelRegistryEntry`.
+- Every decoded policy field maps to an existing field or a named new field.
+- The compiler has deterministic examples for Fast, Frugal, Assured, Balanced, and at least three custom positions.
+- Hard policies can override the triangle and produce an explanation.
+- A keyboard-only user can operate the control.
+- The UI shows both requested posture and actual receipt.
+- A benchmark row/view can join intended posture to actual model/cost/outcome.
+- Hive contribution has an explicit payload schema and exclusion list.
+- Tests cover policy compile behavior, not only component rendering.
+
+---
+
+## 15. Open Decisions
+
+1. Should the saved default table be new (`DecisionPreferenceProfile`) or an extension of an existing profile/settings model?
+2. Is the existing `taskType` / `TaskRequirement` taxonomy sufficient for benchmarking, or do we need a separate task-class taxonomy?
+3. Should "cost" v1 mean token/provider cost only, or include review labor and rate-limit capacity from day one?
+4. Which policy fields belong inside `RequestContract` and which belong in workflow/assurance policy outside routing?
+5. Should per-decision overrides be available to all users, or only roles with specific tool/authority grants?
+6. How should the TAK draft standard name and validate the preference snapshot, decoded policy, receipt, and feedback objects?
+7. What is the minimum cohort size before hive-derived defaults can influence a local install?
+
+---
+
+## 16. Prototype Guidance
+
+Build a prototype only after Slice 0 and Slice 1. The prototype should demonstrate:
+
+- the canonical triangle component
+- preset snapping and custom drag
+- numeric/keyboard equivalent
+- live decoded policy
+- policy override explanations
+- projected vs actual cost/latency placeholders
+- 3-state feedback capture
+- receipt display for the selected route
+
+The prototype should not directly influence production routing until receipt and telemetry joins are wired.
+
+---
+
+## 17. Final Design Principle
+
+The Golden Triangle earns trust only when the user can answer four questions:
+
+1. What did I ask the agent system to optimize for?
+2. What did the platform actually configure because of that?
+3. What did it actually run and cost?
+4. Did the result work?
+
+If any one of those is missing, the feature is decoration. If all four are present, it becomes a real trusted-agent control.
