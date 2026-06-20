@@ -12,6 +12,7 @@ import { DashboardTile } from "@/src/components/DashboardTile";
 import { useWorkspaceStore } from "@/src/features/workspace/workspace.store";
 import { useAppConfigStore } from "@/src/lib/appConfig";
 import { CustomerInvoicesPanel } from "@/src/features/customer-invoices/CustomerInvoicesPanel";
+import { CustomerVisitsPanel } from "@/src/features/customer-visits/CustomerVisitsPanel";
 import type { ActivityItem, DashboardTile as TileType } from "@dpf/types";
 
 function TilesGrid({ tiles }: { tiles: TileType[] }) {
@@ -73,9 +74,20 @@ export default function HomeScreen() {
 
   if (isCustomer) {
     return (
-      <View style={styles.screen} testID="customer-home">
-        <CustomerInvoicesPanel />
-      </View>
+      <FlatList
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        testID="customer-home"
+        data={[]}
+        keyExtractor={() => ""}
+        renderItem={() => null}
+        ListHeaderComponent={
+          <View>
+            <CustomerInvoicesPanel />
+            <CustomerVisitsPanel />
+          </View>
+        }
+      />
     );
   }
 
