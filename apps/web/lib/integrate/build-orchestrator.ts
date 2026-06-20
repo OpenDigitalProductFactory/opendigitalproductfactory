@@ -1720,6 +1720,39 @@ export async function runBuildOrchestrator(params: {
     })),
   };
 
+  // BI-9EA09823 — best-effort, additive: a build that failed (a failed task or a
+  // BLOCKED/NEEDS_CONTEXT task that never advanced to review) lands a
+  // fingerprinted corrective BI. Keyed on the sorted role:title of the failing
+  // tasks — NOT buildId — so the same feature failing the same way increments
+  // occurrenceCount instead of spamming a new item on every rebuild.
+  const blockingTasks = allResults.filter(
+    r => !r.success || r.outcome === "BLOCKED" || r.outcome === "NEEDS_CONTEXT",
+  );
+  if (blockingTasks.length > 0) {
+    try {
+      const { captureCorrectiveFailureBI } = await import("@/lib/backlog/capture-corrective-bi");
+      const signature = blockingTasks
+        .map(r => `${r.task.specialist}:${r.task.title}`)
+        .sort()
+        .join("|");
+      await captureCorrectiveFailureBI({
+        source: "build-failure",
+        signature,
+        title: `[build-failure] ${blockingTasks.length} task(s) failed: ${blockingTasks[0]!.task.title}`.slice(0, 200),
+        body: [
+          `buildId: ${buildId}`,
+          `failedTasks: ${failedTasks}`,
+          ``,
+          ...blockingTasks.map(
+            r => `- [${r.outcome}] ${r.task.specialist} / ${r.task.title}: ${sanitizeSpecialistOutput(r.result.content.slice(0, 200))}`,
+          ),
+        ].join("\n"),
+      });
+    } catch (err) {
+      console.error("[orchestrator] corrective-BI capture failed:", err);
+    }
+  }
+
   return {
     content: formatBuildCompleteMessage(summary),
     totalTasks,
