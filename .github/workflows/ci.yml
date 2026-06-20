@@ -194,6 +194,38 @@ jobs:
       - name: Run guard
         run: node scripts/check-no-raw-event-source.mjs
 
+  decision-baseline:
+    name: Decision Baseline
+    runs-on: ubuntu-latest
+    # PR #2157. A new/edited founder-kernel principle loads into EVERY
+    # principle_decide call (commandments at weight 1.0), so its dimension vector
+    # can drag a canonical decision below its margin floor. The authoritative test
+    # (apps/web/lib/decision/golden-decisions.test.ts) runs under vitest deep in a
+    # web shard and first FAILED #2157 only at merge_group, after hours of queue
+    # churn. This job runs the same check vitest-free against the MERGE-STATE
+    # corpus (merge latest main first), so a baseline regression shows as a named
+    # red check on the PR, not three queue cycles later. Mirrors the pre-commit
+    # decision-baseline guard; merge_group stays covered by the canonical test.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Merge latest main (score merge-state, not the stale branch)
+        run: |
+          git config user.email "dpf-ci@users.noreply.github.com"
+          git config user.name "dpf-ci"
+          git fetch --no-tags --quiet origin main
+          git merge --no-edit origin/main || { echo "::error::This PR conflicts with main — merge/rebase main and re-push."; exit 1; }
+      - name: Decision-baseline guard (golden-decisions, vitest-free)
+        run: node scripts/check-golden-decisions.mjs
+      - name: Drift-guard — guard mirrors the canonical golden-decisions test
+        run: node --test scripts/check-golden-decisions.test.mjs
+
   ux-fit-gate:
     name: UX-Fit Gate
     runs-on: ubuntu-latest
