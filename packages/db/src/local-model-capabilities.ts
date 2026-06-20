@@ -75,7 +75,10 @@ export function detectLocalModelFamily(modelId: string): LocalModelFamily {
   const id = normalizeLocalModelId(modelId);
   // Embedding first — "nomic-embed" etc. must never fall through to a chat tier.
   if (/embed|nomic|bge|e5-|gte-/.test(id)) return "embedding";
-  if (/qwen.*coder|coder.*qwen/.test(id)) return "qwen-coder";
+  // "qwen" + "coder" in either order. Plain substring tests rather than
+  // `qwen.*coder|coder.*qwen`: the `.*`-between-literals form backtracks
+  // polynomially on adversarial ids (CodeQL js/polynomial-redos).
+  if (id.includes("qwen") && id.includes("coder")) return "qwen-coder";
   if (/qwen/.test(id)) return "qwen";
   if (/gemma/.test(id)) return "gemma";
   if (/magistral/.test(id)) return "magistral";
@@ -116,7 +119,10 @@ export function detectLocalModelVision(modelId: string): boolean {
 export function detectLocalModelAudio(modelId: string): boolean {
   const id = normalizeLocalModelId(modelId);
   if (/embed|nomic|bge|e5-|gte-/.test(id)) return false;
-  return /gemma4|gemma-4|gemma3n|gemma-3n|whisper|qwen.*omni|omni|[-/]audio\b|voxtral|ultravox/.test(
+  // The bare `omni` alternative already matches Qwen-Omni ("qwen…-omni…"); a
+  // separate `qwen.*omni` would only add polynomial backtracking with no extra
+  // coverage (CodeQL js/polynomial-redos), so it is intentionally omitted.
+  return /gemma4|gemma-4|gemma3n|gemma-3n|whisper|omni|[-/]audio\b|voxtral|ultravox/.test(
     id,
   );
 }
