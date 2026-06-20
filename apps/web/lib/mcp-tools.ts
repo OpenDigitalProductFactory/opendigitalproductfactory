@@ -9118,26 +9118,58 @@ export async function executeTool(
           err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
       }
 
-      // Failed review → structured recovery instructions, no auto-advance
+      // Failed review → revise UNLESS the policy gate makes a passing plan
+      // review optional for this kind/size. For doc + chore-small builds the
+      // gate (build-process-matrix) is `buildPlan-present` only — it does NOT
+      // require `planReview-passed` — so a failed plan review must be ADVISORY,
+      // not a hard loop. checkPhaseGate is the source of truth (the same
+      // gate-driven principle #2085 applied to verification). Without this a
+      // strict reviewer rejecting a trivial-but-correct plan (e.g. "verify the
+      // function exists at line N", which it does) loops the build forever at
+      // plan-review and burns review quota. Only return revise-and-resubmit when
+      // the gate truly requires the review to pass.
       if (review.decision === "fail") {
-        const criticalIssues = review.issues.filter((i: { severity: string }) => i.severity === "critical");
-        const issueList = criticalIssues.length > 0
-          ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
-          : review.summary;
-        // BI-4396EFEC (D38) — Include the iteration trajectory in the
-        // agent-facing message so the implementer model can see when its
-        // revisions are trading one set of issues for another instead of
-        // converging. The oscillating signal recommends scope-split rather
-        // than another iteration.
-        const iter = review.iteration;
-        const trajectoryNote = iter?.prior
-          ? ` (Round ${iter.round}: ${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new${iter.oscillating ? " — issues are not net-decreasing across rounds; consider proposing a scope split rather than another revision." : ""}.)`
-          : "";
-        return {
-          success: true,
-          message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.${trajectoryNote}${archAdvisoryNote}`,
-          data: { review, blocked: true, action: "revise_and_resubmit" },
-        };
+        let planReviewIsGating = true;
+        try {
+          const { checkPhaseGate: cgFail, normalizeHappyPathState: nhpsFail } = await import("@/lib/feature-build-types");
+          const fgBuild = await prisma.featureBuild.findUnique({
+            where: { buildId },
+            select: { phase: true, plan: true, buildPlan: true, kind: true },
+          });
+          if (fgBuild?.phase === "plan") {
+            const fgPlan = (fgBuild.plan as Record<string, unknown> | null) ?? {};
+            const fgGate = cgFail("plan", "build", {
+              kind: fgBuild.kind,
+              processSize: (fgPlan.processSize as string | undefined) ?? "medium",
+              buildPlan: fgBuild.buildPlan,
+              planReview: review, // the FAILED review — the gate decides if it matters
+              happyPathState: nhpsFail(fgPlan.happyPathState),
+            });
+            planReviewIsGating = !fgGate.allowed;
+          }
+        } catch {
+          planReviewIsGating = true; // fail safe: keep the stricter loop on any gate-read error
+        }
+        if (planReviewIsGating) {
+          const criticalIssues = review.issues.filter((i: { severity: string }) => i.severity === "critical");
+          const issueList = criticalIssues.length > 0
+            ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
+            : review.summary;
+          // BI-4396EFEC (D38) — iteration trajectory so the implementer model
+          // sees when revisions trade one issue set for another vs converging.
+          const iter = review.iteration;
+          const trajectoryNote = iter?.prior
+            ? ` (Round ${iter.round}: ${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new${iter.oscillating ? " — issues are not net-decreasing across rounds; consider proposing a scope split rather than another revision." : ""}.)`
+            : "";
+          return {
+            success: true,
+            message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.${trajectoryNote}${archAdvisoryNote}`,
+            data: { review, blocked: true, action: "revise_and_resubmit" },
+          };
+        }
+        // Gate does not require a passing plan review for this kind/size — record
+        // the failure as advisory and fall through to the gate-driven advance.
+        logBuildActivity(buildId, "reviewBuildPlan", `Plan review failed but is ADVISORY for this kind/size (phase gate does not require planReview-passed) — advancing on the gate; issues recorded for visibility.`);
       }
 
       // Passed review → auto-advance if gate is satisfied.
