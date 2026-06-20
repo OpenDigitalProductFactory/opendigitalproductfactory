@@ -28,10 +28,17 @@ vi.mock("@/lib/mcp-tools", () => ({
   executeTool: mockExecuteTool,
 }));
 
+const { mockEscalate } = vi.hoisted(() => ({ mockEscalate: vi.fn() }));
+vi.mock("@/lib/build/escalate-build-to-human", () => ({
+  escalateBuildToHuman: mockEscalate,
+  SELF_FIX_CLASS: { AUTO_RECOVERABLE: "auto-recoverable", NEEDS_HUMAN: "needs-human", NEEDS_EXTERNAL_CAPABILITY: "needs-external-capability" },
+}));
+
 import {
   dispatchIdeateForApprovedBuild,
   buildNeedsIdeateDispatch,
   dispatchApprovedIdeateBuilds,
+  dispatchDesignReviewFixLoop,
 } from "./ideate-on-approval";
 
 describe("dispatchIdeateForApprovedBuild", () => {
@@ -352,5 +359,37 @@ describe("dispatchApprovedIdeateBuilds (BI-3E0EE3BA recovery)", () => {
     const res = await dispatchApprovedIdeateBuilds({ userId: "u-1" });
     expect(res).toEqual({ candidates: 0, dispatched: 0, skipped: 0 });
     expect(mockPrisma.featureBuild.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("dispatchDesignReviewFixLoop (design-review fix loop)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.buildActivity.create.mockResolvedValue({});
+    mockEscalate.mockResolvedValue({ reportId: "PIR-1", wipFreed: true, backlogItemDeferred: true });
+  });
+
+  it("does nothing when the last design review did not fail", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      id: "ck1", title: "T", kind: "feature", originatingBacklogItemId: null,
+      designReview: { decision: "pass", issues: [] },
+    });
+    const res = await dispatchDesignReviewFixLoop({ buildId: "FB-X", userId: "u-1" });
+    expect(res).toMatchObject({ kind: "no-failed-review", rounds: 0 });
+    expect(mockEscalate).not.toHaveBeenCalled();
+    expect(mockDispatchIdeateResearch).not.toHaveBeenCalled();
+  });
+
+  it("escalates a fix build directly — regenerating the designDoc cannot fill a missing fix diagnosis", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      id: "ck2", title: "Bug fix", kind: "fix", originatingBacklogItemId: null,
+      designReview: { decision: "fail", issues: [{ severity: "critical", description: "Incomplete fix diagnosis" }] },
+    });
+    const res = await dispatchDesignReviewFixLoop({ buildId: "FB-Y", userId: "u-1" });
+    expect(res).toMatchObject({ kind: "escalated-fix-diagnosis", rounds: 0 });
+    expect(mockEscalate).toHaveBeenCalledWith(
+      expect.objectContaining({ buildId: "FB-Y", phase: "ideate", selfFixClass: "needs-human" }),
+    );
+    expect(mockDispatchIdeateResearch).not.toHaveBeenCalled(); // never tried to regenerate
   });
 });

@@ -51,8 +51,14 @@ type DispatchOutcome =
 export async function dispatchIdeateForApprovedBuild(params: {
   buildId: string;
   userId: string;
+  /** Design-review fix loop: prior reviewer issues appended to the research
+   *  context so the regenerated designDoc addresses them. Setting this also
+   *  bypasses the idempotency guard (we WANT to overwrite the rejected doc). */
+  priorReviewFeedback?: string;
+  /** Bypass the designDoc idempotency guard (a fix-loop regeneration). */
+  forceRegenerate?: boolean;
 }): Promise<DispatchOutcome> {
-  const { buildId, userId } = params;
+  const { buildId, userId, priorReviewFeedback, forceRegenerate = false } = params;
 
   const logActivity = async (summary: string): Promise<void> => {
     await prisma.buildActivity.create({
@@ -94,7 +100,8 @@ export async function dispatchIdeateForApprovedBuild(params: {
     // designDoc shape is BuildDesignDoc | null; we treat presence of a
     // non-empty problemStatement as "real evidence already saved".
     const existingDesignDoc = build.designDoc as { problemStatement?: string } | null;
-    if (existingDesignDoc && typeof existingDesignDoc.problemStatement === "string" && existingDesignDoc.problemStatement.trim().length > 0) {
+    const skipIdempotent = !forceRegenerate && !priorReviewFeedback;
+    if (skipIdempotent && existingDesignDoc && typeof existingDesignDoc.problemStatement === "string" && existingDesignDoc.problemStatement.trim().length > 0) {
       const outcome: DispatchOutcome = {
         kind: "skipped-already-has-design",
         reason: "Build already has a designDoc with a non-empty problemStatement — skipping re-dispatch to preserve existing evidence.",
@@ -166,7 +173,11 @@ export async function dispatchIdeateForApprovedBuild(params: {
     // architectural notes — exactly what the research prompt needs.
     const featureTitle = bi.title || build.title || "Untitled Feature";
     const featureDescription = bi.body || build.description || "";
-    const userContext = bi.body || ""; // Same source — BI body is operator-authored context.
+    // BI body is the operator-authored context; on a fix-loop regeneration we
+    // append the reviewer's prior issues so the revised design addresses them.
+    const userContext = priorReviewFeedback
+      ? `${bi.body || ""}\n\n${priorReviewFeedback}`
+      : (bi.body || "");
 
     const startedAt = Date.now();
     await logActivity(`Dispatching ideate research via ${config.provider} (provider=${providerId}, model=${model || "default"})`);
@@ -327,4 +338,104 @@ export async function dispatchApprovedIdeateBuilds(params: {
     else skipped += 1;
   }
   return { candidates: pending.length, dispatched, skipped };
+}
+
+/** Bounded rounds for the design-review fix loop. Operator-tunable. */
+export const DESIGN_FIX_MAX_ROUNDS = Number(process.env.DESIGN_FIX_MAX_ROUNDS) || 2;
+
+type DesignReviewVerdict =
+  | { decision?: string; issues?: Array<{ severity: string; description: string }> }
+  | null;
+
+/**
+ * Design-review verification→fix loop — the ideate-phase analog of the
+ * BI-99B06AD1 plan loop. When a FEATURE build's designDoc FAILS review (e.g.
+ * "fails to address critical security / input-validation / audit-logging" — the
+ * local model under-weighting cross-cutting concerns), regenerate the designDoc
+ * with the reviewer's issues fed back, re-review, repeat up to N rounds, then
+ * escalate-to-human — instead of the build re-failing the same review on every
+ * resume forever (the live ideate jam).
+ *
+ * Scoped to feature builds: a `kind=fix` build's "Incomplete fix diagnosis"
+ * failure is a missing fixContext (reproduction/root-cause/fix-approach), which
+ * regenerating the designDoc does NOT populate — so those escalate directly
+ * rather than churn the loop. Never throws.
+ */
+export async function dispatchDesignReviewFixLoop(params: {
+  buildId: string;
+  userId: string;
+}): Promise<{ kind: string; rounds: number }> {
+  const { buildId, userId } = params;
+  const log = (s: string) =>
+    prisma.buildActivity
+      .create({ data: { buildId, tool: "design_fix_loop", summary: s.slice(0, 240) } })
+      .then(() => {})
+      .catch(() => {});
+
+  const escalate = async (build: { id: string; title: string; originatingBacklogItemId: string | null }, review: DesignReviewVerdict, rounds: number) => {
+    const { escalateBuildToHuman, SELF_FIX_CLASS } = await import("@/lib/build/escalate-build-to-human");
+    let biTitle: string | null = null;
+    if (build.originatingBacklogItemId) {
+      biTitle = (await prisma.backlogItem
+        .findUnique({ where: { id: build.originatingBacklogItemId }, select: { title: true } })
+        .catch(() => null))?.title ?? null;
+    }
+    await escalateBuildToHuman({
+      buildPk: build.id,
+      buildId,
+      featureTitle: build.title,
+      biTitle,
+      originatingBacklogItemId: build.originatingBacklogItemId,
+      phase: "ideate",
+      rounds,
+      issues: (review?.issues ?? []).map((i) => ({ severity: i.severity, description: i.description })),
+      selfFixClass: SELF_FIX_CLASS.NEEDS_HUMAN,
+      log,
+    });
+  };
+
+  try {
+    const build = await prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: { id: true, title: true, kind: true, originatingBacklogItemId: true, designReview: true },
+    });
+    if (!build) return { kind: "build-not-found", rounds: 0 };
+
+    let review = build.designReview as DesignReviewVerdict;
+    if (review?.decision !== "fail") return { kind: "no-failed-review", rounds: 0 };
+
+    // Fix builds: regenerating the designDoc cannot fill the missing fixContext
+    // ("Incomplete fix diagnosis"), so escalate to a human directly.
+    if (build.kind === "fix") {
+      await escalate(build, review, 0);
+      return { kind: "escalated-fix-diagnosis", rounds: 0 };
+    }
+
+    const { formatPlanReviewFeedback } = await import("@/lib/integrate/plan-on-approval");
+    const { executeTool } = await import("@/lib/mcp-tools");
+    let round = 0;
+    while (review?.decision === "fail" && round < DESIGN_FIX_MAX_ROUNDS) {
+      round += 1;
+      await log(`Design review failed — regenerating (round ${round}/${DESIGN_FIX_MAX_ROUNDS}) against ${review.issues?.length ?? 0} issue(s)`);
+      const feedback = formatPlanReviewFeedback(review.issues ?? []);
+      const regen = await dispatchIdeateForApprovedBuild({ buildId, userId, priorReviewFeedback: feedback });
+      if (regen.kind !== "dispatched-success") {
+        await log(`Design regeneration round ${round} produced no designDoc (${regen.kind}) — stopping.`);
+        break;
+      }
+      await executeTool("reviewDesignDoc", { buildId }, userId, { featureBuildId: buildId });
+      const fresh = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designReview: true } });
+      review = fresh?.designReview as DesignReviewVerdict;
+    }
+
+    if (review?.decision === "fail") {
+      await escalate(build, review, round);
+      return { kind: "escalated-after-rounds", rounds: round };
+    }
+    await log(`Design review passed after ${round} fix round(s).`);
+    return { kind: "repaired", rounds: round };
+  } catch (err) {
+    await log(`Design fix loop error: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`);
+    return { kind: "error", rounds: 0 };
+  }
 }
