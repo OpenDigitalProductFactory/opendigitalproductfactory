@@ -25,7 +25,7 @@ const HIVE_PATH = "/admin/hive";
 const DEFAULT_CONFIG: HiveContributionConfig = {
   deviceFingerprintOptIn: true,
   hiveContributionsPaused: false,
-  contributionMode: "selective",
+  contributionMode: "private",
 };
 
 export type HiveContributionsView = {

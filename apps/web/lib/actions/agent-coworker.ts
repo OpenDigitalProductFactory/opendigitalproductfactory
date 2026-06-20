@@ -1344,7 +1344,7 @@ export async function sendMessage(input: {
           );
         }
 
-        if (mode === "fork_only" && !hasRepo) {
+        if ((mode === "private" || mode === "fork_only") && !hasRepo) {
           const untrackedCount = await prisma.featureBuild.count({
             where: { phase: "complete", gitCommitHashes: { isEmpty: true } },
           });
@@ -1358,7 +1358,7 @@ export async function sendMessage(input: {
           }
         }
 
-        if (mode === "selective" || mode === "contribute_all") {
+        if (mode === "contributing" || mode === "selective" || mode === "contribute_all") {
           if (!hasDco) {
             modeContext.push(
               "DCO has NOT been accepted yet. If the user chooses to contribute, remind them",

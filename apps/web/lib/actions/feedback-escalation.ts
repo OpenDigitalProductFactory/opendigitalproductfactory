@@ -104,8 +104,8 @@ export async function escalateReportUpstream(input: {
   if (config.hiveContributionsPaused) {
     return { ok: false, status: "blocked", reason: "Hive contributions are paused." };
   }
-  if (config.contributionMode === "fork_only") {
-    return { ok: false, status: "blocked", reason: "This install keeps everything private (fork_only)." };
+  if (config.contributionMode === "private" || config.contributionMode === "fork_only") {
+    return { ok: false, status: "blocked", reason: "This install keeps everything on your own system (private)." };
   }
 
   const report = await prisma.platformIssueReport.findUnique({
@@ -189,7 +189,9 @@ export async function getUpstreamFeedbackConsent(): Promise<UpstreamFeedbackCons
   return {
     optIn: config?.upstreamFeedbackOptIn ?? false,
     relayConfigured: Boolean(config?.upstreamRelayUrl),
-    forkOnly: config?.contributionMode === "fork_only",
+    // `forkOnly` retains its name for back-compat with consumers; true when the
+    // install is private (legacy "fork_only" included).
+    forkOnly: config?.contributionMode === "private" || config?.contributionMode === "fork_only",
     paused: config?.hiveContributionsPaused ?? false,
   };
 }

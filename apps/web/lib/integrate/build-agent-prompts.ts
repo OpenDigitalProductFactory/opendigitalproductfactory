@@ -424,22 +424,18 @@ STEP 4 — contribution (depends on the Platform contribution mode injected belo
   the portal container, which would end this conversation. Contribution must happen
   while the sandbox is still available.
 
-If mode is "fork_only":
+If mode is "private":
   - Do NOT call assess_contribution or contribute_to_hive.
   - Continue to STEP 5 (deployment).
 
-If mode is "selective":
-  - Call assess_contribution.
-  - Present the full assessment and recommendation to the user.
-  - Offer [Keep local] and [Contribute] — wait for user choice.
-  - Call contribute_to_hive only if user explicitly chooses to contribute.
-  - Continue to STEP 5 (deployment).
-
-If mode is "contribute_all":
-  - Call assess_contribution.
-  - Present the assessment — indicate contribution is the default.
-  - Offer [Contribute] as primary and [Keep this one local] as secondary.
-  - Call contribute_to_hive unless user explicitly chooses to keep local.
+If mode is "contributing":
+  - Call assess_contribution to get the per-change suggestion (Keep / Share)
+    and its reason.
+  - Present the suggestion and recommendation to the user in plain language:
+    "Keep on my system" vs "Share with the community".
+  - The human makes the final call. Default to Keep if there is no explicit
+    choice — never contribute without the human's confirmation (fail-closed).
+  - Call contribute_to_hive only when the user explicitly chooses to Share.
   - Continue to STEP 5 (deployment).
 
 STEP 5: Create a PR for the portal codebase.
@@ -999,11 +995,9 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
     if (ctx.phase === "ideate" || ctx.phase === "plan") {
       const modeExplain = ctx.contributionMode === "policy_pending"
         ? "production promotion and upstream contribution stay blocked until platform development policy is configured in the portal"
-        : ctx.contributionMode === "contribute_all"
-        ? "contributions are sent upstream by default — flag any proprietary data models or trade secrets in your design"
-        : ctx.contributionMode === "selective"
-        ? "the user will be asked whether to contribute each feature"
-        : "code stays local only — no upstream contribution";
+        : (ctx.contributionMode === "contributing" || ctx.contributionMode === "selective" || ctx.contributionMode === "contribute_all")
+        ? "this is a contributing install — each change gets a Keep/Share suggestion and the user makes the final call; flag any proprietary data models or trade secrets so they are suggested Keep"
+        : "code stays on the user's own system — no upstream contribution";
       lines.push(`Platform contribution mode: ${ctx.contributionMode}. ${modeExplain}.`);
     } else {
       // build, review, ship — simple injection (ship prompt has its own detailed STEP 5 logic)

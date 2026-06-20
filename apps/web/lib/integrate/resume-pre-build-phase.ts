@@ -73,7 +73,7 @@ export async function resumePreBuildPhase(params: {
 
     const build = await prisma.featureBuild.findUnique({
       where: { buildId },
-      select: { designDoc: true, buildPlan: true, planReview: true },
+      select: { designDoc: true, buildPlan: true, planReview: true, designReview: true },
     });
     if (!build) {
       return { kind: "failed", phase, error: "build not found" };
@@ -87,8 +87,19 @@ export async function resumePreBuildPhase(params: {
         const outcome = await dispatchIdeateForApprovedBuild({ buildId, userId });
         return { kind: "resumed", phase, via: "dispatchIdeateForApprovedBuild", detail: outcome.kind };
       }
-      // Design doc exists but the build never advanced — re-run the canonical
-      // design review (auto-advances ideate->plan when the gate is satisfied).
+      // Design doc exists. If its last review FAILED, run the design-review fix
+      // loop — regenerate the designDoc with the reviewer's issues fed back,
+      // re-review, escalate after N (the loop escalates kind=fix builds whose
+      // "Incomplete fix diagnosis" a regen can't fix). Re-reviewing the same
+      // rejected doc just re-fails forever (the live ideate jam). Otherwise
+      // re-run the review (current reviewer logic may now pass an older verdict).
+      const designReviewFailed =
+        (build.designReview as { decision?: string } | null)?.decision === "fail";
+      if (designReviewFailed) {
+        const { dispatchDesignReviewFixLoop } = await import("@/lib/integrate/ideate-on-approval");
+        const outcome = await dispatchDesignReviewFixLoop({ buildId, userId });
+        return { kind: "resumed", phase, via: "dispatchDesignReviewFixLoop", detail: outcome.kind };
+      }
       const { executeTool } = await import("@/lib/mcp-tools");
       const result = await executeTool("reviewDesignDoc", { buildId }, userId, { featureBuildId: buildId });
       return {
