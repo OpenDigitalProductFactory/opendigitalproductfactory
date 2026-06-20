@@ -233,6 +233,8 @@ jobs:
         run: node --test packages/dpf-skill-pack/hooks/spec-plan-doc-precheck.test.mjs
       - name: Test lease-guard hook
         run: node --test packages/dpf-skill-pack/hooks/lease-guard.test.mjs
+      - name: Test root-clone-guard hook
+        run: node --test packages/dpf-skill-pack/hooks/root-clone-guard.test.mjs
       - name: Conformance — DPF guards stay wired in the dpf-platform plugin (hooks/hooks.json)
         run: node --test packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs
       - name: Run spec/plan/doc gate
