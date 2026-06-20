@@ -125,17 +125,24 @@ function getLocalIntegrationStatus(build: FeatureBuildRow): EnvironmentStatusSum
   return { status: "failed", summary: "Merged-code verification needs attention before release." };
 }
 
-function getEvidenceEvents(phase: BuildPhase, build: FeatureBuildRow): UnifiedEvidenceTimelineEvent[] {
+function getEvidenceEvents(
+  phase: BuildPhase,
+  build: FeatureBuildRow,
+  externalEvents: UnifiedEvidenceTimelineEvent[],
+): UnifiedEvidenceTimelineEvent[] {
   if (!isRuntimePhase(phase)) return [];
 
   const events: UnifiedEvidenceTimelineEvent[] = [];
   const taskCount = build.taskResults ? normalizeTaskResults(build.taskResults).tasks.length : 0;
 
   if (taskCount > 0) {
+    // The coding provider is the engine Build Studio ran inside ITS sandbox — not
+    // an external agent. Label it as Build Studio work; genuinely-external work
+    // arrives via `externalEvents` below (EP-UNIFIED-TRACKING Phase 1).
     events.push({
       id: "implementation-tasks",
-      source: sourceForCodingProvider(build.codingProvider),
-      label: labelForCodingProvider(build.codingProvider),
+      source: "build-studio",
+      label: buildStudioEngineLabel(build.codingProvider),
       summary: `${taskCount} implementation task${taskCount === 1 ? "" : "s"} recorded for review.`,
       status: "recorded",
     });
@@ -173,6 +180,10 @@ function getEvidenceEvents(phase: BuildPhase, build: FeatureBuildRow): UnifiedEv
     });
   }
 
+  // Real cross-surface evidence (external-agent records, runtime verification,
+  // capsule evidence) projected server-side and threaded through progressVisibility.
+  events.push(...externalEvents);
+
   return events;
 }
 
@@ -188,17 +199,14 @@ function getVerificationSummary(verification: NonNullable<FeatureBuildRow["verif
   return `${verification.testsFailed} test warning${verification.testsFailed === 1 ? "" : "s"} need review.`;
 }
 
-function sourceForCodingProvider(provider: string | null): UnifiedEvidenceTimelineEvent["source"] {
-  return provider?.toLowerCase().includes("codex") ? "codex" : "external";
-}
-
-function labelForCodingProvider(provider: string | null): string {
-  if (!provider) return "Implementation";
-  return provider
+function buildStudioEngineLabel(provider: string | null): string {
+  if (!provider) return "Build Studio";
+  const engine = provider
     .split(/[-_\s]+/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
     .join(" ");
+  return `Build Studio (${engine})`;
 }
 
 export function WorkflowStageInspector({
@@ -215,7 +223,7 @@ export function WorkflowStageInspector({
   const stageLabel = PHASE_LABELS[phase] ?? phase;
   const artifacts = getArtifactLines(phase, build);
   const environmentReadiness = getEnvironmentReadiness(phase, build);
-  const evidenceEvents = getEvidenceEvents(phase, build);
+  const evidenceEvents = getEvidenceEvents(phase, build, progressVisibility?.evidenceTimeline ?? []);
   const stageGuidance = deriveWorkflowStageGuidance({
     build,
     phase,

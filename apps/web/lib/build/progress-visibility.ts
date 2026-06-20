@@ -9,6 +9,8 @@ import { getDispatchHistoryForBuild } from "./dispatch-attempts";
 import { getSandboxStateForBuild, type BuildSandboxState } from "./sandbox-state";
 import { getScopedVerificationForBuild, type ScopedVerificationView } from "./scoped-verification";
 import { normalizeTaskResults, type NormalizedTaskResults } from "./task-results";
+import { loadBuildEvidenceTimelineEvents } from "./evidence-timeline";
+import type { UnifiedEvidenceTimelineEvent } from "./evidence-timeline-types";
 
 export type ChatProgressSnapshot = {
   completed: number | null;
@@ -58,6 +60,8 @@ export type BuildProgressVisibility = {
   };
   /** Phase-level cost rollup; empty array when BuildPhaseRun rows don't exist yet */
   phaseRuns: PhaseRunSummary[];
+  /** EP-UNIFIED-TRACKING Phase 1: cross-surface evidence (external-agent, runtime, capsule), newest first. */
+  evidenceTimeline: UnifiedEvidenceTimelineEvent[];
 };
 
 export function buildProgressProjectionFromParts(args: {
@@ -70,6 +74,7 @@ export function buildProgressProjectionFromParts(args: {
   verification: ScopedVerificationView | null;
   lastActivityAt: string | null;
   phaseRuns?: PhaseRunSummary[];
+  evidenceTimeline?: UnifiedEvidenceTimelineEvent[];
 }): BuildProgressVisibility {
   const now = args.now ?? new Date();
   const conflicts = getProgressConflicts(args.dbTasks.source, args.chatSnapshots);
@@ -119,6 +124,7 @@ export function buildProgressProjectionFromParts(args: {
       lastObservableSignalAt,
     },
     phaseRuns: args.phaseRuns ?? [],
+    evidenceTimeline: args.evidenceTimeline ?? [],
   };
 }
 
@@ -127,6 +133,7 @@ export async function getBuildProgressVisibility(buildId: string): Promise<Build
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: {
+      id: true,
       buildId: true,
       threadId: true,
       taskResults: true,
@@ -183,6 +190,11 @@ export async function getBuildProgressVisibility(buildId: string): Promise<Build
     inferenceCount: r.inferenceCount,
   }));
 
+  const evidenceTimeline = await loadBuildEvidenceTimelineEvents({
+    db: prisma,
+    build: { id: build.id, buildId: build.buildId },
+  });
+
   return buildProgressProjectionFromParts({
     buildId,
     dbTasks: normalizeTaskResults(build.taskResults),
@@ -192,6 +204,7 @@ export async function getBuildProgressVisibility(buildId: string): Promise<Build
     verification: await getScopedVerificationForBuild(buildId),
     lastActivityAt: build.activities[0]?.createdAt.toISOString() ?? build.updatedAt.toISOString(),
     phaseRuns,
+    evidenceTimeline,
   });
 }
 
