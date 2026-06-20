@@ -10683,6 +10683,28 @@ export async function executeTool(
         };
       }
 
+      // Capture the PR onto the build's Work Capsule so it becomes a queryable,
+      // surfaceable fact (delivery visibility). The capsule's pullRequestUrl/
+      // Number are READ by the change-lanes projection, the runtime-target
+      // rollup, and the capsule presenters, but had no writer at PR-creation
+      // time — so a build's PR stayed invisible until a delayed branch-name-
+      // matched GitHub inventory snapshot backfilled it (or never). Migration-
+      // free + best-effort: opening the PR must never hinge on this write.
+      try {
+        const { captureBuildPrOntoCapsule } = await import("@/lib/build/capture-build-pr");
+        const cap = await captureBuildPrOntoCapsule({
+          db: prisma,
+          featureBuildId: build.id,
+          prNumber: prResult.prNumber,
+          prUrl: prResult.prUrl,
+        });
+        if (cap.captured > 0) {
+          logBuildActivity(buildId, "create_portal_pr", `Linked PR #${prResult.prNumber} to ${cap.captured} work capsule(s).`);
+        }
+      } catch (err) {
+        console.warn("[create_portal_pr] PR-capture onto capsule failed:", err);
+      }
+
       // Auto-merge decision: all gates pass + build fully verified
       const fullyVerified = typecheckPassed && testsFailed === 0 && acMet === acTotal && acTotal > 0;
       let merged = false;
