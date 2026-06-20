@@ -220,6 +220,40 @@ export async function reconcileSelfUpgradeRunsOnBoot(
 }
 
 /**
+ * Boot/periodic reconcile for QuiescenceRun rows orphaned by a self-swap — the
+ * quiescence-coordinator counterpart to reconcileSelfUpgradeRunsOnBoot. A real
+ * upgrade recreates this very portal, killing the orchestrator before it can
+ * deliver the coordinator's swap-complete handshake; the coordinator (suspended
+ * in Inngest) then runs out its full 10-minute wait and falsely records
+ * `outcome=failed`, which the operator banner renders as "Upgrade postponed,
+ * failed" even though the swap SUCCEEDED. The surviving portal resolves the
+ * running bundle identity and lets the lib reconciler close the loop. Non-fatal.
+ */
+export async function reconcileQuiescenceRunsOnBoot(
+  logger: Pick<Console, "log" | "warn" | "error"> = console,
+  opts: { staleAfterMs?: number; now?: () => Date } = {},
+): Promise<{ reconciled: number; failed: number } | null> {
+  try {
+    const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
+    const { reconcileQuiescenceOnBoot } = await import("@/lib/self-upgrade/quiescence");
+    const deployedSha = await getDeployedSha();
+    return await reconcileQuiescenceOnBoot({
+      // A self-upgrade stores the deployed/merge identity in targetBundleHash;
+      // the runtime exposes that same identity as DEPLOYED_SHA. Pass it for both
+      // fields so the match is robust across upstream- and local-mode rows.
+      currentVersion: deployedSha,
+      currentBundleHash: deployedSha,
+      staleAfterMs: opts.staleAfterMs ?? 0,
+      now: opts.now?.(),
+      logger,
+    });
+  } catch (err) {
+    logger.error("[quiescence-reconcile] wrapper failed (non-fatal):", err);
+    return null;
+  }
+}
+
+/**
  * Self-heal a stuck quiescence level on boot. A real upgrade flips the level to
  * "draining"/"swapping" and recreates the portal — killing both the
  * orchestrator and the coordinator before either can flip it back to "normal".
@@ -788,6 +822,19 @@ export async function register() {
     setInterval(
       () => {
         void reconcileSelfUpgradeRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
+      },
+      20 * 60 * 1000,
+    );
+
+    // Close the SAME self-swap gap for the quiescence coordinator. A succeeded
+    // upgrade whose swap kills the orchestrator leaves the coordinator to time
+    // out and falsely emit `failed`, surfacing as a bogus "Upgrade postponed,
+    // failed" banner. The surviving portal completes the swap-complete handshake
+    // here (boot), plus a periodic net for the portal-stays-up orphan case.
+    void reconcileQuiescenceRunsOnBoot();
+    setInterval(
+      () => {
+        void reconcileQuiescenceRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
       },
       20 * 60 * 1000,
     );

@@ -578,32 +578,206 @@ export async function isShipForceEscalated(runId: string): Promise<boolean> {
 }
 
 /**
- * Called from app boot (BI-QUIESCE-010 integration). Scans for QuiescenceRun
- * rows that were in flight when the previous bundle died. If the running
- * bundle's version matches `targetVersion`, marks as completed via
- * boot-reconciler. Otherwise marks as failed so caller can decide what to do.
- *
- * Either way, level is forced to normal and platform.quiescence-cleared
- * fires so the new bundle starts in a clean state.
- *
- * BI-QUIESCE-010 wires this into the app startup sequence; v1 is a stub
- * that just returns the candidate runs without action.
+ * Broadcast a `platform.quiescence-cleared` terminal event from OUTSIDE the
+ * coordinator (the boot reconciler). Mirrors quiescence-run.ts:emitCleared:
+ * SSE first so any connected operator banner dismisses immediately, then the
+ * Inngest event so suspended functions wake. Best-effort on the SSE leg.
  */
-export async function reconcileQuiescenceOnBoot(_opts: {
-  currentVersion: string;
-  currentBundleHash: string;
+async function broadcastQuiescenceCleared(payload: {
+  runId: string;
+  outcome: "succeeded" | "failed";
+  triggerRefId: string | null;
+  reason?: string | null;
+}): Promise<void> {
+  invalidateQuiescenceCache();
+  try {
+    const { agentEventBus } = await import("@/lib/tak/agent-event-bus");
+    agentEventBus.broadcastSystem({
+      type: "system:quiescence",
+      level: "cleared",
+      runId: payload.runId,
+      swapEtaSeconds: null,
+      deferReason: null,
+      deferSurface: null,
+      outcome: payload.outcome,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(sanitizeForLog(`[quiescence-reconcile] broadcastSystem failed: ${msg}`));
+  }
+  const { inngest } = await import("@/lib/queue/inngest-client");
+  await inngest.send({
+    name: "platform.quiescence-cleared",
+    data: {
+      runId: payload.runId,
+      outcome: payload.outcome,
+      triggerRefId: payload.triggerRefId,
+      deferSurface: null,
+      reason: payload.reason ?? null,
+    },
+  });
+}
+
+/**
+ * True when the running bundle is the one this QuiescenceRun was draining
+ * toward — i.e. the swap it coordinated actually landed and we booted on its
+ * target. A self-upgrade stores the merge/deploy identity in `targetBundleHash`
+ * (the upstream lineage marker lives in `targetVersion`, which is NOT the
+ * runtime identity), so the deployed SHA is matched against EITHER field to be
+ * robust to local-mode rows where they coincide. Case-insensitive; empty
+ * fields never match.
+ */
+export function quiescenceTargetMatchesRunningBundle(
+  run: { targetVersion: string | null; targetBundleHash: string | null },
+  currentVersion: string | null,
+  currentBundleHash: string | null,
+): boolean {
+  const candidates = [currentVersion, currentBundleHash]
+    .filter((s): s is string => !!s)
+    .map((s) => s.toLowerCase());
+  if (candidates.length === 0) return false;
+  const targets = [run.targetVersion, run.targetBundleHash]
+    .filter((s): s is string => !!s)
+    .map((s) => s.toLowerCase());
+  return targets.some((t) => candidates.includes(t));
+}
+
+const NON_TERMINAL_QUIESCENCE_STATUSES = QUIESCENCE_RUN_STATUSES.filter(
+  (s) => !TERMINAL_QUIESCENCE_STATUSES.has(s),
+);
+
+/**
+ * Reconcile QuiescenceRun rows on boot (and on a periodic safety tick). The
+ * counterpart to instrumentation.ts:reconcileSelfUpgradeRunsOnBoot, closing the
+ * SAME self-swap gap for the quiescence coordinator: a real upgrade recreates
+ * this very portal, killing the orchestrator before it can deliver the
+ * swap-complete handshake — so the coordinator (suspended in Inngest) runs out
+ * its full 10-minute `waitForEvent` and falsely records `outcome=failed`, which
+ * the operator banner renders as "Upgrade postponed, failed" even though the
+ * swap succeeded. The surviving (new) portal closes the loop here.
+ *
+ * Two cases, both keyed on "are we running this run's target bundle?":
+ *
+ *  1. In-flight rows (non-terminal status). The coordinator is still suspended
+ *     at `waitForEvent`. If we booted on its target, the swap landed → send the
+ *     swap-complete signal so the LIVE coordinator finishes through its own
+ *     success path (transition completed + flip level normal + emit
+ *     quiescence-cleared/succeeded). If we did NOT boot on its target, the swap
+ *     never landed → drive the coordinator's failure path so it stops waiting.
+ *
+ *  2. Already-`failed` rows whose target we ARE running (within `failedLookbackMs`).
+ *     The coordinator timed out before this portal booted (slow boot), so its
+ *     terminal `failed` is a false negative. Correct it to `completed`
+ *     (completionSource='boot-reconciler') and re-emit a truthful
+ *     quiescence-cleared/succeeded so the banner is accurate.
+ *
+ * `staleAfterMs` mirrors the self-upgrade reconciler: 0 (boot default) touches
+ * every in-flight row because a boot means any in-flight coordinator is orphaned;
+ * >0 (periodic mode) only touches in-flight rows older than the window, so a
+ * legitimately in-flight drain on a still-running portal is never reconciled out
+ * from under itself. Note the target-match guard already prevents failing a live
+ * drain: a drain that has not swapped yet does not match the running bundle.
+ *
+ * Non-fatal; returns counts. Level normalisation is also handled independently
+ * by resetStuckQuiescenceLevelOnBoot, so a throw here never strands the level.
+ */
+export async function reconcileQuiescenceOnBoot(opts: {
+  currentVersion: string | null;
+  currentBundleHash: string | null;
+  staleAfterMs?: number;
+  failedLookbackMs?: number;
   now?: Date;
+  logger?: Pick<Console, "log" | "warn" | "error">;
 }): Promise<{ reconciled: number; failed: number }> {
-  // Stub for BI-QUIESCE-010. Real implementation will:
-  //   1. Query QuiescenceRun WHERE status IN (pending, preparing, draining,
-  //      ready-to-swap, swapping)
-  //   2. Per row: if targetVersion matches currentVersion AND
-  //      targetBundleHash matches → transition to completed
-  //      (completionSource='boot-reconciler')
-  //      Otherwise → transition to failed (completionSource='boot-reconciler')
-  //   3. Force level to normal
-  //   4. Emit platform.quiescence-cleared for each
-  return { reconciled: 0, failed: 0 };
+  const logger = opts.logger ?? console;
+  const now = opts.now ?? new Date();
+  const staleAfterMs = opts.staleAfterMs ?? 0;
+  const failedLookbackMs = opts.failedLookbackMs ?? 30 * 60 * 1000;
+
+  let reconciled = 0;
+  let failed = 0;
+
+  try {
+    // ── Case 1: in-flight coordinators orphaned by the swap ──────────────
+    const inFlight = await prisma.quiescenceRun.findMany({
+      where:
+        staleAfterMs > 0
+          ? {
+              status: { in: [...NON_TERMINAL_QUIESCENCE_STATUSES] },
+              startedAt: { lt: new Date(now.getTime() - staleAfterMs) },
+            }
+          : { status: { in: [...NON_TERMINAL_QUIESCENCE_STATUSES] } },
+      select: { runId: true, targetVersion: true, targetBundleHash: true, triggerRefId: true },
+    });
+    for (const run of inFlight) {
+      if (quiescenceTargetMatchesRunningBundle(run, opts.currentVersion, opts.currentBundleHash)) {
+        // We booted on this run's target → the swap landed. Complete the
+        // handshake the dying portal couldn't: the live coordinator resumes
+        // through success and emits quiescence-cleared/succeeded itself.
+        await signalSwapComplete(run.runId);
+        reconciled++;
+        logger.log(
+          sanitizeForLog(
+            `[quiescence-reconcile] ${run.runId} -> swap-complete (booted on target ${opts.currentVersion ?? "?"})`,
+          ),
+        );
+      } else {
+        // Not running its target → the swap did not land; the row is orphaned.
+        await failQuiescenceSwap(
+          run.runId,
+          `Reconciled on boot: running bundle does not match target (deployed=${opts.currentBundleHash ?? opts.currentVersion ?? "unknown"} targetBundle=${run.targetBundleHash ?? "unknown"})`,
+        );
+        failed++;
+        logger.log(`[quiescence-reconcile] ${run.runId} -> failed (orphaned, target mismatch)`);
+      }
+    }
+
+    // ── Case 2: false-negative `failed` rows we actually booted onto ─────
+    // The coordinator timed out before this portal came up, so its terminal
+    // `failed` is wrong (we are running its target). Correct + re-announce.
+    const staleFailed = await prisma.quiescenceRun.findMany({
+      where: {
+        status: "failed",
+        completedAt: { gte: new Date(now.getTime() - failedLookbackMs) },
+      },
+      select: { runId: true, targetVersion: true, targetBundleHash: true, triggerRefId: true },
+    });
+    for (const run of staleFailed) {
+      if (!quiescenceTargetMatchesRunningBundle(run, opts.currentVersion, opts.currentBundleHash)) {
+        continue;
+      }
+      await transitionState(
+        run.runId,
+        "completed",
+        {
+          completedAt: now,
+          swapCompletedAt: now,
+          outcome: "succeeded",
+          completionSource: "boot-reconciler",
+          outcomeNotes:
+            "Reconciled on boot: swap landed (running bundle matches target); the coordinator had falsely timed out before this portal booted.",
+        },
+        now,
+      );
+      await broadcastQuiescenceCleared({
+        runId: run.runId,
+        outcome: "succeeded",
+        triggerRefId: run.triggerRefId,
+      });
+      reconciled++;
+      logger.log(
+        sanitizeForLog(`[quiescence-reconcile] ${run.runId} -> corrected failed→completed (false negative)`),
+      );
+    }
+
+    if (reconciled || failed) {
+      logger.log(`[quiescence-reconcile] resolved ${reconciled} reconciled, ${failed} failed`);
+    }
+    return { reconciled, failed };
+  } catch (err) {
+    logger.error("[quiescence-reconcile] failed (non-fatal):", err);
+    return { reconciled, failed };
+  }
 }
 
 // ─── Active session blockers — evidence capture ──────────────────────────

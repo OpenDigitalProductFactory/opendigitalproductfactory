@@ -18,6 +18,7 @@ const prismaMock = vi.hoisted(() => ({
   toolExecutionFindMany: vi.fn(),
   quiescenceRunFindUnique: vi.fn(),
   quiescenceRunUpdate: vi.fn(),
+  quiescenceRunFindMany: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -36,6 +37,7 @@ vi.mock("@dpf/db", () => ({
     quiescenceRun: {
       findUnique: (...args: unknown[]) => prismaMock.quiescenceRunFindUnique(...args),
       update: (...args: unknown[]) => prismaMock.quiescenceRunUpdate(...args),
+      findMany: (...args: unknown[]) => prismaMock.quiescenceRunFindMany(...args),
     },
   },
 }));
@@ -43,6 +45,11 @@ vi.mock("@dpf/db", () => ({
 const inngestSendMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/queue/inngest-client", () => ({
   inngest: { send: (...args: unknown[]) => inngestSendMock(...args) },
+}));
+
+const broadcastSystemMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/tak/agent-event-bus", () => ({
+  agentEventBus: { broadcastSystem: (...args: unknown[]) => broadcastSystemMock(...args) },
 }));
 
 import {
@@ -58,6 +65,8 @@ import {
   pickPrimaryBlocker,
   QuiescingError,
   QUIESCENCE_RUN_STATUSES,
+  quiescenceTargetMatchesRunningBundle,
+  reconcileQuiescenceOnBoot,
   reconcileTerminalBuildPhaseRuns,
   signalSwapComplete,
   TERMINAL_QUIESCENCE_STATUSES,
@@ -74,6 +83,158 @@ beforeEach(() => {
   prismaMock.toolExecutionFindMany.mockResolvedValue([]);
   prismaMock.quiescenceRunFindUnique.mockResolvedValue(null);
   prismaMock.quiescenceRunUpdate.mockResolvedValue({});
+  prismaMock.quiescenceRunFindMany.mockResolvedValue([]);
+});
+
+const DEPLOYED = "b9bfac549e2723ff1ae903c80ef4b29849e693b5";
+const UPSTREAM = "cf3dd6546c1dbc5aa1ade8bb4c8ecf0153030053";
+const OTHER = "c513c5dd210f488d0bbe113394bdfd4589586630";
+
+function swapCompleteCalls(outcome: "succeeded" | "failed") {
+  return inngestSendMock.mock.calls.filter(
+    (c) =>
+      (c[0] as { name?: string; data?: { outcome?: string } })?.name ===
+        "ops/quiescence.swap-complete" &&
+      (c[0] as { data?: { outcome?: string } })?.data?.outcome === outcome,
+  );
+}
+
+describe("quiescenceTargetMatchesRunningBundle", () => {
+  it("matches when the running SHA equals targetBundleHash (the deploy identity)", () => {
+    // A self-upgrade stores the upstream lineage marker in targetVersion and the
+    // deployed/merge identity in targetBundleHash — the running SHA is the latter.
+    expect(
+      quiescenceTargetMatchesRunningBundle(
+        { targetVersion: UPSTREAM, targetBundleHash: DEPLOYED },
+        DEPLOYED,
+        DEPLOYED,
+      ),
+    ).toBe(true);
+  });
+
+  it("does NOT match a row whose target bundle we did not boot onto (real failure)", () => {
+    expect(
+      quiescenceTargetMatchesRunningBundle(
+        { targetVersion: "x", targetBundleHash: OTHER },
+        DEPLOYED,
+        DEPLOYED,
+      ),
+    ).toBe(false);
+  });
+
+  it("is case-insensitive and never matches on empty fields", () => {
+    expect(
+      quiescenceTargetMatchesRunningBundle(
+        { targetVersion: null, targetBundleHash: DEPLOYED.toUpperCase() },
+        DEPLOYED,
+        null,
+      ),
+    ).toBe(true);
+    expect(
+      quiescenceTargetMatchesRunningBundle({ targetVersion: null, targetBundleHash: null }, DEPLOYED, DEPLOYED),
+    ).toBe(false);
+    expect(
+      quiescenceTargetMatchesRunningBundle({ targetVersion: UPSTREAM, targetBundleHash: DEPLOYED }, null, null),
+    ).toBe(false);
+  });
+});
+
+describe("reconcileQuiescenceOnBoot (false-negative 'Upgrade postponed, failed' fix)", () => {
+  it("completes the swap-complete handshake for an in-flight run we booted onto", async () => {
+    prismaMock.quiescenceRunFindMany
+      // in-flight query
+      .mockResolvedValueOnce([
+        { runId: "QR-1", targetVersion: UPSTREAM, targetBundleHash: DEPLOYED, triggerRefId: "SUR-1" },
+      ])
+      // stale-failed query
+      .mockResolvedValueOnce([]);
+
+    const res = await reconcileQuiescenceOnBoot({
+      currentVersion: DEPLOYED,
+      currentBundleHash: DEPLOYED,
+      logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+
+    expect(res).toEqual({ reconciled: 1, failed: 0 });
+    // Drove the LIVE coordinator's success path (it owns the cleared/succeeded emit).
+    expect(swapCompleteCalls("succeeded")).toHaveLength(1);
+    expect(swapCompleteCalls("failed")).toHaveLength(0);
+  });
+
+  it("fails an in-flight run whose target we did NOT boot onto (orphaned)", async () => {
+    prismaMock.quiescenceRunFindMany
+      .mockResolvedValueOnce([
+        { runId: "QR-2", targetVersion: "x", targetBundleHash: OTHER, triggerRefId: "SUR-2" },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const res = await reconcileQuiescenceOnBoot({
+      currentVersion: DEPLOYED,
+      currentBundleHash: DEPLOYED,
+      logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+
+    expect(res).toEqual({ reconciled: 0, failed: 1 });
+    expect(swapCompleteCalls("failed")).toHaveLength(1);
+    expect(swapCompleteCalls("succeeded")).toHaveLength(0);
+  });
+
+  it("corrects a false-negative terminal `failed` run we actually booted onto", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValue({ enteredStateAt: {} });
+    prismaMock.quiescenceRunUpdate.mockResolvedValue({ status: "completed", enteredStateAt: {} });
+    prismaMock.quiescenceRunFindMany
+      // in-flight query — none
+      .mockResolvedValueOnce([])
+      // stale-failed query — one false negative + one genuine failure
+      .mockResolvedValueOnce([
+        { runId: "QR-3", targetVersion: UPSTREAM, targetBundleHash: DEPLOYED, triggerRefId: "SUR-3" },
+        { runId: "QR-4", targetVersion: "x", targetBundleHash: OTHER, triggerRefId: "SUR-4" },
+      ]);
+
+    const res = await reconcileQuiescenceOnBoot({
+      currentVersion: DEPLOYED,
+      currentBundleHash: DEPLOYED,
+      logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+
+    // Only the matching false negative is corrected; the genuine failure is left alone.
+    expect(res).toEqual({ reconciled: 1, failed: 0 });
+    const update = prismaMock.quiescenceRunUpdate.mock.calls[0]![0] as {
+      where: { runId: string };
+      data: { status: string; outcome: string; completionSource: string };
+    };
+    expect(update.where.runId).toBe("QR-3");
+    expect(update.data.status).toBe("completed");
+    expect(update.data.outcome).toBe("succeeded");
+    expect(update.data.completionSource).toBe("boot-reconciler");
+    // Re-announced a truthful cleared/succeeded so the banner corrects.
+    expect(broadcastSystemMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "system:quiescence", level: "cleared", outcome: "succeeded" }),
+    );
+  });
+
+  it("periodic mode (staleAfterMs>0) scopes the in-flight query by startedAt so a live drain is untouched", async () => {
+    prismaMock.quiescenceRunFindMany.mockResolvedValue([]);
+    await reconcileQuiescenceOnBoot({
+      currentVersion: DEPLOYED,
+      currentBundleHash: DEPLOYED,
+      staleAfterMs: 30 * 60 * 1000,
+      now: new Date("2026-06-20T18:00:00.000Z"),
+      logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+    const inFlightWhere = (prismaMock.quiescenceRunFindMany.mock.calls[0]![0] as { where: Record<string, unknown> }).where;
+    expect(inFlightWhere).toHaveProperty("startedAt");
+  });
+
+  it("is non-fatal: a DB error returns zero counts instead of throwing", async () => {
+    prismaMock.quiescenceRunFindMany.mockRejectedValue(new Error("db down"));
+    const res = await reconcileQuiescenceOnBoot({
+      currentVersion: DEPLOYED,
+      currentBundleHash: DEPLOYED,
+      logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+    expect(res).toEqual({ reconciled: 0, failed: 0 });
+  });
 });
 
 describe("escalateQuiescenceToForced (BI-4F3B2FA9)", () => {

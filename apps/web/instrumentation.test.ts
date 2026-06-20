@@ -6,6 +6,7 @@ import {
   isInngestSelfSyncOnBootEnabled,
   isStartupModelRevalidationEnabled,
   reconcileSelfUpgradeRunsOnBoot,
+  reconcileQuiescenceRunsOnBoot,
   recoverContradictoryBuildExecStatesOnBoot,
   resumeStrandedBuildsOnBoot,
   scheduleInitialCodeGraphBootstrap,
@@ -29,6 +30,7 @@ const productVersionFindManyMock = vi.fn();
 const changePromotionUpdateManyMock = vi.fn();
 const isFeatureBuildDeployedMock = vi.fn();
 const reconcileBuildCompletionMock = vi.fn();
+const reconcileQuiescenceOnBootMock = vi.fn();
 
 vi.mock("@/lib/platform/version-config", () => ({
   syncPlatformVersionConfig: (...args: unknown[]) => syncPlatformVersionConfigMock(...args),
@@ -41,6 +43,10 @@ vi.mock("@/lib/self-upgrade/completion", () => ({
 
 vi.mock("@/lib/build-flow-state", () => ({
   reconcileBuildCompletion: (...args: unknown[]) => reconcileBuildCompletionMock(...args),
+}));
+
+vi.mock("@/lib/self-upgrade/quiescence", () => ({
+  reconcileQuiescenceOnBoot: (...args: unknown[]) => reconcileQuiescenceOnBootMock(...args),
 }));
 
 vi.mock("@/lib/self-upgrade/run-store", () => ({
@@ -97,6 +103,8 @@ beforeEach(() => {
   changePromotionUpdateManyMock.mockReset();
   isFeatureBuildDeployedMock.mockReset();
   reconcileBuildCompletionMock.mockReset();
+  reconcileQuiescenceOnBootMock.mockReset();
+  reconcileQuiescenceOnBootMock.mockResolvedValue({ reconciled: 0, failed: 0 });
   featureBuildUpdateMock.mockResolvedValue({});
   featureBuildUpdateManyMock.mockResolvedValue({ count: 1 });
   buildActivityCreateMock.mockResolvedValue({});
@@ -362,6 +370,44 @@ describe("reconcileSelfUpgradeRunsOnBoot", () => {
 
     expect(result).toEqual({ succeeded: 0, failed: 1 });
     expect(failRunMock).toHaveBeenCalledWith("SUR-HUNG", expect.stringContaining("watchdog"));
+  });
+});
+
+describe("reconcileQuiescenceRunsOnBoot (wrapper)", () => {
+  it("passes the deployed SHA as BOTH currentVersion and currentBundleHash", async () => {
+    // The runtime identity (DEPLOYED_SHA) equals the self-upgrade's stored
+    // targetBundleHash; passing it for both fields makes the lib reconciler's
+    // match robust regardless of which field a row populated.
+    getDeployedShaMock.mockResolvedValueOnce("deployed-sha");
+    reconcileQuiescenceOnBootMock.mockResolvedValueOnce({ reconciled: 1, failed: 0 });
+
+    const result = await reconcileQuiescenceRunsOnBoot({ log: vi.fn(), warn: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ reconciled: 1, failed: 0 });
+    expect(reconcileQuiescenceOnBootMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentVersion: "deployed-sha",
+        currentBundleHash: "deployed-sha",
+        staleAfterMs: 0,
+      }),
+    );
+  });
+
+  it("forwards staleAfterMs in periodic mode", async () => {
+    getDeployedShaMock.mockResolvedValueOnce("deployed-sha");
+    await reconcileQuiescenceRunsOnBoot(
+      { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      { staleAfterMs: 30 * 60 * 1000 },
+    );
+    expect(reconcileQuiescenceOnBootMock).toHaveBeenCalledWith(
+      expect.objectContaining({ staleAfterMs: 30 * 60 * 1000 }),
+    );
+  });
+
+  it("is non-fatal: returns null when resolving the deployed SHA throws", async () => {
+    getDeployedShaMock.mockRejectedValueOnce(new Error("boom"));
+    const result = await reconcileQuiescenceRunsOnBoot({ log: vi.fn(), warn: vi.fn(), error: vi.fn() });
+    expect(result).toBeNull();
   });
 });
 
