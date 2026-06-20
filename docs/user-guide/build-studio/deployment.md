@@ -90,10 +90,10 @@ If any gate finds issues, the PR is created but not merged. The findings are pos
 
 ### Configuration
 
-Pull request creation requires a GitHub token. This is configured differently depending on your contribution mode:
+Pull request creation requires a GitHub token. This is configured differently depending on whether your install is **Contributing** or **Private** (the two contribution states — see Admin > Platform Development):
 
-- **Anonymous contributions** (selective/contribute_all mode) — The platform uses a pre-provisioned token (`HIVE_CONTRIBUTION_TOKEN` environment variable). No GitHub account is needed from the customer.
-- **Private mode** (fork_only) — If you want PR-based code tracking for your own repository, configure a personal access token in Admin > Platform Development.
+- **Contributing install** — The platform uses a pre-provisioned token (`HIVE_CONTRIBUTION_TOKEN` environment variable) for anonymous contributions. No GitHub account is needed from the customer. When you ship a change, the platform suggests whether to keep it on your system or share it with the community, and you make the final call (nothing is shared without your confirmation).
+- **Private install** — Everything stays on your own system. If you want PR-based code tracking for your own repository, configure a personal access token in Admin > Platform Development.
 
 To set up the hive contribution token, add it to your `.env` file:
 
