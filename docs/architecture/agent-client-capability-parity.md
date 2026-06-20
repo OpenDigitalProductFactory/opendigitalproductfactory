@@ -19,7 +19,7 @@ Adoption status legend: ✅ adopted · ◐ partial/planned · ⬜ not adopted ·
 | **Compaction style** | summarize + tool-result clearing | encrypted latent-state | `/compress` (lossy) | window scale-out | auto/`/smol` | window-aware `compactAgenticMessages`. ✅ |
 | **Out-of-window instruction retention** | system reminders | — | `/memory add` pin | — | Focus-Chain-like | `withPlanReminder` re-injects plan every iteration. ✅ (ahead) |
 | **Prompt caching / cache boundary** | static/dynamic boundary; ⚠️ TTL 1h→5m (2026-03) | prefix cache | prefix cache | n/a (beta) | provider-dependent | `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` mirrored; local prefix-KV ◐ (R6 verify). ⚠️ track TTL. |
-| **Deferred / search-based tool loading** | Tool Search Tool (`defer_loading`, ~85% list cut) | all tools presented | all enabled | discovers MCP | per-tool wildcard perms | native loop subsets via grants+phase; **external CLI path not deferred** ⬜ (R3). |
+| **Deferred / search-based tool loading** | Tool Search Tool (`defer_loading`, ~85% list cut) | all tools presented | all enabled | discovers MCP | per-tool wildcard perms | native loop subsets via grants+phase; external CLI path has opt-in **core tier** ◐ (`?tier=core`, R3 Phase 1); model-driven deferral staged (Phase 2). |
 | **Code execution / programmatic tool calling** | code-exec w/ MCP (37–98% cut) | sandboxed shell | — | — | — | `run_tool_script` shipped dark ◐ (R4; governed read-only, flag+grant gated, live-verify pending). |
 | **Tool-result cap** | ~25K-token default | — | — | — | — | `tool-result-budget.ts` (native + MCP route). ✅ |
 | **Subagents / context isolation** | Task subagents | subagents | subagents (tool allowlist) | up to 8 parallel | primary+sub | Build Studio specialists; A2A. ✅ |
