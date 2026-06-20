@@ -3822,6 +3822,7 @@ model AgentThread {
   cancelledAt    DateTime?
   idempotencyKey String?
   terminalError  Json?
+  executionPlan  Json?         // BI-655507BA: crash-durable agentic-loop ExecutionPlan (goal+steps+status); written on each plan mutation, reloaded on resume.
   parent         AgentThread?  @relation("AgentThreadChildren", fields: [parentThreadId], references: [id], onDelete: Restrict)
   children       AgentThread[] @relation("AgentThreadChildren")
 

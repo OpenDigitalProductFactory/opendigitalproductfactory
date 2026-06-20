@@ -7,13 +7,15 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { mockIssueBootstrapTokenAction } = vi.hoisted(() => ({
+const { mockIssueBootstrapTokenAction, mockPrepareRemoteProvisioning } = vi.hoisted(() => ({
   mockIssueBootstrapTokenAction: vi.fn(),
+  mockPrepareRemoteProvisioning: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/edge-nodes", () => ({
   approveEdgeNodeAction: vi.fn(),
   issueEdgeBootstrapTokenAction: mockIssueBootstrapTokenAction,
+  prepareRemoteEdgeProvisioningAction: mockPrepareRemoteProvisioning,
   quarantineEdgeNodeAction: vi.fn(),
   revokeEdgeNodeAction: vi.fn(),
 }));
@@ -236,7 +238,7 @@ describe("EdgeNodesAdminClient customer/site scope", () => {
     expect(screen.queryByRole("option", { name: "Main Office" })).not.toBeInTheDocument();
 
     fireEvent.change(siteSelect, { target: { value: "site_hq" } });
-    fireEvent.click(screen.getByRole("button", { name: "Issue token" }));
+    fireEvent.click(screen.getByRole("button", { name: "Issue raw token only" }));
 
     await waitFor(() => {
       expect(mockIssueBootstrapTokenAction).toHaveBeenCalledWith(
@@ -245,6 +247,92 @@ describe("EdgeNodesAdminClient customer/site scope", () => {
           targetCustomerSiteId: "site_hq",
         }),
       );
+    });
+  });
+
+  it("generates a ready-to-run install command for a remote host", async () => {
+    mockPrepareRemoteProvisioning.mockResolvedValue({
+      ok: true,
+      tokenId: "boot_remote",
+      prefix: "dpfboot_REM",
+      expiresAt: "2026-05-22T12:15:00.000Z",
+      plan: {
+        authorityUrl: "https://dpf-authority.lan:443",
+        authorityUrlIssues: [],
+        os: "linux",
+        commands: [
+          {
+            id: "linux-container",
+            label: "Linux — Docker (real LAN)",
+            kind: "container",
+            worksToday: true,
+            shell: "bash",
+            command:
+              "curl -fsSL https://example/docker-compose.edge-standalone.yml -o docker-compose.edge-standalone.yml && DPF_AUTHORITY_URL='https://dpf-authority.lan:443' DPF_BOOTSTRAP_TOKEN='dpfboot_x' docker compose -f docker-compose.edge-standalone.yml up -d",
+            note: "Native Docker Engine on Linux sees the host's real NICs.",
+          },
+        ],
+        approveHint: "The node enrolls as pending. Approve it here on this Edge Nodes page.",
+        nativeBinaryNote: "Full-fidelity LAN discovery on Windows/macOS needs the native binary.",
+      },
+    });
+
+    render(
+      <EdgeNodesAdminClient nodes={[]} tokens={[]} customerAccounts={CUSTOMER_ACCOUNTS} />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Host operating system"), {
+      target: { value: "linux" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate install command" }));
+
+    await waitFor(() => {
+      expect(mockPrepareRemoteProvisioning).toHaveBeenCalledWith(
+        expect.objectContaining({ os: "linux" }),
+      );
+    });
+    expect(screen.getByText("Run this on the new machine")).toBeInTheDocument();
+    expect(
+      screen.getByText(/docker compose -f docker-compose\.edge-standalone\.yml up -d/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+  });
+
+  it("warns when the resolved Authority URL is unreachable from another machine", async () => {
+    mockPrepareRemoteProvisioning.mockResolvedValue({
+      ok: true,
+      tokenId: "boot_remote",
+      prefix: "dpfboot_REM",
+      expiresAt: "2026-05-22T12:15:00.000Z",
+      plan: {
+        authorityUrl: "http://localhost:3000",
+        authorityUrlIssues: ["loopback", "insecure-http"],
+        os: "linux",
+        commands: [
+          {
+            id: "linux-container",
+            label: "Linux — Docker (real LAN)",
+            kind: "container",
+            worksToday: true,
+            shell: "bash",
+            command: "curl ... up -d",
+          },
+        ],
+        approveHint: "The node enrolls as pending.",
+        nativeBinaryNote: "Native binary note.",
+      },
+    });
+
+    render(
+      <EdgeNodesAdminClient nodes={[]} tokens={[]} customerAccounts={CUSTOMER_ACCOUNTS} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate install command" }));
+
+    // The loopback warning names NEXT_PUBLIC_BASE_URL — a clean text node we
+    // can assert without tripping over the interspersed <code> elements.
+    await waitFor(() => {
+      expect(screen.getByText("NEXT_PUBLIC_BASE_URL")).toBeInTheDocument();
     });
   });
 });

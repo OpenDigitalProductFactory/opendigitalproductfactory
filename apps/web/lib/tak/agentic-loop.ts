@@ -30,6 +30,7 @@ import {
   planCompletionGate,
   planProgress,
 } from "./execution-plan";
+import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store";
 import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
@@ -1102,6 +1103,10 @@ export async function runAgenticLoop(params: {
   let executionPlan: ExecutionPlan | null = null;
   let planNudges = 0;
   if (planEnabled) {
+    // BI-655507BA: resume a crash-durable plan persisted for this thread, so a
+    // portal recycle mid-loop doesn't lose the plan + step progress. Best-effort
+    // (never throws); null on miss -> the model simply re-plans, as today.
+    executionPlan = await loadExecutionPlan(threadId);
     const planProviderTools = executionPlanProviderTools();
     routeOptions.tools = [
       ...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? []),
@@ -1882,6 +1887,9 @@ export async function runAgenticLoop(params: {
       if (planEnabled && EXECUTION_PLAN_TOOL_NAMES.has(tc.name)) {
         const applied = applyPlanToolCall(executionPlan, tc.name, tc.arguments, iteration);
         executionPlan = applied.plan;
+        // BI-655507BA: best-effort write-through so the plan survives a process
+        // restart (not just compaction). Fire-and-forget; never throws.
+        void persistExecutionPlan(threadId, executionPlan);
         console.log(
           `[agentic-tool] PLAN iter=${iteration} tool=${tc.name} success=${applied.result.success}` +
           (executionPlan ? ` progress=${planProgress(executionPlan).done}/${planProgress(executionPlan).total}` : ""),
