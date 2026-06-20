@@ -7688,6 +7688,10 @@ export async function executeTool(
           name: String(params["name"]),
           portfolioSlug: String(params["portfolioSlug"]),
           versionBump: (params["versionBump"] as "major" | "minor" | "patch") ?? "minor",
+          // Thread the MCP actor through so this works in a session-less context
+          // (autonomous ship from the reconciler). UI callers go through the
+          // session as before; shipBuild falls back to requireBuildAccess().
+          actorUserId: userId,
         });
         return {
           success: true,
