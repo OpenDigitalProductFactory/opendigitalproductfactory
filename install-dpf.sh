@@ -507,10 +507,19 @@ if [ "$DPF_PLATFORM" = "darwin" ] && command -v docker >/dev/null 2>&1; then
       sleep 2
     done
     if [ "$mr_ready" -ne 1 ]; then
-      warn "Docker Model Runner did not become ready within 30s. The model pull may fail."
-    fi
-
-    if [ -n "$DPF_SELECTED_MODEL" ]; then
+      # Distinguish "Model Runner CLI absent" (Docker Desktop too old) from
+      # "present but not ready yet" so we give the right guidance and never
+      # leak the raw `docker: 'model' is not a docker command` error by
+      # attempting a pull that cannot succeed (#1767). The portal still
+      # installs either way; AI features activate once a model is available.
+      if docker model --help >/dev/null 2>&1; then
+        warn "Docker Model Runner isn't running yet; skipping the AI model download."
+        info "  Pull it later once it's ready: docker model pull ${DPF_SELECTED_MODEL:-<model>}"
+      else
+        warn "Docker Model Runner isn't available (requires Docker Desktop 4.40+); skipping the AI model download."
+        info "  Update Docker Desktop, then re-run install-dpf.sh. The portal still works without it."
+      fi
+    elif [ -n "$DPF_SELECTED_MODEL" ]; then
       # Skip pull if the EXACT selected model (family + tag/quant) is on
       # disk. The earlier loose check stripped `ai/` and everything after
       # `:`, so any pre-existing qwen3 quant satisfied the grep and the
@@ -826,7 +835,28 @@ if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -d .git ]; then
     ok "Stamping local build with DPF_PLATFORM_VERSION=$DPF_PLATFORM_VERSION"
   fi
 fi
-docker compose "${DPF_COMPOSE_FILES[@]}" up -d
+# Non-critical sidecars (e.g. dpf-stt voice STT) pull from third-party
+# registries whose mutable tags get pruned upstream: hwdsl2/whisper-server
+# re-pushes :latest and prunes the prior index digest, so a pinned digest
+# eventually 404s ("manifest unknown"). A single such failure would otherwise
+# abort the WHOLE `docker compose up`, taking the portal/db/redis down with it
+# (#1767). Pre-pull them with failure tolerated and, if one is unavailable,
+# scale it to 0 so the core platform still comes up — voice degrades, the
+# install does not. Nothing depends_on these sidecars, so scaling to 0 is safe.
+_noncritical_sidecars="dpf-stt"
+_scale_args=()
+for _svc in $_noncritical_sidecars; do
+  if ! docker compose "${DPF_COMPOSE_FILES[@]}" pull "$_svc" >/dev/null 2>&1; then
+    warn "Optional sidecar '$_svc' image is unavailable upstream; bringing up the platform without it."
+    info "  Voice features needing '$_svc' stay inactive until its image returns; re-run install-dpf.sh to retry."
+    _scale_args+=(--scale "$_svc=0")
+  fi
+done
+if [ "${#_scale_args[@]}" -gt 0 ]; then
+  docker compose "${DPF_COMPOSE_FILES[@]}" up -d "${_scale_args[@]}"
+else
+  docker compose "${DPF_COMPOSE_FILES[@]}" up -d
+fi
 ok "docker compose up returned"
 
 # 10b. Voice / TTS sidecar (Linux hosts with an NVIDIA GPU).

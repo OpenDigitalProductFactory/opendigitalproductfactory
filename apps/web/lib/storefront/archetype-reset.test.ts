@@ -255,6 +255,199 @@ describe("resetStorefrontArchetype", () => {
     });
   });
 
+  it("preserves operator-owned identity and reports it when none is supplied (AUDIT-R1S-001)", async () => {
+    const tx = {
+      orgSettings: { findFirst: vi.fn().mockResolvedValue({ baseCurrency: "USD" }) },
+      organization: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "org_1",
+          name: "Riverside Plumbing Solutions",
+          slug: "riverside-plumbing-solutions",
+        }),
+        findFirst: vi.fn().mockResolvedValue(null),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      storefrontConfig: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "sf_1",
+          organizationId: "org_1",
+          tagline: "Fast, reliable plumbing for homes and businesses in Riverside",
+        }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      businessContext: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      storefrontArchetype: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "arch_1",
+          archetypeId: "electrician",
+          category: "trades-maintenance",
+          ctaType: "inquiry",
+          sectionTemplates: [{ type: "hero", title: "Hero", sortOrder: 0 }],
+          itemTemplates: [{ name: "Panel upgrade", priceType: "quote", ctaType: "inquiry" }],
+        }),
+      },
+      storefrontSection: {
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      storefrontItem: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      providerService: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      bookingHold: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      businessCapability: businessCapabilityProjectionStore(),
+    };
+    mockPrisma.$transaction.mockImplementation(async (fn: (trx: typeof tx) => Promise<unknown>) => fn(tx));
+
+    const result = await resetStorefrontArchetype({
+      organizationId: "org_1",
+      targetArchetypeId: "electrician",
+      mode: "replace-seeded-content",
+    });
+
+    // Identity is operator-owned, so the swap must NOT auto-clobber it...
+    expect(tx.organization.update).toHaveBeenCalledWith({
+      where: { id: "org_1" },
+      data: { industry: "trades-maintenance" },
+    });
+    expect(tx.organization.findFirst).not.toHaveBeenCalled();
+    // ...but it MUST be reported so the caller can prompt the operator instead
+    // of silently presenting the prior identity to customers (AUDIT-R1S-001).
+    expect(result.identity.updated).toEqual([]);
+    expect(result.identity.preserved).toEqual(["orgName", "slug", "tagline"]);
+    expect(result.identity.orgName).toBe("Riverside Plumbing Solutions");
+    expect(result.identity.slug).toBe("riverside-plumbing-solutions");
+    expect(result.warnings.some((w) => /preserved across the archetype change/i.test(w))).toBe(true);
+  });
+
+  it("applies supplied identity (name, slug, tagline) and marks them updated", async () => {
+    const tx = {
+      orgSettings: { findFirst: vi.fn().mockResolvedValue({ baseCurrency: "USD" }) },
+      organization: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "org_1",
+          name: "Riverside Plumbing Solutions",
+          slug: "riverside-plumbing-solutions",
+        }),
+        findFirst: vi.fn().mockResolvedValue(null), // requested slug is free
+        update: vi.fn().mockResolvedValue({}),
+      },
+      storefrontConfig: {
+        findUnique: vi.fn().mockResolvedValue({ id: "sf_1", organizationId: "org_1", tagline: "old" }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      businessContext: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      storefrontArchetype: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "arch_1",
+          archetypeId: "electrician",
+          category: "trades-maintenance",
+          ctaType: "inquiry",
+          sectionTemplates: [{ type: "hero", title: "Hero", sortOrder: 0 }],
+          itemTemplates: [{ name: "Panel upgrade", priceType: "quote", ctaType: "inquiry" }],
+        }),
+      },
+      storefrontSection: {
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      storefrontItem: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      providerService: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      bookingHold: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      businessCapability: businessCapabilityProjectionStore(),
+    };
+    mockPrisma.$transaction.mockImplementation(async (fn: (trx: typeof tx) => Promise<unknown>) => fn(tx));
+
+    const result = await resetStorefrontArchetype({
+      organizationId: "org_1",
+      targetArchetypeId: "electrician",
+      mode: "replace-seeded-content",
+      identity: {
+        orgName: "Riverside Electric Co.",
+        slug: "riverside-electric",
+        tagline: "Licensed electricians for homes and businesses",
+      },
+    });
+
+    expect(tx.organization.findFirst).toHaveBeenCalledWith({
+      where: { slug: "riverside-electric", NOT: { id: "org_1" } },
+      select: { id: true },
+    });
+    expect(tx.organization.update).toHaveBeenCalledWith({
+      where: { id: "org_1" },
+      data: { industry: "trades-maintenance", name: "Riverside Electric Co.", slug: "riverside-electric" },
+    });
+    expect(tx.storefrontConfig.update).toHaveBeenCalledWith({
+      where: { id: "sf_1" },
+      data: { archetypeId: "arch_1", tagline: "Licensed electricians for homes and businesses" },
+    });
+    expect([...result.identity.updated].sort()).toEqual(["orgName", "slug", "tagline"]);
+    expect(result.identity.preserved).toEqual([]);
+    expect(result.identity.orgName).toBe("Riverside Electric Co.");
+    expect(result.identity.slug).toBe("riverside-electric");
+    expect(result.identity.tagline).toBe("Licensed electricians for homes and businesses");
+  });
+
+  it("does not overwrite a slug already taken by another org", async () => {
+    const tx = {
+      orgSettings: { findFirst: vi.fn().mockResolvedValue({ baseCurrency: "USD" }) },
+      organization: {
+        findUnique: vi.fn().mockResolvedValue({ id: "org_1", name: "Acme", slug: "acme" }),
+        findFirst: vi.fn().mockResolvedValue({ id: "org_2" }), // requested slug is taken
+        update: vi.fn().mockResolvedValue({}),
+      },
+      storefrontConfig: {
+        findUnique: vi.fn().mockResolvedValue({ id: "sf_1", organizationId: "org_1", tagline: null }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      businessContext: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      storefrontArchetype: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "arch_1",
+          archetypeId: "electrician",
+          category: "trades-maintenance",
+          ctaType: "inquiry",
+          sectionTemplates: [],
+          itemTemplates: [],
+        }),
+      },
+      storefrontSection: {
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      storefrontItem: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      providerService: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      bookingHold: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      businessCapability: businessCapabilityProjectionStore(),
+    };
+    mockPrisma.$transaction.mockImplementation(async (fn: (trx: typeof tx) => Promise<unknown>) => fn(tx));
+
+    const result = await resetStorefrontArchetype({
+      organizationId: "org_1",
+      targetArchetypeId: "electrician",
+      mode: "replace-seeded-content",
+      identity: { slug: "taken-slug" },
+    });
+
+    expect(tx.organization.update).toHaveBeenCalledWith({
+      where: { id: "org_1" },
+      data: { industry: "trades-maintenance" },
+    });
+    expect(result.identity.slug).toBe("acme");
+    expect(result.identity.updated).not.toContain("slug");
+    expect(result.warnings.some((w) => /already in use/i.test(w))).toBe(true);
+  });
+
   it("refuses to run when the target archetype is missing", async () => {
     const tx = {
       organization: {

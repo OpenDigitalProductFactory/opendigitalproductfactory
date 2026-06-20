@@ -335,6 +335,22 @@ Open Docker Desktop → Settings → Features in development → enable
 "Use Docker Compose v2" and "Docker Model Runner", then re-run
 `bash install-dpf.sh`.
 
+**Install log says "Docker Model Runner isn't available … skipping the AI
+model download".**
+Expected on Docker Desktop older than 4.40 (the `docker model` CLI isn't
+present). The portal installs and runs normally — only the local AI model
+is skipped, and the installer no longer leaks a raw `docker: 'model' is not
+a docker command` error. Update Docker Desktop and re-run
+`bash install-dpf.sh` to pull the model, or point the portal at an external
+LLM provider under Admin → Providers.
+
+**Install log says an "optional sidecar … image is unavailable upstream".**
+The bundled voice speech-to-text sidecar (`dpf-stt`) is pulled from a
+third-party registry that occasionally prunes its image tag. When that
+happens the installer brings the platform up *without* voice input rather
+than failing the whole install — everything else works. Re-run
+`bash install-dpf.sh` later to pick the image up once it's available again.
+
 **`/api/health` returns 500.**
 The portal's database migrations may not have completed. Tail the
 portal-init container:
