@@ -58,7 +58,7 @@ jobs:
       DPF_HEALTH_URL: http://localhost:3000/api/health
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # The full stack no longer fits in the ~14 GB a stock
       # ubuntu-latest runner leaves free: the v6.0.0 and v6.1.0 release

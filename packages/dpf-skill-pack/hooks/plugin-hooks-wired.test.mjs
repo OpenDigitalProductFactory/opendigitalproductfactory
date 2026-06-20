@@ -24,7 +24,7 @@ import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-const GUARD_SCRIPTS = ["lease-guard.mjs", "ux-fit-precheck.mjs", "spec-plan-doc-precheck.mjs"];
+const GUARD_SCRIPTS = ["lease-guard.mjs", "root-clone-guard.mjs", "ux-fit-precheck.mjs", "spec-plan-doc-precheck.mjs"];
 const WRITE_TOOLS = ["Write", "Edit", "MultiEdit"];
 
 function loadHooksJson() {
@@ -63,15 +63,17 @@ for (const script of GUARD_SCRIPTS) {
   });
 }
 
-test("lease-guard rides a Bash matcher; the prechecks ride a write-tool matcher", () => {
+test("lease-guard + root-clone-guard ride a Bash matcher; the prechecks ride a write-tool matcher", () => {
   const pre = loadHooksJson().hooks.PreToolUse;
 
   const bashEntry = pre.find((e) => String(e.matcher ?? "").split("|").map((s) => s.trim()).includes("Bash"));
-  assert.ok(bashEntry, "expected a Bash PreToolUse matcher for lease-guard");
-  assert.ok(
-    (bashEntry.hooks ?? []).some((h) => JSON.stringify(h).includes("lease-guard.mjs")),
-    "lease-guard.mjs must ride the Bash matcher",
-  );
+  assert.ok(bashEntry, "expected a Bash PreToolUse matcher for the Bash guards");
+  for (const guard of ["lease-guard.mjs", "root-clone-guard.mjs"]) {
+    assert.ok(
+      (bashEntry.hooks ?? []).some((h) => JSON.stringify(h).includes(guard)),
+      `${guard} must ride the Bash matcher`,
+    );
+  }
 
   const writeEntry = pre.find((e) => {
     const tools = String(e.matcher ?? "").split("|").map((s) => s.trim());

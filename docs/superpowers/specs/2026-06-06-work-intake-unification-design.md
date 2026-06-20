@@ -2,7 +2,7 @@
 
 | Field | Value |
 | ----- | ----- |
-| Status | Draft — EA reviewed and tightened 2026-06-06; Phase 6 ImprovementProposal evidence fold + orphan backfill implemented 2026-06-20 (BI-196693D6, partial — see §3.5) |
+| Status | Draft — EA reviewed and tightened 2026-06-06; Phase 6 evidence folds + orphan backfills implemented 2026-06-20 — ImprovementProposal (BI-196693D6, §3.5) + CoworkerCapabilityNeed (BI-8CE36E65, §3.6). `/admin/issue-reports` (BI-EDFBE081) still open. |
 | Date | 2026-06-06 |
 | Epic | [`EP-INTAKE-UNIFY`](#) — "Single front door for work intake — consolidate isolated queues into the backlog"; live MCP verified the listed BIs under this epic on 2026-06-06. |
 | Backlog items | BI-2BB06F90 (shared front door — foundation), BI-7541AB88 (auto-file ImprovementProposal — this slice), BI-B716B387 (ImprovementSignal), BI-8CE36E65 (CoworkerCapabilityNeed), BI-EDFBE081 (PlatformIssueReport sync projection), BI-353702E8 (audit ledgers), BI-196693D6 (UI fold). |
@@ -109,10 +109,10 @@ The `/ops/improvements` page stays in this slice (its full fold into a filtered 
 | Phase | BI | Change |
 | ----- | -- | ------ |
 | 2 | BI-B716B387 | `ImprovementSignal`: flywheel evaluation files recurring/high-impact signals via the front door, deduped by `signalId`. |
-| 3 | BI-8CE36E65 | `CoworkerCapabilityNeed`: auto-file on submission (`workType=skill|tool`), back-link `linkedBacklogItemId`. |
+| 3 | BI-8CE36E65 | `CoworkerCapabilityNeed`: auto-file on submission (`workType=skill|tool`), back-link `linkedBacklogItemId`. **DONE** — auto-file shipped 2026-06-06; page fold + orphan backfill 2026-06-20 (§3.6). |
 | 4 | BI-EDFBE081 | `PlatformIssueReport`: synchronous projection via the front door, retire the 15-min cron, fold `/admin/issue-reports` into a `workType=bug` view (the 2026-05-30 spec's Phase 2). |
 | 5 | BI-353702E8 | Audit ledgers (`AssuranceFinding` already auto-files — migrate it onto the front door; others gain a rule/operator "file to backlog" affordance). |
-| 6 | BI-196693D6 | UI fold: the former queue pages become evidence views; `/ops` is the one place to see and prioritize portal-dev work. This is a UX convergence slice, not a new dashboard. It must reuse report-kit `StatusBadge`, `DataTable`, `FilterBar`, and `StatCard` where applicable, keep theme-token styling, and treat origin pages as evidence/detail views linked from the canonical backlog row. **`/ops/improvements` shipped 2026-06-20** (§3.5): read-only evidence view of the linked `BacklogItem` status + idempotent orphan backfill. The `/platform/ai/capability-needs` and `/admin/issue-reports` page folds remain (gated on Phases 3–4 auto-file landing). |
+| 6 | BI-196693D6 | UI fold: the former queue pages become evidence views; `/ops` is the one place to see and prioritize portal-dev work. This is a UX convergence slice, not a new dashboard. It must reuse report-kit `StatusBadge`, `DataTable`, `FilterBar`, and `StatCard` where applicable, keep theme-token styling, and treat origin pages as evidence/detail views linked from the canonical backlog row. **`/ops/improvements` shipped 2026-06-20** (§3.5) **and `/platform/ai/capability-needs` shipped 2026-06-20** (§3.6): read-only evidence views of the linked `BacklogItem` status + idempotent orphan backfill. The `/admin/issue-reports` page fold remains (Phase 4, BI-EDFBE081). |
 
 ### 3.4 Enterprise architecture guardrails
 
@@ -131,7 +131,16 @@ Operator review (Mark, 2026-06-20) reopened the symptom: the Improvements tab st
 - **Orphan backfill (queue drain).** New idempotent `reconcileImprovementBacklog()` (`apps/web/lib/evaluate/improvement-backlog-reconcile.ts`) files every non-skill, non-rejected proposal with `backlogItemId IS NULL` through the **same** shared front door (`ingestBacklogItem`, no second create path), then sets the link. The page server-render awaits it (non-fatal) before reading, so legacy orphans drain to the backlog the moment the page is viewed — the operator never clicks anything (`do-the-work-dont-task-the-operator`). It converges to a zero-write no-op once every proposal is linked, and self-heals any future auto-file failure.
 - **Skill proposals untouched.** `category="skill"` is excluded from both the evidence read and the backfill; the governed `lib/skills/proposals.ts` approve/rollback lifecycle is unaffected.
 - **UX-Fit decision** (`human_cognitive_load`, `principle_decide`, external_coding_agent): fold-to-evidence composite 6.67 vs keep-parallel-queue 1.49, margin 5.18, high confidence, no commandment conflict.
-- **Still open under BI-196693D6:** the `/platform/ai/capability-needs` and `/admin/issue-reports` page folds (each gated on its Phase 3–4 auto-file slice landing first).
+- **Still open under BI-196693D6:** the `/admin/issue-reports` page fold (gated on the Phase 4 PlatformIssueReport projection landing on the front door first).
+
+### 3.6 Phase 6 implementation — `/platform/ai/capability-needs` evidence fold (2026-06-20)
+
+The CoworkerCapabilityNeed queue was the same shape as ImprovementProposal: auto-file on submission already shipped (PR #1591, 2026-06-06 — `submitCoworkerSelfAssessment` files each need through `ingestBacklogItem` with origin `{kind:"capability-need", id: capabilityNeedOriginId(agentId, kind, need)}` and sets `linkedBacklogItemId` + `status="backlog-filed"`), but the `/platform/ai/capability-needs` page still owned a parallel review lifecycle (`submitted→reviewing→accepted/deferred/discarded/duplicate→resolved`) via Accept/Defer/Discard, manual "Link backlog item", and "Mark duplicate" controls. Live DB: 2 needs, both orphaned (created 2026-06-03, pre-auto-file, no backlog link). This slice mirrors §3.5:
+
+- **One lifecycle.** The page is now a read-only evidence view: each row shows the linked `BacklogItem`'s status (`StatusBadge domain="backlogItem"`), with severity/kind as evidence labels, filterable by severity/kind via report-kit `FilterBar` (`mode="url"`, server-rendered). Deleted the UI action layer (`apps/web/lib/actions/coworker-capability-needs.ts` + test) and the need-status filter/summary. The work is triaged on the backlog row the page links to.
+- **Orphan backfill.** New idempotent `reconcileCapabilityNeedBacklog()` (`apps/web/lib/coworker-self-assessment/capability-backlog-reconcile.ts`) files every non-dismissed need with no `linkedBacklogItemId` through the SAME filer the submit path uses (`fileCapabilityNeedToBacklog`, extracted from the submit closure so origin dedup key + body never drift), then links it back. The page awaits it (non-fatal) before rendering, so the 2 orphans drain automatically. Dismissed needs (`discarded`/`duplicate`/`resolved`) are excluded so closed evidence is not resurrected.
+- **Service capability retained.** `resolveCapabilityNeed` / `linkNeedToBacklogItem` stay in the service layer (the latter is reused by the reconcile); only the competing *UI surface* was removed.
+- **UX-Fit decision** (`human_cognitive_load`, `principle_decide`, external_coding_agent): fold-to-evidence, same rationale as §3.5 — one lifecycle replaces two.
 
 ## 4. Verification Gates (this slice)
 

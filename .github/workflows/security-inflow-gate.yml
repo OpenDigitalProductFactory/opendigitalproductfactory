@@ -61,7 +61,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout default branch (trusted base — do not check out PR head)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         # Intentionally NO `ref:` parameter. Defaults to the workflow file's
         # ref (default branch on workflow_run), which is what we want — the
         # baseline file and gate script must come from the trusted base, not

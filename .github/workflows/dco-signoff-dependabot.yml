@@ -36,7 +36,7 @@ jobs:
         # pattern. We don't run any PR code in this workflow (only git log,
         # rebase, push) but the safe pattern is to not persist the token
         # into git config and instead pass it explicitly on the push step.
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0

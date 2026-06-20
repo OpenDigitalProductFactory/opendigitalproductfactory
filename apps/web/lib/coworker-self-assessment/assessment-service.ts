@@ -107,31 +107,46 @@ export function capabilityNeedOriginId(agentId: string, kind: string, need: stri
   return `${agentId}:${kind}:${slug}`;
 }
 
+/**
+ * File one capability need into the backlog through the shared front door.
+ * Exported so the submit path AND the orphan-reconcile (BI-8CE36E65 Phase 6)
+ * share ONE filing behaviour — same origin dedup key + body — and never drift.
+ * Non-fatal: returns null on failure (the need is still recorded as evidence).
+ */
+export async function fileCapabilityNeedToBacklog(n: {
+  needId: string;
+  agentId: string;
+  kind: string;
+  severity: string;
+  need: string;
+  blocks: string;
+}): Promise<{ itemId: string } | null> {
+  try {
+    const res = await ingestBacklogItem({
+      title: `[${n.kind}] ${n.need}`.replace(/\s+/g, " ").trim().slice(0, 200),
+      body: [
+        n.need,
+        `Blocks: ${n.blocks}`,
+        `Kind: ${n.kind} | Severity: ${n.severity}`,
+        `Coworker: ${n.agentId}`,
+        `From capability need ${n.needId}`,
+      ].join("\n"),
+      workType: capabilityNeedToWorkType(n.kind),
+      source: "automated-detection",
+      itemIdPrefix: "CAP",
+      agentId: n.agentId,
+      origin: { kind: "capability-need", id: capabilityNeedOriginId(n.agentId, n.kind, n.need) },
+    });
+    return { itemId: res.itemId };
+  } catch (err) {
+    // Non-fatal: the need is still recorded even if the backlog projection fails.
+    console.error("[coworker-self-assessment] backlog auto-file failed", err);
+    return null;
+  }
+}
+
 function defaultFileBacklogItem(): FileCapabilityNeedFn {
-  return async (n) => {
-    try {
-      const res = await ingestBacklogItem({
-        title: `[${n.kind}] ${n.need}`.replace(/\s+/g, " ").trim().slice(0, 200),
-        body: [
-          n.need,
-          `Blocks: ${n.blocks}`,
-          `Kind: ${n.kind} | Severity: ${n.severity}`,
-          `Coworker: ${n.agentId}`,
-          `From capability need ${n.needId}`,
-        ].join("\n"),
-        workType: capabilityNeedToWorkType(n.kind),
-        source: "automated-detection",
-        itemIdPrefix: "CAP",
-        agentId: n.agentId,
-        origin: { kind: "capability-need", id: capabilityNeedOriginId(n.agentId, n.kind, n.need) },
-      });
-      return { itemId: res.itemId };
-    } catch (err) {
-      // Non-fatal: the need is still recorded even if the backlog projection fails.
-      console.error("[coworker-self-assessment] backlog auto-file failed", err);
-      return null;
-    }
-  };
+  return fileCapabilityNeedToBacklog;
 }
 
 function defined<T extends Record<string, unknown>>(value: T): T {
