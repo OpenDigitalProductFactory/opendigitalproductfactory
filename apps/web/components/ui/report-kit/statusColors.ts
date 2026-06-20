@@ -215,6 +215,17 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     resolved: "success",
     suppressed: "neutral",
   },
+  // Backlog item lifecycle (Operations > Backlog and the Improvements evidence
+  // view). This is the single canonical work lifecycle: origin queues
+  // (improvements, capability needs, issue reports) surface THIS status, not a
+  // parallel one. Mirrors BACKLOG_STATUS_VALUES in apps/web/lib/explore/backlog.ts.
+  backlogItem: {
+    triaging: "warning",
+    open: "info",
+    "in-progress": "accent",
+    done: "success",
+    deferred: "neutral",
+  },
   // Platform domain-readiness matrix (Six-Cs). good/attention/blocked/unknown
   // map to the shared intent ramp so the readiness surface stops carrying its
   // own state->color map. See PlatformReadinessMatrix + command-center.ts.

@@ -2,7 +2,7 @@
 
 | Field | Value |
 | ----- | ----- |
-| Status | Draft — EA reviewed and tightened 2026-06-06 |
+| Status | Draft — EA reviewed and tightened 2026-06-06; Phase 6 ImprovementProposal evidence fold + orphan backfill implemented 2026-06-20 (BI-196693D6, partial — see §3.5) |
 | Date | 2026-06-06 |
 | Epic | [`EP-INTAKE-UNIFY`](#) — "Single front door for work intake — consolidate isolated queues into the backlog"; live MCP verified the listed BIs under this epic on 2026-06-06. |
 | Backlog items | BI-2BB06F90 (shared front door — foundation), BI-7541AB88 (auto-file ImprovementProposal — this slice), BI-B716B387 (ImprovementSignal), BI-8CE36E65 (CoworkerCapabilityNeed), BI-EDFBE081 (PlatformIssueReport sync projection), BI-353702E8 (audit ledgers), BI-196693D6 (UI fold). |
@@ -112,7 +112,7 @@ The `/ops/improvements` page stays in this slice (its full fold into a filtered 
 | 3 | BI-8CE36E65 | `CoworkerCapabilityNeed`: auto-file on submission (`workType=skill|tool`), back-link `linkedBacklogItemId`. |
 | 4 | BI-EDFBE081 | `PlatformIssueReport`: synchronous projection via the front door, retire the 15-min cron, fold `/admin/issue-reports` into a `workType=bug` view (the 2026-05-30 spec's Phase 2). |
 | 5 | BI-353702E8 | Audit ledgers (`AssuranceFinding` already auto-files — migrate it onto the front door; others gain a rule/operator "file to backlog" affordance). |
-| 6 | BI-196693D6 | UI fold: the former queue pages become evidence views; `/ops` is the one place to see and prioritize portal-dev work. This is a UX convergence slice, not a new dashboard. It must reuse report-kit `StatusBadge`, `DataTable`, `FilterBar`, and `StatCard` where applicable, keep theme-token styling, and treat origin pages as evidence/detail views linked from the canonical backlog row. |
+| 6 | BI-196693D6 | UI fold: the former queue pages become evidence views; `/ops` is the one place to see and prioritize portal-dev work. This is a UX convergence slice, not a new dashboard. It must reuse report-kit `StatusBadge`, `DataTable`, `FilterBar`, and `StatCard` where applicable, keep theme-token styling, and treat origin pages as evidence/detail views linked from the canonical backlog row. **`/ops/improvements` shipped 2026-06-20** (§3.5): read-only evidence view of the linked `BacklogItem` status + idempotent orphan backfill. The `/platform/ai/capability-needs` and `/admin/issue-reports` page folds remain (gated on Phases 3–4 auto-file landing). |
 
 ### 3.4 Enterprise architecture guardrails
 
@@ -122,6 +122,16 @@ The `/ops/improvements` page stays in this slice (its full fold into a filtered 
 - **No body-only provenance as a final architecture.** The body marker is a no-migration bridge. `BacklogItemActivity` carries the audit record now; a future schema slice may add explicit origin/dedupe columns if query volume or reporting requires it.
 - **No UI dialect drift.** The UI fold composes existing `/ops` and report-kit primitives. Do not add a second status badge, KPI tile, table, tab row, or queue dashboard.
 - **Skill proposals stay separate.** `ImprovementProposal.category="skill"` remains in the governed skill revision flow; this spec may create backlog work for missing platform capability, but must not bypass skill approve/rollback.
+
+### 3.5 Phase 6 implementation — `/ops/improvements` evidence fold (2026-06-20)
+
+Operator review (Mark, 2026-06-20) reopened the symptom: the Improvements tab still **looked** like an orphaned parallel queue — 6 proposals all stuck at `proposed`, and live DB confirmed **5 of 6 had no `BacklogItem` at all** (only the newest, post-auto-file, was linked). The data layer had converged (Phase 1 auto-files new proposals) but the **UI lifecycle never did**: `ImprovementsClient` still rendered the full `proposed→reviewed→prioritized→in_progress→implemented→verified` workflow with its own buttons and status filter — a second lifecycle competing with `BacklogItem.status`, which no one drained. That is the queue-elimination violation. This slice finishes the fold for the improvements page:
+
+- **One lifecycle.** Removed the parallel improvement workflow entirely — the `reviewImprovement` / `prioritizeImprovement` / `startImprovement` / `completeImprovement` / `verifyImprovement` / `rejectImprovement` server actions (`apps/web/lib/actions/improvements.ts`, deleted) and the status-filter bar keyed on improvement status. `/ops/improvements` is now a **read-only evidence view**: each card surfaces the linked `BacklogItem`'s canonical status (report-kit `StatusBadge` `domain="backlogItem"`, registry entry added to `statusColors.ts`), filterable by backlog status (`FilterBar` pills), and links to the backlog row where triage/prioritize/build/defer happen. No competing status workflow remains (spec guardrail "No parallel lifecycle").
+- **Orphan backfill (queue drain).** New idempotent `reconcileImprovementBacklog()` (`apps/web/lib/evaluate/improvement-backlog-reconcile.ts`) files every non-skill, non-rejected proposal with `backlogItemId IS NULL` through the **same** shared front door (`ingestBacklogItem`, no second create path), then sets the link. The page server-render awaits it (non-fatal) before reading, so legacy orphans drain to the backlog the moment the page is viewed — the operator never clicks anything (`do-the-work-dont-task-the-operator`). It converges to a zero-write no-op once every proposal is linked, and self-heals any future auto-file failure.
+- **Skill proposals untouched.** `category="skill"` is excluded from both the evidence read and the backfill; the governed `lib/skills/proposals.ts` approve/rollback lifecycle is unaffected.
+- **UX-Fit decision** (`human_cognitive_load`, `principle_decide`, external_coding_agent): fold-to-evidence composite 6.67 vs keep-parallel-queue 1.49, margin 5.18, high confidence, no commandment conflict.
+- **Still open under BI-196693D6:** the `/platform/ai/capability-needs` and `/admin/issue-reports` page folds (each gated on its Phase 3–4 auto-file slice landing first).
 
 ## 4. Verification Gates (this slice)
 
