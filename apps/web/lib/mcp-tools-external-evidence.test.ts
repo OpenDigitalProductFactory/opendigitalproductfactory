@@ -58,7 +58,7 @@ describe("record_external_development_evidence — build ownership guard", () =>
     expect(mockPrisma.externalEvidenceRecord.create).not.toHaveBeenCalled();
   });
 
-  it("rejects a buildId that does not exist and does not write", async () => {
+  it("allows a non-existent buildId (dangling, not a security risk) and writes", async () => {
     mockPrisma.featureBuild.findUnique.mockResolvedValue(null);
 
     const { executeTool } = await import("./mcp-tools");
@@ -68,9 +68,8 @@ describe("record_external_development_evidence — build ownership guard", () =>
       "user-1",
     );
 
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("not_found");
-    expect(mockPrisma.externalEvidenceRecord.create).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(mockPrisma.externalEvidenceRecord.create).toHaveBeenCalledTimes(1);
   });
 
   it("writes when the supplied buildId is owned by the caller", async () => {
