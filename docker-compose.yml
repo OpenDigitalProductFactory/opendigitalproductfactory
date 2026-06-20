@@ -1,5 +1,20 @@
 name: ${COMPOSE_PROJECT_NAME:-dpf}
 
+# Bounded container logging (BI-C8164664). Docker's default json-file driver has
+# NO size cap, so a single chatty/looping container can grow its log to many GB
+# and "scroll like crazy" until it fills the host disk. We observed exactly this:
+# self-hosted Inngest re-scanning a backlog of un-leasable poison queue items
+# (nil envID) emitted ~135 ERROR lines/sec with full stack traces, growing one
+# container log to 5.8 GB. Pin a rotation cap so the blast radius of ANY future
+# log storm is bounded regardless of root cause. Apply via `<<: *default-logging`
+# on every long-lived service. Override DPF_LOG_MAX_SIZE / DPF_LOG_MAX_FILE to
+# tune (defaults keep at most 3 × 20 MB = 60 MB per container).
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: ${DPF_LOG_MAX_SIZE:-20m}
+    max-file: ${DPF_LOG_MAX_FILE:-3}
+
 # Dev-profile workspace mount (BI-9C557535). The dev services bind-mount the
 # whole repo at /workspace, then overlay every node_modules directory with a
 # named volume. Overlaying ONLY the root node_modules is not enough: pnpm also
@@ -29,6 +44,7 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-dpf}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dpf_dev}
@@ -46,6 +62,7 @@ services:
   neo4j:
     image: neo4j:5-community
     restart: unless-stopped
+    logging: *default-logging
     environment:
       NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/dpf_dev_password}
       NEO4J_PLUGINS: '["apoc"]'
@@ -61,6 +78,7 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     restart: unless-stopped
+    logging: *default-logging
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
@@ -112,6 +130,7 @@ services:
         DPF_VERSION: ${DPF_VERSION:-}
         DPF_PLATFORM_VERSION: ${DPF_PLATFORM_VERSION:-}
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "3000:3000"
       - "1455:3000"  # OpenAI Codex OAuth callback (shared client requires this port)
@@ -272,6 +291,7 @@ services:
   sandbox-postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_USER: dpf
       POSTGRES_PASSWORD: dpf_sandbox
@@ -314,6 +334,7 @@ services:
       context: .
       dockerfile: Dockerfile.sandbox
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "3035:3000"
     volumes:
@@ -387,6 +408,7 @@ services:
       context: ./services/browser-use
       dockerfile: Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8500:8500"
     volumes:
@@ -416,6 +438,7 @@ services:
       context: .
       dockerfile: services/adp/Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8600:8600"
     environment:
@@ -442,6 +465,7 @@ services:
       context: .
       dockerfile: services/integration-test-harness/Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     profiles: ["integration-test"]
     ports:
       - "8700:8700"
@@ -461,6 +485,7 @@ services:
   dev-postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *default-logging
     profiles: ["dev"]
     environment:
       POSTGRES_USER: dpf
@@ -479,6 +504,7 @@ services:
   dev-neo4j:
     image: neo4j:5-community
     restart: unless-stopped
+    logging: *default-logging
     profiles: ["dev"]
     environment:
       NEO4J_AUTH: neo4j/dpf_dev_password
@@ -498,6 +524,7 @@ services:
   dev-qdrant:
     image: qdrant/qdrant:latest
     restart: unless-stopped
+    logging: *default-logging
     profiles: ["dev"]
     volumes:
       - dev_qdrant_data:/qdrant/storage
@@ -543,6 +570,7 @@ services:
       context: .
       target: dev
     restart: unless-stopped
+    logging: *default-logging
     profiles: ["dev"]
     ports:
       - "3001:3000"
@@ -571,6 +599,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "9090:9090"
     volumes:
@@ -592,6 +621,7 @@ services:
   grafana:
     image: grafana/grafana-oss:latest
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "3002:3000"
     volumes:
@@ -625,6 +655,7 @@ services:
   loki:
     image: grafana/loki:latest
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "127.0.0.1:3100:3100"   # localhost-only; portal + grafana reach it via dpf-network DNS
     volumes:
@@ -643,6 +674,7 @@ services:
   alloy:
     image: grafana/alloy:latest
     restart: unless-stopped
+    logging: *default-logging
     volumes:
       - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro   # discovers + tails all containers
@@ -669,6 +701,7 @@ services:
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     restart: unless-stopped
+    logging: *default-logging
     profiles: ["linux-monitoring"]
     ports:
       - "8080:8080"
@@ -681,6 +714,7 @@ services:
   node-exporter:
     image: prom/node-exporter:latest
     restart: unless-stopped
+    logging: *default-logging
     profiles: ["linux-monitoring"]
     ports:
       - "9100:9100"
@@ -698,6 +732,7 @@ services:
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "9187:9187"
     environment:
@@ -710,6 +745,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "6379:6379"
     volumes:
@@ -725,6 +761,7 @@ services:
   redis-exporter:
     image: oliver006/redis_exporter:latest
     restart: unless-stopped
+    logging: *default-logging
     command: ["--redis.addr=redis://redis:6379"]
     depends_on:
       redis:
@@ -744,8 +781,22 @@ services:
     # envid, #4391/#4438 constraint/lease scan). 1.26→1.30 goose migration
     # validated on a throwaway DB copy (v7→v10, clean). Pin to keep :latest
     # from silently regressing again. BI-C8164664.
+    #
+    # IMPORTANT (2026-06-18): the version bump only stops NEW poison items from
+    # being enqueued (1.28+ sets envID). It does NOT drain items already enqueued
+    # by the 1.26-era bug — those live in the Redis queue store (INNGEST_REDIS_URI
+    # below), not Postgres, so the goose history migration never touched them.
+    # v1.30 still rejects them at the lease-constraint check (nil wsID/envID), and
+    # because the failure is PRE-attempt the items never increment `atts`, never
+    # exhaust maxAtts, and never dead-letter — the scanner re-reads them forever.
+    # A backlog of ~22k such items re-scanned at ~135 lines/sec grew the container
+    # log to 5.8 GB ("logs scrolling like crazy"). One-time remediation after this
+    # pin: drain the stuck `{queue}:queue:sorted:<fnID>` partitions from the
+    # Inngest-dedicated Redis (see scripts/drain-inngest-poison-queue.sh). The
+    # `<<: *default-logging` cap below bounds the blast radius if it ever recurs.
     image: inngest/inngest:v1.30.0
     restart: unless-stopped
+    logging: *default-logging
     command: "inngest start"
     ports:
       - "8288:8288"
@@ -799,6 +850,7 @@ services:
     # makes the install non-reproducible.
     image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:008ef78e8164be1a52d3c16a0a4702af4190bc355c057e481ceb35af739ab184}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       # `base` (~145 MB) is the smallest model with usable accuracy on English.
       # Override DPF_STT_MODEL to e.g. `distil-small.en` for lower latency on
@@ -848,6 +900,7 @@ services:
     image: ${DPF_TTS_IMAGE:-travisvn/chatterbox-tts-api:latest}
     profiles: ["tts"]
     restart: unless-stopped
+    logging: *default-logging
     environment:
       # travisvn/chatterbox-tts-api defaults to port 5123; force 8000 so the
       # Docker-network DNS address (dpf-tts:8000) matches DPF_TTS_URL.
