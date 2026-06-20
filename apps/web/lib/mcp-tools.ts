@@ -2601,6 +2601,22 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
     buildPhases: ["ship"],
   },
+  {
+    name: "set_change_disposition",
+    description: "Record the human's final call on whether the current change is kept private (on the user's own system) or shared with the community. Use after presenting the Keep/Share suggestion at ship time. A change must be 'shareable' before contribute_to_hive or a public-hive PR will share it; the default is 'private' (fail-closed), so inaction never shares.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        disposition: { type: "string", enum: ["private", "shareable"], description: "'private' keeps the change on the user's system; 'shareable' clears it to be contributed to the community." },
+        reason: { type: "string", description: "Optional short note on why this disposition was chosen." },
+      },
+      required: ["disposition"],
+    },
+    requiredCapability: "manage_capabilities",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ship"],
+  },
   // ─── Email setup (PBI-INV-04 Phase 2) ──────────────────────────────────
   // Lets the onboarding/COO coworker walk a non-technical operator through
   // configuring their OWN outbound email (SMTP). Operator-only
@@ -10383,6 +10399,7 @@ export async function executeTool(
           description: true, gitCommitHashes: true, updatedAt: true, buildExecState: true,
           verificationOut: true, acceptanceMet: true, phase: true,
           designDoc: true, buildPlan: true,
+          disposition: true, dispositionSuggestionReason: true,
           productVersions: {
             take: 1,
             orderBy: { shippedAt: "desc" },
@@ -10468,11 +10485,23 @@ export async function executeTool(
         const { classifyEgress } = await import("@/lib/integrate/contribution-egress");
         const egress = classifyEgress({ owner: repoOwner, repo: repoName }, _egCfg?.upstreamRemoteUrl);
         if (egress === "public-hive") {
+          // Fail-closed disposition gate (EP-1A78BAE1): a public-hive PR may only
+          // carry a change confirmed "shareable". Own-repo PRs skip this — that
+          // is the install's private home.
+          const { mayShareToPublicHive, privateDispositionBlockMessage } = await import("@/lib/integrate/disposition");
+          if (!mayShareToPublicHive(build.disposition)) {
+            logBuildActivity(buildId, "create_portal_pr", "blocked: change disposition is private (public-hive target)");
+            return {
+              success: false,
+              error: "Change is kept private.",
+              message: privateDispositionBlockMessage(build.dispositionSuggestionReason),
+            };
+          }
           const { loadPrivatePathPatterns, compilePrivatePathMatcher, stripPrivatePathsFromDiff } =
             await import("@/lib/integrate/private-paths");
           shareableDiff = stripPrivatePathsFromDiff(
             diff,
-            compilePrivatePathMatcher(await loadPrivatePathPatterns()),
+            compilePrivatePathMatcher(await loadPrivatePathPatterns({ prisma })),
           ).kept;
           if (!shareableDiff.trim()) {
             return {
@@ -11343,6 +11372,33 @@ export async function executeTool(
       return { success: true, message: assessment.summary, data: assessment };
     }
 
+    case "set_change_disposition": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      const disposition = (params.disposition as string) ?? "";
+      if (disposition !== "private" && disposition !== "shareable") {
+        return { success: false, error: "Invalid disposition.", message: "disposition must be 'private' or 'shareable'." };
+      }
+      const reason = typeof params.reason === "string" ? params.reason : null;
+      await prisma.featureBuild.update({
+        where: { buildId },
+        data: {
+          disposition,
+          dispositionReason: reason,
+          dispositionSource: "operator",
+          dispositionDecidedAt: new Date(),
+          dispositionDecidedById: userId,
+        },
+      });
+      logBuildActivity(buildId, "set_change_disposition", `disposition=${disposition}${reason ? ` (${reason})` : ""}`);
+      return {
+        success: true,
+        message: disposition === "shareable"
+          ? "This change is marked to share with the community. Run contribute_to_hive (or create the portal PR) to share it."
+          : "This change is kept on your system and will not be shared.",
+      };
+    }
+
     case "contribute_to_hive": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
@@ -11417,6 +11473,7 @@ export async function executeTool(
           sandboxId: true, portfolioId: true, createdById: true,
           buildBranch: true, gitCommitHashes: true, updatedAt: true, buildPlan: true,
           description: true, buildExecState: true,
+          disposition: true, dispositionSuggestionReason: true,
           createdBy: { select: { email: true } },
         },
       });
@@ -11448,13 +11505,27 @@ export async function executeTool(
       // docs/superpowers/specs/2026-06-18-private-public-change-segregation-design.md
       const { loadPrivatePathPatterns: _loadPriv, compilePrivatePathMatcher: _compilePriv, stripPrivatePathsFromDiff: _stripPriv } =
         await import("@/lib/integrate/private-paths");
-      const shareableDiff = _stripPriv(diff, _compilePriv(await _loadPriv())).kept;
+      const shareableDiff = _stripPriv(diff, _compilePriv(await _loadPriv({ prisma }))).kept;
       if (!shareableDiff.trim()) {
         return {
           success: false,
           error: "Only private paths.",
           message:
             "This change only affects parts of your system you've marked private (see .dpf/private-paths or Admin > Platform Development), so there is nothing to share upstream.",
+        };
+      }
+
+      // Fail-closed disposition gate (EP-1A78BAE1): contribute_to_hive is always
+      // public-hive egress, so a change may leave only when explicitly
+      // "shareable". Default "private" blocks — the human's confirmation (via
+      // set_change_disposition / the ship UI) is required first.
+      const { mayShareToPublicHive, privateDispositionBlockMessage } = await import("@/lib/integrate/disposition");
+      if (!mayShareToPublicHive(build.disposition)) {
+        logBuildActivity(buildId, "contribute_to_hive", "blocked: change disposition is private (not confirmed shareable)");
+        return {
+          success: false,
+          error: "Change is kept private.",
+          message: privateDispositionBlockMessage(build.dispositionSuggestionReason),
         };
       }
 
