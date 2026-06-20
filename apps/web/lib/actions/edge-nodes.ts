@@ -16,8 +16,15 @@ import { revalidatePath } from "next/cache";
 
 import { prisma } from "@dpf/db";
 
+import { resolveAppBaseUrl } from "@/lib/app-url";
 import { auth } from "@/lib/auth";
 import { issueBootstrapToken } from "@/lib/edge-node/enrollment";
+import {
+  buildRemoteProvisioningPlan,
+  EDGE_HOST_OSES,
+  type EdgeHostOs,
+  type RemoteProvisioningPlan,
+} from "@/lib/edge-node/remote-provisioning";
 import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { can } from "@/lib/permissions";
 
@@ -178,6 +185,74 @@ export async function issueEdgeBootstrapTokenAction(input: {
       message: err instanceof Error ? err.message : "issuance failed",
     };
   }
+}
+
+// ── Easy remote provisioning ────────────────────────────────────────────────
+
+export type PrepareRemoteEdgeProvisioningAction =
+  | {
+      ok: true;
+      tokenId: string;
+      prefix: string;
+      expiresAt: string; // ISO
+      /** The ready-to-run command(s) + URL assessment for the chosen host. */
+      plan: RemoteProvisioningPlan;
+    }
+  | ActionFailure;
+
+/**
+ * Prepare an Edge Node on *separate hardware* (BI-D18DD7A9 / edge-topology
+ * design §8): issue a scoped, short-TTL bootstrap token through the running
+ * Authority (so no host-side `@dpf/db` import — EP-BUILD-D78835 — is needed)
+ * and render a copy-paste install command with the Authority URL + token
+ * already baked in. The operator never clones the repo or edits a `.env`.
+ *
+ * Reuses `issueEdgeBootstrapTokenAction` for the manage_platform gate, scope
+ * validation, and issuance; this only adds OS validation + URL resolution +
+ * command rendering on top.
+ */
+export async function prepareRemoteEdgeProvisioningAction(input: {
+  os: EdgeHostOs;
+  nodeName?: string;
+  ttlMs?: number;
+  targetCustomerAccountId?: string | null;
+  targetCustomerSiteId?: string | null;
+  /** Git ref for the raw standalone-compose URL; defaults to `main`. */
+  composeRef?: string;
+}): Promise<PrepareRemoteEdgeProvisioningAction> {
+  if (!EDGE_HOST_OSES.includes(input.os)) {
+    return {
+      ok: false,
+      error: "invalid_input",
+      message: "os must be one of: linux, macos, windows",
+    };
+  }
+
+  // Delegate the gate + scope validation + token mint to the existing action
+  // so there is exactly one issuance path. Only mint after OS validation so a
+  // bad request never consumes a token.
+  const issued = await issueEdgeBootstrapTokenAction({
+    ...(input.ttlMs !== undefined ? { ttlMs: input.ttlMs } : {}),
+    targetCustomerAccountId: input.targetCustomerAccountId ?? null,
+    targetCustomerSiteId: input.targetCustomerSiteId ?? null,
+  });
+  if (!issued.ok) return issued;
+
+  const plan = buildRemoteProvisioningPlan({
+    resolvedAuthorityUrl: resolveAppBaseUrl(),
+    bootstrapToken: issued.plaintext,
+    os: input.os,
+    ...(input.nodeName?.trim() ? { nodeName: input.nodeName.trim() } : {}),
+    ...(input.composeRef?.trim() ? { composeRef: input.composeRef.trim() } : {}),
+  });
+
+  return {
+    ok: true,
+    tokenId: issued.tokenId,
+    prefix: issued.prefix,
+    expiresAt: issued.expiresAt,
+    plan,
+  };
 }
 
 // ── Lifecycle actions: approve / quarantine / revoke ──────────────────────
