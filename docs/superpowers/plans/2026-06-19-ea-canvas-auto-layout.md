@@ -66,3 +66,9 @@ Operator /goal "do as recommended with the container view" — built the deferre
 - `apps/web/components/ea/EaCanvas.tsx`: a **▦ Nest** toggle (localStorage-persisted, available to read-only too since nothing is saved) swaps the node/edge set to nested boxes (containers + nested leaves; only cross-cutting edges drawn — `contains` becomes nesting). Flat layout controls hidden while nested; flat auto-layout mount-effect guarded.
 
 Tests: 30 adapter (6 containment) + 16 EA component + 52 graph/actions/topology pass; web typecheck clean.
+
+---
+
+## Addendum — 2026-06-20: fix nested-view edge detachment
+
+Live-review regression on the containment view: cross-cutting edges detached from the boxes (bunched near the canvas origin) and didn't follow a container when moved. Cause: the floating `EaRelationshipEdge` built node geometry from `node.position`, which for nested children is **relative to the container** — fine in flat mode (all nodes top-level) but wrong when nested. Fix: new pure `apps/web/lib/ea/node-geometry.ts` `resolveAbsolutePositions` (sums the parent chain, cycle-guarded, unit-tested); `EaRelationshipEdge` now anchors edges on absolute positions, so they stay attached and track container moves (`useNodes()` re-fires on drag). Tests: +5 node-geometry; web typecheck clean.
