@@ -386,3 +386,41 @@ describe("projectContributorChangeLanes", () => {
     expect(result.lanes.at(-1)!.source).toBe("git-branch");
   });
 });
+
+describe("shipped lane status — completed cross-surface work (EP-UNIFIED-TRACKING)", () => {
+  it("projects a complete capsule to a 'shipped' lane with no in-flight blockers", () => {
+    const { lanes } = projectContributorChangeLanes(
+      emptyInput({ workCapsules: [capsule({ capsuleId: "WC-DONE", status: "complete" })] }),
+    );
+    expect(lanes).toHaveLength(1);
+    expect(lanes[0]).toMatchObject({
+      workCapsuleId: "WC-DONE",
+      source: "work-capsule",
+      status: "shipped",
+      nextAction: "Shipped — work complete",
+    });
+    expect(lanes[0]!.blockers).toEqual([]);
+  });
+
+  it("treats ready-for-promotion as shipped and raises no 'no branch' blocker", () => {
+    const { lanes } = projectContributorChangeLanes(
+      emptyInput({
+        workCapsules: [
+          capsule({ capsuleId: "WC-RFP", status: "ready-for-promotion", headBranch: null }),
+        ],
+      }),
+    );
+    expect(lanes[0]!.status).toBe("shipped");
+    expect(lanes[0]!.blockers).toEqual([]);
+  });
+
+  it("leaves an in-flight capsule with no PR/TTL claimed + blocked (unchanged)", () => {
+    const { lanes } = projectContributorChangeLanes(
+      emptyInput({
+        workCapsules: [capsule({ capsuleId: "WC-WIP", status: "working", leaseExpiresAt: null })],
+      }),
+    );
+    expect(lanes[0]!.status).toBe("claimed");
+    expect(lanes[0]!.blockers).toContain("No open PR and no active WIP TTL");
+  });
+});

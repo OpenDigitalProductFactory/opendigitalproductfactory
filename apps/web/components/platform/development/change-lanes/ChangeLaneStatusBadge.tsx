@@ -14,6 +14,7 @@ const LANE_INTENT: Record<ContributorLaneStatus, Intent> = {
   available: "neutral",
   released: "neutral",
   stale: "warning",
+  shipped: "success",
 };
 
 export function ChangeLaneStatusBadge({ status }: { status: ContributorLaneStatus }) {

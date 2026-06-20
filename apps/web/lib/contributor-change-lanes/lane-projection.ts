@@ -31,6 +31,7 @@ const LANE_STATUS_PRIORITY: Record<ContributorLaneStatus, number> = {
   available: 6,
   released: 7,
   stale: 8,
+  shipped: 9,
 };
 
 export function projectContributorChangeLanes(
@@ -127,27 +128,32 @@ export function projectContributorChangeLanes(
     if (consumedCapsules.has(capsule.capsuleId)) continue;
     if (capsule.status === "released" || capsule.status === "archived") continue;
 
+    const isShipped =
+      capsule.status === "complete" || capsule.status === "ready-for-promotion";
     const pr = capsule.headBranch ? prByBranch.get(capsule.headBranch) ?? null : null;
     const blockers: string[] = [];
     const hasTtl = Boolean(capsule.leaseExpiresAt);
     const isExpired = hasTtl && capsule.leaseExpiresAt! <= now;
-    if (!pr && !hasTtl) {
+    // Completed work needs no PR/TTL — those "blockers" only apply to in-flight capsules.
+    if (!isShipped && !pr && !hasTtl) {
       blockers.push("No open PR and no active WIP TTL");
     }
-    if (isExpired) {
+    if (!isShipped && isExpired) {
       blockers.push(
         `WIP lease expired at ${capsule.leaseExpiresAt?.toISOString() ?? "unknown"}`,
       );
     }
-    if (!capsule.headBranch) {
+    if (!isShipped && !capsule.headBranch) {
       blockers.push("Capsule has no branch");
     }
 
-    const status: ContributorLaneStatus = isExpired
-      ? "stale"
-      : pr?.state === "open"
-        ? "ready-for-review"
-        : "claimed";
+    const status: ContributorLaneStatus = isShipped
+      ? "shipped"
+      : isExpired
+        ? "stale"
+        : pr?.state === "open"
+          ? "ready-for-review"
+          : "claimed";
 
     lanes.push({
       id: capsule.capsuleId,
@@ -366,6 +372,9 @@ function deriveNextActionForCapsule(
   pr: PullRequestSnapshot | null,
   blockers: string[],
 ): string {
+  if (capsule.status === "complete" || capsule.status === "ready-for-promotion") {
+    return "Shipped — work complete";
+  }
   if (capsule.nextAction) return capsule.nextAction;
   if (blockers.length > 0) return blockers[0];
   if (pr?.state === "open") return "Drive ready-for-review verification";
