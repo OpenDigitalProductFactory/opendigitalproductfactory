@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { normalizeHappyPathState, type FeatureBuildRow } from "@/lib/feature-build-types";
+import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import { WorkflowStageInspector } from "./WorkflowStageInspector";
 
 afterEach(cleanup);
@@ -40,6 +41,37 @@ describe("WorkflowStageInspector", () => {
     expect(screen.queryByText(/localhost:53601/i)).toBeNull();
     expect(screen.queryByText(/ExternalEvidenceRecord/i)).toBeNull();
     expect(screen.queryByText(/ToolExecutionReceipt/i)).toBeNull();
+  });
+
+  it("renders real cross-surface evidence threaded through progressVisibility", () => {
+    const progressVisibility = {
+      evidenceTimeline: [
+        { id: "external-1", source: "external", label: "Grok", summary: "Implemented the parser", status: "recorded" },
+        {
+          id: "runtime-1",
+          source: "review",
+          label: "Runtime verification",
+          summary: "Verified on the live install.",
+          status: "passed",
+        },
+      ],
+    } as unknown as BuildProgressVisibility;
+
+    render(
+      <WorkflowStageInspector
+        build={makeBuild()}
+        phase="review"
+        status="running"
+        workflowLabel={null}
+        governedBacklogEnabled
+        progressVisibility={progressVisibility}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Grok")).toBeInTheDocument();
+    expect(screen.getByText("Implemented the parser")).toBeInTheDocument();
+    expect(screen.getByText("Runtime verification")).toBeInTheDocument();
   });
 });
 

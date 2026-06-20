@@ -1,13 +1,10 @@
 "use client";
 
-export type UnifiedEvidenceTimelineEvent = {
-  id: string;
-  source: "build-studio" | "codex" | "local-integration" | "review" | "external";
-  label: string;
-  summary: string;
-  status?: "passed" | "pending" | "failed" | "recorded";
-  timestamp?: string | Date | null;
-};
+import type { UnifiedEvidenceTimelineEvent } from "@/lib/build/evidence-timeline-types";
+
+// Canonical type now lives in lib so server-side projection can produce events
+// (EP-UNIFIED-TRACKING Phase 1). Re-exported here for existing importers.
+export type { UnifiedEvidenceTimelineEvent };
 
 const SOURCE_LABELS: Record<UnifiedEvidenceTimelineEvent["source"], string> = {
   "build-studio": "Build Studio",
