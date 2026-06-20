@@ -69,8 +69,13 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     name: "Self-upgrade reconcile",
     purpose:
       "Autonomous deployment of merged main PRs to this install. Core to keeping the platform current.",
-    cron: "nightly",
-    cadence: "Nightly",
+    // Mirrors SELF_UPGRADE_CRON ("0 * * * *") in queue/functions/self-upgrade.ts.
+    // The poll is hourly, but a run only proceeds inside the maintenance window
+    // (whenever the storefront is closed, in the store's timezone) and no more
+    // often than checkIntervalHours. The old "Nightly" label misrepresented this
+    // and made a noon run read as "off-schedule" when it was the window misfiring.
+    cron: "0 * * * *",
+    cadence: "Hourly — applies only in the maintenance window (store closed)",
     category: "core",
     tracksRunData: false,
     runNowEvent: null,

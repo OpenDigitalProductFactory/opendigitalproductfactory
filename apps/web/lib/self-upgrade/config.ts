@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { DEFAULT_COOLDOWN_MINUTES } from "./cooldown";
+import { zonedDayAndTime } from "./zoned-time";
 
 export type MaintenanceWindow = {
   dayOfWeek: number[];
@@ -111,13 +112,18 @@ const DEFAULTS: SelfUpgradeConfig = {
 
 /**
  * Returns true if `now` (defaults to current time) falls within any of the
- * configured maintenance windows. Uses local timezone for day/time checks
- * (same semantics as the shared isInWindow in deployment-windows.ts).
+ * configured maintenance windows. Day/time are evaluated against `timeZone`
+ * (IANA) — the STORE's clock — so an operator's "02:00-04:00" window fires at
+ * 02:00 local, not 02:00 on the portal container's host clock (UTC). When
+ * `timeZone` is omitted it falls back to host-local time (backward compatible).
  */
-export function isInMaintenanceWindow(config: SelfUpgradeConfig, now?: Date): boolean {
+export function isInMaintenanceWindow(
+  config: SelfUpgradeConfig,
+  now?: Date,
+  timeZone?: string,
+): boolean {
   const d = now ?? new Date();
-  const currentDay = d.getDay();
-  const currentTime = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const { day: currentDay, hhmm: currentTime } = zonedDayAndTime(d, timeZone);
 
   return config.maintenanceWindows.some((w) => {
     if (!w.dayOfWeek.includes(currentDay)) return false;
@@ -129,36 +135,39 @@ export function isInMaintenanceWindow(config: SelfUpgradeConfig, now?: Date): bo
   });
 }
 
+const WINDOW_SCAN_STEP_MS = 60_000; // 1-minute resolution — window times are HH:mm aligned
+const WINDOW_SCAN_HORIZON_MS = 8 * 24 * 60 * 60 * 1000; // 8 days covers any weekly window set
+
 /**
- * Returns the next datetime a maintenance window opens, scanning the next 7
- * days. If a window is currently active, returns `now` (the scheduled upgrade
- * can run on the next hourly cron tick). Returns null when no windows are
- * configured — meaning scheduled upgrades will never fire on their own.
+ * Returns the next datetime a maintenance window opens. If a window is currently
+ * active, returns `now` (the scheduled upgrade can run on the next hourly cron
+ * tick). Returns null when no windows are configured — meaning scheduled
+ * upgrades will never fire on their own.
+ *
+ * Minute-resolution forward scan that reuses the timezone-aware
+ * isInMaintenanceWindow, so day-of-week and the configured start times are
+ * resolved against the store's `timeZone` (IANA) rather than the host clock —
+ * the same approach as nextUpgradeWindowOpen in window.ts. This is what keeps an
+ * explicit "02:00" window from being computed at 02:00 UTC on a US install.
  */
 export function nextMaintenanceWindowStart(
   config: SelfUpgradeConfig,
   now?: Date,
+  timeZone?: string,
 ): Date | null {
   if (config.maintenanceWindows.length === 0) return null;
   const base = now ?? new Date();
-  if (isInMaintenanceWindow(config, base)) return base;
+  if (isInMaintenanceWindow(config, base, timeZone)) return base;
 
-  let best: Date | null = null;
-  for (let offset = 0; offset <= 7; offset++) {
-    const day = new Date(base);
-    day.setDate(base.getDate() + offset);
-    const dow = day.getDay();
-    for (const w of config.maintenanceWindows) {
-      if (!w.dayOfWeek.includes(dow)) continue;
-      const [h, m] = w.startTime.split(":").map(Number);
-      const start = new Date(day);
-      start.setHours(h, m, 0, 0);
-      if (start.getTime() > base.getTime() && (!best || start < best)) {
-        best = start;
-      }
-    }
+  // Align to the next whole minute so the boundary lands on the window's start
+  // time (e.g. 02:00) rather than an arbitrary second within it.
+  const start = Math.ceil(base.getTime() / WINDOW_SCAN_STEP_MS) * WINDOW_SCAN_STEP_MS;
+  const limit = base.getTime() + WINDOW_SCAN_HORIZON_MS;
+  for (let t = start; t <= limit; t += WINDOW_SCAN_STEP_MS) {
+    const probe = new Date(t);
+    if (isInMaintenanceWindow(config, probe, timeZone)) return probe;
   }
-  return best;
+  return null;
 }
 
 export const SELF_UPGRADE_CONFIG_KEY = "self_upgrade";

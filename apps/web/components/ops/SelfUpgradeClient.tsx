@@ -78,6 +78,8 @@ type Props = {
   channel: string;
   inMaintenanceWindow: boolean;
   windowConfigured?: boolean;
+  /** IANA timezone the upgrade window is evaluated in (store operating hours). */
+  windowTimezone?: string;
   nextWindowStart?: string | null;
   nextScheduledCheckAt?: string | null;
   deployedSha: string | null;
@@ -236,6 +238,7 @@ export default function SelfUpgradeClient({
   channel,
   inMaintenanceWindow,
   windowConfigured,
+  windowTimezone,
   nextWindowStart,
   nextScheduledCheckAt,
   deployedSha,
@@ -919,6 +922,12 @@ export default function SelfUpgradeClient({
             <span className="text-[var(--dpf-muted)]">
               Maintenance window configured.
             </span>
+          )}
+          {windowTimezone && (
+            <div className="mt-1 text-[var(--dpf-muted)]" data-window-timezone={windowTimezone}>
+              Times shown in <span className="font-medium text-[var(--dpf-text)]">{windowTimezone}</span> — your
+              operating-hours timezone. Change it in Settings → Operating Hours.
+            </div>
           )}
         </div>
       )}
