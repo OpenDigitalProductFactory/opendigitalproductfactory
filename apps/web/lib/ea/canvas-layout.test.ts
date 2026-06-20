@@ -47,12 +47,7 @@ describe("computeEaLayout", () => {
     });
   }
 
-  it("layered: no two nodes overlap (ELK respects node spacing)", async () => {
-    const result = await computeEaLayout(
-      nodes("a", "b", "c", "d"),
-      [edge("a", "b"), edge("b", "c"), edge("c", "d")],
-      { algorithm: "layered" },
-    );
+  const assertNoOverlap = (result: Record<string, { x: number; y: number }>) => {
     const points = Object.values(result);
     for (let i = 0; i < points.length; i += 1) {
       for (let j = i + 1; j < points.length; j += 1) {
@@ -62,6 +57,33 @@ describe("computeEaLayout", () => {
         expect(overlap).toBe(false);
       }
     }
+  };
+
+  it("layered: no two nodes overlap (ELK respects node spacing)", async () => {
+    assertNoOverlap(
+      await computeEaLayout(
+        nodes("a", "b", "c", "d"),
+        [edge("a", "b"), edge("b", "c"), edge("c", "d")],
+        { algorithm: "layered" },
+      ),
+    );
+  });
+
+  it("organic: no two nodes overlap after the separation pass (dense mesh)", async () => {
+    const ns = nodes("a", "b", "c", "d", "e", "f");
+    const es = [
+      edge("a", "b"), edge("a", "c"), edge("a", "d"), edge("a", "e"), edge("a", "f"),
+      edge("b", "c"), edge("c", "d"), edge("d", "e"), edge("e", "f"), edge("f", "b"),
+    ];
+    assertNoOverlap(await computeEaLayout(ns, es, { algorithm: "organic" }));
+  });
+
+  it("radial: no two nodes overlap (dense star)", async () => {
+    const center = "h";
+    const leaves = Array.from({ length: 14 }, (_, i) => `n${i}`);
+    const ns = nodes(center, ...leaves);
+    const es = leaves.map((l) => edge(center, l));
+    assertNoOverlap(await computeEaLayout(ns, es, { algorithm: "radial" }));
   });
 });
 
