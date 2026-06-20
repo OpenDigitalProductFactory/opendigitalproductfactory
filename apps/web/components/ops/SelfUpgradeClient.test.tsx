@@ -168,6 +168,35 @@ describe("SelfUpgradeClient – enabled", () => {
     expect(html).toContain("next scheduled check");
     expect(html).toContain("May 24, 2026");
   });
+
+  // BI-A6382FB9 — a 24/7 store auto-runs overnight; the panel explains the
+  // schedule in plain language instead of asking the operator to configure cron.
+  it("shows the 24/7 overnight note when windowSource is auto-overnight", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        windowConfigured={true}
+        windowSource="auto-overnight"
+        autoWindowSummary="2:00 AM–4:00 AM"
+        windowTimezone="America/Chicago"
+        nextWindowStart="2026-05-26T02:00:00.000Z"
+      />,
+    );
+    expect(html).toContain("runs 24/7");
+    expect(html).toContain("2:00 AM–4:00 AM");
+    expect(html).toContain("America/Chicago");
+  });
+
+  // BI-A6382FB9 — only when a timezone genuinely can't be derived does the panel
+  // ask, and it points at the EXISTING Operating Hours timezone picker.
+  it("prompts for a timezone when windowSource is needs-timezone", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} windowConfigured={true} windowSource="needs-timezone" />,
+    );
+    expect(html).toContain("Set your timezone");
+    expect(html).toContain("/storefront/settings/operations");
+    expect(html).toContain('data-window-source="needs-timezone"');
+  });
 });
 
 // ─── Running ──────────────────────────────────────────────────────────────────

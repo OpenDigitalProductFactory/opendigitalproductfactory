@@ -10,6 +10,7 @@
 
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 import type { MaintenanceWindow } from "./config";
+import { isWithinWindows } from "./windows-eval";
 import { zonedDayAndTime } from "./zoned-time";
 
 // Re-exported for callers/tests that historically imported it from here. The
@@ -41,22 +42,6 @@ export function isStoreOpen(schedule: WeeklySchedule, now: Date, timeZone?: stri
   return hhmm >= d.open || hhmm < d.close; // overnight
 }
 
-function isInExplicitWindows(
-  windows: MaintenanceWindow[],
-  now: Date,
-  timeZone?: string,
-): boolean {
-  // Evaluate against the store's clock, same as isStoreOpen — not the portal
-  // container's host zone (UTC), which would fire an explicit "02:00-04:00"
-  // window at the wrong real-world time.
-  const { day, hhmm } = zonedDayAndTime(now, timeZone);
-  return windows.some((w) => {
-    if (!w.dayOfWeek.includes(day)) return false;
-    if (w.startTime <= w.endTime) return hhmm >= w.startTime && hhmm < w.endTime;
-    return hhmm >= w.startTime || hhmm < w.endTime; // overnight
-  });
-}
-
 /**
  * Is an upgrade allowed to run right now?
  * - Explicit maintenance windows configured → honor them (advanced override).
@@ -72,7 +57,10 @@ export function isUpgradeWindowOpen(args: {
 }): boolean {
   const now = args.now ?? new Date();
   if (args.explicitWindows && args.explicitWindows.length > 0) {
-    return isInExplicitWindows(args.explicitWindows, now, args.timeZone);
+    // Evaluated against the store's clock (shared with the explicit-override and
+    // auto-overnight paths) — not the portal container's UTC host zone, which
+    // would fire a "02:00-04:00" window at the wrong real-world time.
+    return isWithinWindows(args.explicitWindows, now, args.timeZone);
   }
   if (args.schedule) {
     return !isStoreOpen(args.schedule, now, args.timeZone);

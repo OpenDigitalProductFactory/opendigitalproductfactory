@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 import { DEFAULT_COOLDOWN_MINUTES } from "./cooldown";
-import { zonedDayAndTime } from "./zoned-time";
+import { isWithinWindows, nextWindowStartForWindows } from "./windows-eval";
 
 export type MaintenanceWindow = {
   dayOfWeek: number[];
@@ -116,58 +116,31 @@ const DEFAULTS: SelfUpgradeConfig = {
  * (IANA) — the STORE's clock — so an operator's "02:00-04:00" window fires at
  * 02:00 local, not 02:00 on the portal container's host clock (UTC). When
  * `timeZone` is omitted it falls back to host-local time (backward compatible).
+ * Delegates to the pure {@link isWithinWindows} primitive (windows-eval.ts),
+ * shared with the auto-selected 24/7 overnight window (auto-window.ts).
  */
 export function isInMaintenanceWindow(
   config: SelfUpgradeConfig,
   now?: Date,
   timeZone?: string,
 ): boolean {
-  const d = now ?? new Date();
-  const { day: currentDay, hhmm: currentTime } = zonedDayAndTime(d, timeZone);
-
-  return config.maintenanceWindows.some((w) => {
-    if (!w.dayOfWeek.includes(currentDay)) return false;
-    if (w.startTime <= w.endTime) {
-      return currentTime >= w.startTime && currentTime < w.endTime;
-    }
-    // Overnight window: e.g. 22:00-06:00 → matches >= 22:00 OR < 06:00
-    return currentTime >= w.startTime || currentTime < w.endTime;
-  });
+  return isWithinWindows(config.maintenanceWindows, now ?? new Date(), timeZone);
 }
-
-const WINDOW_SCAN_STEP_MS = 60_000; // 1-minute resolution — window times are HH:mm aligned
-const WINDOW_SCAN_HORIZON_MS = 8 * 24 * 60 * 60 * 1000; // 8 days covers any weekly window set
 
 /**
  * Returns the next datetime a maintenance window opens. If a window is currently
  * active, returns `now` (the scheduled upgrade can run on the next hourly cron
  * tick). Returns null when no windows are configured — meaning scheduled
- * upgrades will never fire on their own.
- *
- * Minute-resolution forward scan that reuses the timezone-aware
- * isInMaintenanceWindow, so day-of-week and the configured start times are
- * resolved against the store's `timeZone` (IANA) rather than the host clock —
- * the same approach as nextUpgradeWindowOpen in window.ts. This is what keeps an
- * explicit "02:00" window from being computed at 02:00 UTC on a US install.
+ * upgrades will never fire on their own. Delegates to the pure
+ * {@link nextWindowStartForWindows} primitive (windows-eval.ts) so day-of-week
+ * and start times resolve against the store's `timeZone`, not the host clock.
  */
 export function nextMaintenanceWindowStart(
   config: SelfUpgradeConfig,
   now?: Date,
   timeZone?: string,
 ): Date | null {
-  if (config.maintenanceWindows.length === 0) return null;
-  const base = now ?? new Date();
-  if (isInMaintenanceWindow(config, base, timeZone)) return base;
-
-  // Align to the next whole minute so the boundary lands on the window's start
-  // time (e.g. 02:00) rather than an arbitrary second within it.
-  const start = Math.ceil(base.getTime() / WINDOW_SCAN_STEP_MS) * WINDOW_SCAN_STEP_MS;
-  const limit = base.getTime() + WINDOW_SCAN_HORIZON_MS;
-  for (let t = start; t <= limit; t += WINDOW_SCAN_STEP_MS) {
-    const probe = new Date(t);
-    if (isInMaintenanceWindow(config, probe, timeZone)) return probe;
-  }
-  return null;
+  return nextWindowStartForWindows(config.maintenanceWindows, now ?? new Date(), timeZone);
 }
 
 export const SELF_UPGRADE_CONFIG_KEY = "self_upgrade";

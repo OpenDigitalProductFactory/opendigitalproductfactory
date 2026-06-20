@@ -70,6 +70,7 @@ const baseStatus = {
   inMaintenanceWindow: false,
   windowConfigured: true,
   windowSource: "operating-hours" as const,
+  autoWindowSummary: null,
   storeOpen: false,
   windowTimezone: "UTC",
   nextWindowStart: null,
