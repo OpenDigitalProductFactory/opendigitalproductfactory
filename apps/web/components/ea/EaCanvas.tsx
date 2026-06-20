@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   ReactFlow, Background, Controls, ConnectionMode, MarkerType,
   useNodesState, useEdgesState,
@@ -67,9 +68,9 @@ type Props = {
 const MAX_LAYOUT_REVISIONS = 10;
 
 function defaultLayoutAlgo(): EaLayoutAlgorithm {
-  if (typeof window === "undefined") return "layered";
+  if (typeof window === "undefined") return "auto";
   const v = window.localStorage.getItem("ea-layout-algo");
-  return v && (EA_LAYOUT_ALGORITHMS as string[]).includes(v) ? (v as EaLayoutAlgorithm) : "layered";
+  return v && (EA_LAYOUT_ALGORITHMS as string[]).includes(v) ? (v as EaLayoutAlgorithm) : "auto";
 }
 
 function makeRevisionId(): string {
@@ -374,6 +375,7 @@ export function EaCanvas({
   const [selectedViewElement, setSelectedViewElement] = useState<SerializedViewElement | null>(null);
   const [isLayouting, setIsLayouting] = useState(false);
   const [revMenuOpen, setRevMenuOpen] = useState(false);
+  const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const [pendingDrop, setPendingDrop] = useState<{
     elementId: string; name: string; typeName: string;
     lifecycleStage: string; lifecycleStatus: string;
@@ -453,6 +455,7 @@ export function EaCanvas({
         requestAnimationFrame(() => rfRef.current?.fitView({ duration: 400, padding: 0.15 }));
       } finally {
         setIsLayouting(false);
+        setLayoutMenuOpen(false);
       }
     },
     [isReadOnly, layoutEdges, viewId, setNodes, currentNodesRecord],
@@ -694,7 +697,8 @@ export function EaCanvas({
         {/* Status bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", background: "var(--dpf-surface-1)", borderBottom: "1px solid var(--dpf-border)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>EA /</span>
+            <Link href="/ea/views" style={{ color: "var(--dpf-muted)", fontSize: 11, textDecoration: "none" }}>← Views</Link>
+            <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>/</span>
             <span style={{ color: "var(--dpf-text)", fontSize: 11, fontWeight: 600 }}>{viewName}</span>
             <span style={{
               fontSize: 10, padding: "2px 6px", borderRadius: 3,
@@ -711,25 +715,64 @@ export function EaCanvas({
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {!isReadOnly && (
               <div style={{ display: "flex", alignItems: "center", gap: 4, position: "relative" }}>
-                <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>Arrange:</span>
-                {EA_LAYOUT_ALGORITHMS.map((algo) => (
-                  <button
-                    key={algo}
-                    disabled={isLayouting}
-                    onClick={() => {
-                      try { window.localStorage.setItem("ea-layout-algo", algo); } catch { /* ignore */ }
-                      void runAutoLayout(algo);
-                    }}
-                    title={`Auto-layout — ${EA_LAYOUT_LABELS[algo]}`}
-                    style={{
-                      fontSize: 10, padding: "2px 7px", borderRadius: 3,
-                      cursor: isLayouting ? "wait" : "pointer", opacity: isLayouting ? 0.5 : 1,
-                      background: "transparent", border: "1px solid #2a2a40", color: "var(--dpf-muted)",
-                    }}
-                  >
-                    {EA_LAYOUT_LABELS[algo].split(" · ")[0]}
-                  </button>
-                ))}
+                <button
+                  onClick={() => {
+                    try { window.localStorage.setItem("ea-layout-algo", "auto"); } catch { /* ignore */ }
+                    void runAutoLayout("auto");
+                  }}
+                  disabled={isLayouting}
+                  title="Auto-layout — picks the best arrangement for this view's shape"
+                  style={{
+                    fontSize: 10, padding: "2px 9px", borderRadius: 3,
+                    cursor: isLayouting ? "wait" : "pointer", opacity: isLayouting ? 0.6 : 1,
+                    background: "#2a2a50", border: "1px solid var(--dpf-accent)", color: "var(--dpf-accent)",
+                  }}
+                >
+                  {isLayouting ? "Arranging…" : "⤢ Auto-layout"}
+                </button>
+                <button
+                  onClick={() => setLayoutMenuOpen((o) => !o)}
+                  disabled={isLayouting}
+                  title="Choose a specific layout"
+                  style={{
+                    fontSize: 10, padding: "2px 6px", borderRadius: 3,
+                    cursor: isLayouting ? "wait" : "pointer",
+                    background: layoutMenuOpen ? "#2a2a50" : "transparent",
+                    border: `1px solid ${layoutMenuOpen ? "var(--dpf-accent)" : "#2a2a40"}`,
+                    color: "var(--dpf-muted)",
+                  }}
+                >
+                  ▾
+                </button>
+                {layoutMenuOpen && (
+                  <>
+                    <div onClick={() => setLayoutMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                    <div style={{
+                      position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 41,
+                      minWidth: 200, background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)",
+                      borderRadius: 5, padding: 4, boxShadow: "0 6px 20px #0008",
+                    }}>
+                      {EA_LAYOUT_ALGORITHMS.map((algo) => (
+                        <button
+                          key={algo}
+                          onClick={() => {
+                            try { window.localStorage.setItem("ea-layout-algo", algo); } catch { /* ignore */ }
+                            void runAutoLayout(algo);
+                          }}
+                          style={{
+                            display: "block", width: "100%", textAlign: "left", fontSize: 10,
+                            padding: "5px 7px", borderRadius: 3, cursor: "pointer",
+                            background: "transparent", border: "none", color: "var(--dpf-text)",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "#2a2a50"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                        >
+                          {EA_LAYOUT_LABELS[algo]}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
 
                 {/* Revisions — restore a previous layout */}
                 {(() => {
@@ -814,6 +857,7 @@ export function EaCanvas({
           onDragOver={(e) => e.preventDefault()}
         >
           <ReactFlow
+            proOptions={{ hideAttribution: true }}
             nodes={nodes}
             edges={edges}
             onNodesChange={handleNodesChange}

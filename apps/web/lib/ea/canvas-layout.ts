@@ -1,48 +1,85 @@
-// Automatic layout for the EA views/viewpoints canvas (BI-D9F9B34F, EP-ARCH-GRAPH-LIVE).
+// Automatic layout for the EA views/viewpoints canvas (BI-D9F9B34F, BI-20F95B0E; EP-ARCH-GRAPH-LIVE).
 //
-// Reuses the render-agnostic layout engines in `lib/graph/` (dagre / ELK / radial-BFS)
-// rather than introducing a new layout library. EA elements + relationships are adapted
-// to `GraphData`, an engine is run, and the result is normalized to React Flow top-left
-// coordinates keyed by EaViewElement id (the React Flow node id used by EaCanvas).
+// EA views are SysML/ArchiMate graphs: mostly containment trees/forests (Package⊃Part⊃Port)
+// stored as flat "contains" edges, plus cross-cutting association/flow edges. Many large views
+// are trees (e.g. ~615-node route trees) or dependency meshes with disconnected islands.
 //
-// All functions here are pure (the layered path is async only because ELK is) so they can
-// be unit-tested without React Flow or the DB.
+// We reuse ELK (already a dependency) directly — calling the right algorithm for the graph's
+// shape and ALWAYS separating connected components so disconnected nodes pack tightly instead
+// of sprawling. "radial" stays a hand-rolled BFS (good hub-and-spoke). No new layout library.
+//
+// All functions are pure (ELK paths are async only because ELK is) and unit-testable without
+// React Flow or the DB.
 
 import type { GraphData } from "@/lib/actions/graph";
-import { computeHierarchicalLayout } from "@/lib/graph/layout-hierarchical";
 import { computeRadialLayout } from "@/lib/graph/layout-radial";
-import { computeSwimLaneLayout } from "@/lib/graph/layout-swimlane";
 
-export type EaLayoutAlgorithm = "layered" | "radial" | "hierarchical";
+// "auto" inspects the graph shape and dispatches to the best concrete algorithm.
+export type EaLayoutAlgorithm = "auto" | "organic" | "tree" | "layered" | "radial";
+export type ConcreteLayoutAlgorithm = Exclude<EaLayoutAlgorithm, "auto">;
 
 export type EaLayoutNode = { id: string };
 export type EaLayoutEdge = { source: string; target: string };
 export type EaPositions = Record<string, { x: number; y: number }>;
 
 // Footprint of a standard EA element node (EaElementNode renders ~120–160px wide).
-// The layout is spaced for this box so auto-laid views don't overlap.
 export const EA_NODE_W = 170;
 export const EA_NODE_H = 80;
-const GAP = 70;
+const GAP = 60;
 const PITCH_X = EA_NODE_W + GAP;
 const PITCH_Y = EA_NODE_H + GAP;
 const MARGIN = 40;
 
+export const EA_LAYOUT_ALGORITHMS: EaLayoutAlgorithm[] = ["auto", "organic", "tree", "layered", "radial"];
+
 export const EA_LAYOUT_LABELS: Record<EaLayoutAlgorithm, string> = {
-  layered: "Layered · fewest crossings",
+  auto: "Auto · best fit",
+  organic: "Organic · clustered",
+  tree: "Tree · hierarchy",
+  layered: "Layered · directed flow",
   radial: "Radial · hub & spoke",
-  hierarchical: "Hierarchical · top-down",
 };
 
-export const EA_LAYOUT_ALGORITHMS: EaLayoutAlgorithm[] = ["layered", "radial", "hierarchical"];
+// Shared ELK options: separate + pack disconnected components (the de-sprawl fix), and keep
+// the packed result roughly 16:10 rather than a long strip.
+const ELK_SHARED: Record<string, string> = {
+  "elk.separateConnectedComponents": "true",
+  "elk.spacing.componentComponent": "60",
+  "elk.aspectRatio": "1.6",
+};
 
-function toGraphData(nodes: EaLayoutNode[], edges: EaLayoutEdge[]): GraphData {
-  const ids = new Set(nodes.map((n) => n.id));
+function elkOptionsFor(algo: "organic" | "tree" | "layered"): Record<string, string> {
+  if (algo === "organic") {
+    // ELK stress majorization — the clustered, force-directed "organic" look. iterationLimit
+    // is capped (ELK's default is effectively unbounded) so big views stay responsive.
+    return {
+      ...ELK_SHARED,
+      "elk.algorithm": "stress",
+      "elk.stress.desiredEdgeLength": String(PITCH_X),
+      "elk.stress.iterationLimit": "200",
+      "elk.spacing.nodeNode": String(GAP),
+    };
+  }
+  if (algo === "tree") {
+    // ELK mrtree (Walker's tree layout) — compact, legible trees/forests.
+    return {
+      ...ELK_SHARED,
+      "elk.algorithm": "mrtree",
+      "elk.direction": "DOWN",
+      "elk.spacing.nodeNode": String(GAP),
+    };
+  }
+  // layered — Sugiyama; best for directed flow/DAGs. thoroughness lowered from the default 7
+  // so 600-node views lay out quickly.
   return {
-    nodes: nodes.map((n) => ({ id: n.id, name: n.id, label: n.id, color: "#000", size: 1 })),
-    links: edges
-      .filter((e) => e.source !== e.target && ids.has(e.source) && ids.has(e.target))
-      .map((e) => ({ source: e.source, target: e.target, type: "rel" })),
+    ...ELK_SHARED,
+    "elk.algorithm": "layered",
+    "elk.direction": "DOWN",
+    "elk.layered.spacing.nodeNodeBetweenLayers": String(PITCH_Y),
+    "elk.spacing.nodeNode": String(GAP),
+    "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
+    "elk.layered.thoroughness": "4",
+    "elk.edgeRouting": "ORTHOGONAL",
   };
 }
 
@@ -57,7 +94,83 @@ function buildAdjacency(nodes: EaLayoutNode[], edges: EaLayoutEdge[]): Map<strin
   return adj;
 }
 
-/** Most-connected node — the natural center for a radial layout. */
+export type GraphMetrics = {
+  n: number;
+  m: number; // unique undirected edges
+  components: number;
+  isForest: boolean; // no cycle → tree/forest
+  maxDegree: number;
+  density: number; // m / n
+  isolated: number; // degree-0 nodes
+};
+
+// Single pass: union-find for components + cycle detection, plus degree stats.
+export function computeMetrics(nodes: EaLayoutNode[], edges: EaLayoutEdge[]): GraphMetrics {
+  const index = new Map<string, number>();
+  nodes.forEach((node, i) => index.set(node.id, i));
+  const parent = nodes.map((_, i) => i);
+  const find = (x: number): number => {
+    let root = x;
+    while (parent[root] !== root) root = parent[root]!;
+    while (parent[x] !== root) {
+      const next = parent[x]!;
+      parent[x] = root;
+      x = next;
+    }
+    return root;
+  };
+
+  const degree = new Map<string, number>(nodes.map((n) => [n.id, 0]));
+  const seen = new Set<string>();
+  let m = 0;
+  let hasCycle = false;
+  for (const e of edges) {
+    if (e.source === e.target) continue;
+    const a = index.get(e.source);
+    const b = index.get(e.target);
+    if (a === undefined || b === undefined) continue;
+    const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+    if (seen.has(key)) continue; // dedupe parallel edges
+    seen.add(key);
+    m += 1;
+    degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
+    degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+    const ra = find(a);
+    const rb = find(b);
+    if (ra === rb) hasCycle = true;
+    else parent[ra] = rb;
+  }
+
+  const roots = new Set<number>();
+  for (let i = 0; i < nodes.length; i += 1) roots.add(find(i));
+  let maxDegree = 0;
+  let isolated = 0;
+  for (const d of degree.values()) {
+    if (d > maxDegree) maxDegree = d;
+    if (d === 0) isolated += 1;
+  }
+  const n = nodes.length;
+  return { n, m, components: roots.size, isForest: !hasCycle, maxDegree, density: n ? m / n : 0, isolated };
+}
+
+/**
+ * Pick the best concrete algorithm from the graph's shape:
+ * - tree/forest → mrtree (or radial when one node dominates, i.e. a star)
+ * - dense / many isolated / many components → stress (organic)
+ * - otherwise → layered (directed flow)
+ */
+export function pickAutoAlgorithm(nodes: EaLayoutNode[], edges: EaLayoutEdge[]): ConcreteLayoutAlgorithm {
+  if (nodes.length <= 2) return "layered";
+  const x = computeMetrics(nodes, edges);
+  if (x.isForest) {
+    return x.maxDegree / x.n > 0.5 ? "radial" : "tree";
+  }
+  if (x.density > 1.5 || x.isolated > x.n * 0.2 || x.components > Math.max(3, x.n * 0.15)) {
+    return "organic";
+  }
+  return "layered";
+}
+
 function highestDegreeId(nodes: EaLayoutNode[], edges: EaLayoutEdge[]): string {
   const adj = buildAdjacency(nodes, edges);
   let best = nodes[0]?.id ?? "";
@@ -72,11 +185,8 @@ function highestDegreeId(nodes: EaLayoutNode[], edges: EaLayoutEdge[]): string {
   return best;
 }
 
-/**
- * Ring spacing wide enough that the densest ring's nodes don't overlap angularly.
- * `computeRadialLayout` hard-codes 60×30 node sizing, so we size the rings here for the
- * larger EA node footprint instead of editing the shared graph helper.
- */
+// Ring spacing wide enough that the densest ring's nodes don't overlap angularly
+// (computeRadialLayout hard-codes 60×30 sizing, so we size rings for the EA footprint here).
 function radialRingSpacing(nodes: EaLayoutNode[], edges: EaLayoutEdge[], rootId: string): number {
   const adj = buildAdjacency(nodes, edges);
   const depth = new Map<string, number>([[rootId, 0]]);
@@ -96,21 +206,23 @@ function radialRingSpacing(nodes: EaLayoutNode[], edges: EaLayoutEdge[], rootId:
     if (d >= 1) ringCount.set(d, (ringCount.get(d) ?? 0) + 1);
   }
   const maxRing = ringCount.size > 0 ? Math.max(...ringCount.values()) : 1;
-  // Arc length per node on the innermost ring (radius = ringSpacing) must be >= PITCH_X.
   const needed = Math.ceil((PITCH_X * maxRing) / (2 * Math.PI));
   return Math.max(220, needed);
 }
 
-function fromResult(
-  result: { nodes: Array<{ id: string; x: number; y: number }> },
-  centerBased: boolean,
-): EaPositions {
+function toGraphData(nodes: EaLayoutNode[], edges: EaLayoutEdge[]): GraphData {
+  const ids = new Set(nodes.map((n) => n.id));
+  return {
+    nodes: nodes.map((n) => ({ id: n.id, name: n.id, label: n.id, color: "#000", size: 1 })),
+    links: edges
+      .filter((e) => e.source !== e.target && ids.has(e.source) && ids.has(e.target))
+      .map((e) => ({ source: e.source, target: e.target, type: "rel" })),
+  };
+}
+
+function fromCenter(result: { nodes: Array<{ id: string; x: number; y: number }> }): EaPositions {
   const out: EaPositions = {};
-  for (const n of result.nodes) {
-    out[n.id] = centerBased
-      ? { x: n.x - EA_NODE_W / 2, y: n.y - EA_NODE_H / 2 }
-      : { x: n.x, y: n.y };
-  }
+  for (const n of result.nodes) out[n.id] = { x: n.x - EA_NODE_W / 2, y: n.y - EA_NODE_H / 2 };
   return out;
 }
 
@@ -127,6 +239,41 @@ function normalize(positions: EaPositions): EaPositions {
   return out;
 }
 
+async function runElk(
+  nodes: EaLayoutNode[],
+  edges: EaLayoutEdge[],
+  algo: "organic" | "tree" | "layered",
+): Promise<EaPositions> {
+  const ELK = (await import("elkjs/lib/elk.bundled.js")).default;
+  const elk = new ELK();
+  const ids = new Set(nodes.map((n) => n.id));
+  const children = nodes.map((n) => ({ id: n.id, width: EA_NODE_W, height: EA_NODE_H }));
+  const elkEdges = edges
+    .filter((e) => e.source !== e.target && ids.has(e.source) && ids.has(e.target))
+    .map((e, i) => ({ id: `e${i}`, sources: [e.source], targets: [e.target] }));
+
+  const graph = await elk.layout({
+    id: "root",
+    layoutOptions: elkOptionsFor(algo),
+    children,
+    edges: elkEdges,
+  });
+
+  const out: EaPositions = {};
+  for (const child of graph.children ?? []) {
+    out[child.id] = { x: child.x ?? 0, y: child.y ?? 0 }; // ELK reports top-left
+  }
+  // Defensive: ensure every node got a position.
+  let parked = 0;
+  for (const n of nodes) {
+    if (!out[n.id]) {
+      out[n.id] = { x: parked * PITCH_X, y: -PITCH_Y };
+      parked += 1;
+    }
+  }
+  return normalize(out);
+}
+
 /**
  * Compute an automatic layout for the given EA nodes + edges.
  * Returns React Flow top-left positions keyed by node id (EaViewElement id).
@@ -134,43 +281,26 @@ function normalize(positions: EaPositions): EaPositions {
 export async function computeEaLayout(
   nodes: EaLayoutNode[],
   edges: EaLayoutEdge[],
-  opts: { algorithm: EaLayoutAlgorithm; direction?: "TB" | "LR" },
+  opts: { algorithm: EaLayoutAlgorithm },
 ): Promise<EaPositions> {
   if (nodes.length === 0) return {};
   if (nodes.length === 1) return { [nodes[0]!.id]: { x: MARGIN, y: MARGIN } };
 
-  const graphData = toGraphData(nodes, edges);
+  const algo: ConcreteLayoutAlgorithm =
+    opts.algorithm === "auto" ? pickAutoAlgorithm(nodes, edges) : opts.algorithm;
 
-  if (opts.algorithm === "hierarchical") {
-    const result = computeHierarchicalLayout(graphData, {
-      direction: opts.direction ?? "TB",
-      nodeWidth: EA_NODE_W,
-      nodeHeight: EA_NODE_H,
-      rankSep: PITCH_Y,
-      nodeSep: GAP,
-    });
-    return normalize(fromResult(result, true));
-  }
-
-  if (opts.algorithm === "radial") {
+  if (algo === "radial") {
     const rootId = highestDegreeId(nodes, edges);
-    const result = computeRadialLayout(graphData, {
+    const result = computeRadialLayout(toGraphData(nodes, edges), {
       rootId,
       ringSpacing: radialRingSpacing(nodes, edges, rootId),
       centerX: 0,
       centerY: 0,
     });
-    return normalize(fromResult(result, true));
+    return normalize(fromCenter(result));
   }
 
-  // Default: ELK "layered" with no partitions — strongest edge-crossing minimization.
-  const result = await computeSwimLaneLayout(graphData, () => null, {
-    nodeWidth: EA_NODE_W,
-    nodeHeight: EA_NODE_H,
-    layerSpacing: PITCH_Y,
-    nodeSpacing: GAP,
-  });
-  return normalize(fromResult(result, false)); // ELK reports top-left already
+  return runElk(nodes, edges, algo); // organic | tree | layered
 }
 
 function overlaps(a: { x: number; y: number }, b: { x: number; y: number }): boolean {
