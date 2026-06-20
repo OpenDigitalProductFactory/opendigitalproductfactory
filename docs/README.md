@@ -42,6 +42,7 @@ Domain-specific operating guides (admin, AI workforce, build studio, compliance,
 ## Architecture
 
 - [Platform Overview](architecture/platform-overview.md) — runtime core, deployment models, hardware tiers, and Docker Compose breakdown.
+- [Unified Development Activity Tracking](architecture/unified-development-tracking.md) — how all development work (Build Studio plus external Claude / Codex / Grok agents) is tracked as one WorkCapsule unit and shown in one cross-surface activity view. Includes an at-a-glance diagram.
 - [Autonomy, WWMD, and trusted coworker decisions](architecture/autonomy-and-wwmd.md) — how the founder-kernel wiki, principle vectors, decision profiles, and audit ledgers let coworkers answer ambiguity without silently overreaching.
 - [Trusted AI Kernel (markdown)](architecture/trusted-ai-kernel.md) / [(Word)](architecture/Trusted-AI-Kernel-Architecture.docx) — the layered enforcement, routing, audit, and immutable-directive architecture for agentic work.
 - [AI Coworker Development Principles](architecture/ai-coworker-development-principles.md) — the contract AI coworkers are expected to honor.
