@@ -17,6 +17,7 @@
     "./discovery-collectors-arp-scan": "./src/discovery-collectors/arp-scan.ts",
     "./discovery-collectors-snmp": "./src/discovery-collectors/snmp.ts",
     "./discovery-collectors-unifi": "./src/discovery-collectors/unifi.ts",
+    "./local-model-capabilities": "./src/local-model-capabilities.ts",
     "./location-normalize": "./src/location-normalize.ts",
     "./eu-jurisdictions": "./src/eu-jurisdictions.ts",
     "./sovereignty-assessment": "./src/sovereignty-assessment.ts",
