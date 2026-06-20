@@ -109,6 +109,42 @@ describe("dispatchIdeateForApprovedBuild", () => {
     expect(mockExecuteTool).not.toHaveBeenCalled();
   });
 
+  it("routes Ideate to the LOCAL engine when provider=opencode (not the codex/chatgpt fallback)", async () => {
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({ originatingBacklogItemId: "cmpcuid1", designDoc: null, title: "T", description: "D" })
+      .mockResolvedValueOnce({ designDoc: { problemStatement: "P" } });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body." });
+    mockGetBuildStudioConfig.mockResolvedValue({
+      provider: "opencode",
+      opencodeProviderId: "local",
+      opencodeModel: "docker.io/ai/qwen3-coder:latest",
+      // The codex fallback MUST NOT be used for an opencode install.
+      codexProviderId: "chatgpt",
+      codexModel: "gpt-5.3-codex",
+      claudeProviderId: "", grokProviderId: "", claudeModel: "", grokModel: "",
+    });
+    mockDispatchIdeateResearch.mockResolvedValue({
+      success: true,
+      designDoc: { problemStatement: "P", proposedApproach: "x".repeat(60) },
+      rawOutput: "", durationMs: 1,
+    });
+    mockExecuteTool.mockResolvedValue({ success: true });
+
+    await dispatchIdeateForApprovedBuild({ buildId: "FB-X", userId: "u-1" });
+
+    expect(mockDispatchIdeateResearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: "local",
+        model: "docker.io/ai/qwen3-coder:latest",
+        dispatchEngine: "opencode",
+      }),
+    );
+    // Regression guard: it must NOT fall back to the cloud chatgpt provider.
+    expect(mockDispatchIdeateResearch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "chatgpt" }),
+    );
+  });
+
   it("dispatches research and saves designDoc evidence on the happy path", async () => {
     // 2026-05-24: originatingBacklogItemId is a FK to BacklogItem.id (cuid),
     // not BacklogItem.itemId (BI-XXXXX semantic id). Use a cuid-shaped value
