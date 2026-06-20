@@ -56,6 +56,18 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect(out).toMatchObject({ kind: "resumed", via: "executeTool:reviewBuildPlan" });
   });
 
+  it("REGENERATES via the fix loop when the existing plan's last review FAILED (does not re-review the bad plan)", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 },
+      buildPlan: { tasks: [{ title: "t" }] },
+      planReview: { decision: "fail", issues: [{ severity: "critical", description: "points at files that do not exist" }] },
+    });
+    const out = await resumePreBuildPhase({ buildId: "FB-3F", phase: "plan", userId: "u3" });
+    expect(dispatchPlanMock).toHaveBeenCalledWith({ buildId: "FB-3F", userId: "u3", forceRegenerate: true });
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ kind: "resumed", via: "dispatchPlanForApprovedBuild:repair" });
+  });
+
   it("re-dispatches ideate research when no design doc exists yet", async () => {
     findUniqueMock.mockResolvedValue({ designDoc: null, buildPlan: null });
     const out = await resumePreBuildPhase({ buildId: "FB-4", phase: "ideate", userId: "u4" });
