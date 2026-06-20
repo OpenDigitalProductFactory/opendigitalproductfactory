@@ -22,6 +22,7 @@
   ],
   "skills": "./skills/",
   "mcpServers": "./codex.mcp.json",
+  "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "DPF Platform",
     "shortDescription": "DPF-native development and coworker skills",

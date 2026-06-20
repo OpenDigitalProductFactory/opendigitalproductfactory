@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scripts/hooks/lease-guard.mjs
+// packages/dpf-skill-pack/hooks/lease-guard.mjs
 //
 // PreToolUse guard (BI-4043A64B enforcement pillar): refuse an UNGOVERNED
 // dev-server / runtime launch from a Claude session. On a single shared
@@ -9,9 +9,11 @@
 // heartbeated, and reaped) or run on an isolated runtime; this hook blocks the
 // raw launch and points at them.
 //
-// Wired DIRECTLY in .claude/settings.json (PreToolUse, matcher "Bash") — NOT
-// through run-hook.mjs, which forces exit 0 and so could never deny. Node is the
-// one runtime guaranteed cross-platform for Claude Code hooks.
+// Shipped INSIDE the dpf-platform plugin (hooks/hooks.json, matcher "Bash") so
+// the guard travels with the plugin to every surface — NOT through run-hook.mjs,
+// which forces exit 0 and so could never deny. Node is the one runtime
+// guaranteed cross-platform for Claude Code hooks. (BI-CA0ED781 moved this from
+// repo .claude/settings.json into the plugin.)
 //
 // Decision protocol: to DENY, emit the PreToolUse permissionDecision JSON on
 // stdout and exit 0; to ALLOW, exit 0 with no output. The hook fails OPEN — any

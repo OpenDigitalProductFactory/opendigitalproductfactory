@@ -113,9 +113,9 @@ Make sure your client reads repo-root project instructions (`AGENTS.md` via its 
 
 #### Be deliberate about auto-run / auto-approve
 
-DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (`git config core.hooksPath .githooks`, auto-set on new clones), and for **Claude Code** a `PreToolUse` **lease guard** (`scripts/hooks/lease-guard.mjs`) that *refuses* ungoverned dev-server launches (`pnpm/npm/yarn dev`, `next dev`, `turbo dev`). Don't loosen these. Emergency bypass for the lease guard only: prefix `DPF_ALLOW_UNGATED_SERVER=1`.
+DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (`git config core.hooksPath .githooks`, auto-set on new clones), and a `PreToolUse` **lease guard** (`packages/dpf-skill-pack/hooks/lease-guard.mjs`, shipped in the `dpf-platform` plugin) that *refuses* ungoverned dev-server launches (`pnpm/npm/yarn dev`, `next dev`, `turbo dev`). Don't loosen these. Emergency bypass for the lease guard only: prefix `DPF_ALLOW_UNGATED_SERVER=1`.
 
-> **Codex and Grok get the same contract by reading it, not by a hook.** There's no `.claude/settings.json` equivalent that fires for them, so comply **by construction**: claim a lease before launching any shared runtime, claim a Work Capsule before you start, record evidence as you go. A shared `dpf worktree` wrapper to enforce this for Codex/Grok is planned.
+> **Codex and Grok now inherit the same guard from the plugin.** The `dpf-platform` plugin ships the governance hooks in `hooks/hooks.json`, and both clients adopted the Claude `PreToolUse` protocol, so the lease guard travels to them too (functional confirmation on those surfaces is pending). Either way, comply **by construction**: claim a lease before launching any shared runtime, claim a Work Capsule before you start, record evidence as you go.
 
 ---
 
@@ -123,7 +123,7 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 
 #### Claude
 
-- Desktop app, IDE extension, and Claude Code CLI share `~/.claude`, so one bootstrap covers whichever you run. Loads the `dpf-platform` skill pack and `dpf` MCP connector via the repo-local marketplace + `.claude/settings.json` (which also declares the lease guard and worktree/transcript hooks).
+- Desktop app, IDE extension, and Claude Code CLI share `~/.claude`, so one bootstrap covers whichever you run. Loads the `dpf-platform` skill pack, `dpf` MCP connector, and the governance hooks (`hooks/hooks.json`) via the repo-local marketplace. `.claude/settings.json` still declares the session-lifecycle hooks (the SessionEnd reaper and transcript snapshot).
 
 #### Codex
 
