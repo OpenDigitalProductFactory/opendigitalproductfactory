@@ -170,6 +170,8 @@ Before adding any large feature, audit the existing schema for refactoring oppor
 
 `Organization` is the canonical platform identity model. Any feature needing org name, slug, logo, address, or contact info reads from `Organization` — not from `BrandingConfig`, env vars, or bespoke fields elsewhere. → [kernel principle](docs/founder-kernel/wiki/principles/organization-canonical-identity.md)
 
+The `Organization.address` JSON has one canonical shape + helpers in [`apps/web/lib/shared/org-address.ts`](apps/web/lib/shared/org-address.ts) (`OrgAddress`, `parseOrgAddress` / `serializeOrgAddress` / `formatOrgAddressLines`, `resolveTimezoneFromAddress`). Read and write the address through those — do **not** hand-roll a parallel address field or shape. It is captured at setup via the business-context step (`/storefront/settings/business`) and is the precise source for state-accurate timezone derivation (BI-AAAA0691).
+
 **Principal convergence (2026-05-09).** Per the addendum on `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`, any new identity-bearing entity introduced after 2026-05-09 must be modeled as a `PrincipalAlias` linked to a single `Principal`, not as a parallel identity table. The convergence target covers `User`, `CustomerContact`, `Agent`, `EdgeNode`, `MobileDevice`, and `ServiceAccount`. Authorization decisions resolve on the `Principal`; alias kind tells the platform which surface authenticated the request. → [kernel principle](docs/founder-kernel/wiki/principles/principal-convergence.md)
 
 ## 12. UI — Theme-Aware Styling (mandatory)

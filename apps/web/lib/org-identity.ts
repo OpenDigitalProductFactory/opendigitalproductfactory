@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { formatOrgAddressLines } from "@/lib/shared/org-address";
 
 // Shared resolver for the install's own business identity — the issuer behind
 // invoices, emails, and other outbound artifacts. Sourced from live DB
@@ -23,38 +24,6 @@ export type OrgIdentity = {
   vatNumber: string | null;
   bank: OrgBankDetails | null;
 };
-
-const ADDRESS_KEYS = [
-  "line1",
-  "line2",
-  "street",
-  "city",
-  "region",
-  "state",
-  "county",
-  "postalCode",
-  "postcode",
-  "zip",
-  "country",
-];
-
-function formatAddress(address: unknown): string[] {
-  if (!address || typeof address !== "object") return [];
-  const a = address as Record<string, unknown>;
-  const lines: string[] = [];
-  const seen = new Set<string>();
-  for (const key of ADDRESS_KEYS) {
-    const v = a[key];
-    if (typeof v === "string") {
-      const t = v.trim();
-      if (t && !seen.has(t)) {
-        seen.add(t);
-        lines.push(t);
-      }
-    }
-  }
-  return lines;
-}
 
 /**
  * Resolve the install's business identity. Returns null if no Organization
@@ -101,7 +70,7 @@ export async function getOrgIdentity(): Promise<OrgIdentity | null> {
     email: org.email ?? null,
     phone: org.phone ?? null,
     website: org.website ?? null,
-    addressLines: formatAddress(org.address),
+    addressLines: formatOrgAddressLines(org.address),
     logoUrl: org.logoUrl ?? null,
     vatNumber: vat?.registrationNumber ?? null,
     bank: bankRow

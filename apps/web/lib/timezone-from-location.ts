@@ -13,6 +13,8 @@
 // heavy/server-only imports so the unattended cron path
 // (resolveOperatingScheduleForSystem) can use it without a bundle-boundary risk.
 
+import { orgAddressTimezoneSignal, type OrgAddress } from "@/lib/shared/org-address";
+
 /**
  * Predominant IANA timezone per US state / territory. States that span more than
  * one zone resolve to their most-populous ("majority") zone as a sensible
@@ -150,4 +152,15 @@ export function resolveTimezoneFromLocation(args: {
     return COUNTRY_TO_TIMEZONE[countryCode];
   }
   return null;
+}
+
+/**
+ * Resolve an IANA timezone from the canonical Organization.address. This is the
+ * PRECISE source: a captured US address carries a state code, so it resolves to
+ * the right one of the six US zones instead of the country-only Eastern default.
+ * Thin wrapper over resolveTimezoneFromLocation using the address's normalized
+ * codes; returns null when the address carries no usable location signal.
+ */
+export function resolveTimezoneFromAddress(addr: OrgAddress): string | null {
+  return resolveTimezoneFromLocation(orgAddressTimezoneSignal(addr));
 }
