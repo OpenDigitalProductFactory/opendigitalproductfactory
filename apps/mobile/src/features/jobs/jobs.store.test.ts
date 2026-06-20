@@ -36,6 +36,7 @@ const detail: WorkItemDetail = {
   assignedToUserId: "u1",
   claimedAt: "2026-06-14T01:00:00.000Z",
   completedAt: null,
+  account: null,
 };
 
 function reset() {

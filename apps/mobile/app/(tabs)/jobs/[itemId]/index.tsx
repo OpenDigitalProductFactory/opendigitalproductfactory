@@ -64,10 +64,13 @@ export default function JobDetailScreen() {
 
   // Once a job is completed, the field tech bills the customer. Seed the
   // draft with the job title as a single line so the tech only has to set
-  // the price; the invoice screen lets them refine before submit.
+  // the price; the invoice screen lets them refine before submit. When the
+  // server resolved the customer from the job's source row, pre-fill the
+  // accountId so the tech doesn't type it.
   const goToInvoice = (): void => {
     beginInvoiceDraft({
       workItemId: detail.itemId,
+      accountId: detail.account?.accountId,
       seedLines: [{ description: detail.title, quantity: 1, unitPrice: 0 }],
     });
     router.push(`/jobs/${encodeURIComponent(detail.itemId)}/invoice`);
@@ -78,6 +81,11 @@ export default function JobDetailScreen() {
       <Text style={styles.title}>{detail.title}</Text>
       <Text style={styles.status}>{detail.status}</Text>
       <Text style={styles.meta}>Urgency: {detail.urgency}</Text>
+      {detail.account ? (
+        <Text style={styles.meta} testID="job-customer">
+          Customer: {detail.account.name}
+        </Text>
+      ) : null}
       {detail.dueAt ? (
         <Text style={styles.meta}>
           Due {new Date(detail.dueAt).toLocaleString()}

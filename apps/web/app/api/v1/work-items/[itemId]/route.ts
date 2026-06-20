@@ -12,6 +12,7 @@ import {
   isValidWorkItemTransition,
   statusUpdateData,
 } from "@/lib/api/work-items";
+import { resolveWorkItemAccount } from "@/lib/api/work-item-account-resolution";
 
 const DETAIL_SELECT = {
   id: true,
@@ -52,7 +53,11 @@ export async function GET(
     const { user } = await authenticateRequest(request);
     const { itemId } = await params;
     const row = await loadAssigned(itemId, user.id);
-    return apiSuccess(toWorkItemDetail(row));
+    const account = await resolveWorkItemAccount({
+      sourceType: row.sourceType,
+      sourceId: row.sourceId,
+    });
+    return apiSuccess(toWorkItemDetail(row, account));
   } catch (e) {
     if (e instanceof ApiError) return e.toResponse();
     return NextResponse.json(
@@ -93,8 +98,12 @@ export async function PATCH(
       data: statusUpdateData(to, new Date()),
       select: DETAIL_SELECT,
     });
+    const account = await resolveWorkItemAccount({
+      sourceType: updated.sourceType,
+      sourceId: updated.sourceId,
+    });
 
-    return apiSuccess(toWorkItemDetail(updated));
+    return apiSuccess(toWorkItemDetail(updated, account));
   } catch (e) {
     if (e instanceof ApiError) return e.toResponse();
     return NextResponse.json(
