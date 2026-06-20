@@ -52,12 +52,14 @@ function elkOptionsFor(algo: "organic" | "tree" | "layered"): Record<string, str
   if (algo === "organic") {
     // ELK stress majorization — the clustered, force-directed "organic" look. iterationLimit
     // is capped (ELK's default is effectively unbounded) so big views stay responsive.
+    // desiredEdgeLength is wide (stress treats nodes as points); a separateOverlaps post-pass
+    // then guarantees boxes don't overlap.
     return {
       ...ELK_SHARED,
       "elk.algorithm": "stress",
-      "elk.stress.desiredEdgeLength": String(PITCH_X),
-      "elk.stress.iterationLimit": "200",
-      "elk.spacing.nodeNode": String(GAP),
+      "elk.stress.desiredEdgeLength": String(Math.round(PITCH_X * 1.8)),
+      "elk.stress.iterationLimit": "240",
+      "elk.spacing.nodeNode": String(EA_NODE_W),
     };
   }
   if (algo === "tree") {
@@ -239,6 +241,52 @@ function normalize(positions: EaPositions): EaPositions {
   return out;
 }
 
+const OVERLAP_GAP = 28;
+
+/**
+ * Remove node-box overlaps by minimal axis-aligned separation, preserving the overall
+ * arrangement. Force/stress and the radial packer treat nodes as points, so dense clusters
+ * collide; this pushes overlapping pairs apart on their least-penetrating axis until every
+ * pair clears a readable gap. O(n^2) per pass, iteration-capped — skipped above ~2k nodes.
+ */
+function separateOverlaps(positions: EaPositions, iterations = 30): EaPositions {
+  const ids = Object.keys(positions);
+  if (ids.length < 2 || ids.length > 2000) return positions;
+  const p: EaPositions = {};
+  for (const id of ids) p[id] = { x: positions[id]!.x, y: positions[id]!.y };
+  const minDX = EA_NODE_W + OVERLAP_GAP;
+  const minDY = EA_NODE_H + OVERLAP_GAP;
+  for (let iter = 0; iter < iterations; iter += 1) {
+    let moved = false;
+    for (let a = 0; a < ids.length; a += 1) {
+      for (let b = a + 1; b < ids.length; b += 1) {
+        const A = p[ids[a]!]!;
+        const B = p[ids[b]!]!;
+        let dx = B.x - A.x;
+        let dy = B.y - A.y;
+        const overlapX = minDX - Math.abs(dx);
+        const overlapY = minDY - Math.abs(dy);
+        if (overlapX > 0 && overlapY > 0) {
+          moved = true;
+          if (overlapX <= overlapY) {
+            if (dx === 0) dx = (a + b) % 2 === 0 ? 1 : -1; // break ties deterministically
+            const shift = (overlapX / 2 + 0.5) * (dx < 0 ? -1 : 1);
+            A.x -= shift;
+            B.x += shift;
+          } else {
+            if (dy === 0) dy = (a + b) % 2 === 0 ? 1 : -1;
+            const shift = (overlapY / 2 + 0.5) * (dy < 0 ? -1 : 1);
+            A.y -= shift;
+            B.y += shift;
+          }
+        }
+      }
+    }
+    if (!moved) break;
+  }
+  return normalize(p);
+}
+
 async function runElk(
   nodes: EaLayoutNode[],
   edges: EaLayoutEdge[],
@@ -297,10 +345,12 @@ export async function computeEaLayout(
       centerX: 0,
       centerY: 0,
     });
-    return normalize(fromCenter(result));
+    return separateOverlaps(normalize(fromCenter(result)));
   }
 
-  return runElk(nodes, edges, algo); // organic | tree | layered
+  const positions = await runElk(nodes, edges, algo); // organic | tree | layered
+  // Stress (organic) treats nodes as points and can overlap; layered/mrtree already space.
+  return algo === "organic" ? separateOverlaps(positions) : positions;
 }
 
 function overlaps(a: { x: number; y: number }, b: { x: number; y: number }): boolean {
