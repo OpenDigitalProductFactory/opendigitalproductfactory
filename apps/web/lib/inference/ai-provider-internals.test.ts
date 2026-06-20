@@ -18,6 +18,7 @@ import {
   buildAutoDiscoveryEvalEvents,
   extractTokenUsage,
   providerHasConfiguredCredential,
+  resolveSyncedToolUse,
 } from "./ai-provider-internals";
 
 describe("extractTokenUsage", () => {
@@ -111,5 +112,82 @@ describe("providerHasConfiguredCredential", () => {
     expect(await providerHasConfiguredCredential("p", "oauth2_client_credentials")).toBe(true);
     credState.row = { secretRef: null, clientSecret: null, cachedToken: null, refreshToken: null };
     expect(await providerHasConfiguredCredential("p", "oauth2_client_credentials")).toBe(false);
+  });
+});
+
+describe("resolveSyncedToolUse (sticky-false trap — BI-B6DEBFFE)", () => {
+  it("provider floor of false floors everything", () => {
+    expect(
+      resolveSyncedToolUse({
+        providerToolFloor: false,
+        extractedToolUse: true,
+        existing: { profileSource: "evaluated", supportsToolUse: true, capabilityOverrides: { toolUse: true } },
+      }),
+    ).toBe(false);
+  });
+
+  it("admin override wins over a stale stored false (the live qwen3-coder relief)", () => {
+    expect(
+      resolveSyncedToolUse({
+        providerToolFloor: true,
+        extractedToolUse: null,
+        existing: { profileSource: "evaluated", supportsToolUse: false, capabilityOverrides: { toolUse: true } },
+      }),
+    ).toBe(true);
+  });
+
+  it("admin override can also pin OFF a capable model", () => {
+    expect(
+      resolveSyncedToolUse({
+        providerToolFloor: true,
+        extractedToolUse: true,
+        existing: { profileSource: "seed", supportsToolUse: true, capabilityOverrides: { toolUse: false } },
+      }),
+    ).toBe(false);
+  });
+
+  it("HEALS a stale discovery-owned false when the adapter now extracts true (the core bug)", () => {
+    // qwen3-coder: stored false from before the adapter recognised the coder family,
+    // seed/auto-discover profile, no override. The fresh true must win — previously
+    // the existing===false branch re-pinned it false forever.
+    expect(
+      resolveSyncedToolUse({
+        providerToolFloor: true,
+        extractedToolUse: true,
+        existing: { profileSource: "seed", supportsToolUse: false, capabilityOverrides: null },
+      }),
+    ).toBe(true);
+  });
+
+  it("a measured eval (no override) is NOT clobbered by a low-confidence re-discovery", () => {
+    // An evaluated profile that legitimately measured non-tool-use keeps its value
+    // when the optimistic adapter prior disagrees and there is no admin override.
+    expect(
+      resolveSyncedToolUse({
+        providerToolFloor: true,
+        extractedToolUse: true,
+        existing: { profileSource: "evaluated", supportsToolUse: false, capabilityOverrides: null },
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps an embedding model false (adapter extracts a definitive false)", () => {
+    expect(
+      resolveSyncedToolUse({
+        providerToolFloor: true,
+        extractedToolUse: false,
+        existing: { profileSource: "seed", supportsToolUse: false, capabilityOverrides: null },
+      }),
+    ).toBe(false);
+  });
+
+  it("unknown with no signal falls back to the provider floor, not false", () => {
+    expect(
+      resolveSyncedToolUse({
+        providerToolFloor: true,
+        extractedToolUse: null,
+        existing: null,
+      }),
+    ).toBe(true);
   });
 });

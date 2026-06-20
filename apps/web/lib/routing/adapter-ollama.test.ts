@@ -167,6 +167,31 @@ describe("ollamaAdapter", () => {
       });
     });
 
+    // ── Capabilities driven by the shared local-model prior (BI-B6DEBFFE) ──
+    // The adapter must agree with deriveLocalModelCapabilityPrior (the same prior
+    // the seed uses): coder/chat models are tool-capable; embedding models are not.
+    // Regression guard for the bug where the installed coder model (qwen3-coder)
+    // was flagged non-tool-capable while the embedding model (nomic-embed) was
+    // flagged tool-capable.
+    describe("capabilities — local prior (coder vs embedding)", () => {
+      it("flags qwen3-coder tool-capable (was the missed family)", () => {
+        const card = ollamaAdapter.extractModelCard("docker.io/ai/qwen3-coder:latest", {});
+        expect(card.capabilities.toolUse).toBe(true);
+        expect(card.capabilities.structuredOutput).toBe(true);
+      });
+
+      it("flags qwen2.5-coder tool-capable", () => {
+        const card = ollamaAdapter.extractModelCard("ai/qwen2.5-coder:7B", {});
+        expect(card.capabilities.toolUse).toBe(true);
+      });
+
+      it("flags an embedding model NOT tool-capable (definitive false, not null)", () => {
+        const card = ollamaAdapter.extractModelCard("docker.io/ai/nomic-embed-text-v1.5:latest", {});
+        expect(card.capabilities.toolUse).toBe(false);
+        expect(card.capabilities.structuredOutput).toBe(false);
+      });
+    });
+
     // ── modelFamily extraction ────────────────────────────────────────
 
     describe("modelFamily extraction", () => {
