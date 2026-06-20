@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, borderRadius } from "@/src/lib/theme";
 import { api } from "@/src/lib/apiClient";
+import { SpaceSwitcher } from "@/src/features/spaces/SpaceSwitcher";
 import type { DynamicFormSchema, DynamicViewSchema } from "@dpf/types";
 
 interface MenuItemProps {
@@ -46,6 +47,9 @@ export default function MoreScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>More</Text>
+      <View style={{ paddingHorizontal: spacing.md, marginBottom: spacing.md }}>
+        <SpaceSwitcher />
+      </View>
       <MenuItem
         title="Approvals"
         icon="checkmark-circle-outline"
