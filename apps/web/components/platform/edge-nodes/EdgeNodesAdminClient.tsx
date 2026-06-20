@@ -6,9 +6,14 @@ import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
 import {
   approveEdgeNodeAction,
   issueEdgeBootstrapTokenAction,
+  prepareRemoteEdgeProvisioningAction,
   quarantineEdgeNodeAction,
   revokeEdgeNodeAction,
 } from "@/lib/actions/edge-nodes";
+import type {
+  EdgeHostOs,
+  RemoteProvisioningPlan,
+} from "@/lib/edge-node/remote-provisioning";
 
 type EdgeNodeRow = {
   id: string;
@@ -283,6 +288,11 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
   const [ttlMinutes, setTtlMinutes] = useState<number>(15);
   const [selectedCustomerAccountId, setSelectedCustomerAccountId] = useState<string>("");
   const [selectedCustomerSiteId, setSelectedCustomerSiteId] = useState<string>("");
+  const [provisioningOs, setProvisioningOs] = useState<EdgeHostOs>("linux");
+  const [remoteNodeName, setRemoteNodeName] = useState<string>("");
+  const [remotePlan, setRemotePlan] = useState<
+    { plan: RemoteProvisioningPlan; expiresAt: string } | null
+  >(null);
   const [isPending, startTransition] = useTransition();
   const selectedCustomerAccount =
     customerAccounts.find((account) => account.id === selectedCustomerAccountId) ?? null;
@@ -319,6 +329,33 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
         setFlash({
           kind: "error",
           text: `Bootstrap-token issuance failed: ${result.message}`,
+        });
+      }
+    });
+  }
+
+  function onGenerateRemoteCommand() {
+    clearFlash();
+    setRemotePlan(null);
+    setIssuedToken(null);
+    startTransition(async () => {
+      const result = await prepareRemoteEdgeProvisioningAction({
+        os: provisioningOs,
+        ttlMs: Math.max(60_000, ttlMinutes * 60_000),
+        targetCustomerAccountId: selectedCustomerAccountId || null,
+        targetCustomerSiteId: selectedCustomerSiteId || null,
+        ...(remoteNodeName.trim() ? { nodeName: remoteNodeName.trim() } : {}),
+      });
+      if (result.ok) {
+        setRemotePlan({ plan: result.plan, expiresAt: result.expiresAt });
+        setFlash({
+          kind: "success",
+          text: "Install command ready. Copy it to the new machine — the token is shown once.",
+        });
+      } else {
+        setFlash({
+          kind: "error",
+          text: `Could not prepare provisioning: ${result.message}`,
         });
       }
     });
@@ -459,6 +496,102 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
         </div>
       )}
 
+      {remotePlan && (
+        <div
+          className="rounded border-2 p-4 text-sm"
+          style={{
+            borderColor:
+              remotePlan.plan.authorityUrlIssues.includes("loopback") ||
+              remotePlan.plan.authorityUrlIssues.includes("missing")
+                ? "var(--dpf-danger)"
+                : "var(--dpf-accent)",
+            backgroundColor: "var(--dpf-surface-1)",
+          }}
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-base font-semibold text-[var(--dpf-text)]">
+              Run this on the new machine
+            </h3>
+            <button
+              type="button"
+              onClick={() => setRemotePlan(null)}
+              className="text-xs text-[var(--dpf-muted)] hover:underline"
+            >
+              Dismiss
+            </button>
+          </div>
+
+          {(remotePlan.plan.authorityUrlIssues.includes("loopback") ||
+            remotePlan.plan.authorityUrlIssues.includes("missing")) && (
+            <p
+              className="mb-3 rounded border px-3 py-2 text-[var(--dpf-text)]"
+              style={{
+                borderColor: "var(--dpf-danger)",
+                backgroundColor: "var(--dpf-surface-2)",
+              }}
+            >
+              This portal&apos;s address (<code>{remotePlan.plan.authorityUrl}</code>) is not
+              reachable from another machine. Set <code>NEXT_PUBLIC_BASE_URL</code> to your
+              portal&apos;s LAN or public URL and regenerate, or replace the host in the command
+              below before running it.
+            </p>
+          )}
+          {remotePlan.plan.authorityUrlIssues.includes("insecure-http") &&
+            !remotePlan.plan.authorityUrlIssues.includes("loopback") &&
+            !remotePlan.plan.authorityUrlIssues.includes("missing") && (
+              <p
+                className="mb-3 rounded border px-3 py-2 text-[var(--dpf-text)]"
+                style={{
+                  borderColor: "var(--dpf-warning)",
+                  backgroundColor: "var(--dpf-surface-2)",
+                }}
+              >
+                Heads up: this uses plain HTTP. On a shared network the token is sniffable —
+                prefer an HTTPS portal address for anything past a private lab.
+              </p>
+            )}
+
+          {remotePlan.plan.commands.map((cmd) => (
+            <div key={cmd.id} className="mb-3">
+              <p className="mb-1 text-xs font-medium text-[var(--dpf-muted)]">
+                {cmd.label}
+                {!cmd.worksToday && " (preview)"}
+              </p>
+              <div className="flex items-start gap-2">
+                <pre
+                  className="flex-1 overflow-x-auto whitespace-pre-wrap break-all rounded p-2 font-mono text-xs"
+                  style={{
+                    backgroundColor: "var(--dpf-surface-2)",
+                    color: "var(--dpf-text)",
+                  }}
+                >
+                  {cmd.command}
+                </pre>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard?.writeText(cmd.command)}
+                  className="rounded px-3 py-1 text-xs font-medium"
+                  style={{ backgroundColor: "var(--dpf-accent)", color: "white" }}
+                >
+                  Copy
+                </button>
+              </div>
+              {cmd.note && (
+                <p className="mt-1 text-xs text-[var(--dpf-muted)]">{cmd.note}</p>
+              )}
+            </div>
+          ))}
+
+          <p className="text-[var(--dpf-muted)]">{remotePlan.plan.approveHint}</p>
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+            {remotePlan.plan.nativeBinaryNote}
+          </p>
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+            The token expires {formatTimestamp(remotePlan.expiresAt)}.
+          </p>
+        </div>
+      )}
+
       <RuntimeSummary nodes={nodes} />
 
       <section
@@ -468,14 +601,66 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
           backgroundColor: "var(--dpf-surface-1)",
         }}
       >
-        <h2 className="mb-3 text-base font-semibold text-[var(--dpf-text)]">
-          Issue bootstrap token
+        <h2 className="mb-1 text-base font-semibold text-[var(--dpf-text)]">
+          Add a node on another machine
         </h2>
         <p className="mb-3 text-sm text-[var(--dpf-muted)]">
-          One-time enrollment credential for a new Edge Node. Single-use, hashed at rest. TTL
-          15 min default; cap 24h.
+          The portal builds a ready-to-run command — no repo to clone, no file to edit. Pick the
+          host&apos;s operating system; we mint a one-time token and bake in this portal&apos;s
+          address. The node arrives <strong>pending</strong> and submits nothing until you
+          approve it below.
         </p>
-        <div className="grid gap-3 md:grid-cols-[minmax(7rem,0.6fr)_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] md:items-end">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="edge-remote-os"
+              className="text-xs font-medium text-[var(--dpf-muted)]"
+            >
+              Host operating system
+            </label>
+            <select
+              id="edge-remote-os"
+              value={provisioningOs}
+              onChange={(e) => setProvisioningOs(e.target.value as EdgeHostOs)}
+              className="w-full rounded border px-2 py-1.5 text-sm"
+              style={{
+                borderColor: "var(--dpf-border)",
+                backgroundColor: "var(--dpf-surface-2)",
+                color: "var(--dpf-text)",
+              }}
+            >
+              <option value="linux" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                Linux — Docker (real LAN)
+              </option>
+              <option value="macos" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                macOS — Docker Desktop
+              </option>
+              <option value="windows" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                Windows — Docker Desktop
+              </option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="edge-remote-name"
+              className="text-xs font-medium text-[var(--dpf-muted)]"
+            >
+              Node name (optional)
+            </label>
+            <input
+              id="edge-remote-name"
+              type="text"
+              value={remoteNodeName}
+              onChange={(e) => setRemoteNodeName(e.target.value)}
+              placeholder="e.g. warehouse-2"
+              className="w-full rounded border px-2 py-1.5 text-sm"
+              style={{
+                borderColor: "var(--dpf-border)",
+                backgroundColor: "var(--dpf-surface-2)",
+                color: "var(--dpf-text)",
+              }}
+            />
+          </div>
           <div className="flex flex-col gap-1">
             <label
               htmlFor="edge-bootstrap-ttl"
@@ -563,9 +748,11 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
               ))}
             </select>
           </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={onIssueBootstrap}
+            onClick={onGenerateRemoteCommand}
             disabled={isPending}
             className="rounded px-4 py-1.5 text-sm font-medium disabled:opacity-50"
             style={{
@@ -573,7 +760,19 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
               color: "white",
             }}
           >
-            {isPending ? "Issuing…" : "Issue token"}
+            {isPending ? "Preparing…" : "Generate install command"}
+          </button>
+          <button
+            type="button"
+            onClick={onIssueBootstrap}
+            disabled={isPending}
+            className="rounded px-3 py-1.5 text-xs disabled:opacity-50"
+            style={{
+              backgroundColor: "var(--dpf-surface-2)",
+              color: "var(--dpf-text)",
+            }}
+          >
+            Issue raw token only
           </button>
         </div>
       </section>
