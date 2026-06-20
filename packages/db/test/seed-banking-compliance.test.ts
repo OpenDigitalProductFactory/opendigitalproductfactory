@@ -17,6 +17,7 @@ describe("banking compliance pack data", () => {
     expect(total).toBe(14);
     for (const reg of BANKING_REGULATIONS) {
       expect(reg.industry).toBe("financial");
+      expect(reg.sourceUrl).toMatch(/^https:\/\//);
       expect(reg.obligations.length).toBeGreaterThan(0);
     }
   });

@@ -1,27 +1,48 @@
 import { prisma } from "@dpf/db";
 import Link from "next/link";
 import { CreateRegulationForm } from "@/components/compliance/CreateRegulationForm";
-import { StatusBadge } from "@/components/ui/report-kit";
+import { RegulationLibraryPanel } from "@/components/compliance/RegulationLibraryPanel";
+import {
+  addRegulationApplicability,
+  complianceLibraryContextLabel,
+  countByComplianceLibraryScope,
+  filterByComplianceLibraryScope,
+  parseComplianceLibraryScope,
+  resolveComplianceLibraryContext,
+} from "@/lib/compliance-library";
 
-type Props = { searchParams: Promise<{ type?: string }> };
+type Props = { searchParams: Promise<{ type?: string; scope?: string }> };
 
 export default async function RegulationsPage({ searchParams }: Props) {
-  const { type } = await searchParams;
+  const { type, scope: rawScope } = await searchParams;
+  const scope = parseComplianceLibraryScope(rawScope);
   const where: Record<string, unknown> = {};
   if (type && type !== "all") where.sourceType = type;
 
-  const regulations = await prisma.regulation.findMany({
-    where,
-    orderBy: { shortName: "asc" },
-    include: { _count: { select: { obligations: true } } },
-  });
+  const [context, regulations] = await Promise.all([
+    resolveComplianceLibraryContext(),
+    prisma.regulation.findMany({
+      where,
+      orderBy: { shortName: "asc" },
+      include: { _count: { select: { obligations: true } } },
+    }),
+  ]);
+
+  const classifiedRegulations = regulations.map((regulation) =>
+    addRegulationApplicability(regulation, context),
+  );
+  const scopeCounts = countByComplianceLibraryScope(classifiedRegulations);
+  const visibleRegulations = filterByComplianceLibraryScope(classifiedRegulations, scope);
+  const contextLabel = complianceLibraryContextLabel(context);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">Regulations</h1>
-          <p className="text-sm text-[var(--dpf-muted)] mt-0.5">{regulations.length} registered</p>
+          <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
+            {visibleRegulations.length} shown - {regulations.length} registered - {contextLabel}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Link href="/compliance/onboard" className="px-3 py-1.5 text-xs font-medium rounded bg-[var(--dpf-accent)] text-white hover:opacity-90">
@@ -31,36 +52,14 @@ export default async function RegulationsPage({ searchParams }: Props) {
         </div>
       </div>
 
-      {/* Source type filter bar */}
-      <div className="flex gap-2 mb-4">
-        {["all", "external", "standard", "framework", "internal"].map((t) => (
-          <a key={t} href={`/compliance/regulations${t === "all" ? "" : `?type=${t}`}`}
-            className={`px-3 py-1 text-xs rounded-full border ${(!type && t === "all") || type === t ? "bg-[var(--dpf-accent)] text-white border-[var(--dpf-accent)]" : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"}`}>
-            {t === "all" ? "All" : t.charAt(0).toUpperCase() + t.slice(1)}
-          </a>
-        ))}
-      </div>
-
-      {regulations.length === 0 ? (
-        <p className="text-sm text-[var(--dpf-muted)]">No regulations registered yet.</p>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {regulations.map((r) => (
-            <a key={r.id} href={`/compliance/regulations/${r.id}`}
-              className="block p-4 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm font-semibold text-[var(--dpf-text)]">{r.shortName}</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{r.jurisdiction}</span>
-                <StatusBadge domain="complianceRegulation" status={r.status} variant="soft" uppercase={false} />
-              </div>
-              <p className="text-xs text-[var(--dpf-muted)] mb-1">{r.name}</p>
-              <p className="text-xs text-[var(--dpf-muted)]">
-                {r._count.obligations} obligation{r._count.obligations !== 1 ? "s" : ""}
-              </p>
-            </a>
-          ))}
-        </div>
-      )}
+      <RegulationLibraryPanel
+        rows={visibleRegulations}
+        totalCount={classifiedRegulations.length}
+        contextLabel={contextLabel}
+        activeScope={scope}
+        activeSourceType={type}
+        scopeCounts={scopeCounts}
+      />
     </div>
   );
 }

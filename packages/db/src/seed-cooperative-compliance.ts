@@ -27,6 +27,7 @@ type RegulationSeed = {
   jurisdiction: string;
   industry: string;
   sourceType: "external";
+  sourceUrl: string | null;
   notes: string;
   obligations: ObligationSeed[];
 };
@@ -39,6 +40,7 @@ export const COOPERATIVE_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-federal",
     industry: "cooperative",
     sourceType: "external",
+    sourceUrl: "https://uscode.house.gov/view.xhtml?edition=prelim&path=%2Fprelim%40title26%2FsubtitleA%2Fchapter1%2FsubchapterT",
     notes:
       "Internal Revenue Code §§1381–1388 govern how cooperatives deduct patronage dividends: " +
       "allocations must be made on the basis of business done with members, qualified written " +
@@ -100,6 +102,7 @@ export const COOPERATIVE_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-state",
     industry: "cooperative",
     sourceType: "external",
+    sourceUrl: null,
     notes:
       "State cooperative statutes and the co-op's own bylaws require democratic member control: " +
       "an annual member meeting, director elections, one-member-one-vote (with limited exceptions), " +
@@ -211,6 +214,8 @@ export async function seedCooperativeCompliance(prisma: PrismaClient): Promise<v
         shortName: regData.shortName,
         jurisdiction: regData.jurisdiction,
         industry: regData.industry,
+        sourceType: regData.sourceType,
+        sourceUrl: regData.sourceUrl,
         notes: regData.notes,
       },
       create: regData,

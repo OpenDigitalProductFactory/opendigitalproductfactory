@@ -17,6 +17,11 @@ describe("law-enforcement compliance pack data", () => {
     expect(total).toBe(8);
     for (const reg of LAW_ENFORCEMENT_REGULATIONS) {
       expect(reg.industry).toBe("public-safety");
+      if (reg.jurisdiction === "US-federal") {
+        expect(reg.sourceUrl).toMatch(/^https:\/\//);
+      } else {
+        expect(reg.sourceUrl).toBeNull();
+      }
       expect(reg.obligations.length).toBeGreaterThan(0);
     }
   });

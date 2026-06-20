@@ -30,6 +30,7 @@ type RegulationSeed = {
   jurisdiction: string;
   industry: string;
   sourceType: "external";
+  sourceUrl: string | null;
   notes: string;
   obligations: ObligationSeed[];
 };
@@ -42,6 +43,7 @@ export const BANKING_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-federal",
     industry: "financial",
     sourceType: "external",
+    sourceUrl: "https://www.fincen.gov/resources/statutes-and-regulations/bank-secrecy-act",
     notes:
       "The Bank Secrecy Act and its AML program requirements apply to all insured " +
       "depositories — community banks AND credit unions alike. A single shared regime: " +
@@ -113,6 +115,7 @@ export const BANKING_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-federal",
     industry: "financial",
     sourceType: "external",
+    sourceUrl: "https://ncua.gov/regulation-supervision/manuals-guides",
     notes:
       "The National Credit Union Administration regulates and insures federal and most " +
       "state-chartered credit unions: quarterly Call Report (Form 5300), field-of-membership " +
@@ -171,6 +174,7 @@ export const BANKING_REGULATIONS: RegulationSeed[] = [
     jurisdiction: "US-federal",
     industry: "financial",
     sourceType: "external",
+    sourceUrl: "https://www.ffiec.gov/resources/reporting-forms",
     notes:
       "Community banks file the quarterly FFIEC Call Report and are examined for Community " +
       "Reinvestment Act performance, fair-lending compliance (ECOA/HMDA), insider-lending limits " +
@@ -303,6 +307,8 @@ export async function seedBankingCompliance(prisma: PrismaClient): Promise<void>
         shortName: regData.shortName,
         jurisdiction: regData.jurisdiction,
         industry: regData.industry,
+        sourceType: regData.sourceType,
+        sourceUrl: regData.sourceUrl,
         notes: regData.notes,
       },
       create: regData,
