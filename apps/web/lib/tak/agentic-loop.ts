@@ -32,6 +32,7 @@ import {
 } from "./execution-plan";
 import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store";
 import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
+import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern
@@ -2050,9 +2051,14 @@ export async function runAgenticLoop(params: {
       },
       ...iterationResults.map(({ tc, toolResult }) => ({
         role: "tool" as const,
-        content: toolResult.success
-          ? `${toolResult.message}${toolResult.data ? `\n${JSON.stringify(toolResult.data).slice(0, 3000)}` : ""}`
-          : `Error: ${toolResult.error ?? "unknown error"}`,
+        // G1/P6 (context-engineering-standards.md): bound the model-facing
+        // serialization to a window-proportional cap with an explicit
+        // truncation notice. Replaces the prior silent `slice(0, 3000)`, which
+        // left `message` unbounded and gave the model no signal that data was
+        // cut. The stored toolResult (audit/receipts) is unaffected.
+        content: clampToolResultForModel(toolResult, {
+          maxChars: resolveToolResultCharCap(resolvedMaxContextTokens),
+        }).text,
         toolCallId: tc.id,
       })),
     ];
