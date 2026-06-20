@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const findUniqueMock = vi.fn();
 const queueBuildReviewVerificationMock = vi.fn();
 const dispatchIdeateMock = vi.fn();
+const dispatchDesignFixMock = vi.fn();
 const dispatchPlanMock = vi.fn();
 const executeToolMock = vi.fn();
 
@@ -14,6 +15,7 @@ vi.mock("@/lib/build-review-verification-trigger", () => ({
 }));
 vi.mock("@/lib/integrate/ideate-on-approval", () => ({
   dispatchIdeateForApprovedBuild: (...args: unknown[]) => dispatchIdeateMock(...args),
+  dispatchDesignReviewFixLoop: (...args: unknown[]) => dispatchDesignFixMock(...args),
 }));
 vi.mock("@/lib/integrate/plan-on-approval", () => ({
   dispatchPlanForApprovedBuild: (...args: unknown[]) => dispatchPlanMock(...args),
@@ -29,6 +31,7 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     findUniqueMock.mockReset();
     queueBuildReviewVerificationMock.mockReset().mockResolvedValue(undefined);
     dispatchIdeateMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
+    dispatchDesignFixMock.mockReset().mockResolvedValue({ kind: "repaired", rounds: 1 });
     dispatchPlanMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
     executeToolMock.mockReset().mockResolvedValue({ success: true, message: "Plan review: pass." });
   });
@@ -81,6 +84,18 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect(executeToolMock).toHaveBeenCalledWith("reviewDesignDoc", { buildId: "FB-5" }, "u5", { featureBuildId: "FB-5" });
     expect(dispatchIdeateMock).not.toHaveBeenCalled();
     expect(out).toMatchObject({ kind: "resumed", via: "executeTool:reviewDesignDoc" });
+  });
+
+  it("runs the design-review fix loop when an existing designDoc's last review FAILED", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "fail", issues: [{ severity: "critical", description: "fails to address security" }] },
+    });
+    const out = await resumePreBuildPhase({ buildId: "FB-5F", phase: "ideate", userId: "u5" });
+    expect(dispatchDesignFixMock).toHaveBeenCalledWith({ buildId: "FB-5F", userId: "u5" });
+    expect(executeToolMock).not.toHaveBeenCalled(); // does NOT just re-review the rejected doc
+    expect(out).toMatchObject({ kind: "resumed", via: "dispatchDesignReviewFixLoop" });
   });
 
   it("returns failed (never throws) when the build row is missing", async () => {
