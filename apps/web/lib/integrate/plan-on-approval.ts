@@ -256,8 +256,13 @@ async function runPlanReview(buildId: string, userId: string, log: (s: string) =
 export async function dispatchPlanForApprovedBuild(params: {
   buildId: string;
   userId: string;
+  /** Local-tuning: when a build is RESUMED with an existing plan that already
+   *  FAILED review, bypass the idempotency guard so the BI-99B06AD1 fix loop
+   *  regenerates it (with a fresh verified-paths search) instead of re-reviewing
+   *  the same bad plan forever. The resume path passes this on a failed planReview. */
+  forceRegenerate?: boolean;
 }): Promise<PlanDispatchOutcome> {
-  const { buildId, userId } = params;
+  const { buildId, userId, forceRegenerate = false } = params;
   const t0 = Date.now();
 
   const log = (summary: string) =>
@@ -293,11 +298,16 @@ export async function dispatchPlanForApprovedBuild(params: {
       return { kind: "skipped-no-design-doc", reason: "designDoc is null" };
     }
 
-    // Idempotency guard.
+    // Idempotency guard — skipped when forceRegenerate (a resume of a build whose
+    // existing plan FAILED review), so the fix loop below repairs it rather than
+    // the dispatch short-circuiting and the build re-failing the same review.
     const existingPlan = build.buildPlan as { tasks?: unknown[] } | null;
-    if (existingPlan?.tasks && Array.isArray(existingPlan.tasks) && existingPlan.tasks.length > 0) {
+    if (!forceRegenerate && existingPlan?.tasks && Array.isArray(existingPlan.tasks) && existingPlan.tasks.length > 0) {
       await log("Skipped — buildPlan already present");
       return { kind: "skipped-already-has-plan", reason: "buildPlan already saved" };
+    }
+    if (forceRegenerate && existingPlan?.tasks?.length) {
+      await log("Resume: existing plan failed review — regenerating with the fix loop.");
     }
 
     // 2. Fetch BI context for richer prompt.

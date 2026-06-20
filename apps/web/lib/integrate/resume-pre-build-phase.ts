@@ -73,7 +73,7 @@ export async function resumePreBuildPhase(params: {
 
     const build = await prisma.featureBuild.findUnique({
       where: { buildId },
-      select: { designDoc: true, buildPlan: true },
+      select: { designDoc: true, buildPlan: true, planReview: true },
     });
     if (!build) {
       return { kind: "failed", phase, error: "build not found" };
@@ -107,9 +107,21 @@ export async function resumePreBuildPhase(params: {
         const outcome = await dispatchPlanForApprovedBuild({ buildId, userId });
         return { kind: "resumed", phase, via: "dispatchPlanForApprovedBuild", detail: outcome.kind };
       }
-      // Plan exists but the build never advanced (e.g. a stale FAILED planReview
-      // that current reviewer logic would now pass). Re-run the canonical plan
-      // review; it auto-advances plan->build on pass.
+      // Plan exists. If its last review FAILED, REGENERATE via the fix loop —
+      // re-reviewing the same bad plan just re-fails forever (the live jam: a plan
+      // that "points at files that do not exist" stays stuck every resume). The
+      // forceRegenerate path bypasses the idempotency guard so #2090's bounded
+      // fix loop (with a fresh verified-paths search + escalation) repairs it.
+      const planReviewFailed =
+        (build.buildPlan != null) &&
+        (build.planReview as { decision?: string } | null)?.decision === "fail";
+      if (planReviewFailed) {
+        const { dispatchPlanForApprovedBuild } = await import("@/lib/integrate/plan-on-approval");
+        const outcome = await dispatchPlanForApprovedBuild({ buildId, userId, forceRegenerate: true });
+        return { kind: "resumed", phase, via: "dispatchPlanForApprovedBuild:repair", detail: outcome.kind };
+      }
+      // No failed verdict — re-run the review (current reviewer logic may now pass
+      // an older verdict); it auto-advances plan->build on pass.
       const { executeTool } = await import("@/lib/mcp-tools");
       const result = await executeTool("reviewBuildPlan", { buildId }, userId, { featureBuildId: buildId });
       return {
