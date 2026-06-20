@@ -36,7 +36,7 @@ Each is a rule + how DPF applies it. Items marked **[ENFORCED]** have an automat
 - **P9 — Isolate heavy work in sub-contexts — but multi-agent ≈ 15× tokens.** Only when task value justifies it; poor fit for tightly-coupled/shared-context work. *[REVIEW]*
 - **P10 — Enforce non-negotiables deterministically.** Hooks / the kernel runtime gate, not prompt hope, for security/audit. DPF is ahead of the field here. *[ENFORCED]* (kernel gate in `executeTool`).
 - **P11 — Persist + re-inject across compaction.** Plans, memory, key instructions must survive the sliding window (`withPlanReminder` already does this for the plan). *[REVIEW]*
-- **P12 — Measure empirically.** Track tokens-per-task, task success, tool-selection accuracy; watch the 15-tool cliff. *Planned harness (R8).*
+- **P12 — Measure empirically.** Track tokens-per-task, task success, tool-selection accuracy; watch the 15-tool cliff. **Phase 1 shipped** — a per-turn **tool-surface + selection-accuracy gauge** (`apps/web/lib/tak/context-economy-metrics.ts`, logged in the agentic loop as `toolSurface/surfaceZone/toolAccuracy` alongside `ctxZone`); `surfaceZone=overload` is the explicit cliff signal. Cross-task rollup staged (R8 Phase 2). *[REVIEW]*
 - **P13 — Do the simplest thing that works.** Reuse substrate; spike before building. *[REVIEW]*
 
 ## Enforcement (how subsequent changes stay conformant)
