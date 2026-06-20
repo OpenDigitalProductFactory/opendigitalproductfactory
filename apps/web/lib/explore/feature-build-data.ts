@@ -364,6 +364,7 @@ export async function getFeatureBuildForContext(
   const r = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: {
+      id: true,
       buildId: true,
       title: true,
       phase: true,
@@ -597,6 +598,37 @@ export async function getFeatureBuildForContext(
   const planObj = (r.plan as Record<string, unknown> | null) ?? null;
   const processSize = (planObj?.["processSize"] as string | undefined) ?? "medium";
 
+  // Risk-gated intent confirmation (BI-564D68F7): when the business brief is
+  // HIGH risk or LOW confidence, surface its open questions so the ideate
+  // coworker (STEP 0.4) confirms intent with the operator before research. Any
+  // other phase/kind, low-risk + high-confidence, or a missing brief -> the
+  // value is undefined and the context + prompt are byte-identical to today.
+  // Best-effort: a brief-load error omits the gate rather than blocking ideate.
+  let intentConfirmation: string | undefined;
+  if ((r.phase as BuildPhase) === "ideate" && (r.kind ?? "feature") === "feature") {
+    try {
+      const bbb = await prisma.businessBuildBrief.findUnique({
+        where: { featureBuildId: r.id },
+        select: { riskProfile: true, confidence: true, openQuestions: true },
+      });
+      if (bbb) {
+        const level = (bbb.riskProfile as { level?: string } | null)?.level;
+        const lowConfidence = bbb.confidence === "low";
+        if (level === "high" || lowConfidence) {
+          const questions = (bbb.openQuestions ?? []).filter(Boolean);
+          const reason = level === "high" ? "high-risk" : "low-confidence";
+          intentConfirmation =
+            `This build is ${reason}. Confirm intent with the operator before research.\n` +
+            (questions.length > 0
+              ? `Open questions to resolve:\n${questions.map((q) => `  - ${q}`).join("\n")}`
+              : `No specific open questions — confirm the goal and scope in one sentence before proceeding.`);
+        }
+      }
+    } catch {
+      // non-fatal — omit the gate rather than block ideate
+    }
+  }
+
   return {
     buildId: r.buildId,
     phase: r.phase as BuildPhase,
@@ -620,6 +652,7 @@ export async function getFeatureBuildForContext(
     designSystem,
     businessContext,
     scoutFindings,
+    intentConfirmation,
   };
 }
 
