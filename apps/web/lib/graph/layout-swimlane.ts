@@ -11,11 +11,24 @@ export type PartitionFn = (nodeId: string) => number | string | null;
 export async function computeSwimLaneLayout(
   data: GraphData,
   getPartition: PartitionFn,
-  options?: { partitionLabels?: Map<string | number, string> },
+  options?: {
+    partitionLabels?: Map<string | number, string>;
+    // Optional node footprint + spacing. Defaults preserve the original TopologyGraph
+    // behavior (60×30 nodes); the EA canvas adapter passes its larger node sizing.
+    nodeWidth?: number;
+    nodeHeight?: number;
+    layerSpacing?: number;
+    nodeSpacing?: number;
+  },
 ): Promise<LayoutResult> {
   if (data.nodes.length === 0) {
     return { nodes: [], links: [] };
   }
+
+  const nodeWidth = options?.nodeWidth ?? 60;
+  const nodeHeight = options?.nodeHeight ?? 30;
+  const layerSpacing = options?.layerSpacing ?? 80;
+  const nodeSpacing = options?.nodeSpacing ?? 30;
 
   // Build partition index map for ELK (needs integer partition keys)
   const partitionKeys = new Set<string | number>();
@@ -48,8 +61,8 @@ export async function computeSwimLaneLayout(
       const idx = partition != null ? partitionIndex.get(partition) : undefined;
       return {
         id: node.id,
-        width: 60,
-        height: 30,
+        width: nodeWidth,
+        height: nodeHeight,
         ...(idx != null
           ? { layoutOptions: { "elk.partitioning.partition": String(idx) } }
           : {}),
@@ -70,8 +83,8 @@ export async function computeSwimLaneLayout(
         "elk.algorithm": "layered",
         "elk.direction": "DOWN",
         "elk.partitioning.activate": "true",
-        "elk.layered.spacing.nodeNodeBetweenLayers": "80",
-        "elk.spacing.nodeNode": "30",
+        "elk.layered.spacing.nodeNodeBetweenLayers": String(layerSpacing),
+        "elk.spacing.nodeNode": String(nodeSpacing),
       },
       children,
       edges,

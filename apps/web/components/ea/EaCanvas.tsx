@@ -7,8 +7,16 @@ import {
   type Node, type Edge, type Connection, type OnNodesChange, type ReactFlowInstance, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { SerializedViewElement, SerializedEdge, CanvasState } from "@/lib/ea-types";
+import type { SerializedViewElement, SerializedEdge, CanvasState, CanvasLayoutRevision } from "@/lib/ea-types";
 import { buildStructuredViewElements, filterStructuredEdges } from "@/lib/ea-structure";
+import {
+  computeEaLayout,
+  placeIncremental,
+  EA_LAYOUT_ALGORITHMS,
+  EA_LAYOUT_LABELS,
+  type EaLayoutAlgorithm,
+  type EaLayoutEdge,
+} from "@/lib/ea/canvas-layout";
 import { EaElementNode } from "./EaElementNode";
 import { EaRelationshipEdge } from "./EaRelationshipEdge";
 import { ElementPalette } from "./ElementPalette";
@@ -56,83 +64,122 @@ type Props = {
   isReadOnly: boolean;
 };
 
+const MAX_LAYOUT_REVISIONS = 10;
+
+function defaultLayoutAlgo(): EaLayoutAlgorithm {
+  if (typeof window === "undefined") return "layered";
+  const v = window.localStorage.getItem("ea-layout-algo");
+  return v && (EA_LAYOUT_ALGORITHMS as string[]).includes(v) ? (v as EaLayoutAlgorithm) : "layered";
+}
+
+function makeRevisionId(): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  return uuid ?? `rev-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+}
+
+// Append a restore point, dropping the oldest beyond the cap (bounded ring buffer).
+function pushRevision(
+  history: CanvasLayoutRevision[],
+  label: string,
+  nodes: Record<string, { x: number; y: number }>,
+): CanvasLayoutRevision[] {
+  const next = [...history, { id: makeRevisionId(), at: Date.now(), label, nodes }];
+  return next.length > MAX_LAYOUT_REVISIONS ? next.slice(next.length - MAX_LAYOUT_REVISIONS) : next;
+}
+
+// Relationship edges remapped to top-level node ids (structured children collapse to their
+// parent) — used for crossing-minimizing layout and neighbor-aware incremental placement.
+function buildLayoutEdges(
+  visibleElements: SerializedViewElement[],
+  visibleEdges: SerializedEdge[],
+): EaLayoutEdge[] {
+  const parentOf = new Map<string, string | null>();
+  for (const el of visibleElements) parentOf.set(el.viewElementId, el.parentViewElementId);
+  const topAncestor = (id: string): string => {
+    let cur = id;
+    const seen = new Set<string>();
+    while (true) {
+      const parent = parentOf.get(cur);
+      if (!parent || seen.has(cur)) return cur;
+      seen.add(cur);
+      cur = parent;
+    }
+  };
+  const out: EaLayoutEdge[] = [];
+  for (const e of visibleEdges) {
+    const source = topAncestor(e.fromViewElementId);
+    const target = topAncestor(e.toViewElementId);
+    if (source && target && source !== target) out.push({ source, target });
+  }
+  return out;
+}
+
 function buildNodeLayout(
   elements: SerializedViewElement[],
   canvasState: CanvasState | null,
+  layoutEdges: EaLayoutEdge[],
 ): {
   nodes: Record<string, { x: number; y: number }>;
-  shouldPersist: boolean;
+  needsInitialAutoLayout: boolean;
+  backfilled: boolean;
 } {
   const savedNodes = canvasState?.nodes ?? {};
   const elementCount = elements.length;
 
   if (elementCount <= 1) {
     const single = elements[0];
-    if (!single) return { nodes: {}, shouldPersist: false };
+    if (!single) return { nodes: {}, needsInitialAutoLayout: false, backfilled: false };
     return {
       nodes: { [single.viewElementId]: savedNodes[single.viewElementId] ?? { x: 0, y: 0 } },
-      shouldPersist: false,
+      needsInitialAutoLayout: false,
+      backfilled: false,
     };
   }
 
-  const allSavedPresent = elements.every((ve) => Boolean(savedNodes[ve.viewElementId]));
-  const allSavedAtOrigin = allSavedPresent
-    ? elements.every((ve) => {
-        const pos = savedNodes[ve.viewElementId];
-        return pos != null && pos.x === 0 && pos.y === 0;
-      })
-    : false;
+  const savedCount = elements.filter((ve) => Boolean(savedNodes[ve.viewElementId])).length;
+  const allSavedAtOrigin =
+    savedCount === elementCount &&
+    elements.every((ve) => {
+      const pos = savedNodes[ve.viewElementId];
+      return pos != null && pos.x === 0 && pos.y === 0;
+    });
 
-  const shouldLayoutAll = !allSavedPresent || allSavedAtOrigin;
-
-  if (shouldLayoutAll) {
+  // Fresh / auto-generated view (nothing meaningful saved): lay out on a grid as a cheap,
+  // SSR-safe placeholder. The canvas upgrades it to a real crossing-minimizing layout on mount.
+  if (savedCount === 0 || allSavedAtOrigin) {
     const cols = Math.ceil(Math.sqrt(elementCount));
     const xStep = 240;
     const yStep = 150;
     const nodes: Record<string, { x: number; y: number }> = {};
-
     for (let i = 0; i < elementCount; i += 1) {
       const ve = elements[i];
       if (!ve) continue;
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      nodes[ve.viewElementId] = { x: col * xStep, y: row * yStep };
+      nodes[ve.viewElementId] = { x: (i % cols) * xStep, y: Math.floor(i / cols) * yStep };
     }
-
-    return { nodes, shouldPersist: true };
+    return { nodes, needsInitialAutoLayout: true, backfilled: false };
   }
 
-  // Keep existing saved coordinates, but backfill any missing node positions.
-  const used = new Set<string>();
+  // Existing layout with new elements added: keep every saved position untouched and nestle
+  // the new nodes next to their connected neighbors (minimal disruption), instead of re-gridding.
   const nodes = { ...savedNodes } as Record<string, { x: number; y: number }>;
-  for (const pos of Object.values(savedNodes)) {
-    used.add(`${pos.x},${pos.y}`);
+  const missingIds = elements
+    .filter((ve) => !nodes[ve.viewElementId])
+    .map((ve) => ve.viewElementId);
+  if (missingIds.length > 0) {
+    const placed = placeIncremental(nodes, layoutEdges, missingIds);
+    for (const [id, pos] of Object.entries(placed)) nodes[id] = pos;
   }
-
-  const cols = Math.ceil(Math.sqrt(elementCount));
-  const xStep = 240;
-  const yStep = 150;
-  let fillIndex = 0;
-
-  for (const ve of elements) {
-    if (nodes[ve.viewElementId]) continue;
-    while (true) {
-      const candidate = { x: (fillIndex % cols) * xStep, y: Math.floor(fillIndex / cols) * yStep };
-      const key = `${candidate.x},${candidate.y}`;
-      fillIndex += 1;
-      if (used.has(key)) continue;
-      nodes[ve.viewElementId] = candidate;
-      used.add(key);
-      break;
-    }
-  }
-
-  return { nodes, shouldPersist: false };
+  return { nodes, needsInitialAutoLayout: false, backfilled: missingIds.length > 0 };
 }
 
-function buildNodes(elements: SerializedViewElement[], canvasState: CanvasState | null): {
+function buildNodes(
+  elements: SerializedViewElement[],
+  canvasState: CanvasState | null,
+  layoutEdges: EaLayoutEdge[],
+): {
   nodes: Node[];
-  shouldPersist: boolean;
+  needsInitialAutoLayout: boolean;
+  backfilled: boolean;
 } {
   const structuredChildIds = new Set<string>();
   for (const element of elements) {
@@ -142,7 +189,7 @@ function buildNodes(elements: SerializedViewElement[], canvasState: CanvasState 
   }
 
   const topLevelElements = elements.filter((element) => !structuredChildIds.has(element.viewElementId));
-  const topLevelLayout = buildNodeLayout(topLevelElements, canvasState);
+  const topLevelLayout = buildNodeLayout(topLevelElements, canvasState, layoutEdges);
   const nodes: Node[] = [];
 
   for (const element of topLevelElements) {
@@ -194,7 +241,8 @@ function buildNodes(elements: SerializedViewElement[], canvasState: CanvasState 
   }
 
   return {
-    shouldPersist: topLevelLayout.shouldPersist,
+    needsInitialAutoLayout: topLevelLayout.needsInitialAutoLayout,
+    backfilled: topLevelLayout.backfilled,
     nodes,
   };
 }
@@ -319,10 +367,13 @@ export function EaCanvas({
   );
   const visibleEdges = initialEdges.filter((edge) => visibleEdgeIds.has(edge.id));
 
-  const initialNodeLayout = buildNodes(visibleElements, initialCanvasState);
+  const layoutEdges = buildLayoutEdges(visibleElements, visibleEdges);
+  const initialNodeLayout = buildNodes(visibleElements, initialCanvasState, layoutEdges);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodeLayout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges(visibleEdges, handleDeleteEdge, edgeVariant));
   const [selectedViewElement, setSelectedViewElement] = useState<SerializedViewElement | null>(null);
+  const [isLayouting, setIsLayouting] = useState(false);
+  const [revMenuOpen, setRevMenuOpen] = useState(false);
   const [pendingDrop, setPendingDrop] = useState<{
     elementId: string; name: string; typeName: string;
     lifecycleStage: string; lifecycleStatus: string;
@@ -345,12 +396,6 @@ export function EaCanvas({
   // Updated by onInit (after fitView) and onMove (during pan/zoom).
   const viewportRef = useRef(initialCanvasState?.viewport ?? { x: 0, y: 0, zoom: 1 });
 
-  useEffect(() => {
-    if (!initialNodeLayout.shouldPersist) return;
-    const nodesRecord = Object.fromEntries(nodes.map((node) => [node.id, node.position]));
-    scheduleAutoSave({ ...latestCanvasStateRef.current, nodes: nodesRecord });
-  }, [nodes, initialNodeLayout.shouldPersist]);
-
   function scheduleAutoSave(state: CanvasState) {
     latestCanvasStateRef.current = state;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
@@ -358,6 +403,102 @@ export function EaCanvas({
       void saveCanvasState({ viewId, canvasState: latestCanvasStateRef.current });
     }, 1500);
   }
+
+  const nodesRef = useRef<Node[]>(nodes);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  const rfRef = useRef<ReactFlowInstance | null>(null);
+
+  // Snapshot of every node's current position, keyed by React Flow node id.
+  const currentNodesRecord = useCallback(
+    () =>
+      Object.fromEntries(nodesRef.current.map((n) => [n.id, n.position])) as Record<
+        string,
+        { x: number; y: number }
+      >,
+    [],
+  );
+
+  // Run an automatic layout: optionally snapshot the current arrangement (so it can be
+  // restored later), reposition top-level nodes via the chosen engine, persist, and refit.
+  const runAutoLayout = useCallback(
+    async (algo: EaLayoutAlgorithm, opts?: { snapshot?: boolean; persist?: boolean }) => {
+      const snapshot = opts?.snapshot ?? true;
+      const persist = opts?.persist ?? !isReadOnly;
+      setIsLayouting(true);
+      try {
+        const topLevelNodes = nodesRef.current.filter((n) => !n.parentId).map((n) => ({ id: n.id }));
+        if (topLevelNodes.length < 2) return;
+        const positions = await computeEaLayout(topLevelNodes, layoutEdges, { algorithm: algo });
+
+        const history = snapshot
+          ? pushRevision(
+              latestCanvasStateRef.current.history ?? [],
+              `Before ${EA_LAYOUT_LABELS[algo].split(" · ")[0]} layout`,
+              currentNodesRecord(),
+            )
+          : latestCanvasStateRef.current.history;
+
+        setNodes((nds: Node[]) =>
+          nds.map((n) => (n.parentId ? n : { ...n, position: positions[n.id] ?? n.position })),
+        );
+
+        const nextState: CanvasState = {
+          ...latestCanvasStateRef.current,
+          nodes: { ...currentNodesRecord(), ...positions },
+          ...(history ? { history } : {}),
+        };
+        latestCanvasStateRef.current = nextState;
+        if (persist) await saveCanvasState({ viewId, canvasState: nextState });
+
+        requestAnimationFrame(() => rfRef.current?.fitView({ duration: 400, padding: 0.15 }));
+      } finally {
+        setIsLayouting(false);
+      }
+    },
+    [isReadOnly, layoutEdges, viewId, setNodes, currentNodesRecord],
+  );
+
+  // Restore a previously captured layout revision (the "go back to a previous revision" path).
+  const restoreRevision = useCallback(
+    async (rev: CanvasLayoutRevision) => {
+      setNodes((nds: Node[]) =>
+        nds.map((n) => (rev.nodes[n.id] ? { ...n, position: rev.nodes[n.id]! } : n)),
+      );
+      const nextState: CanvasState = {
+        ...latestCanvasStateRef.current,
+        nodes: { ...currentNodesRecord(), ...rev.nodes },
+      };
+      latestCanvasStateRef.current = nextState;
+      if (!isReadOnly) await saveCanvasState({ viewId, canvasState: nextState });
+      setRevMenuOpen(false);
+      requestAnimationFrame(() => rfRef.current?.fitView({ duration: 400, padding: 0.15 }));
+    },
+    [isReadOnly, viewId, setNodes, currentNodesRecord],
+  );
+
+  // On first mount: upgrade an auto-generated grid placeholder to a real crossing-minimizing
+  // layout, or persist the nestled positions of newly-added nodes. Runs exactly once.
+  const didInitLayoutRef = useRef(false);
+  useEffect(() => {
+    if (didInitLayoutRef.current) return;
+    didInitLayoutRef.current = true;
+    const topLevelCount = nodesRef.current.filter((n) => !n.parentId).length;
+    if (initialNodeLayout.needsInitialAutoLayout) {
+      if (topLevelCount > 1 && layoutEdges.length > 0) {
+        void runAutoLayout(defaultLayoutAlgo(), { snapshot: false, persist: !isReadOnly });
+      } else if (!isReadOnly) {
+        void saveCanvasState({
+          viewId,
+          canvasState: { ...latestCanvasStateRef.current, nodes: currentNodesRecord() },
+        });
+      }
+    } else if (initialNodeLayout.backfilled && !isReadOnly) {
+      void saveCanvasState({
+        viewId,
+        canvasState: { ...latestCanvasStateRef.current, nodes: currentNodesRecord() },
+      });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function getAbsoluteNodePosition(node: Node, nodesById: Map<string, Node>): { x: number; y: number } {
     if (!node.parentId) {
@@ -566,23 +707,104 @@ export function EaCanvas({
             {viewpoint && <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>Viewpoint: {viewpoint.name}</span>}
           </div>
 
-          {/* Edge style toggle */}
-          <div style={{ display: "flex", gap: 4 }}>
-            {(["straight", "bezier", "step"] as EdgeVariant[]).map((v) => (
-              <button
-                key={v}
-                onClick={() => handleSetEdgeVariant(v)}
-                title={v.charAt(0).toUpperCase() + v.slice(1)}
-                style={{
-                  fontSize: 10, padding: "2px 7px", borderRadius: 3, cursor: "pointer",
-                  background: edgeVariant === v ? "#2a2a50" : "transparent",
-                  border: `1px solid ${edgeVariant === v ? "var(--dpf-accent)" : "#2a2a40"}`,
-                  color: edgeVariant === v ? "var(--dpf-accent)" : "var(--dpf-muted)",
-                }}
-              >
-                {EDGE_VARIANT_LABELS[v]}
-              </button>
-            ))}
+          {/* Right-side controls */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {!isReadOnly && (
+              <div style={{ display: "flex", alignItems: "center", gap: 4, position: "relative" }}>
+                <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>Arrange:</span>
+                {EA_LAYOUT_ALGORITHMS.map((algo) => (
+                  <button
+                    key={algo}
+                    disabled={isLayouting}
+                    onClick={() => {
+                      try { window.localStorage.setItem("ea-layout-algo", algo); } catch { /* ignore */ }
+                      void runAutoLayout(algo);
+                    }}
+                    title={`Auto-layout — ${EA_LAYOUT_LABELS[algo]}`}
+                    style={{
+                      fontSize: 10, padding: "2px 7px", borderRadius: 3,
+                      cursor: isLayouting ? "wait" : "pointer", opacity: isLayouting ? 0.5 : 1,
+                      background: "transparent", border: "1px solid #2a2a40", color: "var(--dpf-muted)",
+                    }}
+                  >
+                    {EA_LAYOUT_LABELS[algo].split(" · ")[0]}
+                  </button>
+                ))}
+
+                {/* Revisions — restore a previous layout */}
+                {(() => {
+                  const revisions = latestCanvasStateRef.current.history ?? [];
+                  const hasRevisions = revisions.length > 0;
+                  return (
+                    <>
+                      <button
+                        onClick={() => setRevMenuOpen((o) => !o)}
+                        disabled={!hasRevisions}
+                        title={hasRevisions ? "Restore a previous layout" : "No saved layouts yet"}
+                        style={{
+                          fontSize: 10, padding: "2px 7px", borderRadius: 3,
+                          cursor: hasRevisions ? "pointer" : "default",
+                          background: revMenuOpen ? "#2a2a50" : "transparent",
+                          border: `1px solid ${revMenuOpen ? "var(--dpf-accent)" : "#2a2a40"}`,
+                          color: hasRevisions ? "var(--dpf-text)" : "#3a3a4a",
+                        }}
+                      >
+                        ↶ Revisions{hasRevisions ? ` (${revisions.length})` : ""}
+                      </button>
+                      {revMenuOpen && hasRevisions && (
+                        <>
+                          <div onClick={() => setRevMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                          <div style={{
+                            position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 41,
+                            minWidth: 240, maxHeight: 300, overflowY: "auto",
+                            background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)",
+                            borderRadius: 5, padding: 4, boxShadow: "0 6px 20px #0008",
+                          }}>
+                            {[...revisions].reverse().map((rev) => (
+                              <button
+                                key={rev.id}
+                                onClick={() => void restoreRevision(rev)}
+                                style={{
+                                  display: "block", width: "100%", textAlign: "left",
+                                  fontSize: 10, padding: "5px 7px", borderRadius: 3, cursor: "pointer",
+                                  background: "transparent", border: "none", color: "var(--dpf-text)",
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "#2a2a50"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                              >
+                                <span style={{ color: "var(--dpf-accent)" }}>Restore</span> · {rev.label}
+                                <span style={{ color: "var(--dpf-muted)", marginLeft: 4 }}>
+                                  {new Date(rev.at).toLocaleTimeString()}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Edge style toggle */}
+            <div style={{ display: "flex", gap: 4 }}>
+              {(["straight", "bezier", "step"] as EdgeVariant[]).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => handleSetEdgeVariant(v)}
+                  title={v.charAt(0).toUpperCase() + v.slice(1)}
+                  style={{
+                    fontSize: 10, padding: "2px 7px", borderRadius: 3, cursor: "pointer",
+                    background: edgeVariant === v ? "#2a2a50" : "transparent",
+                    border: `1px solid ${edgeVariant === v ? "var(--dpf-accent)" : "#2a2a40"}`,
+                    color: edgeVariant === v ? "var(--dpf-accent)" : "var(--dpf-muted)",
+                  }}
+                >
+                  {EDGE_VARIANT_LABELS[v]}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -610,7 +832,7 @@ export function EaCanvas({
             zoomOnScroll
             zoomOnPinch
             translateExtent={[[-Infinity, -Infinity], [Infinity, Infinity]]}
-            onInit={(rf: ReactFlowInstance) => { viewportRef.current = rf.getViewport(); }}
+            onInit={(rf: ReactFlowInstance) => { rfRef.current = rf; viewportRef.current = rf.getViewport(); }}
             onMove={(_evt: unknown, vp: Viewport) => { viewportRef.current = vp; }}
           >
             <Background color="#2a2a40" gap={20} />
