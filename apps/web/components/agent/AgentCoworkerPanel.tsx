@@ -6,6 +6,7 @@ import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { resolveAgentForRouteSync, AGENT_NAME_MAP } from "@/lib/agent-routing";
 import { clearConversation, getOrCreateThreadSnapshot, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
+import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
@@ -289,11 +290,18 @@ export function AgentCoworkerPanel({
     }
   }, [isBusy, activeSkill]);
 
-  // SSE for tool-level progress, orchestrator status, and async completion
-  useEffect(() => {
-    if (!isBusy || !threadId) { setCurrentTool(null); setOrchestratorStatus(null); return; }
-    const es = new EventSource(`/api/agent/stream?threadId=${threadId}`);
-    es.onmessage = (event) => {
+  // SSE for tool-level progress, orchestrator status, and async completion.
+  //
+  // Resilient SSE (BI-1AFF530D): the coworker stream is open whenever the agent
+  // is busy — including while a self-upgrade recreates the portal container — so
+  // a plain EventSource here was a prime source of the zombie connections that
+  // wedge Chrome's ~6 HTTP/1.1 slots (BI-864E83B0). The heartbeat watchdog in
+  // useResilientEventSource reaps the stream the moment it goes silent past the
+  // window and reconnects, so it can never strand a slot. The idle reset and the
+  // periodic DB recovery poll that used to share this effect are split out below.
+  const coworkerStreamUrl = isBusy && threadId ? `/api/agent/stream?threadId=${threadId}` : null;
+  useResilientEventSource(coworkerStreamUrl, {
+    onMessage: (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === "tool:start") setCurrentTool(data.tool);
@@ -478,17 +486,25 @@ export function AgentCoworkerPanel({
           window.dispatchEvent(new CustomEvent("build-research-progress", { detail: data }));
         }
       } catch { /* ignore */ }
-    };
-    // SSE connection lost — don't mark as "Not sent", show reconnection attempt
-    es.onerror = () => {
-      // EventSource auto-reconnects. If the server already emitted "done" while
-      // disconnected, the reconnection won't see it. The periodic recovery poll
-      // below will catch this case.
-    };
+    },
+  });
 
-    // Periodic recovery: check DB every 15 seconds while busy.
-    // Catches missed SSE "done" events (connection drops, server restart, etc.)
-    // Fetches by threadId for the same reason as the "done" handler above.
+  // Idle reset — clear the in-flight tool/orchestrator chips when the agent is
+  // not busy (formerly the early-return of the combined SSE effect).
+  useEffect(() => {
+    if (!isBusy || !threadId) {
+      setCurrentTool(null);
+      setOrchestratorStatus(null);
+    }
+  }, [isBusy, threadId]);
+
+  // Periodic recovery: check DB every 15 seconds while busy. Catches missed SSE
+  // "done" events (connection drops, server restart, etc.). This is the backstop
+  // for the case the resilient stream reconnects *after* the server already
+  // emitted "done" and so never replays it. Fetches by threadId for the same
+  // reason as the "done" handler above.
+  useEffect(() => {
+    if (!isBusy || !threadId) return;
     const recoveryInterval = setInterval(() => {
       if (!threadId) return;
       getThreadSnapshotById({ threadId }).then((snapshot) => {
@@ -502,9 +518,8 @@ export function AgentCoworkerPanel({
         }
       }).catch(() => {});
     }, 15_000);
-
-    return () => { es.close(); clearInterval(recoveryInterval); setCurrentTool(null); setOrchestratorStatus(null); };
-  }, [isBusy, threadId]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => clearInterval(recoveryInterval);
+  }, [isBusy, threadId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

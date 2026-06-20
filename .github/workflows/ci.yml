@@ -176,6 +176,24 @@ jobs:
       - name: Run guard
         run: node scripts/check-no-native-dialogs.mjs
 
+  raw-event-source-guard:
+    name: Raw EventSource Guard
+    runs-on: ubuntu-latest
+    # BI-1AFF530D. A raw `new EventSource(...)` has no liveness watchdog, so a
+    # self-upgrade that recreates the portal container leaves a silent zombie
+    # socket holding one of the browser's ~6 HTTP/1.1 slots per origin; enough
+    # zombies wedge the whole portal until the browser is restarted
+    # (BI-864E83B0). This guard fails any PR that (re)introduces one outside the
+    # resilient wrapper at apps/web/lib/hooks/useResilientEventSource.ts.
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/check-no-raw-event-source.mjs
+
   ux-fit-gate:
     name: UX-Fit Gate
     runs-on: ubuntu-latest

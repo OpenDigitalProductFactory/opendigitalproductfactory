@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
 import { confirmDialog } from "@/components/ui/Dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -348,32 +349,41 @@ export function BuildStudio({
   // Only activates once threadId is known (via relay or DB poll).
   // The panel relay is the primary channel; this catches updates when
   // the panel is closed or the build was started by an external agent.
-  useEffect(() => {
-    if (!activeBuild?.threadId) return;
-    const es = new EventSource(`/api/agent/stream?threadId=${activeBuild.threadId}`);
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    es.onmessage = async (e) => {
-      let isUrgent = false;
-      try {
-        const data = JSON.parse(e.data);
-        isUrgent = data.type === "phase:change" || data.type === "evidence:update"
-          || data.type === "orchestrator:task_complete" || data.type === "sandbox:ready"
-          || data.type === "orchestrator:warning";
-      } catch { /* non-JSON — debounce */ }
+  //
+  // Resilient SSE (BI-1AFF530D): the heartbeat watchdog
+  // (lib/hooks/useResilientEventSource) reaps this stream if the portal
+  // rebuilds underneath it, instead of leaving a zombie connection holding one
+  // of the browser's ~6 HTTP/1.1 slots (BI-864E83B0). A build's stream is
+  // typically open exactly when a self-upgrade recreates the container, so this
+  // consumer was a prime zombie source.
+  const buildSseDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (buildSseDebounceRef.current) clearTimeout(buildSseDebounceRef.current);
+    },
+    [],
+  );
+  useResilientEventSource(
+    activeBuild && activeBuild.threadId ? `/api/agent/stream?threadId=${activeBuild.threadId}` : null,
+    {
+      onMessage: async (e) => {
+        let isUrgent = false;
+        try {
+          const data = JSON.parse(e.data);
+          isUrgent = data.type === "phase:change" || data.type === "evidence:update"
+            || data.type === "orchestrator:task_complete" || data.type === "sandbox:ready"
+            || data.type === "orchestrator:warning";
+        } catch { /* non-JSON — debounce */ }
 
-      if (isUrgent) {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        await debouncedRefetch();
-      } else {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(debouncedRefetch, 800);
-      }
-    };
-    return () => {
-      es.close();
-      if (debounceTimer) clearTimeout(debounceTimer);
-    };
-  }, [activeBuild?.threadId, activeBuild?.buildId, debouncedRefetch]);
+        if (buildSseDebounceRef.current) clearTimeout(buildSseDebounceRef.current);
+        if (isUrgent) {
+          await debouncedRefetch();
+        } else {
+          buildSseDebounceRef.current = setTimeout(debouncedRefetch, 800);
+        }
+      },
+    },
+  );
 
   // ─── Ultimate fallback: DB poll when panel is closed AND no threadId ───
   // Only runs when we have no other update channel. 10-second interval
