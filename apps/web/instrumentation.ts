@@ -388,6 +388,85 @@ export async function advanceStrandedBuildToReview(buildId: string): Promise<boo
 }
 
 /**
+ * Periodic ship→complete reconciler for the autonomous-completion path
+ * (operator opt-in via DPF_AUTO_COMPLETE_VERIFIED_BUILDS, default OFF).
+ *
+ * A verified build that reached `ship` — with its forks set up by
+ * `autoResolveShipForks` (community PR pushed + product/promotion registered) —
+ * completes once its merged code is LIVE via the platform self-upgrade (the
+ * deploy the operator already runs; NOT the per-build promoter). This loop
+ * detects that: for each `ship`-phase build whose merged SHA is now in the
+ * deployed runtime (`isFeatureBuildDeployed`), it marks the build's still-open
+ * promotion(s) `deployed` — the self-upgrade WAS the deploy — so the promote
+ * fork becomes terminal, then runs `reconcileBuildCompletion` to advance
+ * ship→complete.
+ *
+ * No-op (and cheap) when the flag is off or no ship build is deployed yet.
+ * Idempotent + non-throwing. Exported for tests.
+ */
+export async function reconcileDeployedShipBuilds(
+  logger: Pick<Console, "log" | "error"> = console,
+): Promise<{ completed: number } | null> {
+  const { isAutoCompleteEnabled } = await import("@/lib/integrate/ship-on-review-approval");
+  if (!isAutoCompleteEnabled()) return null;
+  try {
+    const { prisma } = await import("@dpf/db");
+    const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
+    const { isFeatureBuildDeployed } = await import("@/lib/self-upgrade/completion");
+
+    const shipBuilds = await prisma.featureBuild.findMany({
+      where: { phase: "ship" },
+      select: { id: true, buildId: true },
+    });
+    let completed = 0;
+    for (const build of shipBuilds) {
+      try {
+        if (!(await isFeatureBuildDeployed(build.buildId))) continue;
+        // Merged code is live via self-upgrade → mark the build's still-open
+        // promotion(s) deployed so the promote fork is terminal. The platform
+        // self-upgrade IS the deploy here (the per-build promoter is not used).
+        const pvs = await prisma.productVersion.findMany({
+          where: { featureBuildId: build.id },
+          select: { id: true },
+        });
+        if (pvs.length > 0) {
+          await prisma.changePromotion.updateMany({
+            where: {
+              productVersionId: { in: pvs.map((p) => p.id) },
+              status: { in: ["pending", "approved", "scheduled", "awaiting_operator"] },
+            },
+            data: {
+              status: "deployed",
+              deployedAt: new Date(),
+              rationale: "Deployed via platform self-upgrade (autonomous build completion)",
+            },
+          });
+        }
+        if (await reconcileBuildCompletion(build.buildId)) {
+          completed++;
+          logger.log(
+            `[auto-complete] ${build.buildId} completed — merged code live via self-upgrade`,
+          );
+        }
+      } catch (err) {
+        logger.error(
+          "[auto-complete] ship reconcile failed for %s: %s",
+          JSON.stringify(build.buildId),
+          err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
+        );
+      }
+    }
+    return { completed };
+  } catch (err) {
+    logger.error(
+      "[auto-complete] reconcileDeployedShipBuilds failed: %s",
+      err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
+    );
+    return null;
+  }
+}
+
+/**
  * FIX 2 (spec §3.1 engine-first) — Restart-resume for stranded build rows. The
  * pipeline is dispatched fire-and-forget (`autoExecuteBuild(...).catch(...)`),
  * so a portal recycle silently kills it mid-flight, leaving a row in the `build`
@@ -718,6 +797,10 @@ export async function register() {
     void (async () => {
       await recoverContradictoryBuildExecStatesOnBoot();
       await resumeStrandedBuildsOnBoot();
+      // Complete any ship-phase builds whose merged code went live in the
+      // self-upgrade that just (re)started this portal (autonomous-completion
+      // path; no-op when the flag is off).
+      await reconcileDeployedShipBuilds();
     })();
 
     // Periodic build-resume (cron-independent) — the boot reconcile above runs
@@ -737,6 +820,7 @@ export async function register() {
         void (async () => {
           await recoverContradictoryBuildExecStatesOnBoot();
           await resumeStrandedBuildsOnBoot({ staleAfterMs: 20 * 60 * 1000 });
+          await reconcileDeployedShipBuilds();
         })();
       },
       10 * 60 * 1000,

@@ -1,0 +1,66 @@
+# Context Engineering & Tool Efficiency Standards
+
+**Status:** Active standard (advisory + eval-backed; specific items are CI-enforced — see "Enforcement").
+**Owner:** Enterprise Architect persona / `dpf-platform:dpf-architecture-review`.
+**Rationale of record:** `docs/superpowers/specs/2026-06-20-context-engineering-tool-efficiency-design.md` (research, current-state evaluation, and the full principle derivation).
+**Live client facts:** `docs/architecture/agent-client-capability-parity.md` (refreshed monthly — clients change weekly).
+
+This is the canonical reference for **how DPF spends context and tokens** across its three model-facing surfaces — the **MCP tool registry**, **Build Studio** (CLI agents + native local LLM), and **AI coworkers**. Consult it when tuning prompts, adding or changing tools, sizing context, or reviewing a spec that touches any of these. It is the operational form of Anthropic's *context engineering*: **find the smallest set of high-signal tokens that maximize the likelihood of the desired outcome.**
+
+## Why this is a first-order constraint here (not a nicety)
+
+DPF is **local-first by founder strategy**: cloud frontier models are disabled by choice and the platform is tuned for budget / small-GPU deployments. The binding constraint is therefore the **served local window of ~24,576 tokens** (`RECOMMENDED_BUILD_CONTEXT_TOKENS`), not a 200K cloud window. Three consequences shape every rule below:
+
+- **The local-window contract.** One DMR llama-server, one generation model, ~24,576 tokens. Anything that silently consumes that budget (an unbounded tool result, 50K of tool definitions, a forgotten plan) is an *existential* failure mode, not an inefficiency.
+- **The tool-count cliff.** Tool-selection accuracy collapses past ~15 tools on small local models — encoded as `LOCAL_FALLBACK_MAX_TOOLS = 15` (`apps/web/lib/routing/fallback.ts`). Above it, local fallback is skipped entirely.
+- **The cheapest token is the one we never process.** Every reduction (just-in-time loading, in-environment filtering, concise results) compounds with caching and tiering.
+
+## The three laws
+
+1. **Context is a finite resource with diminishing returns.** Recall degrades as tokens grow ("context rot"). Default to *removing*, not adding.
+2. **Smallest high-signal set.** Optimize signal-to-token ratio in every block: system prompt, tool definitions, examples, history, results.
+3. **Tool-selection accuracy collapses past a threshold.** Few, consolidated, unambiguous tools beat many; keep exposed sets under the local cliff.
+
+## The standards (P1–P13)
+
+Each is a rule + how DPF applies it. Items marked **[ENFORCED]** have an automatic guard; **[REVIEW]** are checked at architecture review.
+
+- **P1 — Spend context like a budget.** Treat 24,576 as the binding window. *[REVIEW]*
+- **P2 — Smallest high-signal set.** The L0/L1/L2 arbitrator (`context-arbitrator.ts`, EP-CTX-001) already does this for injected context; extend the discipline to tool definitions and results. *[REVIEW]*
+- **P3 — Right altitude for instructions.** Heuristics and decision criteria over brittle hardcoded branches; labeled sections; prefer the kernel registry (data) over prose where enforcement matters. *[REVIEW]*
+- **P4 — Just-in-time over front-loading.** Pass handles (paths, IDs, queries); retrieve bodies on demand; structure is signal. DPF: corpus slug-prefix retrieval, skill *summaries* not bodies, L3/L4 deferred to tools. *[REVIEW]*
+- **P5 — Few, consolidated, unambiguous tools.** "If a human can't say which tool to use, neither can the agent." Namespace; onboarding-doc descriptions; **no provenance** (`Phase N`, `(BI-…)`, source paths) in model-facing descriptions — that belongs in code comments. **[ENFORCED]** `apps/web/lib/tool-description-hygiene.test.ts`.
+- **P6 — Token-efficient tool results.** High-signal fields; concise by default; pagination/filter/range; **truncate with a notice and a hard cap**. **[ENFORCED]** `apps/web/lib/tak/tool-result-budget.ts` (native loop + MCP route).
+- **P7 — Code execution beats round-tripping.** Have the model write code to call tools and filter results in the sandbox before they re-enter context (37–98% token cuts). *Planned spike (R4) — see spec §7.*
+- **P8 — Cache the stable prefix.** Largest stable content first behind the `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`; volatile content last. Verify the local server exploits prefix-KV caching. *[REVIEW]*
+- **P9 — Isolate heavy work in sub-contexts — but multi-agent ≈ 15× tokens.** Only when task value justifies it; poor fit for tightly-coupled/shared-context work. *[REVIEW]*
+- **P10 — Enforce non-negotiables deterministically.** Hooks / the kernel runtime gate, not prompt hope, for security/audit. DPF is ahead of the field here. *[ENFORCED]* (kernel gate in `executeTool`).
+- **P11 — Persist + re-inject across compaction.** Plans, memory, key instructions must survive the sliding window (`withPlanReminder` already does this for the plan). *[REVIEW]*
+- **P12 — Measure empirically.** Track tokens-per-task, task success, tool-selection accuracy; watch the 15-tool cliff. *Planned harness (R8).*
+- **P13 — Do the simplest thing that works.** Reuse substrate; spike before building. *[REVIEW]*
+
+## Enforcement (how subsequent changes stay conformant)
+
+The criteria apply to future changes automatically, not by memory:
+
+1. **Runtime cap (P6).** `clampToolResultForModel` bounds the native loop's model-facing tool messages to a window-proportional cap (~10% of the known window, floored at 4,000 chars); the MCP route (`/api/mcp/v1`) bounds payloads to `MCP_ROUTE_TOOL_RESULT_CHAR_CAP` and no longer double-dumps `data` into both `text` and `structuredContent`. Truncation always carries a notice so the model knows to paginate/filter.
+2. **CI guard (P5).** `tool-description-hygiene.test.ts` fails the build if any tool's model-facing `description` carries `Phase N` / `(BI-…)` provenance or a leaked source path. (Input-schema property descriptions may still carry format examples like `e.g. BI-E4A86393`.)
+3. **Shift-left precheck (P5/P6).** `packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs` fires (Claude/Codex/Grok) when `mcp-tools.ts`, the MCP route, the agentic loop, or the budget module is edited, re-asserting these criteria before CI.
+4. **Review tie-in.** `docs/architecture/agent-standards-dpf-conformance.md` carries a Context Economy control area so spec/architecture reviews check P1–P13.
+
+## How to apply (quick checklist when changing a model-facing surface)
+
+- Adding a tool? Write the description like onboarding docs; no provenance; namespace it; ask "could a human pick this over its siblings?" If not, consolidate.
+- Returning data from a tool? Default concise; paginate/filter; never return unbounded rows — the cap will truncate you and the model will have to re-fetch.
+- Adding context to a prompt? Can it be a handle retrieved just-in-time instead? Does it survive compaction if it must persist?
+- Exposing tools to a small local model? Keep the set under ~15; lean on phase/grant scoping.
+- Bigger bet (code-exec, deferred CLI tools, registry convergence)? It's in the spec backlog (R3/R4/R7) — design against this standard.
+
+## Related
+
+- Full rationale & research: `docs/superpowers/specs/2026-06-20-context-engineering-tool-efficiency-design.md`
+- Context budget arbitration: `docs/superpowers/specs/2026-04-03-context-budget-arbitration-design.md` (EP-CTX-001)
+- Coworker memory shape: `docs/superpowers/specs/2026-05-14-coworker-memory-shape-contracts-design.md`
+- AI cost governance: `docs/superpowers/specs/2026-05-19-ai-cost-governance.md`
+- Local LLM build engine: `docs/architecture/local-llm-build-engine.md`
+- Client capability parity (live): `docs/architecture/agent-client-capability-parity.md`

@@ -50,6 +50,24 @@ The companion verification rubrics intended to make future conformance claims re
 | Transparency logging | Partially Implemented | Internal execution logging in `apps/web/lib/tak/agentic-loop.ts` | Internal audit logging exists, but there is no public or federated transparency log for issuance, revocation, or public identity state changes. | Add a transparency log for agent issuance, status, and revocation events. |
 | Protocol interoperability profile | Partially Implemented | `apps/web/lib/mcp-tools.ts`, `apps/web/lib/identity/aidoc-resolver.ts`, `apps/web/lib/tak/agent-card-service.ts` | `DPF` models tool metadata and open-world access in a way that can align with `MCP`-style interoperability, and it now has an internal Agent Card projection that carries `TAK` and `GAID` metadata for future A2A/MCP publication. It does not yet publish public A2A Agent Cards, public verifier metadata, or external receipt status endpoints. | Publish identity and receipt metadata through protocol profiles, starting with private A2A-compatible cards and MCP server metadata before public endpoints. |
 
+## Context Economy Conformance
+
+Assessed against `docs/architecture/context-engineering-standards.md` (P1–P13). This is the local-first token/context discipline; the binding window is the ~24,576-token served local window. Spec and architecture reviews should check changes to model-facing surfaces (tool registry, MCP route, agentic loop, prompt assembler) against these.
+
+| Criterion | Status | Evidence Path | Notes |
+|-----------|--------|---------------|-------|
+| P2 Smallest high-signal set | Implemented | `apps/web/lib/tak/context-arbitrator.ts` | L0/L1/L2 per-tier budgets (EP-CTX-001); L3/L4 deferred to tools. |
+| P5 Few/unambiguous tools; clean descriptions | Implemented (enforced) | `apps/web/lib/tool-description-hygiene.test.ts` | CI fails on `Phase N` / `(BI-…)` / source-path provenance in tool descriptions. Registry convergence (12 `search_*`, 7-way `record_*_evidence`) tracked as R7. |
+| P6 Token-efficient, capped tool results | Implemented (enforced) | `apps/web/lib/tak/tool-result-budget.ts` | Window-proportional cap on the native loop; `MCP_ROUTE_TOOL_RESULT_CHAR_CAP` on `/api/mcp/v1`, no more `data` double-dump; truncation carries a notice. |
+| P7 Code execution over round-tripping | Not Implemented | spec §7 (R4) | Sandbox exists; not yet wired into the native loop. Flagged spike. |
+| P8 Cache-first prompt | Partially Implemented | `apps/web/lib/tak/prompt-assembler.ts` | `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` split present; local prefix-KV reuse unverified (R6). |
+| P10 Deterministic enforcement | Implemented | `apps/web/lib/mcp-tools.ts` (kernel gate), `packages/dpf-skill-pack/hooks/` | Kernel runtime gate + PreToolUse prechecks (incl. `tool-economy-precheck.mjs`). |
+| P11 Persist/re-inject across compaction | Partially Implemented | `apps/web/lib/tak/agentic-loop.ts` | `withPlanReminder` keeps the plan out of the compacted window; memory-fact re-injection tracked as R9. |
+| P12 Empirical measurement | Not Implemented | spec §7 (R8) | Tokens-per-task / selection-accuracy harness planned; watch the 15-tool cliff. |
+| Deferred tool exposure on external CLI path | Not Implemented | spec §7 (R3) | Native loop subsets via grants+phase; `/api/mcp/v1` not yet deferred. |
+
+Recommended next steps for this area are tracked in `docs/superpowers/specs/2026-06-20-context-engineering-tool-efficiency-design.md` (R3, R4, R6, R7, R8, R9) and kept current by `docs/architecture/agent-client-capability-parity.md`.
+
 ## Recommended Roadmap
 
 ### Short-Term

@@ -538,7 +538,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     // builds — a downstream-of-Ideate decomposition, not an upstream-from-
     // backlog one. Different name avoids the collision.
     name: "propose_build_decomposition",
-    description: "Phase 4b/7 (BI-2E6CC391). Ask the SE coworker to propose 2-4 candidate decompositions of a passed-design xlarge FeatureBuild. Distinct from `propose_decomposition` (which is an upstream brainstorming tool that generates an Epic + feature-set breakdown). This one is downstream of Ideate — eligible when the build is in `ideate`, has a passed designReview, and the recorded sizeAssessment.decision is `decompose-recommended` or `decompose-required`; Phase 7 also allows a top-level `plan` build whose failed planReview has iteration.oscillating=true, recomputing sizeDesignDoc retroactively when sizeAssessment is missing. Optional `operatorHint` re-runs with guidance ('make the read-first smaller', 'ship the ledger separately'). Persists validated candidates to designReview.decompositionCandidates.latest; prior rounds are preserved under .priorRounds for audit. Returns the validated candidates plus an observability list of rejected ones (model returned them but they failed validateCandidate).",
+    description: "Ask the SE coworker to propose 2-4 candidate decompositions of a passed-design xlarge FeatureBuild. Distinct from `propose_decomposition` (which is an upstream brainstorming tool that generates an Epic + feature-set breakdown). This one is downstream of Ideate — eligible when the build is in `ideate`, has a passed designReview, and the recorded sizeAssessment.decision is `decompose-recommended` or `decompose-required`; also allows a top-level `plan` build whose failed planReview has iteration.oscillating=true, recomputing sizeDesignDoc retroactively when sizeAssessment is missing. Optional `operatorHint` re-runs with guidance ('make the read-first smaller', 'ship the ledger separately'). Persists validated candidates to designReview.decompositionCandidates.latest; prior rounds are preserved under .priorRounds for audit. Returns the validated candidates plus an observability list of rejected ones (model returned them but they failed validateCandidate).",
     inputSchema: {
       type: "object",
       properties: {
@@ -555,7 +555,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "approve_decomposition",
-    description: "Phase 4a/7 (BI-2E6CC391). Atomically create an execution-organizational Epic + N child FeatureBuilds + sibling-dependency edges from a pre-validated DecompositionCandidate, and mark the originating FeatureBuild as superseded. The originating build must be in `ideate` phase with a passed designReview, or in `plan` with a failed oscillating planReview as the Phase 7 retroactive escape hatch, and must not itself be a child. Callers (typically the Phase 4b assistant flow) supply the candidate after the operator has chosen and optionally edited it; all invariants from epic-decomposition-invariants run before any DB writes.",
+    description: "Atomically create an execution-organizational Epic + N child FeatureBuilds + sibling-dependency edges from a pre-validated DecompositionCandidate, and mark the originating FeatureBuild as superseded. The originating build must be in `ideate` phase with a passed designReview, or in `plan` with a failed oscillating planReview as the retroactive escape hatch, and must not itself be a child. Callers (typically the decomposition assistant flow) supply the candidate after the operator has chosen and optionally edited it; all invariants from epic-decomposition-invariants run before any DB writes.",
     inputSchema: {
       type: "object",
       properties: {
@@ -591,7 +591,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "record_decomposition_override",
-    description: "Phase 4a (BI-2E6CC391). Record the operator's 'keep as one build' override on a FeatureBuild whose size assessment is decompose-required. Writes designReview.decompositionOverride for audit and hive-contribution context. Only valid on decompose-required builds; recommended-tier builds proceed without recording an override (single-click path per spec §4.1). Does not enforce — Phase 4b's gate is the consumer of this record.",
+    description: "Record the operator's 'keep as one build' override on a FeatureBuild whose size assessment is decompose-required. Writes designReview.decompositionOverride for audit and hive-contribution context. Only valid on decompose-required builds; recommended-tier builds proceed without recording an override (single-click path per spec §4.1). Does not enforce — the downstream decomposition gate is the consumer of this record.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1150,7 +1150,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "update_backlog_item_status",
-    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table in apps/web/lib/backlog/transitions.ts; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic. Moving an item to in-progress ACQUIRES its work claim and is rejected with error=claim_conflict if another session already holds a fresh active claim (pass force=true to take it over); the claim is released when the item leaves in-progress. NOTE: this only changes the status field — it does NOT start work. For a triageOutcome=build item, starting the work means promote_to_build_studio (creates the FeatureBuild + Build Studio Ideate); flipping such an item to in-progress returns an advisory and does not build anything.",
+    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic. Moving an item to in-progress ACQUIRES its work claim and is rejected with error=claim_conflict if another session already holds a fresh active claim (pass force=true to take it over); the claim is released when the item leaves in-progress. NOTE: this only changes the status field — it does NOT start work. For a triageOutcome=build item, starting the work means promote_to_build_studio (creates the FeatureBuild + Build Studio Ideate); flipping such an item to in-progress returns an advisory and does not build anything.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1624,7 +1624,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "tick_marketing_scheduler",
-    description: "Phase 5: dispatch all ScheduledOutboundAction rows whose scheduledFor <= now. Fires each via the right Phase 1-4 service (draftMarketingAsset / publishApprovedDraft / pullChannelKpis) and reports fired vs failed counts. Idempotent and safe to call as often as the scheduler cadence requires.",
+    description: "Dispatch all ScheduledOutboundAction rows whose scheduledFor <= now. Fires each via the right service (draftMarketingAsset / publishApprovedDraft / pullChannelKpis) and reports fired vs failed counts. Idempotent and safe to call as often as the scheduler cadence requires.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -1635,7 +1635,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "plan_upcoming_marketing_drafts",
-    description: "Phase 5: walk recent MarketingAssetTask rows for the organization and schedule a draft-marketing-asset action 3 days ahead of each task's due window (idempotent — skips tasks that already have a pending or fired schedule).",
+    description: "Walk recent MarketingAssetTask rows for the organization and schedule a draft-marketing-asset action 3 days ahead of each task's due window (idempotent — skips tasks that already have a pending or fired schedule).",
     inputSchema: {
       type: "object",
       properties: {},
@@ -1646,7 +1646,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "set_marketing_autopilot_policy",
-    description: "Phase 5: operator-only. Upsert a bounded per-channel autopilot policy. Channel must be in the autopilot allowlist (linkedin-personal-social, linkedin, email-postmark, email); ad channels are hard-refused by design. The runtime enforces channel allowlist + word-count threshold + weekly publish ceiling + low-confidence-marker check on every auto-approval.",
+    description: "Operator-only. Upsert a bounded per-channel autopilot policy. Channel must be in the autopilot allowlist (linkedin-personal-social, linkedin, email-postmark, email); ad channels are hard-refused by design. The runtime enforces channel allowlist + word-count threshold + weekly publish ceiling + low-confidence-marker check on every auto-approval.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1663,7 +1663,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "draft_marketing_asset",
-    description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Phase 1: LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
+    description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Currently LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2969,7 +2969,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "read_project_file",
-    description: "Read a file from the project codebase. Use relative paths like 'apps/web/lib/mcp-tools.ts'. Cannot access .env, credentials, or node_modules.",
+    description: "Read a file from the project codebase. Use a path relative to the project root (forward slashes). Cannot access .env, credentials, or node_modules.",
     inputSchema: {
       type: "object",
       properties: {
@@ -4690,7 +4690,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "summarize_upgrade_impact",
     description:
-      "On-demand, install-tailored \"What's in this update?\" summary (BI-C26F7EE1). Compares the upstream lineage marker (latest succeeded SelfUpgradeRun.targetSha) to the resolved upstream HEAD, classifies the change set by Conventional Commit type, scores each commit's relevance to this install (archetype, industry, customization paths, open quality-issue themes), and returns a headline + ordered top-N items (most impactful first) plus the full list and a 'touches your customizations' callout that doubles as a §5.0 merge-conflict early warning. Advisory only — never queues or applies an upgrade. Cacheable per (currentLineageSha, targetSha); set refresh=true to bypass.",
+      "On-demand, install-tailored \"What's in this update?\" summary. Compares the upstream lineage marker (latest succeeded SelfUpgradeRun.targetSha) to the resolved upstream HEAD, classifies the change set by Conventional Commit type, scores each commit's relevance to this install (archetype, industry, customization paths, open quality-issue themes), and returns a headline + ordered top-N items (most impactful first) plus the full list and a 'touches your customizations' callout that doubles as a §5.0 merge-conflict early warning. Advisory only — never queues or applies an upgrade. Cacheable per (currentLineageSha, targetSha); set refresh=true to bypass.",
     inputSchema: {
       type: "object",
       properties: {
@@ -4730,7 +4730,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "screen_describe",
     description:
-      "Pseudo-User Contract (spec §6.1, BI-D9487754/BI-DF6079E9). Return the active ScreenManifest summary for the chat's current routeContext — the list of selections, navigations, panels, forms, and domain actions the coworker may invoke on this page. Read-only. Call once at the start of a turn to discover what's available before dispatching screen_* actions. Returns the manifest's serialisable metadata; live handlers stay on the client.",
+      "Pseudo-User Contract. Return the active ScreenManifest summary for the chat's current routeContext — the list of selections, navigations, panels, forms, and domain actions the coworker may invoke on this page. Read-only. Call once at the start of a turn to discover what's available before dispatching screen_* actions. Returns the manifest's serialisable metadata; live handlers stay on the client.",
     inputSchema: { type: "object", properties: {}, required: [] },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -4768,7 +4768,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "screen_navigate",
     description:
-      "Pseudo-User Contract. Navigate to another route within the portal — e.g. /build → /storefront. Conditionally destructive: if the current page has unsaved form state the chat handler auto-wraps the call in an envelope (spec §6.4). Cross-coworker-ownership navigations will fire a HITL handoff gate when BI-A32801C5 lands.",
+      "Pseudo-User Contract. Navigate to another route within the portal — e.g. /build → /storefront. Conditionally destructive: if the current page has unsaved form state the chat handler auto-wraps the call in an envelope (spec §6.4). Cross-coworker-ownership navigations will fire a HITL handoff gate.",
     inputSchema: {
       type: "object",
       properties: {
@@ -4838,7 +4838,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "screen_set_input",
     description:
-      "Pseudo-User Contract. Pre-fill a form field on the user's behalf. The user can still review and modify before submit; the visual cue contract (BI-5696B4D7) highlights coworker-set fields with an amber affordance + \"Set by <Coworker>\" tooltip. Not destructive by itself (reversible until submit) — submit is the destructive action and goes through the envelope flow.",
+      "Pseudo-User Contract. Pre-fill a form field on the user's behalf. The user can still review and modify before submit; the visual cue contract highlights coworker-set fields with an amber affordance + \"Set by <Coworker>\" tooltip. Not destructive by itself (reversible until submit) — submit is the destructive action and goes through the envelope flow.",
     inputSchema: {
       type: "object",
       properties: {
@@ -4874,7 +4874,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "screen_propose_action",
     description:
-      "Pseudo-User Contract (spec §6.4 — destructive-action envelope flow). Propose a domain action that needs explicit user approval before execution. Creates a CoworkerActionEnvelope (BI-D887CD3B schema) in `proposed` status, emits the proposal to the chat UI, and returns the envelope id so the chat handler can correlate the user's approve/deny response. Subject to the per-turn N=3 destructive auto-approval cap (spec §6.4); irreversible actions require an explicit typed-phrase floor and ignore elevation.",
+      "Pseudo-User Contract — destructive-action envelope flow. Propose a domain action that needs explicit user approval before execution. Creates a CoworkerActionEnvelope in `proposed` status, emits the proposal to the chat UI, and returns the envelope id so the chat handler can correlate the user's approve/deny response. Subject to the per-turn N=3 destructive auto-approval cap (spec §6.4); irreversible actions require an explicit typed-phrase floor and ignore elevation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -7688,6 +7688,10 @@ export async function executeTool(
           name: String(params["name"]),
           portfolioSlug: String(params["portfolioSlug"]),
           versionBump: (params["versionBump"] as "major" | "minor" | "patch") ?? "minor",
+          // Thread the MCP actor through so this works in a session-less context
+          // (autonomous ship from the reconciler). UI callers go through the
+          // session as before; shipBuild falls back to requireBuildAccess().
+          actorUserId: userId,
         });
         return {
           success: true,

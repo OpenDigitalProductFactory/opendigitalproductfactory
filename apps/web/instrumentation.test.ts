@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   advanceStrandedBuildToReview,
+  reconcileDeployedShipBuilds,
   areOptionalStartupTasksEnabled,
   isInngestSelfSyncOnBootEnabled,
   isStartupModelRevalidationEnabled,
@@ -24,6 +25,10 @@ const featureBuildUpdateManyMock = vi.fn();
 const buildActivityCreateMock = vi.fn();
 const getScopedVerificationForBuildMock = vi.fn();
 const queueBuildReviewVerificationMock = vi.fn();
+const productVersionFindManyMock = vi.fn();
+const changePromotionUpdateManyMock = vi.fn();
+const isFeatureBuildDeployedMock = vi.fn();
+const reconcileBuildCompletionMock = vi.fn();
 
 vi.mock("@/lib/platform/version-config", () => ({
   syncPlatformVersionConfig: (...args: unknown[]) => syncPlatformVersionConfigMock(...args),
@@ -31,6 +36,11 @@ vi.mock("@/lib/platform/version-config", () => ({
 
 vi.mock("@/lib/self-upgrade/completion", () => ({
   getDeployedSha: () => getDeployedShaMock(),
+  isFeatureBuildDeployed: (...args: unknown[]) => isFeatureBuildDeployedMock(...args),
+}));
+
+vi.mock("@/lib/build-flow-state", () => ({
+  reconcileBuildCompletion: (...args: unknown[]) => reconcileBuildCompletionMock(...args),
 }));
 
 vi.mock("@/lib/self-upgrade/run-store", () => ({
@@ -51,6 +61,12 @@ vi.mock("@dpf/db", () => ({
     },
     buildActivity: {
       create: (...args: unknown[]) => buildActivityCreateMock(...args),
+    },
+    productVersion: {
+      findMany: (...args: unknown[]) => productVersionFindManyMock(...args),
+    },
+    changePromotion: {
+      updateMany: (...args: unknown[]) => changePromotionUpdateManyMock(...args),
     },
   },
   // Sentinels — the reconcilers only need identity equality, not real Prisma.
@@ -77,10 +93,62 @@ beforeEach(() => {
   buildActivityCreateMock.mockReset();
   getScopedVerificationForBuildMock.mockReset();
   queueBuildReviewVerificationMock.mockReset();
+  productVersionFindManyMock.mockReset();
+  changePromotionUpdateManyMock.mockReset();
+  isFeatureBuildDeployedMock.mockReset();
+  reconcileBuildCompletionMock.mockReset();
   featureBuildUpdateMock.mockResolvedValue({});
   featureBuildUpdateManyMock.mockResolvedValue({ count: 1 });
   buildActivityCreateMock.mockResolvedValue({});
   queueBuildReviewVerificationMock.mockResolvedValue(undefined);
+  productVersionFindManyMock.mockResolvedValue([]);
+  changePromotionUpdateManyMock.mockResolvedValue({ count: 0 });
+  reconcileBuildCompletionMock.mockResolvedValue(false);
+  delete process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS;
+});
+
+describe("reconcileDeployedShipBuilds — autonomous ship→complete (flag-gated)", () => {
+  afterEach(() => {
+    delete process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS;
+  });
+
+  it("is a no-op (returns null) when the auto-complete flag is off", async () => {
+    delete process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS;
+    const result = await reconcileDeployedShipBuilds({ log: vi.fn(), error: vi.fn() });
+    expect(result).toBeNull();
+    expect(featureBuildFindManyMock).not.toHaveBeenCalled();
+  });
+
+  it("completes a ship-phase build once its merged code is live, marking the promotion deployed", async () => {
+    process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS = "1";
+    featureBuildFindManyMock.mockResolvedValue([{ id: "fb-1", buildId: "FB-1" }]);
+    isFeatureBuildDeployedMock.mockResolvedValue(true);
+    productVersionFindManyMock.mockResolvedValue([{ id: "pv-1" }]);
+    changePromotionUpdateManyMock.mockResolvedValue({ count: 1 });
+    reconcileBuildCompletionMock.mockResolvedValue(true);
+
+    const result = await reconcileDeployedShipBuilds({ log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ completed: 1 });
+    expect(changePromotionUpdateManyMock).toHaveBeenCalledTimes(1);
+    const updateArg = changePromotionUpdateManyMock.mock.calls[0]?.[0] as {
+      data: { status: string };
+    };
+    expect(updateArg.data.status).toBe("deployed");
+    expect(reconcileBuildCompletionMock).toHaveBeenCalledWith("FB-1");
+  });
+
+  it("skips a ship-phase build whose merged code is not live yet", async () => {
+    process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS = "on";
+    featureBuildFindManyMock.mockResolvedValue([{ id: "fb-2", buildId: "FB-2" }]);
+    isFeatureBuildDeployedMock.mockResolvedValue(false);
+
+    const result = await reconcileDeployedShipBuilds({ log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ completed: 0 });
+    expect(changePromotionUpdateManyMock).not.toHaveBeenCalled();
+    expect(reconcileBuildCompletionMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("warnIfLegacyHiveTokenEnvSet", () => {
