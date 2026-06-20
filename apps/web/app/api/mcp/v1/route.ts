@@ -25,6 +25,7 @@ import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/m
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import { resolveMcpToolTier, selectToolsByTier, type McpToolTier } from "@/lib/mcp/tool-tier";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 
@@ -342,12 +343,18 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
 async function handleToolsList(
   id: JsonRpcId,
   token: ResolvedAuth,
+  tier: McpToolTier = "full",
 ): Promise<Response> {
   const userContext = await loadUserContext(token.userId);
   const grantMap = getToolGrantMapping();
-  const tools = PLATFORM_TOOLS.filter((t) =>
+  // Grant/capability/scope filter first (the authority), then the optional tier
+  // narrowing (a context-economy lever, R3/P4). Tiering only affects discovery
+  // here — tools/call still executes any granted tool by name — so core tier is
+  // a pure token saving with no loss of capability.
+  const granted = PLATFORM_TOOLS.filter((t) =>
     tokenCanUseTool(t, token, userContext, grantMap),
-  ).map(annotateTool);
+  );
+  const tools = selectToolsByTier(granted, tier).map(annotateTool);
   return jsonRpcOk(id, { tools });
 }
 
@@ -561,7 +568,11 @@ export async function POST(request: Request): Promise<Response> {
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return await handleToolsList(body.id ?? null, token);
+        return await handleToolsList(
+          body.id ?? null,
+          token,
+          resolveMcpToolTier(new URL(request.url).searchParams.get("tier")),
+        );
 
       case "tools/call":
         if (isNotification) {
