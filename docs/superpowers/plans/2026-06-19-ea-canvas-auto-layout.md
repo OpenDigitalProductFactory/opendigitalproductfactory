@@ -54,3 +54,15 @@ Live review of the deployed #2151 surfaced that the layouts sprawl into hairball
 - **UX fix C:** added a `← Views` back link (→ `/ea/views`) to the EA top bar, matching the sibling-detail-page pattern.
 
 **Deferred follow-ups (file separately):** populate `parentViewElementId` from "contains" edges + render containment as nested groups (`elk.hierarchyHandling: INCLUDE_CHILDREN` + React Flow parent nodes) — biggest structural ceiling; and move ELK to a Web Worker for 600-node perf.
+
+---
+
+## Addendum — 2026-06-20: containment (nested) view (BI-9E5EA3FF)
+
+Operator /goal "do as recommended with the container view" — built the deferred containment nesting. Rather than the generator/migration route, derive nesting **client-side from `contains` edges** (the dominant relationship: 1887 live; directed parent→child) so it works on existing views with no schema/data change. Custom recursive shelf-packer chosen over ELK compound — simpler + predictable for the pure-`contains` trees that dominate (ELK `INCLUDE_CHILDREN` noted as a future enhancement for cross-edge-heavy containment).
+
+- `apps/web/lib/ea/canvas-layout.ts`: `computeContainmentLayout(nodeIds, containsEdges)` — builds the forest, packs each container's children into a wrapped grid, sizes the container to fit; returns `{id, parentId, x, y (parent-relative), width, height, isContainer, depth}` (parents before children for React Flow ordering). Guards: first-parent-wins (forest), cycle/in-progress, unknown-node, and a cycle-fallback so no node is dropped. Unit-tested.
+- `apps/web/components/ea/EaContainerNode.tsx` (new): titled translucent box, layer-coloured; children render inside via React Flow `parentId`.
+- `apps/web/components/ea/EaCanvas.tsx`: a **▦ Nest** toggle (localStorage-persisted, available to read-only too since nothing is saved) swaps the node/edge set to nested boxes (containers + nested leaves; only cross-cutting edges drawn — `contains` becomes nesting). Flat layout controls hidden while nested; flat auto-layout mount-effect guarded.
+
+Tests: 30 adapter (6 containment) + 16 EA component + 52 graph/actions/topology pass; web typecheck clean.
