@@ -153,16 +153,34 @@ export async function reconcileSelfUpgradeRunsOnBoot(
         await completeRun(run.runId);
         succeeded++;
         logger.log(`[self-upgrade-reconcile] ${run.runId} -> succeeded (deployed ${deployedSha})`);
-      } else {
-        await failRun(
-          run.runId,
-          staleAfterMs > 0
-            ? `Reconciled by watchdog (stuck "running" > ${Math.round(staleAfterMs / 60000)}m): orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`
-            : `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`,
-        );
-        failed++;
-        logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (orphaned)`);
+        continue;
       }
+      // Swap PENDING, not orphaned. On boot (staleAfterMs===0) we may come up still on the
+      // run's PRE-upgrade SHA — e.g. the old portal restarted mid-swap before the promoter
+      // recreated it on the target. Failing here is a false negative: the promoter may still
+      // complete the swap (it did for SUR-F4209F75 — failed on a mid-swap boot although the
+      // portal then came up healthy on the target). Leave the run "running"; the staleness-
+      // guarded periodic watchdog (staleAfterMs>0) fails it only if the swap genuinely never
+      // lands. The watchdog path never takes this branch, so a truly stuck run is still reaped.
+      if (
+        staleAfterMs === 0 &&
+        deployedSha &&
+        run.currentSha &&
+        run.currentSha.toLowerCase() === deployedSha.toLowerCase()
+      ) {
+        logger.log(
+          `[self-upgrade-reconcile] ${run.runId} -> swap pending (still on pre-upgrade SHA ${deployedSha}); leaving "running" for the watchdog`,
+        );
+        continue;
+      }
+      await failRun(
+        run.runId,
+        staleAfterMs > 0
+          ? `Reconciled by watchdog (stuck "running" > ${Math.round(staleAfterMs / 60000)}m): orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`
+          : `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`,
+      );
+      failed++;
+      logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (orphaned)`);
     }
 
     // In PERIODIC mode, also fail runs stuck "queued"/"pending" that never
