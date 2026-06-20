@@ -10,6 +10,11 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Merge queue: required checks (Typecheck / Production Build / Unit Tests) must
+  # run on the merge_group branch, or a queued PR hangs forever waiting for
+  # statuses that never post. The `changes` gate below fails safe to heavy=true
+  # on any non-PR event, so the heavy required jobs do run on merge_group.
+  merge_group:
 
 concurrency:
   group: ci-${{ github.ref }}
