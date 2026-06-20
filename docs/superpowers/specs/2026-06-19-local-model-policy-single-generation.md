@@ -89,6 +89,21 @@ real context window — even the first pull on a fresh install. Recalibrated:
 Per-host result: 8 GB GPU → 4B, 12 GB → 8B, 24 GB → 30B, 27 GB+ → 35B, 53 GB+
 discrete or 64 GB+ unified → 80B. None over-commit at build context.
 
+## Auto-set build context on install (2026-06-20)
+
+Right-sizing the *model* isn't enough — the served **context window** matters too.
+A fresh DMR pull serves a small default (qwen3-coder = 4k), below OpenCode's 22k
+build floor, so local builds silently truncate until an operator sets it by hand
+in Build Runtime. `bootstrap-first-run` now auto-raises the GENERATION model's
+served context to `RECOMMENDED_BUILD_CONTEXT_TOKENS` (24k) on install: read the
+effective context from `/v1/models`, raise via `setServedContextTokens` only when
+it is below target, persist to the `ModelProfile` row (the routing source of
+truth), and leave the embedder alone. Best-effort — never blocks setup; 24k fits
+inside the headroom the tier selection already reserves (~2.3 GB of KV cache).
+The build preflight's existing "context too small" flag stays as the safety net
+for later model swaps (and for the rare case DMR refuses to reconfigure an
+already-active runner).
+
 ## Still out of scope (follow-ups under BI-0B893092)
 
 - **Install-script tiers are mirrored, not imported** — shell / the

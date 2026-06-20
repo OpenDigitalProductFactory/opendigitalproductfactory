@@ -377,3 +377,136 @@ export function placeIncremental(
   }
   return result;
 }
+
+// ─── Containment (nested) layout ────────────────────────────────────────────
+// SysML/ArchiMate containment (Package⊃Part⊃Port) is encoded as directed "contains"
+// edges (parent → child). Rather than draw those as edges, the containment view nests
+// children INSIDE their parent as React Flow group nodes. This pure packer derives the
+// forest from the contains-edges and lays each container's children out in a wrapped grid,
+// sizing the container to fit. Coordinates are relative to the parent (React Flow convention).
+
+const HEADER_H = 28; // container title bar
+const INNER_PAD = 16; // padding inside a container
+const INNER_GAP = 24; // gap between siblings inside a container
+
+export type ContainmentEdge = { parent: string; child: string };
+
+export type ContainmentNode = {
+  id: string;
+  parentId: string | null;
+  x: number; // relative to parent (canvas for top-level)
+  y: number;
+  width: number;
+  height: number;
+  isContainer: boolean;
+  depth: number;
+};
+
+type Measured = { width: number; height: number; childPos: Map<string, { x: number; y: number }> };
+
+// Shelf-pack boxes into rows bounded by `target` width; returns each box's top-left + extent.
+function shelfPack(
+  boxes: Array<{ id: string; width: number; height: number }>,
+  target: number,
+  originX: number,
+  originY: number,
+  gap: number,
+): { pos: Map<string, { x: number; y: number }>; width: number; height: number } {
+  const pos = new Map<string, { x: number; y: number }>();
+  let x = originX;
+  let y = originY;
+  let rowHeight = 0;
+  let contentRight = originX;
+  for (const b of boxes) {
+    if (x > originX && x + b.width > originX + target) {
+      x = originX;
+      y += rowHeight + gap;
+      rowHeight = 0;
+    }
+    pos.set(b.id, { x, y });
+    x += b.width + gap;
+    rowHeight = Math.max(rowHeight, b.height);
+    contentRight = Math.max(contentRight, x - gap);
+  }
+  return { pos, width: contentRight - originX, height: y + rowHeight - originY };
+}
+
+/**
+ * Compute a nested (containment) layout from "contains" edges.
+ * Returns one entry per node (parents before children) with parent-relative coordinates and
+ * container sizes. Nodes with children are containers; leaves get the standard node footprint.
+ */
+export function computeContainmentLayout(
+  nodeIds: string[],
+  containsEdges: ContainmentEdge[],
+): ContainmentNode[] {
+  const idset = new Set(nodeIds);
+  const childrenOf = new Map<string, string[]>();
+  const hasParent = new Set<string>();
+  for (const e of containsEdges) {
+    if (!idset.has(e.parent) || !idset.has(e.child) || e.parent === e.child) continue;
+    if (hasParent.has(e.child)) continue; // first parent wins (treat as a forest)
+    if (!childrenOf.has(e.parent)) childrenOf.set(e.parent, []);
+    childrenOf.get(e.parent)!.push(e.child);
+    hasParent.add(e.child);
+  }
+  const roots = nodeIds.filter((id) => !hasParent.has(id));
+
+  const measured = new Map<string, Measured>();
+  const inProgress = new Set<string>();
+  function measure(id: string): { width: number; height: number } {
+    const cached = measured.get(id);
+    if (cached) return { width: cached.width, height: cached.height };
+    const kids = (childrenOf.get(id) ?? []).filter((k) => !inProgress.has(k)); // cycle guard
+    if (kids.length === 0) {
+      measured.set(id, { width: EA_NODE_W, height: EA_NODE_H, childPos: new Map() });
+      return { width: EA_NODE_W, height: EA_NODE_H };
+    }
+    inProgress.add(id);
+    const boxes = kids.map((k) => ({ id: k, ...measure(k) }));
+    inProgress.delete(id);
+    const totalArea = boxes.reduce((s, b) => s + (b.width + INNER_GAP) * (b.height + INNER_GAP), 0);
+    const maxChildW = Math.max(...boxes.map((b) => b.width));
+    const target = Math.max(maxChildW, Math.sqrt(totalArea) * 1.3);
+    const packed = shelfPack(boxes, target, INNER_PAD, HEADER_H, INNER_GAP);
+    const width = Math.max(packed.width + 2 * INNER_PAD, maxChildW + 2 * INNER_PAD, 140);
+    const height = packed.height + HEADER_H + INNER_PAD;
+    measured.set(id, { width, height, childPos: packed.pos });
+    return { width, height };
+  }
+  roots.forEach(measure);
+
+  // Place roots in a top-level shelf.
+  const rootBoxes = roots.map((id) => ({ id, ...measure(id) }));
+  const totalArea = rootBoxes.reduce((s, b) => s + (b.width + GAP) * (b.height + GAP), 0);
+  const target = Math.max(0, ...rootBoxes.map((b) => b.width), Math.sqrt(totalArea) * 1.4);
+  const rootPacked = shelfPack(rootBoxes, target, MARGIN, MARGIN, GAP);
+
+  const out: ContainmentNode[] = [];
+  const emitted = new Set<string>();
+  function emit(id: string, parentId: string | null, pos: { x: number; y: number }, depth: number) {
+    if (emitted.has(id)) return; // each node once (guards cycles / shared descendants)
+    emitted.add(id);
+    const meas = measured.get(id) ?? { width: EA_NODE_W, height: EA_NODE_H, childPos: new Map() };
+    const isContainer = (childrenOf.get(id) ?? []).length > 0;
+    out.push({ id, parentId, x: pos.x, y: pos.y, width: meas.width, height: meas.height, isContainer, depth });
+    for (const k of childrenOf.get(id) ?? []) {
+      const cp = meas.childPos.get(k);
+      if (cp && !emitted.has(k)) emit(k, id, cp, depth + 1); // parent already pushed → RF ordering holds
+    }
+  }
+  for (const id of roots) emit(id, null, rootPacked.pos.get(id) ?? { x: MARGIN, y: MARGIN }, 0);
+
+  // Cycle fallback: nodes whose containment formed a cycle have no root — emit them as
+  // top-level so nothing silently disappears.
+  const leftover = nodeIds.filter((id) => !emitted.has(id));
+  if (leftover.length > 0) {
+    const boxes = leftover.map((id) => ({ id, ...measure(id) }));
+    const area = boxes.reduce((s, b) => s + (b.width + GAP) * (b.height + GAP), 0);
+    const target = Math.max(0, ...boxes.map((b) => b.width), Math.sqrt(area) * 1.4);
+    const baseY = out.reduce((m, n) => (n.parentId ? m : Math.max(m, n.y + n.height)), MARGIN) + GAP;
+    const packed = shelfPack(boxes, target, MARGIN, baseY, GAP);
+    for (const id of leftover) emit(id, null, packed.pos.get(id) ?? { x: MARGIN, y: baseY }, 0);
+  }
+  return out;
+}
