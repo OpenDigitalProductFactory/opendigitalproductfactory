@@ -314,3 +314,36 @@ on landing, and adds exactly one extractor + its tests.
 - No runtime-validation claims from the worktree; route runtime gates through the canonical
   install or shared local-CI lease.
 - No SysML where a smaller ArchiMate/BPMN/C4 view is the adequate answer.
+
+## 14. Implementation Log (appended)
+
+Shipped against `EP-ARCH-GRAPH-LIVE`, in order:
+
+- **#2029** — roadmap spec (this doc) + the skill & agent-toolchain extractor (the last
+  unextracted static portal domain). **#2033** — the keystone: `applySysmlModel.crossLayerRelationships`,
+  resolving an edge endpoint against existing `EaElement.infraCiKey` across projections.
+  **#2034** — the three Tier-2 bridges (operational `RuntimeTarget`, network `EdgeNode`/
+  `InventoryEntity`, integration `IntegrationCredential`) as self-contained drift-proof
+  projections. **#2073** — the first cross-layer `traces` edges: each actual element traces
+  to its `prisma:model:<Model>` data-model type.
+- **Functional verification (live, 2026-06-19):** after deploy, triggering the
+  `sysml-projection-nightly` reconcile created **331 cross-layer `traces` edges from real data**
+  (network 317 / operational 12 / edge-node 1 / integration 1), each resolving against the live
+  `prisma:model:*` elements. A data-model change's blast radius now reaches the live elements
+  that realize it — confirmed by direct DB inspection.
+- **#2104** — `cross_layer_impact` traversal pattern (in `seed-ea-archimate4.ts`) + the slug in
+  the `run_traversal_pattern` MCP enum, so the impact *query* walks the `traces` edges. Engine
+  note: the traversal executor matches relationship/element slugs **globally** (no notation
+  scoping), so an archimate4-registered pattern traverses the sysml2 `traces` edges; registered
+  under archimate4 because `run_traversal_pattern` defaults to that notation.
+- **#2130 (this PR) — seed→migration backfill finding.** Seed data does **not** reliably
+  re-apply on self-upgrade (`seed.ts` tolerates partial failure), so the `cross_layer_impact`
+  pattern added to the seed in #2104 never reached the already-running install — the edges were
+  live but the pattern row was absent. **Lesson: a new seeded EA artifact (traversal pattern,
+  element type, notation) needs a paired idempotent data migration to reach existing installs;
+  the seed alone only covers fresh installs.** This PR adds that migration (`migrate deploy` runs
+  reliably, before the seed). Generalize this to future EA seed additions.
+
+**Remaining (filed):** impact VIEW/UX surface (`BI-4A73ED94`); `docker-compose` infra-topology
+extractor; event-driven real-time projection (`BI-F0923D0F`); Tier-1 leftovers
+(deployment-contracts extractor `BI-26C6F5B4`, Build-Studio/value-stream BPMN `BI-PARITY-BPMN`).
