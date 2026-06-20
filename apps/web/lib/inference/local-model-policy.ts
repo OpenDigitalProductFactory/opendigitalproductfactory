@@ -56,45 +56,101 @@ export function classifyLocalModelRole(modelId: string): LocalModelRole {
 }
 
 /**
- * Canonical generation-model tiers, ordered largest-first. Qwen3 — NOT Gemma —
- * because the platform's Coworkers catalog tiers Qwen3 as `strong + Tool Use`
- * (F1 0.93 @ 8B, 0.97 @ 14B) while Gemma tiers as `adequate`, and default
- * coworkers require `minimumTier: strong`.
+ * Headroom (GB) reserved ON TOP OF a model's weights for the context KV cache,
+ * the embedder, and runtime overhead — so a recommended model fits with room to
+ * RUN, not just to load. Grounded in on-box measurement (RTX 4090, 2026-06-20):
+ * qwen3-coder 30B (~16.5 GB weights) at a 24k build context used ~20.7 GB
+ * resident — ~4 GB over weights — and the embedder adds ~1 GB. 5 GB covers both
+ * with margin and is why a 24 GB card lands on the 30B, not the 35B.
+ */
+export const MODEL_HEADROOM_GB = 5;
+
+/**
+ * Fraction of UNIFIED memory (Apple Silicon) usable for the model. macOS lets
+ * Metal address ~70–75% of unified RAM for the GPU; the rest stays for the OS +
+ * the Docker stack. So a 128 GB Mac has a far larger model budget than a 24 GB
+ * discrete card — it can run an 80B where the 4090 runs a 30B.
+ */
+export const UNIFIED_USABLE_FRACTION = 0.75;
+
+/** Fraction of system RAM usable for CPU-only inference (leaves room for OS + stack). */
+export const CPU_USABLE_FRACTION = 0.5;
+
+export type HostArchitecture = "discrete" | "unified" | "cpu";
+
+export interface HostMemory {
+  /** "discrete" = dedicated GPU VRAM; "unified" = Apple Silicon shared RAM; "cpu" = no GPU. */
+  architecture: HostArchitecture;
+  /** Dedicated GPU VRAM in GB (discrete hosts). */
+  vramGb?: number | null;
+  /** Total system RAM in GB (drives the unified + cpu budgets). */
+  totalRamGb?: number | null;
+}
+
+/**
+ * Canonical generation-model tiers, ordered largest-first. Qwen3 family (strong
+ * tool-calling); the `-coder` variants double as the Build Studio code model AND
+ * a capable chat model, so one model serves both. `weightsGb` is the approximate
+ * Q4 resident WEIGHT footprint; the selector adds MODEL_HEADROOM_GB for context +
+ * embedder before deciding what fits.
  *
- * `minVramGb` is the discrete-VRAM floor; `approxVramGb` is the resident
- * footprint used for the over-commit budget. Mirrored (with a pointer comment)
- * by scripts/detect-hardware-host.ts and install-dpf.{ps1,sh}, which cannot
- * import TypeScript. Keep those in sync when this changes.
+ * Mirrored (with a pointer comment) by scripts/detect-hardware-host.ts and
+ * install-dpf.{ps1,sh}, which cannot import TypeScript. Keep those in sync.
  */
 export interface LocalModelTier {
   model: string;
-  minVramGb: number;
-  approxVramGb: number;
+  /** Approximate resident weight footprint, GB (Q4). */
+  weightsGb: number;
   label: string;
 }
 
 export const LOCAL_MODEL_TIERS: readonly LocalModelTier[] = [
-  { model: "ai/qwen3.6:35B-A3B-UD-Q4_K_M", minVramGb: 22, approxVramGb: 22, label: "Qwen3.6 35B-A3B (MoE)" },
-  { model: "ai/qwen3:14B-Q6_K", minVramGb: 12, approxVramGb: 12, label: "Qwen3 14B" },
-  { model: "ai/qwen3:8B-Q4_K_M", minVramGb: 6, approxVramGb: 6, label: "Qwen3 8B" },
-  { model: "ai/qwen3:4B-UD-Q4_K_XL", minVramGb: 0, approxVramGb: 3, label: "Qwen3 4B" },
+  { model: "ai/qwen3-coder-next", weightsGb: 48, label: "Qwen3-Coder-Next 80B (MoE, 3B active)" }, // big unified (Apple 128 GB) / 64 GB+ discrete
+  { model: "ai/qwen3.6:35B-A3B-UD-Q4_K_M", weightsGb: 22, label: "Qwen3.6 35B-A3B (MoE)" },
+  { model: "ai/qwen3-coder", weightsGb: 16, label: "Qwen3-Coder 30B (MoE, 3B active)" }, // the 24 GB-card sweet spot (measured ~20.7 GB @ 24k ctx)
+  { model: "ai/qwen3:14B-Q6_K", weightsGb: 12, label: "Qwen3 14B" },
+  { model: "ai/qwen3:8B-Q4_K_M", weightsGb: 6, label: "Qwen3 8B" },
+  { model: "ai/qwen3:4B-UD-Q4_K_XL", weightsGb: 3, label: "Qwen3 4B" },
 ] as const;
 
+/** Smallest tier — the CPU-OK fallback when nothing larger fits the budget. */
+const SMALLEST_TIER = LOCAL_MODEL_TIERS[LOCAL_MODEL_TIERS.length - 1]!;
+
 /**
- * Select the largest generation tier that fits available VRAM. Walks the tier
- * list top-down and returns the first whose `minVramGb` floor is satisfied.
- *
- * Semantics (preserve the prior bootstrap behaviour exactly):
- *   - `null`  → VRAM is UNDETECTABLE → broadly-compatible mid default (8B).
- *   - `0`     → detected zero VRAM (CPU-only host) → the CPU-OK 4B tier.
- *   - `n > 0` → largest tier whose floor `n` satisfies.
+ * The memory budget (GB) actually available to a local model on this host:
+ *   - discrete → dedicated VRAM (hard ceiling)
+ *   - unified  → a fraction of total RAM (Apple Silicon shares it with the OS)
+ *   - cpu      → a smaller fraction of total RAM
+ */
+export function computeMemoryBudgetGb(host: HostMemory): number {
+  if (host.architecture === "discrete") return host.vramGb && host.vramGb > 0 ? host.vramGb : 0;
+  if (host.architecture === "unified") return Math.max(0, (host.totalRamGb ?? 0) * UNIFIED_USABLE_FRACTION);
+  return Math.max(0, (host.totalRamGb ?? 0) * CPU_USABLE_FRACTION);
+}
+
+/**
+ * Recommend the largest generation model that fits the host's memory budget WITH
+ * headroom for context + embedder. Architecture-aware: a 24 GB discrete card
+ * lands on the 30B (fits at build context), a 128 GB unified Mac lands on the
+ * 80B MoE, and an 8–12 GB budget GPU lands on a model that actually fits instead
+ * of one that fills the card and then over-commits the moment it runs.
+ */
+export function recommendGenerationModelForHost(host: HostMemory): string {
+  const budget = computeMemoryBudgetGb(host);
+  for (const tier of LOCAL_MODEL_TIERS) {
+    if (tier.weightsGb + MODEL_HEADROOM_GB <= budget) return tier.model;
+  }
+  return SMALLEST_TIER.model;
+}
+
+/**
+ * Discrete-VRAM convenience wrapper (the runtime bootstrap path knows only VRAM).
+ * Headroom-aware. `null` = VRAM undetectable → broadly-compatible 8B default;
+ * `0` = detected zero VRAM (CPU-only) → the smallest tier.
  */
 export function recommendGenerationModel(vramGb: number | null): string {
   if (vramGb === null) return "ai/qwen3:8B-Q4_K_M";
-  for (const tier of LOCAL_MODEL_TIERS) {
-    if (vramGb >= tier.minVramGb) return tier.model;
-  }
-  return "ai/qwen3:4B-UD-Q4_K_XL";
+  return recommendGenerationModelForHost({ architecture: "discrete", vramGb });
 }
 
 /**
@@ -106,9 +162,12 @@ export function recommendGenerationModel(vramGb: number | null): string {
 export function estimateModelVramGb(modelId: string): number | null {
   const id = modelId.toLowerCase();
   if (isEmbeddingModelId(id)) return 1;
+  // qwen3-coder-next is the 80B MoE coder — match BEFORE qwen3-coder (substring).
+  if (/coder-next/.test(id)) return 48;
   // qwen3-coder's short DMR name carries no size hint but is the 30B-A3B build
   // model (observed ~16.5 GB resident). Match it explicitly before param-size.
   if (/qwen3-coder/.test(id)) return 16;
+  if (/80b/.test(id)) return 48;
   if (/35b/.test(id)) return 22;
   if (/30b/.test(id)) return 16; // qwen3 30B-A3B observed ~16.5 GB
   if (/gemma.?4|gemma.?3/.test(id)) return /12b/.test(id) ? 8 : 20;
