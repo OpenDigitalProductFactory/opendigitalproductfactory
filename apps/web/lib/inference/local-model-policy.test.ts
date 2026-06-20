@@ -96,7 +96,9 @@ describe("recommendKeepGenerationModel", () => {
     expect(keep).toBe("qwen3-coder");
   });
   it("falls back to the hardware-recommended tier", () => {
-    const keep = recommendKeepGenerationModel(["ai/qwen3:8B-Q4_K_M", "ai/qwen3:14B-Q6_K"], 12);
+    // 17 GB budget: the headroom-aware recommendation is the 14B (12+5=17), so
+    // recommendKeep picks it over the also-present 8B.
+    const keep = recommendKeepGenerationModel(["ai/qwen3:8B-Q4_K_M", "ai/qwen3:14B-Q6_K"], 17);
     expect(keep).toBe("ai/qwen3:14B-Q6_K");
   });
   it("returns the single model unchanged", () => {
