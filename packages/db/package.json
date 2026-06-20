@@ -53,7 +53,7 @@
     "i18n-iso-countries": "^7.14.0",
     "neo4j-driver": "^6.1.0",
     "net-snmp": "^3.26.3",
-    "pg": "^8.21.0",
+    "pg": "^8.22.0",
     "read-excel-file": "9.2.0",
     "undici": "^8.5.0"
   },
@@ -65,6 +65,6 @@
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   }
 }
