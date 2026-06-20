@@ -76,6 +76,16 @@ export const UNIFIED_USABLE_FRACTION = 0.75;
 /** Fraction of system RAM usable for CPU-only inference (leaves room for OS + stack). */
 export const CPU_USABLE_FRACTION = 0.5;
 
+/**
+ * Served context window (tokens) the platform auto-sets for the local GENERATION
+ * model on install, so Build Studio's local builds aren't silently truncated. A
+ * fresh Docker Model Runner pull defaults to a small context (qwen3-coder = 4k),
+ * below OpenCode's 22k build floor (OPENCODE_MIN_CONTEXT_TOKENS). 24k clears the
+ * floor with margin and fits inside the MODEL_HEADROOM_GB the tier selection
+ * already reserves (~2.3 GB of KV cache at this size — measured ~0.1 GB / 1k tokens).
+ */
+export const RECOMMENDED_BUILD_CONTEXT_TOKENS = 24_576;
+
 export type HostArchitecture = "discrete" | "unified" | "cpu";
 
 export interface HostMemory {

@@ -8,7 +8,10 @@ import {
   recommendGenerationModel,
   detectLocalModelOverCommit,
   normaliseModelId,
+  isEmbeddingModelId,
+  RECOMMENDED_BUILD_CONTEXT_TOKENS,
 } from "./local-model-policy";
+import { setServedContextTokens } from "./dmr-runtime-config";
 
 /** Check if first-run bootstrap is needed. */
 export async function checkBootstrapNeeded(): Promise<boolean> {
@@ -182,6 +185,40 @@ export async function executeFirstRunBootstrap(
           }
         } catch {
           // best-effort — never block setup on the drift check
+        }
+
+        // Build-context guard: a fresh DMR pull serves a small default context
+        // (qwen3-coder = 4k), below OpenCode's 22k build floor, so local builds
+        // would silently truncate. Raise the GENERATION model's served context to
+        // a build-appropriate size (the embedder is left alone). Best-effort —
+        // never blocks setup. See local-model-policy.ts + dmr-runtime-config.ts.
+        try {
+          const oaiBase = getOllamaBaseUrl().replace(/\/$/, "");
+          const modelsUrl = oaiBase.endsWith("/v1") ? `${oaiBase}/models` : `${oaiBase}/v1/models`;
+          const modelsRes = await fetch(modelsUrl, { signal: AbortSignal.timeout(3000) });
+          if (modelsRes.ok) {
+            const body = (await modelsRes.json()) as {
+              data?: Array<{ id?: string; dmr?: { context_window?: number } }>;
+            };
+            const gen = (body.data ?? []).find((m) => m.id && !isEmbeddingModelId(m.id));
+            const served = gen?.dmr?.context_window ?? 0;
+            if (gen?.id && served < RECOMMENDED_BUILD_CONTEXT_TOKENS) {
+              const applied = await setServedContextTokens(apiRoot, gen.id, RECOMMENDED_BUILD_CONTEXT_TOKENS);
+              if (applied.ok) {
+                // fix-the-seed: the ModelProfile row is the routing source of truth,
+                // so persist the served context there too (not just in DMR).
+                await prisma.modelProfile.updateMany({
+                  where: { providerId: { in: ["local", "ollama"] }, modelId: gen.id },
+                  data: { maxContextTokens: applied.contextTokens ?? RECOMMENDED_BUILD_CONTEXT_TOKENS },
+                });
+                console.log(`[bootstrap] Raised ${gen.id} served context ${served} → ${RECOMMENDED_BUILD_CONTEXT_TOKENS} for Build Studio.`);
+              } else {
+                console.warn(`[bootstrap] Could not raise ${gen.id} context (${applied.reason ?? "unknown"}); local builds may truncate until set in Build Runtime.`);
+              }
+            }
+          }
+        } catch {
+          // best-effort — never block setup on the context tune
         }
       } else {
         console.warn("[bootstrap] Ollama not reachable — proceeding without local AI");

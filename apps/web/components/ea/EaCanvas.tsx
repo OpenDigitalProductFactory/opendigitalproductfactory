@@ -13,11 +13,13 @@ import { buildStructuredViewElements, filterStructuredEdges } from "@/lib/ea-str
 import {
   computeEaLayout,
   placeIncremental,
+  computeContainmentLayout,
   EA_LAYOUT_ALGORITHMS,
   EA_LAYOUT_LABELS,
   type EaLayoutAlgorithm,
   type EaLayoutEdge,
 } from "@/lib/ea/canvas-layout";
+import { EaContainerNode } from "./EaContainerNode";
 import { EaElementNode } from "./EaElementNode";
 import { EaRelationshipEdge } from "./EaRelationshipEdge";
 import { ElementPalette } from "./ElementPalette";
@@ -33,7 +35,7 @@ import {
 } from "@/lib/actions/ea";
 import { buildValueStreamGroupLayout, estimateStageWidth } from "./value-stream-layout";
 
-const NODE_TYPES = { eaElement: EaElementNode };
+const NODE_TYPES = { eaElement: EaElementNode, eaContainer: EaContainerNode };
 const EDGE_TYPES = { eaRelationship: EaRelationshipEdge };
 
 const DEFAULT_CANVAS_STATE: CanvasState = {
@@ -308,6 +310,46 @@ function buildEdges(edges: SerializedEdge[], onDelete: (id: string) => void, edg
   }));
 }
 
+// Containment (nested) view: derive the Package⊃Part hierarchy from "contains" edges, lay it
+// out as nested boxes, and draw only the cross-cutting (non-contains) edges. (BI-9E5EA3FF)
+function buildNestedGraph(
+  visibleElements: SerializedViewElement[],
+  visibleEdges: SerializedEdge[],
+  onDelete: (id: string) => void,
+  edgeVariant: EdgeVariant,
+): { nodes: Node[]; edges: Edge[] } {
+  const elementById = new Map(visibleElements.map((el) => [el.viewElementId, el]));
+  const containsEdges = visibleEdges
+    .filter((e) => e.relationshipType.slug === "contains")
+    .map((e) => ({ parent: e.fromViewElementId, child: e.toViewElementId }));
+  const crossEdges = visibleEdges.filter((e) => e.relationshipType.slug !== "contains");
+
+  const layout = computeContainmentLayout(
+    visibleElements.map((el) => el.viewElementId),
+    containsEdges,
+  );
+
+  const nodes: Node[] = layout.map((cn) => {
+    const element = elementById.get(cn.id);
+    const node: Node = {
+      id: cn.id,
+      type: cn.isContainer ? "eaContainer" : "eaElement",
+      position: { x: cn.x, y: cn.y },
+      data: (element ?? {}) as unknown as Record<string, unknown>,
+    };
+    if (cn.parentId) {
+      node.parentId = cn.parentId;
+      node.extent = "parent";
+    }
+    if (cn.isContainer) {
+      node.style = { width: cn.width, height: cn.height };
+    }
+    return node;
+  });
+
+  return { nodes, edges: buildEdges(crossEdges, onDelete, edgeVariant) };
+}
+
 const EDGE_VARIANT_LABELS: Record<EdgeVariant, string> = {
   straight: "━ Straight",
   bezier:   "⌒ Curved",
@@ -376,6 +418,7 @@ export function EaCanvas({
   const [isLayouting, setIsLayouting] = useState(false);
   const [revMenuOpen, setRevMenuOpen] = useState(false);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
+  const [nestedMode, setNestedMode] = useState(false);
   const [pendingDrop, setPendingDrop] = useState<{
     elementId: string; name: string; typeName: string;
     lifecycleStage: string; lifecycleStatus: string;
@@ -479,12 +522,44 @@ export function EaCanvas({
     [isReadOnly, viewId, setNodes, currentNodesRecord],
   );
 
+  // Containment (nested) view — swap the node/edge set to nested boxes derived from
+  // "contains" edges. Deterministic from data, so it isn't persisted (localStorage toggle only).
+  const enterNested = useCallback(() => {
+    setNestedMode(true);
+    try { window.localStorage.setItem("ea-nested-mode", "1"); } catch { /* ignore */ }
+    const g = buildNestedGraph(visibleElements, visibleEdges, handleDeleteEdge, edgeVariant);
+    setNodes(g.nodes);
+    setEdges(g.edges);
+    setLayoutMenuOpen(false);
+    requestAnimationFrame(() => rfRef.current?.fitView({ duration: 400, padding: 0.1 }));
+  }, [visibleElements, visibleEdges, handleDeleteEdge, edgeVariant, setNodes, setEdges]);
+
+  const exitNested = useCallback(() => {
+    setNestedMode(false);
+    try { window.localStorage.setItem("ea-nested-mode", "0"); } catch { /* ignore */ }
+    setNodes(buildNodes(visibleElements, latestCanvasStateRef.current, layoutEdges).nodes);
+    setEdges(buildEdges(visibleEdges, handleDeleteEdge, edgeVariant));
+    requestAnimationFrame(() => rfRef.current?.fitView({ duration: 400, padding: 0.1 }));
+  }, [visibleElements, visibleEdges, layoutEdges, handleDeleteEdge, edgeVariant, setNodes, setEdges]);
+
+  // Hydrate the nested-view toggle from localStorage once on mount.
+  const didHydrateNestedRef = useRef(false);
+  useEffect(() => {
+    if (didHydrateNestedRef.current) return;
+    didHydrateNestedRef.current = true;
+    if (typeof window !== "undefined" && window.localStorage.getItem("ea-nested-mode") === "1") {
+      enterNested();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // On first mount: upgrade an auto-generated grid placeholder to a real crossing-minimizing
   // layout, or persist the nestled positions of newly-added nodes. Runs exactly once.
   const didInitLayoutRef = useRef(false);
   useEffect(() => {
     if (didInitLayoutRef.current) return;
     didInitLayoutRef.current = true;
+    // Nested view manages its own node set; skip the flat auto-layout.
+    if (typeof window !== "undefined" && window.localStorage.getItem("ea-nested-mode") === "1") return;
     const topLevelCount = nodesRef.current.filter((n) => !n.parentId).length;
     if (initialNodeLayout.needsInitialAutoLayout) {
       if (topLevelCount > 1 && layoutEdges.length > 0) {
@@ -713,7 +788,19 @@ export function EaCanvas({
 
           {/* Right-side controls */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {!isReadOnly && (
+            <button
+              onClick={() => (nestedMode ? exitNested() : enterNested())}
+              title="Containment view — nest Packages/Parts as boxes (from 'contains' relationships)"
+              style={{
+                fontSize: 10, padding: "2px 8px", borderRadius: 3, cursor: "pointer",
+                background: nestedMode ? "#2a2a50" : "transparent",
+                border: `1px solid ${nestedMode ? "var(--dpf-accent)" : "#2a2a40"}`,
+                color: nestedMode ? "var(--dpf-accent)" : "var(--dpf-muted)",
+              }}
+            >
+              ▦ Nest
+            </button>
+            {!isReadOnly && !nestedMode && (
               <div style={{ display: "flex", alignItems: "center", gap: 4, position: "relative" }}>
                 <button
                   onClick={() => {

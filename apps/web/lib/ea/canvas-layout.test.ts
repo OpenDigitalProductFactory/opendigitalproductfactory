@@ -4,6 +4,7 @@ import {
   placeIncremental,
   pickAutoAlgorithm,
   computeMetrics,
+  computeContainmentLayout,
   EA_NODE_W,
   EA_NODE_H,
 } from "./canvas-layout";
@@ -140,5 +141,51 @@ describe("placeIncremental", () => {
     const result = placeIncremental(existing, [edge("x", "a"), edge("y", "a")], ["x", "y"]);
     expect(Object.keys(result).sort()).toEqual(["x", "y"]);
     expect(existing).toEqual({ a: { x: 0, y: 0 } });
+  });
+});
+
+describe("computeContainmentLayout", () => {
+  const c = (parent: string, child: string) => ({ parent, child });
+
+  it("nests children under parents (parentId) and marks containers", () => {
+    const out = computeContainmentLayout(["P", "A", "B", "X"], [c("P", "A"), c("P", "B"), c("A", "X")]);
+    const by = Object.fromEntries(out.map((n) => [n.id, n]));
+    expect(by.P!.parentId).toBeNull();
+    expect(by.P!.isContainer).toBe(true);
+    expect(by.A!.parentId).toBe("P");
+    expect(by.A!.isContainer).toBe(true);
+    expect(by.B!.parentId).toBe("P");
+    expect(by.B!.isContainer).toBe(false);
+    expect(by.X!.parentId).toBe("A");
+    expect(by.X!.isContainer).toBe(false);
+  });
+
+  it("emits parents before their children (React Flow ordering)", () => {
+    const order = computeContainmentLayout(["P", "A", "X"], [c("P", "A"), c("A", "X")]).map((n) => n.id);
+    expect(order.indexOf("P")).toBeLessThan(order.indexOf("A"));
+    expect(order.indexOf("A")).toBeLessThan(order.indexOf("X"));
+  });
+
+  it("sizes a container to enclose its children", () => {
+    const P = computeContainmentLayout(["P", "A", "B"], [c("P", "A"), c("P", "B")]).find((n) => n.id === "P")!;
+    expect(P.width).toBeGreaterThan(EA_NODE_W);
+    expect(P.height).toBeGreaterThan(EA_NODE_H);
+  });
+
+  it("treats nodes with no contains-edges as top-level leaves", () => {
+    const out = computeContainmentLayout(["a", "b", "c"], []);
+    expect(out).toHaveLength(3);
+    expect(out.every((n) => n.parentId === null && !n.isContainer)).toBe(true);
+  });
+
+  it("ignores edges referencing unknown nodes", () => {
+    const out = computeContainmentLayout(["P", "A"], [c("P", "A"), c("P", "ghost")]);
+    expect(out.find((n) => n.id === "ghost")).toBeUndefined();
+    expect(out.find((n) => n.id === "A")!.parentId).toBe("P");
+  });
+
+  it("emits every node even when containment forms a cycle (no hang, none dropped)", () => {
+    const out = computeContainmentLayout(["P", "Q"], [c("P", "Q"), c("Q", "P")]);
+    expect(out.map((n) => n.id).sort()).toEqual(["P", "Q"]);
   });
 });

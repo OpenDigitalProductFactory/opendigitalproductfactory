@@ -74,7 +74,7 @@ jobs:
     name: Release Contract Guards
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -88,7 +88,7 @@ jobs:
     name: Release Image Manifest Guard
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -107,7 +107,7 @@ jobs:
         mode: [dev, release]
         platform: [linux, macos]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Render compose chain
         env:
@@ -144,7 +144,7 @@ jobs:
     name: Shellcheck (installer surface)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install shellcheck
         run: |
@@ -181,7 +181,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -231,7 +231,7 @@ jobs:
     # changes, so this only runs when there's a genuine reason to
     # verify the bash installer on arm64 + BSD userland.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js
         uses: actions/setup-node@v6

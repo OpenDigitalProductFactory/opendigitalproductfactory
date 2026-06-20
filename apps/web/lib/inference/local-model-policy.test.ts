@@ -10,6 +10,7 @@ import {
   detectLocalModelOverCommit,
   normaliseModelId,
   MAX_CONCURRENT_GENERATION_MODELS,
+  RECOMMENDED_BUILD_CONTEXT_TOKENS,
 } from "./local-model-policy";
 
 describe("classifyLocalModelRole / isEmbeddingModelId", () => {
@@ -65,6 +66,12 @@ describe("recommendGenerationModelForHost (architecture-aware) + computeMemoryBu
   it("a budget 8–12 GB discrete GPU never over-commits", () => {
     expect(recommendGenerationModelForHost({ architecture: "discrete", vramGb: 12 })).toBe("ai/qwen3:8B-Q4_K_M");
     expect(recommendGenerationModelForHost({ architecture: "discrete", vramGb: 8 })).toBe("ai/qwen3:4B-UD-Q4_K_XL");
+  });
+});
+
+describe("RECOMMENDED_BUILD_CONTEXT_TOKENS", () => {
+  it("clears the OpenCode build floor (22k) so the auto-set context never truncates builds", () => {
+    expect(RECOMMENDED_BUILD_CONTEXT_TOKENS).toBeGreaterThanOrEqual(22_000);
   });
 });
 
