@@ -152,6 +152,31 @@ if [ -n "$STAGED_SCHEMA" ]; then
   fi
 fi
 
+# ─── Guard 6: decision baseline (golden-decisions) ──────────────────────────
+# When a founder-kernel principle is staged, a new/edited principleDimensionVector
+# (or principleWeight) can perturb the canonical decision baseline below its margin
+# floor — a commandment loads into EVERY principle_decide call. PR #2157 only
+# surfaced this at merge_group after hours of queue churn. Run the vitest-free
+# scorer over the working-tree corpus so the regression is caught at commit. CI
+# re-runs it against the merge-state corpus. Override (verified only):
+# DPF_SKIP_DECISION_BASELINE=1.
+
+STAGED_PRINCIPLES=$(git diff --cached --name-only --diff-filter=ACMR \
+  | grep -E '^docs/founder-kernel/wiki/principles/.*\.md$' || true)
+
+if [ -n "$STAGED_PRINCIPLES" ] && [ "$DPF_SKIP_DECISION_BASELINE" != "1" ]; then
+  echo "[pre-commit] kernel principle staged — checking the decision baseline..."
+  if ! node scripts/check-golden-decisions.mjs; then
+    echo ""
+    echo "Commit rejected. A kernel-principle change moved a canonical decision below its"
+    echo "margin floor. Recalibrate the principleDimensionVector / principleWeight (see the"
+    echo "guidance above and docs/founder-kernel/AUTHORING.md — a procedural meta-principle"
+    echo "wants a focused vector + low principleWeight). Override: DPF_SKIP_DECISION_BASELINE=1 git commit ..."
+    echo ""
+    exit 1
+  fi
+fi
+
 # ─── Guard 4: typecheck gate ────────────────────────────────────────────────
 
 if [ "$DPF_SKIP_TYPECHECK" = "1" ]; then
