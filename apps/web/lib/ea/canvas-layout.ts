@@ -34,9 +34,9 @@ export const EA_LAYOUT_ALGORITHMS: EaLayoutAlgorithm[] = ["auto", "organic", "tr
 
 export const EA_LAYOUT_LABELS: Record<EaLayoutAlgorithm, string> = {
   auto: "Auto · best fit",
-  organic: "Organic · clustered",
+  organic: "Organic · clustered (not crossing-min)",
   tree: "Tree · hierarchy",
-  layered: "Layered · directed flow",
+  layered: "Layered · fewest crossings",
   radial: "Radial · hub & spoke",
 };
 
@@ -48,7 +48,7 @@ const ELK_SHARED: Record<string, string> = {
   "elk.aspectRatio": "1.6",
 };
 
-function elkOptionsFor(algo: "organic" | "tree" | "layered"): Record<string, string> {
+function elkOptionsFor(algo: "organic" | "tree" | "layered", nodeCount = 0): Record<string, string> {
   if (algo === "organic") {
     // ELK stress majorization — the clustered, force-directed "organic" look. iterationLimit
     // is capped (ELK's default is effectively unbounded) so big views stay responsive.
@@ -71,17 +71,22 @@ function elkOptionsFor(algo: "organic" | "tree" | "layered"): Record<string, str
       "elk.spacing.nodeNode": String(GAP),
     };
   }
-  // layered — Sugiyama; best for directed flow/DAGs. thoroughness lowered from the default 7
-  // so 600-node views lay out quickly.
+  // layered — Sugiyama; ELK's crossing-MINIMIZING layout. It is not DAG-only: cyclic EA
+  // meshes are handled via cycle-breaking, so this is the "least chaotic" choice for dense
+  // graphs (unlike stress, which optimizes distance and ignores crossings). thoroughness is
+  // ELK's default 7 for crossing quality, dropped to 4 only for very large views (perf).
   return {
     ...ELK_SHARED,
     "elk.algorithm": "layered",
     "elk.direction": "DOWN",
+    "elk.edgeRouting": "ORTHOGONAL",
     "elk.layered.spacing.nodeNodeBetweenLayers": String(PITCH_Y),
     "elk.spacing.nodeNode": String(GAP),
+    "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
     "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
-    "elk.layered.thoroughness": "4",
-    "elk.edgeRouting": "ORTHOGONAL",
+    "elk.layered.nodePlacement.bk.edgeStraightening": "IMPROVE_STRAIGHTNESS",
+    "elk.layered.cycleBreaking.strategy": "GREEDY",
+    "elk.layered.thoroughness": nodeCount > 400 ? "4" : "7",
   };
 }
 
@@ -156,10 +161,12 @@ export function computeMetrics(nodes: EaLayoutNode[], edges: EaLayoutEdge[]): Gr
 }
 
 /**
- * Pick the best concrete algorithm from the graph's shape:
+ * Pick the best concrete algorithm from the graph's shape, optimizing for "least chaotic":
  * - tree/forest → mrtree (or radial when one node dominates, i.e. a star)
- * - dense / many isolated / many components → stress (organic)
- * - otherwise → layered (directed flow)
+ * - anything with cycles (a dependency mesh) → layered, ELK's crossing MINIMIZER
+ *
+ * Note: "organic" (ELK stress) is intentionally NOT auto-selected — it clusters by distance
+ * but does not reduce edge crossings, so it stays visually busy. It remains a manual choice.
  */
 export function pickAutoAlgorithm(nodes: EaLayoutNode[], edges: EaLayoutEdge[]): ConcreteLayoutAlgorithm {
   if (nodes.length <= 2) return "layered";
@@ -167,9 +174,7 @@ export function pickAutoAlgorithm(nodes: EaLayoutNode[], edges: EaLayoutEdge[]):
   if (x.isForest) {
     return x.maxDegree / x.n > 0.5 ? "radial" : "tree";
   }
-  if (x.density > 1.5 || x.isolated > x.n * 0.2 || x.components > Math.max(3, x.n * 0.15)) {
-    return "organic";
-  }
+  // Non-forest (has cycles / dependency mesh): layered minimizes crossings → least chaotic.
   return "layered";
 }
 
@@ -302,7 +307,7 @@ async function runElk(
 
   const graph = await elk.layout({
     id: "root",
-    layoutOptions: elkOptionsFor(algo),
+    layoutOptions: elkOptionsFor(algo, nodes.length),
     children,
     edges: elkEdges,
   });
@@ -481,12 +486,121 @@ function shelfPack(
   return { pos, width: contentRight - originX, height: y + rowHeight - originY };
 }
 
+type ElkInputNode = {
+  id: string;
+  width?: number;
+  height?: number;
+  layoutOptions?: Record<string, string>;
+  children?: ElkInputNode[];
+};
+
 /**
- * Compute a nested (containment) layout from "contains" edges.
- * Returns one entry per node (parents before children) with parent-relative coordinates and
- * container sizes. Nodes with children are containers; leaves get the standard node footprint.
+ * Relationship-aware nested layout via ELK compound (`hierarchyHandling: INCLUDE_CHILDREN`).
+ * Children are laid out INSIDE their container by the cross-cutting edges between them (so the
+ * structure among siblings is visible), with crossing minimization, and containers sized to fit.
+ * ELK reports parent-relative child coords + computed container sizes — exactly React Flow's
+ * model. Falls back to the shelf packer (cross-edge-agnostic) if ELK errors. (BI-6333C6BC)
  */
-export function computeContainmentLayout(
+async function runElkCompound(
+  nodeIds: string[],
+  containsEdges: ContainmentEdge[],
+  crossEdges: EaLayoutEdge[],
+): Promise<ContainmentNode[]> {
+  const idset = new Set(nodeIds);
+  const childrenOf = new Map<string, string[]>();
+  const hasParent = new Set<string>();
+  for (const e of containsEdges) {
+    if (!idset.has(e.parent) || !idset.has(e.child) || e.parent === e.child) continue;
+    if (hasParent.has(e.child)) continue; // first parent wins (forest)
+    if (!childrenOf.has(e.parent)) childrenOf.set(e.parent, []);
+    childrenOf.get(e.parent)!.push(e.child);
+    hasParent.add(e.child);
+  }
+  const roots = nodeIds.filter((id) => !hasParent.has(id));
+  if (roots.length === 0) throw new Error("containment is a pure cycle — no roots");
+
+  const building = new Set<string>(); // cycle guard for the recursive build
+  function buildNode(id: string): ElkInputNode {
+    const kids = (childrenOf.get(id) ?? []).filter((k) => !building.has(k));
+    if (kids.length === 0) return { id, width: EA_NODE_W, height: EA_NODE_H };
+    building.add(id);
+    const children = kids.map(buildNode);
+    building.delete(id);
+    return {
+      id,
+      // Reserve the title bar + inner margin; let ELK grow the container to fit its children.
+      layoutOptions: {
+        "elk.padding": `[top=${HEADER_H + 10},left=${INNER_PAD},bottom=${INNER_PAD},right=${INNER_PAD}]`,
+        "elk.spacing.nodeNode": String(INNER_GAP),
+        "elk.nodeSize.constraints": "MINIMUM_SIZE",
+        "elk.nodeSize.minimum": `(${EA_NODE_W},${EA_NODE_H})`,
+      },
+      children,
+    };
+  }
+
+  const elkEdges = crossEdges
+    .filter((e) => e.source !== e.target && idset.has(e.source) && idset.has(e.target))
+    .map((e, i) => ({ id: `c${i}`, sources: [e.source], targets: [e.target] }));
+
+  const ELK = (await import("elkjs/lib/elk.bundled.js")).default;
+  const elk = new ELK();
+  const graph = await elk.layout({
+    id: "root",
+    layoutOptions: {
+      "elk.algorithm": "layered",
+      "elk.hierarchyHandling": "INCLUDE_CHILDREN", // lay out all depths in one pass + route cross-hierarchy edges
+      "elk.direction": "DOWN",
+      "elk.edgeRouting": "ORTHOGONAL",
+      "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
+      "elk.layered.thoroughness": nodeIds.length > 400 ? "4" : "7",
+      "elk.separateConnectedComponents": "true",
+      "elk.spacing.componentComponent": String(GAP),
+      "elk.spacing.nodeNode": String(GAP),
+    },
+    children: roots.map(buildNode),
+    edges: elkEdges,
+  });
+
+  type ElkResultNode = { id: string; x?: number; y?: number; width?: number; height?: number; children?: ElkResultNode[] };
+  const out: ContainmentNode[] = [];
+  function walk(node: ElkResultNode, parentId: string | null, depth: number) {
+    out.push({
+      id: node.id,
+      parentId,
+      x: node.x ?? MARGIN, // ELK child coords are already parent-relative
+      y: node.y ?? MARGIN,
+      width: node.width ?? EA_NODE_W,
+      height: node.height ?? EA_NODE_H,
+      isContainer: (node.children?.length ?? 0) > 0,
+      depth,
+    });
+    for (const c of node.children ?? []) walk(c, node.id, depth + 1); // parent before children → RF ordering
+  }
+  for (const c of (graph as { children?: ElkResultNode[] }).children ?? []) walk(c, null, 0);
+  if (out.length === 0) throw new Error("ELK compound returned no nodes");
+  return out;
+}
+
+/**
+ * Nested (containment) layout. Lays children out INSIDE their container by their relationships
+ * (ELK compound, crossing-minimized); falls back to a cross-edge-agnostic shelf/grid packer.
+ * Returns one entry per node (parents before children) with parent-relative coords + sizes.
+ */
+export async function computeContainmentLayout(
+  nodeIds: string[],
+  containsEdges: ContainmentEdge[],
+  crossEdges: EaLayoutEdge[] = [],
+): Promise<ContainmentNode[]> {
+  try {
+    return await runElkCompound(nodeIds, containsEdges, crossEdges);
+  } catch {
+    return shelfPackContainment(nodeIds, containsEdges);
+  }
+}
+
+// Fallback packer: nests children in a wrapped grid, ignoring cross-edges. Pure + synchronous.
+function shelfPackContainment(
   nodeIds: string[],
   containsEdges: ContainmentEdge[],
 ): ContainmentNode[] {
