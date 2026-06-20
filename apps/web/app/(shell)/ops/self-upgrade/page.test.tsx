@@ -71,6 +71,7 @@ const baseStatus = {
   windowConfigured: true,
   windowSource: "operating-hours" as const,
   storeOpen: false,
+  windowTimezone: "UTC",
   nextWindowStart: null,
   nextScheduledCheckAt: null,
   deployedSha: null,
