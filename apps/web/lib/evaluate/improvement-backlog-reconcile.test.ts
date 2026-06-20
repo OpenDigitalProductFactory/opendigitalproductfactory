@@ -5,6 +5,7 @@ import {
   reconcileImprovementBacklog,
   type ReconcileStore,
 } from "./improvement-backlog-reconcile";
+import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
 
 // ─── Pure helper ──────────────────────────────────────────────────────────────
 
@@ -79,7 +80,11 @@ const ORPHAN = {
 describe("reconcileImprovementBacklog", () => {
   it("files each orphan through the shared front door and links it back", async () => {
     const { store, updates } = makeStore([ORPHAN]);
-    const ingest = vi.fn(async () => ({ itemId: "BI-IMP-NEW001", id: "cuid-1", created: true }));
+    const ingest = vi.fn(async (_input: BacklogIngestInput) => ({
+      itemId: "BI-IMP-NEW001",
+      id: "cuid-1",
+      created: true,
+    }));
 
     const result = await reconcileImprovementBacklog({ store, ingest });
 
