@@ -5,4 +5,5 @@ export * from "./mobile-manifest";
 export * from "./work-items";
 export * from "./customer-visits";
 export * from "./finance";
+export * from "./work-item-evidence";
 export * from "./nearby";
