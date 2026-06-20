@@ -79,6 +79,32 @@ export async function failRun(runId: string, error: string) {
     data: { status: "failed", completedAt: new Date(), failureLog: error },
   });
   await safeSyncSelfUpgradeChangeRecord(runId);
+  // BI-9EA09823 — best-effort: every self-upgrade failure lands a fingerprinted
+  // corrective BI, keyed on the failure CLASS (not runId) so recurrences
+  // increment occurrenceCount instead of spamming new items. The run row is
+  // already persisted above, so a throw here cannot corrupt run state — but the
+  // helper never throws anyway.
+  try {
+    const { classifyBuildFailure } = await import("@/lib/self-upgrade/build-failure-classifier");
+    const cls = classifyBuildFailure({ log: error });
+    const { captureCorrectiveFailureBI } = await import("@/lib/backlog/capture-corrective-bi");
+    await captureCorrectiveFailureBI({
+      source: "self-upgrade-failure",
+      signature: `${cls.class}|${cls.failingTrace.slice(0, 200)}`,
+      title: `[self-upgrade] ${cls.class}: ${cls.summary}`.slice(0, 200),
+      body: [
+        `class: ${cls.class}`,
+        `disposition: ${cls.isMainDefectVsEnvironment ?? "unknown"}`,
+        `playbook: ${cls.playbookLink}`,
+        `runId: ${runId}`,
+        ``,
+        cls.failingTrace,
+      ].join("\n"),
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[failRun] corrective-BI capture failed:", err);
+  }
   return updated;
 }
 
