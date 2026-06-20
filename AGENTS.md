@@ -147,6 +147,8 @@ Both must permit the tool. The `TOOL_TO_GRANTS` record maps platform tool names 
 
 Every tool call writes to `ToolExecution` (`agentId`, `userId`, `toolName`, `parameters`, `result`, `success`, `executionMode`, `routeContext`, `durationMs`, `createdAt`). Visible at `/platform/ai/authority`.
 
+**Context & token economy (mandatory).** Tool definitions, results, and prompts are a finite-budget resource; the binding window is the **~24,576-token local served window**, not a cloud window, and tool-selection accuracy collapses past ~15 tools (`LOCAL_FALLBACK_MAX_TOOLS`). When adding or changing a model-facing tool: keep its `description` **provenance-free** (no `Phase N`, `(BI-…)`, or source paths — those go in code comments; CI guard: `apps/web/lib/tool-description-hygiene.test.ts`), return **concise, paginated, capped** results (the runtime cap is `apps/web/lib/tak/tool-result-budget.ts`), and prefer **few, consolidated, phase/grant-scoped** tools over growing the 242-tool surface. Standard: [`docs/architecture/context-engineering-standards.md`](docs/architecture/context-engineering-standards.md). Live client capability facts (refreshed monthly): [`docs/architecture/agent-client-capability-parity.md`](docs/architecture/agent-client-capability-parity.md).
+
 ## 9. External Tools
 
 → [kernel principle](docs/founder-kernel/wiki/principles/tool-evaluation-pipeline.md)

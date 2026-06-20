@@ -24,7 +24,13 @@ import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-const GUARD_SCRIPTS = ["lease-guard.mjs", "root-clone-guard.mjs", "ux-fit-precheck.mjs", "spec-plan-doc-precheck.mjs"];
+const GUARD_SCRIPTS = [
+  "lease-guard.mjs",
+  "root-clone-guard.mjs",
+  "ux-fit-precheck.mjs",
+  "spec-plan-doc-precheck.mjs",
+  "tool-economy-precheck.mjs",
+];
 const WRITE_TOOLS = ["Write", "Edit", "MultiEdit"];
 
 function loadHooksJson() {
