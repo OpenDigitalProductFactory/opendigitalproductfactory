@@ -6826,6 +6826,31 @@ export async function executeTool(
         taskRunId,
         details: details as unknown as import("@dpf/db").Prisma.InputJsonValue,
       });
+
+      // Durable auto-capture (EP-UNIFIED-TRACKING / BI-636A11B3): recording evidence
+      // (which AGENTS.md §17 asks external agents to do) also makes the session a
+      // tracked WorkCapsule, so its work appears in the cross-surface activity view
+      // without a manual adopt_worktree. Idempotent per externalSessionId; best-effort
+      // — a capture failure must never fail the evidence write.
+      let capturedCapsuleId: string | null = null;
+      try {
+        const { captureExternalSessionEvidence } = await import(
+          "@/lib/work-capsules/external-session-capture"
+        );
+        capturedCapsuleId = await captureExternalSessionEvidence({
+          db: prisma,
+          externalSessionId,
+          provider,
+          summary,
+          actor: { userId, agentId: context?.agentId ?? null, principalId: null },
+        });
+      } catch (captureError) {
+        console.warn(
+          "[record_external_development_evidence] auto-capsule capture failed:",
+          captureError instanceof Error ? captureError.message : String(captureError),
+        );
+      }
+
       return {
         success: true,
         entityId: evidence.id,
@@ -6834,6 +6859,7 @@ export async function executeTool(
           evidenceId: evidence.id,
           buildId: buildId ?? null,
           taskRunId: taskRunId ?? null,
+          workCapsuleId: capturedCapsuleId,
         },
       };
     }
