@@ -726,38 +726,10 @@ export const ARCHETYPE_TO_INDUSTRY: Record<string, string> = {
 };
 
 /** Maps ISO 3166-1 alpha-2 country code → primary IANA timezone. */
-export const COUNTRY_TO_TIMEZONE: Record<string, string> = {
-  GB: "Europe/London",
-  IE: "Europe/Dublin",
-  DE: "Europe/Berlin",
-  FR: "Europe/Paris",
-  ES: "Europe/Madrid",
-  IT: "Europe/Rome",
-  NL: "Europe/Amsterdam",
-  BE: "Europe/Brussels",
-  AT: "Europe/Vienna",
-  PT: "Europe/Lisbon",
-  CH: "Europe/Zurich",
-  SE: "Europe/Stockholm",
-  NO: "Europe/Oslo",
-  DK: "Europe/Copenhagen",
-  FI: "Europe/Helsinki",
-  PL: "Europe/Warsaw",
-  CZ: "Europe/Prague",
-  AU: "Australia/Sydney",
-  NZ: "Pacific/Auckland",
-  CA: "America/Toronto",
-  US: "America/New_York",
-  JP: "Asia/Tokyo",
-  CN: "Asia/Shanghai",
-  IN: "Asia/Kolkata",
-  SG: "Asia/Singapore",
-  ZA: "Africa/Johannesburg",
-  AE: "Asia/Dubai",
-  BR: "America/Sao_Paulo",
-  MX: "America/Mexico_City",
-  EU: "Europe/Brussels",
-};
+// Canonical home is @/lib/timezone-from-location (dependency-light, importable
+// from the unattended cron path). Re-exported here so the brand-import path
+// (branding.ts) and any existing importers keep working unchanged.
+export { COUNTRY_TO_TIMEZONE } from "@/lib/timezone-from-location";
 
 export function analyzePublicWebsiteBranding(
   evidence: PublicWebsiteEvidence,

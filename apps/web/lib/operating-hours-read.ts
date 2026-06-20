@@ -8,11 +8,36 @@
 // BusinessProfile.businessHours → WeeklySchedule mapping.
 
 import { prisma } from "@dpf/db";
-import { GENERIC_DEFAULTS } from "@/lib/operating-hours-types";
+import { DEFAULT_OPERATING_HOURS_TIMEZONE, GENERIC_DEFAULTS } from "@/lib/operating-hours-types";
 import type { DaySchedule, WeeklySchedule } from "@/lib/operating-hours-types";
+import { resolveTimezoneFromLocation } from "@/lib/timezone-from-location";
 
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 const CLOSED_DAY: DaySchedule = { enabled: false, open: "09:00", close: "17:00" };
+
+/**
+ * Best-effort IANA timezone derived from the captured business location, used
+ * when the operator hasn't pinned a timezone on the active BusinessProfile (the
+ * UTC placeholder). Prefers the precise US state code; falls back to a country
+ * code found in the operating jurisdictions. Returns null when nothing resolves.
+ * The platform captures these at setup, so the self-upgrade window should follow
+ * them rather than silently evaluating in UTC (BI-0C000AB3).
+ */
+export async function deriveTimezoneFromBusinessLocation(): Promise<string | null> {
+  // Fail-open: a best-effort default must never throw into the caller (the cron
+  // window check or the settings page), and it keeps callers that mock only
+  // businessProfile working.
+  try {
+    const ctx = await prisma.businessContext.findFirst({
+      select: { stateCode: true, operatesIn: true },
+    });
+    if (!ctx) return null;
+    const countryCode = (ctx.operatesIn ?? []).find((c) => /^[A-Za-z]{2}$/.test(c)) ?? null;
+    return resolveTimezoneFromLocation({ stateCode: ctx.stateCode, countryCode });
+  } catch {
+    return null;
+  }
+}
 
 /** Map the BusinessProfile.businessHours JSON to a full WeeklySchedule. */
 export function profileHoursToSchedule(
@@ -41,7 +66,17 @@ export async function resolveOperatingScheduleForSystem(): Promise<{
     where: { isActive: true },
     select: { businessHours: true, timezone: true, hoursConfirmedAt: true },
   });
-  const timezone = profile?.timezone && profile.timezone.length > 0 ? profile.timezone : "UTC";
+  // Prefer the operator-pinned profile timezone; when it's unset or still the UTC
+  // placeholder, derive from the captured business location so the upgrade window
+  // is correct from day one rather than evaluating in UTC.
+  let timezone =
+    profile?.timezone && profile.timezone.length > 0
+      ? profile.timezone
+      : DEFAULT_OPERATING_HOURS_TIMEZONE;
+  if (timezone === DEFAULT_OPERATING_HOURS_TIMEZONE) {
+    const derived = await deriveTimezoneFromBusinessLocation();
+    if (derived) timezone = derived;
+  }
   if (profile?.hoursConfirmedAt && profile.businessHours) {
     const businessHours = profile.businessHours as Record<string, { open: string; close: string } | null>;
     return { schedule: profileHoursToSchedule(businessHours), timezone };
