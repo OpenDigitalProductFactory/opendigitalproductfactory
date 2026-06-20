@@ -30,7 +30,7 @@ import {
   planCompletionGate,
   planProgress,
 } from "./execution-plan";
-import { estimateContextTokens, classifyContextPressure } from "./context-pressure";
+import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern
@@ -888,10 +888,18 @@ function truncateMessageContent(content: string, maxChars: number, label: string
 }
 
 
-function compactAgenticMessages(messages: ChatMessage[]): ChatMessage[] {
-  const scopedMessages = messages.length <= MAX_AGENTIC_HISTORY_MESSAGES
+function compactAgenticMessages(messages: ChatMessage[], maxContextTokens?: number | null): ChatMessage[] {
+  // BI-9679EB1A: size the caps from the real model window when known, never
+  // below today's floor. Unknown window (incl. iteration 0) -> floor exactly,
+  // so the unknown-window path is byte-for-byte identical to before.
+  const caps = deriveCompactionCaps(maxContextTokens, {
+    maxHistory: MAX_AGENTIC_HISTORY_MESSAGES,
+    toolCap: MAX_TOOL_RESULT_CHARS,
+    textCap: MAX_TEXT_MESSAGE_CHARS,
+  });
+  const scopedMessages = messages.length <= caps.maxHistory
     ? messages
-    : [messages[0]!, ...messages.slice(-(MAX_AGENTIC_HISTORY_MESSAGES - 1))];
+    : [messages[0]!, ...messages.slice(-(caps.maxHistory - 1))];
 
   const retainedToolCallIds = new Set(
     scopedMessages.flatMap((message) =>
@@ -912,12 +920,12 @@ function compactAgenticMessages(messages: ChatMessage[]): ChatMessage[] {
       if (message.role === "tool") {
         return {
           ...message,
-          content: truncateMessageContent(message.content, MAX_TOOL_RESULT_CHARS, "tool output"),
+          content: truncateMessageContent(message.content, caps.toolCap, "tool output"),
         };
       }
       return {
         ...message,
-        content: truncateMessageContent(message.content, MAX_TEXT_MESSAGE_CHARS, "message context"),
+        content: truncateMessageContent(message.content, caps.textCap, "message context"),
       };
     });
 }
@@ -1131,6 +1139,7 @@ export async function runAgenticLoop(params: {
   const startTime = Date.now();
   let inferenceCallCount = 0;
   let ctxPeakTokens = 0; // Peak assembled context (est. tokens) this turn — dumb-zone gauge.
+  let resolvedMaxContextTokens: number | null = null; // BI-9679EB1A: learned from the first dispatch; sizes compaction + the gauge to the real window.
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
   let previousResponseId: string | undefined; // Responses API conversation chaining
 
@@ -1150,7 +1159,7 @@ export async function runAgenticLoop(params: {
         `dispatches=${inferenceCallCount} nudges=${continuationNudges} ` +
         `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} ` +
         `totalMs=${Date.now() - startTime} ` +
-        `ctxPeakTokens=${ctxPeakTokens} ctxZone=${classifyContextPressure(ctxPeakTokens).zone}`,
+        `ctxPeakTokens=${ctxPeakTokens} ctxZone=${classifyContextPressure(ctxPeakTokens, resolvedMaxContextTokens).zone}`,
       ),
     );
     // BI-47443B67: persist the same rollup durably so the regression detector
@@ -1334,8 +1343,8 @@ export async function runAgenticLoop(params: {
     // only — the array is sent unchanged; this just makes context fill visible
     // per dispatch (the autonomous loop is the run most likely to drift into
     // the dumb zone). See ./context-pressure.
-    const assembledMessages = withPlanReminder(compactAgenticMessages(messages));
-    const ctxPressure = classifyContextPressure(estimateContextTokens(assembledMessages, systemPrompt));
+    const assembledMessages = withPlanReminder(compactAgenticMessages(messages, resolvedMaxContextTokens));
+    const ctxPressure = classifyContextPressure(estimateContextTokens(assembledMessages, systemPrompt), resolvedMaxContextTokens);
     if (ctxPressure.estimatedTokens > ctxPeakTokens) ctxPeakTokens = ctxPressure.estimatedTokens;
     if (ctxPressure.zone !== "sharp") {
       console.log(
@@ -1415,6 +1424,9 @@ export async function runAgenticLoop(params: {
     }
 
     lastResult = result;
+    if (resolvedMaxContextTokens == null && result.resolvedMaxContextTokens != null) {
+      resolvedMaxContextTokens = result.resolvedMaxContextTokens;
+    }
     totalInputTokens += result.inputTokens;
     totalOutputTokens += result.outputTokens;
 
