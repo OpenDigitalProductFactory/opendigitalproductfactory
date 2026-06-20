@@ -397,6 +397,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   query_ontology_graph:   ["ea_graph_read"],
   run_traversal_pattern:  ["ea_graph_read"],
   export_archimate:       ["ea_graph_read"],
+  describe_ea_view:       ["ea_graph_read"],
 
   // Finance
   get_finance_period_summary:   ["financial_report_create"],
