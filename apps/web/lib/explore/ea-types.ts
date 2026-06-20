@@ -2,9 +2,20 @@
 
 export type EaViewMode = "new" | "reference" | "propose";
 
+// A captured layout snapshot the author can restore (BI-D9F9B34F). Stored inline in
+// canvasState so it round-trips through the existing saveCanvasState/addElementToView
+// path with no schema change. Bounded to a small ring buffer client-side.
+export type CanvasLayoutRevision = {
+  id: string; // stable id for restore/keying
+  at: number; // epoch ms captured
+  label: string; // e.g. "Before Layered layout"
+  nodes: Record<string, { x: number; y: number }>;
+};
+
 export type CanvasState = {
   viewport: { x: number; y: number; zoom: number };
   nodes: Record<string, { x: number; y: number }>; // key = EaViewElement.id
+  history?: CanvasLayoutRevision[]; // restore points, newest last; optional + bounded
 };
 
 export type ProjectionLayoutRole =
