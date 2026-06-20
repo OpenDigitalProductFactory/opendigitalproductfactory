@@ -233,6 +233,15 @@ services:
       # resumes across portal recycles) instead of the legacy in-process loop.
       # Default OFF during the burn-in window; flip per-install via host .env.
       DPF_BUILD_DURABLE_EXECUTION_ENABLED: ${DPF_BUILD_DURABLE_EXECUTION_ENABLED:-0}
+      # Autonomous build completion (operator opt-in, default OFF). When on, a
+      # verified build at `ship` auto-resolves its delivery forks (PR push +
+      # product/promotion); the periodic reconciler then advances it ship→complete
+      # once its merged code is live via the platform self-upgrade. The feature
+      # code (PRs #2180 + #2188) reads this env var, but the deployment contract
+      # never passed it through — so the switch could not survive a self-upgrade
+      # (which recreates from this file, not docker-compose.override.yml). See
+      # docs/operations/autonomous-build-completion.md. Flip per-install via host .env.
+      DPF_AUTO_COMPLETE_VERIFIED_BUILDS: ${DPF_AUTO_COMPLETE_VERIFIED_BUILDS:-0}
       # Tell Inngest's serve() the externally-reachable URL for this app so
       # sync registrations announce the Docker-DNS hostname (not the Host
       # header of the /api/inngest PUT, which would be "localhost:3000"

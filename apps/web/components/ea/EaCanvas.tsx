@@ -14,6 +14,7 @@ import {
   computeEaLayout,
   placeIncremental,
   computeContainmentLayout,
+  pickAutoAlgorithm,
   EA_LAYOUT_ALGORITHMS,
   EA_LAYOUT_LABELS,
   type EaLayoutAlgorithm,
@@ -312,21 +313,24 @@ function buildEdges(edges: SerializedEdge[], onDelete: (id: string) => void, edg
 
 // Containment (nested) view: derive the Package⊃Part hierarchy from "contains" edges, lay it
 // out as nested boxes, and draw only the cross-cutting (non-contains) edges. (BI-9E5EA3FF)
-function buildNestedGraph(
+async function buildNestedGraph(
   visibleElements: SerializedViewElement[],
   visibleEdges: SerializedEdge[],
   onDelete: (id: string) => void,
   edgeVariant: EdgeVariant,
-): { nodes: Node[]; edges: Edge[] } {
+): Promise<{ nodes: Node[]; edges: Edge[] }> {
   const elementById = new Map(visibleElements.map((el) => [el.viewElementId, el]));
   const containsEdges = visibleEdges
     .filter((e) => e.relationshipType.slug === "contains")
     .map((e) => ({ parent: e.fromViewElementId, child: e.toViewElementId }));
   const crossEdges = visibleEdges.filter((e) => e.relationshipType.slug !== "contains");
+  // Cross-cutting edges drive the ELK-compound layout of children INSIDE each container.
+  const crossLayoutEdges = crossEdges.map((e) => ({ source: e.fromViewElementId, target: e.toViewElementId }));
 
-  const layout = computeContainmentLayout(
+  const layout = await computeContainmentLayout(
     visibleElements.map((el) => el.viewElementId),
     containsEdges,
+    crossLayoutEdges,
   );
 
   const nodes: Node[] = layout.map((cn) => {
@@ -475,6 +479,11 @@ export function EaCanvas({
         if (topLevelNodes.length < 2) return;
         const positions = await computeEaLayout(topLevelNodes, layoutEdges, { algorithm: algo });
 
+        // Drive edge style from the layout: orthogonal layouts (layered/tree) read cleanest with
+        // right-angle (step) edges; organic/radial with straight. Curved/bezier looks chaotic.
+        const resolved = algo === "auto" ? pickAutoAlgorithm(topLevelNodes, layoutEdges) : algo;
+        handleSetEdgeVariant(resolved === "layered" || resolved === "tree" ? "step" : "straight");
+
         const history = snapshot
           ? pushRevision(
               latestCanvasStateRef.current.history ?? [],
@@ -524,15 +533,22 @@ export function EaCanvas({
 
   // Containment (nested) view — swap the node/edge set to nested boxes derived from
   // "contains" edges. Deterministic from data, so it isn't persisted (localStorage toggle only).
-  const enterNested = useCallback(() => {
+  const enterNested = useCallback(async () => {
     setNestedMode(true);
     try { window.localStorage.setItem("ea-nested-mode", "1"); } catch { /* ignore */ }
-    const g = buildNestedGraph(visibleElements, visibleEdges, handleDeleteEdge, edgeVariant);
-    setNodes(g.nodes);
-    setEdges(g.edges);
+    // ELK compound routes orthogonally → right-angle (step) edges read cleanest.
+    handleSetEdgeVariant("step");
+    setIsLayouting(true);
+    try {
+      const g = await buildNestedGraph(visibleElements, visibleEdges, handleDeleteEdge, "step");
+      setNodes(g.nodes);
+      setEdges(g.edges);
+    } finally {
+      setIsLayouting(false);
+    }
     setLayoutMenuOpen(false);
     requestAnimationFrame(() => rfRef.current?.fitView({ duration: 400, padding: 0.1 }));
-  }, [visibleElements, visibleEdges, handleDeleteEdge, edgeVariant, setNodes, setEdges]);
+  }, [visibleElements, visibleEdges, handleDeleteEdge, setNodes, setEdges]);
 
   const exitNested = useCallback(() => {
     setNestedMode(false);
@@ -548,7 +564,7 @@ export function EaCanvas({
     if (didHydrateNestedRef.current) return;
     didHydrateNestedRef.current = true;
     if (typeof window !== "undefined" && window.localStorage.getItem("ea-nested-mode") === "1") {
-      enterNested();
+      void enterNested();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -789,7 +805,7 @@ export function EaCanvas({
           {/* Right-side controls */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button
-              onClick={() => (nestedMode ? exitNested() : enterNested())}
+              onClick={() => { if (nestedMode) exitNested(); else void enterNested(); }}
               title="Containment view — nest Packages/Parts as boxes (from 'contains' relationships)"
               style={{
                 fontSize: 10, padding: "2px 8px", borderRadius: 3, cursor: "pointer",

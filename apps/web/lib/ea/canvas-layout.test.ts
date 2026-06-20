@@ -120,12 +120,12 @@ describe("pickAutoAlgorithm", () => {
     expect(pickAutoAlgorithm(nodes("h", "a", "b", "c", "d", "e"), star)).toBe("radial");
   });
 
-  it("chooses organic for a dense, cyclic mesh", () => {
+  it("chooses layered (crossing-min) for a dense, cyclic mesh", () => {
     const dense = [
       edge("a", "b"), edge("a", "c"), edge("a", "d"), edge("a", "e"),
       edge("b", "c"), edge("c", "d"), edge("d", "e"), edge("e", "b"),
-    ]; // n=5, m=8, density 1.6, has cycles
-    expect(pickAutoAlgorithm(nodes("a", "b", "c", "d", "e"), dense)).toBe("organic");
+    ]; // n=5, m=8, has cycles → mesh → layered minimizes crossings (organic does not)
+    expect(pickAutoAlgorithm(nodes("a", "b", "c", "d", "e"), dense)).toBe("layered");
   });
 
   it("chooses layered for a sparse cyclic (DAG-like) graph", () => {
@@ -169,8 +169,8 @@ describe("placeIncremental", () => {
 describe("computeContainmentLayout", () => {
   const c = (parent: string, child: string) => ({ parent, child });
 
-  it("nests children under parents (parentId) and marks containers", () => {
-    const out = computeContainmentLayout(["P", "A", "B", "X"], [c("P", "A"), c("P", "B"), c("A", "X")]);
+  it("nests children under parents (parentId) and marks containers", async () => {
+    const out = await computeContainmentLayout(["P", "A", "B", "X"], [c("P", "A"), c("P", "B"), c("A", "X")]);
     const by = Object.fromEntries(out.map((n) => [n.id, n]));
     expect(by.P!.parentId).toBeNull();
     expect(by.P!.isContainer).toBe(true);
@@ -182,32 +182,50 @@ describe("computeContainmentLayout", () => {
     expect(by.X!.isContainer).toBe(false);
   });
 
-  it("emits parents before their children (React Flow ordering)", () => {
-    const order = computeContainmentLayout(["P", "A", "X"], [c("P", "A"), c("A", "X")]).map((n) => n.id);
+  it("emits parents before their children (React Flow ordering)", async () => {
+    const order = (await computeContainmentLayout(["P", "A", "X"], [c("P", "A"), c("A", "X")])).map((n) => n.id);
     expect(order.indexOf("P")).toBeLessThan(order.indexOf("A"));
     expect(order.indexOf("A")).toBeLessThan(order.indexOf("X"));
   });
 
-  it("sizes a container to enclose its children", () => {
-    const P = computeContainmentLayout(["P", "A", "B"], [c("P", "A"), c("P", "B")]).find((n) => n.id === "P")!;
+  it("sizes a container to enclose its children", async () => {
+    const P = (await computeContainmentLayout(["P", "A", "B"], [c("P", "A"), c("P", "B")])).find((n) => n.id === "P")!;
     expect(P.width).toBeGreaterThan(EA_NODE_W);
     expect(P.height).toBeGreaterThan(EA_NODE_H);
   });
 
-  it("treats nodes with no contains-edges as top-level leaves", () => {
-    const out = computeContainmentLayout(["a", "b", "c"], []);
+  it("lays children out by their cross-edges inside the container (compound)", async () => {
+    const out = await computeContainmentLayout(
+      ["P", "A", "B", "C"],
+      [c("P", "A"), c("P", "B"), c("P", "C")],
+      [edge("A", "B"), edge("B", "C")], // cross-edges among siblings drive the inner layout
+    );
+    const by = Object.fromEntries(out.map((n) => [n.id, n]));
+    expect(by.P!.isContainer).toBe(true);
+    for (const id of ["A", "B", "C"]) {
+      expect(by[id]!.parentId).toBe("P");
+      expect(Number.isFinite(by[id]!.x)).toBe(true);
+      expect(Number.isFinite(by[id]!.y)).toBe(true);
+    }
+    // children laid out at distinct positions (not stacked at one point)
+    const pts = ["A", "B", "C"].map((id) => `${Math.round(by[id]!.x)},${Math.round(by[id]!.y)}`);
+    expect(new Set(pts).size).toBe(3);
+  });
+
+  it("treats nodes with no contains-edges as top-level leaves", async () => {
+    const out = await computeContainmentLayout(["a", "b", "c"], []);
     expect(out).toHaveLength(3);
     expect(out.every((n) => n.parentId === null && !n.isContainer)).toBe(true);
   });
 
-  it("ignores edges referencing unknown nodes", () => {
-    const out = computeContainmentLayout(["P", "A"], [c("P", "A"), c("P", "ghost")]);
+  it("ignores edges referencing unknown nodes", async () => {
+    const out = await computeContainmentLayout(["P", "A"], [c("P", "A"), c("P", "ghost")]);
     expect(out.find((n) => n.id === "ghost")).toBeUndefined();
     expect(out.find((n) => n.id === "A")!.parentId).toBe("P");
   });
 
-  it("emits every node even when containment forms a cycle (no hang, none dropped)", () => {
-    const out = computeContainmentLayout(["P", "Q"], [c("P", "Q"), c("Q", "P")]);
+  it("emits every node even when containment forms a cycle (no hang, none dropped)", async () => {
+    const out = await computeContainmentLayout(["P", "Q"], [c("P", "Q"), c("Q", "P")]);
     expect(out.map((n) => n.id).sort()).toEqual(["P", "Q"]);
   });
 });
