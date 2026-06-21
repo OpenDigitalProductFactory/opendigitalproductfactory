@@ -18,7 +18,12 @@
 // human label at runtime, and "is this job essential to platform integrity?"
 // is a governance judgement that belongs in reviewed code, not inferred.
 // When a new cron is added to scheduledFunctions, add it here too — the
-// catalog drift test (scheduled-jobs.test.ts) fails the build otherwise.
+// catalog<->registry parity test (queue/functions/index.test.ts) matches each
+// scheduled function's id() against these inngestIds and fails the build on any
+// gap in either direction. That guard did NOT exist when logSignatureScanner /
+// alertDeliveryBridge / releaseHealthCheck shipped, so they ran uncatalogued —
+// invisible on the admin Scheduled Jobs surface — until this catalog was
+// reconciled (scheduling-surface review, 2026-06-21). Keep the parity test real.
 
 import { CODE_GRAPH_JOB_ID } from "@/lib/integrate/code-graph/constants";
 
@@ -182,6 +187,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
+  {
+    jobId: "alert-delivery-bridge",
+    inngestId: "ops/alert-delivery-bridge",
+    name: "Alert delivery bridge",
+    purpose:
+      "Delivers firing Prometheus/Loki alerts into the quality-issue inbox (the platform runs no Alertmanager). If it stops, firing alerts evaluate but never reach an operator — silent blindness. Core-locked for that reason.",
+    cron: "*/1 * * * *",
+    cadence: "Every minute",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
   // ── Editable (operationally tunable) ──────────────────────────────────────
   {
     jobId: "data-retention-sweep",
@@ -312,6 +329,30 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     purpose: "Curates / proposes skill improvements. Cadence is tunable.",
     cron: "0 7 * * *",
     cadence: "Daily at 07:00",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "log-signature-scanner",
+    inngestId: "ops/log-signature-scanner",
+    name: "Log signature scanner",
+    purpose:
+      "Scans container logs (Loki) for novel error signatures and files one issue per new signature. If it stops, novel log anomalies surface to no one. Cadence and noise threshold are tunable.",
+    cron: "*/15 * * * *",
+    cadence: "Every 15 minutes",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "release-health-check",
+    inngestId: "ops/release-health-check",
+    name: "Release health check",
+    purpose:
+      "Polls the latest release's verify-gate outcome and keeps the operator notification + health card in sync. If it stops, a red release can go unnoticed. Cadence is tunable.",
+    cron: "*/15 * * * *",
+    cadence: "Every 15 minutes",
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,
