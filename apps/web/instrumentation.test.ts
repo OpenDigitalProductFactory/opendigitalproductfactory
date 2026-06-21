@@ -30,6 +30,7 @@ const productVersionFindManyMock = vi.fn();
 const changePromotionUpdateManyMock = vi.fn();
 const isFeatureBuildDeployedMock = vi.fn();
 const reconcileBuildCompletionMock = vi.fn();
+const completeLocalDeliveryBuildMock = vi.fn();
 const reconcileQuiescenceOnBootMock = vi.fn();
 
 vi.mock("@/lib/platform/version-config", () => ({
@@ -43,6 +44,7 @@ vi.mock("@/lib/self-upgrade/completion", () => ({
 
 vi.mock("@/lib/build-flow-state", () => ({
   reconcileBuildCompletion: (...args: unknown[]) => reconcileBuildCompletionMock(...args),
+  completeLocalDeliveryBuild: (...args: unknown[]) => completeLocalDeliveryBuildMock(...args),
 }));
 
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
@@ -103,6 +105,7 @@ beforeEach(() => {
   changePromotionUpdateManyMock.mockReset();
   isFeatureBuildDeployedMock.mockReset();
   reconcileBuildCompletionMock.mockReset();
+  completeLocalDeliveryBuildMock.mockReset();
   reconcileQuiescenceOnBootMock.mockReset();
   reconcileQuiescenceOnBootMock.mockResolvedValue({ reconciled: 0, failed: 0 });
   featureBuildUpdateMock.mockResolvedValue({});
@@ -112,6 +115,7 @@ beforeEach(() => {
   productVersionFindManyMock.mockResolvedValue([]);
   changePromotionUpdateManyMock.mockResolvedValue({ count: 0 });
   reconcileBuildCompletionMock.mockResolvedValue(false);
+  completeLocalDeliveryBuildMock.mockResolvedValue(false);
   delete process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS;
 });
 
@@ -155,6 +159,23 @@ describe("reconcileDeployedShipBuilds — autonomous ship→complete (flag-gated
 
     expect(result).toEqual({ completed: 0 });
     expect(changePromotionUpdateManyMock).not.toHaveBeenCalled();
+    expect(reconcileBuildCompletionMock).not.toHaveBeenCalled();
+    // Non-deployed builds now route to completeLocalDeliveryBuild, which no-ops
+    // (returns false) for a build that has a real upstream deploy path.
+    expect(completeLocalDeliveryBuildMock).toHaveBeenCalledWith("FB-2");
+  });
+
+  it("completes a non-deployed fully-local build via completeLocalDeliveryBuild", async () => {
+    process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS = "1";
+    featureBuildFindManyMock.mockResolvedValue([{ id: "fb-3", buildId: "FB-3" }]);
+    isFeatureBuildDeployedMock.mockResolvedValue(false); // never deployed (fully-local)
+    completeLocalDeliveryBuildMock.mockResolvedValue(true); // private/fork_only → delivered locally
+
+    const result = await reconcileDeployedShipBuilds({ log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ completed: 1 });
+    expect(completeLocalDeliveryBuildMock).toHaveBeenCalledWith("FB-3");
+    // The deployed-path reconcile is not used for a fully-local build.
     expect(reconcileBuildCompletionMock).not.toHaveBeenCalled();
   });
 });

@@ -463,7 +463,7 @@ export async function reconcileDeployedShipBuilds(
   if (!isAutoCompleteEnabled()) return null;
   try {
     const { prisma } = await import("@dpf/db");
-    const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
+    const { reconcileBuildCompletion, completeLocalDeliveryBuild } = await import("@/lib/build-flow-state");
     const { isFeatureBuildDeployed } = await import("@/lib/self-upgrade/completion");
 
     const shipBuilds = await prisma.featureBuild.findMany({
@@ -473,7 +473,21 @@ export async function reconcileDeployedShipBuilds(
     let completed = 0;
     for (const build of shipBuilds) {
       try {
-        if (!(await isFeatureBuildDeployed(build.buildId))) continue;
+        if (!(await isFeatureBuildDeployed(build.buildId))) {
+          // Not deployed: a fully-local (private/fork_only) build still completes
+          // here — its local ProductVersion registration IS the delivery (there
+          // is no upstream PR or remote deploy to wait on). completeLocalDeliveryBuild
+          // no-ops for a build that has a real upstream deploy path (those wait
+          // for their merged code to go live). This is the backstop for builds
+          // that parked at ship because the promote fork was still `approved`.
+          if (await completeLocalDeliveryBuild(build.buildId)) {
+            completed++;
+            logger.log(
+              `[auto-complete] ${build.buildId} completed — delivered locally (fully-local install)`,
+            );
+          }
+          continue;
+        }
         // Merged code is live via self-upgrade → mark the build's still-open
         // promotion(s) deployed so the promote fork is terminal. The platform
         // self-upgrade IS the deploy here (the per-build promoter is not used).
@@ -848,6 +862,19 @@ export async function register() {
       );
       await reconcileStuckBackupRuns();
       setInterval(() => void reconcileStuckBackupRuns(), 20 * 60 * 1000);
+    })();
+
+    // Backfill the operational value stream (OVSM) EA view for any storefront
+    // that completed setup before the #1798 generator was running on it — those
+    // installs have a StorefrontConfig + archetype but no archetype_value_stream
+    // EaView, so /ea/value-streams shows the empty state forever with nothing to
+    // self-heal it. Cheap when already present (existence check, no projection);
+    // idempotent and non-fatal per org.
+    void (async () => {
+      const { backfillOperationalValueStreamsOnBoot } = await import(
+        "@/lib/storefront/backfill-operational-value-streams"
+      );
+      await backfillOperationalValueStreamsOnBoot();
     })();
 
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).

@@ -198,7 +198,20 @@ export async function runPipelineStepDurable(params: {
   if (decision !== "run") return state;
 
   const { executeStep, nextStep } = await import("@/lib/integrate/build-pipeline");
-  const { withHeartbeatTicker, heartbeat } = await import("@/lib/observability/heartbeat");
+  const { withHeartbeatTicker, heartbeat, markTaskRunWorking } = await import("@/lib/observability/heartbeat");
+
+  // Refresh the stall heartbeat at the START of each step so the watchdog's
+  // timeout window is measured per-step, not from taskrun creation. The in-step
+  // heartbeat ticker (withHeartbeatTicker's setInterval) does NOT fire inside
+  // the Inngest step.run execution context, so without this a long step (local
+  // codegen ~100s+) accumulates the ENTIRE build phase's elapsed time against a
+  // single heartbeat window and is falsely reaped as a `heartbeat_timeout`
+  // stall — observed live reaping every durable codegen (FB-6E8F4BA4,
+  // FB-8E5BD3A8 each failed at code_generated with the taskrun heartbeat never
+  // advancing past creation). markTaskRunWorking also re-asserts
+  // status="working" so heartbeat() writes land even when ensureBuildTaskRun
+  // reused a row that was not in the working state.
+  await markTaskRunWorking(taskRunId).catch(() => {});
 
   await emitForBuild(buildId, { type: "phase:change", buildId, phase: step });
 

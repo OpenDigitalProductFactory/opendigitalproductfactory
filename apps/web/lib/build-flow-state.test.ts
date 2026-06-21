@@ -6,6 +6,8 @@ vi.mock("@dpf/db", () => ({
     featurePack:       { findFirst: vi.fn() },
     platformDevConfig: { findUnique: vi.fn() },
     buildActivity:     { findFirst: vi.fn() },
+    productVersion:    { findMany: vi.fn() },
+    changePromotion:   { updateMany: vi.fn() },
   },
 }));
 
@@ -19,7 +21,7 @@ vi.mock("@/lib/self-upgrade/completion", () => ({
 
 import { prisma } from "@dpf/db";
 import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
-import { getBuildFlowState, reconcileBuildCompletion } from "./build-flow-state";
+import { getBuildFlowState, reconcileBuildCompletion, completeLocalDeliveryBuild } from "./build-flow-state";
 
 // ─── Fixture helpers ────────────────────────────────────────────────────────
 
@@ -88,6 +90,8 @@ beforeEach(() => {
   mockPack(null);
   mockActivity(null);
   vi.mocked(isFeatureBuildDeployed).mockResolvedValue(true);
+  vi.mocked(prisma.productVersion.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.changePromotion.updateMany).mockResolvedValue({ count: 0 } as never);
 });
 
 // ─── Main-track substep counts (A.3) ────────────────────────────────────────
@@ -388,6 +392,65 @@ describe("reconcileBuildCompletion", () => {
     vi.mocked(isFeatureBuildDeployed).mockResolvedValue(false);
     const changed = await reconcileBuildCompletion("FB-TEST-001");
     expect(changed).toBe(false);
+    expect(prisma.featureBuild.update).not.toHaveBeenCalled();
+  });
+
+  it("completes a fully-local (fork_only) build on forks-terminal even when NOT deployed", async () => {
+    // Fully-local install: contributionMode fork_only → the upstream fork is
+    // "skipped" (the change is never PR'd / merged / re-deployed), so
+    // isFeatureBuildDeployed can never become true. Without this path the build
+    // parks at ship forever and clogs the WIP cap. The promote fork (the
+    // registered ProductVersion) is the delivery, so the build must complete.
+    mockDevConfig("fork_only");
+    mockBuild({
+      phase: "ship",
+      productVersions: [{ id: "pv-1", promotions: [{ promotionId: "CP-1", status: "deployed", deployedAt: new Date(), rollbackReason: null, deploymentLog: null, createdAt: new Date() }] }],
+    });
+    vi.mocked(isFeatureBuildDeployed).mockResolvedValue(false);
+    const changed = await reconcileBuildCompletion("FB-TEST-001");
+    expect(changed).toBe(true);
+    expect(prisma.featureBuild.update).toHaveBeenCalledWith({
+      where: { buildId: "FB-TEST-001" },
+      data: { phase: "complete" },
+    });
+  });
+});
+
+describe("completeLocalDeliveryBuild", () => {
+  it("marks the local promotion delivered and completes a fork_only build (no deploy needed)", async () => {
+    mockDevConfig("fork_only"); // upstream fork resolves to "skipped"
+    mockBuild({
+      phase: "ship",
+      productVersions: [{ id: "pv-1", promotions: [{ promotionId: "CP-1", status: "deployed", deployedAt: new Date(), rollbackReason: null, deploymentLog: null, createdAt: new Date() }] }],
+    });
+    vi.mocked(prisma.productVersion.findMany).mockResolvedValue([{ id: "pv-1" }] as never);
+    vi.mocked(prisma.changePromotion.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(isFeatureBuildDeployed).mockResolvedValue(false);
+    vi.mocked(prisma.featureBuild.update).mockResolvedValue({} as never);
+
+    const changed = await completeLocalDeliveryBuild("FB-TEST-001");
+
+    expect(changed).toBe(true);
+    // The still-open promotion is marked delivered — the local registration IS the delivery.
+    expect(prisma.changePromotion.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "deployed" }) }),
+    );
+    expect(prisma.featureBuild.update).toHaveBeenCalledWith({
+      where: { buildId: "FB-TEST-001" },
+      data: { phase: "complete" },
+    });
+  });
+
+  it("is a no-op for a build with a real upstream fork (not skipped)", async () => {
+    mockDevConfig("selective");
+    mockPack({ packId: "FP-1", prUrl: "https://github.com/org/repo/pull/9", prNumber: 9 }); // upstream "shipped"
+    mockBuild({
+      phase: "ship",
+      productVersions: [{ id: "pv-1", promotions: [{ promotionId: "CP-1", status: "approved", deployedAt: null, rollbackReason: null, deploymentLog: null, createdAt: new Date() }] }],
+    });
+    const changed = await completeLocalDeliveryBuild("FB-TEST-001");
+    expect(changed).toBe(false);
+    expect(prisma.changePromotion.updateMany).not.toHaveBeenCalled();
     expect(prisma.featureBuild.update).not.toHaveBeenCalled();
   });
 });
