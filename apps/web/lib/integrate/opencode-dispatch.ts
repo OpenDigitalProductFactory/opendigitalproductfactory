@@ -510,6 +510,43 @@ export async function dispatchOpencodeTask(params: {
     });
 
     const content = extractOpencodeResult(stdout);
+
+    // Detect a FATAL model/runtime error event in the stream. opencode emits
+    // these as {"type":"error",...} JSON to stdout and STILL exits 0, so the
+    // process-close check above (code===0 || stdout.trim()) classified a failed
+    // run as a SUCCESS — the build then advanced with zero code produced and
+    // shipped an empty diff ("No releasable source changes"). The classic case
+    // is a llama.cpp ContextOverflowError when the prompt exceeds the served
+    // context window. Treat any fatal error event as a task FAILURE so the
+    // orchestrator's fix/retry/escalate path engages instead of silently
+    // shipping nothing.
+    const fatalError = detectOpencodeFatalError(stdout);
+    if (fatalError) {
+      console.error(
+        sanitizeForLog(`[opencode-dispatch] Task "${task.title}" reported a fatal error: ${fatalError}`),
+      );
+      await recordBuildDispatchAttempt({
+        buildId: params.buildId,
+        taskTitle: task.title,
+        specialist: role,
+        providerId,
+        model,
+        startedAt,
+        completedAt: new Date(),
+        durationMs: elapsed,
+        exitCode: 0,
+        success: false,
+        stdout: content,
+        stderr: fatalError,
+      });
+      return {
+        content: `OpenCode task failed: ${fatalError}`,
+        success: false,
+        executedTools: [],
+        durationMs: elapsed,
+      };
+    }
+
     console.log(
       sanitizeForLog(
         `[opencode-dispatch] Task "${task.title}" completed in ${(elapsed / 1000).toFixed(1)}s (${content.length} chars)`,
@@ -564,6 +601,37 @@ export async function dispatchOpencodeTask(params: {
       durationMs,
     };
   }
+}
+
+/**
+ * Scan an `opencode run --format json` stdout stream for a FATAL error event.
+ * opencode emits these as {"type":"error","error":{"name":...,"data":{"message":...}}}
+ * for model/runtime failures (e.g. a llama.cpp ContextOverflowError /
+ * exceed_context_size_error when the prompt exceeds the served context window)
+ * yet STILL exits 0 — so without this the dispatcher's exit-code/non-empty-stdout
+ * success check mis-reads the run as a success that produced no code, and the
+ * build advances to ship with an empty diff ("No releasable source changes").
+ * Returns a short "Name: message" for the first fatal error, or null when the
+ * stream has none. Tolerant of format drift: non-JSON / unknown lines are skipped.
+ */
+export function detectOpencodeFatalError(stdout: string): string | null {
+  for (const line of stdout.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{")) continue;
+    let evt: Record<string, unknown>;
+    try {
+      evt = JSON.parse(trimmed) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (evt.type === "error") {
+      const err = evt.error as { name?: string; data?: { message?: string } } | undefined;
+      const name = typeof err?.name === "string" ? err.name : "OpencodeError";
+      const message = typeof err?.data?.message === "string" ? err.data.message : "";
+      return `${name}${message ? `: ${message}` : ""}`.slice(0, 300);
+    }
+  }
+  return null;
 }
 
 /**
