@@ -1695,6 +1695,10 @@ export async function prepareTaxRemittanceRun(input: PrepareTaxRemittanceRunInpu
     return run;
   }
 
+  // EP-SCHEDULING-SURFACE / BI-SCHED-DORMANT: TaxRemittanceRun.scheduledFor is NOT
+  // polled by a central cron. A scheduled run is dispatched here as a one-shot
+  // ScheduledAgentTask (nextRunAt = scheduledFor), so it rides the agent-task
+  // substrate pumped by agent/task-dispatch. Intentional — do not add a tax poller.
   if (parsed.executionMode === "scheduled_coworker" && scheduledFor) {
     const taskId = taxExecutionTaskId();
     const schedule = `${scheduledFor.getUTCMinutes()} ${scheduledFor.getUTCHours()} ${scheduledFor.getUTCDate()} ${scheduledFor.getUTCMonth() + 1} *`;

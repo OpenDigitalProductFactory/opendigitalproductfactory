@@ -1,6 +1,6 @@
 # Scheduling surface — review & design
 
-- Status: Draft (review complete; phased build proposed)
+- Status: Build implemented 2026-06-21 — `BI-SCHED-CATALOG-PARITY` shipped via PR #2227; the remaining 5 BIs via branch `claude/scheduling-surface-buildout` (see the [buildout plan](../plans/2026-06-21-scheduling-surface-buildout-plan.md))
 - Date: 2026-06-21
 - Epic: `EP-SCHEDULING-SURFACE`
 - Source: Founder `/goal` — "review and optimize the schedule jobs we have setup, both out of the box and that are scheduled automatically based on other activities… make sure we have a tight approach and don't overlap scheduled work significantly… I'm not sure if it's a surface in its own right in the code graph."

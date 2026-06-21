@@ -52,6 +52,8 @@ import {
 import { logSignatureScanner } from "./log-signature-scanner";
 import { alertDeliveryBridge } from "./alert-delivery-bridge";
 import { releaseHealthCheck } from "./release-health-check";
+import { marketingSchedulerDispatch } from "./marketing-scheduler-dispatch";
+import { recurringInvoiceDispatch } from "./recurring-invoice-dispatch";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 export const scheduledFunctions = [
@@ -81,6 +83,8 @@ export const scheduledFunctions = [
   logSignatureScanner,   // BI-5FE8656F: EP-FULL-OBS Tier 2 novel-signature log scan, every 15m
   alertDeliveryBridge,   // BI-5FE8656F: EP-FULL-OBS Tier 2 item #6 — Prometheus+Loki firing alerts -> PortfolioQualityIssue, every 1m
   releaseHealthCheck,    // BI-3630773C: EP-FULL-OBS release stamp verify-gate watch, every 15m
+  marketingSchedulerDispatch, // BI-SCHED-DORMANT: wire ScheduledOutboundAction dispatch, every 30m
+  recurringInvoiceDispatch,   // BI-SCHED-DORMANT: wire recurring-invoice generation, daily 06:30
 ];
 
 export const eventFunctions = [

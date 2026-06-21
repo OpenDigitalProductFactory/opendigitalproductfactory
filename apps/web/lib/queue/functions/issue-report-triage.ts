@@ -10,7 +10,7 @@ import { gateAtEntry } from "../quiescence-gates";
 // detection (which needs a historical baseline a single-report event can't see).
 // Both paths share runIssueReportTriage(), so they project identically.
 export const issueReportTriage = inngest.createFunction(
-  { id: "quality/issue-report-triage", retries: 2, triggers: [cron("*/15 * * * *")] },
+  { id: "quality/issue-report-triage", retries: 2, triggers: [cron("3,18,33,48 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };

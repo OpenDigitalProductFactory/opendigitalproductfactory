@@ -31,10 +31,11 @@ describe("reconcileSysmlProjections", () => {
     expect(r.operationalGraph.status).toBe("skipped"); // no RuntimeTarget rows
     expect(r.networkTopology.status).toBe("skipped"); // no EdgeNode/InventoryEntity rows
     expect(r.integrations.status).toBe("skipped"); // no IntegrationCredential rows
-    // mcp + coworker + routes (sysml2) + process (bpmn20) are notation-backed;
-    // value-streams checks the reference model first; code-structure checks graph
-    // freshness first.
-    expect(db.eaNotation.findUnique).toHaveBeenCalledTimes(4);
+    expect(r.scheduledJobs.status).toBe("skipped"); // notation null -> applySysmlModel skips
+    // mcp + coworker + routes (sysml2) + process (bpmn20) + scheduling (sysml2) are
+    // notation-backed; value-streams checks the reference model first;
+    // code-structure checks graph freshness first.
+    expect(db.eaNotation.findUnique).toHaveBeenCalledTimes(5);
     expect(db.eaReferenceModel.findUnique).toHaveBeenCalledTimes(1);
     expect(getFreshness).toHaveBeenCalledTimes(1);
   });
