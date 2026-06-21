@@ -437,8 +437,19 @@ export async function reconcileBuildCompletion(buildId: string): Promise<boolean
   if (!state) return false;
   if (state.currentPhase !== "ship") return false;
   if (!state.allApplicableForksTerminal) return false;
-  // Confirm the deployed runtime includes the build's merge SHA before completing.
-  if (!await isFeatureBuildDeployed(buildId)) return false;
+  // Confirm the deployed runtime includes the build's merge SHA before
+  // completing — UNLESS there is no upstream deploy path at all. When the
+  // install's contributionMode is private/fork_only the upstream fork resolves
+  // to "skipped": the change is never PR'd, merged, or re-deployed, so
+  // isFeatureBuildDeployed can NEVER become true and the build parks at ship
+  // forever (holding a WIP slot — the throughput blocker for a fully-local
+  // install running its backlog). For these installs the promote fork (the
+  // registered ProductVersion) IS the delivery, so completion follows
+  // forks-terminal. A real upstream PR ("shipped"/in-flight) keeps the
+  // deploy-confirmation gate (#2188: complete once the merged SHA is live).
+  if (state.upstream.state !== "skipped" && !(await isFeatureBuildDeployed(buildId))) {
+    return false;
+  }
 
   await prisma.featureBuild.update({
     where: { buildId },
