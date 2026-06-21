@@ -117,7 +117,7 @@ export async function runLogSignatureScan(opts?: {
 }
 
 export const logSignatureScanner = inngest.createFunction(
-  { id: "ops/log-signature-scanner", retries: 2, triggers: [cron("*/15 * * * *")] },
+  { id: "ops/log-signature-scanner", retries: 2, triggers: [cron("9,24,39,54 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };

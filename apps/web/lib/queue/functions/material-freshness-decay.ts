@@ -8,7 +8,7 @@ import { inngest } from "@/lib/queue/inngest-client";
 import { decayStaleMaterials } from "@/lib/decision-perspective/material-freshness";
 
 export const materialFreshnessDecay = inngest.createFunction(
-  { id: "decision/material-freshness-decay", retries: 1, triggers: [cron("0 3 * * *")] }, // daily 03:00
+  { id: "decision/material-freshness-decay", retries: 1, triggers: [cron("20 3 * * *")] }, // daily 03:20 — staggered off the 03:00 batch
   async ({ step }) => {
     const result = await step.run("decay-stale-materials", async () => decayStaleMaterials());
     return { ok: true, ...result };
