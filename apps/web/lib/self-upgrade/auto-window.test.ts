@@ -5,10 +5,13 @@ import {
   formatWindowClock,
   isEffectively247,
   nextAutoWindowOpen,
+  pickOvernightWindow,
   resolveAutoUpgradeWindow,
   selectTroughWindows,
   type LowTrafficWindow,
 } from "./auto-window";
+import { isWithinWindows } from "./windows-eval";
+import { isHeavyMaintenanceBusyAtUtc } from "./maintenance-calendar";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 
 // A genuine 24/7 store: every day open 00:00-24:00 (isStoreOpen always true), so
@@ -78,6 +81,23 @@ describe("resolveAutoUpgradeWindow", () => {
       kind: "auto-overnight",
       source: "default",
       windows: [DEFAULT_OVERNIGHT_WINDOW],
+    });
+  });
+
+  it("shifts the overnight window off the 03:00-04:00 UTC maintenance cluster for a UTC store (BI-963B9D47)", () => {
+    // For a UTC store, the default 02:00-04:00 local IS 02:00-04:00 UTC, which
+    // overlaps the backup/maintenance cluster — so it shifts to the first clear
+    // candidate, 01:00-03:00.
+    const r = resolveAutoUpgradeWindow({
+      schedule: ALL_DAY,
+      timeZone: "UTC",
+      timezoneKnown: true,
+      now: MON_1200_UTC,
+    });
+    expect(r).toMatchObject({
+      kind: "auto-overnight",
+      source: "default",
+      windows: [{ startTime: "01:00", endTime: "03:00" }],
     });
   });
 
@@ -177,5 +197,31 @@ describe("formatWindowClock / describeWindows", () => {
 
   it("describes the default overnight window as a friendly range", () => {
     expect(describeWindows([DEFAULT_OVERNIGHT_WINDOW])).toBe("2:00 AM–4:00 AM");
+  });
+});
+
+describe("pickOvernightWindow (avoids platform heavy maintenance, BI-963B9D47)", () => {
+  it("keeps 02:00-04:00 when it is clear (US-Central: 02:00-04:00 local = 07:00-09:00 UTC)", () => {
+    const w = pickOvernightWindow({ timeZone: "America/Chicago", now: MON_1200_UTC });
+    expect(w).toMatchObject({ startTime: "02:00", endTime: "04:00" });
+  });
+
+  it("shifts earlier for a UTC store whose 02:00-04:00 hits the 03:00-04:00 UTC cluster", () => {
+    const w = pickOvernightWindow({ timeZone: "UTC", now: MON_1200_UTC });
+    expect(w).toMatchObject({ startTime: "01:00", endTime: "03:00" });
+  });
+
+  it("never returns a window overlapping heavy maintenance, across timezones (invariant)", () => {
+    // Half-hour and whole-hour offsets, both hemispheres.
+    for (const tz of ["UTC", "America/Chicago", "Europe/London", "Asia/Kolkata", "Asia/Tokyo"]) {
+      const w = pickOvernightWindow({ timeZone: tz, now: MON_1200_UTC });
+      let overlap = 0;
+      const limit = MON_1200_UTC.getTime() + 7 * 24 * 60 * 60 * 1000;
+      for (let t = MON_1200_UTC.getTime(); t <= limit; t += 30 * 60_000) {
+        const probe = new Date(t);
+        if (isWithinWindows([w], probe, tz) && isHeavyMaintenanceBusyAtUtc(probe)) overlap++;
+      }
+      expect(overlap).toBe(0);
+    }
   });
 });
