@@ -213,6 +213,15 @@ describe("dispatchIdeateForApprovedBuild", () => {
       "u-1",
       expect.any(Object),
     );
+    // Auto-chain (autonomous-flow fix): the design review fires immediately after
+    // the designDoc save so the build advances ideate->plan without waiting ~20
+    // min for the stranded-build reconciler at each handoff.
+    expect(mockExecuteTool).toHaveBeenCalledWith(
+      "reviewDesignDoc",
+      { buildId: "FB-X" },
+      "u-1",
+      expect.any(Object),
+    );
     // Should write at least two activity rows: the "Dispatching..." log and the "Auto-dispatched..." success log.
     expect(mockPrisma.buildActivity.create).toHaveBeenCalledTimes(2);
   });
