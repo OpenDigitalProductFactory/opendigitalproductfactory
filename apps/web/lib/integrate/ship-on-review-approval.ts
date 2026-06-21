@@ -360,12 +360,17 @@ export async function autoResolveShipForks(
     }
   }
 
-  // ── Attempt completion. No-op until the PR is merged AND the self-upgrade
-  //    carries the merge SHA live; the periodic ship reconciler finishes it.
+  // ── Attempt completion. For a fully-local (private/fork_only) build the local
+  //    promotion IS the delivery, so completeLocalDeliveryBuild finishes it now
+  //    (no upstream PR / remote deploy will ever come). Otherwise this is a
+  //    no-op until the PR merges AND the self-upgrade carries the merge SHA
+  //    live; the periodic ship reconciler finishes that case.
   try {
-    const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
+    const { reconcileBuildCompletion, completeLocalDeliveryBuild } = await import("@/lib/build-flow-state");
     if (await reconcileBuildCompletion(buildId)) {
       await log("auto-complete: build COMPLETE (merged code live).");
+    } else if (await completeLocalDeliveryBuild(buildId)) {
+      await log("auto-complete: build COMPLETE (delivered locally — fully-local install).");
     } else {
       await log("auto-complete: forks set up; completes after PR merge + self-upgrade.");
     }

@@ -91,6 +91,10 @@ vi.mock("@/lib/build-flow-state", () => ({
     state.reconcileCalls.push(buildId);
     return state.reconcileResult;
   }),
+  // Fully-local completion fallback (called by autoResolveShipForks when
+  // reconcileBuildCompletion returns false). Default: no-op returning false so
+  // the existing reconcileBuildCompletion assertions are unaffected.
+  completeLocalDeliveryBuild: vi.fn(async () => false),
 }));
 
 vi.mock("@/lib/mcp-tools", () => ({
