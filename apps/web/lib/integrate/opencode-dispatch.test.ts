@@ -8,7 +8,35 @@ import {
   summarizeOpencodeEvent,
   extractOpencodeResult,
   buildOpencodeInstructions,
+  detectOpencodeFatalError,
 } from "./opencode-dispatch";
+
+describe("detectOpencodeFatalError", () => {
+  it("detects a llama.cpp ContextOverflowError in the stream", () => {
+    // The exact shape observed live when a codegen prompt exceeded the served
+    // context window — opencode emitted this AND still exited 0.
+    const stdout = [
+      '{"type":"step_start","time":1}',
+      '{"type":"error","timestamp":1782014385749,"error":{"name":"ContextOverflowError","data":{"message":"request (24792 tokens) exceeds the available context size (24576 tokens), try increasing it"}}}',
+    ].join("\n");
+    const err = detectOpencodeFatalError(stdout);
+    expect(err).toContain("ContextOverflowError");
+    expect(err).toContain("24792");
+  });
+
+  it("returns null for a clean stream with no error event", () => {
+    const stdout = [
+      '{"type":"step_start"}',
+      '{"type":"tool","tool":"write","path":"a.ts"}',
+      '{"type":"result","text":"done"}',
+    ].join("\n");
+    expect(detectOpencodeFatalError(stdout)).toBeNull();
+  });
+
+  it("tolerates non-JSON / empty lines", () => {
+    expect(detectOpencodeFatalError("plain log line\n\nnot json")).toBeNull();
+  });
+});
 
 describe("sandboxReachableUrl", () => {
   it("rewrites localhost to host.docker.internal preserving port", () => {
