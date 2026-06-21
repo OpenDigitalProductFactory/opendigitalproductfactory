@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  HEAVY_JOB_IDS,
   HEAVY_MAINTENANCE,
   isHeavyMaintenanceBusyAtUtc,
   parseSimpleCron,
   type HeavyMaintenanceWindow,
 } from "./maintenance-calendar";
+import { getCatalogEntry } from "@/lib/operate/scheduled-jobs/catalog";
 import { POSTGRES_BACKUP_CRON } from "@/lib/operate/backups/constants";
 import { DATA_RETENTION_CRON } from "@/lib/operate/retention/constants";
 
@@ -61,14 +63,28 @@ describe("isHeavyMaintenanceBusyAtUtc (day-of-week + wrap)", () => {
   });
 });
 
-describe("calendar is anchored to the exported cron constants (drift guard)", () => {
-  it("decodes the backup + retention constants to their documented UTC hours", () => {
-    expect(parseSimpleCron(POSTGRES_BACKUP_CRON)?.hour).toBe(3);
-    expect(parseSimpleCron(DATA_RETENTION_CRON)?.hour).toBe(4);
+describe("calendar derives from SCHEDULED_JOB_CATALOG (single source of truth + drift guard)", () => {
+  it("every tracked heavy job id resolves to a catalog entry (none silently dropped)", () => {
+    for (const jobId of HEAVY_JOB_IDS) {
+      expect(
+        getCatalogEntry(jobId),
+        `heavy job '${jobId}' is missing from SCHEDULED_JOB_CATALOG`,
+      ).toBeDefined();
+    }
+    expect(HEAVY_MAINTENANCE).toHaveLength(HEAVY_JOB_IDS.length);
   });
-  it("includes the backup + retention crons in the heavy calendar", () => {
+
+  it("pins the backup + retention timing to the runtime cron constants", () => {
+    // The catalog shows "daily" for backups; the constant pins the real 03:00 UTC.
     const crons = HEAVY_MAINTENANCE.map((w) => w.cron);
     expect(crons).toContain(POSTGRES_BACKUP_CRON);
     expect(crons).toContain(DATA_RETENTION_CRON);
+    expect(parseSimpleCron(POSTGRES_BACKUP_CRON)?.hour).toBe(3);
+    expect(parseSimpleCron(DATA_RETENTION_CRON)?.hour).toBe(4);
+  });
+
+  it("labels come from the catalog (not hand-written)", () => {
+    const labels = HEAVY_MAINTENANCE.map((w) => w.label);
+    expect(labels).toContain(getCatalogEntry("infra-prune")?.name);
   });
 });
