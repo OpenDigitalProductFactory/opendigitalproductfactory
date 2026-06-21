@@ -16,8 +16,9 @@
 
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 import type { MaintenanceWindow } from "./config";
-import { nextWindowStartForWindows } from "./windows-eval";
+import { isWithinWindows, nextWindowStartForWindows } from "./windows-eval";
 import { nextUpgradeWindowOpen } from "./window";
+import { isHeavyMaintenanceBusyAtUtc } from "./maintenance-calendar";
 
 /**
  * Default low-traffic overnight window used when no valid observed trough is
@@ -29,6 +30,68 @@ export const DEFAULT_OVERNIGHT_WINDOW: MaintenanceWindow = {
   startTime: "02:00",
   endTime: "04:00",
 };
+
+const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
+
+/**
+ * Candidate overnight slots (store-local) in preference order, deepest-sleep
+ * first. `pickOvernightWindow` returns the first one that is clear of the
+ * platform's heavy UTC maintenance for this store's timezone — so a store whose
+ * default 02:00-04:00 maps onto the 03:00-04:00 UTC backup/maintenance cluster
+ * shifts to a neighbouring clear slot instead of contending (BI-963B9D47).
+ */
+export const CANDIDATE_OVERNIGHT_WINDOWS: MaintenanceWindow[] = [
+  DEFAULT_OVERNIGHT_WINDOW, // 02:00-04:00
+  { dayOfWeek: EVERY_DAY, startTime: "01:00", endTime: "03:00" },
+  { dayOfWeek: EVERY_DAY, startTime: "03:00", endTime: "05:00" },
+  { dayOfWeek: EVERY_DAY, startTime: "00:00", endTime: "02:00" },
+  { dayOfWeek: EVERY_DAY, startTime: "04:00", endTime: "06:00" },
+];
+
+const OVERLAP_SCAN_STEP_MS = 30 * 60_000; // 30-min resolution (heavy windows are >= 30 min)
+const OVERLAP_SCAN_HORIZON_MS = 7 * 24 * 60 * 60 * 1000; // 7 days covers weekly jobs + DST
+
+/**
+ * How many horizon instants have `window` (store-local) open WHILE heavy
+ * platform maintenance is running (UTC) — the two reconciled on the absolute
+ * timeline. 0 = no contention.
+ */
+function maintenanceOverlapScore(
+  window: MaintenanceWindow,
+  timeZone: string,
+  now: Date,
+): number {
+  let score = 0;
+  const limit = now.getTime() + OVERLAP_SCAN_HORIZON_MS;
+  for (let t = now.getTime(); t <= limit; t += OVERLAP_SCAN_STEP_MS) {
+    const probe = new Date(t);
+    if (isWithinWindows([window], probe, timeZone) && isHeavyMaintenanceBusyAtUtc(probe)) {
+      score++;
+    }
+  }
+  return score;
+}
+
+/**
+ * The overnight window (store tz) that best avoids the platform's heavy
+ * scheduled maintenance: the first candidate with zero overlap (preference
+ * order, deepest-sleep first), else the minimum-overlap candidate. Never null —
+ * soft-prefer, never block (the quiescence drain is the runtime backstop).
+ */
+export function pickOvernightWindow(args: { timeZone: string; now?: Date }): MaintenanceWindow {
+  const now = args.now ?? new Date();
+  let best: MaintenanceWindow = DEFAULT_OVERNIGHT_WINDOW;
+  let bestScore = Infinity;
+  for (const candidate of CANDIDATE_OVERNIGHT_WINDOWS) {
+    const score = maintenanceOverlapScore(candidate, args.timeZone, now);
+    if (score === 0) return candidate; // first clear candidate in preference order
+    if (score < bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+  return best;
+}
 
 /** A schedule-derived or telemetry-observed low-traffic slot (BusinessProfile.lowTrafficWindows). */
 export type LowTrafficWindow = {
@@ -135,7 +198,10 @@ export function resolveAutoUpgradeWindow(args: {
   if (trough && trough.length > 0) {
     return { kind: "auto-overnight", windows: trough, source: "trough" };
   }
-  return { kind: "auto-overnight", windows: [DEFAULT_OVERNIGHT_WINDOW], source: "default" };
+  // No observed trough → a default overnight slot that also dodges the platform's
+  // own heavy maintenance (backups/retention/batch), not just a fixed 02:00-04:00.
+  const overnight = pickOvernightWindow({ timeZone: args.timeZone, now });
+  return { kind: "auto-overnight", windows: [overnight], source: "default" };
 }
 
 /** Next instant one of the auto-selected windows opens (store tz). */
