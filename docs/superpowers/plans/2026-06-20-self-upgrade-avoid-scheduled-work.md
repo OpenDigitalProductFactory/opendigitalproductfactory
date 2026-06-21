@@ -83,12 +83,30 @@ evaluated in **store tz** — so collision must be judged on one absolute (UTC) 
 - UTC/London 24/7 store → `02:00–04:00` local overlaps the 03:00–04:00 UTC cluster → shifts to
   the first clear candidate (`01:00–03:00` local = `01:00–03:00` UTC, clear).
 
-## 5. Phase 2 (staged, follow-up) — per-org + change windows
+## 5. Phase 2 (BI-59591B14) — catalog SSoT + per-org windows
 
-Compose `ScheduledAgentTask` crons (per-org, with their own tz), `BlackoutPeriod` (hard avoid),
-and `DeploymentWindow` allowed bands into the scorer via a DB-backed collector that passes
-busy-intervals into the pure picker (keeps `auto-window.ts` prisma-free). Deferred to keep this
-PR one-concern; tracked under the same BI.
+### Part A — derive the heavy set from the authoritative catalog (SSoT) — **DONE** (this PR)
+
+Phase 1 hand-listed the heavy crons. The authoritative registry already exists:
+`SCHEDULED_JOB_CATALOG` (`apps/web/lib/operate/scheduled-jobs/catalog.ts`) — every cron, with a
+build-failing catalog↔registry parity guard (#2227) and the `/admin/scheduled-jobs` surface.
+`maintenance-calendar.ts` now resolves its heavy windows FROM the catalog by `jobId`
+(`HEAVY_JOB_SPECS`), keeping only the "which jobs are heavy" judgement + a duration locally
+(the catalog has no contention flag — `category` is operator-tunability). `cronOverride` pins
+the backups/retention to their runtime cron CONSTANTS (the catalog shows `"daily"` for backups);
+other entries use the catalog cron. A drift guard test asserts every heavy `jobId` resolves, so a
+renamed/removed/retimed job fails CI. **Behaviour-preserving:** the heavy set is the same
+conservative 6 (backups ×2, retention, model-discovery, material-decay, infra-prune) → same
+03:00–05:00 UTC busy band → Phase-1 window picks unchanged. Lighter jobs (wiki-lint,
+skill-metrics/curator) are deliberately NOT included — adding them broadens the busy band enough
+to push even a deep-sleep slot off a clear window for no real contention benefit.
+
+### Part B — per-org scheduled work (staged, same BI)
+
+Compose `BlackoutPeriod` (hard avoid), `DeploymentWindow` allowed bands, and `ScheduledAgentTask`
+crons (per-org tz) into the scorer via a DB-backed collector that passes busy-intervals into the
+pure picker (keeps `auto-window.ts`/`maintenance-calendar.ts` prisma-free). Deferred to keep each
+PR one-concern.
 
 ## 6. Phases & verification
 

@@ -14,7 +14,8 @@
 // on the absolute timeline. Pure + prisma-free (only Date UTC accessors + pure
 // constant imports) so the cron path and unit tests can use it without a DB.
 
-import { POSTGRES_BACKUP_CRON } from "@/lib/operate/backups/constants";
+import { getCatalogEntry } from "@/lib/operate/scheduled-jobs/catalog";
+import { ALL_BACKUPS_CRON, POSTGRES_BACKUP_CRON } from "@/lib/operate/backups/constants";
 import { DATA_RETENTION_CRON } from "@/lib/operate/retention/constants";
 
 export type HeavyMaintenanceWindow = {
@@ -26,20 +27,59 @@ export type HeavyMaintenanceWindow = {
 };
 
 /**
- * Heavy recurring platform maintenance, clustered at 03:00-04:00 UTC. Backup +
- * retention crons reuse their exported constants; the rest are inline literals
- * that MUST be kept in sync with their function files (cited per entry).
+ * Which catalog jobs are HEAVY enough that a self-upgrade rebuild should avoid
+ * running on top of them, keyed by SCHEDULED_JOB_CATALOG jobId. The cron/time is
+ * resolved FROM the catalog (single source of truth — operate/scheduled-jobs/catalog.ts,
+ * which carries a build-failing catalog<->registry parity guard and backs the
+ * /admin/scheduled-jobs surface); only the "is this heavy" judgement + an
+ * approximate duration live here, because the catalog carries neither (its
+ * `category` is operator-tunability, not resource weight — taskrun-watchdog is
+ * `core` yet a 1-minute poller). This is a deliberately CONSERVATIVE set:
+ * backups + retention + the 03:00 batch jobs that actually contend with a portal
+ * rebuild. Lighter jobs (wiki-lint, skill-metrics/curator) are excluded — adding
+ * them would broaden the busy band enough to push even a deep-sleep slot off a
+ * clear window for no real contention benefit.
+ *
+ * `cronOverride` pins the precise UTC cron for entries whose catalog `cron` is a
+ * display cadence word ("daily" for the backups) and for the jobs that own a
+ * runtime cron CONSTANT (the constant is the true runtime source; the catalog
+ * string is hand-maintained for display). Entries with no override use the
+ * catalog's own cron.
  */
-export const HEAVY_MAINTENANCE: HeavyMaintenanceWindow[] = [
-  { label: "postgres + all-services backups", cron: POSTGRES_BACKUP_CRON, durationMin: 60 },
-  { label: "data-retention sweep", cron: DATA_RETENTION_CRON, durationMin: 60 },
-  // keep in sync with apps/web/lib/queue/functions/model-discovery-refresh.ts
-  { label: "model-discovery refresh", cron: "0 3 * * *", durationMin: 30 },
-  // keep in sync with apps/web/lib/queue/functions/material-freshness-decay.ts
-  { label: "material-freshness decay", cron: "0 3 * * *", durationMin: 30 },
-  // keep in sync with apps/web/lib/queue/functions/infra-prune.ts (weekly, Sun)
-  { label: "infra prune", cron: "0 3 * * 0", durationMin: 30 },
+type HeavyJobSpec = { jobId: string; durationMin: number; cronOverride?: string };
+
+const HEAVY_JOB_SPECS: HeavyJobSpec[] = [
+  { jobId: "postgres-daily-backup", durationMin: 60, cronOverride: POSTGRES_BACKUP_CRON },
+  { jobId: "all-backups-daily", durationMin: 60, cronOverride: ALL_BACKUPS_CRON },
+  { jobId: "data-retention-sweep", durationMin: 60, cronOverride: DATA_RETENTION_CRON },
+  { jobId: "model-discovery-refresh", durationMin: 30 }, // catalog cron "0 3 * * *"
+  { jobId: "material-freshness-decay", durationMin: 30 }, // catalog cron "0 3 * * *"
+  { jobId: "infra-prune", durationMin: 30 }, // catalog cron "0 3 * * 0" (weekly, Sun)
 ];
+
+/** The heavy-job ids this calendar tracks — exposed for the drift guard test. */
+export const HEAVY_JOB_IDS: readonly string[] = HEAVY_JOB_SPECS.map((s) => s.jobId);
+
+/**
+ * Resolve the heavy maintenance windows from the catalog at module load. A spec
+ * whose jobId is absent from the catalog, or whose resolved cron is unparseable,
+ * is dropped — the drift guard (maintenance-calendar.test.ts) asserts every spec
+ * resolves, so a renamed / removed / re-shaped job fails CI rather than silently
+ * dropping out of the avoidance set.
+ */
+function resolveHeavyMaintenance(): HeavyMaintenanceWindow[] {
+  const out: HeavyMaintenanceWindow[] = [];
+  for (const spec of HEAVY_JOB_SPECS) {
+    const entry = getCatalogEntry(spec.jobId);
+    if (!entry) continue;
+    const cron = spec.cronOverride ?? entry.cron;
+    if (!parseSimpleCron(cron)) continue;
+    out.push({ label: entry.name, cron, durationMin: spec.durationMin });
+  }
+  return out;
+}
+
+export const HEAVY_MAINTENANCE: HeavyMaintenanceWindow[] = resolveHeavyMaintenance();
 
 export type SimpleCron = { minute: number; hour: number; daysOfWeek: number[] | null };
 
