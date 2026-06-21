@@ -390,4 +390,24 @@ describe("reconcileBuildCompletion", () => {
     expect(changed).toBe(false);
     expect(prisma.featureBuild.update).not.toHaveBeenCalled();
   });
+
+  it("completes a fully-local (fork_only) build on forks-terminal even when NOT deployed", async () => {
+    // Fully-local install: contributionMode fork_only → the upstream fork is
+    // "skipped" (the change is never PR'd / merged / re-deployed), so
+    // isFeatureBuildDeployed can never become true. Without this path the build
+    // parks at ship forever and clogs the WIP cap. The promote fork (the
+    // registered ProductVersion) is the delivery, so the build must complete.
+    mockDevConfig("fork_only");
+    mockBuild({
+      phase: "ship",
+      productVersions: [{ id: "pv-1", promotions: [{ promotionId: "CP-1", status: "deployed", deployedAt: new Date(), rollbackReason: null, deploymentLog: null, createdAt: new Date() }] }],
+    });
+    vi.mocked(isFeatureBuildDeployed).mockResolvedValue(false);
+    const changed = await reconcileBuildCompletion("FB-TEST-001");
+    expect(changed).toBe(true);
+    expect(prisma.featureBuild.update).toHaveBeenCalledWith({
+      where: { buildId: "FB-TEST-001" },
+      data: { phase: "complete" },
+    });
+  });
 });
