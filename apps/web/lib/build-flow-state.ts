@@ -470,3 +470,54 @@ export async function reconcileBuildCompletion(buildId: string): Promise<boolean
 
   return true;
 }
+
+/**
+ * Complete a fully-local build whose only "delivery" is the local ProductVersion
+ * registration. A private/fork_only install has no upstream PR and no remote
+ * deploy step, so the registered promotion IS the delivery — but the promote
+ * fork lands as `approved` (not terminal), so `reconcileBuildCompletion` alone
+ * leaves the build parked at `ship` forever (the WIP-clogging throughput blocker
+ * for a fully-local backlog). This marks any still-open promotion delivered (so
+ * the promote fork becomes terminal) and then advances ship→complete via
+ * reconcileBuildCompletion (whose skipped-upstream gate no longer requires a
+ * live deploy).
+ *
+ * No-op for a build with a real (shipped/in-flight) upstream fork — that one
+ * completes only once its merged code is live. Idempotent + safe to call
+ * repeatedly. Returns true iff the build advanced to complete.
+ */
+export async function completeLocalDeliveryBuild(buildId: string): Promise<boolean> {
+  const state = await getBuildFlowState(buildId);
+  if (!state || state.currentPhase !== "ship") return false;
+  // A "skipped" upstream fork means contributionMode is private/fork_only: no PR
+  // to merge, no remote deploy — ours to finalize locally. Anything else has a
+  // real deploy path and is NOT ours to force.
+  if (state.upstream.state !== "skipped") return false;
+
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: { id: true },
+  });
+  if (build) {
+    const pvs = await prisma.productVersion.findMany({
+      where: { featureBuildId: build.id },
+      select: { id: true },
+    });
+    if (pvs.length > 0) {
+      await prisma.changePromotion.updateMany({
+        where: {
+          productVersionId: { in: pvs.map((p) => p.id) },
+          status: { in: ["pending", "approved", "scheduled", "awaiting_operator"] },
+        },
+        data: {
+          status: "deployed",
+          deployedAt: new Date(),
+          rationale:
+            "Delivered locally — fully-local install (private/fork_only); no upstream deploy path.",
+        },
+      });
+    }
+  }
+
+  return reconcileBuildCompletion(buildId);
+}
