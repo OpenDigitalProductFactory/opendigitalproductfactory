@@ -31,7 +31,11 @@ const manifest = routeManifestData as RouteManifest;
 export async function reconcileNavigation(
   opts: { manifest?: RouteManifest; db?: typeof prisma } = {},
 ): Promise<SysmlSeedResult> {
-  const routePaths = ((opts.manifest ?? manifest).routes ?? []).map((r) => r.routePath);
+  // Page routes only — API route handlers never carry navigation, so they must not
+  // count as orphans in the route-not-in-canonical-nav finding.
+  const routePaths = ((opts.manifest ?? manifest).routes ?? [])
+    .filter((r) => r.kind === "page")
+    .map((r) => r.routePath);
   const entries = toNavEntries(PORTAL_NAV_ROUTES);
 
   const result = await applySysmlModel(
