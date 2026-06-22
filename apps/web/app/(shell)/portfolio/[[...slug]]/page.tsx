@@ -7,6 +7,7 @@ import { getPortfolioBudgetMetric } from "@/lib/portfolio/budget-provenance";
 import { PortfolioOverview } from "@/components/portfolio/PortfolioOverview";
 import { PortfolioNodeDetail } from "@/components/portfolio/PortfolioNodeDetail";
 import { CompletenessStrip } from "@/components/portfolio/CompletenessStrip";
+import { CoveragePanel } from "@/components/portfolio/CoveragePanel";
 import { getFullGraphData } from "@/lib/actions/graph";
 import {
   computePortfolioCompleteness,
@@ -85,9 +86,24 @@ export default async function PortfolioPage({ params, searchParams }: Props) {
       )
     : null;
 
+  // BI-PORTCOV-P6: coverage surface at the portfolio root — every entry in this
+  // portfolio (any status), grouped by coverage with provenance + enable links.
+  // Shown only at the root node (inner taxonomy nodes keep the active subtree list).
+  const coverageProducts =
+    rootPortfolioId && node.nodeId === rootSlug
+      ? await prisma.digitalProduct.findMany({
+          where: { portfolioId: rootPortfolioId },
+          select: { id: true, productId: true, name: true, observationConfig: true },
+          orderBy: { name: "asc" },
+        })
+      : [];
+
   return (
     <div>
       {completenessScores ? <CompletenessStrip scores={completenessScores} /> : null}
+      {coverageProducts.length > 0 ? (
+        <CoveragePanel products={coverageProducts} className="mb-4" />
+      ) : null}
       <PortfolioNodeDetail
         node={node}
         subNodes={node.children}
