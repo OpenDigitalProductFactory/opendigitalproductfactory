@@ -72,6 +72,29 @@ describe("resolveCapabilityActivation", () => {
     // Pure channel/reseller archetype derives partner-program = required → on by default.
     expect(resolveCapabilityActivation("required").active).toBe(true);
   });
+
+  it("auto-activates an un-decided recommended capability under a progressive posture; explicit disable still wins", () => {
+    // autoActivateRecommended (progressive risk posture): recommended defaults ON.
+    expect(resolveCapabilityActivation("recommended", null, true)).toMatchObject({
+      active: true,
+      promptAtSetup: true,
+      source: "posture-default",
+    });
+    // an explicit opt-out still wins over the posture default.
+    expect(resolveCapabilityActivation("recommended", "disabled", true)).toMatchObject({
+      active: false,
+      source: "org-choice",
+    });
+    // an explicit opt-in is unchanged.
+    expect(resolveCapabilityActivation("recommended", "enabled", true).source).toBe("org-choice");
+    // optional capabilities are NOT auto-activated (only recommended).
+    expect(resolveCapabilityActivation("optional", null, true)).toMatchObject({
+      active: false,
+      source: "default-off",
+    });
+    // required is unaffected by the flag.
+    expect(resolveCapabilityActivation("required", null, true).source).toBe("required");
+  });
 });
 
 describe("resolveOrgCapabilityActivations", () => {
@@ -102,5 +125,15 @@ describe("resolveOrgCapabilityActivations", () => {
     const effective = resolveOrgCapabilityActivations(derived);
     const partner = effective.find((e) => e.capabilityKey === "partner-program");
     expect(partner).toMatchObject({ active: false, promptAtSetup: true, source: "default-off" });
+  });
+
+  it("auto-activates un-decided recommended capabilities when the posture flag is set", () => {
+    const effective = resolveOrgCapabilityActivations(derived, {}, true);
+    const byKey = Object.fromEntries(effective.map((e) => [e.capabilityKey, e]));
+    // recommended with no choice → on, by posture default.
+    expect(byKey["partner-program"]).toMatchObject({ active: true, source: "posture-default" });
+    // optional is not auto-activated; required is unchanged.
+    expect(byKey["point-of-sale"]).toMatchObject({ active: false });
+    expect(byKey["customer-accounts"]).toMatchObject({ active: true, source: "required" });
   });
 });

@@ -4,12 +4,15 @@ import type { CapabilityActivationChoice, CapabilityApplicability } from "./type
  * Why a capability resolved to its current active/inactive state.
  * - `required`: core to the chosen business model; on by default, no org opt-in needed.
  * - `org-choice`: the org made an explicit enabled/disabled decision.
+ * - `posture-default`: on by a progressive risk posture (auto-activated `recommended`),
+ *   not an explicit org choice.
  * - `default-off`: offered (recommended/optional) but the org has not opted in yet.
  * - `not-applicable`: the business model does not support this capability.
  */
 export type CapabilityActivationSource =
   | "required"
   | "org-choice"
+  | "posture-default"
   | "default-off"
   | "not-applicable";
 
@@ -48,12 +51,15 @@ export interface CapabilityActivationResolution {
  * - `required` → active unless the org explicitly disabled it; confirmed (not
  *   silently applied) at setup; can be re-enabled later.
  * - `recommended` → opt-in: off until the org enables it; **asked at setup**; can
- *   be enabled later.
+ *   be enabled later. When `autoActivateRecommended` is set (a progressive risk
+ *   posture), an un-decided `recommended` capability defaults ON instead of being
+ *   asked — an explicit `disabled` choice still wins.
  * - `optional` → opt-in: off until enabled; not surfaced at setup; **can be added later**.
  */
 export function resolveCapabilityActivation(
   applicability: CapabilityApplicability,
   choice?: CapabilityActivationChoice | null,
+  autoActivateRecommended?: boolean,
 ): CapabilityActivationResolution {
   if (applicability === "not-applicable" || applicability === "hidden") {
     return {
@@ -73,12 +79,16 @@ export function resolveCapabilityActivation(
     };
   }
 
-  // recommended | optional → opt-in; off until the org turns it on.
+  // recommended | optional → opt-in; off until the org turns it on. A progressive
+  // risk posture flips an un-decided `recommended` capability ON by default
+  // (autoActivateRecommended); an explicit `disabled` choice still wins.
+  const autoOn =
+    autoActivateRecommended === true && applicability === "recommended" && choice == null;
   return {
-    active: choice === "enabled",
+    active: choice === "enabled" || autoOn,
     promptAtSetup: applicability === "recommended",
     canEnableLater: true,
-    source: choice ? "org-choice" : "default-off",
+    source: choice ? "org-choice" : autoOn ? "posture-default" : "default-off",
   };
 }
 
@@ -97,13 +107,16 @@ export interface EffectiveCapabilityActivation extends CapabilityActivationResol
  * @param derived  the org's archetype-derived capability activations (each carries a
  *                 `capabilityKey` and `applicability`) — e.g. `NormalizedActivationProfile.capabilityActivations`.
  * @param choices  map of `capabilityKey → CapabilityActivationChoice` for this org.
+ * @param autoActivateRecommended  when true (a progressive risk posture), un-decided
+ *                 `recommended` capabilities default ON. Defaults false = today's behavior.
  */
 export function resolveOrgCapabilityActivations(
   derived: ReadonlyArray<{ capabilityKey: string; applicability: CapabilityApplicability }>,
   choices: Readonly<Record<string, CapabilityActivationChoice>> = {},
+  autoActivateRecommended = false,
 ): EffectiveCapabilityActivation[] {
   return derived.map(({ capabilityKey, applicability }) => ({
     capabilityKey,
-    ...resolveCapabilityActivation(applicability, choices[capabilityKey] ?? null),
+    ...resolveCapabilityActivation(applicability, choices[capabilityKey] ?? null, autoActivateRecommended),
   }));
 }

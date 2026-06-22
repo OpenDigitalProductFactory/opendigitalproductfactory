@@ -6,6 +6,10 @@ vi.mock("@dpf/db", () => ({
       findMany: vi.fn(),
       upsert: vi.fn(),
     },
+    businessContext: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+    },
   },
 }));
 
@@ -18,10 +22,15 @@ import {
 
 const findMany = prisma.organizationCapabilityActivation.findMany as ReturnType<typeof vi.fn>;
 const upsert = prisma.organizationCapabilityActivation.upsert as ReturnType<typeof vi.fn>;
+const bcFindUnique = prisma.businessContext.findUnique as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   findMany.mockReset();
   upsert.mockReset();
+  // Default: no posture stored → resolveOrgRiskEnvelope fails open to balanced
+  // (capabilityAutoActivate=false), i.e. today's behavior.
+  bcFindUnique.mockReset();
+  bcFindUnique.mockResolvedValue(null);
 });
 
 describe("getOrgCapabilityChoices", () => {
@@ -46,6 +55,29 @@ describe("getEffectiveCapabilityActivations", () => {
     const byKey = Object.fromEntries(effective.map((e) => [e.capabilityKey, e]));
     expect(byKey["partner-program"]).toMatchObject({ active: true, source: "org-choice" });
     expect(byKey["customer-accounts"]).toMatchObject({ active: true, source: "required" });
+  });
+
+  it("auto-activates un-decided recommended capabilities under a progressive posture", async () => {
+    findMany.mockResolvedValue([{ capabilityKey: "point-of-sale", choice: "disabled" }]);
+    bcFindUnique.mockResolvedValue({ riskPosture: "progressive" });
+    const effective = await getEffectiveCapabilityActivations("org_1", [
+      { capabilityKey: "partner-program", applicability: "recommended" }, // no choice → auto-on
+      { capabilityKey: "point-of-sale", applicability: "recommended" }, // explicit disable wins
+      { capabilityKey: "customer-accounts", applicability: "required" },
+    ]);
+    const byKey = Object.fromEntries(effective.map((e) => [e.capabilityKey, e]));
+    expect(byKey["partner-program"]).toMatchObject({ active: true, source: "posture-default" });
+    expect(byKey["point-of-sale"]).toMatchObject({ active: false, source: "org-choice" });
+    expect(byKey["customer-accounts"]).toMatchObject({ active: true });
+  });
+
+  it("leaves recommended off under the default balanced posture (no-change baseline)", async () => {
+    findMany.mockResolvedValue([]);
+    bcFindUnique.mockResolvedValue({ riskPosture: "balanced" });
+    const effective = await getEffectiveCapabilityActivations("org_1", [
+      { capabilityKey: "partner-program", applicability: "recommended" },
+    ]);
+    expect(effective[0]).toMatchObject({ active: false, source: "default-off" });
   });
 });
 
