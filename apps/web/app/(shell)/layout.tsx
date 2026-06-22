@@ -15,7 +15,8 @@ import { PlatformBanner } from "@/components/platform/PlatformBanner";
 import { ShellBannerOverlay } from "@/components/shell/ShellBannerOverlay";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
 import { SetupOverlay } from "@/components/setup/SetupOverlay";
-import { getShellNavSections } from "@/lib/permissions";
+import { getShellNavSections, type PortalAudienceMode } from "@/lib/permissions";
+import { cookies } from "next/headers";
 import { getActiveOrgCapabilities } from "@/lib/storefront/civic-surfaces.server";
 import { AppRail } from "@/components/shell/AppRail";
 import { ShellBreadcrumb } from "@/components/shell/ShellBreadcrumb";
@@ -135,6 +136,12 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       });
 
   const brandingCss = buildBrandingStyleTag(activeBranding?.tokens ?? null);
+  // Worker/operator rail mode (EP-NAV-COHERENCE P4). Default "operator" = the full rail
+  // (no behavior change); a user opts into the condensed "worker" rail via the rail's mode
+  // toggle, which sets this cookie. Operator is always one toggle away, so worker mode
+  // never strands a user away from a surface their role can reach.
+  const navModeCookie = (await cookies()).get("dpf-nav-mode")?.value;
+  const navMode: PortalAudienceMode = navModeCookie === "worker" ? "worker" : "operator";
   const shellNavSections = activeSetup
     ? []
     : getShellNavSections(
@@ -143,7 +150,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           platformRole: user.platformRole,
           isSuperuser: user.isSuperuser,
         },
-        { activeOrgCapabilities },
+        { activeOrgCapabilities, mode: navMode },
       );
 
   return (
@@ -183,7 +190,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           {shellNavSections.length > 0 && (
             <aside className="shrink-0 border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] lg:w-[248px] lg:border-b-0 lg:border-r">
               <div className="mx-auto w-full max-w-[1600px] lg:max-w-none">
-                <AppRail sections={shellNavSections} />
+                <AppRail sections={shellNavSections} mode={navMode} />
               </div>
             </aside>
           )}

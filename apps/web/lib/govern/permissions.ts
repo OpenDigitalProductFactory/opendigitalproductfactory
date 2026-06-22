@@ -5,8 +5,11 @@ import { canAccessEmployeeScope } from "./manager-scope";
 import {
   getShellNavEntries,
   getSectionNavEntries,
+  type PortalAudienceMode,
   type PortalShellSectionKey,
 } from "../navigation/portal-navigation-model";
+
+export type { PortalAudienceMode } from "../navigation/portal-navigation-model";
 
 export type PlatformRoleId =
   | "HR-000" | "HR-100" | "HR-200"
@@ -135,6 +138,10 @@ export type ShellNavItem = {
   capabilityKey: CapabilityKey | null;
   /** Archetype-capability gate (any-of when array) — see PortalNavRecord.orgCapabilityKey. */
   orgCapabilityKey: string | readonly string[] | null;
+  /** Audience modes this item belongs to (worker | operator | …). The rail filters on
+   *  this when a mode is active, so "worker" mode shows only the day-to-day business
+   *  surfaces and hides operator/platform chrome (EP-NAV-COHERENCE P4). */
+  audienceModes: readonly PortalAudienceMode[];
 };
 
 export type SectionNavItem = {
@@ -210,6 +217,7 @@ const SHELL_ITEMS: ShellNavItem[] = getShellNavEntries().map((entry) => ({
   sectionKey: entry.sectionKey,
   capabilityKey: entry.capabilityKey,
   orgCapabilityKey: entry.orgCapabilityKey,
+  audienceModes: entry.audienceModes,
 }));
 
 const WORKSPACE_SECTION_BLUEPRINTS: Array<{
@@ -272,9 +280,13 @@ export function getShellNavSections(
      * hidden — the safe default for callers without org context.
      */
     activeOrgCapabilities?: ReadonlySet<string>;
+    /** When set, only items whose audienceModes include this mode render — "worker"
+     *  yields the condensed day-to-day rail; "operator" (or undefined) the full rail. */
+    mode?: PortalAudienceMode;
   },
 ): ShellNavSection[] {
   const activeOrgCapabilities = options?.activeOrgCapabilities;
+  const mode = options?.mode;
   const orgGateOpen = (gate: string | readonly string[] | null): boolean => {
     if (gate === null) return true;
     if (!activeOrgCapabilities) return false;
@@ -287,7 +299,8 @@ export function getShellNavSections(
       (item) =>
         item.sectionKey === section.key &&
         isAllowed(user, item.capabilityKey) &&
-        orgGateOpen(item.orgCapabilityKey),
+        orgGateOpen(item.orgCapabilityKey) &&
+        (mode === undefined || item.audienceModes.includes(mode)),
     ),
   })).filter((section) => section.items.length > 0);
 }

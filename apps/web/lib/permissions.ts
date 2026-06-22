@@ -19,6 +19,7 @@ import {
 
 export type {
   PlatformRoleId,
+  PortalAudienceMode,
   SectionNavItem,
   ShellNavItem,
   ShellNavSection,

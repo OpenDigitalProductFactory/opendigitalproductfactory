@@ -94,6 +94,28 @@ describe("getShellNavSections()", () => {
     expect(sections.find((section) => section.key === "platform")?.items.map((item) => item.key)).toContain("ai_workforce");
   });
 
+  it("worker mode condenses the rail to day-to-day surfaces, hiding operator/platform chrome", () => {
+    const keys = (sections: ReturnType<typeof getShellNavSections>) =>
+      sections.flatMap((section) => section.items.map((item) => item.key));
+
+    const operator = getShellNavSections(hr000, { mode: "operator" });
+    const worker = getShellNavSections(hr000, { mode: "worker" });
+
+    // Operator mode keeps the operator/platform surfaces…
+    expect(keys(operator)).toEqual(expect.arrayContaining(["platform", "admin", "ai_workforce", "backlog"]));
+    // …worker mode hides them and keeps the business/workspace day-to-day surfaces.
+    expect(keys(worker)).not.toContain("platform");
+    expect(keys(worker)).not.toContain("admin");
+    expect(keys(worker)).not.toContain("ai_workforce");
+    expect(keys(worker)).toEqual(expect.arrayContaining(["workspace", "customer", "finance"]));
+  });
+
+  it("treats no mode as the full operator rail (backward compatible)", () => {
+    const keys = (sections: ReturnType<typeof getShellNavSections>) =>
+      sections.flatMap((section) => section.items.map((item) => item.key));
+    expect(keys(getShellNavSections(hr000))).toEqual(keys(getShellNavSections(hr000, { mode: "operator" })));
+  });
+
   it("omits empty sections for more limited roles", () => {
     const sections = getShellNavSections(hr500);
 

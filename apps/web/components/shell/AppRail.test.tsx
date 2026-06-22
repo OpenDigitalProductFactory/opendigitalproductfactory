@@ -5,6 +5,7 @@ let pathname = "/finance";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => pathname,
+  useRouter: () => ({ refresh: () => {} }),
 }));
 
 vi.mock("next/link", () => ({
@@ -40,6 +41,7 @@ const sections: ShellNavSection[] = [
         sectionKey: "workspace",
         capabilityKey: null,
         orgCapabilityKey: null,
+        audienceModes: ["worker", "operator"],
       },
     ],
   },
@@ -56,6 +58,7 @@ const sections: ShellNavSection[] = [
         sectionKey: "business",
         capabilityKey: "view_finance",
         orgCapabilityKey: null,
+        audienceModes: ["worker", "operator"],
       },
       {
         key: "compliance",
@@ -65,6 +68,7 @@ const sections: ShellNavSection[] = [
         sectionKey: "business",
         capabilityKey: "view_compliance",
         orgCapabilityKey: null,
+        audienceModes: ["worker", "operator"],
       },
     ],
   },
@@ -98,5 +102,25 @@ describe("AppRail", () => {
     expect(html).toContain("overflow-x-auto");
     expect(html).toContain("lg:grid");
     expect(html).toContain("whitespace-nowrap");
+  });
+
+  it("renders the worker/operator mode toggle reflecting the active mode", () => {
+    pathname = "/finance";
+    const html = renderToStaticMarkup(<AppRail sections={sections} mode="worker" />);
+
+    expect(html).toContain(">Simple<");
+    expect(html).toContain(">Full<");
+    // In worker mode, "Simple" is the pressed control.
+    const simpleIdx = html.indexOf(">Simple<");
+    const buttonStart = html.lastIndexOf("<button", simpleIdx);
+    expect(html.slice(buttonStart, simpleIdx)).toContain('aria-pressed="true"');
+  });
+
+  it("defaults to operator (full) mode when no mode is passed", () => {
+    pathname = "/finance";
+    const html = renderToStaticMarkup(<AppRail sections={sections} />);
+    const fullIdx = html.indexOf(">Full<");
+    const buttonStart = html.lastIndexOf("<button", fullIdx);
+    expect(html.slice(buttonStart, fullIdx)).toContain('aria-pressed="true"');
   });
 });
