@@ -54,6 +54,7 @@ const DOMAIN_LABELS: Record<ProjectionDomain, string> = {
   coworkerAuthority: "AI coworker workforce",
   valueStreams: "IT4IT value streams",
   routes: "Next.js route tree",
+  navigation: "navigation surface (rail + route reachability)",
   codeStructure: "source-code structure",
   processModels: "platform process models",
   skillToolchain: "skill & agent toolchain",

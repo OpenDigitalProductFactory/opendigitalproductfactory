@@ -1,0 +1,206 @@
+# Local Dependency Health — SBOM, Reduction & Vulnerability Routine
+
+_Status: active · Owner: platform / assurance · Added 2026-06-20_
+
+The platform's dependency-health routine, generated from `pnpm-lock.yaml`. It
+**makes up for what GitHub Dependabot does automatically** — because a DPF
+install running on **local / self-hosted git has no Dependabot at all**. It runs
+two axes, both GitHub-free and pure-Node (no `pnpm install` required):
+
+1. **Reduction / efficiency** — whole-tree SBOM + version fan-out analysis.
+2. **Security / vulnerability / lifecycle** — OSV vulnerability scan over the SBOM.
+
+## The two axes (and where Dependabot fits)
+
+| Axis | Mechanism (this repo) | GitHub-native equivalent |
+| --- | --- | --- |
+| **Reduction / efficiency** | `generate-platform-sbom.mjs` + `check-sbom-drift.mjs` | *none* — Dependabot bumps one package at a time and can't see cross-workspace version consistency |
+| **Security / vulnerability / lifecycle** | `scan-dependencies.mjs` (OSV.dev) | **Dependabot** security alerts |
+| Per-container SBOM at release | `publish-image.yml` (`sbom: true`) | — |
+
+OSV.dev aggregates the **GitHub Advisory Database (GHSA)**, so the scanner
+surfaces the *same advisories* Dependabot would — it just doesn't depend on
+GitHub. On this GitHub-hosted repo the scanner runs alongside Dependabot
+(belt-and-suspenders + a PR gate Dependabot doesn't provide, and a daily dogfood
+of the engine). On a **customer's local/self-hosted install it is the only
+vulnerability feed** — see "The customer-install gap" below.
+
+## SBOM generation
+
+`node scripts/sbom/generate-platform-sbom.mjs` (alias `pnpm sbom`) reads
+`pnpm-lock.yaml` and writes to `sbom/`:
+
+- `dpf-platform-sbom.cdx.json` — CycloneDX 1.7 (every resolved npm component +
+  published container images). Same format/spec as the per-build generator in
+  `apps/web/lib/assurance/cyclonedx-generator.ts`.
+- `dpf-platform-sbom-analysis.json` / `.md` — the reduction analysis.
+
+Generated outputs regenerate on every dependency change and are **not committed**
+(see `.gitignore`); CI uploads them as artifacts. Only the two small anchors —
+`sbom/baseline.json` (drift) and `sbom/vuln-baseline.json` (accepted advisories)
+— are tracked.
+
+## Axis 1 — reduction / efficiency
+
+The analysis tiers duplicate package versions so signal separates from noise:
+
+- **Tier 1 — first-party divergence.** *Our own* declarations resolve to >1
+  version (`typescript` `^6.0.3` in most workspaces but `^5.9.3`/`^5.7.3` in a
+  few). Fully controllable. **Hard-gated.**
+- **Tier 2 — safe `pnpm dedupe` candidates.** Same major, minor/patch drift.
+- **Tier 3 — transitive multi-major.** Pulled by deep transitives/peers
+  (`commander`, `chalk`, `ansi-*`). Mostly accept.
+- **Direct-but-transitive.** We declare it, our specifiers already agree (`zod`
+  `^4`, `undici` `^8`, `@types/node` `^26`); extra versions are transitive.
+
+`scripts/sbom/check-sbom-drift.mjs` (`pnpm check:sbom-drift`) **hard-fails a PR**
+that introduces a *new* Tier-1 split (`SBOM Divergence Guard` job in `ci.yml`),
+and reports deltas for the rest. Accepted splits live in `sbom/baseline.json`;
+ratchet down as they're fixed (`--update-baseline` to accept intentionally).
+
+## Axis 2 — vulnerability & lifecycle (the local Dependabot-equivalent)
+
+`scripts/sbom/scan-dependencies.mjs` (`pnpm scan:deps`) checks every resolved
+component against OSV.dev and writes `sbom/dependency-scan.{json,md}`.
+
+- **Source / sovereignty.** Only `{ecosystem, name, version}` per package (public
+  OSS identifiers) leaves the box — the same exposure Dependabot has reading your
+  manifest. For air-gapped installs the DB source is swappable via `OSV_BASE_URL`
+  (OSV publishes the full DB at `gs://osv-vulnerabilities` for local mirroring).
+- **Gate.** `--fail-on <low|moderate|high|critical>` (CI uses `high`). The report
+  always lists every severity (like Dependabot alerts); the gate blocks only at
+  or above the threshold. `--require-online` makes an unreachable DB a hard error
+  (used on scheduled runs so a silent skip can't hide that the scan didn't run).
+- **Accepted advisories.** `sbom/vuln-baseline.json` — the local mirror of
+  Dependabot/CodeQL dismiss-with-reason. Each entry needs a real `reason`; an
+  `expires` date makes the finding **re-surface** after that date, forcing
+  periodic re-review.
+- **Current state.** 1 finding: `js-yaml@3.14.2` (moderate DoS, CVE-2026-53550) —
+  accepted: it is a build-time transitive via `gray-matter` parsing our own
+  repo-controlled `.md` files (trusted input), and the fix is a breaking js-yaml
+  major `gray-matter` doesn't support (consistent with prior dismissal #74). The
+  ~30 security `overrides` in `pnpm-workspace.yaml` already floor the rest.
+
+## Axis 3 — acquisition control (the New Dependency Gate)
+
+The cheapest moment to stop a bad package is when it *enters* the project.
+`scripts/sbom/check-new-dependencies.mjs` (`pnpm check:new-deps`, CI job **New
+Dependency Gate**) fails a PR that adds a **direct** dependency not acknowledged
+in `sbom/dependency-allowlist.json`. Acquiring a package is therefore a
+deliberate, recorded decision — not a silent lockfile change.
+
+- **Why direct-only**: you *acquire* a direct dependency on purpose; transitives
+  ride in through it and are covered by Axis 1 (drift) + Axis 2 (OSV). The
+  vetting decision belongs at the direct-dep boundary.
+- **Acknowledging** (`--update-allowlist`) records each package with its
+  workspaces + a `note`. Vet before acknowledging: npm provenance attestation,
+  package age + downloads, maintainer count, license, `pnpm scan:deps` (OSV), and
+  whether an existing dependency already covers it. **The allowlist entry is the
+  vetting record.**
+- Pure Node, network-free → safe as a required PR check.
+
+### Why this shape (WWMD)
+
+The acquisition-hardening program was decided through the founder kernel
+(`principle_decide`, 2026-06-20), not by gut. Four complementary layers were
+scored; the composite ranking set the build order:
+
+1. **New Dependency Gate** — composite 9.39, high confidence (top pulls: *least
+   privilege / deny by default*, *build gate mandatory*, *never adopt an unvetted
+   external tool*). **Shipped** (`check-new-dependencies.mjs`).
+2. **Provenance + postinstall-script audit** — 7.66. **Shipped**
+   (`scripts/sbom/audit-provenance.mjs`, `pnpm audit:provenance`, report-only step
+   in `dependency-scan.yml`). Reports who runs install scripts and who ships SLSA
+   provenance. First run: 43/116 audited packages publish provenance, and **all 6
+   `allowBuilds`-allowlisted packages report `hasInstallScript=false`** at current
+   versions → the install-script allowlist is over-permissive and a candidate to
+   trim (verify node-gyp/binding builds first — `prisma` fetches engines).
+3. **Incident-response runbook** — 5.56. **Shipped**
+   ([docs/runbooks/dependency-compromise.md](../runbooks/dependency-compromise.md)):
+   triage → SBOM exposure → override/pin → rotate secrets → rebuild → verify.
+4. **Manual vetting checklist** — 4.30, ranked **last**: it scored *negative* on
+   "do the work; don't task the operator," so its content is folded INTO the
+   gate's allowlist record rather than shipped as human homework.
+
+## Doctrine: rent vs own, and validate the rent
+
+Governing principle (founder, 2026-06-20): **use what's out there — but harden the
+validation around it.** Reimplementing solved problems is waste and risk; the
+default is to rent (keep external + the controls above). Own a dependency only
+when it clears a narrow bar. Optimization order: **eliminate → dedupe →
+replace-with-native → own → keep** (internalize only at step 4, for a vetted
+minority).
+
+`scripts/sbom/runtime-surface.mjs` (`pnpm surface`) and
+`scripts/sbom/internalization-candidates.mjs` (`pnpm candidates`) read the
+codescape for this. The candidacy ranker scores each direct dep on size,
+transitive self-containment, age/stability and runtime reach, and auto-excludes
+security-sensitive / framework / native / type-only packages. First run: **4 of
+106** direct deps cleared the "own" bar (`nanoid`, `dotenv`, `picomatch`,
+`@fullcalendar/react`) — and even those are marginal — confirming renting is
+correct for ~all of the tree. Owning trades supply-chain risk for **lost SBOM/OSV
+visibility + full patching ownership**, so the per-candidate "own it?" decision
+goes through WWMD (`principle_decide`: `operational_independence` +
+`vendor_lock_in` vs `long_term_maintainability` + `blast_radius`). A standing
+review-list win: `gray-matter` (carrier of our one `js-yaml` finding) is a
+replace candidate that would shed that vuln entirely.
+
+## Hardening the rent: upgrade validation
+
+Renting safely means validating versions as they *change*, not just at acquisition:
+- **Release-age cooldown** (`.github/dependabot.yml` `cooldown`): auto-bumps wait
+  5 days (patch 3 / minor 7 / major 14) so a hijacked release is caught and
+  unpublished before we adopt it.
+- **Upgrade-validation gate** (BI-6D1CADFD): at PR time, validate each *changed*
+  version — release-age, a newly-introduced install script (classic compromise
+  signature), provenance continuity, and OSV-clean target.
+- The daily OSV re-scan keeps watching everything already resolved.
+
+## Schedules
+
+- **Reduction guard** — every PR / push / merge_group (`ci.yml` → `SBOM Divergence Guard`).
+- **New Dependency Gate** — every PR / push / merge_group (`ci.yml` → `New Dependency Gate`).
+- **Platform SBOM** — weekly Mon 07:17 UTC + lockfile change + dispatch (`sbom-platform.yml`).
+- **Vulnerability scan** — daily 06:41 UTC + dep-change PRs + dispatch (`dependency-scan.yml`).
+
+## Judgment layer
+
+The mechanical layer surfaces and gates; it does not *decide* which reductions to
+pursue or which advisories to accept. That judgment is the mandate of the **SBOM
+Management Agent** (`AGT-131`, `prompts/specialist/sbom-management-agent.prompt.md`),
+which should run as a monthly native `ScheduledAgentTask` (the
+`dpf-cognitive-load-migration-scan` precedent), not client cron.
+
+## The customer-install gap (the part still to build)
+
+On **this** GitHub repo the routine runs in GitHub Actions. A customer install on
+local/self-hosted git **has no GitHub Actions** — so to genuinely replace
+Dependabot there, the same engines must run inside the **platform runtime**: a
+scheduled job (inngest / `ScheduledAgentTask`) that regenerates the SBOM, runs the
+OSV scan, and files findings into the assurance ledger / backlog. The pure-Node
+scripts here are written to be that reusable engine (importable, no install). The
+assurance-ledger design already anticipates this — scanners are *adapters* that
+read the BOM (`adapterKey`, e.g. `osv-scanner`) and emit `AssuranceFinding`s.
+
+## Backlog
+
+Under `EP-ASSURANCE-LEDGER`.
+
+Reduction / efficiency:
+- **BI-AEDDBCA1** — monthly SBOM-reduction judgment as a `ScheduledAgentTask` (AGT-131).
+- **BI-6C620C7A** — collapse the TypeScript first-party split (align to `^6`).
+- **BI-568B5848** — `pnpm dedupe` pass (Tier 2).
+
+Security / acquisition (program decided via `principle_decide` 2026-06-20):
+- **New Dependency Gate** (layer #1) — *shipped* (`check-new-dependencies.mjs` + `ci.yml` job + `sbom/dependency-allowlist.json`).
+- **BI-78219FDE** (layer #2) — provenance + postinstall audit *tool shipped*
+  (`audit-provenance.mjs`); BI tracks the follow-ons: trim the over-permissive
+  `allowBuilds` allowlist and feed the signals into the gate.
+- **BI-A8D081C9** (layer #3) — incident-response runbook *shipped*
+  ([docs/runbooks/dependency-compromise.md](../runbooks/dependency-compromise.md)).
+- **Release-age cooldown** — *shipped* (`.github/dependabot.yml` `cooldown`).
+- **BI-6D1CADFD** — upgrade-validation gate (release-age / new-install-script /
+  provenance-continuity / OSV on changed versions at PR time).
+- **BI-96DFDC7D** — run the SBOM + OSV engines inside the platform runtime as an
+  assurance adapter so local/self-hosted installs get automatic scanning without
+  GitHub (the customer-install gap above).

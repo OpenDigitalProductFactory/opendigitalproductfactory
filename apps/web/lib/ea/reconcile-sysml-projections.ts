@@ -16,6 +16,7 @@ import { reconcileMcpAuthorityModel, type McpAuthorityReconcileResult } from "./
 import { reconcileCoworkerAuthority } from "./reconcile-coworker-authority";
 import { reconcileValueStreams } from "./reconcile-value-streams";
 import { reconcileRoutes } from "./reconcile-routes";
+import { reconcileNavigation } from "./reconcile-navigation";
 import { reconcileCodeStructure, type CodeStructureReconcileOpts } from "./reconcile-code-structure";
 import { reconcileProcessModels } from "./reconcile-process";
 import { reconcileSkillToolchain } from "./reconcile-skill-toolchain";
@@ -30,6 +31,9 @@ export interface SysmlProjectionsResult {
   coworkerAuthority: SysmlSeedResult;
   valueStreams: SysmlSeedResult;
   routes: SysmlSeedResult;
+  // Navigation surface — canonical nav model + navigates-to edges into the route
+  // surface, with orphan/teleport conformance findings (EP-NAV-COHERENCE).
+  navigation: SysmlSeedResult;
   codeStructure: SysmlSeedResult;
   processModels: SysmlSeedResult;
   skillToolchain: SysmlSeedResult;
@@ -48,6 +52,7 @@ export async function reconcileSysmlProjections(
   const coworkerAuthority = await reconcileCoworkerAuthority({ db: opts.db });
   const valueStreams = await reconcileValueStreams({ db: opts.db });
   const routes = await reconcileRoutes({ db: opts.db });
+  const navigation = await reconcileNavigation({ db: opts.db });
   const codeStructure = await reconcileCodeStructure({ db: opts.db, ...opts.codeGraph });
   const processModels = await reconcileProcessModels({ db: opts.db });
   const skillToolchain = await reconcileSkillToolchain({ db: opts.db });
@@ -56,7 +61,7 @@ export async function reconcileSysmlProjections(
   const integrations = await reconcileIntegrations({ db: opts.db });
   const scheduledJobs = await reconcileScheduledJobs({ db: opts.db });
   return {
-    mcpAuthority, coworkerAuthority, valueStreams, routes, codeStructure, processModels, skillToolchain,
+    mcpAuthority, coworkerAuthority, valueStreams, routes, navigation, codeStructure, processModels, skillToolchain,
     operationalGraph, networkTopology, integrations, scheduledJobs,
   };
 }
