@@ -56,7 +56,7 @@ async function mapPool(items, limit, fn) {
 }
 
 function main() {
-  const { importers, snapshots, totalExternal } = loadGraph(ROOT);
+  const { importers, snapshots } = loadGraph(ROOT);
   const runtimeBase = new Set([...closureFromKeys(snapshots, collectProdRoots(importers, DEPLOYED_WORKSPACES))].map(baseKey));
 
   // direct deps across all workspaces, deduped by name (prefer a runtime variant)

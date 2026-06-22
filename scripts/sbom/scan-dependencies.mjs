@@ -94,7 +94,7 @@ async function mapPool(items, limit, fn) {
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (i < items.length) {
       const idx = i++;
-      out[idx] = await fn(items[idx], idx);
+      out[idx] = await fn(items[idx]);
     }
   });
   await Promise.all(workers);
