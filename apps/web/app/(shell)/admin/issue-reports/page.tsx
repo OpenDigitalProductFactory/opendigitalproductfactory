@@ -17,12 +17,17 @@ export default async function AdminIssueReportsPage() {
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Admin</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          Runtime evidence feed — {data.total} report{data.total === 1 ? "" : "s"}.
-          Each open report projects to a{" "}
+          Runtime evidence &amp; audit trail — {data.total} report{data.total === 1 ? "" : "s"}.
+          Runtime faults project to a{" "}
           <Link href="/ops" className="text-[var(--dpf-accent)] hover:underline">
             backlog item
           </Link>
-          {" "}with workType=bug immediately on report (a 15-minute sweep is the safety net).
+          {" "}(workType=bug) immediately on report. Self-fix escalations are held for a responder
+          and attended in{" "}
+          <Link href="/ops" className="text-[var(--dpf-accent)] hover:underline">
+            Operations
+          </Link>
+          {" "}— this page is the evidence trail, not a queue to drain.
         </p>
       </div>
 

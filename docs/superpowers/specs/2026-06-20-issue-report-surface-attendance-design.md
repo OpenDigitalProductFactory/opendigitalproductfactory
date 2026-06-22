@@ -2,7 +2,7 @@
 
 | Field | Value |
 | ----- | ----- |
-| Status | Draft - chief architect review applied 2026-06-20; responder WWMD-consult mechanism + unified decision front door (5.7) + trust dial / autopilot maturation (§14, operator doctrine) completed 2026-06-20. Root-cause prevention (planner kernel-lens, BI-C2CB3073) shipped #2195. Receiving loop (BI-0ACD9AB2) is HITL-first per §14. No responder code yet. |
+| Status | Draft - chief architect review applied 2026-06-20; responder WWMD-consult mechanism + unified decision front door (5.7) + trust dial / autopilot maturation (§14, operator doctrine) completed 2026-06-20. Root-cause prevention (planner kernel-lens, BI-C2CB3073) shipped #2195. **Slice 1 (classifier + projection guard) shipped #2265.** **Slice 4 first cut (surface convergence): the Attention lens now surfaces in /ops; /admin/issue-reports reframed as evidence.** Receiving loop (BI-0ACD9AB2) is HITL-first per §14. Responder disposition (Slice 2) next. |
 | Date | 2026-06-20 |
 | Trigger | Operator asked: "what process is working `/admin/issue-reports`, and what progress is made daily?" Live investigation found: no human or agent is actively attending the surface. |
 | Related epic | `EP-INTAKE-UNIFY`, especially BI-EDFBE081, re-scoped here as provenance and routing convergence. This surface is not a redundant backlog queue. |
@@ -246,10 +246,12 @@ This generalizes `do-the-work-dont-task-the-operator`, `decisions-belong-to-thei
 
 ### 6.1 Lenses
 
-1. **Attention** - only reports requiring a responder, human acknowledgement, partner/upstream route, or overdue SLA.
-2. **Runtime Faults** - crash/runtime evidence with linked backlog item and occurrence count.
-3. **Digests** - suppressed/aggregated warmup and log-signature noise, with spike history.
-4. **All Evidence** - searchable audit list for admins.
+**Surface convergence (operator directive 2026-06-21):** the **Attention** lens lives in `/ops` — the ONE operator surface — not as a tab inside `/admin/issue-reports`. The operator must not maintain a second queue; escalations needing a human surface where work already happens. `/admin/issue-reports` keeps the **evidence** lenses (Runtime Faults / Digests / All Evidence) and becomes an audit trail, not an operator queue.
+
+1. **Attention** (in `/ops`) - only reports requiring a responder, human acknowledgement, partner/upstream route, or overdue SLA.
+2. **Runtime Faults** (in `/admin/issue-reports`) - crash/runtime evidence with linked backlog item and occurrence count.
+3. **Digests** (in `/admin/issue-reports`) - suppressed/aggregated warmup and log-signature noise, with spike history.
+4. **All Evidence** (in `/admin/issue-reports`) - searchable audit list for admins.
 
 ### 6.2 Escalation Card
 
@@ -335,10 +337,11 @@ Refactor budget: shared classifier + shared status helpers replace local if/else
 - Use trace context across PIR, responder task, ToolExecution, BuildActivity, and backlog evidence.
 - Digest decision packets and outcome artifacts instead of storing raw prompts in receipts.
 
-### Slice 4 - UI Attention Lens
+### Slice 4 - UI Attention Lens (surface convergence)
 
-- Rework `/admin/issue-reports` into Attention, Runtime Faults, Digests, and All Evidence lenses.
-- Add escalation cards with SLA age, responder status, self-fix class, evidence links, and safe action set.
+- Surface the **Attention** lens in `/ops` (the one operator surface), NOT as a new tab in `/admin`. **Shipped (first cut):** an escalation attention section on `/ops` (`getOpenEscalations` + `EscalationsAttention`) listing active `awaiting_escalation_ack` / open self-fix escalations with self-fix class, severity, age, and a `/build` deep-link; read + deep-link only — the WWMD-consult disposition + safe-action set layer on top with Slice 2.
+- Reframe `/admin/issue-reports` as the evidence/audit trail (Runtime Faults / Digests / All Evidence) — no longer an operator queue.
+- Add escalation cards with SLA age, responder status, self-fix class, evidence links, and safe action set (with Slice 2's responder).
 - Keep Delivery/Build lifecycle as the destination for build-specific progress.
 - Verify desktop and mobile with browser screenshots.
 
