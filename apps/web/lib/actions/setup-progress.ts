@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@dpf/db";
+import { prisma, projectArchetypeSupply } from "@dpf/db";
 import { SETUP_STEPS, type SetupStep, type StepStatus, type SetupContext } from "./setup-constants";
 import { seedOrgWwwdCorpus } from "@/lib/onboarding/seed-org-wwwd-corpus";
 import { seedPortfolioDecomposition } from "@/lib/onboarding/seed-portfolio-decomposition";
@@ -34,6 +34,7 @@ async function finalizeSetupCompletion(organizationId: string | null): Promise<v
     await seedOrgWwwdCorpus({ organizationId: orgId });
     await seedPortfolioDecomposition({ organizationId: orgId });
     await seedMarketOffer({ organizationId: orgId });
+    await projectArchetypeSupply({ organizationId: orgId });
     await seedRiskPosture({ organizationId: orgId });
     // P1: project the seeded posture onto the org WWWD profile's autonomy policy
     // (runs after the profile exists + the posture is set; balanced = no change).
