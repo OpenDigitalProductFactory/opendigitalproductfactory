@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveBacklogTarget, buildBacklogItemData, severityToPriority, isDuplicate } from "./process-observer-triage";
+import { resolveBacklogTarget, buildBacklogItemData, severityToPriority, isDuplicate, escalatePriorityForOccurrences } from "./process-observer-triage";
 import type { ObservationFinding } from "./process-observer";
 
 const finding: ObservationFinding = {
@@ -13,6 +13,30 @@ describe("severityToPriority", () => {
   it("maps high to 2", () => expect(severityToPriority("high")).toBe(2));
   it("maps medium to 3", () => expect(severityToPriority("medium")).toBe(3));
   it("maps low to 4", () => expect(severityToPriority("low")).toBe(4));
+});
+
+describe("escalatePriorityForOccurrences", () => {
+  it("keeps a one-off at its base priority", () => {
+    expect(escalatePriorityForOccurrences(4, 1)).toBe(4);
+    expect(escalatePriorityForOccurrences(4, 2)).toBe(4);
+  });
+  it("climbs toward 1 as the tally grows", () => {
+    expect(escalatePriorityForOccurrences(4, 3)).toBe(3);
+    expect(escalatePriorityForOccurrences(4, 8)).toBe(2);
+    expect(escalatePriorityForOccurrences(4, 20)).toBe(1);
+  });
+  it("never lowers urgency below the existing severity-based priority", () => {
+    expect(escalatePriorityForOccurrences(1, 50)).toBe(1); // critical stays 1
+    expect(escalatePriorityForOccurrences(2, 1)).toBe(2); // high never drops to 4 on a one-off
+  });
+  it("defaults a null/zero base to lowest (4), then escalates from the tally", () => {
+    expect(escalatePriorityForOccurrences(null, 1)).toBe(4);
+    expect(escalatePriorityForOccurrences(undefined, 8)).toBe(2);
+    expect(escalatePriorityForOccurrences(0, 20)).toBe(1);
+  });
+  it("clamps to >=1 for very high tallies", () => {
+    expect(escalatePriorityForOccurrences(4, 1000)).toBe(1);
+  });
 });
 
 describe("resolveBacklogTarget", () => {
