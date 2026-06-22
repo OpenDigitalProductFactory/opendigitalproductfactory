@@ -102,3 +102,22 @@ Live review of three issues: (1) "some models show 4 relationships between 2 ent
 **Filed as siblings (NOT in this PR):** root-cause data fix **BI-8C121D30** (dedup the 107 rows + unique constraint + projection upsert — guard-gated steward migration) and large-view perf **BI-7060F7C5** (run ELK in a Web Worker for 300–619-node views so layout doesn't block the main thread).
 
 Tests: 39 adapter (incl. 6 dedupe) + 40 component/graph (190 total) pass; web typecheck clean. No new dependency.
+
+---
+
+## Addendum — 2026-06-22: EA relationship DATA dedup + unique constraint + upsert projections (BI-8C121D30)
+
+Root-cause fix paired with the render-side BI-F1B5C04B above — removes the duplicate rows at the data layer and makes them structurally impossible, so the canvas no longer has to defend against them.
+
+**Cause:** `EaRelationship` had only a PK on `id` — no unique on `(fromElementId, toElementId, relationshipTypeId)` — and the projection/import extractors created edges with plain `create` (one was a racy find-then-create), so duplicates accumulated on every reconcile.
+
+**Shipped (BI-8C121D30):**
+- **Migration `20260622020000_ea_relationship_dedup_unique`** (runs at deploy via `prisma migrate deploy` in `promote.sh`): delete self-loops (`from === to` — projection noise, dropped by the canvas anyway) → collapse duplicate `(from,to,type)` groups keeping the **oldest** row → `CREATE UNIQUE INDEX`. Validated against the live DB in a rolled-back transaction: removes **44 self-loops + 84 duplicate rows**, leaving **0 duplicate groups** so the index creates cleanly. Count-agnostic — cleans whatever exists at deploy time.
+- **schema:** `@@unique([fromElementId, toElementId, relationshipTypeId], map: "EaRelationship_triple_key")` → gives the Prisma client the compound key for upserts.
+- **All five `EaRelationship` create sites → idempotent `upsert`** on the natural key (so the new constraint never throws a raw P2002): `reconcile-mcp-authority.ts` (replaces the racy find-then-create), `data-model-mirror-apply.ts`, the `createEaRelationship` UI action, the `create_ea_relationship` MCP tool, and the ArchiMate import. The three bulk/derived sources also **skip self-loops** at the source.
+
+**Why upsert not find-or-create:** atomic — the prior find-then-create raced under concurrent reconciles, which is part of why duplicates appeared even though one extractor "checked first".
+
+Tests: 190 EA tests (reconcile + mirror idempotency now assert `upsert`, idempotent by construction); full `apps/web` typecheck clean; Prisma client regenerated. No new dependency.
+
+**Remaining sibling:** large-view perf **BI-7060F7C5** (ELK in a Web Worker) — the large-model freeze (operator issue ①).
