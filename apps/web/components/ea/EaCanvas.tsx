@@ -15,6 +15,7 @@ import {
   placeIncremental,
   computeContainmentLayout,
   pickAutoAlgorithm,
+  dedupeRenderEdges,
   EA_LAYOUT_ALGORITHMS,
   EA_LAYOUT_LABELS,
   type EaLayoutAlgorithm,
@@ -109,11 +110,19 @@ function buildLayoutEdges(
       cur = parent;
     }
   };
+  // Collapse parallel + bidirectional edges to ONE structural edge per unordered top-ancestor
+  // pair. Duplicate/bidirectional relationships otherwise make ELK "see" a much denser graph
+  // than exists and pull nodes together (BI-F1B5C04B).
   const out: EaLayoutEdge[] = [];
+  const seen = new Set<string>();
   for (const e of visibleEdges) {
     const source = topAncestor(e.fromViewElementId);
     const target = topAncestor(e.toViewElementId);
-    if (source && target && source !== target) out.push({ source, target });
+    if (!source || !target || source === target) continue;
+    const key = source < target ? `${source} ${target}` : `${target} ${source}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ source, target });
   }
   return out;
 }
@@ -299,16 +308,34 @@ function buildStructuredProjection(elements: SerializedViewElement[]): {
 }
 
 function buildEdges(edges: SerializedEdge[], onDelete: (id: string) => void, edgeVariant: EdgeVariant): Edge[] {
-  return edges.map((e) => ({
-    id: e.id,
-    // IMPORTANT: use viewElementId (EaViewElement.id), not elementId (EaElement.id).
-    // React Flow node IDs are set to viewElementId in buildNodes.
-    source: e.fromViewElementId,
-    target: e.toViewElementId,
-    type: "eaRelationship",
-    markerEnd: { type: MarkerType.ArrowClosed, color: "var(--dpf-accent)" },
-    data: { relationshipType: e.relationshipType, onDelete: () => onDelete(e.id), edgeVariant },
-  }));
+  const byId = new Map(edges.map((e) => [e.id, e]));
+  const arrow = { type: MarkerType.ArrowClosed, color: "var(--dpf-accent)" };
+  // Dedup parallel/exact-duplicate relationships and merge bidirectional pairs into a single
+  // double-headed edge; self-loops are dropped (BI-F1B5C04B). IMPORTANT: source/target are
+  // viewElementId (EaViewElement.id) — React Flow node IDs are set to viewElementId in buildNodes.
+  return dedupeRenderEdges(
+    edges.map((e) => ({ id: e.id, from: e.fromViewElementId, to: e.toViewElementId, typeSlug: e.relationshipType.slug })),
+  ).map((d) => {
+    const rep = byId.get(d.id)!;
+    return {
+      id: d.id,
+      source: d.source,
+      target: d.target,
+      type: "eaRelationship",
+      markerEnd: arrow,
+      // Bidirectional A↔B → arrowheads on both ends instead of two stacked lines.
+      ...(d.bidirectional ? { markerStart: arrow } : {}),
+      data: {
+        relationshipType: rep.relationshipType,
+        // Delete removes only the representative row; the data-layer dedup (BI-8C121D30) clears
+        // the redundant duplicates that this rendered edge also stands for.
+        onDelete: () => onDelete(d.id),
+        edgeVariant,
+        bidirectional: d.bidirectional,
+        mergedCount: d.mergedIds.length,
+      },
+    };
+  });
 }
 
 // Containment (nested) view: derive the Package⊃Part hierarchy from "contains" edges, lay it
