@@ -55,6 +55,33 @@ test("hooks.json is valid JSON with a PreToolUse block", () => {
   assert.ok(Array.isArray(cfg?.hooks?.PreToolUse), "expected hooks.PreToolUse array in plugin hooks.json");
 });
 
+test("hooks.json wires the WorktreeCreate hook and worktree-create.mjs exists (BI-6B02FEE5)", () => {
+  const cfg = loadHooksJson();
+  const wt = cfg?.hooks?.WorktreeCreate ?? [];
+  assert.ok(Array.isArray(wt) && wt.length > 0, "expected a WorktreeCreate event in plugin hooks.json");
+  const cmds = [];
+  for (const entry of wt) for (const h of entry?.hooks ?? []) if (typeof h?.command === "string") cmds.push(h.command);
+  assert.ok(cmds.some((c) => c.includes("worktree-create.mjs")), "WorktreeCreate must run worktree-create.mjs");
+  assert.ok(
+    cmds.every((c) => !c.includes("CLAUDE_PROJECT_DIR")),
+    "WorktreeCreate command must reference the script via ${CLAUDE_PLUGIN_ROOT}, not a repo path",
+  );
+  assert.ok(
+    existsSync(join(here, "worktree-create.mjs")),
+    "worktree-create.mjs referenced by hooks.json is missing from packages/dpf-skill-pack/hooks/",
+  );
+});
+
+test("repo .claude/settings.json does NOT also define WorktreeCreate (anti double-create)", () => {
+  const settingsPath = join(here, "..", "..", "..", ".claude", "settings.json");
+  if (!existsSync(settingsPath)) return; // standalone plugin install
+  const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+  assert.ok(
+    !Array.isArray(settings?.hooks?.WorktreeCreate),
+    "WorktreeCreate is defined in BOTH the plugin and .claude/settings.json — both fire, creating two worktrees. Keep it only in the plugin.",
+  );
+});
+
 for (const script of GUARD_SCRIPTS) {
   test(`plugin hooks.json wires ${script} and the script exists on disk`, () => {
     const commands = preToolUseCommands(loadHooksJson());
