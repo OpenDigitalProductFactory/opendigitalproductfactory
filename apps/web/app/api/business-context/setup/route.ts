@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma, type Prisma } from "@dpf/db";
 import { parseOrgAddress, sanitizeOrgAddressInput, serializeOrgAddress } from "@/lib/shared/org-address";
+import { isRiskPosture } from "@/lib/govern/risk-posture";
+import { applyRiskEnvelopeToOrgProfile } from "@/lib/onboarding/apply-risk-envelope-to-profile";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -23,6 +25,7 @@ export async function POST(req: NextRequest) {
     employsIn,
     dataResidency,
     handlesCardPayments,
+    riskPosture,
     address,
   } = (await req.json()) as {
     description?: string;
@@ -38,6 +41,7 @@ export async function POST(req: NextRequest) {
     employsIn?: string[];
     dataResidency?: string[];
     handlesCardPayments?: boolean;
+    riskPosture?: string;
     address?: unknown;
   };
 
@@ -63,6 +67,19 @@ export async function POST(req: NextRequest) {
         complianceScopeCapturedAt: new Date(),
       }
     : {};
+
+  // Risk posture: the form sends it only when the operator actually chose one
+  // (an untouched industry-derived default is left for setup completion to seed),
+  // so a present + valid value is an explicit operator choice. Reject unknown
+  // values rather than poisoning the typed knob (EP-ONBOARDING-INTAKE P0).
+  const riskPostureUpdate =
+    riskPosture !== undefined && isRiskPosture(riskPosture)
+      ? {
+          riskPosture,
+          riskPostureSource: "operator",
+          riskPostureCapturedAt: new Date(),
+        }
+      : {};
 
   const org = await prisma.organization.findFirst({ select: { id: true, address: true } });
   if (!org) {
@@ -104,6 +121,7 @@ export async function POST(req: NextRequest) {
       customerSegments: [],
       ...(addressStateCode ? { stateCode: addressStateCode } : {}),
       ...complianceScope,
+      ...riskPostureUpdate,
     },
     update: {
       ...(description !== undefined && { description }),
@@ -114,8 +132,15 @@ export async function POST(req: NextRequest) {
       ...(revenueModel !== undefined && { revenueModel }),
       ...(addressStateCode ? { stateCode: addressStateCode } : {}),
       ...complianceScope,
+      ...riskPostureUpdate,
     },
   });
+
+  // When the operator changes the posture, keep the org WWWD profile's autonomy
+  // policy in sync (P1). Fail-open inside the helper; balanced = no change.
+  if (Object.keys(riskPostureUpdate).length > 0) {
+    await applyRiskEnvelopeToOrgProfile({ organizationId: org.id });
+  }
 
   return NextResponse.json({ success: true, id: businessContext.id });
 }

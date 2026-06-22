@@ -292,14 +292,14 @@ Each phase is independently shippable and maps to a BI under `EP-ONBOARDING-INTA
 
 | Phase | Title | Scope | Extends |
 |-------|-------|-------|---------|
-| **P0** | **Risk posture home + industry default** | `BusinessContext.riskPosture` (+source/capturedAt) migration; `resolveRiskEnvelope()`; industry-default derivation; seed at `finalizeSetupCompletion()`; one plain choice in step 4 pre-set to the derived default. *No consumers wired yet — inert, observable.* | — |
-| **P1** | **Risk envelope → consumers** | Wire the envelope into trust-dial initial position, `AgentGovernanceProfile` seed defaults, self-upgrade window width, capability auto-activate threshold, outbound strictness, edge-deploy default. | autopilot trust dial |
+| **P0 ✅ shipped** | **Risk posture home + industry default** | `BusinessContext.riskPosture` (+source/capturedAt) migration; `resolveRiskEnvelope()`; industry-default derivation; seed at `finalizeSetupCompletion()`; one plain choice in step 4 pre-set to the derived default. Inert. | — |
+| **P1 ◑ keystone shipped** | **Risk envelope → autonomy gate** | **Keystone (done):** `riskEnvelopeToAutonomyPolicy()` → the org WWWD profile's `autonomyPolicy` (the live decision-perspective evaluator gate); balanced = today's seed default exactly. **P1.2 (BI-E93A3437):** self-upgrade window width, capability auto-activate, edge-deploy default, AgentGovernanceProfile seed default (each balanced=no-change). **Deferred:** outbound-send strictness (hard kernel principle — needs an org-override design, not wired). | autopilot trust dial |
 | **P2** | **Trust & safety panel** | In-context panel at sensitive capture; disposition/sovereignty-backed per-field; disk-encryption capture → CADA input; live CADA-level readout. | `sovereignty-assessment` / CADA |
 | **P3** | **Accounting lane onboarding wiring** | Optional "Connect your books" step; readiness-descriptor surface; confirm-gated pre-fill of legal name/tax/bank-metadata/roster-counts; stage-not-import. | `EP-SBO` (QuickBooks anchor) |
 | **P4** | **Document lane** | Formation/EIN/return/roster-CSV/statement upload → parse → map → confirm → fan out. Wire bulk-roster import (BI-INT-F23BC6). | file-parsers; bulk-import spec |
 | **P5** | **Intake orchestration + conversational accelerator** | Formalise the Derive→Ingest→Confirm→Ask spine as a unified intake controller; optional COO conversational lane over the same confirm gate. | setup-unification |
 
-**P0 is the recommended first "go"** — smallest self-contained slice that fills the biggest gap, ships inert (dark) so it's safe, and unblocks every other phase.
+**Status:** P0 + P1 keystone (the autonomy-gate wiring) shipped. Plans: [`…risk-posture-p0.md`](plans/2026-06-20-onboarding-risk-posture-p0.md), [`…risk-posture-p1.md`](plans/2026-06-20-onboarding-risk-posture-p1.md). P1.2 (operational knobs, BI-E93A3437) and the deferred outbound-strictness work are filed follow-ons.
 
 ---
 
