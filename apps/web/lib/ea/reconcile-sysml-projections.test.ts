@@ -25,6 +25,7 @@ describe("reconcileSysmlProjections", () => {
     expect(r.coworkerAuthority.status).toBe("skipped");
     expect(r.valueStreams.status).toBe("skipped");
     expect(r.routes.status).toBe("skipped");
+    expect(r.navigation.status).toBe("skipped"); // notation null -> applySysmlModel skips
     expect(r.codeStructure.status).toBe("skipped");
     expect(r.processModels.status).toBe("skipped");
     expect(r.skillToolchain.status).toBe("skipped"); // no SkillDefinition rows → skipped before notation
@@ -32,10 +33,10 @@ describe("reconcileSysmlProjections", () => {
     expect(r.networkTopology.status).toBe("skipped"); // no EdgeNode/InventoryEntity rows
     expect(r.integrations.status).toBe("skipped"); // no IntegrationCredential rows
     expect(r.scheduledJobs.status).toBe("skipped"); // notation null -> applySysmlModel skips
-    // mcp + coworker + routes (sysml2) + process (bpmn20) + scheduling (sysml2) are
-    // notation-backed; value-streams checks the reference model first;
-    // code-structure checks graph freshness first.
-    expect(db.eaNotation.findUnique).toHaveBeenCalledTimes(5);
+    // mcp + coworker + routes + navigation + process + scheduling are notation-backed
+    // (all sysml2 except process=bpmn20); value-streams checks the reference model
+    // first; code-structure checks graph freshness first.
+    expect(db.eaNotation.findUnique).toHaveBeenCalledTimes(6);
     expect(db.eaReferenceModel.findUnique).toHaveBeenCalledTimes(1);
     expect(getFreshness).toHaveBeenCalledTimes(1);
   });

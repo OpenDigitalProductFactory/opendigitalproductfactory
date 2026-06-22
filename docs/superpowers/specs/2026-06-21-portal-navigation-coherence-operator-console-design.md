@@ -201,3 +201,11 @@ Resolves the worst symptom of both named complaints, low-risk and CI-gated:
 - **Big-bang console merge.** Mitigated by phasing: keystone is additive (breadcrumb) + subtractive (teleport tab) + a tab relabel; the console merge is its own reviewed PR (P1).
 - **Breadcrumb on unmodeled detail routes.** Mitigated by graceful URL-segment fallback.
 - **Mode default surprises operators.** Mitigated by defaulting superusers/operators to the full console; worker mode only auto-applies to non-operator roles with an active archetype.
+
+## Implementation log
+
+- **P0 keystone (BI-8866F144)** — merged via PR #2234 (squash `d24c40bfb`): global `ShellBreadcrumb`, removed the Platform→Admin teleport from `PLATFORM_FAMILIES`, grouped `OpsTabNav` (Delivery vs Runtime & Releases).
+- **P6 navigation SysML surface (BI-E71E7FA5)** — WWMD/`principle_decide` ranked it the next track (composite 2.62, margin 1.24, high confidence — Architecture Over Shortcuts + Never Assume—Verify favour establishing the governed surface before more UX surgery). v1 landed:
+  - `apps/web/lib/ea/navigation-extract.ts` — pure `buildNavigationModel` projecting the canonical nav model as a `Navigation` SysML package (one `part_definition` surface per domain, a `part_usage` per entry) with cross-layer `traces` (navigates-to) edges into the route surface (`route:<path>`), plus `toNavEntries`/`buildDomainResolver` normalization. Emits conformance findings `route-not-in-canonical-nav` (orphan) and `nav-entry-crosses-domain` (teleport).
+  - `apps/web/lib/ea/reconcile-navigation.ts` — thin IO shell (canonical model + committed route manifest → desired model → shared seeder), wired into `reconcile-sysml-projections.ts` after `reconcileRoutes` so the `traces` edges resolve same-pass; labelled in `architecture-parity-steward.ts`.
+  - **Scope note:** v1 source is the canonical model only; the per-domain nav components (`finance-nav`, `ComplianceTabNav`, `EaTabNav`, …) are the parallel taxonomies P3 converges, so their routes surface as `route-not-in-canonical-nav` findings — the convergence backlog made into live, drift-proof graph facts. The teleport guard is in place but fires only once non-canonical sources are added (the canonical model is teleport-free by construction).
