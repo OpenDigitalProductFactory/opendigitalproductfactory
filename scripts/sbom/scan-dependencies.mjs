@@ -172,7 +172,9 @@ function renderMarkdown({ findings, counts, generatedAt, scanned, gitRef, accept
   for (const f of findings) {
     const ids = [...f.cve, ...f.ghsa].join(" ");
     const fixed = f.fixedVersions.length ? f.fixedVersions.join(", ") : "—";
-    const summary = (f.summary || "").replace(/\|/g, "\\|").slice(0, 90);
+    // Escape backslashes BEFORE pipes (else a trailing "\" escapes the table
+    // delimiter), and collapse newlines so an OSV summary can't break the row.
+    const summary = (f.summary || "").replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ").slice(0, 90);
     L.push(`| ${f.severity} | \`${f.name}\` | ${f.version} | ${fixed} | ${ids} | ${summary} |`);
   }
   L.push("");
