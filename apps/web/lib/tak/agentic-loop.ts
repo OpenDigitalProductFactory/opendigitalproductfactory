@@ -34,6 +34,7 @@ import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store"
 import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 import { assessToolSurface, computeToolSelectionAccuracy } from "./context-economy-metrics";
+import { summarizeDroppedMessages } from "./compaction-digest";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern
@@ -900,9 +901,23 @@ function compactAgenticMessages(messages: ChatMessage[], maxContextTokens?: numb
     toolCap: MAX_TOOL_RESULT_CHARS,
     textCap: MAX_TEXT_MESSAGE_CHARS,
   });
-  const scopedMessages = messages.length <= caps.maxHistory
-    ? messages
-    : [messages[0]!, ...messages.slice(-(caps.maxHistory - 1))];
+  let scopedMessages: ChatMessage[];
+  if (messages.length <= caps.maxHistory) {
+    scopedMessages = messages;
+  } else {
+    // R9a (P11): the middle of a long turn is dropped entirely. Before
+    // discarding it, distill its TOOL ACTIVITY into a one-line digest — zero
+    // inference, because the local-first single-GPU path can't afford a
+    // summarization call — and re-insert it right after message[0] so "what was
+    // already tried / what failed" survives compaction instead of being silently
+    // lost (which lets the model repeat completed work or re-hit a known fail).
+    const dropped = messages.slice(1, messages.length - (caps.maxHistory - 1));
+    const digest = summarizeDroppedMessages(dropped);
+    const tail = messages.slice(-(caps.maxHistory - 1));
+    scopedMessages = digest
+      ? [messages[0]!, { role: "assistant" as const, content: `[System notice] ${digest}` }, ...tail]
+      : [messages[0]!, ...tail];
+  }
 
   const retainedToolCallIds = new Set(
     scopedMessages.flatMap((message) =>
