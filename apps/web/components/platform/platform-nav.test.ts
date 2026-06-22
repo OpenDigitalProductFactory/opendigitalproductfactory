@@ -17,9 +17,9 @@ describe("platform-nav", () => {
 
   it("does not expose a cross-domain Core Admin teleport tab (EP-NAV-COHERENCE)", () => {
     // Admin is reached from the persistent rail, not a platform secondary-nav tab
-    // that swaps the whole context with no way back. No family may point outside
-    // the platform route tree.
-    expect(PLATFORM_FAMILIES.some((family) => family.key === "admin")).toBe(false);
+    // that swaps the whole context with no way back. The "Core Admin" tab must be
+    // gone and no family may point outside the platform route tree.
+    expect(PLATFORM_FAMILIES.map((family) => family.label)).not.toContain("Core Admin");
     expect(
       PLATFORM_FAMILIES.every((family) => family.href.startsWith("/platform")),
     ).toBe(true);
