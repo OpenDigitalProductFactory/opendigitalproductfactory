@@ -126,4 +126,23 @@ describe("OpsClient", () => {
     expect(html).not.toContain("Hidden deferred child");
     expect(html).toContain("2 completed items hidden");
   });
+
+  it("renders a Portfolio facet listing each portfolio when portfolios exist", () => {
+    const html = renderToStaticMarkup(
+      <OpsClient
+        items={[]}
+        digitalProducts={[]}
+        taxonomyNodes={[]}
+        epics={[]}
+        portfolios={[
+          { id: "p1", slug: "alpha", name: "Alpha Portfolio" },
+          { id: "p2", slug: "beta", name: "Beta Portfolio" },
+        ]}
+      />,
+    );
+
+    // The portfolio lens (a <select>) offers each portfolio as an option.
+    expect(html).toContain("Alpha Portfolio");
+    expect(html).toContain("Beta Portfolio");
+  });
 });

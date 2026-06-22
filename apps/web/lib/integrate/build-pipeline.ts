@@ -460,7 +460,13 @@ async function stepGenerateCode(
   // the read-edit-write loop in the sandbox. Gated on provider === "opencode"
   // so installs with a frontier CLI/provider keep the existing agentic path.
   const { getBuildStudioConfig } = await import("./build-studio-config");
-  const dispatchConfig = await getBuildStudioConfig();
+  const { getModelTier } = await import("@/lib/explore/build-process-matrix");
+  // EP-MODEL-TIER-ROUTING: route this build's codegen to the model tier its
+  // size deserves — local (opencode) for small/medium, the configured robust
+  // (frontier) engine for large/xlarge. Inert unless DPF_BUILD_MODEL_TIER_ROUTING
+  // is enabled; falls back to local when no robust engine is configured.
+  const modelTier = getModelTier(build.kind, processSize);
+  const dispatchConfig = await getBuildStudioConfig({ modelTier });
   if (dispatchConfig.provider === "opencode") {
     const { dispatchOpencodeTask } = await import("./opencode-dispatch");
     const ocTask: import("./task-dependency-graph").AssignedTask = {

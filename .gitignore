@@ -77,6 +77,21 @@ docs/prompts/
 # reflect the runtime container.
 services/adp/pnpm-lock.yaml
 
+# Generated platform SBOM artifacts (scripts/sbom/generate-platform-sbom.mjs).
+# The full CycloneDX document + analysis reports regenerate from pnpm-lock.yaml
+# on every dependency change, so they are uploaded as CI artifacts rather than
+# committed. Only sbom/baseline.json (the drift anchor) and sbom/README.md are
+# tracked. See docs/architecture/dependency-reduction-routine.md.
+/sbom/dpf-platform-sbom.cdx.json
+/sbom/*-analysis.json
+/sbom/*-analysis.md
+/sbom/dependency-scan.json
+/sbom/dependency-scan.md
+/sbom/provenance-audit.json
+/sbom/provenance-audit.md
+/sbom/internalization-candidates.json
+/sbom/internalization-candidates.md
+
 # Python bytecode caches
 __pycache__/
 *.pyc

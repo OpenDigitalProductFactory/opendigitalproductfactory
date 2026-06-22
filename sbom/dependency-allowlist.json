@@ -1,0 +1,1192 @@
+{
+  "note": "Acknowledged DIRECT dependencies. The New Dependency Gate (scripts/sbom/check-new-dependencies.mjs) fails a PR that adds a direct dependency not listed here, so every acquired package is a deliberate, recorded decision. Add an entry ONLY after vetting: npm provenance attestation, package age + downloads, maintainer count, license, `pnpm scan:deps` (OSV), and whether an existing dep already covers it — record the outcome in `note`. See docs/architecture/dependency-reduction-routine.md.",
+  "dependencies": {
+    "@axe-core/playwright": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@dpf/api-client": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@dpf/db": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "packages/types"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@dpf/finance-templates": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@dpf/integration-shared": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "services/adp"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@dpf/storefront-templates": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "packages/db"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@dpf/types": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile",
+        "apps/web",
+        "packages/api-client"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@dpf/validators": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile",
+        "apps/web",
+        "packages/api-client",
+        "services/edge-node"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@expo/metro-runtime": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@expo/vector-icons": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@floating-ui/react": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@fullcalendar/core": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@fullcalendar/daygrid": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@fullcalendar/interaction": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@fullcalendar/react": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@fullcalendar/timegrid": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@mermaid-js/mermaid-cli": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "."
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@modelcontextprotocol/sdk": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "services/adp"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@opentelemetry/api": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@playwright/test": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "."
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@prisma/adapter-pg": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "packages/db"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@prisma/client": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "packages/db"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@react-pdf/renderer": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@ricky0123/vad-web": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@stoplight/prism-cli": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "services/integration-test-harness"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@stoplight/prism-http": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "services/integration-test-harness"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@tailwindcss/postcss": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@testing-library/jest-dom": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@testing-library/react": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@testing-library/react-native": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@types/dagre": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@types/jest": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@types/net-snmp": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "services/edge-node"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@types/node": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "packages/dpf-bootstrap",
+        "packages/integration-shared",
+        "services/adp",
+        "services/edge-node",
+        "services/integration-test-harness"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@types/nodemailer": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@types/papaparse": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@types/pg": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "packages/db"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@types/picomatch": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "packages/db"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@types/pino": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "services/integration-test-harness"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@types/react": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile",
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@types/react-dom": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@vitejs/plugin-react": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@xyflow/react": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "autoprefixer": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "bcryptjs": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "packages/db"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "dagre": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "docx": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "."
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "dotenv": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "packages/db"
+      ],
+      "kinds": [
+        "dev",
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "elkjs": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "expo": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "expo-camera": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "expo-linking": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "expo-local-authentication": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "expo-location": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "expo-notifications": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "expo-router": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "expo-secure-store": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "expo-sqlite": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "expo-status-bar": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "fast-xml-parser": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "fflate": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "packages/db"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "fuse.js": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "gray-matter": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "i18n-iso-countries": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "packages/db"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "inngest": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "jest": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "jest-expo": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "jose": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "jsdom": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "jsep": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "libphonenumber-js": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "lucide-react": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "mammoth": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "msw": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "nanoid": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "nativewind": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "neo4j-driver": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "packages/db"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "net-snmp": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "packages/db",
+        "services/edge-node"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "next": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "next-auth": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "nodemailer": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "papaparse": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "pdf-parse": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "pg": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "packages/db"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "picomatch": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "packages/db"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "pino": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "services/integration-test-harness"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "postcss": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "postgres": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "services/adp"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "prisma": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "packages/db"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "prom-client": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "services/adp"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "react": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile",
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "react-data-grid": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "react-day-picker": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "react-dom": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "react-force-graph-2d": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "react-markdown": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "react-native": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "react-native-safe-area-context": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "react-native-screens": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "react-native-sse": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "react-test-renderer": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "read-excel-file": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "packages/db"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "recharts": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "sharp": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "smol-toml": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "packages/dpf-bootstrap"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "tailwindcss": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile",
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "tsx": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "packages/db",
+        "packages/dpf-bootstrap",
+        "services/adp",
+        "services/edge-node",
+        "services/integration-test-harness"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "typescript": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile",
+        "apps/web",
+        "packages/api-client",
+        "packages/coworker-sim-harness",
+        "packages/db",
+        "packages/dpf-bootstrap",
+        "packages/finance-templates",
+        "packages/integration-shared",
+        "packages/storefront-templates",
+        "packages/types",
+        "packages/validators",
+        "services/adp",
+        "services/edge-node",
+        "services/integration-test-harness"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "undici": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "packages/db",
+        "services/adp",
+        "services/edge-node"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "vite": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "packages/db"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "vitest": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "packages/coworker-sim-harness",
+        "packages/db",
+        "packages/dpf-bootstrap",
+        "packages/finance-templates",
+        "packages/integration-shared",
+        "packages/storefront-templates",
+        "services/adp",
+        "services/edge-node",
+        "services/integration-test-harness"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "zod": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/web",
+        "packages/validators",
+        "services/adp",
+        "services/edge-node"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "zustand": {
+      "added": "2026-06-21",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    }
+  }
+}

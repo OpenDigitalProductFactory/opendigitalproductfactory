@@ -428,6 +428,35 @@ export function deriveBuildProcessSize(
   return normalizeSize(bi.effortSize ?? null);
 }
 
+// ─── Model tier (EP-MODEL-TIER-ROUTING) ──────────────────────────────────────
+
+/** Which model tier a build deserves. "local" = the on-box model (opencode /
+ *  qwen3-coder); "robust" = a more capable configured engine (cloud Claude/
+ *  Codex, or a larger local model). Endpoint-agnostic — the resolver in
+ *  build-studio-config decides the concrete provider for each tier. */
+export type BuildModelTier = "local" | "robust";
+
+/**
+ * Capability-matched routing: small/medium work stays on the local model; large
+ * and xlarge (incl. decompose-bound) work routes to the robust tier. Pure
+ * function of the right-sizing inputs — the local model reliably clears
+ * small/medium designs + codegen, but its quick designs fail review and its
+ * codegen overflows the VRAM-capped context on large work (observed
+ * 2026-06-21/22), so large+ needs a more capable tier. Type-level refinement
+ * (e.g. a large doc is simpler than a large feature) is a deliberate P2+
+ * follow-up; P1 routes on size, the operator's stated lever.
+ */
+export function getModelTier(
+  type: BuildProcessType | FeatureBuildKind | string | null | undefined,
+  size: BuildProcessSize | string | null | undefined,
+): BuildModelTier {
+  // `type` is accepted for forward-compat (per-cell refinement) but P1 routes
+  // purely on size. normalizeType keeps the signature total + lint-clean.
+  void normalizeType(type);
+  const s = normalizeSize(size);
+  return s === "large" || s === "xlarge" ? "robust" : "local";
+}
+
 // ─── Requirement check primitive ────────────────────────────────────────────
 
 import {

@@ -21,6 +21,7 @@ function projectionResult(overrides: Partial<SysmlProjectionsResult> = {}): Sysm
     coworkerAuthority: healthy,
     valueStreams: healthy,
     routes: healthy,
+    navigation: healthy,
     codeStructure: healthy,
     processModels: healthy,
     skillToolchain: healthy,

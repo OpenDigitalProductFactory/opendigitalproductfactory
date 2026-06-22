@@ -5,6 +5,17 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    # Supply-chain hardening: a release-age "cooldown" so Dependabot does not bump
+    # us into a freshly-published version. Hijacked/compromised releases (the now-
+    # daily npm attack) are typically caught and unpublished within hours-to-days;
+    # waiting lets the ecosystem absorb that hit before we adopt. Majors wait
+    # longest (also dampens churn). The OSV scan + New Dependency Gate still apply
+    # on top. See docs/architecture/dependency-reduction-routine.md.
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
     labels:
       - "dependencies"
       - "javascript"
