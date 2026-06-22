@@ -16,6 +16,7 @@ import { seedEaSysml2 } from "./seed-ea-sysml2.js";
 import { seedEaSysmlAiCockpit } from "./seed-ea-sysml-ai-cockpit.js";
 import { seedEaSysmlAgentAuthority } from "./seed-ea-sysml-agent-authority.js";
 import { seedEaSysmlDataAuthority } from "./seed-ea-sysml-data-authority.js";
+import { projectPlatformCapabilities } from "./portfolio-sources/project-portfolio-source.js";
 import {
   seedViewpointsForNotation,
   ARCHIMATE_VIEWPOINTS,
@@ -2347,6 +2348,7 @@ async function main(): Promise<void> {
   await step("eaSysmlAgentAuthority", () => seedEaSysmlAgentAuthority());
   await step("eaSysmlDataAuthority", () => seedEaSysmlDataAuthority());
   await step("dpfSelfRegistration", () => seedDpfSelfRegistration());
+  await step("platformCapabilityPortfolio", () => projectPlatformCapabilities());
   await step("defaultAdminUser", () => seedDefaultAdminUser());
   await step("discoveryTriageScheduledTask", () => ensureDiscoveryTriageScheduledTask(prisma));
   await step("dataModelMirrorScheduledTask", () => ensureDataModelMirrorScheduledTask(prisma));
