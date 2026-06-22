@@ -17,6 +17,7 @@ import { seedEaSysmlAiCockpit } from "./seed-ea-sysml-ai-cockpit.js";
 import { seedEaSysmlAgentAuthority } from "./seed-ea-sysml-agent-authority.js";
 import { seedEaSysmlDataAuthority } from "./seed-ea-sysml-data-authority.js";
 import { projectPlatformCapabilities } from "./portfolio-sources/project-portfolio-source.js";
+import { projectAiProviders, projectIntegrations } from "./portfolio-sources/project-external-supply.js";
 import {
   seedViewpointsForNotation,
   ARCHIMATE_VIEWPOINTS,
@@ -2438,6 +2439,8 @@ async function main(): Promise<void> {
     console.log(`  platform-voice: ${platformVoice.status} (clip-copied=${platformVoice.copiedClip})`);
   });
   await step("syncCapabilities", () => syncCapabilities(prisma));
+  await step("aiProviderPortfolio", () => projectAiProviders());
+  await step("integrationPortfolio", () => projectIntegrations());
   // Invariant asserts — isolated so a violation is surfaced in the summary
   // rather than aborting the whole seed (they run after all seeding).
   await step("assert:activeProvidersHaveClearance", () => assertActiveProvidersHaveClearance());

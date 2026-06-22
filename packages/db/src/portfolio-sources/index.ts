@@ -7,3 +7,5 @@ export * from "./platform-capability-manifest";
 export * from "./project-portfolio-source";
 export * from "./archetype-supply-manifest";
 export * from "./project-archetype-supply";
+export * from "./supported-integrations-manifest";
+export * from "./project-external-supply";
