@@ -121,3 +121,18 @@ Root-cause fix paired with the render-side BI-F1B5C04B above — removes the dup
 Tests: 190 EA tests (reconcile + mirror idempotency now assert `upsert`, idempotent by construction); full `apps/web` typecheck clean; Prisma client regenerated. No new dependency.
 
 **Remaining sibling:** large-view perf **BI-7060F7C5** (ELK in a Web Worker) — the large-model freeze (operator issue ①).
+
+---
+
+## Addendum — 2026-06-22: ELK in a Web Worker for large views (BI-7060F7C5)
+
+Closes operator issue ① ("issues with larger models, processing") — the large live-projection views (Application Routes 619n, Data Model 424n, Network Topology 353n, Code Structure 343n, MCP Tool Authority 312n) ran ELK via `elk.bundled.js`, which executes the GWT layout **synchronously in the calling thread**. On the main thread that froze the UI during auto-layout.
+
+**Shipped (BI-7060F7C5):**
+- New `apps/web/lib/ea/elk.worker.ts` — a module Web Worker that imports `elk.bundled` and runs `elk.layout()` in the **worker thread**. Protocol: main posts `{ id, graph }`, worker replies `{ id, result }` / `{ id, error }` (ELK graphs/results are JSON-able → structured-clone cleanly).
+- `canvas-layout.ts` `elkLayout(graph, nodeCount)` helper routes graphs with **≥ 100 nodes** to a lazily-created singleton worker (`new Worker(new URL("./elk.worker.ts", import.meta.url), { type: "module" })` — the Turbopack-native worker pattern); both `runElk` and `runElkCompound` call it. **In-thread fallback** for SSR, small graphs, worker-load failure, runtime error, or a 60s timeout → so this can only make layout smoother, **never break it** (no regression). The existing `isLayouting` spinner already covers the async wait; the adapter API stayed async, so `EaCanvas` is unchanged.
+- **Risk posture:** no prior Web Worker precedent in the app + Turbopack build. The in-thread fallback guarantees no runtime regression, and CI's "Production Build" check gates the Turbopack worker-bundling before merge. Workers don't run under vitest, so the unit suite exercises the fallback path (a new 120-node test locks it in); the off-thread win is verified live on a large view.
+
+Tests: 40 adapter (incl. 120-node large-graph fallback) + component/graph; full `apps/web` typecheck clean. No new dependency (elkjs already shipped; just imported in a worker).
+
+**EA canvas series now complete** across both operator reviews: auto-layout/revisions/incremental (#2151), shape-aware ELK (#2161), containment nesting (#2174), overlap + nested-edge fixes (#2185/#2187), crossing-min + compound nesting (#2207), render-side edge dedup (#2232/BI-F1B5C04B), relationship **data** dedup + unique constraint (#2239/BI-8C121D30), and large-view **Web Worker** perf (BI-7060F7C5).

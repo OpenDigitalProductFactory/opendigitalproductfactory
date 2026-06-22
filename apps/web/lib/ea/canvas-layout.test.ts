@@ -86,6 +86,21 @@ describe("computeEaLayout", () => {
     const es = leaves.map((l) => edge(center, l));
     assertNoOverlap(await computeEaLayout(ns, es, { algorithm: "radial" }));
   });
+
+  it("lays out a large graph (Web Worker threshold) with finite positions for every node", async () => {
+    // n ≥ ELK_WORKER_NODE_THRESHOLD routes ELK through the Web Worker in the browser; under
+    // vitest (no Worker global) it falls back to in-thread ELK. This locks in that fallback —
+    // the no-regression guarantee for BI-7060F7C5 — so large views always lay out.
+    const ids = Array.from({ length: 120 }, (_, i) => `n${i}`);
+    const ns = ids.map((id) => ({ id }));
+    const es = ids.slice(1).map((id, i) => edge(ids[i]!, id)); // 120-node chain (a tree)
+    const result = await computeEaLayout(ns, es, { algorithm: "layered" });
+    expect(Object.keys(result)).toHaveLength(120);
+    for (const pos of Object.values(result)) {
+      expect(Number.isFinite(pos.x)).toBe(true);
+      expect(Number.isFinite(pos.y)).toBe(true);
+    }
+  });
 });
 
 describe("computeMetrics", () => {
