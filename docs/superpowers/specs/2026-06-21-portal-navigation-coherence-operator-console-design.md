@@ -60,7 +60,20 @@ Mapping: complaint 1 → root cause 1 (teleport + no breadcrumb). complaint 2 �
 
 ### Already done (do not redo)
 
-Duplicate *routes* mostly already redirect (Phase 5 partially landed): `/admin/prompts→/platform/ai/prompts`, `/admin/skills→/platform/ai/skills`, `/admin/backlog→/ops`, `/platform/integrations→/platform/tools/catalog`, `/platform/services→/platform/tools/services`, `/admin/business-context→/storefront/settings/business`, `/admin/operating-hours→/storefront/settings/operations`. **The debt is in the nav *models*, not the routes.**
+Duplicate *routes* mostly already redirect (Phase 5 partially landed): `/admin/prompts→/platform/ai/prompts`, `/admin/skills→/platform/ai/skills`, `/admin/backlog→/ops`, `/platform/integrations→/platform/tools/catalog`, `/platform/services→/platform/tools/services`, `/admin/business-context→/storefront/settings/business`, `/admin/operating-hours→/storefront/settings/operations`. The *duplicate-route* debt is mostly retired — but see the route census below: the *coverage* debt is large and new.
+
+### Route census — the canonical model is not canonical for routes (2026-06-21)
+
+A structural cross-reference of every App Router `page.tsx` against the canonical `portal-navigation-model.ts` (`scripts/nav-route-census.mjs`, throwaway analysis):
+
+- **291 page routes** total; **261** under `(shell)`. The canonical model declares only **63 paths** (3 of them legacy-redirect).
+- Classification of all page routes: **61 in the canonical model · 68 dynamic/detail · 37 redirect shims · 125 ORPHANS** (static routes, not in the model, not redirects).
+- **125 `(shell)` orphans** are reachable by URL but invisible to the canonical model — so the new breadcrumb title-cases their labels (no modeled parent chain) and any "derive the rail from one model" work (P3) would miss them. They cluster in the domains that own their own *parallel* nav models: **finance (39)** (whole invoices/bills/banking/reports tree), **platform (22)** (runtime-health, founder-review, edge-nodes, device-catalog, change-lanes, every `tools/integrations/<provider>` page), **admin (14)** (settings, branding, reference-data, diagnostics, backups, hive, … — Admin's entire body is model-invisible), **compliance (14)**, **storefront (6)**, **ea (5)**, **ops (5)**, **customer/marketing (4)**.
+- **Odd singletons:** `/complaints` and `/inventory` are top-level `(shell)` routes with **no nav entry anywhere**. `portfolio/product/[id]` **and** `portfolio/products/[productId]` are **two parallel product-detail trees** — a route-level duplicate.
+- **37 redirect shims, only 3 classified** as `legacy-redirect` in the model (e.g. `/platform/ai/{authority,history,operations,routing}`, `/storefront/{items,sections,units}`, `/workspace/{calendar,my-queue}` are unclassified redirects).
+- The two "dead model entries" the census flagged (`/portfolio`, `/docs`) are **false positives** — both are served by `[[...slug]]` catch-all routes.
+
+**Conclusion:** the model is a hand-curated *subset* (rail + breadcrumb seeds), while the real route taxonomy lives in **N per-domain parallel nav models** (`finance-nav.ts`, `ComplianceTabNav`, `EaTabNav`, …) that never register into it. This is root cause 3 ("divergent taxonomies") seen at the route level — and it is bigger than three taxonomies. P3 must therefore not just reconcile three lists but **bring every real route under one registered model**, and a **route/nav inventory gate** (the 2026-06-05 audit's Phase 0 that `BI-CD6EE9D8` only half-built) must fail CI on any new orphan or unclassified redirect.
 
 ## Root Causes
 
@@ -149,9 +162,10 @@ Wire the existing `audienceModes`: `getShellNavSections` takes a mode; non-opera
 | **P0 keystone** | BI-NAV-KEYSTONE | Global `ShellBreadcrumb` (derived from nav model) + remove "Core Admin" teleport from `PLATFORM_FAMILIES` + refile `OpsTabNav` (Backlog + Improvements only; relabel) | medium |
 | P1 | BI-NAV-CONSOLE | Unify Platform + Admin into one `CONSOLE_FAMILIES` + one layout-injected `ConsoleTabNav`; add "Runtime & Releases" family; retire per-page `AdminTabNav`/`PlatformTabNav` imports | large |
 | P2 | BI-NAV-DEVLOOP | Surface Dev Loop under Build Studio / Build Runtime; finalize Runtime & Releases home for self-upgrade/promotions/changes | medium |
-| P3 | BI-NAV-TAXONOMY | Collapse the 3 taxonomies to one derived model; reconcile Build Studio/Backlog/Admin grouping | medium |
+| P3 | BI-NAV-TAXONOMY | Collapse the 3 taxonomies to one derived model AND register the **125 orphan routes + per-domain nav models** into it (finance/compliance/ea/admin/… stop being parallel); reconcile Build Studio/Backlog/Admin grouping; resolve the odd singletons (`/complaints`, `/inventory`) and the duplicate product-detail trees (`product/[id]` vs `products/[productId]`) | large |
 | P4 | BI-NAV-MODE | Wire worker/operator mode + condensed collapsible rail (uses existing `audienceModes`) | large |
-| P5 | BI-NAV-SECTIONNAV | Layout-level section-nav centralization for the remaining per-page navs (Ops, Employee, EA, Finance); redirect classification + telemetry | medium |
+| P5 | BI-NAV-SECTIONNAV | Layout-level section-nav centralization for the remaining per-page navs (Ops, Employee, EA, Finance); classify the **37 redirect shims** (only 3 are modeled) + telemetry | medium |
+| **P6** | BI-NAV-INVENTORY-GATE | Route/nav **inventory gate** — a CI test enumerating every `(shell)` `page.tsx` and asserting each is in the canonical model OR an allowlisted dynamic detail OR a classified `legacy-redirect`; fails on any new orphan/unclassified redirect (completes the 2026-06-05 audit's Phase 0 that `BI-CD6EE9D8` only half-built). Seed: `scripts/nav-route-census.mjs`. | medium |
 
 ## Keystone (this PR)
 
