@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import routeManifest from "./route-manifest.json";
-import { toNavEntries } from "./navigation-extract";
-import { PORTAL_NAV_ROUTES } from "../navigation/portal-navigation-model";
+import { getAllNavEntries } from "./domain-nav-sources";
 import type { RouteManifestRow } from "./route-extract";
 
 // Inventory gate (EP-NAV-COHERENCE P7, BI-E7D871ED) — the CI face of the navigation
@@ -32,7 +31,7 @@ const KNOWN_NAV_TOPLEVEL = new Set<string>([
 ]);
 
 describe("navigation inventory gate (EP-NAV-COHERENCE P7)", () => {
-  const entries = toNavEntries(PORTAL_NAV_ROUTES);
+  const entries = getAllNavEntries();
 
   // Orphans are computed over PAGE routes only — API route handlers never carry nav.
   const pageRoutes = (manifest.routes ?? [])
@@ -63,5 +62,11 @@ describe("navigation inventory gate (EP-NAV-COHERENCE P7)", () => {
   it("projects a non-empty canonical navigation surface", () => {
     expect(entries.length).toBeGreaterThan(10);
     expect(entries.every((e) => e.path.startsWith("/"))).toBe(true);
+  });
+
+  it("counts Finance section routes as navigable, not orphans (P3 convergence)", () => {
+    for (const p of ["/finance/invoices", "/finance/bills", "/finance/reports", "/finance/banking"]) {
+      expect(orphans, `${p} should be covered by the converged Finance nav source`).not.toContain(p);
+    }
   });
 });
