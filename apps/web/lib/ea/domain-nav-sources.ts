@@ -10,12 +10,14 @@
 // `navigates-to` edges, and leave the orphan set. The orphan count therefore drops to
 // the genuinely-unreachable routes.
 //
-// The pure-data family navs (Finance, Admin) are ingested directly — the two biggest
-// orphan clusters. The .tsx TABS navs (compliance/ea/ops/customer-marketing/employee/
-// storefront) are ingested as their arrays are extracted to pure data modules (P5).
+// Family-style navs are ingested here: Finance + Admin were already pure-data modules;
+// Compliance's array was lifted out of its .tsx into compliance-nav.ts (the P5 step) so
+// it can be ingested too. The remaining .tsx navs (ea/ops/customer-marketing/employee/
+// storefront) follow the same lift-then-register pattern.
 
 import { FINANCE_FAMILIES } from "@/components/finance/finance-nav";
 import { ADMIN_FAMILIES } from "@/components/admin/admin-nav";
+import { COMPLIANCE_FAMILIES } from "@/components/compliance/compliance-nav";
 import { PORTAL_NAV_ROUTES } from "@/lib/navigation/portal-navigation-model";
 import { toNavEntries, buildDomainResolver, type NavSourceEntry } from "./navigation-extract";
 
@@ -54,6 +56,7 @@ function familyNavSource(
 const DOMAIN_NAV_SOURCES: readonly DomainNavSource[] = [
   familyNavSource(FINANCE_FAMILIES, "business", "finance"),
   familyNavSource(ADMIN_FAMILIES, "admin", "admin"),
+  familyNavSource(COMPLIANCE_FAMILIES, "business", "compliance"),
 ];
 
 /** Per-domain nav entries normalized to NavSourceEntry. targetDomain is resolved from
