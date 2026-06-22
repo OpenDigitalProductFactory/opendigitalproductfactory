@@ -51,6 +51,14 @@ function makeClient(seed?: { elements?: Row[]; relationships?: Row[] }) {
       map.set(id, { id, properties: (data.properties ?? {}) as Record<string, unknown> });
       return { id };
     },
+    upsert: async (args: Record<string, unknown>) => {
+      // The apply step only upserts genuinely-new (from,to,type) edges (plan create ops),
+      // so create-semantics is faithful here; the DB unique key enforces real idempotency.
+      const data = (args.create ?? args.data) as Record<string, unknown>;
+      const id = nextId(prefix);
+      map.set(id, { id, properties: (data.properties ?? {}) as Record<string, unknown> });
+      return { id };
+    },
     update: async (args: Record<string, unknown>) => {
       const id = (args.where as { id: string }).id;
       const data = args.data as Record<string, unknown>;

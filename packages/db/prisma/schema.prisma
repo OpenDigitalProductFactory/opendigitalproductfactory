@@ -5970,6 +5970,9 @@ model EaRelationship {
   relationshipType   EaRelationshipType @relation(fields: [relationshipTypeId], references: [id])
   toElement          EaElement          @relation("ToElement", fields: [toElementId], references: [id])
 
+  // One relationship per (from, to, type) — lets projection/import extractors upsert
+  // idempotently instead of accumulating duplicate edges (BI-8C121D30).
+  @@unique([fromElementId, toElementId, relationshipTypeId], map: "EaRelationship_triple_key")
   @@index([fromElementId])
   @@index([toElementId])
   @@index([relationshipTypeId])

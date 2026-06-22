@@ -14909,15 +14909,20 @@ export async function executeTool(
         where: { fromElementTypeId: fromEl.elementTypeId, toElementTypeId: toEl.elementTypeId, relationshipTypeId: rt.id },
       });
       if (!rule) return { success: false, message: `Relationship "${relSlug}" not permitted between these element types`, error: "Rule not permitted", data: { validationResult: "blocked" } };
-      const rel = await prisma.eaRelationship.create({
-        data: {
+      // Upsert on the (from, to, type) natural key so a repeat call is idempotent rather than
+      // hitting the unique constraint. BI-8C121D30.
+      const relProps = (typeof params["properties"] === "object" && params["properties"] !== null) ? params["properties"] as import("@dpf/db").Prisma.InputJsonValue : {};
+      const rel = await prisma.eaRelationship.upsert({
+        where: { fromElementId_toElementId_relationshipTypeId: { fromElementId: String(params["fromElementId"]), toElementId: String(params["toElementId"]), relationshipTypeId: rt.id } },
+        create: {
           fromElementId: String(params["fromElementId"]),
           toElementId: String(params["toElementId"]),
           relationshipTypeId: rt.id,
           notationSlug: "archimate4",
           createdById: userId,
-          properties: (typeof params["properties"] === "object" && params["properties"] !== null) ? params["properties"] as import("@dpf/db").Prisma.InputJsonValue : {},
+          properties: relProps,
         },
+        update: { properties: relProps },
       });
       return { success: true, entityId: rel.id, message: `Created "${relSlug}" relationship`, data: { relationshipId: rel.id, fromElementName: fromEl.name, toElementName: toEl.name, validationResult: "allowed" } };
     }

@@ -50,6 +50,7 @@ export type MirrorPrismaClient = {
   eaRelationship: {
     findMany(args: Record<string, unknown>): Promise<Array<{ id: string; properties: unknown }>>;
     create(args: Record<string, unknown>): Promise<{ id: string }>;
+    upsert(args: Record<string, unknown>): Promise<{ id: string }>;
     update(args: Record<string, unknown>): Promise<unknown>;
   };
   eaViewElement: {
@@ -294,8 +295,13 @@ export async function reconcileDataModelMirror(deps: {
       const fromId = elementIdByKey.get(op.desired.fromSourceKey);
       const toId = elementIdByKey.get(op.desired.toSourceKey);
       if (!fromId || !toId) continue; // endpoint missing (defensive); skip.
-      await prisma.eaRelationship.create({
-        data: { ...relationshipCreateData(ctx, op.desired, fromId, toId), createdById: deps.createdById ?? null },
+      if (fromId === toId) continue; // skip self-loops (projection noise)
+      // Upsert on the (from, to, type) natural key so re-applies don't duplicate edges. BI-8C121D30.
+      const data = { ...relationshipCreateData(ctx, op.desired, fromId, toId), createdById: deps.createdById ?? null };
+      await prisma.eaRelationship.upsert({
+        where: { fromElementId_toElementId_relationshipTypeId: { fromElementId: fromId, toElementId: toId, relationshipTypeId: ctx.relationshipTypeId } },
+        create: data,
+        update: { properties: data.properties },
       });
     } else if (op.kind === "update" || op.kind === "revive") {
       await prisma.eaRelationship.update({

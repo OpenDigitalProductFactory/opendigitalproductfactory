@@ -25,6 +25,7 @@ function makeDb(existing: ExistingEl[] = [], opts: { notation?: boolean; relExis
     eaRelationship: {
       findFirst: vi.fn().mockResolvedValue(opts.relExists ? { id: "rel-1" } : null),
       create: vi.fn().mockResolvedValue({}),
+      upsert: vi.fn().mockResolvedValue({}),
     },
     viewpointDefinition: { findUnique: vi.fn().mockResolvedValue({ id: "vp-1" }) },
     eaView: {
@@ -62,7 +63,10 @@ describe("reconcileMcpAuthorityModel", () => {
     expect(r.updated).toBe(8);
     expect(r.removed).toBe(0);
     expect(db.eaElement.create).not.toHaveBeenCalled();
+    // Relationships always go through upsert on the (from,to,type) key — idempotent by
+    // construction, so a re-run can never create a duplicate edge. BI-8C121D30.
     expect(db.eaRelationship.create).not.toHaveBeenCalled();
+    expect(db.eaRelationship.upsert).toHaveBeenCalled();
     expect(db.eaView.create).not.toHaveBeenCalled();
   });
 

@@ -114,8 +114,11 @@ export async function importArchimateFile(input: ImportInput): Promise<ImportRes
     const toId = createdElementIdMap.get(rel.toArchimateId);
     const rtId = rtMap.get(rel.slug);
     if (!fromId || !toId || !rtId) continue;
-    await prisma.eaRelationship.create({
-      data: {
+    if (fromId === toId) continue; // skip self-loops on import
+    // Upsert on the (from, to, type) natural key so re-imports don't duplicate edges. BI-8C121D30.
+    await prisma.eaRelationship.upsert({
+      where: { fromElementId_toElementId_relationshipTypeId: { fromElementId: fromId, toElementId: toId, relationshipTypeId: rtId } },
+      create: {
         fromElementId: fromId,
         toElementId: toId,
         relationshipTypeId: rtId,
@@ -123,6 +126,7 @@ export async function importArchimateFile(input: ImportInput): Promise<ImportRes
         properties: rel.archimateRelType ? { archimateRelType: rel.archimateRelType } : {},
         createdById: userId,
       },
+      update: rel.archimateRelType ? { properties: { archimateRelType: rel.archimateRelType } } : {},
     });
     relationshipsCreated++;
   }

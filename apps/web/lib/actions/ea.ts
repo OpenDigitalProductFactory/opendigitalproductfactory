@@ -232,8 +232,17 @@ export async function createEaRelationship(
   );
   if (!validation.valid) throw new Error(validation.reason);
 
-  const rel = await prisma.eaRelationship.create({
-    data: {
+  // Upsert on the (from, to, type) natural key: a duplicate create would otherwise hit the
+  // unique constraint and throw; this keeps the action idempotent. BI-8C121D30.
+  const rel = await prisma.eaRelationship.upsert({
+    where: {
+      fromElementId_toElementId_relationshipTypeId: {
+        fromElementId:      input.fromElementId,
+        toElementId:        input.toElementId,
+        relationshipTypeId: input.relationshipTypeId,
+      },
+    },
+    create: {
       fromElementId:      input.fromElementId,
       toElementId:        input.toElementId,
       relationshipTypeId: input.relationshipTypeId,
@@ -241,6 +250,7 @@ export async function createEaRelationship(
       properties:         (input.properties ?? {}) as Prisma.InputJsonValue,
       createdById:        userId,
     },
+    update:               { properties: (input.properties ?? {}) as Prisma.InputJsonValue },
   });
 
   void Promise.resolve(syncEaRelationship({
