@@ -257,6 +257,48 @@ describe("createPlatformIssueReport", () => {
     expect(inngestMock.send).not.toHaveBeenCalled();
   });
 
+  // BI-0ACD9AB2 §5.2: projection guard — a self-fix escalation is born in
+  // awaiting_escalation_ack and held for the responder, never generic-projected.
+  it("births a build-stall-escalation in awaiting_escalation_ack and does NOT emit", async () => {
+    await createPlatformIssueReport({
+      type: "build-stall-escalation",
+      source: "build-studio",
+      severity: "high",
+      title: "Build Studio needs a human",
+      selfFixClass: "needs-human",
+    });
+    const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+    expect(args?.data.status).toBe("awaiting_escalation_ack");
+    expect(inngestMock.send).not.toHaveBeenCalled();
+  });
+
+  it("births a selfFixClass report in awaiting_escalation_ack even without the build-stall type", async () => {
+    await createPlatformIssueReport({
+      type: "runtime_error",
+      source: "coworker_runtime",
+      title: "Coworker could not self-repair",
+      selfFixClass: "needs-external-capability",
+    });
+    const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+    expect(args?.data.status).toBe("awaiting_escalation_ack");
+    expect(inngestMock.send).not.toHaveBeenCalled();
+  });
+
+  it("does NOT over-trigger: a generic crash report still defaults to open and emits", async () => {
+    const { reportId } = await createPlatformIssueReport({
+      type: "runtime_error",
+      source: "crash_boundary",
+      title: "A crash",
+      errorDigest: "deadbeef",
+    });
+    const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+    expect(args?.data.status).toBeUndefined(); // schema default ("open")
+    expect(inngestMock.send).toHaveBeenCalledWith({
+      name: "quality/issue-report.created",
+      data: { reportId },
+    });
+  });
+
   it("is non-fatal when the projection event fails to send", async () => {
     inngestMock.send.mockRejectedValueOnce(new Error("inngest down"));
     const result = await createPlatformIssueReport({
