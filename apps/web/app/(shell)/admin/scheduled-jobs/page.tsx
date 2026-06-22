@@ -1,8 +1,10 @@
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 
 import { listScheduledJobsAction } from "@/lib/actions/scheduled-jobs";
+import { SCHEDULING_MAP } from "@/lib/operate/scheduled-jobs/scheduling-map";
 
 import { ScheduledJobsClient } from "./ScheduledJobsClient";
+import { SchedulingTimeline } from "./SchedulingTimeline";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +35,8 @@ export default async function ScheduledJobsAdminPage() {
       </div>
 
       <AdminTabNav />
+
+      <SchedulingTimeline entries={SCHEDULING_MAP} />
 
       <ScheduledJobsClient initialJobs={jobs} />
     </div>

@@ -57,6 +57,7 @@ export function CalendarAgentScheduler({ defaultDate, onClose }: Props) {
     time: "09:00",
   });
   const [message, setMessage] = useState<string | null>(null);
+  const [created, setCreated] = useState(false);
 
   const selectedAgent = AGENTS.find((a) => a.id === form.agentId);
 
@@ -75,8 +76,15 @@ export function CalendarAgentScheduler({ defaultDate, onClose }: Props) {
         schedule: cronExpr,
       });
       if (result.success) {
-        onClose();
         router.refresh();
+        if (result.note) {
+          // BI-SCHED-ALLOCATE: the time was auto-staggered to avoid a collision —
+          // tell the operator before closing instead of silently moving it.
+          setCreated(true);
+          setMessage(result.note);
+        } else {
+          onClose();
+        }
       } else {
         setMessage(result.error ?? "Failed to schedule");
       }
@@ -166,32 +174,48 @@ export function CalendarAgentScheduler({ defaultDate, onClose }: Props) {
         </div>
 
         {message && (
-          <p style={{ fontSize: 11, color: "var(--dpf-error)", marginTop: 8 }}>{message}</p>
+          <p style={{ fontSize: 11, color: created ? "#14b8a6" : "var(--dpf-error)", marginTop: 8 }}>{message}</p>
         )}
 
         <div style={{ display: "flex", gap: 6, marginTop: 12, justifyContent: "flex-end" }}>
-          <button
-            type="button" onClick={onClose}
-            style={{
-              padding: "6px 14px", fontSize: 12, borderRadius: 4,
-              border: "1px solid var(--dpf-border)", background: "transparent",
-              color: "var(--dpf-muted)", cursor: "pointer",
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button" onClick={handleSubmit} disabled={isPending}
-            style={{
-              padding: "6px 14px", fontSize: 12, borderRadius: 4,
-              border: "1px solid color-mix(in srgb, #14b8a6 40%, transparent)",
-              background: "color-mix(in srgb, #14b8a6 15%, transparent)",
-              color: "#14b8a6", cursor: "pointer", fontWeight: 600,
-              opacity: isPending ? 0.5 : 1,
-            }}
-          >
-            {isPending ? "Scheduling..." : "Schedule"}
-          </button>
+          {created ? (
+            <button
+              type="button" onClick={onClose}
+              style={{
+                padding: "6px 14px", fontSize: 12, borderRadius: 4,
+                border: "1px solid color-mix(in srgb, #14b8a6 40%, transparent)",
+                background: "color-mix(in srgb, #14b8a6 15%, transparent)",
+                color: "#14b8a6", cursor: "pointer", fontWeight: 600,
+              }}
+            >
+              Done
+            </button>
+          ) : (
+            <>
+              <button
+                type="button" onClick={onClose}
+                style={{
+                  padding: "6px 14px", fontSize: 12, borderRadius: 4,
+                  border: "1px solid var(--dpf-border)", background: "transparent",
+                  color: "var(--dpf-muted)", cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button" onClick={handleSubmit} disabled={isPending}
+                style={{
+                  padding: "6px 14px", fontSize: 12, borderRadius: 4,
+                  border: "1px solid color-mix(in srgb, #14b8a6 40%, transparent)",
+                  background: "color-mix(in srgb, #14b8a6 15%, transparent)",
+                  color: "#14b8a6", cursor: "pointer", fontWeight: 600,
+                  opacity: isPending ? 0.5 : 1,
+                }}
+              >
+                {isPending ? "Scheduling..." : "Schedule"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
