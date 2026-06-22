@@ -7,7 +7,7 @@ import { BacklogItemRow } from "./BacklogItemRow";
 import { EpicCard, type EpicSort } from "./EpicCard";
 import { EpicPanel } from "./EpicPanel";
 import { isTerminalBacklogItemStatus } from "./backlogVisibility";
-import { FilterBar } from "@/components/ui/report-kit";
+import { FilterBar, type FacetDef } from "@/components/ui/report-kit";
 import { backlogItemOrigin, BACKLOG_ORIGIN_FILTERS } from "@/lib/ops/backlog-origin";
 import type {
   BacklogItemWithRelations,
@@ -103,6 +103,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
   const [hideDone, setHideDone] = useState(true);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const originFilter = filters.origin ?? "";
+  const portfolioFilter = filters.portfolio ?? "";
 
   // Origin lens (EP-INTAKE-UNIFY surface convergence): /ops is the one place
   // every source is seen + worked; this narrows it to where work came from
@@ -110,8 +111,26 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
   const matchesOrigin = (i: BacklogItemWithRelations) =>
     !originFilter || backlogItemOrigin(i) === originFilter;
 
-  // Unassigned items only (not belonging to any epic), narrowed by the origin lens.
-  const unassigned = items.filter((i) => i.epicId === null && matchesOrigin(i));
+  // Source + portfolio lenses for the one surface. Portfolio attaches via the
+  // epic (epic.portfolios[].portfolio), so it narrows which epics show; the
+  // facet only appears when portfolios exist.
+  const facets: FacetDef[] = [
+    { kind: "pills", key: "origin", label: "Source", options: [...BACKLOG_ORIGIN_FILTERS] },
+  ];
+  if (portfolios.length > 0) {
+    facets.push({
+      kind: "select",
+      key: "portfolio",
+      label: "Portfolio",
+      options: portfolios.map((p) => ({ value: p.id, label: p.name })),
+    });
+  }
+
+  // Unassigned items only (not belonging to any epic), narrowed by the origin
+  // lens. A portfolio selection excludes them — they belong to no portfolio.
+  const unassigned = items.filter(
+    (i) => i.epicId === null && matchesOrigin(i) && !portfolioFilter,
+  );
   const types = ["portfolio", "product"] as const;
   const byType = new Map(types.map((t) => [t, unassigned.filter((i) => i.type === t)]));
 
@@ -142,10 +161,10 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
 
   return (
     <>
-      {/* Origin lens — see/filter the different sources in the one Operations surface */}
+      {/* Source + portfolio lenses — narrow the one Operations surface */}
       <FilterBar
         mode="client"
-        facets={[{ kind: "pills", key: "origin", label: "Source", options: [...BACKLOG_ORIGIN_FILTERS] }]}
+        facets={facets}
         value={filters}
         onChange={setFilters}
         className="mb-4"
@@ -179,11 +198,13 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
 
         {(() => {
           const byHideDone = hideDone ? epics.filter((e) => e.status !== "done") : epics;
-          // When an origin lens is active, show epics that carry at least one
-          // item from that source (the epic stays whole — no progress skew).
-          const filteredEpics = originFilter
-            ? byHideDone.filter((e) => (e.items ?? []).some(matchesOrigin))
-            : byHideDone;
+          // When a lens is active, show epics that carry a matching item (origin)
+          // and that belong to the selected portfolio. Epics stay whole — no skew.
+          const filteredEpics = byHideDone.filter(
+            (e) =>
+              (!originFilter || (e.items ?? []).some(matchesOrigin)) &&
+              (!portfolioFilter || (e.portfolios ?? []).some((l) => l.portfolio?.id === portfolioFilter)),
+          );
           // Footnote counts epics hidden by the "Hide done" toggle (not the origin lens).
           const hiddenCount = hideDone ? epics.filter((e) => e.status === "done").length : 0;
 
@@ -220,8 +241,8 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
                 {filteredEpics.length === 0 ? (
                   <div className="px-4 py-3">
                     <p className="text-xs text-[var(--dpf-muted)]">
-                      {originFilter
-                        ? "No epics carry work from this source."
+                      {originFilter || portfolioFilter
+                        ? "No epics match the current filters."
                         : `All ${epics.length} epics are done. Uncheck "Hide done" to see them.`}
                     </p>
                   </div>
