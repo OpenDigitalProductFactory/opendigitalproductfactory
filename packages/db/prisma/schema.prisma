@@ -593,6 +593,8 @@ model DigitalProduct {
   version                       String                         @default("1.0.0")
   description                   String?
   observationConfig             Json?
+  coverageStatus                String?
+  sourceKind                    String?
   backlogItems                  BacklogItem[]
   manifests                     CodebaseManifest[]
   assuranceFindings             AssuranceFinding[]
