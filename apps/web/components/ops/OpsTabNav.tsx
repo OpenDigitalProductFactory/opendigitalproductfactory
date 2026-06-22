@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { label: "Backlog", href: "/ops" },
-  { label: "Improvements", href: "/ops/improvements" },
+  // "Improvements" retired into /ops (EP-INTAKE-UNIFY surface convergence):
+  // improvements are backlog items, seen here via the "Improvement" origin.
   { label: "Changes", href: "/ops/changes" },
   { label: "Promotions", href: "/ops/promotions" },
   { label: "Self-upgrade", href: "/ops/self-upgrade" },
