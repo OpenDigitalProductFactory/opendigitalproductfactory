@@ -3,15 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const TABS = [
-  { label: "Overview", href: "/ea" },
-  { label: "Capability Map", href: "/ea/capabilities" },
-  { label: "Value Streams", href: "/ea/value-streams" },
-  { label: "Data Model", href: "/ea/data-model" },
-  { label: "Views & Viewpoints", href: "/ea/views" },
-  { label: "Reference Models", href: "/ea/models" },
-];
+import { EA_TABS } from "./ea-nav";
 
 export function EaTabNav() {
   const pathname = usePathname();
@@ -20,7 +12,7 @@ export function EaTabNav() {
 
   return (
     <div className="flex gap-1 mb-6 border-b border-[var(--dpf-border)]">
-      {TABS.map((t) => (
+      {EA_TABS.map((t) => (
         <Link
           key={t.href}
           href={t.href}
