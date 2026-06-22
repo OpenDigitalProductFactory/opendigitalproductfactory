@@ -2,11 +2,13 @@
 
 **Cost | Quality | Time as a governed preference-to-policy compiler for trusted AI agents**
 
-*Design review draft v0.3.1 - 2026-06-21*
+*Design review draft v0.3.2 - 2026-06-21*
 
 > **v0.3 changelog.** Integrates a multi-thread review (UX/accessibility, ethos/culture fit, strategy/completeness) plus a competitive-benchmarking pass. Headline changes: **presets are the primary control** (the triangle becomes a fine-tune visualization); a corrected **2-degrees-of-freedom accessibility contract** (a 2D control is not the WAI-ARIA *slider* pattern); the triangle is framed as **cognitive-load migration** and connected to the **kernel principle system**; and three factual corrections to the v0.2 control-layers analysis — the `effort` lever already exists end-to-end, perspective/review count's home is the **deliberation engine**, and `MAX_ITERATIONS` is a *safety ceiling*, not the dominant cost lever. Adds cold-start defaults, the composition point with `inferContract()`, and success metrics.
 >
 > **v0.3.1 architect/usability pass.** Tightens the enterprise architecture decision, adds a one-screen executive capsule, strengthens the UX navigation and component contract, makes the standards basis explicit (WCAG 2.2 + APG radio/spinbutton patterns), and replaces success-metric placeholders with initial launch guardrails to validate in Slice 0.
+>
+> **v0.3.2 Slice 0 close-out.** Folds the Slice 0 substrate-audit findings (companion doc [`golden-triangle-slice0-substrate-audit.md`](golden-triangle-slice0-substrate-audit.md)): the saved-defaults home already exists (`DecisionInteraction.profileId` → `DecisionPerspectiveProfile`, **extend it** — resolves Open Decision 1); the orchestration budget is **GO** as JSON on the receipt path (not `AgentModelConfig`, not a new table — resolves Open Decision 7); plus two corrections — `TaskRequirement.minimumTier` is code-side (`BUILT_IN_TASK_REQUIREMENTS`), not a DB column, and `verificationDepth` is inert until a verify step is wired.
 
 ---
 
@@ -376,7 +378,7 @@ A customer's *live, per-decision* posture is a WWWD/per-decision business choice
 
 Before any benchmark history exists, the triangle defers to the existing inferred contract rather than overriding it:
 
-1. New org/user default preset = **Balanced**, which compiles to **no deltas**: the decoded policy equals what `inferContract()` already produces from `TaskRequirement` (`budgetClassDefault`, `reasoningDepthDefault`, `minimumTier`). Balanced is a pass-through, not a competing default.
+1. New org/user default preset = **Balanced**, which compiles to **no deltas**: the decoded policy equals what `inferContract()` already produces from `TaskRequirement` (`budgetClassDefault`, `reasoningDepthDefault`) plus the code-side `BUILT_IN_TASK_REQUIREMENTS` tier floor — note `minimumTier` lives there, **not** as a DB column (Slice 0 finding). Balanced is a pass-through, not a competing default.
 2. WWMD/platform scope may ship seeded non-Balanced presets for known platform task classes (e.g. code-gen → Assured) as the first-party prior.
 3. A new customer org inherits Balanced until it sets WWWD defaults or accumulates ≥ N local benchmark rows (N defined in §9).
 4. The decode panel labels cold-start state explicitly.
@@ -634,14 +636,16 @@ v1 implements WWMD and WWWD/org scopes only; WSID/profession and per-decision-ov
 
 ### Slice 0: Substrate Audit and Refactor Budget
 
+**Status: COMPLETE** — see the companion delta [`golden-triangle-slice0-substrate-audit.md`](golden-triangle-slice0-substrate-audit.md). Resolved outcomes are marked ✓ below; the unmarked bullets remain the standing checklist for the implementing epic.
+
 Use the requested 20 percent refactor budget here. This is not cosmetic cleanup; it is the architectural work that prevents the feature from creating duplicate truth. A practical allocation for the first implementation epic is **80% feature delivery / 20% substrate refactor**, with the refactor bucket spent only on code and schema boundaries the triangle directly touches.
 
 - Verify exact existing fields and gaps across `ModelProfile`, `AgentModelConfig`, `RequestContract`, `TaskRequirement`, the `effort` lever, the deliberation engine, route receipts, telemetry, and decision records.
 - Normalize names and type boundaries around preference snapshot, decoded policy, orchestration budget, receipt view, and feedback verdict before adding UI.
 - Map each triangle axis to its `PRINCIPLE_DIMENSIONS` member(s) and record a `UX-Fit-Decision:` attestation (AGENTS.md §12 — mandatory, CI-enforced). Note: `human_cognitive_load` has no carrying kernel principle today, so its `principle_decide` score is degenerate — record on merits and flag the kernel gap (§0.1).
-- Audit the profile referenced by `DecisionInteraction.profileId` before adding any saved-defaults table.
+- **✓ Saved-defaults home found.** `DecisionInteraction.profileId` → `DecisionPerspectiveProfile` (org/principal-scoped, versioned, already carries `autonomyPolicy`). **Extend it** with a typed `goldenTriangle` field; do not add a new `DecisionPreferenceProfile` table (resolves Open Decision 1).
 - Confirm whether benchmark records should be materialized or initially projected as a read model; align the shape to GearInterface.
-- **Go/no-go on the orchestration-budget surface.** Confirm there is no *posture-driven* orchestration budget today (`agentic-loop.ts` bounds runs with the `MAX_ITERATIONS = 200` safety ceiling, phase-aware `MAX_DURATION_*` limits, a spin guard, a one-nudge cap, and a repetition detector — none driven by posture). Decide whether the orchestration budget (duration ceiling, retry budget, verification depth, deliberation pattern) is a new per-decision field or an extension of `AgentModelConfig`/workflow policy. Slices 2–3 depend on this.
+- **✓ Orchestration-budget go/no-go — GO.** Confirmed no posture-driven orchestration budget exists today (`agentic-loop.ts` uses the `MAX_ITERATIONS = 200` *safety* ceiling plus phase-aware `MAX_DURATION_*`, a spin guard, a one-nudge cap, and a repetition detector — none posture-driven). Resolution: the orchestration budget (duration ceiling, retry budget, verification depth, deliberation pattern) is a **typed object persisted as JSON on the receipt / `DecisionInteraction.outcomePayload` path** — not columns on `AgentModelConfig` (a per-agent floor) and not a new table; it biases the existing governors. Caveat: `verificationDepth` has no consuming governor yet, so a `deep` value is inert until a verify step is wired. Slices 2–3 build on this shape.
 - Define stable TypeScript types for the posture override and orchestration budget.
 - Delete or avoid any provisional `ModelRegistryEntry`, detached `TrianglePosition`, page-local status-color map, or route-local model picker that appears during prototyping.
 
@@ -736,6 +740,11 @@ Measured against a control cohort with the triangle off. Initial launch guardrai
 9. Should the triangle receipt *be* a GearInterface Ring 1↔2 emission (dual-emit) rather than a standalone benchmark table, so one record feeds the Cockpit, Calibrator, and hive trust transport? (Resolve in Slice 0 against the Gear spec's Phase-0 status.)
 
 Resolved for v0.3.1: routing-shaped fields go through `inferContract`; loop/verification/perspective fields are workflow-layer (§5). This is no longer an open decision.
+
+Resolved for v0.3.2 (Slice 0 substrate audit, [`golden-triangle-slice0-substrate-audit.md`](golden-triangle-slice0-substrate-audit.md)):
+- **Q1 (saved-default table)** → **extend** `DecisionPerspectiveProfile` (reached via `DecisionInteraction.profileId`; versioned + scoped); do not add `DecisionPreferenceProfile`.
+- **Q7 (orchestration-budget home)** → a **typed JSON object on the receipt / `DecisionInteraction.outcomePayload` path**, not `AgentModelConfig` and not a new table; it biases the existing loop governors. `verificationDepth` is defined but inert until a verify step is wired.
+- New schema is minimal: predicted-cost columns (no drift capture exists today) + one propagated correlation id across the receipt chain (`RouteOutcome`/`TokenUsage`/`AdapterRunTelemetry`/`DecisionInteraction`).
 
 ---
 
