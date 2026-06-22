@@ -5,8 +5,7 @@ export type PlatformFamilyKey =
   | "identity"
   | "ai"
   | "tools"
-  | "audit"
-  | "admin";
+  | "audit";
 
 export type PlatformFamily = {
   key: PlatformFamilyKey;
@@ -101,14 +100,12 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       { label: "Metrics", href: "/platform/audit/metrics" },
     ],
   },
-  {
-    key: "admin",
-    label: "Core Admin",
-    href: "/admin",
-    description: "Reach controlled configuration work without turning Admin into a launchpad.",
-    matchPrefixes: ["/admin"],
-    subItems: [{ label: "Admin Home", href: "/admin" }],
-  },
+  // NOTE: "Core Admin" was removed here (EP-NAV-COHERENCE keystone, BI-8866F144).
+  // A secondary-nav tab pointing at /admin was a cross-domain teleport — clicking
+  // it swapped the whole tab row to Admin's families with no way back, the exact
+  // "you took them out of context with no path back" defect. Admin is reachable
+  // from the persistent AppRail; P1 (BI-CB07C8BA) unifies Platform + Admin into
+  // one operator console so the boundary stops being a context swap entirely.
 ];
 
 export function getPlatformFamily(pathname: string): PlatformFamily {
