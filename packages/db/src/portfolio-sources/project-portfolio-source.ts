@@ -126,6 +126,8 @@ export async function projectPortfolioEntries(
           taxonomyNodeId: taxonomyNodeId ?? undefined,
           lifecycleStage,
           lifecycleStatus,
+          coverageStatus: entry.coverageStatus,
+          sourceKind: entry.sourceKind,
           observationConfig: projectionMarkers,
         },
       });
@@ -151,6 +153,8 @@ export async function projectPortfolioEntries(
         taxonomyNodeId: taxonomyNodeId ?? undefined,
         lifecycleStage,
         lifecycleStatus,
+        coverageStatus: entry.coverageStatus,
+        sourceKind: entry.sourceKind,
         observationConfig: { ...prevConfig, ...projectionMarkers },
       },
     });
