@@ -5,6 +5,7 @@ import {
   deriveBuildProcessSize,
   deriveBuildProcessType,
   describePolicy,
+  getModelTier,
   getProcessPolicy,
   normalizeSize,
   normalizeType,
@@ -333,6 +334,26 @@ describe("describePolicy", () => {
     const phasesPortion = summary.split("phases:")[1] ?? "";
     expect(phasesPortion).not.toContain("ideate");
     expect(phasesPortion).not.toContain("review");
+  });
+});
+
+describe("getModelTier (EP-MODEL-TIER-ROUTING)", () => {
+  it("routes small + medium work to the local tier", () => {
+    expect(getModelTier("feature", "small")).toBe("local");
+    expect(getModelTier("feature", "medium")).toBe("local");
+    expect(getModelTier("fix", "small")).toBe("local");
+    expect(getModelTier("doc", "medium")).toBe("local");
+  });
+  it("routes large + xlarge work to the robust tier", () => {
+    expect(getModelTier("feature", "large")).toBe("robust");
+    expect(getModelTier("feature", "xlarge")).toBe("robust");
+    expect(getModelTier("fix", "large")).toBe("robust");
+    expect(getModelTier("chore", "xlarge")).toBe("robust");
+  });
+  it("defaults absent/unknown size to medium → local (back-compat)", () => {
+    expect(getModelTier("feature", null)).toBe("local");
+    expect(getModelTier("feature", undefined)).toBe("local");
+    expect(getModelTier(null, "bogus")).toBe("local");
   });
 });
 

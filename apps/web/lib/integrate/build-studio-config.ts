@@ -4,6 +4,8 @@
 
 import { prisma } from "@dpf/db";
 
+import type { BuildModelTier } from "@/lib/explore/build-process-matrix";
+
 export type BuildStudioDispatchConfig = {
   provider: "claude" | "codex" | "grok" | "opencode" | "agentic";
   claudeProviderId: string;
@@ -100,7 +102,7 @@ async function autoDetectConfig(): Promise<BuildStudioDispatchConfig> {
   };
 }
 
-export async function getBuildStudioConfig(): Promise<BuildStudioDispatchConfig> {
+async function resolveBaseBuildStudioConfig(): Promise<BuildStudioDispatchConfig> {
   // If explicit config exists, use it
   const row = await prisma.platformConfig.findUnique({
     where: { key: "build-studio-dispatch" },
@@ -124,4 +126,61 @@ export async function getBuildStudioConfig(): Promise<BuildStudioDispatchConfig>
 
   // No explicit config — auto-detect from configured providers
   return autoDetectConfig();
+}
+
+/**
+ * EP-MODEL-TIER-ROUTING: tier routing is opt-in (default off) so the change
+ * merges inert and the operator enables it via env after a robust-tier
+ * smoke-test. Set DPF_BUILD_MODEL_TIER_ROUTING=1 to route large/xlarge builds
+ * to the configured robust (frontier) provider.
+ */
+export function isModelTierRoutingEnabled(): boolean {
+  const v = process.env.DPF_BUILD_MODEL_TIER_ROUTING;
+  return v === "1" || v === "true";
+}
+
+/**
+ * Resolve the first available robust (frontier) provider, preferring Claude >
+ * Codex > Grok. Only active + credentialed providers qualify (the same
+ * findConfiguredProvider gate the auto-detect uses). Returns null when no robust
+ * engine is configured — the caller then falls back to the local/base config,
+ * so a robust-tier build on a local-only install gracefully degrades to local.
+ */
+async function resolveRobustProvider(): Promise<
+  { provider: "claude" | "codex" | "grok"; providerId: string } | null
+> {
+  const claudeId = await findConfiguredProvider("claude");
+  if (claudeId) return { provider: "claude", providerId: claudeId };
+  const codexId = await findConfiguredProvider("codex");
+  if (codexId) return { provider: "codex", providerId: codexId };
+  const grokId = await findConfiguredProvider("grok");
+  if (grokId) return { provider: "grok", providerId: grokId };
+  return null;
+}
+
+/**
+ * Resolve the Build Studio dispatch config. With `opts.modelTier === "robust"`
+ * AND tier routing enabled AND a robust provider configured, the config is
+ * overridden to that frontier provider; otherwise the base (local/explicit)
+ * config is returned unchanged. A default call (no opts) is byte-identical to
+ * the pre-EP-MODEL-TIER-ROUTING behavior.
+ */
+export async function getBuildStudioConfig(
+  opts?: { modelTier?: BuildModelTier },
+): Promise<BuildStudioDispatchConfig> {
+  const base = await resolveBaseBuildStudioConfig();
+  if (opts?.modelTier === "robust" && isModelTierRoutingEnabled()) {
+    const robust = await resolveRobustProvider();
+    if (robust) {
+      const idField =
+        robust.provider === "claude"
+          ? "claudeProviderId"
+          : robust.provider === "codex"
+            ? "codexProviderId"
+            : "grokProviderId";
+      return { ...base, provider: robust.provider, [idField]: robust.providerId };
+    }
+    // No robust engine configured — gracefully fall back to the base (local) config.
+  }
+  return base;
 }
