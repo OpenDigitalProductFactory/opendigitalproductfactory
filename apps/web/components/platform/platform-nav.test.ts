@@ -12,8 +12,17 @@ describe("platform-nav", () => {
       "AI Operations",
       "Tools & Services",
       "Governance & Audit",
-      "Core Admin",
     ]);
+  });
+
+  it("does not expose a cross-domain Core Admin teleport tab (EP-NAV-COHERENCE)", () => {
+    // Admin is reached from the persistent rail, not a platform secondary-nav tab
+    // that swaps the whole context with no way back. No family may point outside
+    // the platform route tree.
+    expect(PLATFORM_FAMILIES.some((family) => family.key === "admin")).toBe(false);
+    expect(
+      PLATFORM_FAMILIES.every((family) => family.href.startsWith("/platform")),
+    ).toBe(true);
   });
 
   it("maps AI workforce routes to the AI Operations family", () => {
@@ -74,12 +83,6 @@ describe("platform-nav", () => {
     expect(getPlatformFamily("/platform/audit").key).toBe("audit");
     expect(getPlatformFamily("/platform/audit/ledger").key).toBe("audit");
     expect(getPlatformFamily("/platform/audit/authority").key).toBe("audit");
-  });
-
-  it("maps admin routes to the Core Admin family", () => {
-    expect(getPlatformFamily("/admin").key).toBe("admin");
-    expect(getPlatformFamily("/admin/settings").key).toBe("admin");
-    expect(getPlatformFamily("/admin/platform-development").key).toBe("admin");
   });
 
   it("keeps the platform root in the Overview family", () => {

@@ -18,6 +18,7 @@ import { SetupOverlay } from "@/components/setup/SetupOverlay";
 import { getShellNavSections } from "@/lib/permissions";
 import { getActiveOrgCapabilities } from "@/lib/storefront/civic-surfaces.server";
 import { AppRail } from "@/components/shell/AppRail";
+import { ShellBreadcrumb } from "@/components/shell/ShellBreadcrumb";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveHomePhoneCountry } from "@/lib/phone-country.server";
 import { PhoneCountryProvider } from "@/components/ui/PhoneCountryContext";
@@ -206,6 +207,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
                   className="mx-auto w-full"
                   style={{ maxWidth: "var(--shell-page-content-max-width, 80rem)" }}
                 >
+                  {shellNavSections.length > 0 && <ShellBreadcrumb />}
                   {children}
                 </div>
               </div>
