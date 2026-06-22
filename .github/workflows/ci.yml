@@ -194,6 +194,51 @@ jobs:
       - name: Run guard
         run: node scripts/check-no-raw-event-source.mjs
 
+  sbom-divergence-guard:
+    name: SBOM Divergence Guard
+    runs-on: ubuntu-latest
+    # The proactive dependency-REDUCTION gate — counterpart to Dependabot, which
+    # owns vulnerabilities + lifecycle. Fails a PR that introduces a NEW
+    # first-party version split: the same package declared at incompatible
+    # versions across our own workspaces. Dependabot structurally cannot catch
+    # this — it bumps one package at a time and is configured never to move
+    # majors for typescript/react/expo (.github/dependabot.yml). Pure Node, no
+    # install, runs in seconds. Accepted splits are pinned in sbom/baseline.json;
+    # update it intentionally (align the versions, or accept) via
+    # `node scripts/sbom/check-sbom-drift.mjs --update-baseline`.
+    # See docs/architecture/dependency-reduction-routine.md.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/sbom/check-sbom-drift.mjs
+
+  new-dependency-gate:
+    name: New Dependency Gate
+    runs-on: ubuntu-latest
+    # Kernel-selected #1 of the package-acquisition hardening program
+    # (principle_decide 2026-06-20: composite 9.39, high confidence — "Least
+    # privilege / deny by default", "Build Gate Mandatory", "Never adopt an
+    # unvetted external tool"). Fails a PR that adds a DIRECT dependency not
+    # acknowledged in sbom/dependency-allowlist.json, so every acquired package
+    # is a deliberate, vetted, recorded decision (provenance / age / maintainers
+    # / license / OSV). New transitives are covered by the OSV scan + SBOM drift
+    # guard; the acquisition decision lives at the direct-dep boundary. Pure
+    # Node, network-free. Acknowledge with
+    # `node scripts/sbom/check-new-dependencies.mjs --update-allowlist`.
+    # See docs/architecture/dependency-reduction-routine.md.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/sbom/check-new-dependencies.mjs
+
   ux-fit-gate:
     name: UX-Fit Gate
     runs-on: ubuntu-latest

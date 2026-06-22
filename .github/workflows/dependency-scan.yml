@@ -1,0 +1,84 @@
+name: Dependency Vulnerability Scan
+
+# The local, GitHub-free equivalent of Dependabot's security alerts. Reads the
+# platform SBOM (scripts/sbom/generate-platform-sbom.mjs) and checks every
+# resolved component against OSV.dev — which aggregates the GitHub Advisory
+# Database, so it surfaces the same advisories Dependabot would, without
+# depending on GitHub. This is what a DPF install on local / self-hosted git
+# relies on (no Dependabot there); on this GitHub repo it also runs as a PR
+# gate + daily dogfood of the engine customer installs use.
+#
+# Accepted advisories (with justification + expiry) live in sbom/vuln-baseline.json
+# — the local mirror of Dependabot/CodeQL dismiss-with-reason.
+#
+# See docs/architecture/dependency-reduction-routine.md.
+
+on:
+  schedule:
+    - cron: "41 6 * * *" # daily — OSV/GHSA advisories land continuously
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "pnpm-lock.yaml"
+      - "sbom/vuln-baseline.json"
+      - "scripts/sbom/**"
+  push:
+    branches: [main]
+    paths:
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: OSV vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Scan dependencies against OSV
+        # Gate on high+critical. On scheduled/manual runs, require the DB to be
+        # reachable (a silent skip would hide that the security scan didn't run);
+        # on PR/push, tolerate an OSV outage so a transient blip can't block
+        # unrelated merges (it skips with a notice instead).
+        run: |
+          set -euo pipefail
+          FLAGS="--fail-on high --git-ref $GITHUB_SHA"
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            FLAGS="$FLAGS --require-online"
+          fi
+          node scripts/sbom/scan-dependencies.mjs $FLAGS
+
+      - name: Audit provenance + install scripts (report-only)
+        if: always()
+        run: node scripts/sbom/audit-provenance.mjs || true
+
+      - name: Publish reports to the run summary
+        if: always()
+        run: |
+          { test -f sbom/dependency-scan.md && cat sbom/dependency-scan.md; } >> "$GITHUB_STEP_SUMMARY" || echo "No scan report produced." >> "$GITHUB_STEP_SUMMARY"
+          { test -f sbom/provenance-audit.md && cat sbom/provenance-audit.md; } >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload scan + audit reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dependency-scan-${{ github.run_id }}
+          path: |
+            sbom/dependency-scan.json
+            sbom/dependency-scan.md
+            sbom/provenance-audit.json
+            sbom/provenance-audit.md
+          if-no-files-found: warn
+          retention-days: 90
