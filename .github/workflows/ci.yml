@@ -186,7 +186,7 @@ jobs:
     # (BI-864E83B0). This guard fails any PR that (re)introduces one outside the
     # resilient wrapper at apps/web/lib/hooks/useResilientEventSource.ts.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Node.js
         uses: actions/setup-node@v6.4.0
         with:
