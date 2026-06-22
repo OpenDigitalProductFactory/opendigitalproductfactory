@@ -48,7 +48,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.0
 
       - name: Set up Node.js
         uses: actions/setup-node@v6.4.0
@@ -117,7 +117,7 @@ jobs:
             tag_suffix: linux-arm64
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.0
 
       # CodeQL actions/unpinned-tag #101-#103: 3rd-party actions pinned to
       # immutable commit SHAs (with version trailing comment) so a compromised
@@ -202,7 +202,7 @@ jobs:
           - dpf-edge-node
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.0
 
       # CodeQL actions/unpinned-tag #104-#105: SHA-pin in the merge job too.
       - name: Set up Docker Buildx
@@ -303,7 +303,7 @@ jobs:
       DPF_HEALTH_TIMEOUT: 900
       DPF_HEALTH_URL: http://localhost:3000/api/health
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.0
 
       # The full release stack no longer fits in the ~14 GB a stock
       # ubuntu-latest runner leaves free: v6.0.0 and v6.1.0 both died
