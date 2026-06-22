@@ -37,6 +37,13 @@ function makeClient() {
       m.set(rid, { id: rid, properties: ((a.data as Record<string, unknown>).properties ?? {}) as Record<string, unknown> });
       return { id: rid };
     },
+    upsert: async (a: Record<string, unknown>) => {
+      // Apply step only upserts genuinely-new (from,to,type) edges; create-semantics is faithful.
+      const rid = id(p);
+      const data = (a.create ?? a.data) as Record<string, unknown>;
+      m.set(rid, { id: rid, properties: (data.properties ?? {}) as Record<string, unknown> });
+      return { id: rid };
+    },
     update: async (a: Record<string, unknown>) => {
       const rid = (a.where as { id: string }).id;
       const row = m.get(rid);

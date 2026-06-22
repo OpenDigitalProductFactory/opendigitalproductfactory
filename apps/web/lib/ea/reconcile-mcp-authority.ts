@@ -109,16 +109,19 @@ export async function reconcileMcpAuthorityModel(
     removed++;
   }
 
-  // Relationships (de-dupe on natural key).
+  // Relationships — upsert on the natural key (from, to, type) so re-runs stay idempotent
+  // (atomic; the prior find-then-create raced under concurrent reconciles). BI-8C121D30.
   for (const rel of model.relationships) {
     const fromElementId = idByKey.get(rel.fromKey);
     const toElementId = idByKey.get(rel.toKey);
     const relationshipTypeId = rtId.get(rel.relSlug);
     if (!fromElementId || !toElementId || !relationshipTypeId) continue;
-    const found = await db.eaRelationship.findFirst({ where: { fromElementId, toElementId, relationshipTypeId }, select: { id: true } });
-    if (!found) {
-      await db.eaRelationship.create({ data: { fromElementId, toElementId, relationshipTypeId, notationSlug: NOTATION_SLUG, properties: {} } });
-    }
+    if (fromElementId === toElementId) continue; // skip self-loops (projection noise)
+    await db.eaRelationship.upsert({
+      where: { fromElementId_toElementId_relationshipTypeId: { fromElementId, toElementId, relationshipTypeId } },
+      create: { fromElementId, toElementId, relationshipTypeId, notationSlug: NOTATION_SLUG, properties: {} },
+      update: {},
+    });
   }
 
   // System-owned view.

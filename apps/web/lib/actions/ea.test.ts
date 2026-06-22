@@ -20,6 +20,7 @@ vi.mock("@dpf/db", () => ({
     },
     eaRelationship: {
       create:     vi.fn(),
+      upsert:     vi.fn(),
       delete:     vi.fn(),
       findUnique: vi.fn(),
     },
@@ -148,11 +149,11 @@ describe("createEaRelationship", () => {
     mockPrisma.eaRelationshipType.findUnique.mockResolvedValue({
       id: "rt-1", neoType: "REALIZES", slug: "realizes", notation: { slug: "archimate4" },
     });
-    mockPrisma.eaRelationship.create.mockResolvedValue({ id: "rel-1" });
+    mockPrisma.eaRelationship.upsert.mockResolvedValue({ id: "rel-1" });
 
     await createEaRelationship({ fromElementId: "el-1", toElementId: "el-2", relationshipTypeId: "rt-1" });
 
-    expect(mockPrisma.eaRelationship.create).toHaveBeenCalledOnce();
+    expect(mockPrisma.eaRelationship.upsert).toHaveBeenCalledOnce();
   });
 
   it("throws when no matching rule", async () => {
