@@ -412,6 +412,10 @@ export async function dispatchIdeateResearch(params: {
   providerId?: string;
   model?: string;
   dispatchEngine?: "claude" | "codex" | "grok" | "opencode" | "agentic";
+  /** EP-MODEL-TIER-ROUTING: capability tier for the local routeAndCall ideate
+   *  path. "robust" lets routing prefer a frontier endpoint for large designs;
+   *  "local"/undefined keeps it on the on-box model. */
+  modelTier?: "local" | "robust";
   onProgress?: (message: string) => void;
 }): Promise<IdeateResult> {
   const dispatchEngine = params.dispatchEngine ?? "codex";
@@ -445,7 +449,7 @@ export async function dispatchIdeateResearch(params: {
         [{ role: "user" as const, content: prompt }],
         "You are a senior software architect producing a structured design document. Respond with the design document content only — no preamble.",
         "internal",
-        { budgetClass: "quality_first" },
+        { budgetClass: "quality_first", ...(params.modelTier ? { modelTier: params.modelTier } : {}) },
       );
       const rawOutput = (response.content ?? "").trim();
       const designDoc = parseDesignDoc(rawOutput);

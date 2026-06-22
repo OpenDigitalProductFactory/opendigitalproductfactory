@@ -122,7 +122,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
     // that PR #1030 fixed in this same file.
     const bi = await prisma.backlogItem.findUnique({
       where: { id: build.originatingBacklogItemId },
-      select: { title: true, body: true },
+      select: { title: true, body: true, effortSize: true },
     });
 
     if (!bi) {
@@ -182,6 +182,17 @@ export async function dispatchIdeateForApprovedBuild(params: {
     const startedAt = Date.now();
     await logActivity(`Dispatching ideate research via ${config.provider} (provider=${providerId}, model=${model || "default"})`);
 
+    // EP-MODEL-TIER-ROUTING: route this build's ideate design generation to the
+    // model tier its size deserves — local for small/medium, robust/frontier for
+    // large/xlarge. Flag-gated; inert until DPF_BUILD_MODEL_TIER_ROUTING is on
+    // (and a robust endpoint + the global local-only switch off make robust route
+    // to cloud; otherwise it gracefully stays local).
+    const { getModelTier } = await import("@/lib/explore/build-process-matrix");
+    const { isModelTierRoutingEnabled } = await import("@/lib/integrate/build-studio-config");
+    const modelTier = isModelTierRoutingEnabled()
+      ? getModelTier(null, bi.effortSize) // tier is size-derived (P1); build.kind isn't in this select
+      : undefined;
+
     const { dispatchIdeateResearch } = await import("./ideate-dispatch");
     const ideateResult = await dispatchIdeateResearch({
       featureTitle,
@@ -194,6 +205,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
       providerId,
       model,
       dispatchEngine: config.provider,
+      modelTier,
     });
 
     const durationMs = Date.now() - startedAt;
