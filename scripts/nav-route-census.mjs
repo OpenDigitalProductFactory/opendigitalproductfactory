@@ -74,7 +74,6 @@ console.log("dynamic/detail     :", buckets.dynamic.length);
 console.log("redirect shims     :", buckets.redirectShim.length);
 console.log("ORPHANS (static, not in model, not redirect):", buckets.orphan.length);
 
-const shellOrphans = buckets.orphan.filter((o) => o.grp === "(shell)");
 console.log("\n=== (shell) ORPHANS by domain (reachable by URL, invisible to canonical nav/breadcrumb) ===");
 for (const [dom, list] of Object.entries(shellOrphansByDomain).sort((a, b) => b[1].length - a[1].length)) {
   console.log(`\n/${dom}  (${list.length})`);
