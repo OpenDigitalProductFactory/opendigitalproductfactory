@@ -2,14 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const TABS = [
-  { label: "Overview", href: "/customer/marketing" },
-  { label: "Strategy", href: "/customer/marketing/strategy" },
-  { label: "Campaigns", href: "/customer/marketing/campaigns" },
-  { label: "Funnel", href: "/customer/marketing/funnel" },
-  { label: "Automation", href: "/customer/marketing/automation" },
-] as const;
+import { MARKETING_TABS } from "./marketing-nav";
 
 export function MarketingTabNav() {
   const pathname = usePathname();
@@ -23,7 +16,7 @@ export function MarketingTabNav() {
 
   return (
     <nav className="mb-6 flex flex-wrap gap-2 border-b border-[var(--dpf-border)] pb-3">
-      {TABS.map((tab) => (
+      {MARKETING_TABS.map((tab) => (
         <Link
           key={tab.href}
           href={tab.href}
