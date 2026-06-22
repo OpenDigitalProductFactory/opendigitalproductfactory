@@ -11,6 +11,7 @@ import { prisma } from "@dpf/db";
 import { ISSUE_REPORT_STATUS } from "@/lib/quality/issue-report-status";
 
 import { triageIssueReports } from "./issue-report-triage";
+import { escalatePriorityForOccurrences } from "./process-observer-triage";
 
 /**
  * Project OPEN issue reports into the backlog. With no `reportId` this is the
@@ -80,9 +81,18 @@ export async function runIssueReportTriage(opts: { reportId?: string } = {}) {
         where: { title: { contains: title, mode: "insensitive" }, workType: "bug" },
       });
       if (existing) {
+        // Dedup-on-entry: bump the tally AND escalate priority so a frequently
+        // recurring duplicate becomes incrementally higher-priority to look at
+        // (operator directive). Monotonic — never lowers urgency below the
+        // item's severity-based priority.
+        const newCount = (existing.occurrenceCount ?? 0) + 1;
         await prisma.backlogItem.update({
           where: { id: existing.id },
-          data: { occurrenceCount: { increment: 1 }, lastSeenAt: new Date() },
+          data: {
+            occurrenceCount: { increment: 1 },
+            lastSeenAt: new Date(),
+            priority: escalatePriorityForOccurrences(existing.priority, newCount),
+          },
         });
       }
     },
