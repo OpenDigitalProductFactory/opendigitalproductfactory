@@ -85,3 +85,20 @@ Live review (research-backed): "organic" stays chaotic, and the nested view's in
 - **Deferred follow-up:** persist nested manual edits (drag) across reload (canvasState nesting schema) — nodes are draggable in-session today.
 
 Tests: 33 adapter (incl. compound + dense→layered) + 40 component/graph; web typecheck clean. No new dependency.
+
+---
+
+## Addendum — 2026-06-21: edge dedup + bidirectional merge + self-loop drop (BI-F1B5C04B)
+
+Live review of three issues: (1) "some models show 4 relationships between 2 entities — seems odd"; (2) large models cluster/process poorly; (3) auto-clustering loses to a quick manual cleanup on small dense meshes.
+
+**Evidence (live DB):** `EaRelationship` has NO unique constraint on (from,to,type) → projection extractors re-create rows each sync → 95 duplicate groups / 107 redundant rows + 44 self-loops + 1288 bidirectional pairs. `buildEdges` rendered one React-Flow edge per row (no dedup) → 4 duplicate rows = 4 stacked lines (the operator's "4"). `buildLayoutEdges` fed ALL those edges to ELK → ELK saw an inflated graph and clustered too tightly (why manual beat auto on the small mesh).
+
+**Shipped (canvas-only, BI-F1B5C04B):**
+- New pure `dedupeRenderEdges(edges)` in `canvas-layout.ts`: groups by (unordered pair × relationship type); parallel/exact duplicates → one edge; both directions present → one **bidirectional** edge; self-loops dropped. Returns a representative id + `mergedIds`. Unit-tested (6 cases).
+- `EaCanvas.buildEdges` uses it; bidirectional → `markerStart` + `markerEnd` (one double-headed edge instead of two stacked lines). `EaRelationshipEdge` now passes `markerStart` through to `BaseEdge`.
+- `EaCanvas.buildLayoutEdges` dedupes to one structural edge per unordered top-ancestor pair before ELK → truer structure, looser/clearer clustering (addresses the manual-beats-auto gap from the layout side).
+
+**Filed as siblings (NOT in this PR):** root-cause data fix **BI-8C121D30** (dedup the 107 rows + unique constraint + projection upsert — guard-gated steward migration) and large-view perf **BI-7060F7C5** (run ELK in a Web Worker for 300–619-node views so layout doesn't block the main thread).
+
+Tests: 39 adapter (incl. 6 dedupe) + 40 component/graph (190 total) pass; web typecheck clean. No new dependency.

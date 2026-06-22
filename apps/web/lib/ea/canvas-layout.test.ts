@@ -5,6 +5,7 @@ import {
   pickAutoAlgorithm,
   computeMetrics,
   computeContainmentLayout,
+  dedupeRenderEdges,
   EA_NODE_W,
   EA_NODE_H,
 } from "./canvas-layout";
@@ -227,5 +228,51 @@ describe("computeContainmentLayout", () => {
   it("emits every node even when containment forms a cycle (no hang, none dropped)", async () => {
     const out = await computeContainmentLayout(["P", "Q"], [c("P", "Q"), c("Q", "P")]);
     expect(out.map((n) => n.id).sort()).toEqual(["P", "Q"]);
+  });
+});
+
+describe("dedupeRenderEdges", () => {
+  const re = (id: string, from: string, to: string, typeSlug = "associated_with") => ({ id, from, to, typeSlug });
+
+  it("collapses exact/parallel duplicates (same from→to→type) into one edge", () => {
+    const out = dedupeRenderEdges([re("1", "A", "B"), re("2", "A", "B"), re("3", "A", "B"), re("4", "A", "B")]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.bidirectional).toBe(false);
+    expect(out[0]!.source).toBe("A");
+    expect(out[0]!.target).toBe("B");
+    expect(out[0]!.mergedIds).toHaveLength(4);
+  });
+
+  it("merges a bidirectional pair (A→B and B→A, same type) into one double-headed edge", () => {
+    const out = dedupeRenderEdges([re("1", "A", "B"), re("2", "B", "A")]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.bidirectional).toBe(true);
+    expect(out[0]!.mergedIds.sort()).toEqual(["1", "2"]);
+  });
+
+  it("keeps DISTINCT relationship types between the same pair as separate edges", () => {
+    const out = dedupeRenderEdges([re("1", "A", "B", "contains"), re("2", "A", "B", "associated_with")]);
+    expect(out).toHaveLength(2);
+    expect(out.every((e) => !e.bidirectional)).toBe(true);
+  });
+
+  it("drops self-loops (from === to)", () => {
+    const out = dedupeRenderEdges([re("1", "A", "A"), re("2", "A", "B")]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.source).toBe("A");
+    expect(out[0]!.target).toBe("B");
+  });
+
+  it("preserves the true direction for a unidirectional edge", () => {
+    const out = dedupeRenderEdges([re("1", "B", "A")]);
+    expect(out[0]!.source).toBe("B");
+    expect(out[0]!.target).toBe("A");
+    expect(out[0]!.bidirectional).toBe(false);
+  });
+
+  it("is deterministic and order-stable for identical input", () => {
+    const input = [re("1", "A", "B"), re("2", "C", "D"), re("3", "B", "A")];
+    expect(dedupeRenderEdges(input)).toEqual(dedupeRenderEdges(input));
+    expect(dedupeRenderEdges(input).map((e) => e.id)).toEqual(["1", "2"]);
   });
 });
