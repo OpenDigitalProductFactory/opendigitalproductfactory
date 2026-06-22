@@ -20,6 +20,65 @@ import {
   canQueueBackgroundModelEvals,
 } from "@/lib/routing/provider-eligibility";
 
+/**
+ * Resolve the `supportsToolUse` value a metadata-sync should persist for a model,
+ * given the provider floor, the freshly-extracted adapter value, and the existing
+ * stored profile. Pure + exported for unit tests.
+ *
+ * Precedence (BI-B6DEBFFE — closes the "sticky false" trap that permanently pinned a
+ * once-false local model, e.g. qwen3-coder, as non-tool-capable on every re-sync):
+ *   1. provider-level false       — hard backend floor (no model can exceed it)
+ *   2. admin field-level override — capabilityOverrides.toolUse is the ONLY durable
+ *                                   manual pin, in either direction
+ *   3. manual profile (evaluated/admin) — preserve the measured/decided value so a
+ *      low-confidence re-discovery never clobbers a real eval
+ *   4. fresh definitive extracted value — discovery-owned (seed/auto-discover)
+ *      profiles HEAL a stale/incorrect stored `false` on re-sync
+ *   5. existing stored value, else provider floor, else null (unknown — NOT false;
+ *      never permanently disables tools on an undiscovered model)
+ *
+ * The old inline chain pinned ANY existing `false` (step 2 was `existing===false`),
+ * so once a model was wrongly stored false it could never recover from discovery —
+ * only an admin override or a successful eval could flip it. A deliberate non-tool
+ * pin now lives in capabilityOverrides, not the raw column.
+ */
+export function resolveSyncedToolUse(input: {
+  providerToolFloor: boolean | null | undefined;
+  extractedToolUse: boolean | null | undefined;
+  existing: {
+    profileSource: string | null;
+    supportsToolUse: boolean | null;
+    capabilityOverrides: unknown;
+  } | null;
+}): boolean | null {
+  const { providerToolFloor, extractedToolUse, existing } = input;
+
+  // 1. Hard backend floor — a provider that cannot do tools floors every model.
+  if (providerToolFloor === false) return false;
+
+  // 2. Admin field-level override — authoritative manual pin in either direction.
+  const overrides = existing?.capabilityOverrides as Record<string, unknown> | null | undefined;
+  if (overrides && typeof overrides === "object" && "toolUse" in overrides) {
+    return overrides.toolUse as boolean;
+  }
+
+  // 3. A measured/admin decision is authoritative — re-discovery must not clobber it.
+  const isManuallySet =
+    existing?.profileSource === "evaluated" || existing?.profileSource === "admin";
+  if (isManuallySet) {
+    return existing!.supportsToolUse ?? extractedToolUse ?? providerToolFloor ?? null;
+  }
+
+  // 4. Discovery-owned: a fresh, definitive extracted value wins, so a stale or
+  //    incorrect stored `false` self-heals on the next sync.
+  if (extractedToolUse !== null && extractedToolUse !== undefined) {
+    return extractedToolUse;
+  }
+
+  // 5. No fresh signal: keep the existing value, else the provider floor, else unknown.
+  return existing?.supportsToolUse ?? providerToolFloor ?? null;
+}
+
 // ─── Shared helpers (exported for use by ai-providers.ts server actions) ─────
 
 /** Decrypt the API key / client secret for a provider (server-only).
@@ -681,7 +740,7 @@ export async function profileModelsInternal(
     // EP-INF-003: Drift detection — check if provider metadata changed
     const existingProfile = await prisma.modelProfile.findUnique({
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
-      select: { rawMetadataHash: true, profileSource: true, supportsToolUse: true },
+      select: { rawMetadataHash: true, profileSource: true, supportsToolUse: true, capabilityOverrides: true },
     });
     const driftDetected = existingProfile?.rawMetadataHash != null
       && existingProfile.rawMetadataHash !== card.rawMetadataHash;
@@ -706,28 +765,25 @@ export async function profileModelsInternal(
     }
 
     // EP-INF-003: ModelCard metadata fields — always safe to overwrite on re-sync.
-    // supportsToolUse uses a fallback chain:
-    //   1. provider-level false — hard backend floor
-    //   2. existing DB false — explicit profile-level floor
-    //   3. extracted value (non-null) — authoritative from provider metadata
-    //   4. existing DB value when profileSource is evaluated/admin — preserves manual overrides
-    //   5. provider-level supportsToolUse flag — permissive provider fallback
-    //   6. null — unknown (not false); prevents permanent tool disabling on undiscovered models
-    const providerToolFloor = provider!.supportsToolUse;
-    const extractedToolUse = card.capabilities.toolUse;
-    const isManuallySet = existingProfile?.profileSource === "evaluated" || existingProfile?.profileSource === "admin";
-    const resolvedToolUse = providerToolFloor === false
-      ? false
-      : existingProfile?.supportsToolUse === false
-      ? false
-      : extractedToolUse !== null && extractedToolUse !== undefined
-      ? extractedToolUse
-      : isManuallySet
-        ? (existingProfile.supportsToolUse ?? providerToolFloor ?? null)
-        : (providerToolFloor ?? null);
-    const resolvedCapabilities = providerToolFloor === false || existingProfile?.supportsToolUse === false
-      ? { ...card.capabilities, toolUse: false }
-      : card.capabilities;
+    // supportsToolUse precedence lives in the pure resolveSyncedToolUse helper so the
+    // "sticky false" trap (BI-B6DEBFFE) is unit-tested and can never silently re-pin a
+    // healed model. A deliberate non-tool pin lives in capabilityOverrides, not the raw
+    // column, so a stale/incorrect discovery-owned `false` self-heals on re-sync.
+    const resolvedToolUse = resolveSyncedToolUse({
+      providerToolFloor: provider!.supportsToolUse,
+      extractedToolUse: card.capabilities.toolUse as boolean | null | undefined,
+      existing: existingProfile
+        ? {
+            profileSource: existingProfile.profileSource,
+            supportsToolUse: existingProfile.supportsToolUse,
+            capabilityOverrides: existingProfile.capabilityOverrides,
+          }
+        : null,
+    });
+    // Keep capabilities.toolUse consistent with the resolved boolean so the two
+    // capability representations can never disagree (the original defect surfaced as a
+    // row with capabilities.toolUse=false yet toolFidelity=100).
+    const resolvedCapabilities = { ...card.capabilities, toolUse: resolvedToolUse };
 
     const metadataFields = {
       modelFamily: card.modelFamily,

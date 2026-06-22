@@ -8,6 +8,7 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import type { SerializedEdge } from "@/lib/ea-types";
+import { resolveAbsolutePositions } from "@/lib/ea/node-geometry";
 
 type EaEdgeData = Pick<SerializedEdge, "relationshipType"> & {
   onDelete?: () => void;
@@ -88,7 +89,7 @@ function getSpacedPoint(node: NodeInfo, side: Position, index: number, total: nu
 
 // No memo — must re-render whenever sibling edge targets or node positions change.
 // useNodes() fires on every position change, making spacing fully reactive.
-export function EaRelationshipEdge({ id, source, target, selected, data, markerEnd }: EdgeProps) {
+export function EaRelationshipEdge({ id, source, target, selected, data, markerEnd, markerStart }: EdgeProps) {
   const edgeData = data as EaEdgeData | undefined;
   const variant = edgeData?.edgeVariant ?? "bezier";
 
@@ -96,15 +97,21 @@ export function EaRelationshipEdge({ id, source, target, selected, data, markerE
   const nodes = useNodes();
   const allEdges = useEdges();
 
-  // Build nodeInfo map once per nodes update.
+  // Build nodeInfo map once per nodes update. Use ABSOLUTE positions — nested (containment-view)
+  // child nodes store positions relative to their container, so edges must resolve the parent
+  // chain or they detach from the boxes.
   const nodeInfo = useMemo(() => {
+    const absolute = resolveAbsolutePositions(
+      nodes.map((n) => ({ id: n.id, position: n.position, parentId: n.parentId })),
+    );
     const map = new Map<string, NodeInfo>();
     for (const n of nodes) {
       const w = n.measured?.width ?? 150;
       const h = n.measured?.height ?? 60;
+      const pos = absolute.get(n.id) ?? n.position;
       map.set(n.id, {
-        x: n.position.x, y: n.position.y,
-        cx: n.position.x + w / 2, cy: n.position.y + h / 2,
+        x: pos.x, y: pos.y,
+        cx: pos.x + w / 2, cy: pos.y + h / 2,
         w, h,
       });
     }
@@ -146,6 +153,7 @@ export function EaRelationshipEdge({ id, source, target, selected, data, markerE
         path={edgePath}
         style={{ stroke: selected ? "#a5b4fc" : "var(--dpf-accent)", strokeWidth: selected ? 2 : 1.5 }}
         {...(markerEnd !== undefined && { markerEnd })}
+        {...(markerStart !== undefined && { markerStart })}
       />
       <EdgeLabelRenderer>
         <div

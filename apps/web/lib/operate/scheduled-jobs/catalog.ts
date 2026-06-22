@@ -18,7 +18,12 @@
 // human label at runtime, and "is this job essential to platform integrity?"
 // is a governance judgement that belongs in reviewed code, not inferred.
 // When a new cron is added to scheduledFunctions, add it here too — the
-// catalog drift test (scheduled-jobs.test.ts) fails the build otherwise.
+// catalog<->registry parity test (queue/functions/index.test.ts) matches each
+// scheduled function's id() against these inngestIds and fails the build on any
+// gap in either direction. That guard did NOT exist when logSignatureScanner /
+// alertDeliveryBridge / releaseHealthCheck shipped, so they ran uncatalogued —
+// invisible on the admin Scheduled Jobs surface — until this catalog was
+// reconciled (scheduling-surface review, 2026-06-21). Keep the parity test real.
 
 import { CODE_GRAPH_JOB_ID } from "@/lib/integrate/code-graph/constants";
 
@@ -69,8 +74,13 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     name: "Self-upgrade reconcile",
     purpose:
       "Autonomous deployment of merged main PRs to this install. Core to keeping the platform current.",
-    cron: "nightly",
-    cadence: "Nightly",
+    // Mirrors SELF_UPGRADE_CRON ("0 * * * *") in queue/functions/self-upgrade.ts.
+    // The poll is hourly, but a run only proceeds inside the maintenance window
+    // (whenever the storefront is closed, in the store's timezone) and no more
+    // often than checkIntervalHours. The old "Nightly" label misrepresented this
+    // and made a noon run read as "off-schedule" when it was the window misfiring.
+    cron: "0 * * * *",
+    cadence: "Hourly — applies only in the maintenance window (store closed)",
     category: "core",
     tracksRunData: false,
     runNowEvent: null,
@@ -104,8 +114,8 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     name: "Model discovery refresh",
     purpose:
       "Refreshes the provider model catalog routing depends on. Stale data degrades model selection.",
-    cron: "0 3 * * *",
-    cadence: "Daily at 03:00",
+    cron: "10 3 * * *",
+    cadence: "Daily at 03:10",
     category: "core",
     tracksRunData: true,
     runNowEvent: null,
@@ -177,6 +187,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
+  {
+    jobId: "alert-delivery-bridge",
+    inngestId: "ops/alert-delivery-bridge",
+    name: "Alert delivery bridge",
+    purpose:
+      "Delivers firing Prometheus/Loki alerts into the quality-issue inbox (the platform runs no Alertmanager). If it stops, firing alerts evaluate but never reach an operator — silent blindness. Core-locked for that reason.",
+    cron: "*/1 * * * *",
+    cadence: "Every minute",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
   // ── Editable (operationally tunable) ──────────────────────────────────────
   {
     jobId: "data-retention-sweep",
@@ -195,8 +217,8 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     inngestId: "ops/prometheus-poll",
     name: "Discovery: Prometheus poll",
     purpose: "Polls Prometheus for new monitoring targets. Cadence is tunable to taste.",
-    cron: "0 * * * *",
-    cadence: "Hourly",
+    cron: "5 * * * *",
+    cadence: "Hourly (at :05)",
     category: "editable",
     tracksRunData: true,
     runNowEvent: null,
@@ -206,8 +228,8 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     inngestId: "ops/full-discovery-sweep",
     name: "Discovery: full sweep",
     purpose: "Full infrastructure discovery sweep. Cadence is tunable.",
-    cron: "0 * * * *",
-    cadence: "Hourly",
+    cron: "10 * * * *",
+    cadence: "Hourly (at :10)",
     category: "editable",
     tracksRunData: true,
     runNowEvent: null,
@@ -217,8 +239,8 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     inngestId: "quality/issue-report-triage",
     name: "Quality: issue-report triage",
     purpose: "Triages inbound issue reports into the backlog. Cadence is tunable.",
-    cron: "*/15 * * * *",
-    cadence: "Every 15 minutes",
+    cron: "3,18,33,48 * * * *",
+    cadence: "Every 15 min (at :03)",
     category: "editable",
     tracksRunData: true,
     runNowEvent: null,
@@ -239,8 +261,8 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     inngestId: "quality/coworker-regression-detect",
     name: "Coworker regression detect",
     purpose: "Scans for coworker quality regressions. Cadence is tunable.",
-    cron: "*/15 * * * *",
-    cadence: "Every 15 minutes",
+    cron: "6,21,36,51 * * * *",
+    cadence: "Every 15 min (at :06)",
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,
@@ -261,8 +283,8 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     inngestId: "decision/material-freshness-decay",
     name: "Material freshness decay",
     purpose: "Decays stale decision materials. Cadence is tunable.",
-    cron: "0 3 * * *",
-    cadence: "Daily at 03:00",
+    cron: "20 3 * * *",
+    cadence: "Daily at 03:20",
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,
@@ -307,6 +329,54 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     purpose: "Curates / proposes skill improvements. Cadence is tunable.",
     cron: "0 7 * * *",
     cadence: "Daily at 07:00",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "log-signature-scanner",
+    inngestId: "ops/log-signature-scanner",
+    name: "Log signature scanner",
+    purpose:
+      "Scans container logs (Loki) for novel error signatures and files one issue per new signature. If it stops, novel log anomalies surface to no one. Cadence and noise threshold are tunable.",
+    cron: "9,24,39,54 * * * *",
+    cadence: "Every 15 min (at :09)",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "release-health-check",
+    inngestId: "ops/release-health-check",
+    name: "Release health check",
+    purpose:
+      "Polls the latest release's verify-gate outcome and keeps the operator notification + health card in sync. If it stops, a red release can go unnoticed. Cadence is tunable.",
+    cron: "12,27,42,57 * * * *",
+    cadence: "Every 15 min (at :12)",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "marketing-scheduler-dispatch",
+    inngestId: "marketing/scheduler-dispatch",
+    name: "Marketing scheduler",
+    purpose:
+      "Fires due scheduled outbound marketing actions (draft/publish/KPI pull) that an operator or autopilot policy queued. If it stops, scheduled marketing actions never run. Outbound sends still pass the kernel veto. Editable so an operator can disable it.",
+    cron: "5,35 * * * *",
+    cadence: "Every 30 min (at :05/:35)",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "recurring-invoice-dispatch",
+    inngestId: "finance/recurring-invoice-dispatch",
+    name: "Recurring invoice generator",
+    purpose:
+      "Generates invoices for active recurring schedules whose next date is due (idempotent; honours auto-send). If it stops, recurring invoices are not generated. Editable so an operator can disable it.",
+    cron: "30 6 * * *",
+    cadence: "Daily at 06:30",
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,

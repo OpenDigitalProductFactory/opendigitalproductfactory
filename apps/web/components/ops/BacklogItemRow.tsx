@@ -9,6 +9,7 @@ import { startBacklogBuild } from "@/lib/actions/backlog-build";
 import { type BacklogItemWithRelations } from "@/lib/backlog";
 import { resolveBacklogBuildActionState } from "@/lib/backlog-build-action-state";
 import { AGENT_NAME_MAP } from "@/lib/agent-routing";
+import { backlogItemOrigin, BACKLOG_ORIGIN_LABEL } from "@/lib/ops/backlog-origin";
 
 type Props = {
   item: BacklogItemWithRelations;
@@ -79,6 +80,11 @@ export function BacklogItemRow({ item, onEdit, focused = false }: Props) {
 
       {/* Work-type badge */}
       <WorkTypeBadge workType={item.workType} />
+
+      {/* Origin badge — which source this work came from (improvements,
+          capability needs, issue reports, signals…), now that /ops is the one
+          place every source is seen and worked. */}
+      <OriginBadge item={item} />
 
       {/* Main content */}
       <div className="flex-1 min-w-0">
@@ -260,6 +266,19 @@ const WORK_TYPE_BADGE_CLASS: Record<string, string> = {
   skill: "border-[var(--dpf-info)]/40 bg-[var(--dpf-info)]/10 text-[var(--dpf-info)]",
   refactor: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]",
 };
+
+function OriginBadge({ item }: { item: BacklogItemWithRelations }) {
+  const origin = backlogItemOrigin(item);
+  if (origin === "unknown") return null;
+  return (
+    <span
+      className="shrink-0 rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--dpf-muted)]"
+      title={`origin: ${BACKLOG_ORIGIN_LABEL[origin]} — every source is seen and worked here in Operations`}
+    >
+      {BACKLOG_ORIGIN_LABEL[origin]}
+    </span>
+  );
+}
 
 function WorkTypeBadge({ workType }: { workType: string | null }) {
   const label = workType ?? "unclassified";

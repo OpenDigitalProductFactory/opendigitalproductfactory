@@ -405,6 +405,27 @@ export async function abortQuiescence(runId: string, operatorUserId: string): Pr
 
 // Called during platform-version boot reconciliation. Completes or fails a
 // swapping run left behind by a process/container replacement.
+//
+// LANDED (2026-06-20). Implemented in apps/web/lib/self-upgrade/quiescence.ts
+// and wired at boot + on a 20-min periodic safety net in
+// apps/web/instrumentation.ts (alongside reconcileSelfUpgradeRunsOnBoot). It
+// matches a run's stored target against the running bundle identity
+// (DEPLOYED_SHA, compared to targetBundleHash/targetVersion), then: in-flight +
+// match -> signalSwapComplete (drive the live coordinator's success path);
+// in-flight + no-match -> failQuiescenceSwap; recently-`failed` + match ->
+// transition completed (completionSource="boot-reconciler") + re-emit a
+// truthful quiescence-cleared/succeeded.
+//
+// Why it was load-bearing: until it landed, the stub returned `{reconciled:0}`
+// and was never called, so EVERY successful self-upgrade whose swap recreated
+// the portal orphaned the coordinator, which then ran out its full 10-minute
+// waitForEvent and emitted `outcome=failed`. The PlatformBanner rendered that
+// as "Upgrade postponed, failed. You can continue working." even though the
+// SelfUpgradeRun was `succeeded` and DEPLOYED_SHA matched the target — a
+// false-negative observed on the live install for the 2026-06-18 and
+// 2026-06-20 upgrades (QuiescenceRun.outcomeNotes = "swap-complete signal never
+// received within 10m"). The new portal now completes the handshake the dying
+// portal could not.
 export async function reconcileQuiescenceOnBoot(): Promise<void>;
 
 type QuiescenceOutcome =

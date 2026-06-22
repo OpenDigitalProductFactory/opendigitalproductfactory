@@ -14,6 +14,8 @@ import {
   computeEaLayout,
   placeIncremental,
   computeContainmentLayout,
+  pickAutoAlgorithm,
+  dedupeRenderEdges,
   EA_LAYOUT_ALGORITHMS,
   EA_LAYOUT_LABELS,
   type EaLayoutAlgorithm,
@@ -108,11 +110,19 @@ function buildLayoutEdges(
       cur = parent;
     }
   };
+  // Collapse parallel + bidirectional edges to ONE structural edge per unordered top-ancestor
+  // pair. Duplicate/bidirectional relationships otherwise make ELK "see" a much denser graph
+  // than exists and pull nodes together (BI-F1B5C04B).
   const out: EaLayoutEdge[] = [];
+  const seen = new Set<string>();
   for (const e of visibleEdges) {
     const source = topAncestor(e.fromViewElementId);
     const target = topAncestor(e.toViewElementId);
-    if (source && target && source !== target) out.push({ source, target });
+    if (!source || !target || source === target) continue;
+    const key = source < target ? `${source} ${target}` : `${target} ${source}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ source, target });
   }
   return out;
 }
@@ -298,35 +308,56 @@ function buildStructuredProjection(elements: SerializedViewElement[]): {
 }
 
 function buildEdges(edges: SerializedEdge[], onDelete: (id: string) => void, edgeVariant: EdgeVariant): Edge[] {
-  return edges.map((e) => ({
-    id: e.id,
-    // IMPORTANT: use viewElementId (EaViewElement.id), not elementId (EaElement.id).
-    // React Flow node IDs are set to viewElementId in buildNodes.
-    source: e.fromViewElementId,
-    target: e.toViewElementId,
-    type: "eaRelationship",
-    markerEnd: { type: MarkerType.ArrowClosed, color: "var(--dpf-accent)" },
-    data: { relationshipType: e.relationshipType, onDelete: () => onDelete(e.id), edgeVariant },
-  }));
+  const byId = new Map(edges.map((e) => [e.id, e]));
+  const arrow = { type: MarkerType.ArrowClosed, color: "var(--dpf-accent)" };
+  // Dedup parallel/exact-duplicate relationships and merge bidirectional pairs into a single
+  // double-headed edge; self-loops are dropped (BI-F1B5C04B). IMPORTANT: source/target are
+  // viewElementId (EaViewElement.id) — React Flow node IDs are set to viewElementId in buildNodes.
+  return dedupeRenderEdges(
+    edges.map((e) => ({ id: e.id, from: e.fromViewElementId, to: e.toViewElementId, typeSlug: e.relationshipType.slug })),
+  ).map((d) => {
+    const rep = byId.get(d.id)!;
+    return {
+      id: d.id,
+      source: d.source,
+      target: d.target,
+      type: "eaRelationship",
+      markerEnd: arrow,
+      // Bidirectional A↔B → arrowheads on both ends instead of two stacked lines.
+      ...(d.bidirectional ? { markerStart: arrow } : {}),
+      data: {
+        relationshipType: rep.relationshipType,
+        // Delete removes only the representative row; the data-layer dedup (BI-8C121D30) clears
+        // the redundant duplicates that this rendered edge also stands for.
+        onDelete: () => onDelete(d.id),
+        edgeVariant,
+        bidirectional: d.bidirectional,
+        mergedCount: d.mergedIds.length,
+      },
+    };
+  });
 }
 
 // Containment (nested) view: derive the Package⊃Part hierarchy from "contains" edges, lay it
 // out as nested boxes, and draw only the cross-cutting (non-contains) edges. (BI-9E5EA3FF)
-function buildNestedGraph(
+async function buildNestedGraph(
   visibleElements: SerializedViewElement[],
   visibleEdges: SerializedEdge[],
   onDelete: (id: string) => void,
   edgeVariant: EdgeVariant,
-): { nodes: Node[]; edges: Edge[] } {
+): Promise<{ nodes: Node[]; edges: Edge[] }> {
   const elementById = new Map(visibleElements.map((el) => [el.viewElementId, el]));
   const containsEdges = visibleEdges
     .filter((e) => e.relationshipType.slug === "contains")
     .map((e) => ({ parent: e.fromViewElementId, child: e.toViewElementId }));
   const crossEdges = visibleEdges.filter((e) => e.relationshipType.slug !== "contains");
+  // Cross-cutting edges drive the ELK-compound layout of children INSIDE each container.
+  const crossLayoutEdges = crossEdges.map((e) => ({ source: e.fromViewElementId, target: e.toViewElementId }));
 
-  const layout = computeContainmentLayout(
+  const layout = await computeContainmentLayout(
     visibleElements.map((el) => el.viewElementId),
     containsEdges,
+    crossLayoutEdges,
   );
 
   const nodes: Node[] = layout.map((cn) => {
@@ -475,6 +506,11 @@ export function EaCanvas({
         if (topLevelNodes.length < 2) return;
         const positions = await computeEaLayout(topLevelNodes, layoutEdges, { algorithm: algo });
 
+        // Drive edge style from the layout: orthogonal layouts (layered/tree) read cleanest with
+        // right-angle (step) edges; organic/radial with straight. Curved/bezier looks chaotic.
+        const resolved = algo === "auto" ? pickAutoAlgorithm(topLevelNodes, layoutEdges) : algo;
+        handleSetEdgeVariant(resolved === "layered" || resolved === "tree" ? "step" : "straight");
+
         const history = snapshot
           ? pushRevision(
               latestCanvasStateRef.current.history ?? [],
@@ -524,15 +560,22 @@ export function EaCanvas({
 
   // Containment (nested) view — swap the node/edge set to nested boxes derived from
   // "contains" edges. Deterministic from data, so it isn't persisted (localStorage toggle only).
-  const enterNested = useCallback(() => {
+  const enterNested = useCallback(async () => {
     setNestedMode(true);
     try { window.localStorage.setItem("ea-nested-mode", "1"); } catch { /* ignore */ }
-    const g = buildNestedGraph(visibleElements, visibleEdges, handleDeleteEdge, edgeVariant);
-    setNodes(g.nodes);
-    setEdges(g.edges);
+    // ELK compound routes orthogonally → right-angle (step) edges read cleanest.
+    handleSetEdgeVariant("step");
+    setIsLayouting(true);
+    try {
+      const g = await buildNestedGraph(visibleElements, visibleEdges, handleDeleteEdge, "step");
+      setNodes(g.nodes);
+      setEdges(g.edges);
+    } finally {
+      setIsLayouting(false);
+    }
     setLayoutMenuOpen(false);
     requestAnimationFrame(() => rfRef.current?.fitView({ duration: 400, padding: 0.1 }));
-  }, [visibleElements, visibleEdges, handleDeleteEdge, edgeVariant, setNodes, setEdges]);
+  }, [visibleElements, visibleEdges, handleDeleteEdge, setNodes, setEdges]);
 
   const exitNested = useCallback(() => {
     setNestedMode(false);
@@ -548,7 +591,7 @@ export function EaCanvas({
     if (didHydrateNestedRef.current) return;
     didHydrateNestedRef.current = true;
     if (typeof window !== "undefined" && window.localStorage.getItem("ea-nested-mode") === "1") {
-      enterNested();
+      void enterNested();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -789,7 +832,7 @@ export function EaCanvas({
           {/* Right-side controls */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button
-              onClick={() => (nestedMode ? exitNested() : enterNested())}
+              onClick={() => { if (nestedMode) exitNested(); else void enterNested(); }}
               title="Containment view — nest Packages/Parts as boxes (from 'contains' relationships)"
               style={{
                 fontSize: 10, padding: "2px 8px", borderRadius: 3, cursor: "pointer",

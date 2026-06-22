@@ -581,11 +581,25 @@ export function deriveBuildStudioWorkflowAction({
         build.buildExecState?.step === "complete" &&
         (build.buildExecState?.error == null && build.buildExecState?.failedAt == null) &&
         build.verificationOut == null;
+      // Don't fabricate a cause. A null-step checkpoint can come from a failed
+      // dispatch, an early crash, an OOM / codegen context-overflow, a watchdog
+      // reap, OR a process restart. If the pipeline left an actual error
+      // breadcrumb, surface THAT verbatim instead of guessing "portal restart"
+      // — the old copy sent operators chasing restarts that never happened.
+      const stalledReason =
+        typeof build.buildExecState?.error === "string" && build.buildExecState.error.trim()
+          ? build.buildExecState.error.trim()
+          : null;
+      const stalledReasonShort = stalledReason
+        ? stalledReason.slice(0, 240) + (stalledReason.length > 240 ? "…" : "")
+        : null;
       return {
         kind: "reset-build",
         title: "Build Pipeline Needs Reset",
         message: isStalledAtPending
-          ? "The build pipeline stalled before it could start — the process was likely interrupted (e.g. portal restart) before the first step completed. Reset will restart the pipeline from scratch."
+          ? (stalledReasonShort
+              ? `The build pipeline stalled without a resumable step. Recorded reason: ${stalledReasonShort} — Reset will restart the pipeline from scratch.`
+              : "The build pipeline stalled with no recorded step and no error breadcrumb — it was interrupted before the first step completed (e.g. a failed dispatch, an early crash, or a process restart). Reset will restart the pipeline from scratch.")
           : isSilentComplete
             ? "The pipeline reported completion but verification results are missing — the sandbox likely ran but tests were never captured. Reset will restart the full build from the beginning."
             : "The build pipeline checkpoint is in a contradictory shape (a prior run left an error breadcrumb on a non-failed step). Clear the checkpoint and re-run the pipeline from the start.",
@@ -594,7 +608,9 @@ export function deriveBuildStudioWorkflowAction({
         disabledReason: null,
         coworkerLabel: "Diagnose with coworker",
         coworkerPrompt: isStalledAtPending
-          ? "The build pipeline has no recorded step — it was likely interrupted before the first step completed. Confirm whether a Reset Build is safe to restart the pipeline from scratch."
+          ? (stalledReasonShort
+              ? `The build pipeline stalled without a resumable step. The recorded reason was: ${stalledReasonShort}. Confirm whether a Reset Build is safe, or whether that root cause needs investigating first.`
+              : "The build pipeline has no recorded step and no error breadcrumb — it was interrupted before the first step (a failed dispatch, an early crash, or a process restart). Confirm whether a Reset Build is safe to restart the pipeline from scratch.")
           : isSilentComplete
             ? "The build shows step=complete but verificationOut is null, meaning tests never ran or the result was not captured. Explain what likely happened and confirm whether a full Reset Build is the right recovery."
             : "The build's execution checkpoint is contradictory (step says complete but an error breadcrumb is set). Read buildExecState and tell me whether a Reset Build is safe or if the original error needs investigation first.",

@@ -153,16 +153,34 @@ export async function reconcileSelfUpgradeRunsOnBoot(
         await completeRun(run.runId);
         succeeded++;
         logger.log(`[self-upgrade-reconcile] ${run.runId} -> succeeded (deployed ${deployedSha})`);
-      } else {
-        await failRun(
-          run.runId,
-          staleAfterMs > 0
-            ? `Reconciled by watchdog (stuck "running" > ${Math.round(staleAfterMs / 60000)}m): orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`
-            : `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`,
-        );
-        failed++;
-        logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (orphaned)`);
+        continue;
       }
+      // Swap PENDING, not orphaned. On boot (staleAfterMs===0) we may come up still on the
+      // run's PRE-upgrade SHA — e.g. the old portal restarted mid-swap before the promoter
+      // recreated it on the target. Failing here is a false negative: the promoter may still
+      // complete the swap (it did for SUR-F4209F75 — failed on a mid-swap boot although the
+      // portal then came up healthy on the target). Leave the run "running"; the staleness-
+      // guarded periodic watchdog (staleAfterMs>0) fails it only if the swap genuinely never
+      // lands. The watchdog path never takes this branch, so a truly stuck run is still reaped.
+      if (
+        staleAfterMs === 0 &&
+        deployedSha &&
+        run.currentSha &&
+        run.currentSha.toLowerCase() === deployedSha.toLowerCase()
+      ) {
+        logger.log(
+          `[self-upgrade-reconcile] ${run.runId} -> swap pending (still on pre-upgrade SHA ${deployedSha}); leaving "running" for the watchdog`,
+        );
+        continue;
+      }
+      await failRun(
+        run.runId,
+        staleAfterMs > 0
+          ? `Reconciled by watchdog (stuck "running" > ${Math.round(staleAfterMs / 60000)}m): orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`
+          : `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`,
+      );
+      failed++;
+      logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (orphaned)`);
     }
 
     // In PERIODIC mode, also fail runs stuck "queued"/"pending" that never
@@ -197,6 +215,40 @@ export async function reconcileSelfUpgradeRunsOnBoot(
     return { succeeded, failed };
   } catch (err) {
     logger.error("[self-upgrade-reconcile] failed (non-fatal):", err);
+    return null;
+  }
+}
+
+/**
+ * Boot/periodic reconcile for QuiescenceRun rows orphaned by a self-swap — the
+ * quiescence-coordinator counterpart to reconcileSelfUpgradeRunsOnBoot. A real
+ * upgrade recreates this very portal, killing the orchestrator before it can
+ * deliver the coordinator's swap-complete handshake; the coordinator (suspended
+ * in Inngest) then runs out its full 10-minute wait and falsely records
+ * `outcome=failed`, which the operator banner renders as "Upgrade postponed,
+ * failed" even though the swap SUCCEEDED. The surviving portal resolves the
+ * running bundle identity and lets the lib reconciler close the loop. Non-fatal.
+ */
+export async function reconcileQuiescenceRunsOnBoot(
+  logger: Pick<Console, "log" | "warn" | "error"> = console,
+  opts: { staleAfterMs?: number; now?: () => Date } = {},
+): Promise<{ reconciled: number; failed: number } | null> {
+  try {
+    const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
+    const { reconcileQuiescenceOnBoot } = await import("@/lib/self-upgrade/quiescence");
+    const deployedSha = await getDeployedSha();
+    return await reconcileQuiescenceOnBoot({
+      // A self-upgrade stores the deployed/merge identity in targetBundleHash;
+      // the runtime exposes that same identity as DEPLOYED_SHA. Pass it for both
+      // fields so the match is robust across upstream- and local-mode rows.
+      currentVersion: deployedSha,
+      currentBundleHash: deployedSha,
+      staleAfterMs: opts.staleAfterMs ?? 0,
+      now: opts.now?.(),
+      logger,
+    });
+  } catch (err) {
+    logger.error("[quiescence-reconcile] wrapper failed (non-fatal):", err);
     return null;
   }
 }
@@ -385,6 +437,99 @@ export async function advanceStrandedBuildToReview(buildId: string): Promise<boo
   const { queueBuildReviewVerification } = await import("@/lib/build-review-verification-trigger");
   await queueBuildReviewVerification(buildId);
   return true;
+}
+
+/**
+ * Periodic ship→complete reconciler for the autonomous-completion path
+ * (operator opt-in via DPF_AUTO_COMPLETE_VERIFIED_BUILDS, default OFF).
+ *
+ * A verified build that reached `ship` — with its forks set up by
+ * `autoResolveShipForks` (community PR pushed + product/promotion registered) —
+ * completes once its merged code is LIVE via the platform self-upgrade (the
+ * deploy the operator already runs; NOT the per-build promoter). This loop
+ * detects that: for each `ship`-phase build whose merged SHA is now in the
+ * deployed runtime (`isFeatureBuildDeployed`), it marks the build's still-open
+ * promotion(s) `deployed` — the self-upgrade WAS the deploy — so the promote
+ * fork becomes terminal, then runs `reconcileBuildCompletion` to advance
+ * ship→complete.
+ *
+ * No-op (and cheap) when the flag is off or no ship build is deployed yet.
+ * Idempotent + non-throwing. Exported for tests.
+ */
+export async function reconcileDeployedShipBuilds(
+  logger: Pick<Console, "log" | "error"> = console,
+): Promise<{ completed: number } | null> {
+  const { isAutoCompleteEnabled } = await import("@/lib/integrate/ship-on-review-approval");
+  if (!isAutoCompleteEnabled()) return null;
+  try {
+    const { prisma } = await import("@dpf/db");
+    const { reconcileBuildCompletion, completeLocalDeliveryBuild } = await import("@/lib/build-flow-state");
+    const { isFeatureBuildDeployed } = await import("@/lib/self-upgrade/completion");
+
+    const shipBuilds = await prisma.featureBuild.findMany({
+      where: { phase: "ship" },
+      select: { id: true, buildId: true },
+    });
+    let completed = 0;
+    for (const build of shipBuilds) {
+      try {
+        if (!(await isFeatureBuildDeployed(build.buildId))) {
+          // Not deployed: a fully-local (private/fork_only) build still completes
+          // here — its local ProductVersion registration IS the delivery (there
+          // is no upstream PR or remote deploy to wait on). completeLocalDeliveryBuild
+          // no-ops for a build that has a real upstream deploy path (those wait
+          // for their merged code to go live). This is the backstop for builds
+          // that parked at ship because the promote fork was still `approved`.
+          if (await completeLocalDeliveryBuild(build.buildId)) {
+            completed++;
+            logger.log(
+              `[auto-complete] ${build.buildId} completed — delivered locally (fully-local install)`,
+            );
+          }
+          continue;
+        }
+        // Merged code is live via self-upgrade → mark the build's still-open
+        // promotion(s) deployed so the promote fork is terminal. The platform
+        // self-upgrade IS the deploy here (the per-build promoter is not used).
+        const pvs = await prisma.productVersion.findMany({
+          where: { featureBuildId: build.id },
+          select: { id: true },
+        });
+        if (pvs.length > 0) {
+          await prisma.changePromotion.updateMany({
+            where: {
+              productVersionId: { in: pvs.map((p) => p.id) },
+              status: { in: ["pending", "approved", "scheduled", "awaiting_operator"] },
+            },
+            data: {
+              status: "deployed",
+              deployedAt: new Date(),
+              rationale: "Deployed via platform self-upgrade (autonomous build completion)",
+            },
+          });
+        }
+        if (await reconcileBuildCompletion(build.buildId)) {
+          completed++;
+          logger.log(
+            `[auto-complete] ${build.buildId} completed — merged code live via self-upgrade`,
+          );
+        }
+      } catch (err) {
+        logger.error(
+          "[auto-complete] ship reconcile failed for %s: %s",
+          JSON.stringify(build.buildId),
+          err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
+        );
+      }
+    }
+    return { completed };
+  } catch (err) {
+    logger.error(
+      "[auto-complete] reconcileDeployedShipBuilds failed: %s",
+      err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
+    );
+    return null;
+  }
 }
 
 /**
@@ -695,6 +840,19 @@ export async function register() {
       20 * 60 * 1000,
     );
 
+    // Close the SAME self-swap gap for the quiescence coordinator. A succeeded
+    // upgrade whose swap kills the orchestrator leaves the coordinator to time
+    // out and falsely emit `failed`, surfacing as a bogus "Upgrade postponed,
+    // failed" banner. The surviving portal completes the swap-complete handshake
+    // here (boot), plus a periodic net for the portal-stays-up orphan case.
+    void reconcileQuiescenceRunsOnBoot();
+    setInterval(
+      () => {
+        void reconcileQuiescenceRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
+      },
+      20 * 60 * 1000,
+    );
+
     // Same boot + periodic safety net for BackupRun rows stuck "running": a
     // backup runner that dies mid-dump leaves a false "in progress" row forever
     // (no other recovery), polluting the backup-health card + corruption alerts.
@@ -704,6 +862,19 @@ export async function register() {
       );
       await reconcileStuckBackupRuns();
       setInterval(() => void reconcileStuckBackupRuns(), 20 * 60 * 1000);
+    })();
+
+    // Backfill the operational value stream (OVSM) EA view for any storefront
+    // that completed setup before the #1798 generator was running on it — those
+    // installs have a StorefrontConfig + archetype but no archetype_value_stream
+    // EaView, so /ea/value-streams shows the empty state forever with nothing to
+    // self-heal it. Cheap when already present (existence check, no projection);
+    // idempotent and non-fatal per org.
+    void (async () => {
+      const { backfillOperationalValueStreamsOnBoot } = await import(
+        "@/lib/storefront/backfill-operational-value-streams"
+      );
+      await backfillOperationalValueStreamsOnBoot();
     })();
 
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
@@ -718,6 +889,10 @@ export async function register() {
     void (async () => {
       await recoverContradictoryBuildExecStatesOnBoot();
       await resumeStrandedBuildsOnBoot();
+      // Complete any ship-phase builds whose merged code went live in the
+      // self-upgrade that just (re)started this portal (autonomous-completion
+      // path; no-op when the flag is off).
+      await reconcileDeployedShipBuilds();
     })();
 
     // Periodic build-resume (cron-independent) — the boot reconcile above runs
@@ -737,6 +912,7 @@ export async function register() {
         void (async () => {
           await recoverContradictoryBuildExecStatesOnBoot();
           await resumeStrandedBuildsOnBoot({ staleAfterMs: 20 * 60 * 1000 });
+          await reconcileDeployedShipBuilds();
         })();
       },
       10 * 60 * 1000,

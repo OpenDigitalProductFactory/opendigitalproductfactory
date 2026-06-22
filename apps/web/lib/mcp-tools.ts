@@ -538,7 +538,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     // builds — a downstream-of-Ideate decomposition, not an upstream-from-
     // backlog one. Different name avoids the collision.
     name: "propose_build_decomposition",
-    description: "Phase 4b/7 (BI-2E6CC391). Ask the SE coworker to propose 2-4 candidate decompositions of a passed-design xlarge FeatureBuild. Distinct from `propose_decomposition` (which is an upstream brainstorming tool that generates an Epic + feature-set breakdown). This one is downstream of Ideate — eligible when the build is in `ideate`, has a passed designReview, and the recorded sizeAssessment.decision is `decompose-recommended` or `decompose-required`; Phase 7 also allows a top-level `plan` build whose failed planReview has iteration.oscillating=true, recomputing sizeDesignDoc retroactively when sizeAssessment is missing. Optional `operatorHint` re-runs with guidance ('make the read-first smaller', 'ship the ledger separately'). Persists validated candidates to designReview.decompositionCandidates.latest; prior rounds are preserved under .priorRounds for audit. Returns the validated candidates plus an observability list of rejected ones (model returned them but they failed validateCandidate).",
+    description: "Ask the SE coworker to propose 2-4 candidate decompositions of a passed-design xlarge FeatureBuild. Distinct from `propose_decomposition` (which is an upstream brainstorming tool that generates an Epic + feature-set breakdown). This one is downstream of Ideate — eligible when the build is in `ideate`, has a passed designReview, and the recorded sizeAssessment.decision is `decompose-recommended` or `decompose-required`; also allows a top-level `plan` build whose failed planReview has iteration.oscillating=true, recomputing sizeDesignDoc retroactively when sizeAssessment is missing. Optional `operatorHint` re-runs with guidance ('make the read-first smaller', 'ship the ledger separately'). Persists validated candidates to designReview.decompositionCandidates.latest; prior rounds are preserved under .priorRounds for audit. Returns the validated candidates plus an observability list of rejected ones (model returned them but they failed validateCandidate).",
     inputSchema: {
       type: "object",
       properties: {
@@ -555,7 +555,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "approve_decomposition",
-    description: "Phase 4a/7 (BI-2E6CC391). Atomically create an execution-organizational Epic + N child FeatureBuilds + sibling-dependency edges from a pre-validated DecompositionCandidate, and mark the originating FeatureBuild as superseded. The originating build must be in `ideate` phase with a passed designReview, or in `plan` with a failed oscillating planReview as the Phase 7 retroactive escape hatch, and must not itself be a child. Callers (typically the Phase 4b assistant flow) supply the candidate after the operator has chosen and optionally edited it; all invariants from epic-decomposition-invariants run before any DB writes.",
+    description: "Atomically create an execution-organizational Epic + N child FeatureBuilds + sibling-dependency edges from a pre-validated DecompositionCandidate, and mark the originating FeatureBuild as superseded. The originating build must be in `ideate` phase with a passed designReview, or in `plan` with a failed oscillating planReview as the retroactive escape hatch, and must not itself be a child. Callers (typically the decomposition assistant flow) supply the candidate after the operator has chosen and optionally edited it; all invariants from epic-decomposition-invariants run before any DB writes.",
     inputSchema: {
       type: "object",
       properties: {
@@ -591,7 +591,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "record_decomposition_override",
-    description: "Phase 4a (BI-2E6CC391). Record the operator's 'keep as one build' override on a FeatureBuild whose size assessment is decompose-required. Writes designReview.decompositionOverride for audit and hive-contribution context. Only valid on decompose-required builds; recommended-tier builds proceed without recording an override (single-click path per spec §4.1). Does not enforce — Phase 4b's gate is the consumer of this record.",
+    description: "Record the operator's 'keep as one build' override on a FeatureBuild whose size assessment is decompose-required. Writes designReview.decompositionOverride for audit and hive-contribution context. Only valid on decompose-required builds; recommended-tier builds proceed without recording an override (single-click path per spec §4.1). Does not enforce — the downstream decomposition gate is the consumer of this record.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1150,7 +1150,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "update_backlog_item_status",
-    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table in apps/web/lib/backlog/transitions.ts; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic. Moving an item to in-progress ACQUIRES its work claim and is rejected with error=claim_conflict if another session already holds a fresh active claim (pass force=true to take it over); the claim is released when the item leaves in-progress. NOTE: this only changes the status field — it does NOT start work. For a triageOutcome=build item, starting the work means promote_to_build_studio (creates the FeatureBuild + Build Studio Ideate); flipping such an item to in-progress returns an advisory and does not build anything.",
+    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic. Moving an item to in-progress ACQUIRES its work claim and is rejected with error=claim_conflict if another session already holds a fresh active claim (pass force=true to take it over); the claim is released when the item leaves in-progress. NOTE: this only changes the status field — it does NOT start work. For a triageOutcome=build item, starting the work means promote_to_build_studio (creates the FeatureBuild + Build Studio Ideate); flipping such an item to in-progress returns an advisory and does not build anything.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1624,7 +1624,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "tick_marketing_scheduler",
-    description: "Phase 5: dispatch all ScheduledOutboundAction rows whose scheduledFor <= now. Fires each via the right Phase 1-4 service (draftMarketingAsset / publishApprovedDraft / pullChannelKpis) and reports fired vs failed counts. Idempotent and safe to call as often as the scheduler cadence requires.",
+    description: "Dispatch all ScheduledOutboundAction rows whose scheduledFor <= now. Fires each via the right service (draftMarketingAsset / publishApprovedDraft / pullChannelKpis) and reports fired vs failed counts. Idempotent and safe to call as often as the scheduler cadence requires.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -1635,7 +1635,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "plan_upcoming_marketing_drafts",
-    description: "Phase 5: walk recent MarketingAssetTask rows for the organization and schedule a draft-marketing-asset action 3 days ahead of each task's due window (idempotent — skips tasks that already have a pending or fired schedule).",
+    description: "Walk recent MarketingAssetTask rows for the organization and schedule a draft-marketing-asset action 3 days ahead of each task's due window (idempotent — skips tasks that already have a pending or fired schedule).",
     inputSchema: {
       type: "object",
       properties: {},
@@ -1646,7 +1646,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "set_marketing_autopilot_policy",
-    description: "Phase 5: operator-only. Upsert a bounded per-channel autopilot policy. Channel must be in the autopilot allowlist (linkedin-personal-social, linkedin, email-postmark, email); ad channels are hard-refused by design. The runtime enforces channel allowlist + word-count threshold + weekly publish ceiling + low-confidence-marker check on every auto-approval.",
+    description: "Operator-only. Upsert a bounded per-channel autopilot policy. Channel must be in the autopilot allowlist (linkedin-personal-social, linkedin, email-postmark, email); ad channels are hard-refused by design. The runtime enforces channel allowlist + word-count threshold + weekly publish ceiling + low-confidence-marker check on every auto-approval.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1663,7 +1663,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "draft_marketing_asset",
-    description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Phase 1: LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
+    description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Currently LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2560,6 +2560,26 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["build", "review"],
   },
   {
+    name: "run_tool_script",
+    description:
+      "Run a short script that calls several READ-only tools and filters their results inside an isolated sandbox, returning only the small filtered result. Use instead of calling many read tools individually when results are large — e.g. scan N records and keep the few that match. The code is the body of an async run: call `await callTool(name, args)` for each tool, then `emit(value)` once with your final small result. Read-only: the script cannot call side-effecting tools. Disabled unless an operator has enabled it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        code: {
+          type: "string",
+          description:
+            "Script body. You have `callTool(name, args)` (returns the tool's data) and `emit(value)` (return your final small result). Example: const r = await callTool('query_backlog', { status: 'open' }); emit(r.items.filter(i => i.priority === 'high').map(i => i.itemId));",
+        },
+        purpose: { type: "string", description: "One line describing what the script does (recorded for audit)." },
+      },
+      required: ["code"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false, // sandbox-isolated; inner calls are read-only + governed per call
+  },
+  {
     name: "describe_model",
     description: "Look up a Prisma model's fields, types, relations, and indexes from the sandbox schema. Use this instead of asking the user about schema structure. Example: describe_model({ model_name: 'User' }) returns all fields with types.",
     inputSchema: {
@@ -2969,7 +2989,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "read_project_file",
-    description: "Read a file from the project codebase. Use relative paths like 'apps/web/lib/mcp-tools.ts'. Cannot access .env, credentials, or node_modules.",
+    description: "Read a file from the project codebase. Use a path relative to the project root (forward slashes). Cannot access .env, credentials, or node_modules.",
     inputSchema: {
       type: "object",
       properties: {
@@ -4477,6 +4497,19 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_ea_modeler",
     sideEffect: false,
   },
+  {
+    name: "describe_ea_view",
+    description: "Summarize an EA view so a coworker can explain or critique it (read-only). Returns element counts by type, relationship counts by type, connected components, isolated and highest-degree (hub) nodes, containment structure derived from 'contains' edges, viewpoint conformance, and layout density/shape (tree/forest/mesh). Use before suggesting how to arrange or restructure a view.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        viewId: { type: "string", description: "EaView id to describe" },
+      },
+      required: ["viewId"],
+    },
+    requiredCapability: "view_ea_modeler",
+    sideEffect: false,
+  },
   // ─── Agent Thread Spawning Tools ─────────────────────────────────────────────
   {
     name: "spawn_work_thread",
@@ -4690,7 +4723,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "summarize_upgrade_impact",
     description:
-      "On-demand, install-tailored \"What's in this update?\" summary (BI-C26F7EE1). Compares the upstream lineage marker (latest succeeded SelfUpgradeRun.targetSha) to the resolved upstream HEAD, classifies the change set by Conventional Commit type, scores each commit's relevance to this install (archetype, industry, customization paths, open quality-issue themes), and returns a headline + ordered top-N items (most impactful first) plus the full list and a 'touches your customizations' callout that doubles as a §5.0 merge-conflict early warning. Advisory only — never queues or applies an upgrade. Cacheable per (currentLineageSha, targetSha); set refresh=true to bypass.",
+      "On-demand, install-tailored \"What's in this update?\" summary. Compares the upstream lineage marker (latest succeeded SelfUpgradeRun.targetSha) to the resolved upstream HEAD, classifies the change set by Conventional Commit type, scores each commit's relevance to this install (archetype, industry, customization paths, open quality-issue themes), and returns a headline + ordered top-N items (most impactful first) plus the full list and a 'touches your customizations' callout that doubles as a §5.0 merge-conflict early warning. Advisory only — never queues or applies an upgrade. Cacheable per (currentLineageSha, targetSha); set refresh=true to bypass.",
     inputSchema: {
       type: "object",
       properties: {
@@ -4730,7 +4763,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "screen_describe",
     description:
-      "Pseudo-User Contract (spec §6.1, BI-D9487754/BI-DF6079E9). Return the active ScreenManifest summary for the chat's current routeContext — the list of selections, navigations, panels, forms, and domain actions the coworker may invoke on this page. Read-only. Call once at the start of a turn to discover what's available before dispatching screen_* actions. Returns the manifest's serialisable metadata; live handlers stay on the client.",
+      "Pseudo-User Contract. Return the active ScreenManifest summary for the chat's current routeContext — the list of selections, navigations, panels, forms, and domain actions the coworker may invoke on this page. Read-only. Call once at the start of a turn to discover what's available before dispatching screen_* actions. Returns the manifest's serialisable metadata; live handlers stay on the client.",
     inputSchema: { type: "object", properties: {}, required: [] },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -4768,7 +4801,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "screen_navigate",
     description:
-      "Pseudo-User Contract. Navigate to another route within the portal — e.g. /build → /storefront. Conditionally destructive: if the current page has unsaved form state the chat handler auto-wraps the call in an envelope (spec §6.4). Cross-coworker-ownership navigations will fire a HITL handoff gate when BI-A32801C5 lands.",
+      "Pseudo-User Contract. Navigate to another route within the portal — e.g. /build → /storefront. Conditionally destructive: if the current page has unsaved form state the chat handler auto-wraps the call in an envelope (spec §6.4). Cross-coworker-ownership navigations will fire a HITL handoff gate.",
     inputSchema: {
       type: "object",
       properties: {
@@ -4838,7 +4871,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "screen_set_input",
     description:
-      "Pseudo-User Contract. Pre-fill a form field on the user's behalf. The user can still review and modify before submit; the visual cue contract (BI-5696B4D7) highlights coworker-set fields with an amber affordance + \"Set by <Coworker>\" tooltip. Not destructive by itself (reversible until submit) — submit is the destructive action and goes through the envelope flow.",
+      "Pseudo-User Contract. Pre-fill a form field on the user's behalf. The user can still review and modify before submit; the visual cue contract highlights coworker-set fields with an amber affordance + \"Set by <Coworker>\" tooltip. Not destructive by itself (reversible until submit) — submit is the destructive action and goes through the envelope flow.",
     inputSchema: {
       type: "object",
       properties: {
@@ -4874,7 +4907,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "screen_propose_action",
     description:
-      "Pseudo-User Contract (spec §6.4 — destructive-action envelope flow). Propose a domain action that needs explicit user approval before execution. Creates a CoworkerActionEnvelope (BI-D887CD3B schema) in `proposed` status, emits the proposal to the chat UI, and returns the envelope id so the chat handler can correlate the user's approve/deny response. Subject to the per-turn N=3 destructive auto-approval cap (spec §6.4); irreversible actions require an explicit typed-phrase floor and ignore elevation.",
+      "Pseudo-User Contract — destructive-action envelope flow. Propose a domain action that needs explicit user approval before execution. Creates a CoworkerActionEnvelope in `proposed` status, emits the proposal to the chat UI, and returns the envelope id so the chat handler can correlate the user's approve/deny response. Subject to the per-turn N=3 destructive auto-approval cap (spec §6.4); irreversible actions require an explicit typed-phrase floor and ignore elevation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -7688,6 +7721,10 @@ export async function executeTool(
           name: String(params["name"]),
           portfolioSlug: String(params["portfolioSlug"]),
           versionBump: (params["versionBump"] as "major" | "minor" | "patch") ?? "minor",
+          // Thread the MCP actor through so this works in a session-less context
+          // (autonomous ship from the reconciler). UI callers go through the
+          // session as before; shipBuild falls back to requireBuildAccess().
+          actorUserId: userId,
         });
         return {
           success: true,
@@ -9081,26 +9118,58 @@ export async function executeTool(
           err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
       }
 
-      // Failed review → structured recovery instructions, no auto-advance
+      // Failed review → revise UNLESS the policy gate makes a passing plan
+      // review optional for this kind/size. For doc + chore-small builds the
+      // gate (build-process-matrix) is `buildPlan-present` only — it does NOT
+      // require `planReview-passed` — so a failed plan review must be ADVISORY,
+      // not a hard loop. checkPhaseGate is the source of truth (the same
+      // gate-driven principle #2085 applied to verification). Without this a
+      // strict reviewer rejecting a trivial-but-correct plan (e.g. "verify the
+      // function exists at line N", which it does) loops the build forever at
+      // plan-review and burns review quota. Only return revise-and-resubmit when
+      // the gate truly requires the review to pass.
       if (review.decision === "fail") {
-        const criticalIssues = review.issues.filter((i: { severity: string }) => i.severity === "critical");
-        const issueList = criticalIssues.length > 0
-          ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
-          : review.summary;
-        // BI-4396EFEC (D38) — Include the iteration trajectory in the
-        // agent-facing message so the implementer model can see when its
-        // revisions are trading one set of issues for another instead of
-        // converging. The oscillating signal recommends scope-split rather
-        // than another iteration.
-        const iter = review.iteration;
-        const trajectoryNote = iter?.prior
-          ? ` (Round ${iter.round}: ${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new${iter.oscillating ? " — issues are not net-decreasing across rounds; consider proposing a scope split rather than another revision." : ""}.)`
-          : "";
-        return {
-          success: true,
-          message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.${trajectoryNote}${archAdvisoryNote}`,
-          data: { review, blocked: true, action: "revise_and_resubmit" },
-        };
+        let planReviewIsGating = true;
+        try {
+          const { checkPhaseGate: cgFail, normalizeHappyPathState: nhpsFail } = await import("@/lib/feature-build-types");
+          const fgBuild = await prisma.featureBuild.findUnique({
+            where: { buildId },
+            select: { phase: true, plan: true, buildPlan: true, kind: true },
+          });
+          if (fgBuild?.phase === "plan") {
+            const fgPlan = (fgBuild.plan as Record<string, unknown> | null) ?? {};
+            const fgGate = cgFail("plan", "build", {
+              kind: fgBuild.kind,
+              processSize: (fgPlan.processSize as string | undefined) ?? "medium",
+              buildPlan: fgBuild.buildPlan,
+              planReview: review, // the FAILED review — the gate decides if it matters
+              happyPathState: nhpsFail(fgPlan.happyPathState),
+            });
+            planReviewIsGating = !fgGate.allowed;
+          }
+        } catch {
+          planReviewIsGating = true; // fail safe: keep the stricter loop on any gate-read error
+        }
+        if (planReviewIsGating) {
+          const criticalIssues = review.issues.filter((i: { severity: string }) => i.severity === "critical");
+          const issueList = criticalIssues.length > 0
+            ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
+            : review.summary;
+          // BI-4396EFEC (D38) — iteration trajectory so the implementer model
+          // sees when revisions trade one issue set for another vs converging.
+          const iter = review.iteration;
+          const trajectoryNote = iter?.prior
+            ? ` (Round ${iter.round}: ${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new${iter.oscillating ? " — issues are not net-decreasing across rounds; consider proposing a scope split rather than another revision." : ""}.)`
+            : "";
+          return {
+            success: true,
+            message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.${trajectoryNote}${archAdvisoryNote}`,
+            data: { review, blocked: true, action: "revise_and_resubmit" },
+          };
+        }
+        // Gate does not require a passing plan review for this kind/size — record
+        // the failure as advisory and fall through to the gate-driven advance.
+        logBuildActivity(buildId, "reviewBuildPlan", `Plan review failed but is ADVISORY for this kind/size (phase gate does not require planReview-passed) — advancing on the gate; issues recorded for visibility.`);
       }
 
       // Passed review → auto-advance if gate is satisfied.
@@ -9833,6 +9902,24 @@ export async function executeTool(
           buildId,
         },
       };
+    }
+
+    case "run_tool_script": {
+      // Programmatic tool calling (R4 / P7): governed read-only code execution.
+      // Standalone case — NOT part of the sandbox-file fall-through group below;
+      // it must return before those labels so they keep sharing the
+      // run_sandbox_command block. The handler mints a scoped read-only JWT and
+      // runs the model's script in the sandbox; each inner callTool reenters
+      // /api/mcp/v1 → governedExecuteTool (kernel gate + grants per call). Gated
+      // by the tool_script_exec grant (default-deny) AND the
+      // programmatic_tool_calling flag (default-off).
+      const { runToolScript } = await import("@/lib/tak/tool-script");
+      return runToolScript(params, {
+        userId,
+        agentId: context?.agentId,
+        threadId: context?.threadId,
+        routeContext: context?.routeContext,
+      });
     }
 
     // ─── Sandbox File Tools ──────────────────────────────────────────────────
@@ -14899,6 +14986,104 @@ export async function executeTool(
       });
       if (!result.ok) return { success: false, message: result.error ?? "Traversal failed", error: result.error };
       return { success: true, message: `Traversal complete: ${result.data!.summary.nodesTraversed} nodes`, data: result.data as Record<string, unknown> };
+    }
+
+    case "describe_ea_view": {
+      const viewId = String(params["viewId"] ?? "");
+      if (!viewId) return { success: false, message: "viewId is required", error: "MissingViewId" };
+      const { getEaView } = await import("@/lib/ea-data");
+      const view = await getEaView(viewId);
+      if (!view) return { success: false, message: "View not found", error: "ViewNotFound" };
+
+      const elements = view.elements;
+      const edges = view.edges;
+      const n = elements.length;
+
+      const elementsByType: Record<string, number> = {};
+      for (const el of elements) {
+        elementsByType[el.elementType.name] = (elementsByType[el.elementType.name] ?? 0) + 1;
+      }
+      const relationshipsByType: Record<string, number> = {};
+      for (const e of edges) {
+        relationshipsByType[e.relationshipType.name] = (relationshipsByType[e.relationshipType.name] ?? 0) + 1;
+      }
+
+      // Degree + connected components (union-find) over de-duplicated undirected edges.
+      const index = new Map(elements.map((el, i) => [el.viewElementId, i]));
+      const parent = elements.map((_, i) => i);
+      const find = (x: number): number => {
+        let root = x;
+        while (parent[root] !== root) root = parent[root]!;
+        while (parent[x] !== root) { const next = parent[x]!; parent[x] = root; x = next; }
+        return root;
+      };
+      const degree = new Map<string, number>(elements.map((el) => [el.viewElementId, 0]));
+      const seenPair = new Set<string>();
+      let hasCycle = false;
+      for (const e of edges) {
+        const a = index.get(e.fromViewElementId);
+        const b = index.get(e.toViewElementId);
+        if (a === undefined || b === undefined || a === b) continue;
+        const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+        if (seenPair.has(key)) continue;
+        seenPair.add(key);
+        degree.set(e.fromViewElementId, (degree.get(e.fromViewElementId) ?? 0) + 1);
+        degree.set(e.toViewElementId, (degree.get(e.toViewElementId) ?? 0) + 1);
+        const ra = find(a);
+        const rb = find(b);
+        if (ra === rb) hasCycle = true; else parent[ra] = rb;
+      }
+      const components = new Set(elements.map((_, i) => find(i))).size;
+      const edgeCount = seenPair.size;
+      const nameByVe = new Map(elements.map((el) => [el.viewElementId, el.element.name]));
+      const byDegree = [...degree.entries()].sort((x, y) => y[1] - x[1]);
+      const hubs = byDegree.filter(([, d]) => d > 0).slice(0, 5).map(([ve, d]) => ({ name: nameByVe.get(ve) ?? ve, degree: d }));
+      const isolatedNodes = byDegree.filter(([, d]) => d === 0).length;
+
+      // Containment derived from "contains" edges (parent → child).
+      const childSet = new Set<string>();
+      const containerSet = new Set<string>();
+      for (const e of edges) {
+        if (e.relationshipType.slug !== "contains") continue;
+        containerSet.add(e.fromViewElementId);
+        childSet.add(e.toViewElementId);
+      }
+      const containmentRoots = [...containerSet].filter((id) => !childSet.has(id)).length;
+
+      const allowed = (view.viewpoint as { allowedElementTypeSlugs?: string[] } | null)?.allowedElementTypeSlugs ?? null;
+      const nonConformingElements = allowed
+        ? elements.filter((el) => !allowed.includes(el.elementType.slug)).length
+        : null;
+
+      const density = n > 0 ? Number((edgeCount / n).toFixed(2)) : 0;
+      const shape = edgeCount === 0
+        ? "no relationships"
+        : !hasCycle
+        ? (components === 1 ? "tree" : "forest")
+        : density > 1.5
+        ? "dense mesh"
+        : "general graph";
+
+      return {
+        success: true,
+        message: `View "${view.name}" — ${n} elements, ${edgeCount} relationships, ${components} component(s); shape: ${shape}${isolatedNodes ? `, ${isolatedNodes} isolated` : ""}.`,
+        data: {
+          viewId,
+          name: view.name,
+          viewpoint: view.viewpoint?.name ?? null,
+          elementCount: n,
+          relationshipCount: edgeCount,
+          elementsByType,
+          relationshipsByType,
+          connectedComponents: components,
+          isolatedNodes,
+          hubs,
+          containment: { containerCount: containerSet.size, roots: containmentRoots },
+          nonConformingElements,
+          densityEdgesPerNode: density,
+          shape,
+        },
+      };
     }
 
     // ── EA file tools ─────────────────────────────────────────────────────────

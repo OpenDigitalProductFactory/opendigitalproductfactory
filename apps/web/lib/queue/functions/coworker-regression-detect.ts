@@ -15,7 +15,7 @@ export const coworkerRegressionDetect = inngest.createFunction(
   {
     id: "quality/coworker-regression-detect",
     retries: 2,
-    triggers: [cron("*/15 * * * *")],
+    triggers: [cron("6,21,36,51 * * * *")],
   },
   async ({ step }) => {
     const gate = await gateAtEntry(step);

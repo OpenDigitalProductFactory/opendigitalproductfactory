@@ -1073,6 +1073,16 @@
       "implies": []
     },
     {
+      "key": "tool_script_exec",
+      "description": "Run governed read-only programmatic tool-calling scripts in the sandbox (run_tool_script). Default-deny; also gated by the programmatic_tool_calling flag.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "run_tool_script"
+      ],
+      "implies": []
+    },
+    {
       "key": "sandbox_execute",
       "description": "Execute code in the build sandbox: read, write, edit, run tests and commands.",
       "category": "integrate",

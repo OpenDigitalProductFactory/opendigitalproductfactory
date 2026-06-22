@@ -350,6 +350,17 @@ describe("isInMaintenanceWindow", () => {
     });
     expect(isInMaintenanceWindow(cfg, MONDAY_3AM)).toBe(true);
   });
+
+  it("evaluates the window in the provided store timezone, not the host clock", () => {
+    // 08:00 UTC Monday = 03:00 Monday in US Central (CDT, -5). A 02:00–04:00
+    // Monday window is active in Central but NOT against the UTC host clock.
+    const cfg = parseSelfUpgradeConfig({
+      maintenanceWindows: [{ dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }],
+    });
+    const mon0800Utc = new Date("2026-05-25T08:00:00Z");
+    expect(isInMaintenanceWindow(cfg, mon0800Utc, "America/Chicago")).toBe(true);
+    expect(isInMaintenanceWindow(cfg, mon0800Utc, "UTC")).toBe(false);
+  });
 });
 
 describe("getSelfUpgradeConfig", () => {
@@ -479,5 +490,18 @@ describe("nextMaintenanceWindowStart", () => {
     expect(nextMaintenanceWindowStart(config, now)?.getTime()).toBe(
       expected.getTime(),
     );
+  });
+
+  it("projects the next window start in the store timezone", () => {
+    // Monday 06:00 UTC = Monday 01:00 US Central — before a 02:00 Central window.
+    // The next start is 02:00 Central = 07:00 UTC, regardless of the host clock.
+    const now = new Date("2026-05-25T06:00:00Z");
+    const config = {
+      ...base,
+      maintenanceWindows: [{ dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }],
+    };
+    expect(
+      nextMaintenanceWindowStart(config, now, "America/Chicago")?.toISOString(),
+    ).toBe("2026-05-25T07:00:00.000Z");
   });
 });

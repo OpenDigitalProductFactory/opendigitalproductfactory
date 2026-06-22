@@ -24,6 +24,8 @@ import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
+import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import { resolveMcpToolTier, selectToolsByTier, type McpToolTier } from "@/lib/mcp/tool-tier";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 
@@ -341,12 +343,18 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
 async function handleToolsList(
   id: JsonRpcId,
   token: ResolvedAuth,
+  tier: McpToolTier = "full",
 ): Promise<Response> {
   const userContext = await loadUserContext(token.userId);
   const grantMap = getToolGrantMapping();
-  const tools = PLATFORM_TOOLS.filter((t) =>
+  // Grant/capability/scope filter first (the authority), then the optional tier
+  // narrowing (a context-economy lever, R3/P4). Tiering only affects discovery
+  // here — tools/call still executes any granted tool by name — so core tier is
+  // a pure token saving with no loss of capability.
+  const granted = PLATFORM_TOOLS.filter((t) =>
     tokenCanUseTool(t, token, userContext, grantMap),
-  ).map(annotateTool);
+  );
+  const tools = selectToolsByTier(granted, tier).map(annotateTool);
   return jsonRpcOk(id, { tools });
 }
 
@@ -425,13 +433,41 @@ async function handleToolsCall(
   //   - structuredContent: the raw ToolResult.data when present, so clients
   //     that support structured content (per the 2025-11-25 spec) can use it
   //     directly without re-parsing the text block
+  // Bound the model-facing payload (G1/P6, context-engineering-standards.md).
+  // External CLIs have large windows, so the cap is generous — but the prior
+  // behaviour dumped the *full* result.data into BOTH the text block and
+  // structuredContent with no ceiling, a real context tax at scale. When data
+  // exceeds the budget we substitute a bounded preview marker so both blocks
+  // stay within budget AND remain valid JSON the client can still parse.
+  let structured: unknown = result.data;
+  let dataForText: unknown = result.data;
+  if (result.data !== undefined) {
+    let dataJson: string;
+    try {
+      dataJson = JSON.stringify(result.data);
+    } catch {
+      dataJson = '"[unserializable data]"';
+    }
+    if (dataJson.length > MCP_ROUTE_TOOL_RESULT_CHAR_CAP) {
+      const marker = {
+        _truncated: true,
+        _note:
+          "Result exceeded the per-call context budget; re-call with " +
+          "filter/pagination/range parameters to narrow it.",
+        _originalChars: dataJson.length,
+        _preview: dataJson.slice(0, 2_000),
+      };
+      structured = marker;
+      dataForText = marker;
+    }
+  }
   const text = JSON.stringify(
     {
       success: result.success,
       message: result.message,
       ...(result.entityId ? { entityId: result.entityId } : {}),
       ...(result.error ? { error: result.error } : {}),
-      ...(result.data ? { data: result.data } : {}),
+      ...(dataForText !== undefined ? { data: dataForText } : {}),
     },
     null,
     2,
@@ -440,8 +476,8 @@ async function handleToolsCall(
     content: [{ type: "text", text }],
     isError: !result.success,
   };
-  if (result.data !== undefined) {
-    responseBody["structuredContent"] = result.data;
+  if (structured !== undefined) {
+    responseBody["structuredContent"] = structured;
   }
   return jsonRpcOk(id, responseBody);
 }
@@ -532,7 +568,11 @@ export async function POST(request: Request): Promise<Response> {
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return await handleToolsList(body.id ?? null, token);
+        return await handleToolsList(
+          body.id ?? null,
+          token,
+          resolveMcpToolTier(new URL(request.url).searchParams.get("tier")),
+        );
 
       case "tools/call":
         if (isNotification) {

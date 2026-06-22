@@ -1291,8 +1291,18 @@ export async function shipBuild(input: {
   name: string;
   portfolioSlug: string;
   versionBump?: VersionBump;
+  /**
+   * Explicit actor for autonomous (session-less) ship — the resolved build
+   * owner. When provided, the HTTP-session auth (`requireBuildAccess`) is
+   * skipped, because it throws in a background/reconciler context that has no
+   * session (`auth()` → Unauthorized). The build-ownership check
+   * (`createdById === userId`) below still applies, so a build can only be
+   * shipped by its own creator. UI callers omit this and authenticate via the
+   * session exactly as before — fully backward-compatible.
+   */
+  actorUserId?: string;
 }): Promise<{ productId: string; productInternalId: string; portfolioInternalId: string | null; promotionId: string | null; message: string }> {
-  const userId = await requireBuildAccess();
+  const userId = input.actorUserId ?? await requireBuildAccess();
 
   const build = await prisma.featureBuild.findUnique({ where: { buildId: input.buildId } });
   if (!build) throw new Error("Build not found");

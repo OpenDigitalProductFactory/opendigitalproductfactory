@@ -266,6 +266,33 @@ export async function dispatchIdeateForApprovedBuild(params: {
       durationMs,
     };
     await logActivity(`Auto-dispatched and saved designDoc in ${(durationMs / 1000).toFixed(1)}s (fields: ${designDocKeys.slice(0, 8).join(", ")})`);
+
+    // Auto-advance the happy path: run the design review now so the build moves
+    // ideate -> plan immediately instead of stranding at ideate until the 20-min
+    // stranded-build reconciler heals it. That stall is the autonomous-flow
+    // throughput gap — a backlog cannot drain if every build waits ~20 min at
+    // each pre-build handoff for the reconciler. Once the design review passes,
+    // the plan phase auto-chains on its own (dispatch plan -> reviewBuildPlan ->
+    // build), so this single missing link is all that blocks end-to-end
+    // hands-off progress (verified live: a one-shot reviewDesignDoc nudge drove a
+    // stalled build ideate -> plan -> build automatically).
+    //
+    // reviewDesignDoc is gate-aware (it correctly PARKS a `decompose-required`
+    // design rather than advancing it), so this never bulldozes the
+    // decomposition gate. Skipped on a fix-loop regeneration (priorReviewFeedback
+    // set): dispatchDesignReviewFixLoop runs the review itself, so auto-reviewing
+    // here would double-review. Best-effort — a review hiccup must not fail the
+    // fire-and-forget ideate dispatch; the reconciler/fix-loop stays the backstop.
+    if (!priorReviewFeedback) {
+      try {
+        const { executeTool } = await import("@/lib/mcp-tools");
+        await executeTool("reviewDesignDoc", { buildId }, userId, { featureBuildId: buildId });
+      } catch (err) {
+        await logActivity(
+          `Auto design-review after ideate did not complete: ${String(err instanceof Error ? err.message : err).slice(0, 160)} — stranded-build reconciler will retry.`,
+        );
+      }
+    }
     return outcome;
 
   } catch (err) {

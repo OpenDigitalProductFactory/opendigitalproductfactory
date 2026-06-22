@@ -37,7 +37,7 @@ export const modelDiscoveryRefresh = inngest.createFunction(
     id: "inference/model-discovery-refresh",
     retries: 2,
     concurrency: { limit: 1, scope: "fn" },
-    triggers: [cron("0 3 * * *")], // 3 AM daily (EP-MODEL-CAP-001-D)
+    triggers: [cron("10 3 * * *")], // 03:10 UTC — staggered off the 03:00 batch (EP-MODEL-CAP-001-D)
   },
   async ({ step }) => {
     const gate = await gateAtEntry(step);

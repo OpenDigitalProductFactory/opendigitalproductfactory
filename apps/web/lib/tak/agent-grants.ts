@@ -276,6 +276,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   validate_schema: ["sandbox_execute"],
   describe_model: ["sandbox_execute"],
   search_sandbox: ["sandbox_execute"],
+  // Programmatic tool calling (R4 / P7). Its own grant, default-deny → the tool
+  // is invisible to every agent until deliberately granted; the runtime also
+  // requires the programmatic_tool_calling flag. Read-only by construction.
+  run_tool_script: ["tool_script_exec"],
   list_sandbox_files: ["sandbox_execute"],
   run_sandbox_command: ["sandbox_execute"],
   update_feature_brief: ["backlog_write"],
@@ -397,6 +401,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   query_ontology_graph:   ["ea_graph_read"],
   run_traversal_pattern:  ["ea_graph_read"],
   export_archimate:       ["ea_graph_read"],
+  describe_ea_view:       ["ea_graph_read"],
 
   // Finance
   get_finance_period_summary:   ["financial_report_create"],

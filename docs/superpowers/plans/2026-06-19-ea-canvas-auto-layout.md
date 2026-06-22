@@ -66,3 +66,39 @@ Operator /goal "do as recommended with the container view" — built the deferre
 - `apps/web/components/ea/EaCanvas.tsx`: a **▦ Nest** toggle (localStorage-persisted, available to read-only too since nothing is saved) swaps the node/edge set to nested boxes (containers + nested leaves; only cross-cutting edges drawn — `contains` becomes nesting). Flat layout controls hidden while nested; flat auto-layout mount-effect guarded.
 
 Tests: 30 adapter (6 containment) + 16 EA component + 52 graph/actions/topology pass; web typecheck clean.
+
+---
+
+## Addendum — 2026-06-20: fix nested-view edge detachment
+
+Live-review regression on the containment view: cross-cutting edges detached from the boxes (bunched near the canvas origin) and didn't follow a container when moved. Cause: the floating `EaRelationshipEdge` built node geometry from `node.position`, which for nested children is **relative to the container** — fine in flat mode (all nodes top-level) but wrong when nested. Fix: new pure `apps/web/lib/ea/node-geometry.ts` `resolveAbsolutePositions` (sums the parent chain, cycle-guarded, unit-tested); `EaRelationshipEdge` now anchors edges on absolute positions, so they stay attached and track container moves (`useNodes()` re-fires on drag). Tests: +5 node-geometry; web typecheck clean.
+
+---
+
+## Addendum — 2026-06-20: crossing-minimizing layouts + relationship-aware nesting (BI-6333C6BC)
+
+Live review (research-backed): "organic" stays chaotic, and the nested view's inner layout ignored sibling relationships.
+
+- **Crossing minimization (flat):** research confirmed ELK `stress` ("organic") optimizes distance, not crossings; **ELK `layered` (Sugiyama) is the crossing minimizer** and handles cyclic graphs via cycle-breaking. `pickAutoAlgorithm` now routes any non-forest (dependency mesh) to **layered** (not organic); layered tuned with `crossingMinimization.strategy=LAYER_SWEEP`, `nodePlacement=BRANDES_KOEPF`+`bk.edgeStraightening`, `cycleBreaking=GREEDY`, `edgeRouting=ORTHOGONAL`, and `thoroughness` restored to 7 (4 only for n>400). "Organic" relabeled honestly and kept as a manual option.
+- **Edge style from layout:** layered/tree → step (right-angle), organic/radial → straight — driven automatically when a layout runs (curved/bezier looked chaotic on dense graphs).
+- **Relationship-aware nesting (compound):** `computeContainmentLayout` now uses ELK compound (`hierarchyHandling: INCLUDE_CHILDREN`) — children are laid out INSIDE their container by their cross-cutting edges (crossing-minimized; e.g. MCP Tool Authority's 271 Traces among 308 children), containers sized to fit. ELK's parent-relative coords + sizes map straight onto React Flow `parentId`/`extent`/`style`. The shelf packer is retained as a resilient fallback (and for the pure-cycle case). Nested edges render orthogonally (step).
+- **Deferred follow-up:** persist nested manual edits (drag) across reload (canvasState nesting schema) — nodes are draggable in-session today.
+
+Tests: 33 adapter (incl. compound + dense→layered) + 40 component/graph; web typecheck clean. No new dependency.
+
+---
+
+## Addendum — 2026-06-21: edge dedup + bidirectional merge + self-loop drop (BI-F1B5C04B)
+
+Live review of three issues: (1) "some models show 4 relationships between 2 entities — seems odd"; (2) large models cluster/process poorly; (3) auto-clustering loses to a quick manual cleanup on small dense meshes.
+
+**Evidence (live DB):** `EaRelationship` has NO unique constraint on (from,to,type) → projection extractors re-create rows each sync → 95 duplicate groups / 107 redundant rows + 44 self-loops + 1288 bidirectional pairs. `buildEdges` rendered one React-Flow edge per row (no dedup) → 4 duplicate rows = 4 stacked lines (the operator's "4"). `buildLayoutEdges` fed ALL those edges to ELK → ELK saw an inflated graph and clustered too tightly (why manual beat auto on the small mesh).
+
+**Shipped (canvas-only, BI-F1B5C04B):**
+- New pure `dedupeRenderEdges(edges)` in `canvas-layout.ts`: groups by (unordered pair × relationship type); parallel/exact duplicates → one edge; both directions present → one **bidirectional** edge; self-loops dropped. Returns a representative id + `mergedIds`. Unit-tested (6 cases).
+- `EaCanvas.buildEdges` uses it; bidirectional → `markerStart` + `markerEnd` (one double-headed edge instead of two stacked lines). `EaRelationshipEdge` now passes `markerStart` through to `BaseEdge`.
+- `EaCanvas.buildLayoutEdges` dedupes to one structural edge per unordered top-ancestor pair before ELK → truer structure, looser/clearer clustering (addresses the manual-beats-auto gap from the layout side).
+
+**Filed as siblings (NOT in this PR):** root-cause data fix **BI-8C121D30** (dedup the 107 rows + unique constraint + projection upsert — guard-gated steward migration) and large-view perf **BI-7060F7C5** (run ELK in a Web Worker for 300–619-node views so layout doesn't block the main thread).
+
+Tests: 39 adapter (incl. 6 dedupe) + 40 component/graph (190 total) pass; web typecheck clean. No new dependency.

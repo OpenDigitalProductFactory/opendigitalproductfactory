@@ -147,6 +147,10 @@ Both must permit the tool. The `TOOL_TO_GRANTS` record maps platform tool names 
 
 Every tool call writes to `ToolExecution` (`agentId`, `userId`, `toolName`, `parameters`, `result`, `success`, `executionMode`, `routeContext`, `durationMs`, `createdAt`). Visible at `/platform/ai/authority`.
 
+**Context & token economy (mandatory).** Tool definitions, results, and prompts are a finite-budget resource; the binding window is the **~24,576-token local served window**, not a cloud window, and tool-selection accuracy collapses past ~15 tools (`LOCAL_FALLBACK_MAX_TOOLS`). When adding or changing a model-facing tool: keep its `description` **provenance-free** (no `Phase N`, `(BI-…)`, or source paths — those go in code comments; CI guard: `apps/web/lib/tool-description-hygiene.test.ts`), return **concise, paginated, capped** results (the runtime cap is `apps/web/lib/tak/tool-result-budget.ts`), and prefer **few, consolidated, phase/grant-scoped** tools over growing the 242-tool surface. Standard: [`docs/architecture/context-engineering-standards.md`](docs/architecture/context-engineering-standards.md). Live client capability facts (refreshed monthly): [`docs/architecture/agent-client-capability-parity.md`](docs/architecture/agent-client-capability-parity.md).
+
+**Lean MCP surface (optional):** an external CLI can opt into a curated core tool set by pointing its MCP URL at `…/api/mcp/v1?tier=core` (in `.mcp.json` / Codex `config.toml`). `tools/list` then returns ~22 broadly-useful tools instead of the full granted surface (cutting the upfront token tax); the model can still call any granted tool by name, and `search_tool_marketplace` surfaces the rest. Default (no `?tier=`) is the full surface — unchanged.
+
 ## 9. External Tools
 
 → [kernel principle](docs/founder-kernel/wiki/principles/tool-evaluation-pipeline.md)
@@ -167,6 +171,8 @@ Every new feature spec must include a "Research & Benchmarking" section before f
 Before adding any large feature, audit the existing schema for refactoring opportunities. Indicators that refactoring is needed: a domain model being reused as a shared concept; the same logical data appearing in two+ existing models; a new feature needing meta-data with no canonical home. → [kernel principle](docs/founder-kernel/wiki/principles/schema-audit-before-features.md)
 
 `Organization` is the canonical platform identity model. Any feature needing org name, slug, logo, address, or contact info reads from `Organization` — not from `BrandingConfig`, env vars, or bespoke fields elsewhere. → [kernel principle](docs/founder-kernel/wiki/principles/organization-canonical-identity.md)
+
+The `Organization.address` JSON has one canonical shape + helpers in [`apps/web/lib/shared/org-address.ts`](apps/web/lib/shared/org-address.ts) (`OrgAddress`, `parseOrgAddress` / `serializeOrgAddress` / `formatOrgAddressLines`, `resolveTimezoneFromAddress`). Read and write the address through those — do **not** hand-roll a parallel address field or shape. It is captured at setup via the business-context step (`/storefront/settings/business`) and is the precise source for state-accurate timezone derivation (BI-AAAA0691).
 
 **Principal convergence (2026-05-09).** Per the addendum on `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`, any new identity-bearing entity introduced after 2026-05-09 must be modeled as a `PrincipalAlias` linked to a single `Principal`, not as a parallel identity table. The convergence target covers `User`, `CustomerContact`, `Agent`, `EdgeNode`, `MobileDevice`, and `ServiceAccount`. Authorization decisions resolve on the `Principal`; alias kind tells the platform which surface authenticated the request. → [kernel principle](docs/founder-kernel/wiki/principles/principal-convergence.md)
 

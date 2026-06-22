@@ -61,8 +61,18 @@ vi.mock("@/lib/self-upgrade/window", () => ({
   nextUpgradeWindowOpen: vi.fn().mockReturnValue(null),
 }));
 
+// 24/7 auto-window resolution (BI-A6382FB9). Default "operating-hours" so the
+// existing (non-24/7) status tests are unaffected; the 24/7 tests override it.
+vi.mock("@/lib/self-upgrade/auto-window", () => ({
+  resolveAutoUpgradeWindow: vi.fn().mockReturnValue({ kind: "operating-hours" }),
+  nextAutoWindowOpen: vi.fn().mockReturnValue(null),
+  describeWindows: vi.fn().mockReturnValue("2:00 AM–4:00 AM"),
+}));
+
 vi.mock("@/lib/operating-hours-read", () => ({
-  resolveOperatingScheduleForSystem: vi.fn().mockResolvedValue({ schedule: {}, timezone: "UTC" }),
+  resolveOperatingScheduleForSystem: vi
+    .fn()
+    .mockResolvedValue({ schedule: {}, timezone: "UTC", timezoneKnown: false, lowTrafficWindows: [] }),
 }));
 
 vi.mock("@/lib/self-upgrade/last-check", () => ({
@@ -148,6 +158,7 @@ import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { createRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
 import { getCurrentImpactSummaryId } from "@/lib/self-upgrade/impact";
 import { isUpgradeWindowOpen, nextUpgradeWindowOpen } from "@/lib/self-upgrade/window";
+import { resolveAutoUpgradeWindow, nextAutoWindowOpen } from "@/lib/self-upgrade/auto-window";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import { inngest } from "@/lib/queue/inngest-client";
 import { revalidatePath } from "next/cache";
@@ -215,6 +226,10 @@ beforeEach(() => {
   vi.mocked(getCurrentImpactSummaryId).mockResolvedValue(null);
   vi.mocked(getLastCheckedAt).mockResolvedValue(null);
   vi.mocked(nextUpgradeWindowOpen).mockReturnValue(null);
+  // Default the 24/7 resolver back to "operating-hours" each test (clearAllMocks
+  // leaves return values intact, so a prior 24/7 test would otherwise leak).
+  vi.mocked(resolveAutoUpgradeWindow).mockReturnValue({ kind: "operating-hours" });
+  vi.mocked(nextAutoWindowOpen).mockReturnValue(null);
   // Default: treat triggers as in-window so dispatch tests exercise the happy
   // path. Tests that care about the window gate override this explicitly.
   vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);
@@ -450,6 +465,57 @@ describe("getSelfUpgradeStatus", () => {
     expect(result.inMaintenanceWindow).toBe(false);
     // Explicit windows present → windowSource reflects the override.
     expect(result.windowSource).toBe("explicit");
+  });
+
+  // BI-A6382FB9 — a 24/7 store auto-picks an overnight window; the panel shows a
+  // read-only schedule note and the next 02:00 local, not the dead-end "configured".
+  it("auto-selects an overnight window for a 24/7 store (windowSource=auto-overnight)", async () => {
+    const autoWindows = [
+      { dayOfWeek: [0, 1, 2, 3, 4, 5, 6], startTime: "02:00", endTime: "04:00" },
+    ];
+    vi.mocked(resolveAutoUpgradeWindow).mockReturnValue({
+      kind: "auto-overnight",
+      windows: autoWindows,
+      source: "default",
+    });
+    vi.mocked(nextAutoWindowOpen).mockReturnValue(new Date("2026-05-26T02:00:00.000Z"));
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false); // not currently in the 2-4am window
+    vi.mocked(getDeployedSha).mockResolvedValue("abc1234");
+    vi.mocked(resolveTargetSha).mockResolvedValue("def5678");
+    vi.mocked(isShaFresh).mockReturnValue(false);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
+
+    const result = await getSelfUpgradeStatus();
+
+    expect(result.windowSource).toBe("auto-overnight");
+    expect(result.autoWindowSummary).toBe("2:00 AM–4:00 AM");
+    // nextWindowStart comes from the auto window, not the (null) operating-hours derivation.
+    expect(result.nextWindowStart).toBe("2026-05-26T02:00:00.000Z");
+    // The gate is evaluated against the auto windows.
+    expect(isUpgradeWindowOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ explicitWindows: autoWindows }),
+    );
+  });
+
+  // BI-A6382FB9 — a 24/7 store with no derivable timezone prompts the operator
+  // instead of guessing an overnight window in an unknown zone.
+  it("prompts for a timezone on a 24/7 store with no known timezone (windowSource=needs-timezone)", async () => {
+    vi.mocked(resolveAutoUpgradeWindow).mockReturnValue({ kind: "needs-timezone" });
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
+    vi.mocked(getDeployedSha).mockResolvedValue("abc1234");
+    vi.mocked(resolveTargetSha).mockResolvedValue("def5678");
+    vi.mocked(isShaFresh).mockReturnValue(false);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
+
+    const result = await getSelfUpgradeStatus();
+
+    expect(result.windowSource).toBe("needs-timezone");
+    expect(result.autoWindowSummary).toBeNull();
+    expect(result.nextWindowStart).toBeNull();
+    // No window is handed to the gate (24/7 + unknown tz → not auto-runnable).
+    expect(isUpgradeWindowOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ explicitWindows: undefined }),
+    );
   });
 
   it("passes channel and source config to resolveTargetSha", async () => {

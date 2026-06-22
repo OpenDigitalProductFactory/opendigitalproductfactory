@@ -22,6 +22,7 @@ import { reconcileSkillToolchain } from "./reconcile-skill-toolchain";
 import { reconcileOperationalGraph } from "./reconcile-operational-bridge";
 import { reconcileNetworkTopology } from "./reconcile-network-bridge";
 import { reconcileIntegrations } from "./reconcile-integration-bridge";
+import { reconcileScheduledJobs } from "./reconcile-scheduled-jobs";
 import type { SysmlSeedResult } from "./sysml-model-seed";
 
 export interface SysmlProjectionsResult {
@@ -36,6 +37,8 @@ export interface SysmlProjectionsResult {
   operationalGraph: SysmlSeedResult;
   networkTopology: SysmlSeedResult;
   integrations: SysmlSeedResult;
+  // Scheduling surface — all scheduled work, across substrates (EP-SCHEDULING-SURFACE).
+  scheduledJobs: SysmlSeedResult;
 }
 
 export async function reconcileSysmlProjections(
@@ -51,8 +54,9 @@ export async function reconcileSysmlProjections(
   const operationalGraph = await reconcileOperationalGraph({ db: opts.db });
   const networkTopology = await reconcileNetworkTopology({ db: opts.db });
   const integrations = await reconcileIntegrations({ db: opts.db });
+  const scheduledJobs = await reconcileScheduledJobs({ db: opts.db });
   return {
     mcpAuthority, coworkerAuthority, valueStreams, routes, codeStructure, processModels, skillToolchain,
-    operationalGraph, networkTopology, integrations,
+    operationalGraph, networkTopology, integrations, scheduledJobs,
   };
 }

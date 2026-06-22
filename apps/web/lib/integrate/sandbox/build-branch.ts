@@ -254,6 +254,17 @@ function sandboxGitPrelude(): string {
     // never trip the host-oriented guard. (BI-98B723C0 follow-up — observed
     // blocking a re-dispatch when the sandbox sat on feat/bs-local-gpu-serialize.)
     `export DPF_ALLOW_ROOT_CLONE_COMMIT=1`,
+    // Same rationale for the pre-commit TYPECHECK: the sandbox is a build tree,
+    // not a dev clone, and its pre-commit typecheck runs against a stale /
+    // junctioned Prisma client + other pre-existing, out-of-scope errors (e.g.
+    // `@prisma/client has no exported member 'PrismaClient'`) that have nothing
+    // to do with the build's own diff. Those false positives reject the
+    // mechanical `sandbox baseline` commit, so startBuildBranch fails and NO
+    // build can enter the build phase. The build's real typecheck is the
+    // review-phase SCOPED verification + CI on the PR — not this hook. Bypass it
+    // here like the root-clone guard above. (Observed live blocking FB-0A4B102D
+    // and the whole fleet at the plan→build handoff.)
+    `export DPF_SKIP_TYPECHECK=1`,
     `if [ -f "${GIT_INDEX_LOCK}" ]; then for _dpf_git_wait in 1 2 3 4 5; do if ! pgrep -x git >/dev/null 2>&1; then break; fi; sleep 1; done; if [ -f "${GIT_INDEX_LOCK}" ] && ! pgrep -x git >/dev/null 2>&1; then rm -f "${GIT_INDEX_LOCK}"; fi; fi`,
     `git config --global --add safe.directory "${WORKSPACE}" >/dev/null 2>&1 || true`,
   ].join(" && ");

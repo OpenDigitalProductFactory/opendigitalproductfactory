@@ -38,6 +38,10 @@ const mocks = vi.hoisted(() => ({
   // Activity precheck snapshot (BI-F36E7510). Default empty so existing tests
   // proceed to the drain exactly as before; the new skip-path test overrides it.
   captureActiveSessionBlockers: vi.fn().mockResolvedValue({ surfaces: [] }),
+  // 24/7 auto-window resolution (BI-A6382FB9). Default "operating-hours" so the
+  // gate behaves exactly as before (falls through to the mocked isUpgradeWindowOpen);
+  // the 24/7 tests override it.
+  resolveAutoUpgradeWindow: vi.fn().mockReturnValue({ kind: "operating-hours" }),
 }));
 
 vi.mock("@/lib/self-upgrade/config", () => ({
@@ -50,6 +54,10 @@ vi.mock("@/lib/self-upgrade/window", () => ({
 
 vi.mock("@/lib/operating-hours-read", () => ({
   resolveOperatingScheduleForSystem: mocks.resolveOperatingScheduleForSystem,
+}));
+
+vi.mock("@/lib/self-upgrade/auto-window", () => ({
+  resolveAutoUpgradeWindow: mocks.resolveAutoUpgradeWindow,
 }));
 
 vi.mock("@/lib/self-upgrade/last-check", () => ({
@@ -621,6 +629,10 @@ describe("pre-upgrade recovery point gate", () => {
 describe("maintenance window gate + emergency override", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default the 24/7 resolver back to "operating-hours" (clearAllMocks leaves a
+    // prior describe's return value / one-shot queue intact); the 24/7 tests below
+    // override per-call with mockReturnValueOnce.
+    mocks.resolveAutoUpgradeWindow.mockReturnValue({ kind: "operating-hours" });
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.getDeployedSha.mockResolvedValue("oldsha1");
     setupSourceReady();
@@ -655,6 +667,45 @@ describe("maintenance window gate + emergency override", () => {
     const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true, force: true });
     expect(result).toMatchObject({ ok: true, status: "succeeded" });
     expect(mocks.runPromoter).toHaveBeenCalled();
+  });
+
+  // BI-A6382FB9 — a 24/7 store has no derived "closed" window. With a known
+  // timezone the scheduled gate evaluates against the auto-selected overnight
+  // window instead of the (never-open) operating-hours derivation, so scheduled
+  // upgrades actually run.
+  it("SCHEDULED run on a 24/7 store evaluates the auto-selected overnight window", async () => {
+    const autoWindows = [
+      { dayOfWeek: [0, 1, 2, 3, 4, 5, 6], startTime: "02:00", endTime: "04:00" },
+    ];
+    mocks.resolveAutoUpgradeWindow.mockReturnValueOnce({
+      kind: "auto-overnight",
+      windows: autoWindows,
+      source: "default",
+    });
+    mocks.isUpgradeWindowOpen.mockReturnValue(true); // currently inside the overnight window
+
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+
+    // The gate evaluates the AUTO windows, not the empty operating-hours derivation.
+    expect(mocks.isUpgradeWindowOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ explicitWindows: autoWindows }),
+    );
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+  });
+
+  // BI-A6382FB9 — a 24/7 store with no derivable timezone can't be scheduled
+  // safely. It skips cleanly (no drain, no run, no cooldown) with a distinct
+  // reason; the Upgrade Center prompts for a timezone rather than guessing.
+  it("SCHEDULED run on a 24/7 store with no known timezone skips with no-window-needs-timezone", async () => {
+    mocks.resolveAutoUpgradeWindow.mockReturnValueOnce({ kind: "needs-timezone" });
+
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+
+    expect(result).toMatchObject({ skipped: true, reason: "no-window-needs-timezone" });
+    // Never consults the window gate, never drains, never creates a run.
+    expect(mocks.isUpgradeWindowOpen).not.toHaveBeenCalled();
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
   });
 });
 

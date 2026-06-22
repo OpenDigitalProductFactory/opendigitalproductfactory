@@ -825,6 +825,25 @@ function formatCodeIntelligenceSection(phase: BuildPhase): string[] {
   ];
 }
 
+/**
+ * The founder-kernel lens the architecture reviewer already measures plans
+ * against (build-reviewers.ts `ARCHITECTURE_REVIEW_REFERENCES`). The planner did
+ * not carry it, so plans were rejected on kernel grounds the planner never
+ * consulted and the build escalated `needs-human` for guidance the kernel
+ * already mandates (BI-C2CB3073 / the issue-report surface design §5.3). Injected
+ * into ideate/plan so the planner designs to the same standard up front. These
+ * four are the recurring rejections that stranded a whole WWMD initiative.
+ */
+export const PLAN_DESIGN_STANDARD = `--- Design Standard (the architecture reviewer WILL hold your design/plan to this) ---
+Measured against the DPF founder kernel (docs/founder-kernel/wiki/principles/) and AGENTS.md. Satisfy these IN the design/plan or the review rejects it and the build stalls. The recurring failures:
+
+1. INPUT VALIDATION & SANITIZATION (kernel commandment "never trust input - validate, encode, parameterize"). For every new field, parameter, and external input, state how it is validated, length/format-constrained, and encoded. Unbounded String columns and unvalidated request bodies are automatic rejections.
+2. AUTHORIZATION, least privilege (kernel commandment "least privilege, deny by default"). For every new API route, MCP tool, mutation, or sensitive read, state the auth/ownership check. A new endpoint or tool with no stated authz is an automatic rejection.
+3. CONCRETE TEST-FIRST. Each task's testFirst must name the real test file and the specific failing case it asserts (e.g. "apps/web/lib/x/y.test.ts - asserts validateRationale() rejects a 5000-char body"), not a vague "write a test".
+4. GROUNDED FILE PATHS. Every fileStructure path and modify target must be a REAL path in this repo - verify before listing. Frequent misses: it is "packages/db/prisma/schema.prisma" (not "packages/db/schema.prisma"); source files are kebab-case (e.g. "build-orchestrator.ts", not "build_orchestrator.ts"). A plan referencing a non-existent modify target is rejected.
+
+Design to this up front - it is the same lens the reviewer applies, so meeting it here is how the plan passes WITHOUT a needs-human escalation.`;
+
 export async function getBuildContextSection(ctx: BuildContext): Promise<string> {
   const lines: string[] = [
     "",
@@ -984,6 +1003,17 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
   if (ctx.deliberationReason && ctx.deliberationReason.trim()) {
     lines.push("");
     lines.push(`DELIBERATION: ${ctx.deliberationReason.trim()}`);
+  }
+
+  // BI-C2CB3073: give the planner the SAME founder-kernel lens the architecture
+  // reviewer measures against. The recurring rejections that strand builds at
+  // ideate/plan with a needs-human escalation (missing input validation, missing
+  // authz, vague test-first, invented file paths) are kernel-commandment matters
+  // the planner can satisfy up front instead of escalating for them. Ideate/plan
+  // only - this is design-time guidance, not build-time.
+  if (ctx.phase === "ideate" || ctx.phase === "plan") {
+    lines.push("");
+    lines.push(PLAN_DESIGN_STANDARD);
   }
 
   lines.push("");

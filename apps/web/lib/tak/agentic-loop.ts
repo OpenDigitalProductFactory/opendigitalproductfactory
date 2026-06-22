@@ -32,6 +32,8 @@ import {
 } from "./execution-plan";
 import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store";
 import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
+import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
+import { assessToolSurface, computeToolSelectionAccuracy } from "./context-economy-metrics";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern
@@ -1157,6 +1159,14 @@ export async function runAgenticLoop(params: {
   // the Portfolio Analyst latency investigation, 2026-06-04.
   const toolsAttachedForTurn = Boolean((toolsForProvider && toolsForProvider.length > 0) || planEnabled);
   const logTurnSummary = (provider: string, model: string): void => {
+    // Context-economy gauge (R8/P12): the tool-surface size + estimated
+    // definition-token cost banded against the local selection cliff, plus this
+    // turn's tool-selection accuracy. Observability-only — never changes what is
+    // sent; makes a ballooning surface or a repeatedly-failing tool loud.
+    const surface = assessToolSurface({ tools: toolsForProvider, windowTokens: resolvedMaxContextTokens });
+    const turnToolAccuracy = computeToolSelectionAccuracy(
+      executedTools.map((t) => ({ toolName: t.name, success: t.result.success })),
+    );
     console.log(
       sanitizeForLog(
         `[turn] thread=${JSON.stringify(threadId)} agent=${JSON.stringify(agentId)} ` +
@@ -1164,7 +1174,9 @@ export async function runAgenticLoop(params: {
         `dispatches=${inferenceCallCount} nudges=${continuationNudges} ` +
         `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} ` +
         `totalMs=${Date.now() - startTime} ` +
-        `ctxPeakTokens=${ctxPeakTokens} ctxZone=${classifyContextPressure(ctxPeakTokens, resolvedMaxContextTokens).zone}`,
+        `ctxPeakTokens=${ctxPeakTokens} ctxZone=${classifyContextPressure(ctxPeakTokens, resolvedMaxContextTokens).zone} ` +
+        `toolSurface=${surface.toolCount} estToolTokens=${surface.estDefinitionTokens} surfaceZone=${surface.zone} ` +
+        `toolAccuracy=${turnToolAccuracy.total === 0 ? "na" : turnToolAccuracy.accuracy.toFixed(2)}`,
       ),
     );
     // BI-47443B67: persist the same rollup durably so the regression detector
@@ -2050,9 +2062,14 @@ export async function runAgenticLoop(params: {
       },
       ...iterationResults.map(({ tc, toolResult }) => ({
         role: "tool" as const,
-        content: toolResult.success
-          ? `${toolResult.message}${toolResult.data ? `\n${JSON.stringify(toolResult.data).slice(0, 3000)}` : ""}`
-          : `Error: ${toolResult.error ?? "unknown error"}`,
+        // G1/P6 (context-engineering-standards.md): bound the model-facing
+        // serialization to a window-proportional cap with an explicit
+        // truncation notice. Replaces the prior silent `slice(0, 3000)`, which
+        // left `message` unbounded and gave the model no signal that data was
+        // cut. The stored toolResult (audit/receipts) is unaffected.
+        content: clampToolResultForModel(toolResult, {
+          maxChars: resolveToolResultCharCap(resolvedMaxContextTokens),
+        }).text,
         toolCallId: tc.id,
       })),
     ];

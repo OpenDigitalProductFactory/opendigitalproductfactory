@@ -3,7 +3,7 @@ import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
 
 export const prometheusPoll = inngest.createFunction(
-  { id: "ops/prometheus-poll", retries: 2, triggers: [cron("0 * * * *")] },
+  { id: "ops/prometheus-poll", retries: 2, triggers: [cron("5 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
@@ -22,7 +22,7 @@ export const fullDiscoverySweep = inngest.createFunction(
     id: "ops/full-discovery-sweep",
     retries: 2,
     concurrency: { limit: 1, scope: "fn" },
-    triggers: [cron("0 * * * *")],
+    triggers: [cron("10 * * * *")],
   },
   async ({ step }) => {
     const gate = await gateAtEntry(step);

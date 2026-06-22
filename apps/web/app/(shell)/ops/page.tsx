@@ -1,5 +1,7 @@
 // apps/web/app/(shell)/ops/page.tsx
 import { getBacklogItems, getDigitalProductsForSelect, getTaxonomyNodesFlat, getEpics, getPortfoliosForSelect } from "@/lib/backlog-data";
+import { reconcileImprovementBacklog } from "@/lib/evaluate/improvement-backlog-reconcile";
+import { reconcileCapabilityNeedBacklog } from "@/lib/coworker-self-assessment/capability-backlog-reconcile";
 import { OpsClient } from "@/components/ops/OpsClient";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { SurfaceViewSwitcher } from "@/components/workbooks/SurfaceViewSwitcher";
@@ -15,6 +17,17 @@ export default async function OpsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const rawView = sp?.view;
   const view = rawView === "grid" || rawView === "board" ? rawView : null;
+
+  // Surface convergence (EP-INTAKE-UNIFY, operator directive 2026-06-20): /ops is
+  // the ONE place every source is seen + worked, so it now owns the idempotent
+  // backfill the retired origin pages used to run on render — every improvement /
+  // capability need is guaranteed in the backlog. Non-fatal; zero-write once
+  // converged.
+  await Promise.all([
+    reconcileImprovementBacklog().catch(() => {}),
+    reconcileCapabilityNeedBacklog().catch(() => {}),
+  ]);
+
   const [items, digitalProducts, taxonomyNodes, epics, portfolios] = await Promise.all([
     getBacklogItems(),
     getDigitalProductsForSelect(),

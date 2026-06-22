@@ -60,6 +60,7 @@ const DOMAIN_LABELS: Record<ProjectionDomain, string> = {
   operationalGraph: "operational graph (live runtime)",
   networkTopology: "network topology (discovered)",
   integrations: "connected-application integrations",
+  scheduledJobs: "scheduling surface (all scheduled work)",
 };
 
 function projectionEntries(result: SysmlProjectionsResult): Array<[ProjectionDomain, ProjectionStatus]> {
