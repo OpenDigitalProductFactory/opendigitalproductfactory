@@ -70,7 +70,10 @@ describe("portal navigation model", () => {
       ...family.subItems.map((item) => item.href),
     ]);
 
-    expect(platformFamilyHrefs).toContain("/admin");
+    // EP-NAV-COHERENCE keystone: the "Core Admin" family was removed, so the
+    // platform tab component no longer links out to /admin at all (it was a
+    // cross-context teleport). Admin is reached from the persistent rail instead.
+    expect(platformFamilyHrefs).not.toContain("/admin");
     expect(getSectionNavEntries("/platform").map((entry) => entry.path)).not.toContain(
       "/admin",
     );
