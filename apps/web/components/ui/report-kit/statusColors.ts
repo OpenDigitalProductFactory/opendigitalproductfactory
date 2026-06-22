@@ -56,6 +56,17 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  // Portfolio coverage axis (BI-PORTCOV-P6): what relationship the org has to a
+  // portfolio entry — used/sold = in use, available = configurable now,
+  // potential = one governed click to enable, planned/retired.
+  portfolioCoverage: {
+    used: "success",
+    sold: "success",
+    available: "info",
+    potential: "accent",
+    planned: "warning",
+    retired: "neutral",
+  },
   // Finance invoice/payment lifecycle (was app/(shell)/finance STATUS_COLOURS).
   finance: {
     draft: "neutral",
