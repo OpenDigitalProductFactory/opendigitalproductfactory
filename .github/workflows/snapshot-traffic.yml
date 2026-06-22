@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # main checkout provides scripts/metrics/merge-traffic.mjs.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.0
 
       - name: Fetch clones + views from the Traffic API
         env:

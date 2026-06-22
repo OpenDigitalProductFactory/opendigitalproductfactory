@@ -49,7 +49,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.0
         with:
           # Full history + tags so git describe / tag verification work.
           fetch-depth: 0
