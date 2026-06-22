@@ -12,6 +12,10 @@ import {
   isDuplicate,
   type BacklogItemData,
 } from "./process-observer-triage";
+import {
+  classifyIssueReportStream,
+  isResponderStream,
+} from "@/lib/quality/issue-report-stream";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -29,6 +33,9 @@ interface IssueReport {
   // to dedup a whole crash incident (same real error across routes) and to
   // anchor the operator's diagnostic prompt.
   errorDigest?: string | null;
+  // BI-0ACD9AB2: self-fix-feasibility class. When set, the report is a self-fix
+  // escalation the responder attends — the projection guard skips + holds it.
+  selfFixClass?: string | null;
 }
 
 // BI-B4F401B3: reports filed by the production crash boundary carry only a
@@ -183,6 +190,10 @@ export async function triageIssueReports(deps: {
   createBacklogItem: (data: BacklogItemData) => Promise<void>;
   incrementOccurrence: (title: string) => Promise<void>;
   acknowledgeReport: (id: string) => Promise<void>;
+  /** BI-0ACD9AB2 §5.2: hold a self-fix escalation for the responder
+   *  (awaiting_escalation_ack) instead of generic-projecting it. Optional so
+   *  pure-function tests may omit it; the runner always provides it. */
+  holdForResponder?: (id: string) => Promise<void>;
   /** BI-B4F401B3: returns the title of an existing crash BI that already
    *  captured this error digest, or null. Powers cross-route incident dedup so
    *  one underlying error reported from N routes folds into one BI. */
@@ -209,6 +220,17 @@ export async function triageIssueReports(deps: {
   let llmEnhanced = 0;
 
   for (const report of reports) {
+    // Projection guard (BI-0ACD9AB2 §5.2): a self-fix escalation is attended by
+    // the escalation responder, never generic-projected. Hold it for the
+    // responder (awaiting_escalation_ack) and skip. New escalations are born in
+    // that status (createPlatformIssueReport) and never reach this OPEN pool;
+    // this self-heals any legacy OPEN self-fix row — e.g. the stalled
+    // build-stall-escalation reports filed before the front-door guard existed.
+    if (isResponderStream(classifyIssueReportStream(report))) {
+      if (deps.holdForResponder) await deps.holdForResponder(report.id);
+      continue;
+    }
+
     const isCrashBoundary = report.source === CRASH_BOUNDARY_SOURCE;
 
     // ── Step 1: Try LLM-enhanced triage ──────────────────────────────────

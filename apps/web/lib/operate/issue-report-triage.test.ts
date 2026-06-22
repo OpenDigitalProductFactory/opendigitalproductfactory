@@ -185,6 +185,70 @@ describe("triageIssueReports", () => {
   });
 });
 
+describe("triageIssueReports — self-fix escalation projection guard (BI-0ACD9AB2)", () => {
+  const escalationReport = {
+    id: "r-esc",
+    reportId: "PIR-ESC01",
+    type: "build-stall-escalation",
+    severity: "high",
+    title: 'Build Studio needs a human: "X" stuck at plan review',
+    description: "blocked",
+    routeContext: null,
+    errorStack: null,
+    source: "build-studio",
+    selfFixClass: "needs-human",
+  };
+
+  it("does NOT generic-project a self-fix escalation — holds it for the responder", async () => {
+    const created: unknown[] = [];
+    const acknowledged: string[] = [];
+    const held: string[] = [];
+
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [escalationReport],
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+      acknowledgeReport: async (id: string) => { acknowledged.push(id); },
+      holdForResponder: async (id: string) => { held.push(id); },
+    }));
+
+    expect(result.created).toBe(0);
+    expect(created).toHaveLength(0);   // no BI-PIR-* created
+    expect(acknowledged).toEqual([]);  // not marked triaged_local
+    expect(held).toEqual(["r-esc"]);   // held for the responder instead
+  });
+
+  it("classifies by selfFixClass even when the type is not build-stall-escalation", async () => {
+    const created: unknown[] = [];
+    const held: string[] = [];
+
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [
+        { ...escalationReport, id: "r-esc2", reportId: "PIR-ESC02", type: "runtime_error" },
+      ],
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+      holdForResponder: async (id: string) => { held.push(id); },
+    }));
+
+    expect(result.created).toBe(0);
+    expect(held).toEqual(["r-esc2"]);
+  });
+
+  it("is per-report — a normal runtime report in the same batch still projects", async () => {
+    const created: unknown[] = [];
+    const held: string[] = [];
+
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [escalationReport, report],
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+      holdForResponder: async (id: string) => { held.push(id); },
+    }));
+
+    expect(result.created).toBe(1);    // the runtime report still projects
+    expect(created).toHaveLength(1);
+    expect(held).toEqual(["r-esc"]);   // only the escalation is held
+  });
+});
+
 describe("triageIssueReports — crash_boundary gate (BI-B4F401B3)", () => {
   const crashReport = {
     id: "rc1",
