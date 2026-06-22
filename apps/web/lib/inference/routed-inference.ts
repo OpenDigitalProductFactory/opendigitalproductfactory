@@ -94,6 +94,11 @@ export interface RouteAndCallOptions {
   requiresComputerUse?: boolean;
   /** Budget posture override. */
   budgetClass?: "minimize_cost" | "balanced" | "quality_first";
+  /** EP-MODEL-TIER-ROUTING: capability tier for this call. "local" forces
+   *  residencyPolicy=local_only (keeps small/simple work on the on-box model);
+   *  "robust" leaves routing free to prefer a frontier endpoint. Unset = today's
+   *  behavior (governed only by the global local-only switch). */
+  modelTier?: "local" | "robust";
   /** Minimum dimension scores (0-100) models must meet. Models below any threshold are excluded. */
   minimumDimensions?: Record<string, number>;
   /** EP-INF-009c: Route to a specific model class (e.g., "image_gen", "embedding"). */
@@ -228,7 +233,13 @@ async function prepareRoute(
       requiresComputerUse: options?.requiresComputerUse,
       budgetClass: options?.budgetClass,
       requiredModelClass: options?.requiredModelClass,
-      ...(localOnlyInference ? { residencyPolicy: "local_only" as const } : {}),
+      // EP-MODEL-TIER-ROUTING: a "local"-tier call forces local_only (keep
+      // small/simple work on-box) even when the global switch is off; "robust"
+      // leaves routing free to prefer a frontier endpoint. The global local-only
+      // switch still wins for every call (the sovereign master toggle).
+      ...(options?.modelTier === "local" || localOnlyInference
+        ? { residencyPolicy: "local_only" as const }
+        : {}),
     },
   );
 

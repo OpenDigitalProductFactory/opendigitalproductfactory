@@ -69,6 +69,14 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+    # Bundle ALL workflow-action bumps into one weekly PR. WWMD 2026-06-22
+    # (principle_decide): group-only-manual — cut PR count, keep human review on
+    # merges (Human-in-the-Loop + Build-Gate outweighed auto-merge convenience).
+    # Without this, each action update is its own PR (e.g. two open majors:
+    # actions/checkout + pnpm/action-setup → would collapse to one).
+    groups:
+      github-actions:
+        patterns: ["*"]
     labels:
       - "dependencies"
       - "github-actions"
@@ -78,6 +86,10 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+    # Bundle all base-image bumps into one weekly PR (see github-actions note).
+    groups:
+      docker:
+        patterns: ["*"]
     labels:
       - "dependencies"
       - "docker"

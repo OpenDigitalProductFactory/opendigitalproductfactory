@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 import { inngest } from "@/lib/queue/inngest-client";
 import { ISSUE_REPORT_STATUS, type IssueReportStatus } from "./issue-report-status";
+import { classifyIssueReportStream, isResponderStream } from "./issue-report-stream";
 
 // Field length limits — matched to existing writers and Prisma schema column widths.
 const LIMITS = {
@@ -106,6 +107,9 @@ export interface CreatePlatformIssueReportInput {
  *  - Validates status against ISSUE_REPORT_STATUS; rejects unknown values.
  *  - Leaves status undefined when not provided so the Prisma schema default
  *    ("open") applies — supports cron contract.
+ *  - Projection guard (BI-0ACD9AB2 §5.2): a self-fix escalation (build-stall /
+ *    selfFixClass) with no pinned status is born in awaiting_escalation_ack so it
+ *    is held for the escalation responder, not generic-projected into a BI.
  *
  * Privacy / non-identifiability transforms (redactHostnames, secret scan,
  * coworker-synthesized summaries) are intentionally OUT of scope for Phase 0
@@ -117,6 +121,28 @@ export async function createPlatformIssueReport(
   if (input.status !== undefined && !VALID_STATUSES.has(input.status)) {
     throw new Error(`createPlatformIssueReport: unknown status "${input.status}"`);
   }
+
+  // Projection guard (BI-0ACD9AB2 §5.2 — trusted escalation routing): a self-fix
+  // escalation (type="build-stall-escalation" / selfFixClass set) is attended by
+  // the escalation responder, never generic-projected into a BI. When the caller
+  // did not pin a status, birth it in awaiting_escalation_ack — a non-resolved
+  // support-flow status — so it (a) is held for the responder, not the generic
+  // projector, (b) never fires the immediate projection event below (status !=
+  // open), and (c) is still covered by the per-dedupeKey "one non-resolved
+  // report" partial-unique. Every writer is guarded at this one front door.
+  const status: IssueReportStatus | undefined =
+    input.status ??
+    (isResponderStream(
+      classifyIssueReportStream({
+        type: input.type,
+        source: input.source,
+        severity: input.severity,
+        selfFixClass: input.selfFixClass,
+        errorDigest: input.errorDigest,
+      }),
+    )
+      ? ISSUE_REPORT_STATUS.AWAITING_ESCALATION_ACK
+      : undefined);
 
   const digitalProductId =
     input.digitalProductId ??
@@ -162,7 +188,7 @@ export async function createPlatformIssueReport(
       source: input.source.slice(0, LIMITS.source),
       portfolioId,
       digitalProductId,
-      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(status !== undefined ? { status } : {}),
     },
   });
 
@@ -171,7 +197,7 @@ export async function createPlatformIssueReport(
   // triage cron. Support-flow reports (status !== open) are owned by the support
   // pipeline and skipped. Best-effort — the cron remains the safety net, so a
   // send failure never loses the projection.
-  const effectiveStatus = input.status ?? ISSUE_REPORT_STATUS.OPEN;
+  const effectiveStatus = status ?? ISSUE_REPORT_STATUS.OPEN;
   if (effectiveStatus === ISSUE_REPORT_STATUS.OPEN) {
     try {
       await inngest.send({ name: "quality/issue-report.created", data: { reportId } });

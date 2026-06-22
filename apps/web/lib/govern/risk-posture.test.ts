@@ -92,9 +92,12 @@ describe("resolveRiskEnvelope", () => {
     expect(resolveRiskEnvelope("balanced")).toMatchObject({
       posture: "balanced",
       hitlDefault: "selective",
-      capabilityAutoActivate: true,
+      capabilityAutoActivate: false,
       autonomyCeiling: "moderate",
     });
+    // only progressive auto-activates recommended capabilities
+    expect(resolveRiskEnvelope("conservative").capabilityAutoActivate).toBe(false);
+    expect(resolveRiskEnvelope("progressive").capabilityAutoActivate).toBe(true);
     expect(resolveRiskEnvelope("progressive")).toMatchObject({
       posture: "progressive",
       hitlDefault: "minimal",

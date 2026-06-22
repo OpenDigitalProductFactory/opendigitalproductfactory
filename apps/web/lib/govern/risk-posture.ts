@@ -113,7 +113,10 @@ const ENVELOPES: Record<RiskPosture, Omit<RiskEnvelope, "posture">> = {
   balanced: {
     hitlDefault: "selective",
     selfUpgradeWindow: "standard",
-    capabilityAutoActivate: true,
+    // false = today's behavior: `recommended` capabilities are asked at setup,
+    // not auto-enabled. Only `progressive` auto-activates. Keeps balanced a
+    // strict no-change baseline for the capability-activation consumer (P1.2).
+    capabilityAutoActivate: false,
     outboundConfirmation: "first-time",
     edgeDeployDefault: false,
     autonomyCeiling: "moderate",

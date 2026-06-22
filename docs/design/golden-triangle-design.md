@@ -2,9 +2,11 @@
 
 **Cost | Quality | Time as a governed preference-to-policy compiler for trusted AI agents**
 
-*Design review draft v0.3 - 2026-06-21*
+*Design review draft v0.3.1 - 2026-06-21*
 
 > **v0.3 changelog.** Integrates a multi-thread review (UX/accessibility, ethos/culture fit, strategy/completeness) plus a competitive-benchmarking pass. Headline changes: **presets are the primary control** (the triangle becomes a fine-tune visualization); a corrected **2-degrees-of-freedom accessibility contract** (a 2D control is not the WAI-ARIA *slider* pattern); the triangle is framed as **cognitive-load migration** and connected to the **kernel principle system**; and three factual corrections to the v0.2 control-layers analysis — the `effort` lever already exists end-to-end, perspective/review count's home is the **deliberation engine**, and `MAX_ITERATIONS` is a *safety ceiling*, not the dominant cost lever. Adds cold-start defaults, the composition point with `inferContract()`, and success metrics.
+>
+> **v0.3.1 architect/usability pass.** Tightens the enterprise architecture decision, adds a one-screen executive capsule, strengthens the UX navigation and component contract, makes the standards basis explicit (WCAG 2.2 + APG radio/spinbutton patterns), and replaces success-metric placeholders with initial launch guardrails to validate in Slice 0.
 
 ---
 
@@ -50,6 +52,31 @@ Candidate principle: the cognitive-load migration audit flags `migrate-to-the-ri
 
 ---
 
+## 0.2 Executive Decision Capsule
+
+| Question | Decision |
+| --- | --- |
+| What is this? | A governed preference-to-policy compiler for cost / quality / time posture. |
+| What is the first shippable value? | Operators choose a plain-language posture and see the decoded policy + receipt for what the agent system actually ran. |
+| What is it not? | Not a model picker, not a second router, not a new model registry, not a drag-only visualization. |
+| What must be true before UI exposure? | Slice 0 proves the substrate shape; Slice 1 proves deterministic compile output; Slice 3 proves receipt telemetry. |
+| Where does the 20% refactor budget go? | Entirely into Slice 0 substrate consolidation: naming, type boundaries, receipt joins, and deletion/avoidance of duplicate registry or ledger concepts. |
+| Primary UX promise | One-click default for most users; complete keyboard/numeric access for every posture; audit details available without making the default screen technical. |
+
+Enterprise architecture contract:
+
+```text
+human posture
+  -> Golden Triangle compiler (pure, deterministic)
+  -> existing RequestContract / inferContract + workflow orchestration policy
+  -> route execution + deliberation + verification
+  -> receipt, telemetry, feedback, and learning record
+```
+
+Any implementation that skips the compiler, bypasses `inferContract()`, writes a standalone model-control table first, or exposes the triangle before receipts is a design violation.
+
+---
+
 ## 1. Research and Benchmarking
 
 ### External Precedent
@@ -60,14 +87,16 @@ Trusted AI precedent points in the same direction. NIST AI RMF frames trustworth
 
 Observability precedent also matters. OpenTelemetry's trace/metric/log model emphasizes correlated context across telemetry signals. DPF should follow that pattern: the preference snapshot, route decision, model attempt, token cost, feedback verdict, and benchmark record share a single correlation identifier (the route receipt id; §8).
 
-Accessibility precedent is non-negotiable — **but the WAI-ARIA *slider* pattern is one-dimensional and does not cover a 2D point control.** Because the posture selector exposes two degrees of freedom, its accessible foundation is the **preset list (a `radiogroup` of real buttons) plus three labeled numeric spinbuttons**, with the triangle layered on top as an enhancement (§6). The numeric/preset layer — not the drag surface — is the canonical accessible control.
+Accessibility precedent is non-negotiable — **but the WAI-ARIA *slider* pattern is one-dimensional and does not cover a 2D point control.** WCAG 2.2 also makes drag alternatives and target size first-class AA concerns, which reinforces the design choice: the posture selector's accessible foundation is the **preset list (a `radiogroup`) plus three labeled numeric spinbuttons**, with the triangle layered on top as an enhancement (§6). The numeric/preset layer — not the drag surface — is the canonical accessible control.
 
 External references:
 
 - PMI, [The Triple Constraint](https://www.pmi.org/learning/library/triple-constraint-erroneous-useless-value-8024)
 - NIST, [AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework)
 - OpenTelemetry, [Overview](https://opentelemetry.io/docs/specs/otel/overview/)
+- W3C, [Web Content Accessibility Guidelines 2.2](https://www.w3.org/TR/WCAG22/)
 - W3C WAI-ARIA APG, [Slider Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/slider/) (one-dimensional; see §6 for the 2-DOF contract)
+- W3C WAI-ARIA APG, [Radio Group Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/radio/) and [Spinbutton Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/spinbutton/)
 
 ### DPF Substrate Precedent
 
@@ -203,10 +232,12 @@ The triangle does not run beside contract inference; it **feeds** it. The compil
 
 The canonical control is a **posture selector** with two coordinated layers.
 
-- **Layer 1 (default, primary): four preset cards** — Fast, Frugal, Assured, Balanced — each a real `<button>` showing the preset name and a one-line plain-language effect. Most users stop here; selecting a preset is one click or keypress.
+- **Layer 1 (default, primary): four preset controls** — Fast, Frugal, Assured, Balanced — rendered as native radio inputs styled as compact segmented controls/cards where feasible, each showing the preset name and a one-line plain-language effect. Most users stop here; selecting a preset is one click or keypress.
 - **Layer 2 (opt-in fine-tune): a triangle visualization** that plots the active posture as a labeled point and, once "Fine-tune" is engaged, lets the user nudge the point between presets. The triangle is a *view of* and *adjustment to* the posture, not the only input. Because the weighting is soft and non-zero-sum (Decision 2), the triangle must communicate that vertices are *emphasis*, not a fixed budget being divided — show each axis's resulting bias as a labeled fill/scale, not only as distance from a vertex.
 
 The UI always shows: active preset name, the plain decoded summary, the projected cost/latency envelope when available, and whether hard policy changed the requested posture.
+
+The first viewport must read as an operations control, not an illustration. Use compact preset buttons, a short decoded-policy line, and a receipt/projection area. The triangle is visually subordinate unless the user chooses Fine-tune; it should never dominate the page or push the receipt below the first meaningful viewport.
 
 Preset names carry a mandatory plain-language effect line — the name alone must not be the only signal (operator copy targets FK reading grade ≤ 9 per `docs/platform-usability-standards.md`):
 
@@ -224,11 +255,24 @@ Preset names carry a mandatory plain-language effect line — the name alone mus
 
 The control discloses in three steps, matching DPF's progressive-disclosure doctrine (AGENTS.md §12; a founder-patented value):
 
-1. **Default:** four preset buttons + the active preset's one-line decoded summary. Usable on the first screen with one click.
+1. **Default:** four preset controls + the active preset's one-line decoded summary. Usable on the first screen with one click.
 2. **Fine-tune (on demand):** a toggle reveals the triangle and three numeric weight steppers for users who want a posture between presets.
 3. **Operator detail (on demand):** a "Show what this configured" disclosure reveals the exact `budgetClass`, `reasoningDepth`, `effort`, tier floor, verification depth, retry/orchestration budget, deliberation pattern, model candidates, and any policy override.
 
 The plain decoded summary and the receipt link are always visible; everything else is revealed, not defaulted.
+
+### User Journey Contract
+
+The feature is successful only if the user can complete this loop without learning model-routing vocabulary:
+
+1. **Choose posture:** pick Fast / Frugal / Assured / Balanced, or open Fine-tune.
+2. **Preview policy:** read one plain sentence plus projected cost/latency, including any hard-policy adjustment.
+3. **Confirm at the right boundary:** if the posture changes a phase-level or production-affecting behavior, show a phase-boundary approval card; do not ask per tool call.
+4. **Run:** the router, deliberation engine, loop governors, and verification layer execute the decoded policy.
+5. **Read receipt:** see requested posture, actual model/route/effort/verification, cost/latency, and any delta.
+6. **Give feedback:** lightweight positive / mixed / negative verdict, optionally linked to acceptance or rework evidence.
+
+The receipt is not an afterthought; it is the second half of the control. A posture picker without an adjacent receipt path fails the trust promise.
 
 ### Accessibility contract (2 degrees of freedom)
 
@@ -243,12 +287,13 @@ type GoldenTrianglePreference = {
 };
 ```
 
-- **Roles & structure.** Presets render as a `role="radiogroup"` of real `<button role="radio" aria-checked>` controls (one is always the active posture). The three weights render as `<input type="number">` spinbuttons (Cost %, Quality %, Time %) with visible `<label>`s; together they reproduce any posture. The triangle, if interactive, is a focusable thumb with `aria-roledescription="priority area"` whose accessible name reports all three weights and the active preset — **never** the only path to a value.
+- **Roles & structure.** Presets render as a native radio group where feasible (`<fieldset>` / `<legend>` / `<input type="radio">` styled as compact preset buttons). If the local component library requires a roving-button implementation, it must follow the WAI-ARIA APG radio-group pattern (`role="radiogroup"`, `role="radio"`, `aria-checked`, visible labels, described-by copy). The three weights render as `<input type="number">` spinbuttons (Cost %, Quality %, Time %) with visible `<label>`s; together they reproduce any posture. The triangle, if interactive, is a focusable thumb with `aria-roledescription="priority area"` whose accessible name reports all three weights and the active preset — **never** the only path to a value.
 - **Keyboard model (two axes, explicit).** With a preset focused: Arrow keys move between presets; Enter/Space selects. With the triangle thumb focused (fine-tune only): Left/Right adjust the Cost↔Time balance, Up/Down adjust toward/away from Quality, in fixed steps (e.g. 5%); Home returns to Balanced; PageUp/PageDown jump to the nearest preset; step size and current axis are announced. The three spinbuttons are independently Tab-reachable; editing one re-normalizes the others and announces the change.
 - **Screen-reader announcements.** On any change, announce the **decoded outcome**, not just raw weights, via an `aria-live="polite"` region: e.g. "Assured posture. Cost 20%, Quality 55%, Time 25%. Decoded: stronger model, deeper review, higher projected cost." When hard policy alters the request, the live region announces the adjustment.
 - **No color-only encoding** (WCAG 1.4.1): every axis and the active preset are conveyed by text/label/position, never hue alone.
 - **Reduced motion.** Honor `prefers-reduced-motion` locally (drag-trail/snap animation disabled); do not assume a platform-wide primitive exists.
-- **Touch & target size.** Preset buttons, steppers, and the thumb meet the DPF 44px minimum hit area.
+- **Dragging alternative.** Any drag gesture has an equivalent click, keyboard, and numeric-input path (WCAG 2.5.7). Dragging can enrich the expert layer; it cannot be required for setting a posture.
+- **Touch & target size.** Preset buttons, steppers, and the thumb meet the DPF 44px minimum hit area and WCAG 2.2 target-size expectations.
 - **Semantic HTML & focus.** Real `<button>`/`<input>`/`<fieldset>`/`<legend>`; no `<div onClick>`. Use the platform `:focus-visible` token, do not redefine it.
 
 ### Empty, projecting, and failure states
@@ -262,6 +307,7 @@ type GoldenTrianglePreference = {
 
 - Use DPF theme tokens (`--dpf-*`); the surface is quiet and operational, not a marketing hero.
 - **Compose reporting/data-display UI from the shared report-kit** (`apps/web/components/ui/report-kit/`): `StatusBadge`, `StatCard`, `DataTable`, `FilterBar`, `Chart`. Do not hand-roll badges, tables, KPI tiles, status-color maps, or charts (kernel principle `compose-report-kit-for-reporting-ux`). Status/severity colors resolve through `statusColors.ts` (status → intent → token), never a page-local hex.
+- `Chart` is intentionally imported by subpath (`@/components/ui/report-kit/Chart`) because it pulls in recharts; do not re-export it through the report-kit barrel or make server components transitively client-heavy.
 - The triangle specifically: token-only fills and thumb (no gradient, glow, or orb); axis emphasis shown with labeled fills meeting WCAG 2.2 AA 3:1 for UI components, never hue-only; quiet panel, no cards inside cards.
 - **Mobile / narrow viewport:** the interactive surface falls back to presets + numeric steppers; the triangle renders as a read-only thumbnail. No drag-on-a-simplex requirement on touch widths.
 - The first screen is usable with one click (pick a preset) and reads at a high-school level.
@@ -283,6 +329,23 @@ preference vector
   -> route/review/verification execution
   -> receipt + telemetry + benchmark
 ```
+
+Compiler invariants:
+
+- **Pure and deterministic.** The compiler has no database writes, no network calls, no provider-specific branching, and no hidden randomness. Inputs in, decoded policy out.
+- **Existing routing remains authoritative.** Routing-shaped fields go through `inferContract()`; workflow-shaped fields go to the orchestration budget; model/provider availability comes from existing routing substrate.
+- **Hard constraints outrank posture.** Residency, sensitivity, tool grants, policy floors, and human-in-the-loop rules clamp the decoded policy before execution.
+- **Receipts are mandatory.** Every compiled policy produces a preference snapshot, decoded-policy snapshot, final inferred contract, orchestration budget, and route receipt correlation id.
+- **No silent learning.** Calibration can recommend defaults only from realized outcome signals and must preserve the before/after policy version.
+
+Precedence order:
+
+1. Hard policy and safety constraints.
+2. Authority scope (WWMD / WWWD / later WSID or per-decision override).
+3. Task requirements and model capability floors.
+4. User posture preference.
+5. Provider health, cost, latency, and capacity.
+6. Learned defaults and tie-breakers.
 
 ### Control Layers
 
@@ -361,6 +424,14 @@ type OrchestrationBudget = {
 
 Attachment: recorded on the route/decision receipt alongside the posture override; read by the agentic loop and the deliberation orchestrator. Because the orchestration budget governs how hard a *phase* tries, it is set and changed at **phase boundaries**, not per tool call — honoring the commandment-tier `human-in-the-loop-at-phase-boundaries` principle. A posture change that would alter a production-affecting action still presents an approval card regardless of phase.
 
+Non-functional requirements for the compiler:
+
+- Deterministic enough for snapshot tests: the same inputs produce byte-identical decoded policy.
+- Explainable enough for the plain decode panel: every adjustment has a human-readable reason and a machine-readable reason code.
+- Diffable enough for receipts: requested posture, decoded policy, final inferred contract, and actual route can be compared field by field.
+- Versioned enough for learning: every saved default and receipt records compiler version, preset version, and authority-profile version.
+- Fail-closed by construction: blocked/defer is a first-class output, not an exception path.
+
 ### Representative Compile Table
 
 | User posture | Decoded intent | Compiler behavior |
@@ -422,6 +493,17 @@ Minimum benchmark fields:
 - timestamp and coarse environment metadata
 
 Do not store prompts, outputs, file contents, customer identifiers, or free text in benchmark rows intended for hive contribution.
+
+Provisional artifact names for Slice 0 validation (names, not schema commitments):
+
+| Artifact | Purpose | Persistence posture |
+| --- | --- | --- |
+| `GoldenTrianglePreferenceSnapshot` | Immutable requested posture, preset source, authority scope, and profile version for one run. | Persist with the decision/run receipt path. |
+| `GoldenTriangleDecodedPolicy` | Compiler output: posture override, orchestration budget, policy adjustments, and explanation codes. | Persist with the receipt; no separate ledger unless query cost proves it. |
+| `GoldenTriangleReceiptView` | Read model joining preference snapshot, final inferred contract, route outcome, telemetry, and feedback. | Start as a view/projection; materialize only for performance or hive export. |
+| `GoldenTriangleDefaultProfile` | Saved default for a scope/task class if existing `DecisionInteraction.profileId` substrate cannot carry it cleanly. | Add only after Slice 0 proves existing profile extension is insufficient. |
+
+These names keep implementation conversations precise while preserving the schema discipline: prefer projection and extension over new canonical tables.
 
 ---
 
@@ -488,6 +570,14 @@ Anti-pattern rejected: uploading raw traces and trying to anonymize them later.
 
 ## 11. UI Surfaces
 
+Navigation and placement rules (portal IA):
+
+- This is **not** a new global navigation destination. Global nav stays reserved for durable product areas; the Golden Triangle lives inside Platform > AI / Decision Perspective and appears contextually where a decision is being made.
+- The saved-default editor is configuration, so it belongs with Decision Perspective / AI governance settings, not inside operational Build Studio task flow.
+- The per-decision posture selector is a local page control, not navigation. It appears in a gate/review panel or launch form, then collapses back to the decoded summary + receipt link.
+- Receipts and benchmark history are destination content. They belong in the AI evidence/audit surface, with drill-down links from decisions and Build Studio runs.
+- Do not duplicate the same choice in top nav, section tabs, and page controls. The user chooses posture at the point of decision; admins maintain defaults in the governance surface.
+
 Recommended first surfaces, **reusing the existing Decision Perspective substrate** (`apps/web/lib/decision-perspective/*`, `apps/web/components/decision-perspective/*`, route `/platform/ai/decisions/[interactionId]`) rather than new homes:
 
 1. **Decision Perspective / WWMD default editor**: the first saved Golden Triangle profile, scoped to platform decisions.
@@ -504,6 +594,13 @@ The decode panel reuses the **Decision Canvas two-layer pattern** already shippe
 
 Tiering rule: the plain view never shows schema identifiers or enum literals. The operator-detail view may show raw field names but pairs each with a human gloss (e.g. `reasoningDepth: high` → "Reasoning effort: high") and renders missing values as "default" / "not set", never raw `null`. The two-layer split preserves trust without making every user read infrastructure, and reuses a gate-passing component family rather than a parallel one.
 
+Surface-level copy rules:
+
+- Use posture verbs and outcomes ("check more", "spend less", "finish sooner") before platform nouns.
+- Every numeric projection carries units and confidence state ("estimate unavailable", "based on 12 comparable runs", "policy floor applied").
+- Every override callout states who/what overrode the posture: task floor, residency, sensitivity, provider health, budget cap, or human approval requirement.
+- Receipt links use the same label everywhere: "View receipt". Do not alternate with "trace", "route log", "audit", or "details" unless the page title clarifies the deeper artifact.
+
 ---
 
 ## 12. Risks and Issues
@@ -511,6 +608,8 @@ Tiering rule: the plain view never shows schema identifiers or enum literals. Th
 | Risk | Why it matters | Mitigation |
 | --- | --- | --- |
 | Illusion of control | A nice triangle can hide opaque routing choices. | Always show decoded policy and actual receipt, **and surface the delta**: a plain-language callout whenever hard policy/fail-closed changed the posture, or actual cost/latency/outcome diverged from the projection. |
+| Premature UI exposure | Shipping the selector before receipts trains users to trust a promise the system cannot prove. | Feature-flag UI exposure until Slice 3 receipt joins exist; Slice 2 can be internally demoed but not placed in non-operator workflows. |
+| Visual overreach | The triangle metaphor can dominate the page and make a serious governance control feel like a toy. | Presets, decoded summary, and receipt/projection stay first; triangle is opt-in fine-tune and read-only on narrow/touch-heavy layouts. |
 | Duplicate substrate | A new model registry or ledger would fork routing truth. | Reuse `ModelProfile`, route telemetry, token ledgers, and the deliberation engine first. |
 | Quality theater | Users may equate "more expensive" with "correct." | Separate intended assurance from realized quality and verification. |
 | Frugal under-serving | A non-expert can pick "cheap" on a task where the cheap route is materially less correct, then trust the result. | Hard task floors (`minimumTier`) clamp Frugal; the decode panel states when Frugal was raised by a floor; realized-quality monitoring auto-raises the Frugal floor for a task class whose verification-pass rate falls below threshold. |
@@ -523,6 +622,8 @@ Tiering rule: the plain view never shows schema identifiers or enum literals. Th
 | Hive poisoning & gaming | Bad or strategically self-interested installs can skew defaults. | Reputation weighting, outlier suppression, delayed trust, and incentive-alignment down-weighting (§10). |
 | Cost incompleteness | Token cost is not the whole cost: reviewer labor, latency, subscriptions, rate limits. | Start with tokens, then add capacity/rate-limit and review-cost accounting. |
 | Accessibility gap | A drag-only 2D control excludes keyboard/screen-reader users. | Presets + numeric are the canonical control; the triangle is an enhancement (§6). |
+| APG mismatch | A bespoke radio/drag implementation can look accessible while violating keyboard/name/role/value semantics. | Prefer native radio and number inputs; if using custom roles, test against APG radio-group/spinbutton behavior plus screen-reader announcements. |
+| Calibration drift | Learned defaults can slowly optimize for easy-to-measure cost/latency and underweight correctness. | Guardrail monitors compare realized quality against task floors; calibration changes require receipt-backed before/after evidence and revert path. |
 | Silent policy override | Hard constraints may change the posture invisibly. | Explain adjustments inline and in receipts (the delta callout). |
 
 ---
@@ -533,14 +634,16 @@ v1 implements WWMD and WWWD/org scopes only; WSID/profession and per-decision-ov
 
 ### Slice 0: Substrate Audit and Refactor Budget
 
-Use the requested 20 percent refactor budget here.
+Use the requested 20 percent refactor budget here. This is not cosmetic cleanup; it is the architectural work that prevents the feature from creating duplicate truth. A practical allocation for the first implementation epic is **80% feature delivery / 20% substrate refactor**, with the refactor bucket spent only on code and schema boundaries the triangle directly touches.
 
 - Verify exact existing fields and gaps across `ModelProfile`, `AgentModelConfig`, `RequestContract`, `TaskRequirement`, the `effort` lever, the deliberation engine, route receipts, telemetry, and decision records.
+- Normalize names and type boundaries around preference snapshot, decoded policy, orchestration budget, receipt view, and feedback verdict before adding UI.
 - Map each triangle axis to its `PRINCIPLE_DIMENSIONS` member(s) and record a `UX-Fit-Decision:` attestation (AGENTS.md §12 — mandatory, CI-enforced). Note: `human_cognitive_load` has no carrying kernel principle today, so its `principle_decide` score is degenerate — record on merits and flag the kernel gap (§0.1).
 - Audit the profile referenced by `DecisionInteraction.profileId` before adding any saved-defaults table.
 - Confirm whether benchmark records should be materialized or initially projected as a read model; align the shape to GearInterface.
 - **Go/no-go on the orchestration-budget surface.** Confirm there is no *posture-driven* orchestration budget today (`agentic-loop.ts` bounds runs with the `MAX_ITERATIONS = 200` safety ceiling, phase-aware `MAX_DURATION_*` limits, a spin guard, a one-nudge cap, and a repetition detector — none driven by posture). Decide whether the orchestration budget (duration ceiling, retry budget, verification depth, deliberation pattern) is a new per-decision field or an extension of `AgentModelConfig`/workflow policy. Slices 2–3 depend on this.
 - Define stable TypeScript types for the posture override and orchestration budget.
+- Delete or avoid any provisional `ModelRegistryEntry`, detached `TrianglePosition`, page-local status-color map, or route-local model picker that appears during prototyping.
 
 Exit criterion: a one-page substrate delta naming every schema addition, every reused table, and the orchestration-budget go/no-go.
 
@@ -605,16 +708,18 @@ The design is ready for implementation when:
 - A benchmark row/view joins intended posture to actual model/cost/outcome under one correlation id.
 - Calibration is driven by realized-quality signals, not posture-selection frequency.
 - Hive contribution has an explicit payload schema and exclusion list.
+- Slice 0 records a `UX-Fit-Decision:` attestation and a substrate delta naming reused tables, new fields, rejected duplicate surfaces, and the 20% refactor work completed or intentionally deferred.
 
 ### 14.1 Success Metrics (does the shipped feature work?)
 
-Measured against a control cohort with the triangle off:
+Measured against a control cohort with the triangle off. Initial launch guardrails below are product targets to validate or recalibrate after Slice 0 baseline data:
 
-- **Posture fidelity:** ≥ X% of runs where the realized route/effort matches the requested posture's decoded policy (from receipts).
-- **Cost-posture correlation:** Frugal runs show statistically lower median cost than Balanced, Assured higher, on matched task classes (predicted-vs-actual drift within Y%).
-- **No silent under-serve:** Assured realized quality (verification pass + acceptance, not satisfaction) ≥ Balanced; Frugal shows no more than Z% drop in verification pass vs Balanced.
+- **Posture fidelity:** ≥ 95% of governed runs have actual route/effort/verification matching the decoded policy, excluding explicitly labeled provider outages and hard-policy overrides.
+- **Cost-posture correlation:** On matched task classes, Frugal median token/provider cost is at least 20% below Balanced, and Assured is above Balanced only where it buys additional effort/review/verification. Predicted-vs-actual cost drift stays within 25% after the first 30 comparable runs per task class.
+- **No silent under-serve:** Assured realized quality (verification pass + acceptance, not satisfaction) is at least Balanced; Frugal shows no more than a 5 percentage-point verification-pass drop versus Balanced on tasks where Frugal is allowed by policy.
 - **Override transparency:** 100% of policy-overridden runs surface an explanation (zero silent overrides).
-- **Adoption without confusion:** triangle-set runs show no elevated rework/retry vs defaults (guards against illusion-of-control degrading outcomes).
+- **Accessibility completion:** keyboard-only and screen-reader test scripts complete preset selection, numeric fine-tune, policy preview, and receipt review with zero blocker issues.
+- **Adoption without confusion:** triangle-set runs show no elevated rework/retry versus defaults after controlling for task class; if rework rises by more than 5 percentage points, revert exposure to operator-only while copy and defaults are corrected.
 
 ---
 
@@ -623,13 +728,14 @@ Measured against a control cohort with the triangle off:
 1. Should the saved default table be new (`DecisionPreferenceProfile`) or an extension of the profile referenced by `DecisionInteraction.profileId`?
 2. Is the existing `taskType` / `TaskRequirement` taxonomy sufficient for benchmarking, or do we need a separate task-class taxonomy?
 3. Should "cost" v1 mean token/provider cost only, or include review labor and rate-limit capacity from day one?
-4. *(Resolved — see §5 "Composition point with `inferContract()`": routing-shaped fields go through `inferContract`; loop/verification/perspective fields are workflow-layer.)*
-5. Should per-decision overrides be available to all users, or only roles with specific tool/authority grants? (Deferred past v1.)
-6. How should the TAK draft standard name and validate the preference snapshot, decoded policy, receipt, and feedback objects?
-7. What is the minimum cohort size before hive-derived defaults can influence a local install?
-8. Should the orchestration budget (loop/duration ceiling, retry budget, verification depth) be a new per-decision field or an extension of `AgentModelConfig`/workflow policy? (Perspective count is *not* part of this — it maps to deliberation pattern selection. Resolve the narrower question in Slice 0.)
-9. Should the triangle's preset defaults be expressed as a stored `principle_decide` input (option set + dimension vector) so default-tuning is auditable through the existing decision ledger, rather than as hardcoded weights?
-10. Should the triangle receipt *be* a GearInterface Ring 1↔2 emission (dual-emit) rather than a standalone benchmark table, so one record feeds the Cockpit, Calibrator, and hive trust transport? (Resolve in Slice 0 against the Gear spec's Phase-0 status.)
+4. Should per-decision overrides be available to all users, or only roles with specific tool/authority grants? (Deferred past v1.)
+5. How should the TAK draft standard finalize names and validation for the provisional preference snapshot, decoded policy, receipt view, and feedback objects (§8)?
+6. What is the minimum cohort size before hive-derived defaults can influence a local install?
+7. Should the orchestration budget (loop/duration ceiling, retry budget, verification depth) be a new per-decision field or an extension of `AgentModelConfig`/workflow policy? (Perspective count is *not* part of this — it maps to deliberation pattern selection. Resolve the narrower question in Slice 0.)
+8. Should the triangle's preset defaults be expressed as a stored `principle_decide` input (option set + dimension vector) so default-tuning is auditable through the existing decision ledger, rather than as hardcoded weights?
+9. Should the triangle receipt *be* a GearInterface Ring 1↔2 emission (dual-emit) rather than a standalone benchmark table, so one record feeds the Cockpit, Calibrator, and hive trust transport? (Resolve in Slice 0 against the Gear spec's Phase-0 status.)
+
+Resolved for v0.3.1: routing-shaped fields go through `inferContract`; loop/verification/perspective fields are workflow-layer (§5). This is no longer an open decision.
 
 ---
 

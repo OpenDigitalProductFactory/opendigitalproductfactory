@@ -60,6 +60,7 @@ export async function runIssueReportTriage(opts: { reportId?: string } = {}) {
           errorStack: true,
           source: true,
           errorDigest: true,
+          selfFixClass: true,
         },
       }),
 
@@ -101,6 +102,16 @@ export async function runIssueReportTriage(opts: { reportId?: string } = {}) {
       await prisma.platformIssueReport.update({
         where: { id },
         data: { status: ISSUE_REPORT_STATUS.TRIAGED_LOCAL },
+      });
+    },
+
+    // BI-0ACD9AB2 §5.2: a self-fix escalation is held for the responder, never
+    // generic-projected. Move any legacy OPEN self-fix row into the support-flow
+    // status so the cron stops re-selecting it and the responder receives it.
+    holdForResponder: async (id) => {
+      await prisma.platformIssueReport.update({
+        where: { id },
+        data: { status: ISSUE_REPORT_STATUS.AWAITING_ESCALATION_ACK },
       });
     },
 

@@ -11,9 +11,11 @@
 //   resume-restall forever. The honest outcome is to:
 //     1. CAPTURE a durable, human-facing escalation record (root cause, what was
 //        attempted, why blocked, and a self-fix-feasibility class);
-//     2. RAISE it to humans — reuse createPlatformIssueReport(), whose OPEN rows
-//        auto-project into the backlog/triage intake (EP-INTAKE-UNIFY), so the
-//        escalation surfaces without any new notification plumbing;
+//     2. RAISE it for attendance — reuse createPlatformIssueReport(). A self-fix
+//        escalation is born in awaiting_escalation_ack and HELD for the
+//        escalation responder (BI-0ACD9AB2 §5.2), NOT generic-projected into a
+//        BI: the responder consults WWMD/WWWD/WSID and escalates only the
+//        residue a human truly needs, so the signal is received, not drowned;
 //     3. FREE the WIP slot — mark the build abandoned (wip-cap counts only
 //        abandonedAt-null builds), so the jam clears;
 //     4. RE-QUEUE without re-stalling — park the originating backlog item as
@@ -48,9 +50,10 @@ export type SelfFixClass = (typeof SELF_FIX_CLASS)[keyof typeof SELF_FIX_CLASS];
 /** Minimal shape of a blocking review issue (structurally matches PlanReviewIssue). */
 export type EscalationIssue = { severity: string; description: string };
 
-/** Stable idempotency key — one open escalation per build (partial-unique on
- *  PlatformIssueReport.dedupeKey for open rows). Re-escalation while still open
- *  is a no-op; it can re-file once the prior escalation is resolved. */
+/** Stable idempotency key — one NON-RESOLVED escalation per build (partial-unique
+ *  on PlatformIssueReport.dedupeKey WHERE status NOT IN resolved/suppressed, so it
+ *  covers the awaiting_escalation_ack birth status). Re-escalation while one is
+ *  still open/awaiting is a no-op; it re-files once the prior one is resolved. */
 export function buildEscalationDedupeKey(buildId: string): string {
   return `build-escalation:${buildId}`;
 }
@@ -157,9 +160,10 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
     buildId, featureTitle, biTitle, phase, rounds, issues, selfFixClass,
   });
 
-  // 1. CAPTURE + RAISE — durable report; OPEN rows auto-project into intake.
-  //    Best-effort: a duplicate (partial-unique dedupeKey on open rows) or any
-  //    failure must not stop us freeing the WIP slot.
+  // 1. CAPTURE + RAISE — durable report. A self-fix escalation (selfFixClass set)
+  //    is born in awaiting_escalation_ack and held for the responder, NOT generic-
+  //    projected (BI-0ACD9AB2 §5.2). Best-effort: a duplicate (per-dedupeKey "one
+  //    non-resolved report" partial-unique) or any failure must not stop WIP free-up.
   let reportId: string | null = null;
   try {
     const r = await createPlatformIssueReport({

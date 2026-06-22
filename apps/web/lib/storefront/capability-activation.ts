@@ -6,6 +6,7 @@ import {
   type CapabilityApplicability,
   type EffectiveCapabilityActivation,
 } from "@dpf/storefront-templates";
+import { resolveOrgRiskEnvelope } from "@/lib/govern/org-risk-envelope";
 
 /**
  * Server data-access for the generic per-organization capability-activation
@@ -49,8 +50,14 @@ export async function getEffectiveCapabilityActivations(
   organizationId: string,
   derived: ReadonlyArray<{ capabilityKey: string; applicability: CapabilityApplicability }>,
 ): Promise<EffectiveCapabilityActivation[]> {
-  const choices = await getOrgCapabilityChoices(organizationId);
-  return resolveOrgCapabilityActivations(derived, choices);
+  // P1.2: a progressive risk posture auto-activates un-decided `recommended`
+  // capabilities; balanced/conservative (and the fail-open default) leave today's
+  // ask-at-setup behavior. Resolved here, the single fold every consumer shares.
+  const [choices, envelope] = await Promise.all([
+    getOrgCapabilityChoices(organizationId),
+    resolveOrgRiskEnvelope(organizationId),
+  ]);
+  return resolveOrgCapabilityActivations(derived, choices, envelope.capabilityAutoActivate);
 }
 
 /**

@@ -22,6 +22,13 @@ describe("getDomainNavEntries", () => {
     expect(admin.every((e) => e.domain === "admin" && e.targetDomain === "admin")).toBe(true);
   });
 
+  it("registers Compliance section routes as navigation entries", () => {
+    const paths = entries.map((e) => e.path);
+    expect(paths).toContain("/compliance/risks");
+    expect(paths).toContain("/compliance/controls");
+    expect(paths).toContain("/compliance/audits");
+  });
+
   it("attributes Finance entries to the business domain with no teleport (all in-domain)", () => {
     const finance = entries.filter((e) => e.path.startsWith("/finance"));
     expect(finance.length).toBeGreaterThan(0);
