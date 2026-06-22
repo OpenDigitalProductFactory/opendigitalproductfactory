@@ -5,6 +5,8 @@ import { SETUP_STEPS, type SetupStep, type StepStatus, type SetupContext } from 
 import { seedOrgWwwdCorpus } from "@/lib/onboarding/seed-org-wwwd-corpus";
 import { seedPortfolioDecomposition } from "@/lib/onboarding/seed-portfolio-decomposition";
 import { seedMarketOffer } from "@/lib/onboarding/seed-market-offer";
+import { seedRiskPosture } from "@/lib/onboarding/seed-risk-posture";
+import { applyRiskEnvelopeToOrgProfile } from "@/lib/onboarding/apply-risk-envelope-to-profile";
 import { applyMissionPrompt } from "@/lib/onboarding/apply-mission-prompt";
 
 /**
@@ -32,6 +34,10 @@ async function finalizeSetupCompletion(organizationId: string | null): Promise<v
     await seedOrgWwwdCorpus({ organizationId: orgId });
     await seedPortfolioDecomposition({ organizationId: orgId });
     await seedMarketOffer({ organizationId: orgId });
+    await seedRiskPosture({ organizationId: orgId });
+    // P1: project the seeded posture onto the org WWWD profile's autonomy policy
+    // (runs after the profile exists + the posture is set; balanced = no change).
+    await applyRiskEnvelopeToOrgProfile({ organizationId: orgId });
   } catch (err) {
     console.warn("[setup] mission/WWWD seeding on completion failed (fail-open):", err);
   }

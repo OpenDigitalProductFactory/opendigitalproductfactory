@@ -2931,6 +2931,21 @@ model BusinessContext {
   // computation when null.
   portfolioDecomposition Json?
 
+  // ─── Risk posture (EP-ONBOARDING-INTAKE P0) ─────────────────────────────────
+  // Org-wide autonomy/risk appetite — the structured companion to the prose
+  // howWeDecide WWWD stance. Industry sets a conservative DEFAULT
+  // (deriveRiskPostureDefault, mirroring INDUSTRY_RETENTION_FLOORS); the operator
+  // may override. Sets the autonomy ENVELOPE (ceiling + maturation rate), not the
+  // live autonomy level: the autopilot trust dial still starts HITL-first and
+  // earns autonomy on evidence. Values: conservative | balanced | progressive.
+  // Read via resolveRiskEnvelope() (apps/web/lib/govern/risk-posture.ts).
+  // Consumers wired in P1; this column is the inert home seeded at setup.
+  riskPosture           String?
+  // Provenance: "industry-default" (machine-derived) or "operator" (chosen).
+  riskPostureSource     String?
+  // When the operator last confirmed/changed the posture.
+  riskPostureCapturedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
