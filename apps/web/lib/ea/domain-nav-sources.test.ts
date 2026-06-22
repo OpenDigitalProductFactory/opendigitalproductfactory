@@ -13,6 +13,15 @@ describe("getDomainNavEntries", () => {
     expect(paths).toContain("/finance/banking");
   });
 
+  it("registers Admin section routes as navigation entries in the admin domain", () => {
+    const paths = entries.map((e) => e.path);
+    expect(paths).toContain("/admin/settings");
+    expect(paths).toContain("/admin/branding");
+    const admin = entries.filter((e) => e.path.startsWith("/admin"));
+    expect(admin.length).toBeGreaterThan(0);
+    expect(admin.every((e) => e.domain === "admin" && e.targetDomain === "admin")).toBe(true);
+  });
+
   it("attributes Finance entries to the business domain with no teleport (all in-domain)", () => {
     const finance = entries.filter((e) => e.path.startsWith("/finance"));
     expect(finance.length).toBeGreaterThan(0);
