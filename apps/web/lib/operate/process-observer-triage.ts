@@ -42,6 +42,27 @@ export function severityToPriority(severity: Severity): number {
   return SEVERITY_MAP[severity];
 }
 
+/**
+ * Escalate a recurring item's priority as its occurrence tally grows. Priority
+ * is 1 (highest) … 4 (lowest); a duplicate that keeps recurring climbs toward 1.
+ * The result is never less urgent than the item's existing (severity-based)
+ * priority, and is a pure function of the tally — so re-applying it on every
+ * occurrence increment is monotonic and idempotent.
+ *
+ * Operator directive: dedup on entry → add to the tally → make a frequently
+ * recurring item incrementally higher-priority to look at.
+ */
+export function escalatePriorityForOccurrences(
+  currentPriority: number | null | undefined,
+  occurrenceCount: number,
+): number {
+  const fromTally =
+    occurrenceCount >= 20 ? 1 : occurrenceCount >= 8 ? 2 : occurrenceCount >= 3 ? 3 : 4;
+  const base =
+    typeof currentPriority === "number" && currentPriority > 0 ? currentPriority : 4;
+  return Math.max(1, Math.min(base, fromTally));
+}
+
 export function resolveBacklogTarget(context: {
   digitalProductId: string | null;
   routeContext: string;

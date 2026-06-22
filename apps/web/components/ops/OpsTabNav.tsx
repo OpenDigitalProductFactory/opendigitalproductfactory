@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 // EP-NAV-COHERENCE keystone (BI-8866F144): /ops used to present one flat tab row
-// — Backlog · Improvements · Changes · Promotions · Self-upgrade · Dev Loop —
 // under the rail item labelled "Backlog", so a layman read "why is self-upgrade
 // under backlog?". Self-upgrade (the platform deploying itself) and the dev-loop
 // (build-runtime coordination) are platform runtime/release operations, not
@@ -12,13 +11,12 @@ import { usePathname } from "next/navigation";
 // distinction is visible now; P1 (BI-CB07C8BA) folds Runtime & Releases into the
 // operator console and P2 (BI-058EA759) re-homes the dev-loop under Build Studio,
 // at which point these stop living under /ops at all.
+// (Improvements was retired into the Backlog tab upstream per EP-INTAKE-UNIFY —
+// improvements are backlog items surfaced via the "Improvement" origin.)
 const GROUPS: Array<{ label: string; tabs: Array<{ label: string; href: string }> }> = [
   {
     label: "Delivery",
-    tabs: [
-      { label: "Backlog", href: "/ops" },
-      { label: "Improvements", href: "/ops/improvements" },
-    ],
+    tabs: [{ label: "Backlog", href: "/ops" }],
   },
   {
     label: "Runtime & Releases",

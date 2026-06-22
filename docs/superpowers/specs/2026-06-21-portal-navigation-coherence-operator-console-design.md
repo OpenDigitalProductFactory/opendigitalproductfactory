@@ -47,7 +47,7 @@ Mapping: complaint 1 → root cause 1 (teleport + no breadcrumb). complaint 2 �
 ### Confirmed: self-upgrade + dev-loop filed under "Backlog"
 
 - `apps/web/lib/navigation/portal-navigation-model.ts:374-387` — the `backlog` record is labelled **"Backlog"**, path `/ops`.
-- `apps/web/components/ops/OpsTabNav.tsx:6-13` — tabs are `Backlog · Improvements · Changes · Promotions · Self-upgrade · Dev Loop`.
+- `apps/web/components/ops/OpsTabNav.tsx` — tabs are `Backlog · Changes · Promotions · Self-upgrade · Dev Loop` (Improvements was retired into the Backlog tab upstream per EP-INTAKE-UNIFY — improvements are now backlog items surfaced via the "Improvement" origin).
 - Page intents (read this pass): `/ops/dev-loop` = runtime coordination map (worktree leases, sandbox targets, heartbeats — build-runtime substrate); `/ops/self-upgrade` = portal image/SHA self-deploy lifecycle; `/ops/promotions` = release/version promotion; `/ops/changes` = RFC/rollback; `/ops/improvements` = improvement proposals → backlog intake.
 
 ### Confirmed: three divergent taxonomies + dead mode
@@ -90,7 +90,7 @@ The 2026-06-05 audit left five open decisions "for founder/architect review." Th
 | # | Question | Resolution (this pass) |
 | --- | --- | --- |
 | D1 | Admin: absorb into Platform, or keep separate? | **Absorb into a single operator console.** Platform + Admin share ONE secondary-nav model (`CONSOLE_FAMILIES`) and one `ConsoleTabNav`. Admin becomes an "Administration" family. Route paths may stay (`/admin/*`) to keep migration risk low; the *navigation context* unifies. Removes the teleport by construction. |
-| D2 | `/ops` → "Delivery", runtime ops moved out? | **Yes.** Backlog rail item becomes a pure delivery queue (Backlog + Improvements). Self-upgrade · Changes · Promotions → console "Runtime & Releases" family. Dev Loop → Build Studio / Build Runtime (per founder: "under the build studio … or the AI coworker"). |
+| D2 | `/ops` → "Delivery", runtime ops moved out? | **Yes.** Backlog rail item becomes a pure delivery queue (just Backlog — Improvements was retired into it upstream). Self-upgrade · Changes · Promotions → console "Runtime & Releases" family. Dev Loop → Build Studio / Build Runtime (per founder: "under the build studio … or the AI coworker"). |
 | D3 | Remove `/admin` from Platform family tabs? | **Yes, immediately** (keystone). The teleport tab is deleted; admin is reachable via the unified console nav + the persistent rail. |
 | D4 | Three taxonomies | **Collapse to one.** The `domain` axis on `portal-navigation-model` is the single source; rail groups and workspace blueprints are *derived* from it, not independently authored. |
 | D5 | Worker/operator mode | **Wire it.** Default non-operator business users to worker mode (archetype rail, ~5–7 items); operators get a mode switch to the full console. Condense the rail into collapsible groups with the active group open. |
@@ -137,7 +137,7 @@ There is no "Core Admin" tab that leaves the console; Administration is a peer f
 
 ### Delivery vs Runtime (cures complaint 2)
 
-- **Delivery** (rail): Backlog + Improvements only — the work queue. (Rail label may stay "Backlog" or become "Delivery"; founder did not object to the queue, only to self-upgrade living in it.)
+- **Delivery** (rail): Backlog only — the work queue (Improvements already converged into it upstream, EP-INTAKE-UNIFY). (Rail label may stay "Backlog" or become "Delivery"; founder did not object to the queue, only to self-upgrade living in it.)
 - **Runtime & Releases** (console family): Self-upgrade, Promotions, Changes.
 - **Dev Loop** → surfaced under **Build Studio** (the runtime behind builds) and adjacent to **Build Runtime** in AI Operations — per the founder's "under the build studio … or the AI coworker." Route may stay `/ops/dev-loop` initially; nav re-points.
 
@@ -159,7 +159,7 @@ Wire the existing `audienceModes`: `getShellNavSections` takes a mode; non-opera
 
 | Phase | BI | Scope | Size |
 | --- | --- | --- | --- |
-| **P0 keystone** | BI-NAV-KEYSTONE | Global `ShellBreadcrumb` (derived from nav model) + remove "Core Admin" teleport from `PLATFORM_FAMILIES` + refile `OpsTabNav` (Backlog + Improvements only; relabel) | medium |
+| **P0 keystone** | BI-NAV-KEYSTONE | Global `ShellBreadcrumb` (derived from nav model) + remove "Core Admin" teleport from `PLATFORM_FAMILIES` + group `OpsTabNav` into Delivery (Backlog) vs Runtime & Releases | medium |
 | P1 | BI-NAV-CONSOLE | Unify Platform + Admin into one `CONSOLE_FAMILIES` + one layout-injected `ConsoleTabNav`; add "Runtime & Releases" family; retire per-page `AdminTabNav`/`PlatformTabNav` imports | large |
 | P2 | BI-NAV-DEVLOOP | Surface Dev Loop under Build Studio / Build Runtime; finalize Runtime & Releases home for self-upgrade/promotions/changes | medium |
 | P3 | BI-NAV-TAXONOMY | Collapse the 3 taxonomies to one derived model AND register the **125 orphan routes + per-domain nav models** into it (finance/compliance/ea/admin/… stop being parallel); reconcile Build Studio/Backlog/Admin grouping; resolve the odd singletons (`/complaints`, `/inventory`) and the duplicate product-detail trees (`product/[id]` vs `products/[productId]`) | large |
@@ -173,13 +173,13 @@ Resolves the worst symptom of both named complaints, low-risk and CI-gated:
 
 1. **Global breadcrumb** in the shell — always a visible, climbable trail back (cures "no way to navigate back" for *every* route).
 2. **Remove the "Core Admin" teleport tab** from `PLATFORM_FAMILIES` (+ test). Admin stays reachable via the rail; no more whole-context swap disguised as a sibling tab.
-3. **Refile `OpsTabNav`** to Backlog + Improvements; self-upgrade/changes/promotions/dev-loop drop out of the "Backlog" tab row (routes unchanged; re-homed in P1/P2 console families).
+3. **Group `OpsTabNav`** into a "Delivery" cluster (Backlog) vs a "Runtime & Releases" cluster (Changes, Promotions, Self-upgrade, Dev Loop), so self-upgrade/dev-loop are visibly *not* under "Backlog" (routes unchanged; re-homed in P1/P2 console families).
 
 ## Acceptance Criteria
 
 - No secondary-nav tab links out of its own domain's route tree (teleport census = 0).
 - A global breadcrumb is present on every `(shell)` route and is climbable to the domain root.
-- "Backlog" exposes only delivery work (Backlog + Improvements); self-upgrade/dev-loop/promotions/changes are reachable from their conceptual homes.
+- "Backlog" exposes only delivery work; self-upgrade/dev-loop/promotions/changes are reachable from their conceptual homes.
 - Platform and Admin share one secondary-nav model (post-P1); crossing the boundary keeps the tab row and the breadcrumb.
 - One canonical taxonomy; rail + workspace groups derived from it (post-P3).
 - Worker mode hides operator chrome; operator mode is one switch away (post-P4).

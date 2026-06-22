@@ -37,6 +37,11 @@ describe("OpsTabNav", () => {
     expect(html).toContain(">Self-upgrade<");
   });
 
+  it("does not render the retired Improvements tab (converged into /ops)", () => {
+    const html = render("/ops");
+    expect(html).not.toContain('href="/ops/improvements"');
+  });
+
   it("marks Self-upgrade tab active when pathname is /ops/self-upgrade", () => {
     const html = render("/ops/self-upgrade");
     expect(html).toContain("border-[var(--dpf-accent)]");
