@@ -40,6 +40,14 @@ describe("getDomainNavEntries", () => {
     expect(paths).toContain("/customer/marketing/strategy");
   });
 
+  it("registers Storefront section + settings routes as navigation entries", () => {
+    const paths = entries.map((e) => e.path);
+    expect(paths).toContain("/storefront/team");
+    expect(paths).toContain("/storefront/inbox");
+    expect(paths).toContain("/storefront/settings/business");
+    expect(paths).toContain("/storefront/settings/operations");
+  });
+
   it("attributes Finance entries to the business domain with no teleport (all in-domain)", () => {
     const finance = entries.filter((e) => e.path.startsWith("/finance"));
     expect(finance.length).toBeGreaterThan(0);

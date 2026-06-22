@@ -21,6 +21,7 @@ import { COMPLIANCE_FAMILIES } from "@/components/compliance/compliance-nav";
 import { EA_TABS } from "@/components/ea/ea-nav";
 import { OPS_NAV_GROUPS } from "@/components/ops/ops-nav";
 import { MARKETING_TABS } from "@/components/customer-marketing/marketing-nav";
+import { STOREFRONT_ROUTES, STOREFRONT_SETTINGS_TABS } from "@/components/storefront-admin/storefront-nav";
 import { PORTAL_NAV_ROUTES } from "@/lib/navigation/portal-navigation-model";
 import { toNavEntries, buildDomainResolver, type NavSourceEntry } from "./navigation-extract";
 
@@ -79,6 +80,7 @@ const DOMAIN_NAV_SOURCES: readonly DomainNavSource[] = [
   tabNavSource(EA_TABS, "delivery", "ea"),
   tabNavSource(OPS_NAV_GROUPS.flatMap((g) => g.tabs), "delivery", "ops"),
   tabNavSource(MARKETING_TABS, "customer", "marketing"),
+  tabNavSource([...STOREFRONT_ROUTES, ...STOREFRONT_SETTINGS_TABS], "business", "storefront"),
 ];
 
 /** Per-domain nav entries normalized to NavSourceEntry. targetDomain is resolved from

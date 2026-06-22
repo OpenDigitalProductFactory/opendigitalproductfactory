@@ -2,13 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const SETTINGS_TABS = [
-  { label: "Portal", href: "/storefront/settings" },
-  { label: "Your Business", href: "/storefront/settings/business" },
-  { label: "Capabilities", href: "/storefront/settings/capabilities" },
-  { label: "Operating Hours", href: "/storefront/settings/operations" },
-];
+import { STOREFRONT_SETTINGS_TABS } from "./storefront-nav";
 
 function matchesPath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -19,7 +13,7 @@ export function StorefrontSettingsNav() {
 
   return (
     <div className="mb-6 flex flex-wrap gap-2 border-b border-[var(--dpf-border)] pb-2">
-      {SETTINGS_TABS.map((tab) => {
+      {STOREFRONT_SETTINGS_TABS.map((tab) => {
         const isActive = matchesPath(pathname, tab.href);
 
         return (
