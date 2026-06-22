@@ -37,6 +37,15 @@ const GEOGRAPHIC_SCOPE_OPTIONS = [
   { value: "international", label: "International", description: "Multiple countries" },
 ];
 
+// Risk posture (EP-ONBOARDING-INTAKE P0). Values are the canonical RISK_POSTURES
+// enum; labels are plain-language display only (easily re-tuned). Pre-set from
+// the industry default — sets the autonomy *envelope*, not the live level.
+const RISK_POSTURE_OPTIONS = [
+  { value: "conservative", label: "Cautious", description: "More human review; AI acts only on safe, routine work" },
+  { value: "balanced", label: "Balanced", description: "AI handles the everyday; checks in on consequential calls" },
+  { value: "progressive", label: "Fast-moving", description: "AI runs with more autonomy; you stay in the loop on the big ones" },
+];
+
 // Jurisdiction options for the compliance-scope capture. Slugs match
 // PROFESSION_JURISDICTIONS so the corpus jurisdiction-basis model can match them.
 const JURISDICTION_OPTIONS = [
@@ -68,6 +77,7 @@ type BusinessContextData = {
   employsIn: string[];
   dataResidency: string[];
   handlesCardPayments: boolean;
+  riskPosture: string | null;
   address: OrgAddress;
 };
 
@@ -209,10 +219,15 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
     setError(null);
     setSubmitting(true);
     try {
+      // Send risk posture only when the operator actually chose one. An untouched
+      // industry-derived default is left for setup completion to (re)seed against
+      // the archetype they finally pick, so it isn't frozen as an explicit choice.
+      const payload: Record<string, unknown> = { ...data };
+      if (!editedFields.has("riskPosture")) delete payload.riskPosture;
       const res = await fetch("/api/business-context/setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -592,6 +607,39 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
               + We sell to, employ in, or store data in other regions
             </button>
           )}
+        </div>
+
+        {/* Risk posture (EP-ONBOARDING-INTAKE P0) — one plain choice, pre-set
+            from industry. Sets the autonomy envelope, not the live level: the AI
+            still starts cautious and earns autonomy as it proves itself. */}
+        <div style={{ borderTop: "1px solid var(--dpf-border)", paddingTop: 14 }}>
+          <div style={fieldLabelStyle}>How should your AI workforce balance speed and caution?</div>
+          <div style={hintStyle}>
+            Sets the starting point for how much your AI does on its own. It always begins cautious
+            and earns more autonomy as it proves itself — change this anytime.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8 }}>
+            {RISK_POSTURE_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => update("riskPosture", o.value)}
+                style={{
+                  padding: "8px 6px",
+                  textAlign: "left",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontSize: 12,
+                  border: data.riskPosture === o.value ? "2px solid var(--dpf-accent)" : "1px solid var(--dpf-border)",
+                  background: data.riskPosture === o.value ? "color-mix(in srgb, var(--dpf-accent) 8%, var(--dpf-surface-1))" : "var(--dpf-surface-1)",
+                  color: "var(--dpf-text)",
+                }}
+              >
+                <div style={{ fontWeight: 600 }}>{o.label}</div>
+                <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>{o.description}</div>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Contact details */}
