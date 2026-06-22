@@ -16,6 +16,7 @@ vi.mock("@dpf/db", () => ({
       findFirst: vi.fn(),
     },
   },
+  projectArchetypeSupply: vi.fn(),
 }));
 
 import { prisma } from "@dpf/db";
