@@ -18,6 +18,9 @@
 import { FINANCE_FAMILIES } from "@/components/finance/finance-nav";
 import { ADMIN_FAMILIES } from "@/components/admin/admin-nav";
 import { COMPLIANCE_FAMILIES } from "@/components/compliance/compliance-nav";
+import { EA_TABS } from "@/components/ea/ea-nav";
+import { OPS_NAV_GROUPS } from "@/components/ops/ops-nav";
+import { MARKETING_TABS } from "@/components/customer-marketing/marketing-nav";
 import { PORTAL_NAV_ROUTES } from "@/lib/navigation/portal-navigation-model";
 import { toNavEntries, buildDomainResolver, type NavSourceEntry } from "./navigation-extract";
 
@@ -53,10 +56,29 @@ function familyNavSource(
   return { domain, entries };
 }
 
+/** Flatten a flat tab list (label + href, e.g. EA, Marketing) to distinct route rows. */
+function tabNavSource(
+  tabs: ReadonlyArray<{ label: string; href: string }>,
+  domain: string,
+  keyPrefix: string,
+): DomainNavSource {
+  const seen = new Set<string>();
+  const entries: DomainNavSource["entries"] = [];
+  for (const t of tabs) {
+    if (seen.has(t.href)) continue;
+    seen.add(t.href);
+    entries.push({ key: `${keyPrefix}:${t.href}`, label: t.label, path: t.href });
+  }
+  return { domain, entries };
+}
+
 const DOMAIN_NAV_SOURCES: readonly DomainNavSource[] = [
   familyNavSource(FINANCE_FAMILIES, "business", "finance"),
   familyNavSource(ADMIN_FAMILIES, "admin", "admin"),
   familyNavSource(COMPLIANCE_FAMILIES, "business", "compliance"),
+  tabNavSource(EA_TABS, "delivery", "ea"),
+  tabNavSource(OPS_NAV_GROUPS.flatMap((g) => g.tabs), "delivery", "ops"),
+  tabNavSource(MARKETING_TABS, "customer", "marketing"),
 ];
 
 /** Per-domain nav entries normalized to NavSourceEntry. targetDomain is resolved from

@@ -29,6 +29,17 @@ describe("getDomainNavEntries", () => {
     expect(paths).toContain("/compliance/audits");
   });
 
+  it("registers EA, Ops, and Marketing section routes as navigation entries", () => {
+    const paths = entries.map((e) => e.path);
+    // EA + Ops are delivery-domain; Marketing is customer-domain — all in-domain.
+    expect(paths).toContain("/ea/capabilities");
+    expect(paths).toContain("/ea/value-streams");
+    expect(paths).toContain("/ops/self-upgrade");
+    expect(paths).toContain("/ops/changes");
+    expect(paths).toContain("/customer/marketing/campaigns");
+    expect(paths).toContain("/customer/marketing/strategy");
+  });
+
   it("attributes Finance entries to the business domain with no teleport (all in-domain)", () => {
     const finance = entries.filter((e) => e.path.startsWith("/finance"));
     expect(finance.length).toBeGreaterThan(0);
