@@ -186,6 +186,8 @@ async function generateNormalizedPlan(args: {
   biBody: string | null;
   verifiedPaths: string[];
   priorReviewIssues?: ReadonlyArray<PlanReviewIssue>;
+  /** EP-MODEL-TIER-ROUTING: capability tier for plan generation. */
+  modelTier?: "local" | "robust";
   log: (summary: string) => Promise<void>;
 }): Promise<{ plan: { fileStructure?: unknown[]; tasks?: unknown[] } } | { error: string }> {
   const { routeAndCall } = await import("@/lib/inference/routed-inference");
@@ -209,7 +211,7 @@ async function generateNormalizedPlan(args: {
       [{ role: "user" as const, content: prompt }],
       systemPrompt,
       "internal",
-      { budgetClass: "quality_first" },
+      { budgetClass: "quality_first", ...(args.modelTier ? { modelTier: args.modelTier } : {}) },
     );
     planObj = parsePlanJson(response.content);
     if (!planObj) {
@@ -313,14 +315,25 @@ export async function dispatchPlanForApprovedBuild(params: {
     // 2. Fetch BI context for richer prompt.
     let biTitle: string | null = null;
     let biBody: string | null = null;
+    let biEffortSize: string | null = null;
     if (build.originatingBacklogItemId) {
       const bi = await prisma.backlogItem.findUnique({
         where: { id: build.originatingBacklogItemId },
-        select: { title: true, body: true },
+        select: { title: true, body: true, effortSize: true },
       }).catch(() => null);
       biTitle = bi?.title ?? null;
       biBody = bi?.body ?? null;
+      biEffortSize = bi?.effortSize ?? null;
     }
+
+    // EP-MODEL-TIER-ROUTING: route plan generation by the build's tier — local
+    // for small/medium, robust/frontier for large/xlarge. Flag-gated; inert until
+    // DPF_BUILD_MODEL_TIER_ROUTING is on.
+    const { getModelTier } = await import("@/lib/explore/build-process-matrix");
+    const { isModelTierRoutingEnabled } = await import("./build-studio-config");
+    const planModelTier = isModelTierRoutingEnabled()
+      ? getModelTier(build.kind, biEffortSize)
+      : undefined;
 
     // 2b. Search the codebase for files related to the build to give the plan
     //     LLM verified paths rather than hallucinated ones. This is the single
@@ -363,6 +376,7 @@ export async function dispatchPlanForApprovedBuild(params: {
       biTitle,
       biBody,
       verifiedPaths,
+      modelTier: planModelTier,
       log,
     });
     if ("error" in gen) {
@@ -397,6 +411,7 @@ export async function dispatchPlanForApprovedBuild(params: {
         biBody,
         verifiedPaths,
         priorReviewIssues: review.issues,
+        modelTier: planModelTier,
         log,
       });
       if ("error" in revised) {
