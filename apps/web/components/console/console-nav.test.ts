@@ -10,8 +10,16 @@ describe("console-nav (one operator console)", () => {
       "AI Operations",
       "Tools & Services",
       "Governance & Audit",
+      "Runtime & Releases",
       "Administration",
     ]);
+  });
+
+  it("resolves runtime/release ops paths to the Runtime & Releases family", () => {
+    expect(getConsoleFamily("/ops/self-upgrade").key).toBe("runtime-releases");
+    expect(getConsoleFamily("/ops/promotions").key).toBe("runtime-releases");
+    expect(getConsoleFamily("/ops/changes").key).toBe("runtime-releases");
+    expect(getConsoleFamily("/ops/dev-loop").key).toBe("runtime-releases");
   });
 
   it("resolves admin paths to the Administration family (no separate tab row)", () => {
@@ -37,9 +45,14 @@ describe("console-nav (one operator console)", () => {
     expect(hrefs).toContain("/admin/platform-development");
   });
 
-  it("keeps every console family inside the platform or admin tree (no foreign teleport)", () => {
+  it("keeps every console family inside the platform, admin, or runtime-ops tree", () => {
     expect(
-      CONSOLE_FAMILIES.every((f) => f.href.startsWith("/platform") || f.href.startsWith("/admin")),
+      CONSOLE_FAMILIES.every(
+        (f) =>
+          f.href.startsWith("/platform") ||
+          f.href.startsWith("/admin") ||
+          f.href.startsWith("/ops/"),
+      ),
     ).toBe(true);
   });
 });
