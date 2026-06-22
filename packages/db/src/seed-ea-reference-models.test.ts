@@ -204,10 +204,11 @@ describe("seedEaReferenceModels", () => {
     );
 
     // Version-agnostic on purpose: this guard protects `lfs: true` (so CI fetches
-    // the LFS-backed seed workbooks), NOT a specific checkout major. Pinning @v6
+    // the LFS-backed seed workbooks), NOT a specific checkout version. Pinning @v6
     // made every legitimate Dependabot actions/checkout bump fail this required
-    // test (e.g. #2169 v6→v7). Match any major so bumps stay green while the
-    // LFS wiring stays enforced.
-    expect(workflow).toMatch(/uses:\s*actions\/checkout@v\d+\s*\n\s*with:\s*\n(?:\s*#.*\n)*\s*lfs:\s*true/);
+    // test (e.g. #2169 v6→v7); matching only @v\d+ then still broke on exact-version
+    // tags like @v7.0.0 (#2251). Match any tag version (major or exact) so bumps
+    // stay green while the LFS wiring stays enforced.
+    expect(workflow).toMatch(/uses:\s*actions\/checkout@v[\d.]+\s*\n\s*with:\s*\n(?:\s*#.*\n)*\s*lfs:\s*true/);
   });
 });
