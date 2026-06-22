@@ -1,0 +1,94 @@
+// Portfolio source-projection contract + coverage axis (EP-BOM-WIRING; spec:
+// docs/superpowers/specs/2026-06-21-portfolio-coverage-multisource-projection-design.md).
+//
+// The portfolio surface is meant to be populated from every substrate that
+// already knows about a real (or potential) digital product — not only network
+// discovery. A PortfolioSourceProjector reads one such substrate and returns
+// portfolio entries to materialize; it never becomes a second source of truth.
+//
+// Two closed string enums (AGENTS.md §3 strongly-typed-string-enums) carry the
+// new dimensions. Their canonical values + types live here. The DB home today is
+// DigitalProduct.observationConfig JSON (see project-portfolio-source.ts); the
+// typed-column migration is deferred to BI-PORTCOV-P0's runtime-available
+// follow-up (a source-only worktree cannot generate/verify a Prisma migration).
+
+/**
+ * Coverage axis — what relationship the org has to this portfolio entry, ordered
+ * most-committed → least. "potential" is the planning surface: catalogued and one
+ * governed click from being enabled, never auto-activated.
+ */
+export const PORTFOLIO_COVERAGE_STATUSES = [
+  "used", // actively in use by the org
+  "sold", // a market offer (revenue-generating)
+  "available", // integrated and configurable now (e.g. credential present but idle)
+  "potential", // catalogued; one governed click to enable
+  "planned", // on the roadmap
+  "retired", // decommissioned
+] as const;
+export type PortfolioCoverageStatus = (typeof PORTFOLIO_COVERAGE_STATUSES)[number];
+
+/** Where a projected portfolio entry came from (provenance). */
+export const PORTFOLIO_SOURCE_KINDS = [
+  "network_discovery", // existing: the discovery sweep
+  "manual_entry", // existing: digital_product_registry.json / operator
+  "platform_capability", // this platform's own subsystems (Build Studio, GitHub, …)
+  "capability_registry", // capability-registry.ts capability modules
+  "integration_registry", // McpIntegration / IntegrationCredential
+  "ai_provider", // ModelProvider / providers-registry.json
+  "sbom", // BomComponent (CycloneDX)
+  "archetype", // archetype-seeded offers / suppliers / goods
+] as const;
+export type PortfolioSourceKind = (typeof PORTFOLIO_SOURCE_KINDS)[number];
+
+/** Canonical portfolio root slugs (packages/db/data/portfolio_registry.json). */
+export const PORTFOLIO_SLUGS = [
+  "foundational",
+  "manufacturing_and_delivery",
+  "for_employees",
+  "products_and_services_sold",
+] as const;
+export type PortfolioSlug = (typeof PORTFOLIO_SLUGS)[number];
+
+/** One portfolio entry a projector wants materialized, before it is written. */
+export interface ProjectedPortfolioEntry {
+  /** Stable, deterministic product id so re-projection is idempotent (no dupes). */
+  productId: string;
+  name: string;
+  description: string;
+  portfolioSlug: PortfolioSlug;
+  /** Existing taxonomy nodeId string, or null to place at the portfolio root. */
+  taxonomyNodeId: string | null;
+  coverageStatus: PortfolioCoverageStatus;
+  sourceKind: PortfolioSourceKind;
+}
+
+/**
+ * A projector reads one substrate and returns portfolio entries. The substrate
+ * stays canonical; the projector materializes a *view* into the portfolio.
+ */
+export interface PortfolioSourceProjector {
+  readonly source: PortfolioSourceKind;
+  project(): ProjectedPortfolioEntry[] | Promise<ProjectedPortfolioEntry[]>;
+}
+
+/** Keys the projector writes into DigitalProduct.observationConfig. */
+export const PORTFOLIO_PROJECTION_KEYS = {
+  coverageStatus: "coverageStatus",
+  sourceKind: "sourceKind",
+  projectedBy: "projectedBy",
+} as const;
+
+/** Marker value identifying a DigitalProduct row owned by a source projector. */
+export const PROJECTED_BY = "portfolio-source-projector";
+
+export function isPortfolioCoverageStatus(v: string): v is PortfolioCoverageStatus {
+  return (PORTFOLIO_COVERAGE_STATUSES as readonly string[]).includes(v);
+}
+
+export function isPortfolioSourceKind(v: string): v is PortfolioSourceKind {
+  return (PORTFOLIO_SOURCE_KINDS as readonly string[]).includes(v);
+}
+
+export function isPortfolioSlug(v: string): v is PortfolioSlug {
+  return (PORTFOLIO_SLUGS as readonly string[]).includes(v);
+}
