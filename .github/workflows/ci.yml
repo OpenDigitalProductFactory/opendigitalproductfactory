@@ -358,7 +358,8 @@ jobs:
         run: |
           node --test \
             scripts/lib/runtime-artifact-janitor.test.mjs \
-            scripts/runtime-artifact-janitor.cli.test.mjs
+            scripts/runtime-artifact-janitor.cli.test.mjs \
+            scripts/lib/junction-safe-worktree-remove.test.mjs
       - name: Smoke --help (must exit 0, no docker required)
         run: node scripts/runtime-artifact-janitor.mjs --help > /dev/null
 
