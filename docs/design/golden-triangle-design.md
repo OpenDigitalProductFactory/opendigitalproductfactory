@@ -44,9 +44,9 @@ This design is accountable to the following kernel principles and gates. Paths a
 - `learnings-belong-in-the-shared-commons` — the counter-pressure that legitimizes the hive; resolved against sovereignty in §10.
 - `architecture-over-shortcuts`, `single-source-of-truth`, `schema-audit-before-features` / `verify-substrate-before-proposing-new` — reuse existing substrate; no parallel registries or ledgers (§0, §4, §8).
 - `compose-report-kit-for-reporting-ux` (core) — all reporting/data-display UI composes the shared report-kit (§6, §11).
-- **AGENTS.md gates.** This is an operator-configurable control, so it must carry a `UX-Fit-Decision:` attestation scoring `human_cognitive_load` via `principle_decide` (UX-Fit Gate, CI-enforced by `scripts/check-ux-fit-decision.mjs`), and pass the Spec/Plan/Doc gate.
+- **AGENTS.md gates.** This is an operator-configurable control, so it must carry a `UX-Fit-Decision:` attestation (UX-Fit Gate, CI-enforced by `scripts/check-ux-fit-decision.mjs`) and pass the Spec/Plan/Doc gate. **Known gap:** `human_cognitive_load` has no carrying kernel principle today, so `principle_decide` scores that mandated axis degenerately; until the gap is closed, record the attestation on merits and flag it (this exact degeneracy was hit by the nav-coherence work, 2026-06-21).
 
-Candidate principle: the cognitive-load migration audit flags `migrate-to-the-right-tier` as a not-yet-existing kernel principle. The triangle's learned-default arc (§9) is a concrete proving ground for promoting it.
+Candidate principle: the cognitive-load migration audit flags `migrate-to-the-right-tier` as a not-yet-existing kernel principle, and `human_cognitive_load` lacks a carrying principle. The triangle — a literal load-migration control — is a strong proving ground to promote a principle that carries that axis (and its learned-default arc, §9).
 
 ---
 
@@ -536,7 +536,7 @@ v1 implements WWMD and WWWD/org scopes only; WSID/profession and per-decision-ov
 Use the requested 20 percent refactor budget here.
 
 - Verify exact existing fields and gaps across `ModelProfile`, `AgentModelConfig`, `RequestContract`, `TaskRequirement`, the `effort` lever, the deliberation engine, route receipts, telemetry, and decision records.
-- Map each triangle axis to its `PRINCIPLE_DIMENSIONS` member(s) and record a `UX-Fit-Decision:` attestation scoring the control on `human_cognitive_load` via `principle_decide` (AGENTS.md §12 — mandatory, CI-enforced).
+- Map each triangle axis to its `PRINCIPLE_DIMENSIONS` member(s) and record a `UX-Fit-Decision:` attestation (AGENTS.md §12 — mandatory, CI-enforced). Note: `human_cognitive_load` has no carrying kernel principle today, so its `principle_decide` score is degenerate — record on merits and flag the kernel gap (§0.1).
 - Audit the profile referenced by `DecisionInteraction.profileId` before adding any saved-defaults table.
 - Confirm whether benchmark records should be materialized or initially projected as a read model; align the shape to GearInterface.
 - **Go/no-go on the orchestration-budget surface.** Confirm there is no *posture-driven* orchestration budget today (`agentic-loop.ts` bounds runs with the `MAX_ITERATIONS = 200` safety ceiling, phase-aware `MAX_DURATION_*` limits, a spin guard, a one-nudge cap, and a repetition detector — none driven by posture). Decide whether the orchestration budget (duration ceiling, retry budget, verification depth, deliberation pattern) is a new per-decision field or an extension of `AgentModelConfig`/workflow policy. Slices 2–3 depend on this.
