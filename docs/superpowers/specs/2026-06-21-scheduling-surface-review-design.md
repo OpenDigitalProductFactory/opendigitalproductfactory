@@ -101,3 +101,10 @@ Risk: low — additive catalog data + one test; `fn.id()` is the established acc
 - **Category of `alert-delivery-bridge`**: shipped as `core` (operator cannot disable the sole alert path). Confirm or flip to editable.
 - **Marketing scheduler**: wire an Inngest cron, or keep manual-by-design? (`BI-SCHED-DORMANT`.)
 - **Dedup-guard hardening** (token-expiry tier-change, work-queue bridges) surfaced in review as low-severity; folded into `BI-SCHED-CANONICAL-MAP` rather than separate BIs unless a real duplicate is observed.
+
+## 8. Follow-on — operator timeline + active de-confliction (2026-06-21)
+
+Two additions after the buildout, closing the gap between the *static* contention guard and *runtime* task creation:
+
+- **Daily-schedule timeline** (`BI-SCHED-TIMELINE`): a read-only 24h UTC visual on `/admin/scheduled-jobs`, projecting `SCHEDULING_MAP` onto the clock (timed / frequent / unpinned). `scheduling-timeline.ts` (pure model) + `SchedulingTimeline.tsx`. Answers "what's scheduled when" at a glance.
+- **Creation-time de-confliction** (`BI-SCHED-ALLOCATE`): `scheduling-allocator.ts` de-conflicts a new task *at creation* — `scheduleAgentTask()` nudges a colliding specific-time task to the nearest free minute (occupied = map + live tasks) and the Calendar UI notifies. Interval cadences pass through to the CI guard. The active counterpart to the static contention guard: new scheduled work de-conflicts immediately rather than piling up and being caught later.

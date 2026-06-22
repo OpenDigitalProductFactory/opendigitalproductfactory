@@ -2,6 +2,8 @@
 
 import { auth } from "@/lib/auth";
 import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID } from "@dpf/db";
+import { SCHEDULING_MAP } from "@/lib/operate/scheduled-jobs/scheduling-map";
+import { occupiedTicks, deconflictCron } from "@/lib/operate/scheduled-jobs/scheduling-allocator";
 import { randomUUID } from "crypto";
 import { runDataModelMirror } from "@/lib/ea/run-data-model-mirror";
 import { runArchitectureParitySteward } from "@/lib/ea/architecture-parity-steward";
@@ -54,7 +56,7 @@ export type ScheduleAgentTaskInput = {
 
 export async function scheduleAgentTask(
   input: ScheduleAgentTaskInput,
-): Promise<{ success: true; taskId: string } | { success: false; error: string }> {
+): Promise<{ success: true; taskId: string; note?: string } | { success: false; error: string }> {
   const session = await auth();
   if (!session?.user?.id) return { success: false, error: "Unauthorized" };
 
@@ -67,7 +69,22 @@ export async function scheduleAgentTask(
 
   const taskId = `agent-task-${randomUUID().slice(0, 8)}`;
   const now = new Date();
-  const nextRunAt = computeNextCronRun(input.schedule, now);
+
+  // BI-SCHED-ALLOCATE: de-conflict at creation so a new task does not pile onto
+  // a tick already in use. Occupied ticks = the canonical scheduling map (code
+  // crons + seeded tasks) plus other live agent tasks. Interval cadences pass
+  // through untouched (those are governed by the CI contention guard).
+  const liveTasks = await prisma.scheduledAgentTask.findMany({
+    where: { isActive: true },
+    select: { schedule: true },
+  });
+  const occupied = occupiedTicks([
+    ...SCHEDULING_MAP.map((e) => e.cron),
+    ...liveTasks.map((t) => t.schedule),
+  ]);
+  const { cron: schedule, note } = deconflictCron(input.schedule, occupied);
+
+  const nextRunAt = computeNextCronRun(schedule, now);
 
   await prisma.scheduledAgentTask.create({
     data: {
@@ -76,7 +93,7 @@ export async function scheduleAgentTask(
       title: input.title,
       prompt: input.prompt,
       routeContext: input.routeContext,
-      schedule: input.schedule,
+      schedule,
       timezone: input.timezone ?? "UTC",
       ownerUserId: session.user.id,
       nextRunAt,
@@ -89,17 +106,17 @@ export async function scheduleAgentTask(
     create: {
       jobId: taskId,
       name: `Agent: ${input.title}`,
-      schedule: input.schedule,
+      schedule,
       nextRunAt,
     },
     update: {
       name: `Agent: ${input.title}`,
-      schedule: input.schedule,
+      schedule,
       nextRunAt,
     },
   });
 
-  return { success: true, taskId };
+  return note ? { success: true, taskId, note } : { success: true, taskId };
 }
 
 export async function cancelAgentTask(
