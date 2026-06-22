@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
 
-import { PLATFORM_CAPABILITY_MANIFEST } from "./platform-capability-manifest.js";
-import { platformCapabilityProjector } from "./project-portfolio-source.js";
+import { PLATFORM_CAPABILITY_MANIFEST } from "./platform-capability-manifest";
+import { platformCapabilityProjector } from "./project-portfolio-source";
 import {
   isPortfolioCoverageStatus,
   isPortfolioSlug,
   type ProjectedPortfolioEntry,
-} from "./types.js";
+} from "./types";
 
 describe("platform capability manifest", () => {
   it("has unique cap-* productIds and valid portfolios/coverage", () => {

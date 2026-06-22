@@ -3,8 +3,8 @@ import { describe, it, expect } from "vitest";
 import {
   projectPlatformCapabilities,
   type ProjectPortfolioClient,
-} from "./project-portfolio-source.js";
-import { PORTFOLIO_PROJECTION_KEYS, PROJECTED_BY } from "./types.js";
+} from "./project-portfolio-source";
+import { PORTFOLIO_PROJECTION_KEYS, PROJECTED_BY } from "./types";
 
 type ProductRow = {
   id: string;

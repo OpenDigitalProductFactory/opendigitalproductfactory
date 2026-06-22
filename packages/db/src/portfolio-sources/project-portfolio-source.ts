@@ -7,18 +7,18 @@
 // overwritten — only rows this projector owns (observationConfig.projectedBy)
 // are refreshed. Mirrors the seed-market-offer.ts discipline.
 
-import { prisma } from "./client.js";
+import { prisma } from "../client";
 import {
   PLATFORM_CAPABILITY_MANIFEST,
   type PlatformCapabilityManifestEntry,
-} from "./platform-capability-manifest.js";
+} from "./platform-capability-manifest";
 import {
   PORTFOLIO_PROJECTION_KEYS,
   PROJECTED_BY,
   type PortfolioCoverageStatus,
   type PortfolioSourceProjector,
   type ProjectedPortfolioEntry,
-} from "./types.js";
+} from "./types";
 
 /** Structural client — satisfied by the real PrismaClient and by test fakes. */
 export type ProjectPortfolioClient = {
@@ -184,5 +184,6 @@ function toEntry(c: PlatformCapabilityManifestEntry): ProjectedPortfolioEntry {
 export async function projectPlatformCapabilities(
   options: { db?: ProjectPortfolioClient } = {},
 ): Promise<ProjectPortfolioResult> {
-  return projectPortfolioEntries(platformCapabilityProjector.project(), options);
+  const entries = await platformCapabilityProjector.project();
+  return projectPortfolioEntries(entries, options);
 }

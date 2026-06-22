@@ -2,6 +2,6 @@
 // substrate that already knows about a real (or potential) digital product.
 // Spec: docs/superpowers/specs/2026-06-21-portfolio-coverage-multisource-projection-design.md
 
-export * from "./types.js";
-export * from "./platform-capability-manifest.js";
-export * from "./project-portfolio-source.js";
+export * from "./types";
+export * from "./platform-capability-manifest";
+export * from "./project-portfolio-source";

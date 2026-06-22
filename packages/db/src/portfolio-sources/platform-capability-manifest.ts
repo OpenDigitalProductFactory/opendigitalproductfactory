@@ -14,7 +14,7 @@
 // in digital_product_registry.json. All entries are coverage=used (the platform
 // runs on them).
 
-import type { PortfolioCoverageStatus, PortfolioSlug } from "./types.js";
+import type { PortfolioCoverageStatus, PortfolioSlug } from "./types";
 
 export interface PlatformCapabilityManifestEntry {
   productId: string;
