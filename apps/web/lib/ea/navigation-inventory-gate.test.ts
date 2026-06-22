@@ -64,10 +64,11 @@ describe("navigation inventory gate (EP-NAV-COHERENCE P7)", () => {
     expect(entries.every((e) => e.path.startsWith("/"))).toBe(true);
   });
 
-  it("counts Finance and Admin section routes as navigable, not orphans (P3 convergence)", () => {
+  it("counts converged per-domain section routes as navigable, not orphans (P3)", () => {
     for (const p of [
       "/finance/invoices", "/finance/bills", "/finance/reports", "/finance/banking",
       "/admin/settings", "/admin/branding", "/admin/diagnostics",
+      "/compliance/risks", "/compliance/controls", "/compliance/audits",
     ]) {
       expect(orphans, `${p} should be covered by a converged per-domain nav source`).not.toContain(p);
     }
