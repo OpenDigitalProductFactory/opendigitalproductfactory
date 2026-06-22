@@ -7,6 +7,8 @@ import { BacklogItemRow } from "./BacklogItemRow";
 import { EpicCard, type EpicSort } from "./EpicCard";
 import { EpicPanel } from "./EpicPanel";
 import { isTerminalBacklogItemStatus } from "./backlogVisibility";
+import { FilterBar } from "@/components/ui/report-kit";
+import { backlogItemOrigin, BACKLOG_ORIGIN_FILTERS } from "@/lib/ops/backlog-origin";
 import type {
   BacklogItemWithRelations,
   DigitalProductSelect,
@@ -99,9 +101,17 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
   const [epicPanel, setEpicPanel] = useState<EpicPanelState>(null);
   const [epicSort, setEpicSort] = useState<SortState>(null);
   const [hideDone, setHideDone] = useState(true);
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const originFilter = filters.origin ?? "";
 
-  // Unassigned items only (not belonging to any epic)
-  const unassigned = items.filter((i) => i.epicId === null);
+  // Origin lens (EP-INTAKE-UNIFY surface convergence): /ops is the one place
+  // every source is seen + worked; this narrows it to where work came from
+  // (improvement / capability-need / issue-report / signal / requested / auto).
+  const matchesOrigin = (i: BacklogItemWithRelations) =>
+    !originFilter || backlogItemOrigin(i) === originFilter;
+
+  // Unassigned items only (not belonging to any epic), narrowed by the origin lens.
+  const unassigned = items.filter((i) => i.epicId === null && matchesOrigin(i));
   const types = ["portfolio", "product"] as const;
   const byType = new Map(types.map((t) => [t, unassigned.filter((i) => i.type === t)]));
 
@@ -132,6 +142,15 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
 
   return (
     <>
+      {/* Origin lens — see/filter the different sources in the one Operations surface */}
+      <FilterBar
+        mode="client"
+        facets={[{ kind: "pills", key: "origin", label: "Source", options: [...BACKLOG_ORIGIN_FILTERS] }]}
+        value={filters}
+        onChange={setFilters}
+        className="mb-4"
+      />
+
       {/* ── Epics section ──────────────────────────────────── */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
@@ -159,8 +178,14 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
         </div>
 
         {(() => {
-          const filteredEpics = hideDone ? epics.filter((e) => e.status !== "done") : epics;
-          const hiddenCount = epics.length - filteredEpics.length;
+          const byHideDone = hideDone ? epics.filter((e) => e.status !== "done") : epics;
+          // When an origin lens is active, show epics that carry at least one
+          // item from that source (the epic stays whole — no progress skew).
+          const filteredEpics = originFilter
+            ? byHideDone.filter((e) => (e.items ?? []).some(matchesOrigin))
+            : byHideDone;
+          // Footnote counts epics hidden by the "Hide done" toggle (not the origin lens).
+          const hiddenCount = hideDone ? epics.filter((e) => e.status === "done").length : 0;
 
           if (epics.length === 0) {
             return <p className="text-xs text-[var(--dpf-muted)]">No epics yet. Add one to start organising your backlog.</p>;
@@ -194,7 +219,11 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
 
                 {filteredEpics.length === 0 ? (
                   <div className="px-4 py-3">
-                    <p className="text-xs text-[var(--dpf-muted)]">All {epics.length} epics are done. Uncheck &quot;Hide done&quot; to see them.</p>
+                    <p className="text-xs text-[var(--dpf-muted)]">
+                      {originFilter
+                        ? "No epics carry work from this source."
+                        : `All ${epics.length} epics are done. Uncheck "Hide done" to see them.`}
+                    </p>
                   </div>
                 ) : (
                   sortEpics(filteredEpics, epicSort).map((epic) => (
