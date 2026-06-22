@@ -165,7 +165,13 @@ while IFS= read -r wt_path; do
       [ "$dirty" = "1" ] && reason="$reason (forced: $dirty_count dirty files)"
       record PRUNE "$wt_path" "branch=$branch $reason"
       if [ "$DRY_RUN" = "0" ]; then
-        "$GIT_BIN" -C "$root" worktree remove "$wt_path" ${FORCE:+--force} 2>&1 && ok "removed worktree $wt_path" || warn "worktree remove failed"
+        # Junction-safe removal (BI-F6AC1A56): unlink node_modules junctions FIRST,
+        # then git worktree remove. A raw `git worktree remove --force` on a worktree
+        # whose node_modules is junctioned to the root follows the junction and wipes
+        # the shared root (proven on Windows; the 2026-06-19 corruption mechanism).
+        # Fail-closed: if node is missing the helper errors and we KEEP the worktree
+        # rather than fall back to the unsafe raw removal.
+        node "$root/scripts/lib/junction-safe-worktree-remove.mjs" "$root" "$wt_path" --force 2>&1 && ok "removed worktree $wt_path" || warn "worktree remove failed"
         "$GIT_BIN" -C "$root" branch -D "$branch" 2>&1 && ok "deleted branch $branch" || warn "branch delete failed (may be checked out elsewhere)"
       fi
     fi
@@ -182,7 +188,8 @@ while IFS= read -r wt_path; do
     else
       record PRUNE "$wt_path" "branch=$branch stale ${age_days}d (>${GRACE_DAYS}d), unmerged, clean"
       if [ "$DRY_RUN" = "0" ]; then
-        "$GIT_BIN" -C "$root" worktree remove "$wt_path" 2>&1 && ok "removed worktree $wt_path" || warn "worktree remove failed"
+        # Junction-safe removal (BI-F6AC1A56) — see the merged branch above.
+        node "$root/scripts/lib/junction-safe-worktree-remove.mjs" "$root" "$wt_path" --force 2>&1 && ok "removed worktree $wt_path" || warn "worktree remove failed"
         "$GIT_BIN" -C "$root" branch -D "$branch" 2>&1 && ok "deleted branch $branch" || warn "branch delete failed"
       fi
     fi
