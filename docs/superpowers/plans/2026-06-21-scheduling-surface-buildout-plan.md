@@ -31,3 +31,10 @@ Implements the five remaining BIs from the scheduling-surface review in one PR. 
 ## Validation
 - Local vitest: scheduled-jobs (map/contention/parity), EA (extractor/projection/steward), queue/functions index — all green.
 - Full `apps/web` typecheck.
+
+## Follow-on (same epic, 2026-06-21)
+
+Two operator-facing additions after the buildout merged:
+
+- `BI-SCHED-TIMELINE` — a daily-schedule visual on `/admin/scheduled-jobs`. Pure model `scheduling-timeline.ts` (classifies each map entry onto the 24h UTC clock: timed / frequent / unpinned) + `SchedulingTimeline.tsx` server component (24h bar chart + chips), fed by `SCHEDULING_MAP`. An operator sees what runs when and where work clusters without reading crons.
+- `BI-SCHED-ALLOCATE` — creation-time de-confliction. `scheduling-allocator.ts` (`occupiedTicks` + `deconflictCron`) nudges a colliding specific-time task to the nearest free minute; wired into `scheduleAgentTask()` (occupied = canonical map + live tasks) and surfaced in the Calendar scheduler. Interval cadences pass through (covered by the CI contention guard). Turns the static guard into active de-confliction at the moment a task is created.
