@@ -174,7 +174,7 @@ Ordered by dependency; each filed via the governed path (size → triage → lin
 - **P2 — Integration projector + seed the catalog.** Seed `McpIntegration` from the benchmark metadata; project credentials (`available`/`used`) + catalog (`potential`), category-routed, with pricing. *(large)*
 - **P3 — AI-provider projector → Foundational.** Configured = `used`, catalogued = `potential`; local-first surfaces Docker Model Runner. *(medium)*
 - **P4 — SBOM component projector.** Project `BomComponent` as the component layer of `dpf-meta`/`dpf-platform-standard` with supplier/license/PURL + paid flag; compose with EP-ASSURANCE-LEDGER. *(medium)*
-- **P5 — Archetype supplier/goods projector.** Extend `seed-market-offer.ts` with suppliers (vendor_management) + goods; plumber exemplar. *(medium)*
+- **P5 — Archetype supplier/goods projector.** Extend `seed-market-offer.ts` with suppliers (vendor_management) + goods; plumber exemplar. *(medium)* — **landed**: `packages/db/src/portfolio-sources/archetype-supply-manifest.ts` (per-category starters) + `project-archetype-supply.ts` (reuses the projector writer), wired into onboarding `setup-progress.ts` alongside `seedMarketOffer`. Suppliers → Manufacturing & Delivery (`used`), goods → Products & Services Sold (`sold`), source `archetype`; non-destructive + idempotent.
 - **P6 — Coverage surface UX.** Coverage filter/legend + provenance chip + "Enable" deep-link on `potential` rows; UX-fit gated; no new route. *(medium)*
 - **P7 — Coverage/source parity guard.** A test asserting the projected portfolio stays in sync with the live substrates (mirrors the EP-SCHEDULING-SURFACE catalog↔registry parity guard) — so a new integration/capability/dependency can't silently fall out of the portfolio. *(small)*
 
