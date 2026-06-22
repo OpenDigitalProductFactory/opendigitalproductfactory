@@ -17,9 +17,9 @@
 
 import routeManifestData from "./route-manifest.json";
 import { prisma } from "@dpf/db";
-import { buildNavigationModel, toNavEntries } from "./navigation-extract";
+import { buildNavigationModel } from "./navigation-extract";
+import { getAllNavEntries } from "./domain-nav-sources";
 import { applySysmlModel, type SysmlSeedResult } from "./sysml-model-seed";
-import { PORTAL_NAV_ROUTES } from "../navigation/portal-navigation-model";
 import type { RouteManifestRow } from "./route-extract";
 
 interface RouteManifest {
@@ -36,7 +36,7 @@ export async function reconcileNavigation(
   const routePaths = ((opts.manifest ?? manifest).routes ?? [])
     .filter((r) => r.kind === "page")
     .map((r) => r.routePath);
-  const entries = toNavEntries(PORTAL_NAV_ROUTES);
+  const entries = getAllNavEntries();
 
   const result = await applySysmlModel(
     buildNavigationModel({ entries, routePaths }),
