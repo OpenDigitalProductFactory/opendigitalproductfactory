@@ -25,6 +25,24 @@ export type ConsoleFamily = {
 export const CONSOLE_FAMILIES: ConsoleFamily[] = [
   ...PLATFORM_FAMILIES,
   {
+    // EP-NAV-COHERENCE P2 (BI-058EA759): the operator console's home for the platform's
+    // own runtime/release operations — self-upgrade, release promotion, change control,
+    // and the build dev-loop. This gives self-upgrade & dev-loop a coherent operator home
+    // (the founder's complaint #2 — they did not belong under the "Backlog" rail item).
+    key: "runtime-releases",
+    label: "Runtime & Releases",
+    href: "/ops/self-upgrade",
+    description:
+      "Operate the platform's own runtime: self-upgrade, release promotion, change control, and the build dev-loop.",
+    matchPrefixes: ["/ops/self-upgrade", "/ops/promotions", "/ops/changes", "/ops/dev-loop"],
+    subItems: [
+      { label: "Self-upgrade", href: "/ops/self-upgrade" },
+      { label: "Promotions", href: "/ops/promotions" },
+      { label: "Changes", href: "/ops/changes" },
+      { label: "Dev Loop", href: "/ops/dev-loop" },
+    ],
+  },
+  {
     key: "administration",
     label: "Administration",
     href: "/admin",
