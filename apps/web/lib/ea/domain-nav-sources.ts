@@ -10,11 +10,12 @@
 // `navigates-to` edges, and leave the orphan set. The orphan count therefore drops to
 // the genuinely-unreachable routes.
 //
-// Slice 1 ingests Finance (the biggest orphan cluster and already a pure-data nav).
-// The .tsx TABS navs (compliance/ea/ops/customer-marketing/employee/storefront) are
-// ingested as their arrays are extracted to pure data modules (composes P5).
+// The pure-data family navs (Finance, Admin) are ingested directly — the two biggest
+// orphan clusters. The .tsx TABS navs (compliance/ea/ops/customer-marketing/employee/
+// storefront) are ingested as their arrays are extracted to pure data modules (P5).
 
 import { FINANCE_FAMILIES } from "@/components/finance/finance-nav";
+import { ADMIN_FAMILIES } from "@/components/admin/admin-nav";
 import { PORTAL_NAV_ROUTES } from "@/lib/navigation/portal-navigation-model";
 import { toNavEntries, buildDomainResolver, type NavSourceEntry } from "./navigation-extract";
 
@@ -25,21 +26,35 @@ interface DomainNavSource {
   entries: Array<{ key: string; label: string; path: string }>;
 }
 
-/** Flatten the Finance family nav (families + their sub-items) to distinct route rows. */
-function financeSource(): DomainNavSource {
+/** A family-style secondary nav: families each with an href + sub-items (finance, admin). */
+interface FamilyNav {
+  href: string;
+  label: string;
+  subItems: ReadonlyArray<{ label: string; href: string }>;
+}
+
+/** Flatten a family-style nav (families + their sub-items) to distinct route rows. */
+function familyNavSource(
+  families: readonly FamilyNav[],
+  domain: string,
+  keyPrefix: string,
+): DomainNavSource {
   const seen = new Set<string>();
   const entries: DomainNavSource["entries"] = [];
-  for (const fam of FINANCE_FAMILIES) {
+  for (const fam of families) {
     for (const item of [{ label: fam.label, href: fam.href }, ...fam.subItems]) {
       if (seen.has(item.href)) continue;
       seen.add(item.href);
-      entries.push({ key: `finance:${item.href}`, label: item.label, path: item.href });
+      entries.push({ key: `${keyPrefix}:${item.href}`, label: item.label, path: item.href });
     }
   }
-  return { domain: "business", entries };
+  return { domain, entries };
 }
 
-const DOMAIN_NAV_SOURCES: readonly DomainNavSource[] = [financeSource()];
+const DOMAIN_NAV_SOURCES: readonly DomainNavSource[] = [
+  familyNavSource(FINANCE_FAMILIES, "business", "finance"),
+  familyNavSource(ADMIN_FAMILIES, "admin", "admin"),
+];
 
 /** Per-domain nav entries normalized to NavSourceEntry. targetDomain is resolved from
  *  the route's canonical domain so a per-domain nav that points OUT of its own domain
