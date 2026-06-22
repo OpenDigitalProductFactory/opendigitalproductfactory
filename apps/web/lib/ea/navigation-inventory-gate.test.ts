@@ -71,6 +71,7 @@ describe("navigation inventory gate (EP-NAV-COHERENCE P7)", () => {
       "/compliance/risks", "/compliance/controls", "/compliance/audits",
       "/ea/capabilities", "/ea/value-streams", "/ops/changes", "/ops/self-upgrade",
       "/customer/marketing/campaigns", "/customer/marketing/strategy",
+      "/storefront/team", "/storefront/inbox", "/storefront/settings/business",
     ]) {
       expect(orphans, `${p} should be covered by a converged per-domain nav source`).not.toContain(p);
     }
