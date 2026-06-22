@@ -1,0 +1,67 @@
+name: Platform SBOM
+
+# Routine, monorepo-wide CycloneDX SBOM + dependency-reduction / efficiency
+# analysis, generated from pnpm-lock.yaml. This is the proactive REDUCTION
+# axis; it deliberately does NOT overlap the other two supply-chain feeds:
+#
+#   - Dependabot (.github/dependabot.yml)  → vulnerabilities + lifecycle bumps
+#   - publish-image.yml `sbom: true`       → per-container SBOM attestations at release
+#   - THIS workflow                        → whole-tree inventory + version fan-out
+#
+# The generator is pure Node (no `pnpm install`), so the whole job runs in
+# seconds. Outputs are uploaded as artifacts and mirrored into the run summary;
+# the full reports are intentionally NOT committed (they churn with every
+# lockfile change — only sbom/baseline.json is tracked, as the drift anchor).
+#
+# See docs/architecture/dependency-reduction-routine.md.
+
+on:
+  schedule:
+    - cron: "17 7 * * 1" # weekly, Mon 07:17 UTC (offset from Dependabot's weekly sweep)
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "scripts/sbom/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sbom-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sbom:
+    name: Generate platform SBOM + reduction analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Generate SBOM + analysis
+        run: node scripts/sbom/generate-platform-sbom.mjs --git-ref "$GITHUB_SHA"
+
+      - name: Publish analysis to the run summary
+        run: cat sbom/dpf-platform-sbom-analysis.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Drift report (fails only on a NEW first-party version split)
+        run: node scripts/sbom/check-sbom-drift.mjs
+
+      - name: Upload SBOM + analysis artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: platform-sbom-${{ github.run_id }}
+          path: |
+            sbom/dpf-platform-sbom.cdx.json
+            sbom/dpf-platform-sbom-analysis.json
+            sbom/dpf-platform-sbom-analysis.md
+          if-no-files-found: error
+          retention-days: 90
