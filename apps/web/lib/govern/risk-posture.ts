@@ -131,8 +131,10 @@ const ENVELOPES: Record<RiskPosture, Omit<RiskEnvelope, "posture">> = {
 };
 
 /** Resolve the envelope for a posture, falling back to the balanced default for
- *  an unset/invalid value (fail-open, mirrors the retention floor reader). */
-export function resolveRiskEnvelope(posture: RiskPosture | null | undefined): RiskEnvelope {
+ *  an unset/invalid value. Accepts a raw `string` (e.g. the DB column) on
+ *  purpose — it's fail-open and guards with isRiskPosture, mirroring the
+ *  retention floor reader. */
+export function resolveRiskEnvelope(posture: string | null | undefined): RiskEnvelope {
   const p = isRiskPosture(posture) ? posture : DEFAULT_RISK_POSTURE;
   return { posture: p, ...ENVELOPES[p] };
 }

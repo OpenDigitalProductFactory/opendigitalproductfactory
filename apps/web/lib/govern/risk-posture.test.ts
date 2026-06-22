@@ -108,7 +108,7 @@ describe("resolveRiskEnvelope", () => {
   it("fails open to the balanced default for unset or invalid input", () => {
     expect(resolveRiskEnvelope(null).posture).toBe("balanced");
     expect(resolveRiskEnvelope(undefined).posture).toBe("balanced");
-    // @ts-expect-error exercising the runtime guard with an invalid value
+    // an unrecognized value falls through the guard to the balanced default
     expect(resolveRiskEnvelope("aggressive").posture).toBe("balanced");
   });
 });
