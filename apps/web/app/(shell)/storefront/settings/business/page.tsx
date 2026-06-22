@@ -3,6 +3,7 @@ import { BusinessContextForm } from "@/components/admin/BusinessContextForm";
 import { getSetupContext } from "@/lib/actions/setup-progress";
 import { suggestMission } from "@/lib/onboarding/mission-suggestion";
 import { parseOrgAddress } from "@/lib/shared/org-address";
+import { deriveRiskPostureDefault } from "@/lib/govern/risk-posture";
 
 export default async function StorefrontBusinessSettingsPage() {
   const [org, setupContext, storefrontConfig] = await Promise.all([
@@ -43,6 +44,15 @@ export default async function StorefrontBusinessSettingsPage() {
     dataResidency: businessContext?.dataResidency ?? [],
     handlesCardPayments: businessContext?.handlesCardPayments ?? false,
     address: parseOrgAddress(org?.address),
+    // Pre-set the risk posture from the stored value, else the industry default.
+    // Inert in P0 — captured/seeded only; consumers are wired in P1.
+    riskPosture:
+      businessContext?.riskPosture ??
+      deriveRiskPostureDefault({
+        archetypeCategory: storefrontConfig?.archetype?.category ?? null,
+        industry: setupContext?.suggestedIndustry ?? null,
+        handlesCardPayments: businessContext?.handlesCardPayments ?? false,
+      }).posture,
   };
 
   const missionSuggestion = suggestMission({
