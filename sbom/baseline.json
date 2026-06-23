@@ -6,14 +6,12 @@
     "duplicatedNames": 223,
     "excessInstances": 270,
     "multiMajorNames": 140,
-    "firstPartyDivergentNames": 1,
-    "directButTransitiveNames": 15,
+    "firstPartyDivergentNames": 0,
+    "directButTransitiveNames": 16,
     "dedupeCandidateNames": 83,
     "directProdNames": 81,
     "directDevNames": 33,
     "workspaces": 15
   },
-  "firstPartyDivergent": [
-    "typescript"
-  ]
+  "firstPartyDivergent": []
 }
