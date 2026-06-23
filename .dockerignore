@@ -22,6 +22,7 @@ apps/web/.next/**
 !README.md
 !docs/user-guide/**/*.md
 !docs/user-guide/**/index.md
+!docs/professions/**/*.md
 docs/superpowers/
 docs/Reference/
 # IT4IT functional criteria workbook is needed at seed time; the rest of

@@ -122,6 +122,7 @@ COPY --from=init /app/scripts ./scripts
 RUN chmod +x ./scripts/*.sh
 COPY --from=init /app/docs/user-guide ./docs/user-guide
 COPY --from=init /app/docs/founder-kernel ./docs/founder-kernel
+COPY --from=init /app/docs/professions ./docs/professions
 COPY --from=init /app/prompts ./prompts
 COPY --from=init /app/skills ./skills
 # Deliberation pattern sources must reach the runtime image too — the seed
@@ -162,7 +163,7 @@ COPY version.json ./version.json
 # Decoupling it from DPF_VERSION is the fix for BI-C8E90A79 — a stamped label
 # can no longer mask which source was built. Exclusions keep it reproducible
 # across builds of the same source (node_modules / .next / generated / tsbuildinfo).
-RUN (find /app/apps/web-src /app/packages-src /app/scripts -type f \
+RUN (find /app/apps/web-src /app/packages-src /app/scripts /app/docs/professions -type f \
       -not -path '*/node_modules/*' \
       -not -path '*/.pnpm-store/*' \
       -not -path '*/.next/*' \
