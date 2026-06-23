@@ -16,7 +16,7 @@ import {
   mapCompactSummaryToBuildEntry,
   type ReviewBranchInput,
 } from "./build-reviewers";
-import type { ReviewResult } from "@/lib/feature-build-types";
+import type { ReviewResult, BuildDesignDoc } from "@/lib/feature-build-types";
 
 describe("buildDesignReviewPrompt", () => {
   it("includes all design doc sections", () => {
@@ -45,8 +45,8 @@ describe("buildDesignReviewPrompt", () => {
       problemStatement: "x",
       proposedApproach: "y",
       acceptanceCriteria: ["z"],
-      reusabilityAnalysis: { scope: "parameterizable" } as never,
-    }, "ctx");
+      reusabilityAnalysis: { scope: "parameterizable" },
+    } as unknown as BuildDesignDoc, "ctx");
     expect(objPrompt).toContain("Entities=none");
 
     // reusabilityAnalysis stored as a bare string -> section omitted, no crash.
@@ -54,8 +54,8 @@ describe("buildDesignReviewPrompt", () => {
       problemStatement: "x",
       proposedApproach: "y",
       acceptanceCriteria: ["z"],
-      reusabilityAnalysis: "parameterizable" as never,
-    }, "ctx");
+      reusabilityAnalysis: "parameterizable",
+    } as unknown as BuildDesignDoc, "ctx");
     expect(strPrompt).toContain("JSON FORMAT");
     expect(strPrompt).not.toContain("Reusability Analysis");
   });

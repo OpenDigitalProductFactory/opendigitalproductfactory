@@ -53,7 +53,7 @@ export function buildDesignReviewPrompt(
   // The value is read from a JSON column (`build.designDoc as unknown as
   // BuildDesignDoc`), so its real runtime shape is unknown — model that here so
   // every guard below is genuinely load-bearing rather than `unknown`-narrowed.
-  const ra = doc.reusabilityAnalysis as
+  const ra = doc.reusabilityAnalysis as unknown as
     | {
         scope?: string;
         domainEntities?: ReadonlyArray<{ hardcodedValue?: string; parameterName?: string }>;
