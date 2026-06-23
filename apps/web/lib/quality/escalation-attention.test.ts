@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { escalationSelfFixLabel, escalationAgeLabel } from "./escalation-attention";
+import {
+  escalationSelfFixLabel,
+  escalationAgeLabel,
+  escalationBlockerSummary,
+} from "./escalation-attention";
 
 describe("escalationSelfFixLabel", () => {
   it("maps each self-fix class to a human label", () => {
@@ -31,5 +35,49 @@ describe("escalationAgeLabel", () => {
 
   it("is defensive against an unparseable timestamp", () => {
     expect(escalationAgeLabel("not-a-date", now)).toBe("just now");
+  });
+});
+
+describe("escalationBlockerSummary", () => {
+  // Mirrors the structured description escalateBuildToHuman.formatEscalationReport writes.
+  const withIssues =
+    'Build FB-1 ("X") could not be self-repaired by Build Studio and has been escalated.\n\n' +
+    "Phase: plan\n" +
+    "Self-fix feasibility: needs-human\n\n" +
+    "What was attempted:\n" +
+    "Build Studio attempted 3 automated plan revision round(s), and the reviewer still rejected the plan.\n\n" +
+    "Unresolved blocking issues (root cause):\n" +
+    "- [high] Import endpoint trusts unvalidated input\n" +
+    "- [medium] Missing tests for the new path";
+
+  it("returns the first concrete blocking issue, without the bullet", () => {
+    expect(escalationBlockerSummary(withIssues)).toBe(
+      "[high] Import endpoint trusts unvalidated input",
+    );
+  });
+
+  it("falls back to the what-was-attempted sentence when no issues were listed", () => {
+    const noIssues =
+      "Phase: ideate\n\n" +
+      "What was attempted:\n" +
+      "The plan review failed and no automated revision could be attempted.\n\n" +
+      "Unresolved blocking issues (root cause):\n" +
+      "- (no structured blocking issues were recorded)";
+    expect(escalationBlockerSummary(noIssues)).toBe(
+      "The plan review failed and no automated revision could be attempted.",
+    );
+  });
+
+  it("clips an overlong issue line", () => {
+    const long = "Unresolved blocking issues (root cause):\n- " + "x".repeat(400);
+    const out = escalationBlockerSummary(long)!;
+    expect(out.length).toBeLessThanOrEqual(180);
+    expect(out.endsWith("…")).toBe(true);
+  });
+
+  it("returns null for empty / unparseable descriptions", () => {
+    expect(escalationBlockerSummary(null)).toBeNull();
+    expect(escalationBlockerSummary("")).toBeNull();
+    expect(escalationBlockerSummary("just some prose with no headers")).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import { getBacklogItems, getDigitalProductsForSelect, getTaxonomyNodesFlat, get
 import { reconcileImprovementBacklog } from "@/lib/evaluate/improvement-backlog-reconcile";
 import { reconcileCapabilityNeedBacklog } from "@/lib/coworker-self-assessment/capability-backlog-reconcile";
 import { getOpenEscalations } from "@/lib/quality/escalation-attention";
+import { runEscalationHygiene } from "@/lib/quality/escalation-hygiene-runner";
 import { OpsClient } from "@/components/ops/OpsClient";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { EscalationsAttention } from "@/components/ops/EscalationsAttention";
@@ -28,6 +29,10 @@ export default async function OpsPage({ searchParams }: Props) {
   await Promise.all([
     reconcileImprovementBacklog().catch(() => {}),
     reconcileCapabilityNeedBacklog().catch(() => {}),
+    // BI-467E8F8D: clear stale build-stall escalations on render so /ops stays a
+    // trustworthy attention queue without waiting for the 15-min cron. Non-fatal;
+    // zero-write once converged.
+    runEscalationHygiene().catch(() => {}),
   ]);
 
   const [items, digitalProducts, taxonomyNodes, epics, portfolios, escalations] = await Promise.all([

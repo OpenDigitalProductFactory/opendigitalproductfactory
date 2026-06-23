@@ -48,25 +48,26 @@ export const issueReportTriage = inngest.createFunction(
       });
     });
 
-    // BI-0ACD9AB2 §14 dial-up: advisory WWMD pre-consult for held escalations, so
-    // the /ops attention lens shows the kernel's recommendation without an
-    // operator click. Advisory only — it records a recommendation, the human
-    // still decides. Best-effort; a failed consult retries on the next sweep.
-    const responded = await step.run("respond-to-escalations", async () => {
+    // BI-467E8F8D: auto-resolve stale build-stall escalations so /ops stays a
+    // trustworthy attention queue — an escalation clears once its originating work
+    // shipped, was dropped, was superseded by an epic, or a newer escalation took
+    // over. (Replaces the §14 WWMD pre-consult sweep: principle_decide was
+    // degenerate on the resume/defer axis, so the pre-computed recommendation was
+    // noise.) Best-effort; never fails the core triage cron.
+    const hygiene = await step.run("auto-resolve-stale-escalations", async () => {
       try {
-        const { runEscalationResponder } = await import("@/lib/quality/escalation-responder-runner");
-        return await runEscalationResponder();
+        const { runEscalationHygiene } = await import("@/lib/quality/escalation-hygiene-runner");
+        return await runEscalationHygiene();
       } catch (err) {
-        // Advisory feature — never let it fail the core triage cron.
-        console.error("[issue-report-triage] escalation responder sweep failed", err);
-        return { consulted: 0, failed: 0 };
+        console.error("[issue-report-triage] escalation hygiene sweep failed", err);
+        return { scanned: 0, resolved: 0 };
       }
     });
 
     console.log(
       `[issue-report-triage] Created ${result.created} backlog items ` +
       `(${result.llmEnhanced} LLM-enhanced), spike=${spiked}, ` +
-      `escalations consulted=${responded.consulted}`,
+      `escalations resolved=${hygiene.resolved}/${hygiene.scanned}`,
     );
 
     await step.run("record-job-run", async () => {
@@ -74,6 +75,6 @@ export const issueReportTriage = inngest.createFunction(
       await recordJobRun("issue-report-triage", "ok");
     });
 
-    return { ...result, spiked, escalationsConsulted: responded.consulted };
+    return { ...result, spiked, escalationsResolved: hygiene.resolved };
   },
 );

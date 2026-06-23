@@ -9,7 +9,6 @@
 
 import { prisma } from "@dpf/db";
 import { ISSUE_REPORT_STATUS } from "./issue-report-status";
-import type { StoredResponderDecision } from "./escalation-responder";
 
 export interface OpenEscalation {
   reportId: string;
@@ -22,8 +21,10 @@ export interface OpenEscalation {
   createdAt: string;
   /** FeatureBuild public id (FB-*) for the /build deep-link, if linked. */
   buildId: string | null;
-  /** Pre-computed WWMD recommendation from the responder sweep (§14), if consulted. */
-  responderDecision: StoredResponderDecision | null;
+  /** Originating BacklogItem semantic id (BI-*) for legibility, if resolvable. */
+  backlogItemId: string | null;
+  /** Originating BacklogItem status (e.g. deferred / in-progress / done), if resolvable. */
+  backlogItemStatus: string | null;
 }
 
 /** Human label for a self-fix-feasibility class (escalate-build-to-human's
@@ -50,6 +51,41 @@ export function escalationAgeLabel(iso: string, nowMs: number): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+const BLOCKER_SUMMARY_MAX = 180;
+
+/**
+ * Distil the one honest line an operator needs from an escalation's description:
+ * the top unresolved blocking issue if the report listed any, else the
+ * what-was-attempted sentence. Replaces the degenerate WWMD "composite 0.000"
+ * recommendation that made every card say the same thing (BI-8DE13577). Pure —
+ * parses the structured description that escalateBuildToHuman.formatEscalationReport
+ * writes; returns null when nothing useful can be extracted. */
+export function escalationBlockerSummary(description: string | null | undefined): string | null {
+  if (!description) return null;
+  const lines = description
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const clip = (s: string): string =>
+    s.length > BLOCKER_SUMMARY_MAX ? `${s.slice(0, BLOCKER_SUMMARY_MAX - 1).trimEnd()}…` : s;
+
+  // Prefer the first concrete blocking issue under the root-cause header.
+  const issueHeader = lines.findIndex((l) => l.toLowerCase().startsWith("unresolved blocking issues"));
+  if (issueHeader >= 0) {
+    const firstIssue = lines
+      .slice(issueHeader + 1)
+      .find((l) => l.startsWith("- ") && !l.toLowerCase().includes("no structured blocking issues"));
+    if (firstIssue) return clip(firstIssue.replace(/^-\s*/, ""));
+  }
+
+  // Else the what-was-attempted sentence (e.g. "attempted N plan revision round(s)…").
+  const attemptHeader = lines.findIndex((l) => l.toLowerCase().startsWith("what was attempted"));
+  if (attemptHeader >= 0 && lines[attemptHeader + 1]) return clip(lines[attemptHeader + 1]);
+
+  return null;
 }
 
 /**
@@ -83,52 +119,50 @@ export async function getOpenEscalations(): Promise<OpenEscalation[]> {
       status: true,
       createdAt: true,
       featureBuildId: true,
-      responderDecision: true,
     },
   });
 
-  // PlatformIssueReport has no `featureBuild` relation (only the scalar FK), so
-  // resolve the FB-* public id for the /build deep-link with one extra query.
+  // PlatformIssueReport carries only the scalar build FK, so resolve the FB-*
+  // public id (for the /build deep-link) and the originating BacklogItem (for the
+  // legibility chip) with two small follow-up queries.
   const buildPks = Array.from(
     new Set(rows.map((r) => r.featureBuildId).filter((x): x is string => Boolean(x))),
   );
   const builds = buildPks.length
     ? await prisma.featureBuild.findMany({
         where: { id: { in: buildPks } },
-        select: { id: true, buildId: true },
+        select: { id: true, buildId: true, originatingBacklogItemId: true },
       })
     : [];
-  const buildIdByPk = new Map(builds.map((b) => [b.id, b.buildId]));
+  const buildByPk = new Map(builds.map((b) => [b.id, b]));
 
-  return rows.map((r) => ({
-    reportId: r.reportId,
-    title: r.title,
-    description: r.description,
-    severity: r.severity,
-    selfFixClass: r.selfFixClass,
-    status: r.status,
-    createdAt: r.createdAt.toISOString(),
-    buildId: r.featureBuildId ? buildIdByPk.get(r.featureBuildId) ?? null : null,
-    responderDecision: asStoredResponderDecision(r.responderDecision),
-  }));
-}
+  const itemPks = Array.from(
+    new Set(builds.map((b) => b.originatingBacklogItemId).filter((x): x is string => Boolean(x))),
+  );
+  const items = itemPks.length
+    ? await prisma.backlogItem.findMany({
+        where: { id: { in: itemPks } },
+        select: { id: true, itemId: true, status: true },
+      })
+    : [];
+  const itemByPk = new Map(items.map((i) => [i.id, i]));
 
-/** Coerce the stored responder JSON back to the display shape. We control the
- *  shape the sweep writes, so a light structural guard is enough. */
-function asStoredResponderDecision(value: unknown): StoredResponderDecision | null {
-  if (
-    value &&
-    typeof value === "object" &&
-    "status" in value &&
-    "operatorActionLabel" in value &&
-    "reasonSummary" in value
-  ) {
-    const o = value as Record<string, unknown>;
+  return rows.map((r) => {
+    const build = r.featureBuildId ? buildByPk.get(r.featureBuildId) ?? null : null;
+    const item = build?.originatingBacklogItemId
+      ? itemByPk.get(build.originatingBacklogItemId) ?? null
+      : null;
     return {
-      status: String(o.status),
-      operatorActionLabel: String(o.operatorActionLabel),
-      reasonSummary: String(o.reasonSummary),
+      reportId: r.reportId,
+      title: r.title,
+      description: r.description,
+      severity: r.severity,
+      selfFixClass: r.selfFixClass,
+      status: r.status,
+      createdAt: r.createdAt.toISOString(),
+      buildId: build?.buildId ?? null,
+      backlogItemId: item?.itemId ?? null,
+      backlogItemStatus: item?.status ?? null,
     };
-  }
-  return null;
+  });
 }
