@@ -41,7 +41,12 @@ export async function runEscalationResponder(): Promise<{ consulted: number; fai
     store: async (reportId, decision) => {
       await prisma.platformIssueReport.update({
         where: { reportId },
-        data: { responderDecision: decision, responderDecidedAt: new Date() },
+        data: {
+          // A named type lacks the index signature Prisma's JSON input wants; the
+          // codebase's canonical cast (see tests/build-lifecycle.test.ts).
+          responderDecision: decision as unknown as import("@dpf/db").Prisma.InputJsonValue,
+          responderDecidedAt: new Date(),
+        },
       });
     },
   });
