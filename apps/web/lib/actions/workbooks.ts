@@ -26,6 +26,8 @@ import {
   updateCells as svcUpdateCells,
   deleteRow as svcDeleteRow,
   getTableGridData as svcGetTableGridData,
+  getTableSchema as svcGetTableSchema,
+  queryRows as svcQueryRows,
 } from "@/lib/workbooks/workbook-service";
 import {
   type PlatformUser,
@@ -37,7 +39,10 @@ import {
   getReferenceTargetFields,
 } from "@/lib/workbooks/platform-tables";
 import { inferTableFromSheet, type SheetCell } from "@/lib/workbooks/sheet-import";
-import type { CellValue, ColumnDefinition, FieldType, FieldConfig } from "@/lib/workbooks/types";
+import { parseDelimitedGrid } from "@/lib/onboarding/roster-import";
+import { mapGridToEmployees } from "@/lib/onboarding/roster-from-grid";
+import { importRoster } from "@/lib/onboarding/roster-import-actions";
+import type { CellValue, ColumnDefinition, FieldType, FieldConfig, GridRow } from "@/lib/workbooks/types";
 
 export type ActionResult<T = void> =
   | ({ ok: true } & (T extends void ? Record<string, never> : { data: T }))
@@ -277,9 +282,18 @@ export async function importSheetAction(
     const user = await requireUser("manage_workbooks");
     const file = formData.get("file");
     if (!(file instanceof File)) throw new WorkbookError("No file uploaded", 400);
-    const buffer = await file.arrayBuffer();
-    const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/browser");
-    const matrix = (await readSheet(buffer)) as SheetCell[][];
+    const lower = file.name.toLowerCase();
+    let matrix: SheetCell[][];
+    if (lower.endsWith(".csv") || lower.endsWith(".tsv") || file.type === "text/csv") {
+      // CSV/TSV: parse to a string matrix (header row + data rows).
+      const text = Buffer.from(await file.arrayBuffer()).toString("utf-8");
+      const { columns, rows } = parseDelimitedGrid(text);
+      matrix = [columns, ...rows];
+    } else {
+      const buffer = await file.arrayBuffer();
+      const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/browser");
+      matrix = (await readSheet(buffer)) as SheetCell[][];
+    }
 
     const { columns, rows, truncated } = inferTableFromSheet(matrix);
     if (columns.length === 0) throw new WorkbookError("The sheet has no columns to import", 400);
@@ -307,6 +321,74 @@ export async function importSheetAction(
       ok: true,
       data: { tableId: table.tableId, columnCount: columns.length, rowCount: rows.length, truncated },
     };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// EP-ONBOARDING-INTAKE P4 (grid convergence): create EmployeeProfile rows from a
+// workbook table the operator imported + edited in the grid. Reads the table's
+// current columns + rows, maps them with the same roster mapper as the CSV path,
+// and creates employees (dedup by work email, fail-soft). The grid edit IS the
+// review step — nothing is created until the operator clicks "Create employees".
+export async function createEmployeesFromTableAction(
+  tableId: string,
+): Promise<
+  ActionResult<{ created: number; skippedExisting: number; failed: number; proposed: number; summary: string }>
+> {
+  try {
+    const user = await requireUser("manage_workbooks");
+    const schema = await svcGetTableSchema(user, tableId);
+
+    // Read every row (paged), capped so a giant sheet can't run unbounded.
+    const MAX_ROWS = 5000;
+    const rows: GridRow[] = [];
+    let cursor: string | null = null;
+    do {
+      const page = await svcQueryRows(user, tableId, { cursor, limit: 200 });
+      rows.push(...page.data);
+      cursor = page.nextCursor;
+    } while (cursor && rows.length < MAX_ROWS);
+
+    const mapped = mapGridToEmployees(schema.columns, rows.slice(0, MAX_ROWS));
+    const result = await importRoster(mapped.proposed);
+    return {
+      ok: true,
+      data: {
+        created: result.created,
+        skippedExisting: result.skippedExisting,
+        failed: result.failed,
+        proposed: mapped.proposed.length,
+        summary: mapped.summary,
+      },
+    };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// Onboarding entry for the roster→grid flow (EP-ONBOARDING-INTAKE P4): drop an
+// uploaded team spreadsheet into a "Team" workbook as an editable grid table and
+// return its ids so the caller can open the grid. The operator then edits and
+// clicks "Create employees from this sheet". Find-or-creates the workbook so
+// repeat imports land in the same place.
+export async function startTeamSheetImportAction(
+  formData: FormData,
+): Promise<ActionResult<{ workbookId: string; tableId: string }>> {
+  try {
+    const user = await requireUser("manage_workbooks");
+    const existing = await svcListWorkbooks(user);
+    let workbookId = existing.find((w) => w.name === "Team")?.workbookId;
+    if (!workbookId) {
+      const wb = await svcCreateWorkbook(user, {
+        name: "Team",
+        description: "Imported team rosters — edit in the grid, then create employees.",
+      });
+      workbookId = wb.workbookId;
+    }
+    const imported = await importSheetAction(workbookId, formData);
+    if (!imported.ok) return imported;
+    return { ok: true, data: { workbookId, tableId: imported.data.tableId } };
   } catch (e) {
     return fail(e);
   }
