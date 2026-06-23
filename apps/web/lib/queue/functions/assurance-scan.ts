@@ -20,6 +20,11 @@ export const assuranceScanRun = inngest.createFunction(
         requestedByUserId,
         projectRoot: process.env.PROJECT_ROOT ?? process.cwd(),
         now: new Date(),
+        // Close the "lost queue": genuine findings auto-file as backlog items
+        // through the shared front door — no manual per-finding click. Reconciled
+        // against main first (accepted-baseline + stale-version) so stale/accepted
+        // findings never spawn phantom work; fails closed if context is missing.
+        autoFile: { enabled: true },
       });
     });
   },

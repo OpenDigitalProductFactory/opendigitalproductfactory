@@ -280,6 +280,8 @@ describe("BuildAssuranceGateCard", () => {
               version: "1.2.0",
               packageUrl: "pkg:npm/vulnerable-lib@1.2.0",
             },
+            backlogItemId: null,
+            autoFileReason: null,
           },
         ]}
       />,

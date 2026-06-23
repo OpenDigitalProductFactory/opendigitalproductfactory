@@ -186,9 +186,13 @@ export function BuildAssuranceGateCard({
 
       <div className="mt-3 border-t border-[var(--dpf-border)] pt-3">
         <p className="text-xs font-semibold text-[var(--dpf-text)]">Active findings</p>
+        <p className="mt-0.5 text-[11px] text-[var(--dpf-muted)]">
+          Genuine findings file backlog items automatically; accepted and already-fixed-on-main advisories are suppressed.
+        </p>
         <div className="mt-2">
           <AssuranceFindingsList
             findings={findings}
+            readOnly
             emptyLabel={emptyFindingsLabel(summary, hasBom)}
           />
         </div>

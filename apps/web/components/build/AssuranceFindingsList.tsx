@@ -54,6 +54,17 @@ function componentLabel(finding: ActiveAssuranceFindingRow): string {
   return finding.affectedId;
 }
 
+/** Turn a raw auto-file disposition reason into a short, friendly label. */
+function dispositionLabel(reason: string): string {
+  if (reason.startsWith("accepted-in-baseline")) return "Accepted (baseline)";
+  if (reason.startsWith("stale-sandbox")) return "Resolved on main (stale build)";
+  if (reason.startsWith("below-auto-file-threshold")) return "Tracked as evidence";
+  if (reason.startsWith("reconcile-context-unavailable")) return "Pending verification";
+  if (reason.startsWith("already-linked")) return "Linked";
+  if (reason.startsWith("auto-file")) return "Auto-filed";
+  return reason;
+}
+
 interface FindingRowProps {
   finding: ActiveAssuranceFindingRow;
   readOnly?: boolean;
@@ -89,9 +100,25 @@ function FindingRow({ finding, readOnly }: FindingRowProps) {
       </div>
 
       {readOnly ? (
-        <p className="text-[var(--dpf-muted)]">
-          Status: <span className="font-medium text-[var(--dpf-text)]">{status}</span>
-        </p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--dpf-muted)]">
+          {finding.backlogItemId ? (
+            <span
+              data-testid="assurance-finding-linked"
+              className="inline-flex items-center gap-1 font-medium text-[var(--dpf-text)]"
+            >
+              <FilePlus className="h-3.5 w-3.5" aria-hidden="true" />
+              Linked {finding.backlogItemId}
+            </span>
+          ) : finding.autoFileReason ? (
+            <span data-testid="assurance-finding-disposition" title={finding.autoFileReason}>
+              {dispositionLabel(finding.autoFileReason)}
+            </span>
+          ) : (
+            <span>
+              Status: <span className="font-medium text-[var(--dpf-text)]">{status}</span>
+            </span>
+          )}
+        </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2">
