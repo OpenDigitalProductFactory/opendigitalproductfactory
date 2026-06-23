@@ -15,7 +15,9 @@
 #                    normally refused if the worktree has any local-only state).
 #
 # PRUNING RULES (all conditions must hold for a worktree to be PRUNE candidate):
-#   1. Fully merged to origin/main (branch is an ancestor of origin/main).
+#   1. Fully merged to origin/main — either an ancestor of origin/main, OR the
+#      head branch has a merged PR (DPF squash-merges, so squash-merged branches
+#      are NOT ancestors; gh detects them — BI-8867D524).
 #      OR last commit was > grace-days ago (stale / abandoned).
 #   2. No open PR for the branch (requires `gh` CLI; skipped if unavailable).
 #   3. No active NonProductionEnvironmentLease for the worktree path
@@ -118,6 +120,21 @@ has_open_pr() {
   [ "${count:-0}" -gt 0 ]
 }
 
+# ── Merged PR check via gh CLI (BI-8867D524) ──────────────────────────────
+# DPF squash-merges (AGENTS.md §4), so a squash-merged branch is NOT an ancestor
+# of origin/main and `git merge-base --is-ancestor` reads it as UNMERGED — which
+# is why merged-and-done worktrees accumulate (the janitor only reaped the
+# genuinely-stale ones). A merged PR for the head branch is the reliable signal
+# that the work landed, squash or not. gh absent → return false so we fall back
+# to the ancestry + stale-age checks.
+has_merged_pr() {
+  local branch="$1"
+  command -v "$GH_BIN" >/dev/null 2>&1 || return 1
+  local count
+  count="$("$GH_BIN" pr list --head "$branch" --state merged --json number --jq 'length' 2>/dev/null)" || return 1
+  [ "${count:-0}" -gt 0 ]
+}
+
 printf '\nWorktree janitor — %s (grace=%d days, %s)\n\n' \
   "$([ "$DRY_RUN" = "1" ] && echo "DRY RUN" || echo "LIVE")" \
   "$GRACE_DAYS" "$(date)"
@@ -149,9 +166,15 @@ while IFS= read -r wt_path; do
     continue
   fi
 
-  # Merged to origin/main?
+  # Merged to origin/main? Ancestry catches merge-commit merges; the merged-PR
+  # check (BI-8867D524) catches DPF's SQUASH merges, which are NOT ancestors of
+  # origin/main. has_open_pr already ran above, so a branch still in review is
+  # KEEP before we get here.
   merged=0
   "$GIT_BIN" merge-base --is-ancestor "refs/heads/$branch" origin/main 2>/dev/null && merged=1 || true
+  if [ "$merged" = "0" ] && has_merged_pr "$branch"; then
+    merged=1
+  fi
 
   # Dirty check
   dirty_count="$("$GIT_BIN" -C "$wt_path" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
