@@ -24,12 +24,14 @@ import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { CORE_MCP_TOOL_NAMES } from "@/lib/mcp/tool-tier";
 
 /**
- * Default ceiling on tool schemas attached to a single coworker turn. Chosen to
- * keep the serialized tool block comfortably inside a budget local model's served
- * context with room for the system prompt, conversation history, and the reply:
- * ~48 tools * ~330 tok ≈ ~16k tok of schemas, leaving ~16k of a 32k window for
- * everything else. Deferred tools remain authorized and loadable on demand, so
- * this caps cost, never capability. Tune per install as served context grows.
+ * Default ceiling on the NON-essential (role/core/breadth) tool schemas attached
+ * per coworker turn; the few essential tools (load_tools + route page actions)
+ * ride on top. Chosen to keep the serialized tool block comfortably inside a
+ * budget local model's served context with room for the system prompt,
+ * conversation history, and the reply: ~48 tools * ~330 tok ≈ ~16k tok of schemas,
+ * leaving ~16k of a 32k window for everything else. Deferred tools remain
+ * authorized and loadable on demand, so this caps cost, never capability. Tune
+ * per install as served context grows.
  */
 export const MAX_COWORKER_ATTACHED_TOOLS = 48;
 
@@ -95,8 +97,10 @@ export interface ToolBudgetResult {
  *   tier 2 — the curated universal core (CORE_MCP_TOOL_NAMES)
  *   tier 3 — everything else (the read-baseline breadth: source/code-graph/wiki/…)
  *
- * tier 0 always survives the cap; tiers 1–3 fill the remaining budget in order.
- * Ordering within a tier is preserved (stable). The split is deterministic.
+ * tier 0 is always attached and does NOT consume the cap (essentials ride on top);
+ * the cap bounds how many tier 1–3 tools ride along, filled in priority order. So
+ * total attached ≈ cap + a small route-scoped essentials set. Ordering within a
+ * tier is preserved (stable). The split is deterministic.
  */
 export function selectCoworkerToolBudget(params: {
   tools: ToolDefinition[];
@@ -126,9 +130,19 @@ export function selectCoworkerToolBudget(params: {
 
   const attached: Array<{ t: ToolDefinition; i: number }> = [];
   const deferred: Array<{ t: ToolDefinition; i: number }> = [];
+  // tier-0 (load_tools + page actions) is essential and always attached; it does
+  // NOT consume the cap. The cap bounds the non-essential (role/core/breadth)
+  // tools, filled in priority order.
+  let nonEssentialCount = 0;
   for (const entry of ranked) {
-    if (entry.tier === 0 || attached.length < cap) attached.push(entry);
-    else deferred.push(entry);
+    if (entry.tier === 0) {
+      attached.push(entry);
+    } else if (nonEssentialCount < cap) {
+      attached.push(entry);
+      nonEssentialCount++;
+    } else {
+      deferred.push(entry);
+    }
   }
 
   // Restore original ordering for stable logs / UX.
