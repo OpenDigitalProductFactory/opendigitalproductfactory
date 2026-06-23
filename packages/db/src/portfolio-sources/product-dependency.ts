@@ -13,6 +13,7 @@ import {
   PLATFORM_CAPABILITY_MANIFEST,
   type PlatformCapabilityManifestEntry,
 } from "./platform-capability-manifest";
+import { SUPPORTED_INTEGRATIONS } from "./supported-integrations-manifest";
 
 export type ProductDependencyRelation = "depends_on" | "part_of";
 
@@ -148,8 +149,44 @@ export function platformCapabilityDependencyEdges(
 }
 
 /**
+ * Cross-portfolio DPPM line-of-sight edges (BI-PORTPRIO-5) so the cascade reaches
+ * beyond Foundational. A Products & Services Sold offering is DELIVERED BY the
+ * Manufacturing & Delivery pipeline; integrations (For Employees + others) RUN ON
+ * the foundational MCP plane. The sold→workforce edge into For Employees waits on
+ * Facet B (BI-554E1A14) — the workforce is not a portfolio entry yet, so there is
+ * nothing to depend on there beyond the integration tools.
+ */
+export function crossPortfolioDependencyEdges(): ProductDependencyEdge[] {
+  const edges: ProductDependencyEdge[] = [];
+
+  // Products & Services Sold → Manufacturing & Delivery: the platform offer is
+  // delivered by the build / source-control / deploy pipeline.
+  for (const to of ["cap-build-studio", "cap-github-delivery", "cap-self-upgrade"]) {
+    edges.push({
+      fromProductId: "dpf-platform-standard",
+      toProductId: to,
+      relationType: "depends_on",
+      source: "platform_capability",
+    });
+  }
+
+  // Supported integrations → Foundational: every connector runs on the MCP plane.
+  for (const integration of SUPPORTED_INTEGRATIONS) {
+    edges.push({
+      fromProductId: `int-${integration.slug}`,
+      toProductId: "cap-mcp-plane",
+      relationType: "depends_on",
+      source: "integration_registry",
+    });
+  }
+
+  return edges;
+}
+
+/**
  * Materialize the product dependency graph: registry-declared edges + the
- * platform-capability manifest's edges. Idempotent; missing endpoints skip.
+ * platform-capability manifest's edges + cross-portfolio DPPM edges. Idempotent;
+ * missing endpoints skip.
  */
 export async function projectProductDependencyGraph(input: {
   registryProducts: RegistryProduct[];
@@ -158,6 +195,7 @@ export async function projectProductDependencyGraph(input: {
   const edges = [
     ...registryDependencyEdges(input.registryProducts),
     ...platformCapabilityDependencyEdges(),
+    ...crossPortfolioDependencyEdges(),
   ];
   return linkProductDependencies(edges, { db: input.db });
 }
