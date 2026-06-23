@@ -92,3 +92,31 @@ export async function setGoldenTrianglePosture(
     return false;
   }
 }
+
+/** The scope a resolved posture came from — surfaced so the UI can show "why this default". */
+export type ResolvedPostureSource = "organization" | "platform";
+
+export interface ResolvedPosture {
+  preference: GoldenTrianglePreference;
+  source: ResolvedPostureSource;
+}
+
+/**
+ * Resolve the posture that should apply, layering scopes most-specific first:
+ * organization (WWWD, the org's own choice) → platform (WWMD, the shipped seed
+ * default) → null (the caller falls back to Balanced, the byte-identical-to-off
+ * cold start). Pure composition over the fail-open reader, so it inherits
+ * fail-open behaviour. `organizationId` may be null when there is no org context.
+ */
+export async function getEffectiveGoldenTrianglePosture(
+  organizationId: string | null,
+  db?: GoldenTrianglePersistenceClient,
+): Promise<ResolvedPosture | null> {
+  if (organizationId) {
+    const org = await getGoldenTrianglePosture({ kind: "organization", organizationId }, db);
+    if (org) return { preference: org, source: "organization" };
+  }
+  const platform = await getGoldenTrianglePosture({ kind: "platform" }, db);
+  if (platform) return { preference: platform, source: "platform" };
+  return null;
+}

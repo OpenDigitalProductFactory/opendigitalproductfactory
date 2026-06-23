@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 
 import {
+  getEffectiveGoldenTrianglePosture,
   getGoldenTrianglePosture,
   isGoldenTrianglePreference,
   setGoldenTrianglePosture,
@@ -10,6 +11,21 @@ import {
 } from "./persistence";
 
 const ASSURED: GoldenTrianglePreference = { preset: "assured", qualityWeight: 0.8, costWeight: 0.1, timeWeight: 0.1 };
+const FRUGAL: GoldenTrianglePreference = { preset: "frugal", qualityWeight: 0.1, costWeight: 0.8, timeWeight: 0.1 };
+
+/** A where-aware fake: returns different stored postures for the platform vs org profile rows. */
+function scopedClient(byScope: { platform?: GoldenTrianglePreference; org?: GoldenTrianglePreference }): GoldenTrianglePersistenceClient {
+  return {
+    decisionPerspectiveProfile: {
+      findFirst: async (args) => {
+        const where = (args as { where: Record<string, unknown> }).where;
+        const pref = "profileId" in where ? byScope.platform : byScope.org;
+        return pref ? { autonomyPolicy: { goldenTriangle: pref } } : null;
+      },
+      updateMany: async () => ({ count: 1 }),
+    },
+  };
+}
 
 interface Calls {
   findFirst: unknown[];
@@ -98,6 +114,31 @@ describe("getGoldenTrianglePosture", () => {
 
   it("is fail-open: returns null when the db throws", async () => {
     expect(await getGoldenTrianglePosture({ kind: "platform" }, throwingClient())).toBeNull();
+  });
+});
+
+describe("getEffectiveGoldenTrianglePosture", () => {
+  it("prefers the organization posture when one is set (WWWD over WWMD)", async () => {
+    const client = scopedClient({ platform: ASSURED, org: FRUGAL });
+    expect(await getEffectiveGoldenTrianglePosture("org_1", client)).toEqual({ preference: FRUGAL, source: "organization" });
+  });
+
+  it("falls back to the platform default when the org has none", async () => {
+    const client = scopedClient({ platform: ASSURED });
+    expect(await getEffectiveGoldenTrianglePosture("org_1", client)).toEqual({ preference: ASSURED, source: "platform" });
+  });
+
+  it("skips the org lookup entirely when organizationId is null", async () => {
+    const client = scopedClient({ platform: ASSURED, org: FRUGAL });
+    expect(await getEffectiveGoldenTrianglePosture(null, client)).toEqual({ preference: ASSURED, source: "platform" });
+  });
+
+  it("returns null when neither scope has a saved posture (caller uses Balanced)", async () => {
+    expect(await getEffectiveGoldenTrianglePosture("org_1", scopedClient({}))).toBeNull();
+  });
+
+  it("is fail-open: returns null when the db throws", async () => {
+    expect(await getEffectiveGoldenTrianglePosture("org_1", throwingClient())).toBeNull();
   });
 });
 
