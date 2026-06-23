@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  crossPortfolioDependencyEdges,
   getProductDependencies,
   getProductDependents,
   linkProductDependency,
@@ -130,6 +131,27 @@ describe("edge sources", () => {
           e.relationType === "depends_on" &&
           e.source === "platform_capability",
       ),
+    ).toBe(true);
+  });
+});
+
+describe("crossPortfolioDependencyEdges", () => {
+  it("links the sold offer to its Manufacturing & Delivery pipeline", () => {
+    const edges = crossPortfolioDependencyEdges();
+    expect(
+      edges.some(
+        (e) =>
+          e.fromProductId === "dpf-platform-standard" &&
+          e.toProductId === "cap-build-studio" &&
+          e.relationType === "depends_on",
+      ),
+    ).toBe(true);
+  });
+
+  it("links supported integrations to the foundational MCP plane", () => {
+    const edges = crossPortfolioDependencyEdges();
+    expect(
+      edges.some((e) => e.fromProductId === "int-quickbooks" && e.toProductId === "cap-mcp-plane"),
     ).toBe(true);
   });
 });
