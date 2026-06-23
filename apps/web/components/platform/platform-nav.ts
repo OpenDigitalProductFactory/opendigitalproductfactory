@@ -54,6 +54,9 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
     matchPrefixes: ["/platform/ai"],
     subItems: [
       { label: "Overview", href: "/platform/ai" },
+      // EP-GOLDEN-TRIANGLE: the Cost/Quality/Time priority surface. Without this
+      // tab the page was reachable only by typing /platform/ai/priority.
+      { label: "Priority", href: "/platform/ai/priority" },
       { label: "Operations Map", href: "/platform/ai/operations-map" },
       { label: "Capacity Continuity", href: "/platform/ai/capacity-continuity" },
       { label: "Assignments", href: "/platform/ai/assignments" },
