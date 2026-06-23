@@ -177,3 +177,58 @@ export function decodePostureForDisplay(
   });
   return { decoded, plain: plainSummary(pref), chips: describeConfigured(decoded) };
 }
+
+// ── Balance / starvation colouring ──────────────────────────────────────────
+// Green when the three axes are in balance (centre), shading through yellow to
+// red as one or two axes get starved (the posture pushes toward an edge/vertex).
+export type BalanceLevel = "balanced" | "leaning" | "starved";
+
+export interface BalanceState {
+  level: BalanceLevel;
+  /** A `--dpf-*` token name (without `var()`) for the level's colour. */
+  token: "--dpf-success" | "--dpf-warning" | "--dpf-error";
+  label: string;
+  /** Axis labels currently starved (weight below the floor). */
+  starved: Array<"Quality" | "Cost" | "Time">;
+}
+
+const STARVE_FLOOR = 0.12;
+
+export function balanceState(qualityWeight: number, costWeight: number, timeWeight: number): BalanceState {
+  const q = Math.max(0, qualityWeight);
+  const c = Math.max(0, costWeight);
+  const t = Math.max(0, timeWeight);
+  const s = q + c + t || 1;
+  const nq = q / s;
+  const nc = c / s;
+  const nt = t / s;
+
+  const starved: Array<"Quality" | "Cost" | "Time"> = [];
+  if (nq < STARVE_FLOOR) starved.push("Quality");
+  if (nc < STARVE_FLOOR) starved.push("Cost");
+  if (nt < STARVE_FLOOR) starved.push("Time");
+
+  // 1 = perfectly balanced (1/3 each); 0 = an axis fully starved (a vertex/edge).
+  const score = Math.min(nq, nc, nt) * 3;
+  let level: BalanceLevel;
+  let token: BalanceState["token"];
+  if (score >= 0.66) {
+    level = "balanced";
+    token = "--dpf-success";
+  } else if (score >= 0.33) {
+    level = "leaning";
+    token = "--dpf-warning";
+  } else {
+    level = "starved";
+    token = "--dpf-error";
+  }
+
+  const label =
+    level === "balanced" ? "Well balanced" : starved.length > 0 ? `Starving ${starved.join(" & ")}` : "Leaning";
+
+  return { level, token, label, starved };
+}
+
+export function isAxisStarved(b: BalanceState, axis: "Quality" | "Cost" | "Time"): boolean {
+  return b.starved.includes(axis);
+}

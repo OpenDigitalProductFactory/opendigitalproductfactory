@@ -3,6 +3,7 @@
 import type { AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { AgentSkillsDropdown } from "./AgentSkillsDropdown";
+import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPriorityControl";
 
 function formatSensitivityLabel(value: AgentInfo["sensitivity"]): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -133,6 +134,7 @@ export function AgentPanelHeader({
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginLeft: 12 }}>
+          <CoworkerPriorityControl />
           <span
             style={{
               fontSize: 9,
