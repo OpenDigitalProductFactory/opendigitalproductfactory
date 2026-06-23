@@ -7,7 +7,8 @@
       "kind": "page",
       "segments": [],
       "dynamicParams": [],
-      "file": "apps/web/app/page.tsx"
+      "file": "apps/web/app/page.tsx",
+      "redirectTo": "/welcome"
     },
     {
       "routePath": "/.well-known/dpf-instance.json",
@@ -36,7 +37,8 @@
         "backlog"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/admin/backlog/page.tsx"
+      "file": "apps/web/app/(shell)/admin/backlog/page.tsx",
+      "redirectTo": "/ops"
     },
     {
       "routePath": "/admin/backups",
@@ -77,7 +79,8 @@
         "business-context"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/admin/business-context/page.tsx"
+      "file": "apps/web/app/(shell)/admin/business-context/page.tsx",
+      "redirectTo": "/storefront/settings/business"
     },
     {
       "routePath": "/admin/business-models",
@@ -137,7 +140,8 @@
         "operating-hours"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/admin/operating-hours/page.tsx"
+      "file": "apps/web/app/(shell)/admin/operating-hours/page.tsx",
+      "redirectTo": "/storefront/settings/operations"
     },
     {
       "routePath": "/admin/platform-development",
@@ -157,7 +161,8 @@
         "prompts"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/admin/prompts/page.tsx"
+      "file": "apps/web/app/(shell)/admin/prompts/page.tsx",
+      "redirectTo": "/platform/ai/prompts"
     },
     {
       "routePath": "/admin/reference-data",
@@ -207,7 +212,8 @@
         "skills"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/admin/skills/page.tsx"
+      "file": "apps/web/app/(shell)/admin/skills/page.tsx",
+      "redirectTo": "/platform/ai/skills"
     },
     {
       "routePath": "/admin/storefront",
@@ -217,7 +223,8 @@
         "storefront"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/admin/storefront/page.tsx"
+      "file": "apps/web/app/(shell)/admin/storefront/page.tsx",
+      "redirectTo": "/storefront"
     },
     {
       "routePath": "/admin/storefront/inbox",
@@ -228,7 +235,8 @@
         "inbox"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/admin/storefront/inbox/page.tsx"
+      "file": "apps/web/app/(shell)/admin/storefront/inbox/page.tsx",
+      "redirectTo": "/storefront/inbox"
     },
     {
       "routePath": "/admin/storefront/items",
@@ -239,7 +247,8 @@
         "items"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/admin/storefront/items/page.tsx"
+      "file": "apps/web/app/(shell)/admin/storefront/items/page.tsx",
+      "redirectTo": "/storefront/items"
     },
     {
       "routePath": "/admin/storefront/sections",
@@ -250,7 +259,8 @@
         "sections"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/admin/storefront/sections/page.tsx"
+      "file": "apps/web/app/(shell)/admin/storefront/sections/page.tsx",
+      "redirectTo": "/storefront/sections"
     },
     {
       "routePath": "/admin/storefront/settings",
@@ -261,7 +271,8 @@
         "settings"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/admin/storefront/settings/page.tsx"
+      "file": "apps/web/app/(shell)/admin/storefront/settings/page.tsx",
+      "redirectTo": "/storefront/settings"
     },
     {
       "routePath": "/admin/storefront/setup",
@@ -272,7 +283,8 @@
         "setup"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/admin/storefront/setup/page.tsx"
+      "file": "apps/web/app/(shell)/admin/storefront/setup/page.tsx",
+      "redirectTo": "/storefront/setup"
     },
     {
       "routePath": "/admin/storefront/team",
@@ -283,7 +295,8 @@
         "team"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/admin/storefront/team/page.tsx"
+      "file": "apps/web/app/(shell)/admin/storefront/team/page.tsx",
+      "redirectTo": "/storefront/team"
     },
     {
       "routePath": "/admin/wiki/lint",
@@ -3524,7 +3537,8 @@
         "agents"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/ea/agents/page.tsx"
+      "file": "apps/web/app/(shell)/ea/agents/page.tsx",
+      "redirectTo": "/admin/agents"
     },
     {
       "routePath": "/ea/capabilities",
@@ -4309,7 +4323,8 @@
         "improvements"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/ops/improvements/page.tsx"
+      "file": "apps/web/app/(shell)/ops/improvements/page.tsx",
+      "redirectTo": "/ops"
     },
     {
       "routePath": "/ops/promotions",
@@ -4399,7 +4414,8 @@
         "authority"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/platform/ai/authority/page.tsx"
+      "file": "apps/web/app/(shell)/platform/ai/authority/page.tsx",
+      "redirectTo": "/platform/ai"
     },
     {
       "routePath": "/platform/ai/browser-sessions",
@@ -4444,7 +4460,8 @@
         "capability-needs"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/platform/ai/capability-needs/page.tsx"
+      "file": "apps/web/app/(shell)/platform/ai/capability-needs/page.tsx",
+      "redirectTo": "/ops"
     },
     {
       "routePath": "/platform/ai/capacity-continuity",
@@ -4491,7 +4508,8 @@
         "history"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/platform/ai/history/page.tsx"
+      "file": "apps/web/app/(shell)/platform/ai/history/page.tsx",
+      "redirectTo": "/platform/audit/ledger"
     },
     {
       "routePath": "/platform/ai/model-assignment",
@@ -4502,7 +4520,8 @@
         "model-assignment"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/platform/ai/model-assignment/page.tsx"
+      "file": "apps/web/app/(shell)/platform/ai/model-assignment/page.tsx",
+      "redirectTo": "/platform/ai/assignments"
     },
     {
       "routePath": "/platform/ai/operations",
@@ -4513,7 +4532,8 @@
         "operations"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/platform/ai/operations/page.tsx"
+      "file": "apps/web/app/(shell)/platform/ai/operations/page.tsx",
+      "redirectTo": "/platform/ai/build-studio"
     },
     {
       "routePath": "/platform/ai/operations-map",
@@ -4582,7 +4602,8 @@
         "routing"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/platform/ai/routing/page.tsx"
+      "file": "apps/web/app/(shell)/platform/ai/routing/page.tsx",
+      "redirectTo": "/platform/ai/providers"
     },
     {
       "routePath": "/platform/ai/runtime-health",
@@ -4823,7 +4844,8 @@
         "integrations"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/platform/integrations/page.tsx"
+      "file": "apps/web/app/(shell)/platform/integrations/page.tsx",
+      "redirectTo": "/platform/tools/catalog"
     },
     {
       "routePath": "/platform/integrations/sync",
@@ -4834,7 +4856,8 @@
         "sync"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/platform/integrations/sync/page.tsx"
+      "file": "apps/web/app/(shell)/platform/integrations/sync/page.tsx",
+      "redirectTo": "/platform/tools/catalog/sync"
     },
     {
       "routePath": "/platform/schedule",
@@ -4854,7 +4877,8 @@
         "services"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/platform/services/page.tsx"
+      "file": "apps/web/app/(shell)/platform/services/page.tsx",
+      "redirectTo": "/platform/tools/services"
     },
     {
       "routePath": "/platform/services/[serverId]",
@@ -4878,7 +4902,8 @@
         "activate"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/platform/services/activate/page.tsx"
+      "file": "apps/web/app/(shell)/platform/services/activate/page.tsx",
+      "redirectTo": "/platform/tools/services/activate"
     },
     {
       "routePath": "/platform/tools",
@@ -5265,7 +5290,8 @@
         "architecture"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/portfolio/architecture/page.tsx"
+      "file": "apps/web/app/(shell)/portfolio/architecture/page.tsx",
+      "redirectTo": "/ea/capabilities"
     },
     {
       "routePath": "/portfolio/product/[id]",

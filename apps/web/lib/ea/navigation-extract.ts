@@ -28,6 +28,10 @@
 //       per-domain nav component, not the canonical model; the P3 convergence backlog.
 //   - nav-entry-crosses-domain    (teleport) — an entry whose target route lives in a
 //       different domain than the entry itself (the Platform->Admin defect class).
+//   - nav-entry-redirects-cross-domain (teleport via redirect) — an entry whose href looks
+//       in-domain but whose route is a redirect SHIM that lands in another domain (e.g. an
+//       AI-Operations tab → /platform/ai/capability-needs → /ops). Invisible to the
+//       href-only check; caught by following redirect shims to the effective destination.
 
 import type { SysmlDesiredModel, SysmlDesiredConformanceIssue } from "./sysml-model-seed";
 import type { PortalNavRecord } from "../navigation/portal-navigation-model";
@@ -45,9 +49,42 @@ export interface NavSourceEntry {
   path: string;
   /** The domain the ENTRY belongs to (its owning surface). */
   domain: string;
-  /** The domain the TARGET ROUTE belongs to (resolved by the shell). A mismatch is a
-   *  cross-domain teleport. */
+  /** The domain the EFFECTIVE target route belongs to (resolved by the shell, AFTER
+   *  following any redirect shim). A mismatch with `domain` is a cross-domain teleport. */
   targetDomain: string;
+  /** When `path` is a redirect shim, the route it actually lands on (query stripped);
+   *  absent when the href is a direct destination. */
+  effectivePath?: string;
+  /** True when the target domain is reached by following a redirect shim rather than the
+   *  href directly — the teleport the parity engine's href-only check used to miss. */
+  viaRedirect?: boolean;
+}
+
+/** A map of redirect-shim route path → its destination route path (query stripped),
+ *  derived from the build-time route manifest by the reconcile shell. Passed in (not
+ *  imported) so this extractor stays pure. */
+export type RedirectMap = ReadonlyMap<string, string>;
+
+/** Follow redirect shims from `path` to the route actually rendered — strips query/hash
+ *  and guards against cycles. Returns the final path and whether any redirect hop occurred,
+ *  so a nav entry whose href is itself a shim resolves to its EFFECTIVE destination. */
+export function resolveEffectivePath(
+  path: string,
+  redirects: RedirectMap,
+): { path: string; viaRedirect: boolean } {
+  let current = path.split(/[?#]/)[0]!;
+  const seen = new Set<string>([current]);
+  let viaRedirect = false;
+  for (let i = 0; i < 16; i++) {
+    const next = redirects.get(current);
+    if (!next) break;
+    const dest = next.split(/[?#]/)[0]!;
+    if (seen.has(dest)) break; // cycle guard
+    seen.add(dest);
+    current = dest;
+    viaRedirect = true;
+  }
+  return { path: current, viaRedirect };
 }
 
 export interface NavigationModelInput {
@@ -112,20 +149,35 @@ export function buildNavigationModel(input: NavigationModelInput): SysmlDesiredM
         domain: entry.domain,
         targetPath: entry.path,
         targetDomain: entry.targetDomain,
+        ...(entry.viaRedirect ? { viaRedirect: true, effectivePath: entry.effectivePath } : {}),
       },
     });
     relationships.push({ fromKey: surfaceKey, toKey: entryKey, relSlug: "contains" });
     // Cross-layer: this nav entry traces to (navigates to) the route-surface node.
     crossLayerRelationships.push({ fromKey: entryKey, toKey: ROUTE_KEY(entry.path), relSlug: "traces" });
 
-    // Teleport: the entry's target route lives in a different domain than the entry.
+    // Teleport: the entry's EFFECTIVE target route lives in a different domain than the
+    // entry. Two flavours, surfaced as distinct findings so structural analysis can tell
+    // them apart:
     if (entry.targetDomain && entry.targetDomain !== entry.domain) {
-      conformanceIssues.push({
-        onKey: entryKey,
-        issueType: "nav-entry-crosses-domain",
-        severity: "high",
-        message: `Navigation entry "${entry.label}" (${entry.domain}) points at ${entry.path} in the ${entry.targetDomain} domain — a cross-domain teleport. Reach another domain from the persistent rail, not a secondary-nav entry.`,
-      });
+      if (entry.viaRedirect) {
+        // Href looks in-domain but the page redirects out — the teleport the old
+        // href-only check could not see (e.g. an AI-Operations tab whose route redirects
+        // to /ops). Now caught because the model follows redirect shims.
+        conformanceIssues.push({
+          onKey: entryKey,
+          issueType: "nav-entry-redirects-cross-domain",
+          severity: "high",
+          message: `Navigation entry "${entry.label}" (${entry.domain}) points at ${entry.path}, which REDIRECTS to ${entry.effectivePath} in the ${entry.targetDomain} domain — a cross-domain teleport via a redirect shim. The href looks in-section but lands in another section; link straight to the real destination or reach it from the persistent rail.`,
+        });
+      } else {
+        conformanceIssues.push({
+          onKey: entryKey,
+          issueType: "nav-entry-crosses-domain",
+          severity: "high",
+          message: `Navigation entry "${entry.label}" (${entry.domain}) points at ${entry.path} in the ${entry.targetDomain} domain — a cross-domain teleport. Reach another domain from the persistent rail, not a secondary-nav entry.`,
+        });
+      }
     }
   }
 
@@ -188,15 +240,24 @@ export function buildDomainResolver(
 /** Normalize the canonical nav records into pure NavSourceEntry rows: drop legacy
  *  redirects and resolve each entry's target-route domain (for teleport detection).
  *  Pure — the reconcile shell passes PORTAL_NAV_ROUTES. */
-export function toNavEntries(records: readonly PortalNavRecord[]): NavSourceEntry[] {
+export function toNavEntries(
+  records: readonly PortalNavRecord[],
+  redirects: RedirectMap = new Map(),
+): NavSourceEntry[] {
   const domainOf = buildDomainResolver(records);
   return records
     .filter((r) => r.destinationKind !== "legacy-redirect")
-    .map((r) => ({
-      key: r.key,
-      label: r.label,
-      path: r.path,
-      domain: r.domain,
-      targetDomain: domainOf(r.path, r.domain),
-    }));
+    .map((r) => {
+      const eff = resolveEffectivePath(r.path, redirects);
+      return {
+        key: r.key,
+        label: r.label,
+        path: r.path,
+        domain: r.domain,
+        // Resolve the domain of the EFFECTIVE destination — following a redirect shim —
+        // so an href that looks in-domain but bounces out is caught as a teleport.
+        targetDomain: domainOf(eff.path, r.domain),
+        ...(eff.viaRedirect ? { effectivePath: eff.path, viaRedirect: true } : {}),
+      };
+    });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRouteModel, ROUTE_PACKAGE_KEY, type RouteManifestRow } from "./route-extract";
+import { buildRouteModel, detectRedirectTarget, ROUTE_PACKAGE_KEY, type RouteManifestRow } from "./route-extract";
 
 // Intentionally OMIT the "/build", "/build/work", and "/api" rows so the builder must
 // SYNTHESIZE those intermediate layout segments from their descendants' paths.
@@ -74,9 +74,57 @@ describe("buildRouteModel", () => {
 
   it("declares the element/relationship types and soft-remove prefix it needs", () => {
     expect(model.elementTypeSlugs).toEqual(["package", "part_definition"]);
-    expect(model.relTypeSlugs).toEqual(["contains"]);
+    expect(model.relTypeSlugs).toEqual(["contains", "redirects_to"]);
     expect(model.softRemovePrefix).toBe("route:");
     expect(model.view.viewpointName).toBe("System Decomposition & Interfaces");
     expect(model.view.scopeRef).toBe("routes");
+  });
+});
+
+describe("buildRouteModel — redirect shims", () => {
+  it("emits a redirects_to edge from a shim to its destination and annotates the shim node", () => {
+    const m = buildRouteModel([
+      { routePath: "/platform/ai/capability-needs", kind: "page", segments: ["platform", "ai", "capability-needs"], dynamicParams: [], file: "a", redirectTo: "/ops" },
+      { routePath: "/ops", kind: "page", segments: ["ops"], dynamicParams: [], file: "b" },
+    ]);
+    expect(m.relationships).toContainEqual({
+      fromKey: "route:/platform/ai/capability-needs",
+      toKey: "route:/ops",
+      relSlug: "redirects_to",
+    });
+    const shim = m.elements.find((e) => e.sysmlKey === "route:/platform/ai/capability-needs");
+    expect(shim?.properties?.redirectTo).toBe("/ops");
+    expect(shim?.description).toContain("redirect shim");
+    expect(m.relTypeSlugs).toContain("redirects_to");
+  });
+
+  it("does not emit a dangling redirects_to edge when the destination route is unknown", () => {
+    const m = buildRouteModel([
+      { routePath: "/x", kind: "page", segments: ["x"], dynamicParams: [], file: "a", redirectTo: "/not-a-modeled-route" },
+    ]);
+    expect(m.relationships.some((r) => r.relSlug === "redirects_to")).toBe(false);
+  });
+});
+
+describe("detectRedirectTarget", () => {
+  it("detects a pure redirect shim's destination, stripping the query", () => {
+    const src = `import { redirect } from "next/navigation";\nexport default function P() {\n  redirect("/ops?origin=capability-need");\n}`;
+    expect(detectRedirectTarget(src)).toBe("/ops");
+  });
+
+  it("ignores a conditional auth guard that renders a real page (has JSX)", () => {
+    const src = `export default async function P() {\n  if (!user) redirect("/login");\n  return <Home data={x} />;\n}`;
+    expect(detectRedirectTarget(src)).toBeUndefined();
+  });
+
+  it("ignores dynamic, external, and commented-out redirects", () => {
+    expect(detectRedirectTarget("redirect(`/x/${id}`)")).toBeUndefined();
+    expect(detectRedirectTarget('redirect("https://example.com")')).toBeUndefined();
+    expect(detectRedirectTarget('// redirect("/ops")')).toBeUndefined();
+    expect(detectRedirectTarget("/* redirect(\"/ops\") */")).toBeUndefined();
+  });
+
+  it("returns undefined for a normal page with no redirect", () => {
+    expect(detectRedirectTarget('export default function P() { return <div className="x" />; }')).toBeUndefined();
   });
 });

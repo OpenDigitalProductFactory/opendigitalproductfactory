@@ -4,10 +4,11 @@ import {
   buildNavigationModel,
   buildDomainResolver,
   toNavEntries,
+  resolveEffectivePath,
   NAVIGATION_PACKAGE_KEY,
   type NavSourceEntry,
 } from "./navigation-extract";
-import { PORTAL_NAV_ROUTES } from "../navigation/portal-navigation-model";
+import { PORTAL_NAV_ROUTES, type PortalNavRecord } from "../navigation/portal-navigation-model";
 
 const ENTRIES: NavSourceEntry[] = [
   { key: "platform", label: "Platform Hub", path: "/platform", domain: "platform", targetDomain: "platform" },
@@ -70,6 +71,32 @@ describe("buildNavigationModel", () => {
     expect(teleport?.severity).toBe("high");
   });
 
+  it("flags a redirect-disguised teleport as a distinct finding (href in-domain, redirects out)", () => {
+    const m = buildNavigationModel({
+      entries: [{
+        key: "capNeeds",
+        label: "Capability Needs",
+        path: "/platform/ai/capability-needs",
+        domain: "platform",
+        targetDomain: "delivery",
+        effectivePath: "/ops",
+        viaRedirect: true,
+      }],
+      routePaths: [],
+    });
+    const f = m.conformanceIssues?.find((c) => c.issueType === "nav-entry-redirects-cross-domain");
+    expect(f?.onKey).toBe("navigation:entry:capNeeds");
+    expect(f?.severity).toBe("high");
+    expect(f?.message).toContain("/ops");
+    expect(f?.message).toContain("REDIRECTS");
+    // It is the redirect flavour, NOT also the plain href teleport (no double-count).
+    expect(m.conformanceIssues?.some((c) => c.issueType === "nav-entry-crosses-domain")).toBe(false);
+    // The entry element records the redirect for the canvas.
+    const entry = m.elements.find((e) => e.sysmlKey === "navigation:entry:capNeeds");
+    expect(entry?.properties?.viaRedirect).toBe(true);
+    expect(entry?.properties?.effectivePath).toBe("/ops");
+  });
+
   it("excludes routes owned by not-yet-projected per-domain navs from the orphan set", () => {
     const m = buildNavigationModel({
       entries: ENTRIES,
@@ -113,5 +140,34 @@ describe("toNavEntries (canonical model normalization)", () => {
 
   it("produces no cross-domain teleports from the canonical model (it is clean by construction)", () => {
     expect(entries.filter((e) => e.domain !== e.targetDomain)).toEqual([]);
+  });
+
+  it("resolves the EFFECTIVE target domain through a redirect shim when a redirect map is supplied", () => {
+    const records: PortalNavRecord[] = [
+      { key: "k", label: "Cap Needs", path: "/platform/ai/capability-needs", parentPath: "/platform/ai", domain: "platform", audienceModes: ["operator"], destinationKind: "section-page", capabilityKey: "view_platform" },
+      { key: "ops", label: "Backlog", path: "/ops", parentPath: "/", domain: "delivery", audienceModes: ["operator"], destinationKind: "domain-home", capabilityKey: "view_operations" },
+    ];
+    const out = toNavEntries(records, new Map([["/platform/ai/capability-needs", "/ops"]]));
+    const cap = out.find((e) => e.key === "k");
+    expect(cap?.viaRedirect).toBe(true);
+    expect(cap?.effectivePath).toBe("/ops");
+    expect(cap?.targetDomain).toBe("delivery"); // resolved from the redirect destination, not the href
+  });
+});
+
+describe("resolveEffectivePath", () => {
+  it("follows a redirect chain to the final route and strips the query", () => {
+    const map = new Map([["/a", "/b?x=1"], ["/b", "/c"]]);
+    expect(resolveEffectivePath("/a", map)).toEqual({ path: "/c", viaRedirect: true });
+  });
+
+  it("returns the path unchanged when it is not a shim", () => {
+    expect(resolveEffectivePath("/platform", new Map())).toEqual({ path: "/platform", viaRedirect: false });
+  });
+
+  it("terminates on a redirect cycle (no infinite loop)", () => {
+    const r = resolveEffectivePath("/a", new Map([["/a", "/b"], ["/b", "/a"]]));
+    expect(r.viaRedirect).toBe(true);
+    expect(["/a", "/b"]).toContain(r.path);
   });
 });

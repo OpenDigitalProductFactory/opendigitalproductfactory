@@ -23,7 +23,13 @@ import { OPS_NAV_GROUPS } from "@/components/ops/ops-nav";
 import { MARKETING_TABS } from "@/components/customer-marketing/marketing-nav";
 import { STOREFRONT_ROUTES, STOREFRONT_SETTINGS_TABS } from "@/components/storefront-admin/storefront-nav";
 import { PORTAL_NAV_ROUTES } from "@/lib/navigation/portal-navigation-model";
-import { toNavEntries, buildDomainResolver, type NavSourceEntry } from "./navigation-extract";
+import {
+  toNavEntries,
+  buildDomainResolver,
+  resolveEffectivePath,
+  type NavSourceEntry,
+  type RedirectMap,
+} from "./navigation-extract";
 
 interface DomainNavSource {
   /** PortalDomain the entries belong to (their owning surface). */
@@ -86,26 +92,34 @@ const DOMAIN_NAV_SOURCES: readonly DomainNavSource[] = [
 /** Per-domain nav entries normalized to NavSourceEntry. targetDomain is resolved from
  *  the route's canonical domain so a per-domain nav that points OUT of its own domain
  *  is still caught as a teleport. */
-export function getDomainNavEntries(): NavSourceEntry[] {
+export function getDomainNavEntries(redirects: RedirectMap = new Map()): NavSourceEntry[] {
   const domainOf = buildDomainResolver(PORTAL_NAV_ROUTES);
   return DOMAIN_NAV_SOURCES.flatMap((src) =>
-    src.entries.map((e) => ({
-      key: e.key,
-      label: e.label,
-      path: e.path,
-      domain: src.domain,
-      targetDomain: domainOf(e.path, src.domain),
-    })),
+    src.entries.map((e) => {
+      const eff = resolveEffectivePath(e.path, redirects);
+      return {
+        key: e.key,
+        label: e.label,
+        path: e.path,
+        domain: src.domain,
+        // Resolve the EFFECTIVE target domain (following redirect shims) so a per-domain
+        // nav entry that bounces into another domain is caught as a teleport.
+        targetDomain: domainOf(eff.path, src.domain),
+        ...(eff.viaRedirect ? { effectivePath: eff.path, viaRedirect: true } : {}),
+      };
+    }),
   );
 }
 
 /** The single source of navigation reachability: canonical nav entries plus the
  *  registered per-domain nav entries, deduped by path (canonical wins). Used by both
- *  the reconcile projection and the inventory gate so they agree. */
-export function getAllNavEntries(): NavSourceEntry[] {
+ *  the reconcile projection and the inventory gate so they agree. The redirect map
+ *  (route shim → destination, from the build-time manifest) lets both sources resolve a
+ *  nav entry's effective destination domain, so redirect-disguised teleports are caught. */
+export function getAllNavEntries(redirects: RedirectMap = new Map()): NavSourceEntry[] {
   const byPath = new Map<string, NavSourceEntry>();
-  for (const e of toNavEntries(PORTAL_NAV_ROUTES)) byPath.set(e.path, e);
-  for (const e of getDomainNavEntries()) {
+  for (const e of toNavEntries(PORTAL_NAV_ROUTES, redirects)) byPath.set(e.path, e);
+  for (const e of getDomainNavEntries(redirects)) {
     if (!byPath.has(e.path)) byPath.set(e.path, e);
   }
   return [...byPath.values()];

@@ -59,6 +59,16 @@ describe("getDomainNavEntries", () => {
     const paths = entries.map((e) => e.path);
     expect(new Set(paths).size).toBe(paths.length);
   });
+
+  it("follows the redirect map so a per-domain entry that bounces into another domain is a teleport", () => {
+    // Synthetic map: pretend /finance/invoices is a shim that redirects into the admin domain.
+    const withMap = getDomainNavEntries(new Map([["/finance/invoices", "/admin/settings"]]));
+    const invoice = withMap.find((e) => e.path === "/finance/invoices");
+    expect(invoice?.domain).toBe("business");
+    expect(invoice?.viaRedirect).toBe(true);
+    expect(invoice?.effectivePath).toBe("/admin/settings");
+    expect(invoice?.targetDomain).toBe("admin"); // resolved THROUGH the redirect → cross-domain
+  });
 });
 
 describe("getAllNavEntries (canonical + per-domain, unified)", () => {
