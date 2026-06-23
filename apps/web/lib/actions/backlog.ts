@@ -1,7 +1,7 @@
 "use server";
 
 import * as crypto from "crypto";
-import { prisma } from "@dpf/db";
+import { prisma, attributeBacklogPortfolio } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import {
@@ -58,7 +58,10 @@ export async function createBacklogItem(input: BacklogItemInput): Promise<void> 
     submittedById:    await getSessionUserId(),
     ...(input.body !== undefined && { body: input.body.trim() || null }),
   };
-  await prisma.backlogItem.create({ data: createData });
+  const created = await prisma.backlogItem.create({ data: createData, select: { id: true } });
+  // BI-PORTPRIO-1: attribute the new item to its portfolio (product → taxonomy
+  // node → epic precedence) so it groups/budgets/ranks per portfolio immediately.
+  await attributeBacklogPortfolio(created.id);
 }
 
 export async function updateBacklogItem(id: string, input: BacklogItemInput): Promise<void> {

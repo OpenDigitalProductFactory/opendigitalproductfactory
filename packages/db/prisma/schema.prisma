@@ -1000,6 +1000,7 @@ model BacklogItem {
   digitalProductId        String?
   taxonomyNodeId          String?
   epicId                  String?
+  portfolioId             String?
   source                  String?
   workType                String?
   triageOutcome           String?
@@ -1038,6 +1039,8 @@ model BacklogItem {
   activities              BacklogItemActivity[]
   coworkerNeeds           CoworkerCapabilityNeed[]      @relation("BacklogItemCoworkerCapabilityNeeds")
   businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityBacklogLinks")
+
+  @@index([portfolioId])
 }
 
 // Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
