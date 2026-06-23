@@ -816,6 +816,19 @@ export async function register() {
     // logs loudly on failure but does not block startup.
     void syncPlatformVersionOnBoot();
 
+    // DB-continuity guard (BI-B61779DB): detect a reverted/stale postgres volume
+    // BEFORE any reconciler trusts the data. A monotonic epoch lives in BOTH the
+    // DB (reverts with the data) and a host-side marker outside the volume (does
+    // not). If the DB came up behind the host marker, the volume was swapped or
+    // reverted — the 2026-06-23 8-day silent revert. Awaited so the opt-in
+    // fail-closed (DPF_DB_REVERT_FAILCLOSED=1) can abort boot; otherwise it records
+    // a durable PlatformConfig alert + a CRITICAL log and proceeds. Non-fatal on
+    // any other error (the wrapper swallows them) so a guard bug can't wedge boot.
+    {
+      const { assertDbContinuityOnBoot } = await import("@/lib/operate/db-continuity");
+      await assertDbContinuityOnBoot();
+    }
+
     // Self-heal a quiescence level left stuck by a swap that killed the
     // coordinator mid-protocol — otherwise the portal refuses gated requests
     // ("portal_quiescing") forever. Must run before reconciliation.

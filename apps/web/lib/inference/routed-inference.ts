@@ -28,6 +28,7 @@ import {
 import { routeEndpointV2 } from "@/lib/routing/pipeline-v2";
 import { callWithFallbackChain } from "@/lib/routing/fallback";
 import { getLocalOnlyInference } from "@/lib/inference/local-only";
+import { resolveDispatchPosture, type DispatchPosture } from "@/lib/golden-triangle/dispatch";
 import { logTokenUsage } from "@/lib/ai-inference";
 import type { RouteDecisionActor } from "@/lib/routing/route-decision-attribution";
 
@@ -191,6 +192,8 @@ interface PreparedRoute {
   policies: PolicyRuleEval[];
   overrides: EndpointOverride[];
   taskType: string;
+  /** EP-GOLDEN-TRIANGLE: the resolved posture applied to this route (null = none/Balanced). */
+  posture: DispatchPosture | null;
 }
 
 /**
@@ -219,6 +222,13 @@ async function prepareRoute(
   // Computed in prepareRoute so the per-phase preview (previewRoute) reflects it too.
   const localOnlyInference = await getLocalOnlyInference();
 
+  // EP-GOLDEN-TRIANGLE Slice 3: resolve the saved Cost/Quality/Time posture and
+  // feed it into routing as DEFAULTS (caller options + the local-only sovereignty
+  // switch below still win). Fail-open + Balanced-inert: null when no non-Balanced
+  // default is set, so this is byte-identical to flag-off until a posture is chosen.
+  // Single-org install → null org id resolves the platform (WWMD) default.
+  const posture = await resolveDispatchPosture(null, taskType);
+
   // 1. Infer contract
   const contract = await inferContract(
     taskType,
@@ -226,12 +236,15 @@ async function prepareRoute(
     options?.tools,
     undefined, // outputSchema
     {
+      // Posture defaults first — every explicit caller field and the local-only
+      // switch below override them (spread/assignment order = precedence).
+      ...(posture?.routeContext ?? {}),
       sensitivity,
       interactionMode: options?.interactionMode,
       requiresCodeExecution: options?.requiresCodeExecution,
       requiresWebSearch: options?.requiresWebSearch,
       requiresComputerUse: options?.requiresComputerUse,
-      budgetClass: options?.budgetClass,
+      budgetClass: options?.budgetClass ?? posture?.routeContext.budgetClass,
       requiredModelClass: options?.requiredModelClass,
       // EP-MODEL-TIER-ROUTING: a "local"-tier call forces local_only (keep
       // small/simple work on-box) even when the global switch is off; "robust"
@@ -278,7 +291,7 @@ async function prepareRoute(
     skipRecipe: prep?.skipRecipe,
   });
 
-  return { contract, decision, manifests, policies, overrides, taskType };
+  return { contract, decision, manifests, policies, overrides, taskType, posture };
 }
 
 /** Result of a side-effect-free routing dry-run. */
@@ -358,12 +371,15 @@ export async function routeAndCall(
   // to provider-specific parameters (Anthropic thinking, OpenAI reasoning_effort).
   // Effort is injected here — after routing but before dispatch — so it flows
   // through callWithFallbackChain into every adapter in the fallback chain.
-  if (options?.effort && decision.executionPlan) {
+  // Caller-set effort wins; otherwise the resolved posture's effort applies
+  // (EP-GOLDEN-TRIANGLE Slice 3). Balanced/no posture leaves effort untouched.
+  const effort = options?.effort ?? prepared.posture?.effort;
+  if (effort && decision.executionPlan) {
     decision.executionPlan = {
       ...decision.executionPlan,
       providerSettings: {
         ...decision.executionPlan.providerSettings,
-        effort: options.effort,
+        effort,
       },
     };
   }
