@@ -12,11 +12,6 @@ import {
   type IssueReportStatus,
 } from "@/lib/quality/issue-report-status";
 import { LEGACY_ISSUE_REPORT_STATUS, type LegacyIssueReportStatus } from "@/lib/quality/issue-report-queue";
-import { evaluateBuildStudioDecision } from "@/lib/build/decision-service";
-import {
-  buildEscalationDecisionRequest,
-  type ConsultEscalationResult,
-} from "@/lib/quality/escalation-responder";
 
 export async function reportQualityIssue(input: {
   type: "runtime_error" | "user_report" | "feedback";
@@ -180,13 +175,17 @@ export async function updateIssueReportStatus(
 }
 
 /**
- * Operator-triggered WWMD consult for a held escalation (BI-0ACD9AB2 §5.3 /
- * §14 dial-low). Runs the governed decision with the OPERATOR's own principal —
- * HITL-first by construction: the human asks, the kernel advises, the human
- * decides. Returns the operator-safe recommendation for the /ops attention lens.
- * No autonomous side effects; a system-principal sweep (dial-up) layers on later.
+ * Operator-triggered dismissal of a held escalation (BI-8DE13577). Resolves the
+ * PlatformIssueReport to resolved_locally — the same terminal state the auto-
+ * resolve sweep uses — for an escalation the operator knows is handled (e.g. the
+ * work shipped via a direct PR the sweep can't yet detect). Frees the per-build
+ * dedupeKey so a genuine re-stall re-files. HITL: the human decides; no build is
+ * disposed of. Replaces the degenerate WWMD consult that scored every option at
+ * composite 0.000 and only ever recommended "ask a human".
  */
-export async function consultEscalation(reportId: string): Promise<ConsultEscalationResult> {
+export async function dismissEscalation(
+  reportId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await auth();
   const user = session?.user;
   if (
@@ -196,26 +195,12 @@ export async function consultEscalation(reportId: string): Promise<ConsultEscala
     return { ok: false, error: "Not authorized." };
   }
 
-  const report = await prisma.platformIssueReport.findUnique({
-    where: { reportId },
-    select: {
-      reportId: true,
-      title: true,
-      description: true,
-      selfFixClass: true,
-      featureBuildId: true,
-    },
-  });
-  if (!report) return { ok: false, error: "Escalation not found." };
-
   try {
-    const result = await evaluateBuildStudioDecision({
-      userId: user.id,
-      request: buildEscalationDecisionRequest(report),
-    });
-    return { ok: true, result };
+    await updateIssueReportStatus(reportId, ISSUE_REPORT_STATUS.RESOLVED_LOCALLY);
+    revalidatePath("/ops");
+    return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Consult failed." };
+    return { ok: false, error: err instanceof Error ? err.message : "Dismiss failed." };
   }
 }
 

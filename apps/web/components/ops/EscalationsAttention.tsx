@@ -9,9 +9,10 @@ import Link from "next/link";
 import {
   escalationSelfFixLabel,
   escalationAgeLabel,
+  escalationBlockerSummary,
   type OpenEscalation,
 } from "@/lib/quality/escalation-attention";
-import { EscalationConsult } from "./EscalationConsult";
+import { EscalationDismiss } from "./EscalationDismiss";
 
 export function EscalationsAttention({ escalations }: { escalations: OpenEscalation[] }) {
   if (escalations.length === 0) return null;
@@ -35,39 +36,57 @@ export function EscalationsAttention({ escalations }: { escalations: OpenEscalat
       </div>
 
       <p className="px-3 pt-2 text-[11px] text-[var(--dpf-muted)]">
-        Builds Build Studio could not self-repair — held for a responder, attended here in your one
-        Operations surface rather than a separate queue.
+        Builds Build Studio could not self-repair — each shows what blocked it and the work it came
+        from, attended here in your one Operations surface rather than a separate queue. Items whose
+        work has shipped, been dropped, or been re-attempted clear automatically.
       </p>
 
       <ul className="mt-1 divide-y divide-[var(--dpf-border)]">
-        {escalations.map((e) => (
-          <li key={e.reportId} className="flex items-start gap-3 px-3 py-2">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded border border-[var(--dpf-accent)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--dpf-accent)]">
-                  {escalationSelfFixLabel(e.selfFixClass)}
-                </span>
-                <span className="text-[9px] uppercase tracking-wide text-[var(--dpf-muted)]">
-                  {e.severity}
-                </span>
-                <span className="text-[10px] text-[var(--dpf-muted)]">
-                  {escalationAgeLabel(e.createdAt, nowMs)}
-                </span>
-                <span className="text-[10px] text-[var(--dpf-muted)]">· {e.reportId}</span>
+        {escalations.map((e) => {
+          const blocker = escalationBlockerSummary(e.description);
+          return (
+            <li key={e.reportId} className="flex items-start gap-3 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded border border-[var(--dpf-accent)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--dpf-accent)]">
+                    {escalationSelfFixLabel(e.selfFixClass)}
+                  </span>
+                  <span className="text-[9px] uppercase tracking-wide text-[var(--dpf-muted)]">
+                    {e.severity}
+                  </span>
+                  <span className="text-[10px] text-[var(--dpf-muted)]">
+                    {escalationAgeLabel(e.createdAt, nowMs)}
+                  </span>
+                  <span className="text-[10px] text-[var(--dpf-muted)]">· {e.reportId}</span>
+                </div>
+                <p className="mt-1 text-xs text-[var(--dpf-text)]">{e.title}</p>
+                {blocker ? (
+                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--dpf-muted)]">
+                    <span className="text-[var(--dpf-text)]">Blocked:</span> {blocker}
+                  </p>
+                ) : null}
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-[var(--dpf-muted)]">
+                  {e.backlogItemId ? (
+                    <span>
+                      {e.backlogItemId}
+                      {e.backlogItemStatus ? ` · ${e.backlogItemStatus}` : ""}
+                    </span>
+                  ) : null}
+                  {e.backlogItemId ? <span aria-hidden>·</span> : null}
+                  <EscalationDismiss reportId={e.reportId} />
+                </div>
               </div>
-              <p className="mt-1 truncate text-xs text-[var(--dpf-text)]">{e.title}</p>
-              <EscalationConsult reportId={e.reportId} initial={e.responderDecision} />
-            </div>
-            {e.buildId ? (
-              <Link
-                href={`/build?buildId=${encodeURIComponent(e.buildId)}`}
-                className="shrink-0 text-[10px] font-semibold text-[var(--dpf-accent)] hover:opacity-80"
-              >
-                View build →
-              </Link>
-            ) : null}
-          </li>
-        ))}
+              {e.buildId ? (
+                <Link
+                  href={`/build?buildId=${encodeURIComponent(e.buildId)}`}
+                  className="shrink-0 text-[10px] font-semibold text-[var(--dpf-accent)] hover:opacity-80"
+                >
+                  View build →
+                </Link>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
