@@ -1,11 +1,45 @@
-// EP-GOLDEN-TRIANGLE Slice 3b — read-only "see the difference in outcome" view.
-// Presentational only (no hooks / no I/O): renders stored receipts so it is
-// trivially testable and safe in either a server or client tree. Data is fed by
-// the server wrapper via listGoldenTriangleReceipts().
+// EP-GOLDEN-TRIANGLE Slice 3b/3 — read-only "see the difference in outcome" view.
+// Presentational only (no hooks / no I/O): renders reconstructed receipts plus an
+// optional learned-default (Slice 6) calibration banner, so it is trivially
+// testable and safe in either a server or client tree. Data is fed by the server
+// wrapper via listRecentPostureReceipts() + suggestCalibration().
+import type { CalibrationKind, CalibrationSuggestion } from "@/lib/golden-triangle/calibrate";
 import type { StoredReceipt } from "@/lib/golden-triangle/receipt-store";
 
 function tone(matched: boolean): { token: string; label: string } {
   return matched ? { token: "--dpf-success", label: "Matched" } : { token: "--dpf-warning", label: "Deviated" };
+}
+
+function bannerToken(kind: CalibrationKind): string {
+  if (kind === "address-reliability") return "--dpf-error";
+  if (kind === "raise-quality") return "--dpf-warning";
+  if (kind === "loosen-quality") return "--dpf-success";
+  return "--dpf-border";
+}
+
+function CalibrationBanner({ suggestion }: { suggestion: CalibrationSuggestion }) {
+  const token = bannerToken(suggestion.kind);
+  return (
+    <div
+      role="status"
+      style={{
+        border: "1px solid var(--dpf-border)",
+        borderLeft: `3px solid var(${token})`,
+        borderRadius: 10,
+        padding: "10px 12px",
+        marginBottom: 10,
+        background: "var(--dpf-surface)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+        <strong style={{ fontSize: 13, color: "var(--dpf-text)" }}>{suggestion.headline}</strong>
+        <span style={{ fontSize: 11, color: "var(--dpf-muted)", whiteSpace: "nowrap" }}>
+          learned from {suggestion.sampleSize} run{suggestion.sampleSize === 1 ? "" : "s"}
+        </span>
+      </div>
+      <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--dpf-muted)" }}>{suggestion.detail}</p>
+    </div>
+  );
 }
 
 function reqLine(r: StoredReceipt["receipt"]): string {
@@ -42,12 +76,20 @@ function EmptyState() {
   );
 }
 
-export function GoldenTriangleOutcomes({ receipts }: { receipts: StoredReceipt[] }) {
+export function GoldenTriangleOutcomes({
+  receipts,
+  suggestion,
+}: {
+  receipts: StoredReceipt[];
+  suggestion?: CalibrationSuggestion | null;
+}) {
   if (!receipts.length) return <EmptyState />;
   return (
-    <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-      {receipts.map((row) => {
-        const r = row.receipt;
+    <div>
+      {suggestion ? <CalibrationBanner suggestion={suggestion} /> : null}
+      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+        {receipts.map((row) => {
+          const r = row.receipt;
         const t = tone(r.matchedRequest);
         return (
           <li
@@ -83,7 +125,8 @@ export function GoldenTriangleOutcomes({ receipts }: { receipts: StoredReceipt[]
             </div>
           </li>
         );
-      })}
-    </ul>
+        })}
+      </ul>
+    </div>
   );
 }

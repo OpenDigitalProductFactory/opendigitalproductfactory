@@ -42,4 +42,15 @@ describe("GoldenTriangleOutcomes", () => {
     render(<GoldenTriangleOutcomes receipts={[r]} />);
     expect(screen.getByText("Deviated")).toBeTruthy();
   });
+
+  it("renders the calibration banner when a suggestion is provided", () => {
+    render(
+      <GoldenTriangleOutcomes
+        receipts={[stored()]}
+        suggestion={{ kind: "loosen-quality", headline: "You may have room to save", detail: "All runs ran clean.", sampleSize: 8 }}
+      />,
+    );
+    expect(screen.getByText("You may have room to save")).toBeTruthy();
+    expect(screen.getByText(/learned from 8 runs/)).toBeTruthy();
+  });
 });
