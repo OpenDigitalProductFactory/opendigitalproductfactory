@@ -24,6 +24,8 @@ export interface PlatformCapabilityManifestEntry {
   /** Existing taxonomy nodeId, or null to place at the portfolio root. */
   taxonomyNodeId: string | null;
   coverageStatus: PortfolioCoverageStatus;
+  /** Public productIds this capability depends on (BI-PORTPRIO-2 dependency edges). */
+  dependsOn?: string[];
 }
 
 /** "foundational/platform_services" exists (seeded; used by dpf-meta). */
@@ -39,6 +41,7 @@ export const PLATFORM_CAPABILITY_MANIFEST: readonly PlatformCapabilityManifestEn
     portfolioSlug: "manufacturing_and_delivery",
     taxonomyNodeId: null,
     coverageStatus: "used",
+    dependsOn: ["cap-build-sandbox", "cap-local-ai-inference", "cap-github-delivery"],
   },
   {
     productId: "cap-github-delivery",

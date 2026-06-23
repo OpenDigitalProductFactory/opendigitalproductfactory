@@ -19,6 +19,7 @@ import { seedEaSysmlDataAuthority } from "./seed-ea-sysml-data-authority.js";
 import { projectPlatformCapabilities } from "./portfolio-sources/project-portfolio-source.js";
 import { projectAiProviders, projectIntegrations } from "./portfolio-sources/project-external-supply.js";
 import { projectSupplyChain } from "./portfolio-sources/project-sbom.js";
+import { projectProductDependencyGraph } from "./portfolio-sources/product-dependency.js";
 import {
   seedViewpointsForNotation,
   ARCHIMATE_VIEWPOINTS,
@@ -2443,6 +2444,16 @@ async function main(): Promise<void> {
   await step("aiProviderPortfolio", () => projectAiProviders());
   await step("integrationPortfolio", () => projectIntegrations());
   await step("supplyChainPortfolio", () => projectSupplyChain());
+  await step("productDependencyGraph", async () => {
+    const depRegistry = readJson<{
+      digital_products: Array<{
+        product_id: string;
+        depends_on_product_ids?: string[];
+        is_part_of_product_ids?: string[];
+      }>;
+    }>("digital_product_registry.json");
+    await projectProductDependencyGraph({ registryProducts: depRegistry.digital_products });
+  });
   // Invariant asserts — isolated so a violation is surfaced in the summary
   // rather than aborting the whole seed (they run after all seeding).
   await step("assert:activeProvidersHaveClearance", () => assertActiveProvidersHaveClearance());
