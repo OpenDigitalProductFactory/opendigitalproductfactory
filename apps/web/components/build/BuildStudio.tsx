@@ -29,9 +29,11 @@ import { EpicRollupListItem } from "./EpicRollupListItem";
 import { deriveFleetCounts, deriveNeedsAttention, deriveQueueState } from "./fleet-derivation";
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
+import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
+import { getBuildDecisionLedgerAction } from "@/lib/actions/build-decision-ledger";
 import { getBuildFlowStateAction } from "@/lib/actions/build-flow";
 import { getBuildProgressVisibilityAction } from "@/lib/actions/build-progress-visibility";
 import { getCodeGraphFreshnessAction } from "@/lib/actions/code-intelligence";
@@ -43,6 +45,7 @@ import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { EpicRollupView } from "@/lib/build/epic-rollup";
 import type { BomSummary } from "@/lib/assurance/bom-read";
 import type { CodeGraphFreshness } from "@/lib/integrate/code-graph-access";
+import type { BuildDecisionLedgerEntry } from "@/lib/build/decision-ledger";
 import type { BuildExecutionState } from "@/lib/integrate/build-exec-types";
 import { STEP_LABELS } from "@/lib/integrate/build-exec-types";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
@@ -181,6 +184,7 @@ export function BuildStudio({
   const [codeGraphFreshness, setCodeGraphFreshness] = useState<CodeGraphFreshness | null>(null);
   const [bomSummary, setBomSummary] = useState<BomSummary>(MISSING_BOM_SUMMARY);
   const [assuranceFindings, setAssuranceFindings] = useState<ActiveAssuranceFindingRow[]>([]);
+  const [decisionLedger, setDecisionLedger] = useState<BuildDecisionLedgerEntry[]>([]);
   const workflowAction = activeBuild
     ? deriveBuildStudioWorkflowAction({
       build: activeBuild,
@@ -291,6 +295,27 @@ export function BuildStudio({
       });
     return () => { cancelled = true; };
   }, []);
+
+  // Band 3 (overseer "Solution & Oversight") — load the plain-language decision
+  // ledger for the active build. Standalone fetch: decisions only change at
+  // phase boundaries, so it stays off the hot SSE refresh path. BI-EC934FC6.
+  useEffect(() => {
+    if (!activeBuild) {
+      setDecisionLedger([]);
+      return;
+    }
+    let cancelled = false;
+    getBuildDecisionLedgerAction(activeBuild.buildId)
+      .then((rows) => {
+        if (!cancelled) setDecisionLedger(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setDecisionLedger([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBuild?.buildId]);
 
   useEffect(() => {
     const syncSidebarToViewport = () => {
@@ -758,6 +783,11 @@ export function BuildStudio({
                     {workflowAction.kind === "amend-parent-design" && (
                       <ParentDesignAmendmentCoordinator buildId={activeBuild.buildId} />
                     )}
+                  </div>
+                )}
+                {decisionLedger.length > 0 && (
+                  <div className="border-b border-[var(--dpf-border)] px-4 py-3">
+                    <BuildDecisionLedgerBand entries={decisionLedger} />
                   </div>
                 )}
                 {/* Workflow graph — always-visible primary surface of the
