@@ -197,6 +197,22 @@ describe("SelfUpgradeClient – enabled", () => {
     expect(html).toContain("/storefront/settings/operations");
     expect(html).toContain('data-window-source="needs-timezone"');
   });
+
+  // BI-59591B14 — an active operator blackout pauses scheduled upgrades; the panel
+  // explains it (with the blackout name + end) instead of leaving the schedule opaque.
+  it("shows a paused-schedule note during an active blackout", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        windowConfigured={true}
+        blackoutUntil="2026-07-08T00:00:00.000Z"
+        blackoutName="Launch week freeze"
+      />,
+    );
+    expect(html).toContain("Scheduled upgrades paused");
+    expect(html).toContain("Launch week freeze");
+    expect(html).toContain('data-blackout="true"');
+  });
 });
 
 // ─── Running ──────────────────────────────────────────────────────────────────

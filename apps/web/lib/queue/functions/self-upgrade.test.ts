@@ -42,6 +42,9 @@ const mocks = vi.hoisted(() => ({
   // gate behaves exactly as before (falls through to the mocked isUpgradeWindowOpen);
   // the 24/7 tests override it.
   resolveAutoUpgradeWindow: vi.fn().mockReturnValue({ kind: "operating-hours" }),
+  // Operator blackout gate (BI-59591B14). Default null = no active blackout, so
+  // every existing scheduled test proceeds exactly as before.
+  getActiveSelfUpgradeBlackout: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/lib/self-upgrade/config", () => ({
@@ -58,6 +61,10 @@ vi.mock("@/lib/operating-hours-read", () => ({
 
 vi.mock("@/lib/self-upgrade/auto-window", () => ({
   resolveAutoUpgradeWindow: mocks.resolveAutoUpgradeWindow,
+}));
+
+vi.mock("@/lib/self-upgrade/blackout", () => ({
+  getActiveSelfUpgradeBlackout: mocks.getActiveSelfUpgradeBlackout,
 }));
 
 vi.mock("@/lib/self-upgrade/last-check", () => ({
@@ -633,6 +640,7 @@ describe("maintenance window gate + emergency override", () => {
     // prior describe's return value / one-shot queue intact); the 24/7 tests below
     // override per-call with mockReturnValueOnce.
     mocks.resolveAutoUpgradeWindow.mockReturnValue({ kind: "operating-hours" });
+    mocks.getActiveSelfUpgradeBlackout.mockResolvedValue(null); // no blackout by default
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.getDeployedSha.mockResolvedValue("oldsha1");
     setupSourceReady();
@@ -703,6 +711,28 @@ describe("maintenance window gate + emergency override", () => {
 
     expect(result).toMatchObject({ skipped: true, reason: "no-window-needs-timezone" });
     // Never consults the window gate, never drains, never creates a run.
+    expect(mocks.isUpgradeWindowOpen).not.toHaveBeenCalled();
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+  });
+
+  // BI-59591B14 — an operator-declared blackout pauses the unattended scheduled
+  // upgrade. Clean no-op: the blackout gate runs FIRST, so no window check, no
+  // drain, no run. It resumes automatically once the blackout ends. (force, tested
+  // above, bypasses the whole scheduled-gate block including this.)
+  it("SCHEDULED run skips with blackout-period during an active operator blackout", async () => {
+    mocks.getActiveSelfUpgradeBlackout.mockResolvedValueOnce({
+      name: "Launch week freeze",
+      endAt: new Date("2026-07-08T00:00:00Z"),
+    });
+
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+
+    expect(result).toMatchObject({
+      skipped: true,
+      reason: "blackout-period",
+      blackoutUntil: "2026-07-08T00:00:00.000Z",
+    });
     expect(mocks.isUpgradeWindowOpen).not.toHaveBeenCalled();
     expect(mocks.createRun).not.toHaveBeenCalled();
     expect(mocks.startQuiescence).not.toHaveBeenCalled();

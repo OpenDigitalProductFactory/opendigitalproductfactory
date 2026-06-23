@@ -23,6 +23,7 @@ import {
   nextAutoWindowOpen,
   describeWindows,
 } from "@/lib/self-upgrade/auto-window";
+import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import {
@@ -657,6 +658,7 @@ export async function getSelfUpgradeStatus() {
     quiescence,
     cooldownUntil,
     jobEngine,
+    selfUpgradeBlackout,
   ] = await Promise.all([
     getSelfUpgradeConfig(),
     getLatestRun(),
@@ -674,6 +676,9 @@ export async function getSelfUpgradeStatus() {
     // Background-job-engine (Inngest) registration health — a self-upgrade
     // can't dispatch without it, so the panel must surface a dead job engine.
     getJobEngineHealth(),
+    // Active operator blackout that pauses scheduled upgrades (BI-59591B14), so
+    // the panel explains a paused schedule instead of leaving it opaque.
+    getActiveSelfUpgradeBlackout(),
   ]);
 
   // Upgrade timing follows the storefront's open/closed state (single source of
@@ -766,6 +771,9 @@ export async function getSelfUpgradeStatus() {
     windowSource,
     // Friendly window-time summary for the auto-overnight note (null otherwise).
     autoWindowSummary,
+    // Active operator blackout pausing scheduled upgrades, or null (BI-59591B14).
+    blackoutUntil: selfUpgradeBlackout?.endAt.toISOString() ?? null,
+    blackoutName: selfUpgradeBlackout?.name ?? null,
     storeOpen,
     // The IANA timezone the window is evaluated in (store operating-hours zone).
     // Surfaced so the panel's "next window" is never ambiguous — the symptom that

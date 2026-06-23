@@ -71,6 +71,8 @@ const baseStatus = {
   windowConfigured: true,
   windowSource: "operating-hours" as const,
   autoWindowSummary: null,
+  blackoutUntil: null,
+  blackoutName: null,
   storeOpen: false,
   windowTimezone: "UTC",
   nextWindowStart: null,

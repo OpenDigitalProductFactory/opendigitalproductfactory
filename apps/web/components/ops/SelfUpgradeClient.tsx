@@ -86,6 +86,10 @@ type Props = {
   windowSource?: "explicit" | "operating-hours" | "auto-overnight" | "needs-timezone";
   /** Friendly window-time range (e.g. "2:00 AM-4:00 AM") for the auto-overnight note. */
   autoWindowSummary?: string | null;
+  /** End of an active operator blackout pausing scheduled upgrades, or null (BI-59591B14). */
+  blackoutUntil?: string | null;
+  /** Name of the active blackout, for the paused-schedule note. */
+  blackoutName?: string | null;
   /** IANA timezone the upgrade window is evaluated in (store operating hours). */
   windowTimezone?: string;
   nextWindowStart?: string | null;
@@ -248,6 +252,8 @@ export default function SelfUpgradeClient({
   windowConfigured,
   windowSource,
   autoWindowSummary,
+  blackoutUntil,
+  blackoutName,
   windowTimezone,
   nextWindowStart,
   nextScheduledCheckAt,
@@ -895,7 +901,19 @@ export default function SelfUpgradeClient({
           data-window-configured={windowConfigured ? "true" : "false"}
         >
           <span className="font-medium text-[var(--dpf-text)]">Schedule:</span>{" "}
-          {windowSource === "needs-timezone" ? (
+          {blackoutUntil ? (
+            <span className="text-[var(--dpf-warning)]" data-blackout="true">
+              Scheduled upgrades paused
+              {blackoutName ? (
+                <>
+                  {" "}— blackout{" "}
+                  <span className="font-medium text-[var(--dpf-text)]">{blackoutName}</span>
+                </>
+              ) : null}{" "}
+              until <LocalTime className="font-mono" value={blackoutUntil} />. They resume
+              automatically; use Emergency override to run now.
+            </span>
+          ) : windowSource === "needs-timezone" ? (
             <span className="text-[var(--dpf-warning)]" data-window-source="needs-timezone">
               Your business runs 24/7. Set your timezone in{" "}
               <a className="underline" href="/storefront/settings/operations">
