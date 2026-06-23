@@ -111,6 +111,11 @@ export async function askCoworker(page: Page, prompt: string): Promise<string> {
 export async function clearCoworker(page: Page): Promise<void> {
   try {
     await openCoworker(page);
+    // Erase now lives inside the header overflow ("More options") menu.
+    const moreBtn = page.locator('button[aria-label="More options"]').first();
+    if (!(await moreBtn.isVisible({ timeout: 2_000 }).catch(() => false))) return;
+    await moreBtn.click();
+    await page.waitForTimeout(200);
     const eraseBtn = page
       .locator('button[title="Erase current conversation"]')
       .first();

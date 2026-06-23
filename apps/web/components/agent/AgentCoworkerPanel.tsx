@@ -856,7 +856,6 @@ export function AgentCoworkerPanel({
         onToggleCoworkerMode={handleToggleCoworkerMode}
         onViewProfile={() => setShowProfile(true)}
         useUnified={useUnifiedCoworker}
-        sensitivityLevel={agent.sensitivity}
         marketingSkillRules={marketingSkillRules}
         isDocked={isDocked}
       />
