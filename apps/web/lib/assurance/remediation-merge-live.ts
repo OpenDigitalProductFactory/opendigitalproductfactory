@@ -88,8 +88,10 @@ export async function fetchReleaseCooldownMet(
   now: Date,
 ): Promise<boolean> {
   if (!pkg || !version) return false;
-  // Scoped names keep the leading @, only the slash is percent-encoded for the registry path.
-  const path = pkg.startsWith("@") ? pkg.replace("/", "%2F") : pkg;
+  // Scoped names keep the leading @, with EVERY slash percent-encoded for the
+  // registry path (global replace — a single-occurrence replace is an incomplete
+  // escape, CodeQL js/incomplete-sanitization).
+  const path = pkg.startsWith("@") ? pkg.replace(/\//g, "%2F") : pkg;
   try {
     const res = await fetchImpl(`${NPM_REGISTRY_BASE}/${path}`, { headers: { Accept: "application/json" } });
     if (!res.ok) return false;
