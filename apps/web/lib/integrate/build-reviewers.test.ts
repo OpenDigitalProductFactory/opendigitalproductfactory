@@ -16,7 +16,7 @@ import {
   mapCompactSummaryToBuildEntry,
   type ReviewBranchInput,
 } from "./build-reviewers";
-import type { ReviewResult } from "@/lib/feature-build-types";
+import type { ReviewResult, BuildDesignDoc } from "@/lib/feature-build-types";
 
 describe("buildDesignReviewPrompt", () => {
   it("includes all design doc sections", () => {
@@ -31,6 +31,33 @@ describe("buildDesignReviewPrompt", () => {
     expect(prompt).toContain("Reuse OpsClient pattern");
     expect(prompt).toContain("Filter hides done items");
     expect(prompt).toContain("JSON FORMAT");
+  });
+
+  // BI-699EA362 — reviewDesignDoc crashed with "Cannot read properties of
+  // undefined (reading 'map')" when the loosely-typed designDoc JSON carried a
+  // reusabilityAnalysis that was a string, or an object missing its
+  // domainEntities array (an operator-saved / migrated / partial doc — the exact
+  // shape that wedged FB-8F8E2CE6 in ideate). The prompt builder must degrade
+  // gracefully instead of throwing and leaving the build with no review verdict.
+  it("does not throw and degrades gracefully when reusabilityAnalysis is malformed (BI-699EA362)", () => {
+    // Object present but missing the domainEntities array -> Entities=none.
+    const objPrompt = buildDesignReviewPrompt({
+      problemStatement: "x",
+      proposedApproach: "y",
+      acceptanceCriteria: ["z"],
+      reusabilityAnalysis: { scope: "parameterizable" },
+    } as unknown as BuildDesignDoc, "ctx");
+    expect(objPrompt).toContain("Entities=none");
+
+    // reusabilityAnalysis stored as a bare string -> section omitted, no crash.
+    const strPrompt = buildDesignReviewPrompt({
+      problemStatement: "x",
+      proposedApproach: "y",
+      acceptanceCriteria: ["z"],
+      reusabilityAnalysis: "parameterizable",
+    } as unknown as BuildDesignDoc, "ctx");
+    expect(strPrompt).toContain("JSON FORMAT");
+    expect(strPrompt).not.toContain("Reusability Analysis");
   });
 
   it("gates on whole-outcome alignment per the Optimize for the Whole commandment", () => {

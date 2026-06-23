@@ -44,6 +44,34 @@ export function buildDesignReviewPrompt(
     ? `\n\nPRIOR REVIEW CONTEXT (this is review round ${prior.round + 1}):\nThe immediately-prior review of this design surfaced these ${prior.issues.length} issues:\n${prior.issues.map((i, idx) => `  ${idx + 1}. [${i.severity}] ${i.description}`).join("\n")}\n\nDelta-aware review protocol:\n- For each prior issue, judge whether the new design addresses it. If yes, do NOT re-surface it.\n- If a prior issue is still present, re-surface it but reuse the SAME description so the operator sees persistence.\n- Only add NEW issues that this revision genuinely introduces or that the prior round missed.\n- Goal: convergence, not re-litigation. Avoid trading one set of issues for another.\n`
     : "";
 
+  // BI-699EA362 — null-guard the reusabilityAnalysis section. designDoc comes
+  // from a loosely-typed JSON column, so reusabilityAnalysis can be a string or
+  // an object missing its domainEntities array (an operator-saved, migrated, or
+  // partial doc). Mapping domainEntities unguarded threw "Cannot read properties
+  // of undefined (reading 'map')"; executeTool swallowed it, so reviewDesignDoc
+  // persisted no verdict and the build wedged in ideate with a watchdog stall.
+  // The value is read from a JSON column (`build.designDoc as unknown as
+  // BuildDesignDoc`), so its real runtime shape is unknown — model that here so
+  // every guard below is genuinely load-bearing rather than `unknown`-narrowed.
+  const ra = doc.reusabilityAnalysis as unknown as
+    | {
+        scope?: string;
+        domainEntities?: ReadonlyArray<{ hardcodedValue?: string; parameterName?: string }>;
+        abstractionBoundary?: string;
+        contributionReadiness?: string;
+      }
+    | string
+    | null
+    | undefined;
+  const reusabilitySection =
+    ra && typeof ra === "object"
+      ? `Reusability Analysis: Scope=${ra.scope ?? "?"}, Entities=${
+          (Array.isArray(ra.domainEntities) ? ra.domainEntities : [])
+            .map((e) => `${e.hardcodedValue ?? "?"}->${e.parameterName ?? "?"}`)
+            .join(", ") || "none"
+        }, Boundary="${ra.abstractionBoundary ?? ""}", Readiness=${ra.contributionReadiness ?? "?"}`
+      : "";
+
   return `You are reviewing a design document for a platform feature.
 
 DESIGN DOCUMENT:
@@ -53,7 +81,7 @@ Existing Code Audit: ${doc.existingCodeAudit ?? doc.existingFunctionalityAudit ?
 Reuse Plan: ${doc.reusePlan ?? "Not provided"}
 Proposed Approach: ${doc.proposedApproach ?? "Not provided"}
 Acceptance Criteria: ${Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria.join("; ") : (doc.acceptanceCriteria ?? "Not specified")}
-${doc.reusabilityAnalysis ? `Reusability Analysis: Scope=${doc.reusabilityAnalysis.scope}, Entities=${doc.reusabilityAnalysis.domainEntities.map((e) => `${e.hardcodedValue}->${e.parameterName}`).join(", ") || "none"}, Boundary="${doc.reusabilityAnalysis.abstractionBoundary}", Readiness=${doc.reusabilityAnalysis.contributionReadiness}` : ""}
+${reusabilitySection}
 ${(doc as { accessibility?: string }).accessibility ? `Accessibility: ${(doc as { accessibility?: string }).accessibility}` : ""}
 
 PROJECT CONTEXT:
