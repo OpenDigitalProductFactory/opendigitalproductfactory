@@ -87,11 +87,20 @@ reads `DPF_ASSURANCE_AUTOMERGE_ENABLED` (default off) and `armAutoMerge` is a
 throwing stub — so while dark the lane does ONLY reads + escalation (zero
 irreversible action; the orchestrator dark-records the auto-merge decisions).
 
-**Staged — actuation enable (P2.2b):** implement `armAutoMerge` (GitHub GraphQL
-`enablePullRequestAutoMerge`) AND wire the real `cooldownMet` (npm release-age) +
-`osvClean` (OSV) verifiers in `getReadiness` (currently optimistic), verify against a
-real P1-produced remediation PR, THEN flip the flag. The most irreversible step in
-the loop — it does not blind-launch.
+**Implemented — actuation built, flag-gated OFF (P2.2b):** `armAutoMerge` now does
+the real GitHub GraphQL `enablePullRequestAutoMerge` (resolve the PR node id → enable
+mutation, via `resolveGithubToken` / `resolveRepoIdentity`); `getReadiness` now does
+the real `cooldownMet` (npm release-age ≥ 3d) + `osvClean` (OSV querybatch) checks for
+the bump target — conservative: any missing input / fetch failure → escalate. Pure +
+IO helpers (`isReleaseAgedEnough`, `osvBatchClean`, `fetchReleaseCooldownMet`,
+`fetchOsvClean`, `parseObservedPackage`) are exported + tested; `ReadyRemediationPR`
+gained `packageName`.
+
+The ONLY remaining gate is `DPF_ASSURANCE_AUTOMERGE_ENABLED` (still default **OFF**) —
+the lane keeps running dark (escalate + dark-record) until an operator flips it after
+verifying the dark-records against a real P1-produced PR. Even flipped, only a patch +
+CI-green + aged + OSV-clean + conflict-free PR is ever armed. This is the loop's only
+irreversible step; the flip is a human decision, not a code default.
 
 ## Phase 3 — close the loop (BI-4D5C702F)
 
