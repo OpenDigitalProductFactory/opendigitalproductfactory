@@ -273,6 +273,7 @@ export * from "./discovery-mac-classification";
 export * from "./discovery-fingerprint-observation";
 export * from "./device-placement";
 export * from "./portfolio-sources";
+export * from "./backlog-portfolio";
 export * from "./device-investigation";
 export * from "./device-fingerprint-contribution";
 export * from "./hive-contribution-settings";

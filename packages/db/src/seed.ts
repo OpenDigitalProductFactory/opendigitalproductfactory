@@ -20,6 +20,7 @@ import { projectPlatformCapabilities } from "./portfolio-sources/project-portfol
 import { projectAiProviders, projectIntegrations } from "./portfolio-sources/project-external-supply.js";
 import { projectSupplyChain } from "./portfolio-sources/project-sbom.js";
 import { projectProductDependencyGraph } from "./portfolio-sources/product-dependency.js";
+import { backfillBacklogPortfolios } from "./backlog-portfolio.js";
 import {
   seedViewpointsForNotation,
   ARCHIMATE_VIEWPOINTS,
@@ -2454,6 +2455,7 @@ async function main(): Promise<void> {
     }>("digital_product_registry.json");
     await projectProductDependencyGraph({ registryProducts: depRegistry.digital_products });
   });
+  await step("backlogPortfolioAttribution", () => backfillBacklogPortfolios());
   // Invariant asserts — isolated so a violation is surfaced in the summary
   // rather than aborting the whole seed (they run after all seeding).
   await step("assert:activeProvidersHaveClearance", () => assertActiveProvidersHaveClearance());
