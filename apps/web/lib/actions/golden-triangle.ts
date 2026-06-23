@@ -12,7 +12,8 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
-import { setGoldenTrianglePosture } from "@/lib/golden-triangle/persistence";
+import { contributePostureDefault } from "@/lib/golden-triangle/hive";
+import { getEffectiveGoldenTrianglePosture, setGoldenTrianglePosture } from "@/lib/golden-triangle/persistence";
 
 async function requirePlatformAdmin() {
   const session = await auth();
@@ -48,4 +49,20 @@ export async function saveGoldenTriangleOrgDefault(
   const ok = await setGoldenTrianglePosture({ kind: "organization", organizationId: org.id }, preference);
   if (ok) revalidatePath("/platform/ai/priority");
   return { ok };
+}
+
+/**
+ * EP-GOLDEN-TRIANGLE Slice 7 — explicitly contribute the effective posture default
+ * to the hive (the federated learning commons). Deliberately an EXPLICIT operator
+ * action, not automatic on save: sharing a default is a privacy decision, so it is
+ * gated by both `view_platform` AND the hive consent surface (the "improvement"
+ * opt-in + master pause inside contributePostureDefault, which is fail-closed and
+ * shares only the anonymized preset + weights — never an org identity).
+ */
+export async function contributeGoldenTrianglePostureToHive(): Promise<{ contributed: boolean; reason: string }> {
+  await requirePlatformAdmin();
+  const resolved = await getEffectiveGoldenTrianglePosture(null);
+  if (!resolved) return { contributed: false, reason: "no_posture_set" };
+  const res = await contributePostureDefault(resolved.preference);
+  return { contributed: res.contributed, reason: res.reason };
 }
