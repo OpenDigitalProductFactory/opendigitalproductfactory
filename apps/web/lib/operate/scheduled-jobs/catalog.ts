@@ -291,6 +291,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "assurance-merge-gate",
+    inngestId: "assurance/merge-gate-scheduled",
+    name: "Assurance merge gate",
+    purpose:
+      "Off-hours WWMD-gated merge decision for assurance remediation PRs (patch-only-auto): escalates non-auto PRs to a human. Auto-merge actuation is dark (DPF_ASSURANCE_AUTOMERGE_ENABLED, default off). If it stops, remediation PRs await manual merge.",
+    cron: "47 * * * *",
+    cadence: "Hourly at :47 — acts only in the 02:00–06:00 UTC off-hours window",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "material-freshness-decay",
     inngestId: "decision/material-freshness-decay",
     name: "Material freshness decay",

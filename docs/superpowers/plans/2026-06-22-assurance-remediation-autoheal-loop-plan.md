@@ -75,13 +75,23 @@ escalate-on-uncertain) + test; `apps/web/lib/assurance/remediation-merge-orchest
 **dark-launch** `actuationEnabled` gate — an auto-merge is decided-but-not-actuated
 until enabled) + test.
 
-**Staged — live actuation (P2.2, dark-by-default):** the live GitHub adapters
-(read PR checks/mergeability via the existing github-rest reader; classify the bump
-from the PR diff; arm auto-merge) + the off-hours scheduled job + the escalation
-adapter (`createPlatformIssueReport`). Built once P1 has produced a real
-remediation PR to verify against; ships with `actuationEnabled=false` so the gate
-runs observably (escalates + dark-records) before it merges anything autonomously.
-This is the most irreversible step in the loop — it does not blind-launch.
+**Implemented — live merge gate, DARK (P2.2):**
+`apps/web/lib/assurance/remediation-merge-live.ts` (`mapMergeStateToReadiness` +
+`parseRemediationVersions` pure mappers + `createLiveMergeGateAdapters`: lists ready
+remediation PRs from assurance-origin BIs → build → capsule PR, reads GitHub
+mergeability via the existing `readGithubPullRequests`, escalates via
+`createPlatformIssueReport`) + the off-hours scheduled fn
+`queue/functions/assurance-merge-gate-teeup.ts` (cron `47 * * * *`, 02:00–06:00 UTC,
+`gateAtEntry`, budget) + catalog entry + tests. Ships **DARK**: `actuationEnabled`
+reads `DPF_ASSURANCE_AUTOMERGE_ENABLED` (default off) and `armAutoMerge` is a
+throwing stub — so while dark the lane does ONLY reads + escalation (zero
+irreversible action; the orchestrator dark-records the auto-merge decisions).
+
+**Staged — actuation enable (P2.2b):** implement `armAutoMerge` (GitHub GraphQL
+`enablePullRequestAutoMerge`) AND wire the real `cooldownMet` (npm release-age) +
+`osvClean` (OSV) verifiers in `getReadiness` (currently optimistic), verify against a
+real P1-produced remediation PR, THEN flip the flag. The most irreversible step in
+the loop — it does not blind-launch.
 
 ## Phase 3 — close the loop (BI-4D5C702F)
 
