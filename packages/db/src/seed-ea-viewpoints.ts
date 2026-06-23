@@ -144,9 +144,9 @@ export const SYSML_VIEWPOINTS: ViewpointSpec[] = [
   },
   {
     name: "System Decomposition & Interfaces",
-    description: "SysML parts, ports, and interface definitions showing system structure, specialization, and connections.",
+    description: "SysML parts, ports, and interface definitions showing system structure, specialization, connections, and route redirect forwards.",
     elementSlugs: ["package", "part_definition", "part_usage", "interface_definition", "port", "state", "action"],
-    relSlugs: ["contains", "specializes", "connects", "allocates"],
+    relSlugs: ["contains", "specializes", "connects", "allocates", "redirects_to"],
   },
 ];
 

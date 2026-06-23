@@ -7,8 +7,12 @@ import type { RouteManifestRow } from "./route-extract";
 // Inventory gate (EP-NAV-COHERENCE P7, BI-E7D871ED) — the CI face of the navigation
 // parity surface (BI-E71E7FA5). Locks two invariants so the founder-reported defects
 // cannot silently regress:
-//   1. The canonical navigation model has ZERO cross-domain teleports (complaint #1 —
-//      Platform Hub -> Core Admin yanked the user into another context).
+//   1. The navigation model has ZERO cross-domain teleports — INCLUDING redirect-disguised
+//      ones: a nav entry whose href looks in-domain but whose route is a redirect shim
+//      that lands in another domain (complaint #1 — Platform Hub -> Core Admin, and its
+//      sibling, the "Capability Needs" tab that redirected to /ops). The gate follows
+//      redirect shims (from the route manifest) so this is caught at PR time, not in the
+//      operator's hands.
 //   2. Every PAGE route with no canonical nav entry (orphan) lives under a KNOWN
 //      top-level segment, so a brand-new feature area cannot ship with no navigation.
 // The full orphan-count ratchet (driving the per-domain-nav backlog toward zero as P3
@@ -17,6 +21,12 @@ import type { RouteManifestRow } from "./route-extract";
 
 const manifest = routeManifest as { routes?: RouteManifestRow[] };
 const firstSegment = (p: string) => p.split("/").filter(Boolean)[0] ?? "";
+
+// Redirect shims (route path → destination) from the build-time manifest, so the gate
+// resolves each nav entry's EFFECTIVE destination domain and catches redirect teleports.
+const redirectMap = new Map<string, string>(
+  (manifest.routes ?? []).flatMap((r) => (r.redirectTo ? [[r.routePath, r.redirectTo] as [string, string]] : [])),
+);
 
 // Every top-level URL segment served by a PAGE route today (across all route groups),
 // enumerated from the App Router tree. An orphan under a segment NOT in this set fails
@@ -31,11 +41,12 @@ const KNOWN_NAV_TOPLEVEL = new Set<string>([
 ]);
 
 describe("navigation inventory gate (EP-NAV-COHERENCE P7)", () => {
-  const entries = getAllNavEntries();
+  const entries = getAllNavEntries(redirectMap);
 
-  // Orphans are computed over PAGE routes only — API route handlers never carry nav.
+  // Orphans are computed over PAGE routes only — API route handlers never carry nav — and
+  // exclude redirect shims (a shim is not a real destination needing its own nav entry).
   const pageRoutes = (manifest.routes ?? [])
-    .filter((r) => r.kind === "page")
+    .filter((r) => r.kind === "page" && !r.redirectTo)
     .map((r) => r.routePath);
   const navTargets = new Set(entries.map((e) => e.path));
   const orphans = [...new Set(pageRoutes)]
@@ -43,11 +54,13 @@ describe("navigation inventory gate (EP-NAV-COHERENCE P7)", () => {
     .filter((p) => !/\[/.test(p)) // dynamic/detail routes are never primary nav targets
     .filter((p) => !navTargets.has(p));
 
-  it("has zero cross-domain teleports in the canonical navigation model", () => {
+  it("has zero cross-domain teleports (direct or redirect-disguised) in the navigation model", () => {
     const teleports = entries.filter((e) => e.domain !== e.targetDomain);
     expect(
       teleports,
-      `cross-domain nav teleport(s): ${teleports.map((e) => `${e.label}->${e.path}`).join(", ")}`,
+      `cross-domain nav teleport(s): ${teleports
+        .map((e) => `${e.label} ${e.path}${e.viaRedirect ? ` →redirect→ ${e.effectivePath}` : ""} (${e.domain}→${e.targetDomain})`)
+        .join(", ")}`,
     ).toEqual([]);
   });
 

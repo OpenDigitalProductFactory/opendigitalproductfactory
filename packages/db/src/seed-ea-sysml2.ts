@@ -74,6 +74,7 @@ const REL_TYPES: RelTypeDef[] = [
   { slug: "verifies",    name: "Verifies",    neoType: "VERIFIES",    description: "A verification case verifies a requirement or constraint." },
   { slug: "refines",     name: "Refines",     neoType: "REFINES",     description: "An element refines (elaborates) a higher-level requirement or element." },
   { slug: "traces",      name: "Traces",      neoType: "TRACES",      description: "General traceability link between model elements or to source artifacts." },
+  { slug: "redirects_to", name: "Redirects To", neoType: "REDIRECTS_TO", description: "A pure redirect-shim route forwards to its real destination route. Makes redirects first-class so the nav teleport check can follow them to the effective destination (EP-NAV-COHERENCE)." },
 ];
 
 // ─── Relationship rules ───────────────────────────────────────────────────────
@@ -112,6 +113,9 @@ const RULES: RuleDef[] = [
   ["analysis_case", "requirement", "traces"],
   ["requirement", "requirement", "traces"],
   ["part_definition", "part_definition", "traces"],
+  // Redirect shim (always a leaf route) → its destination route (leaf or a segment package).
+  ["part_definition", "part_definition", "redirects_to"],
+  ["part_definition", "package", "redirects_to"],
   // Allocation (logical obligation → realizing element)
   ["requirement", "part_definition", "allocates"],
   ["action", "part_definition", "allocates"],

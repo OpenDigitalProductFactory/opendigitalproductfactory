@@ -36,6 +36,39 @@ export interface RouteManifestRow {
   dynamicParams: string[];
   /** Source file path relative to repo root (for provenance). */
   file: string;
+  /** If this page is a PURE redirect shim (its only behavior is `redirect("/x")`, no
+   *  UI render), the destination route path (query/hash stripped). Absent for normal
+   *  pages and for conditional auth-guard redirects (which render a real page). Lets the
+   *  model draw a `redirects_to` edge and the nav teleport check follow the redirect to
+   *  its EFFECTIVE destination — so a nav entry whose href looks in-domain but bounces to
+   *  another domain is caught as a cross-domain teleport. */
+  redirectTo?: string;
+}
+
+/** Detect a PURE redirect shim from a page's source. Returns the destination route path
+ *  (leading slash, query/hash stripped) iff the page's sole behavior is to redirect, or
+ *  undefined otherwise. Pure + dependency-free so the build-time walker (which runs under
+ *  plain Node) can import it and it stays unit-testable.
+ *
+ *  Discriminator — a pure shim has an unconditional `redirect("/literal")` and renders NO
+ *  JSX; an auth/conditional guard (e.g. `if (!user) redirect("/login")`) renders the real
+ *  page after the guard, so it carries JSX (a closing tag, fragment, or self-close) and is
+ *  intentionally NOT treated as a shim (it is a normal destination, not a teleport). */
+export function detectRedirectTarget(src: string): string | undefined {
+  // Strip block + whole-line comments so a commented-out redirect / JSX example can't
+  // trip the heuristic (leaves `://` and inline code intact).
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+
+  const m = code.match(/\b(?:redirect|permanentRedirect)\s*\(\s*["'`]([^"'`]+)["'`]/);
+  if (!m) return undefined;
+  const raw = m[1]!;
+  // Dynamic (`/x/${id}`), external, or relative targets can't be resolved to a route node.
+  if (raw.includes("${") || !raw.startsWith("/")) return undefined;
+  // Any JSX render ⇒ the page shows UI ⇒ the redirect is a conditional guard, not a shim.
+  if (/\/>|<\/[A-Za-z]|<>/.test(code)) return undefined;
+  return raw.split(/[?#]/)[0]!;
 }
 
 interface RouteNode {
@@ -44,6 +77,8 @@ interface RouteNode {
   files: string[];
   kinds: Set<string>;
   dynamicParams: Set<string>;
+  /** Destination of a pure redirect shim (see RouteManifestRow.redirectTo). */
+  redirectTo?: string;
 }
 
 /** Parent key for a node: the synthetic root for "/" and top-level routes, else the parent segment. */
@@ -81,6 +116,7 @@ export function buildRouteModel(rows: RouteManifestRow[]): SysmlDesiredModel {
     const node = ensure(row.routePath, row.segments);
     node.files.push(row.file);
     node.kinds.add(row.kind);
+    if (row.redirectTo) node.redirectTo = row.redirectTo;
     for (const p of row.dynamicParams) node.dynamicParams.add(p);
     // Synthesize ancestor segments down to (but not including) the top level.
     for (let i = row.segments.length - 1; i >= 1; i--) {
@@ -110,13 +146,16 @@ export function buildRouteModel(rows: RouteManifestRow[]): SysmlDesiredModel {
     const files = [...n.files].sort();
     const lastSeg = n.segments.length ? n.segments[n.segments.length - 1]! : "/";
     const sourceKey = files.length ? files[0]! : `next-route:${n.routePath}`;
+    const redirectTo = n.redirectTo;
     elements.push({
       sysmlKey: key,
       typeSlug: isPackage ? "package" : "part_definition",
       name: lastSeg,
-      description: isPackage
-        ? `Route segment "${n.routePath}" — groups ${children} child route(s).`
-        : `Route "${n.routePath}"${kinds.length ? ` (${kinds.join("+")})` : ""}.`,
+      description: redirectTo
+        ? `Route "${n.routePath}" — redirect shim → "${redirectTo}".`
+        : isPackage
+          ? `Route segment "${n.routePath}" — groups ${children} child route(s).`
+          : `Route "${n.routePath}"${kinds.length ? ` (${kinds.join("+")})` : ""}.`,
       properties: {
         sourceKey,
         routePath: n.routePath,
@@ -124,16 +163,23 @@ export function buildRouteModel(rows: RouteManifestRow[]): SysmlDesiredModel {
         dynamicParams,
         segmentDepth: n.segments.length,
         files,
+        ...(redirectTo ? { redirectTo } : {}),
       },
     });
     relationships.push({ fromKey: parentKeyOf(n.segments), toKey: key, relSlug: "contains" });
+    // A pure redirect shim points at its real destination — a first-class `redirects_to`
+    // edge makes the bounce visible on the route canvas and lets the nav teleport check
+    // follow it. Guarded so the edge never dangles (dest must be a known route node).
+    if (redirectTo && nodes.has(redirectTo) && redirectTo !== n.routePath) {
+      relationships.push({ fromKey: key, toKey: `route:${redirectTo}`, relSlug: "redirects_to" });
+    }
   }
 
   return {
     elements,
     relationships,
     elementTypeSlugs: ["package", "part_definition"],
-    relTypeSlugs: ["contains"],
+    relTypeSlugs: ["contains", "redirects_to"],
     view: {
       name: "Application Routes — Live Projection",
       description:

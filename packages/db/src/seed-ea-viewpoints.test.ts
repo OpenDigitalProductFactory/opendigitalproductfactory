@@ -73,7 +73,7 @@ describe("SYSML_VIEWPOINTS", () => {
       "package", "part_definition", "part_usage", "interface_definition", "port",
       "requirement", "constraint", "action", "state", "verification_case", "analysis_case",
     ]);
-    const relSlugs = new Set(["contains", "specializes", "connects", "allocates", "satisfies", "verifies", "refines", "traces"]);
+    const relSlugs = new Set(["contains", "specializes", "connects", "allocates", "satisfies", "verifies", "refines", "traces", "redirects_to"]);
     for (const vp of SYSML_VIEWPOINTS) {
       for (const s of vp.elementSlugs) expect(elementSlugs).toContain(s);
       for (const s of vp.relSlugs) expect(relSlugs).toContain(s);

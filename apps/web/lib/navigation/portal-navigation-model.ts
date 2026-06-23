@@ -602,13 +602,19 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     capabilityKey: "view_platform",
   },
   {
+    // Capability needs converged into the Backlog (EP-INTAKE-UNIFY); this path is now a
+    // pure redirect shim to /ops?origin=capability-need. Classified legacy-redirect so the
+    // model tells the truth: it is dropped from nav-reachability (not a teleport, not a
+    // live destination) while staying a known route. Safe now that redirect shims are
+    // excluded from the orphan set (no route-not-in-canonical-nav) — the reason the
+    // earlier teleport fix (#2287) had to leave it as section-page.
     key: "platform-ai-capability-needs",
     label: "Capability Needs",
     path: "/platform/ai/capability-needs",
     parentPath: "/platform/ai",
     domain: "platform",
     audienceModes: ["operator"],
-    destinationKind: "section-page",
+    destinationKind: "legacy-redirect",
     capabilityKey: "view_platform",
   },
   {
