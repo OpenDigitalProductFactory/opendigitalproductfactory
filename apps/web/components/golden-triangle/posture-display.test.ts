@@ -4,6 +4,7 @@ import { compileGoldenTrianglePolicy } from "@/lib/golden-triangle";
 
 import {
   PRESET_WEIGHTS,
+  balanceState,
   decodePostureForDisplay,
   describeConfigured,
   plainSummary,
@@ -81,5 +82,35 @@ describe("decodePostureForDisplay", () => {
     expect(view.decoded.postureOverride.budgetClass).toBe("minimize_cost");
     expect(view.plain).toMatch(/least/i);
     expect(view.chips.length).toBeGreaterThan(0);
+  });
+});
+
+describe("balanceState (triangle colouring)", () => {
+  it("a centred posture is green with nothing starved", () => {
+    const b = balanceState(0.34, 0.33, 0.33);
+    expect(b.level).toBe("balanced");
+    expect(b.token).toBe("--dpf-success");
+    expect(b.starved).toEqual([]);
+  });
+
+  it("a near-vertex posture is red and starves the two low axes", () => {
+    const b = balanceState(0.9, 0.05, 0.05);
+    expect(b.level).toBe("starved");
+    expect(b.token).toBe("--dpf-error");
+    expect(b.starved).toEqual(["Cost", "Time"]);
+    expect(b.label).toMatch(/Starving Cost & Time/);
+  });
+
+  it("an edge posture starves one axis (red)", () => {
+    const b = balanceState(0.5, 0.45, 0.05);
+    expect(b.token).toBe("--dpf-error");
+    expect(b.starved).toEqual(["Time"]);
+  });
+
+  it("a moderate lean is yellow with nothing starved", () => {
+    const b = balanceState(0.5, 0.3, 0.2);
+    expect(b.level).toBe("leaning");
+    expect(b.token).toBe("--dpf-warning");
+    expect(b.starved).toEqual([]);
   });
 });

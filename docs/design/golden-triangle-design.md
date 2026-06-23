@@ -2,13 +2,15 @@
 
 **Cost | Quality | Time as a governed preference-to-policy compiler for trusted AI agents**
 
-*Design review draft v0.3.2 - 2026-06-21*
+*Design review draft v0.3.3 - 2026-06-22*
 
 > **v0.3 changelog.** Integrates a multi-thread review (UX/accessibility, ethos/culture fit, strategy/completeness) plus a competitive-benchmarking pass. Headline changes: **presets are the primary control** (the triangle becomes a fine-tune visualization); a corrected **2-degrees-of-freedom accessibility contract** (a 2D control is not the WAI-ARIA *slider* pattern); the triangle is framed as **cognitive-load migration** and connected to the **kernel principle system**; and three factual corrections to the v0.2 control-layers analysis — the `effort` lever already exists end-to-end, perspective/review count's home is the **deliberation engine**, and `MAX_ITERATIONS` is a *safety ceiling*, not the dominant cost lever. Adds cold-start defaults, the composition point with `inferContract()`, and success metrics.
 >
 > **v0.3.1 architect/usability pass.** Tightens the enterprise architecture decision, adds a one-screen executive capsule, strengthens the UX navigation and component contract, makes the standards basis explicit (WCAG 2.2 + APG radio/spinbutton patterns), and replaces success-metric placeholders with initial launch guardrails to validate in Slice 0.
 >
 > **v0.3.2 Slice 0 close-out.** Folds the Slice 0 substrate-audit findings (companion doc [`golden-triangle-slice0-substrate-audit.md`](golden-triangle-slice0-substrate-audit.md)): the saved-defaults home already exists (`DecisionInteraction.profileId` → `DecisionPerspectiveProfile`, **extend it** — resolves Open Decision 1); the orchestration budget is **GO** as JSON on the receipt path (not `AgentModelConfig`, not a new table — resolves Open Decision 7); plus two corrections — `TaskRequirement.minimumTier` is code-side (`BUILT_IN_TASK_REQUIREMENTS`), not a DB column, and `verificationDepth` is inert until a verify step is wired.
+>
+> **v0.3.3 implementation underway.** Shipped: Slice 1 (pure compiler), Slice 3a (posture → `inferContract()` composition + additive caller overrides), and Slice 2 (the elegant posture control + `/platform/ai/priority` page). UX refinements: the control is surfaced in the **AI coworker dialog** as a compact, balance-coloured chip (`CoworkerPriorityControl`), and the triangle is **colour-coded by balance** — green when centred, yellow→red as one or two axes get starved, with the starved axis's vertex reddened. Remaining: receipts / outcome-diff (Slice 3b) and per-scope persistence (Slice 4) — both can be **migration-free** in v1 via the existing `DecisionInteraction.outcomePayload` and `DecisionPerspectiveProfile.autonomyPolicy` JSON fields (no schema change), which also sidesteps the no-`datasource.url`-in-worktree migration constraint.
 
 ---
 
