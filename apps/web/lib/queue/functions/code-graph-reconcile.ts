@@ -2,10 +2,22 @@ import { cron } from "inngest";
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
 
+// Staleness escalation thresholds for the 15-minute code-graph reconcile
+// (BI-12E646D3): raise an operator-visible PlatformIssueReport after 4
+// consecutive failed runs (~1h) or when no successful reconcile has happened for
+// 2h, instead of silently retrying forever. Env-overridable.
+const CODE_GRAPH_STALE_THRESHOLDS = {
+  maxConsecutiveErrors: Number(process.env.CODE_GRAPH_STALE_MAX_ERRORS) || 4,
+  maxAgeMs: Number(process.env.CODE_GRAPH_STALE_MAX_AGE_MS) || 2 * 3_600_000,
+};
+
 async function recordCodeGraphJob(status: "ok" | "error", error?: string): Promise<void> {
   const { prisma } = await import("@dpf/db");
   const { computeNextRunAt } = await import("@/lib/ai-provider-types");
   const { CODE_GRAPH_JOB_ID } = await import("@/lib/integrate/code-graph-refresh");
+  const { evaluateJobStaleness, readStalenessState, mergeStalenessState, escalateStaleScheduledJob } = await import(
+    "@/lib/operate/scheduled-jobs/staleness-escalation"
+  );
 
   const job = await prisma.scheduledJob.findUnique({
     where: { jobId: CODE_GRAPH_JOB_ID },
@@ -13,6 +25,12 @@ async function recordCodeGraphJob(status: "ok" | "error", error?: string): Promi
   if (!job) return;
 
   const now = new Date();
+  // BI-12E646D3 (make-silent-failures-observable): track success recency in job
+  // metadata and escalate when the reconcile goes stale, so a silently-failing
+  // code graph (which degrades code search / impact analysis) becomes a
+  // queryable operator signal instead of an invisible multi-day drift.
+  const decision = evaluateJobStaleness(readStalenessState(job.metadata), status, now, CODE_GRAPH_STALE_THRESHOLDS);
+
   await prisma.scheduledJob.update({
     where: { jobId: CODE_GRAPH_JOB_ID },
     data: {
@@ -20,8 +38,20 @@ async function recordCodeGraphJob(status: "ok" | "error", error?: string): Promi
       lastStatus: status,
       lastError: error ?? null,
       nextRunAt: computeNextRunAt(job.schedule, now),
+      metadata: mergeStalenessState(job.metadata, decision.nextState) as import("@dpf/db").Prisma.InputJsonValue,
     },
   });
+
+  if (decision.escalate && decision.reason) {
+    await escalateStaleScheduledJob({
+      jobId: CODE_GRAPH_JOB_ID,
+      reason: decision.reason,
+      title: "Code-intelligence graph reconcile is stale",
+      description:
+        "The scheduled code-graph reconcile is not succeeding. A stale code graph degrades code search and impact analysis across Build Studio and the EA surfaces until it recovers.",
+      routeContext: "/platform",
+    });
+  }
 }
 
 export const codeGraphReconcileScheduled = inngest.createFunction(

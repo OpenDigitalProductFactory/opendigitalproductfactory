@@ -164,7 +164,7 @@ Honest accounting — most opportunities are **catalogued, not built**. Per `opt
 |---|---|
 | Cron "Monthly-runs-daily" bug (found dogfooding §6's native bridge) | **Fixed + merged** (PR #2149) |
 | Recurring scan (interim → native) | **Live**: `scheduledAgentTask` agent-task-fe778ee7; client cron retired |
-| #6 Ascent (watchdog / graph-staleness / curator) | **Filed**: BI-A1FC3EBB / BI-12E646D3 / BI-93FE150F (triaging) |
+| #6 Ascent (watchdog / graph-staleness / curator) | BI-A1FC3EBB / BI-93FE150F filed; **BI-12E646D3 (graph-staleness escalation) implemented** via the reusable `apps/web/lib/operate/scheduled-jobs/staleness-escalation.ts` helper wired into `code-graph-reconcile.ts`. Built directly (code→tests→PR): Build Studio autonomous escalated at plan-review on the local model (PIR-VQ07S / PIR-7G8QF), so this shipped via the direct path while the BS plan-reviewer quality is addressed. |
 | #1 Self-driving migration loop (keystone) | **Filed**: BI-A028AA14 (triaging) |
 | Schedule management has no MCP surface | **Filed**: BI-1C44A93A (triaging) |
 | #2 Business-context auto-derivation (highest customer-felt) | Catalogued only |
