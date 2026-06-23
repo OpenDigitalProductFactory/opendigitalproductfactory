@@ -50,9 +50,9 @@ export default async function OpsPage({ searchParams }: Props) {
         </p>
       </div>
 
-      <EscalationsAttention escalations={escalations} />
-
       <OpsTabNav />
+
+      <EscalationsAttention escalations={escalations} />
 
       <SurfaceViewSwitcher entityType="backlog_item" current={view ?? "list"} />
 
