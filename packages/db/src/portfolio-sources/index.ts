@@ -11,3 +11,4 @@ export * from "./supported-integrations-manifest";
 export * from "./project-external-supply";
 export * from "./licensed-dependencies-manifest";
 export * from "./project-sbom";
+export * from "./product-dependency";

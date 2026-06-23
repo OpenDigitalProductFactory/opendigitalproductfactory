@@ -616,6 +616,28 @@ model DigitalProduct {
   knowledgeArticles             KnowledgeArticleProduct[]
   workQueues                    WorkQueue[]
   businessCapabilityLinks       BusinessCapabilityTraceLink[]  @relation("BusinessCapabilityProductLinks")
+  dependencyEdgesFrom           ProductDependency[]            @relation("ProductDependencyFrom")
+  dependencyEdgesTo             ProductDependency[]            @relation("ProductDependencyTo")
+}
+
+/// Product-to-product dependency graph (BI-PORTPRIO-2) — the rail for the DPPM
+/// line-of-sight priority cascade: a Products & Services Sold offering's priority
+/// floors the priority of the Foundational / Manufacturing & Delivery products it
+/// depends on. relationType: "depends_on" | "part_of". source = the
+/// PortfolioSourceKind that asserted the edge (registry backfill, projector, …).
+model ProductDependency {
+  id            String         @id @default(cuid())
+  fromProductId String
+  toProductId   String
+  relationType  String
+  source        String?
+  createdAt     DateTime       @default(now())
+  fromProduct   DigitalProduct @relation("ProductDependencyFrom", fields: [fromProductId], references: [id], onDelete: Cascade)
+  toProduct     DigitalProduct @relation("ProductDependencyTo", fields: [toProductId], references: [id], onDelete: Cascade)
+
+  @@unique([fromProductId, toProductId, relationType])
+  @@index([fromProductId])
+  @@index([toProductId])
 }
 
 model BusinessModel {
