@@ -1,0 +1,270 @@
+/**
+ * EP-GOLDEN-TRIANGLE Slice 1 (BI-8FF4CE21) — pure preference-to-policy compiler.
+ *
+ * `compileGoldenTrianglePolicy()` turns a human Cost/Quality/Time posture into a
+ * DecodedPolicy: a `PostureOverride` (fed into `inferContract()`'s `routeContext`
+ * caller-override slot — never a parallel routing pass) plus an
+ * `OrchestrationBudget` (persisted as JSON on the receipt path). It is pure and
+ * deterministic: no I/O, no Date/random — inputs in, policy out.
+ *
+ * Invariants (design §0, §5, §7):
+ *  - Balanced compiles to NO deltas (cold-start pass-through; equals flag-off).
+ *  - Precedence: hard policy > scope/task floor > posture > model availability.
+ *  - Hard constraints (residency, tier floor, latency ceiling) clamp the posture
+ *    and are recorded as adjustments; residency is never relaxed.
+ *  - Fail-closed is a first-class output (state "blocked" | "defer"), not a throw.
+ *  - `verificationDepth` is emitted but inert until a verify step exists.
+ */
+import type { QualityTier } from "../routing/quality-tiers";
+import type {
+  CompileInput,
+  DecodedPolicy,
+  GoldenTrianglePreference,
+  GoldenTrianglePreset,
+  OrchestrationBudget,
+  PolicyAdjustment,
+  PostureOverride,
+} from "./types";
+
+export const GOLDEN_TRIANGLE_COMPILER_VERSION = "0.1.0";
+export const GOLDEN_TRIANGLE_PRESET_VERSION = "presets@1";
+
+const TIER_RANK: Record<QualityTier, number> = { basic: 0, adequate: 1, strong: 2, frontier: 3 };
+
+function tierRank(t: QualityTier): number {
+  return TIER_RANK[t];
+}
+
+function maxTier(a: QualityTier, b: QualityTier): QualityTier {
+  return tierRank(a) >= tierRank(b) ? a : b;
+}
+
+interface BasePolicy {
+  postureOverride: PostureOverride;
+  orchestrationBudget: OrchestrationBudget;
+}
+
+/**
+ * Canonical preset → policy. Balanced is intentionally empty: it emits no
+ * overrides so `inferContract()` produces exactly the platform/task defaults
+ * (the cold-start pass-through guarantee).
+ */
+const PRESET_POLICIES: Record<Exclude<GoldenTrianglePreset, "custom">, BasePolicy> = {
+  balanced: { postureOverride: {}, orchestrationBudget: {} },
+  assured: {
+    postureOverride: { budgetClass: "quality_first", reasoningDepth: "high", effort: "high", minimumTier: "frontier" },
+    orchestrationBudget: { verificationDepth: "deep", retryBudget: 3, deliberationPattern: "review" },
+  },
+  fast: {
+    postureOverride: { reasoningDepth: "low", effort: "low", maxLatencyMs: 30_000 },
+    orchestrationBudget: { verificationDepth: "none", retryBudget: 1 },
+  },
+  frugal: {
+    postureOverride: { budgetClass: "minimize_cost", reasoningDepth: "low", effort: "low", minimumTier: "adequate" },
+    orchestrationBudget: { verificationDepth: "shallow", retryBudget: 1 },
+  },
+};
+
+function cloneBase(b: BasePolicy): BasePolicy {
+  return {
+    postureOverride: { ...b.postureOverride },
+    orchestrationBudget: { ...b.orchestrationBudget },
+  };
+}
+
+function normalizeWeights(p: GoldenTrianglePreference): { cost: number; quality: number; time: number } {
+  const c = Math.max(0, p.costWeight);
+  const q = Math.max(0, p.qualityWeight);
+  const t = Math.max(0, p.timeWeight);
+  const sum = c + q + t;
+  if (sum <= 0) return { cost: 1 / 3, quality: 1 / 3, time: 1 / 3 };
+  return { cost: c / sum, quality: q / sum, time: t / sum };
+}
+
+/**
+ * Custom posture: snap to the dominant axis (moderate vs strong intensity), or
+ * Balanced when no axis is clearly preferred. v1 keeps this deterministic and
+ * discrete; finer soft-blending is a future refinement (design §3).
+ */
+function deriveCustomPolicy(p: GoldenTrianglePreference): BasePolicy {
+  const w = normalizeWeights(p);
+  // Pick the dominant axis without array indexing; ties favour quality, then cost.
+  let axis: "quality" | "cost" | "time" = "quality";
+  let weight = w.quality;
+  if (w.cost > weight) {
+    axis = "cost";
+    weight = w.cost;
+  }
+  if (w.time > weight) {
+    axis = "time";
+    weight = w.time;
+  }
+
+  if (weight < 0.4) return cloneBase(PRESET_POLICIES.balanced);
+  const strong = weight >= 0.55;
+
+  if (axis === "quality") {
+    return strong
+      ? cloneBase(PRESET_POLICIES.assured)
+      : {
+          postureOverride: { budgetClass: "quality_first", reasoningDepth: "medium", effort: "medium", minimumTier: "strong" },
+          orchestrationBudget: { verificationDepth: "shallow", retryBudget: 2, deliberationPattern: "review" },
+        };
+  }
+  if (axis === "cost") {
+    return strong
+      ? cloneBase(PRESET_POLICIES.frugal)
+      : {
+          postureOverride: { budgetClass: "minimize_cost", reasoningDepth: "low", effort: "low", minimumTier: "adequate" },
+          orchestrationBudget: { verificationDepth: "shallow", retryBudget: 1 },
+        };
+  }
+  // time
+  return strong
+    ? cloneBase(PRESET_POLICIES.fast)
+    : {
+        postureOverride: { reasoningDepth: "low", effort: "low", maxLatencyMs: 60_000 },
+        orchestrationBudget: { verificationDepth: "none", retryBudget: 1 },
+      };
+}
+
+function basePolicyFor(p: GoldenTrianglePreference): BasePolicy {
+  if (p.preset === "custom") return deriveCustomPolicy(p);
+  return cloneBase(PRESET_POLICIES[p.preset]);
+}
+
+function buildExplanation(
+  preset: GoldenTrianglePreset,
+  posture: PostureOverride,
+  budget: OrchestrationBudget,
+  adjustments: PolicyAdjustment[],
+  state: DecodedPolicy["state"],
+): string {
+  const label = preset === "custom" ? "Custom" : preset.charAt(0).toUpperCase() + preset.slice(1);
+  const parts: string[] = [];
+  if (posture.minimumTier) parts.push(`${posture.minimumTier} tier`);
+  if (posture.effort) parts.push(`${posture.effort} effort`);
+  if (posture.budgetClass) parts.push(posture.budgetClass.replace(/_/g, " "));
+  if (budget.verificationDepth && budget.verificationDepth !== "none") parts.push(`${budget.verificationDepth} verification`);
+  if (budget.deliberationPattern) parts.push(`${budget.deliberationPattern} deliberation`);
+
+  const bits: string[] = [
+    parts.length ? `${label} → ${parts.join(", ")}.` : `${label} → platform defaults (no overrides).`,
+  ];
+  if (adjustments.length) bits.push(`Adjusted: ${adjustments.map((a) => a.reason).join(" ")}`);
+  if (state === "defer") bits.push("Deferred: no governed route available right now.");
+  if (state === "blocked") bits.push("Blocked: hard constraints cannot be satisfied.");
+  return bits.join(" ");
+}
+
+export function compileGoldenTrianglePolicy(input: CompileInput): DecodedPolicy {
+  const { preference, policyConstraints, modelAvailability } = input;
+  const base = basePolicyFor(preference);
+  const posture = base.postureOverride;
+  const budget = base.orchestrationBudget;
+  const adjustments: PolicyAdjustment[] = [];
+  let state: DecodedPolicy["state"] = "ok";
+
+  // ── Hard constraint: residency (never relaxed) ──
+  if (policyConstraints?.residency && posture.residencyPolicy !== policyConstraints.residency) {
+    adjustments.push({
+      field: "residencyPolicy",
+      from: posture.residencyPolicy,
+      to: policyConstraints.residency,
+      reasonCode: "residency_clamp",
+      reason: `Residency forced to ${policyConstraints.residency} by policy; posture cannot relax it.`,
+    });
+    posture.residencyPolicy = policyConstraints.residency;
+  }
+
+  // ── Floor: minimum tier (posture cannot drop below the task/agent floor) ──
+  if (policyConstraints?.minimumTierFloor) {
+    const floor = policyConstraints.minimumTierFloor;
+    const current = posture.minimumTier;
+    const raised = current ? maxTier(current, floor) : floor;
+    if (raised !== current) {
+      adjustments.push({
+        field: "minimumTier",
+        from: current,
+        to: raised,
+        reasonCode: "tier_floor",
+        reason: `Minimum tier raised to ${raised} by the task/agent floor.`,
+      });
+      posture.minimumTier = raised;
+    }
+  }
+
+  // ── Ceiling: max latency (posture cannot exceed the policy ceiling) ──
+  if (policyConstraints?.maxLatencyCeilingMs !== undefined) {
+    const ceil = policyConstraints.maxLatencyCeilingMs;
+    if (posture.maxLatencyMs === undefined || posture.maxLatencyMs > ceil) {
+      adjustments.push({
+        field: "maxLatencyMs",
+        from: posture.maxLatencyMs,
+        to: ceil,
+        reasonCode: "latency_ceiling",
+        reason: `Max latency clamped to ${ceil}ms by policy.`,
+      });
+      posture.maxLatencyMs = ceil;
+    }
+  }
+
+  // ── Model availability: clamp the requested tier to what's reachable ──
+  if (modelAvailability) {
+    const hardFloor = policyConstraints?.minimumTierFloor;
+    if (!modelAvailability.healthy || modelAvailability.tiers.length === 0) {
+      state = "defer";
+      adjustments.push({
+        field: "state",
+        from: "ok",
+        to: "defer",
+        reasonCode: "no_models_available",
+        reason: "No healthy models available; deferring rather than routing to an unsafe path.",
+      });
+    } else if (posture.minimumTier) {
+      const requested = posture.minimumTier;
+      const tiers = modelAvailability.tiers;
+      const meetsRequested = tiers.some((t) => tierRank(t) >= tierRank(requested));
+      if (!meetsRequested) {
+        const hardFloorUnmet = hardFloor !== undefined && !tiers.some((t) => tierRank(t) >= tierRank(hardFloor));
+        if (hardFloorUnmet) {
+          state = "blocked";
+          adjustments.push({
+            field: "state",
+            from: "ok",
+            to: "blocked",
+            reasonCode: "tier_floor_unmet",
+            reason: `No available model meets the required minimum tier (${hardFloor}).`,
+          });
+        } else {
+          let best: QualityTier = requested;
+          let found = false;
+          for (const t of tiers) {
+            if (!found || tierRank(t) > tierRank(best)) {
+              best = t;
+              found = true;
+            }
+          }
+          adjustments.push({
+            field: "minimumTier",
+            from: requested,
+            to: best,
+            reasonCode: "tier_clamp_availability",
+            reason: `Requested tier unavailable; clamped to the best reachable tier (${best}).`,
+          });
+          posture.minimumTier = best;
+        }
+      }
+    }
+  }
+
+  return {
+    postureOverride: posture,
+    orchestrationBudget: budget,
+    adjustments,
+    state,
+    explanation: buildExplanation(preference.preset, posture, budget, adjustments, state),
+    compilerVersion: GOLDEN_TRIANGLE_COMPILER_VERSION,
+    presetVersion: GOLDEN_TRIANGLE_PRESET_VERSION,
+  };
+}
