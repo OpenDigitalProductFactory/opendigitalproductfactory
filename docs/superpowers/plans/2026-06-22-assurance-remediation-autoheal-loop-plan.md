@@ -61,6 +61,28 @@ commandment conflict / kernel can't resolve) → **escalate to the responder**
 (`escalate-build-to-human`), never auto-merge. Honors the founder's group-only
 Dependabot merge posture as the conservative default until WWMD clears a class.
 
+**WWMD ruling** (principle_decide 2026-06-22, surface `assurance-remediation-merge-gate`):
+**PATCH-ONLY-AUTO** (composite 6.27, margin 0.41, high confidence, no commandment
+conflict) — auto-merge only patch bumps when every precondition passes; escalate
+every minor/major and anything uncertain.
+
+**Implemented — gate + orchestration (BI-204EE70B):**
+`apps/web/lib/assurance/remediation-merge-gate.ts` (`classifyDepChange` semver
+classifier + `decideRemediationMerge` policy: patch-only ceiling + hard
+preconditions [CI green, release-age cooldown, OSV-clean, no conflict] +
+escalate-on-uncertain) + test; `apps/web/lib/assurance/remediation-merge-orchestrator.ts`
+(`runRemediationMergeGate` over injectable adapters, budget-capped, with a
+**dark-launch** `actuationEnabled` gate — an auto-merge is decided-but-not-actuated
+until enabled) + test.
+
+**Staged — live actuation (P2.2, dark-by-default):** the live GitHub adapters
+(read PR checks/mergeability via the existing github-rest reader; classify the bump
+from the PR diff; arm auto-merge) + the off-hours scheduled job + the escalation
+adapter (`createPlatformIssueReport`). Built once P1 has produced a real
+remediation PR to verify against; ships with `actuationEnabled=false` so the gate
+runs observably (escalates + dark-records) before it merges anything autonomously.
+This is the most irreversible step in the loop — it does not blind-launch.
+
 ## Phase 3 — close the loop (BI-4D5C702F)
 
 When a later scan no longer reports a finding, mark previously-open findings
