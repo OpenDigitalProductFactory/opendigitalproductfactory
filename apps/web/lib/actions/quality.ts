@@ -12,6 +12,11 @@ import {
   type IssueReportStatus,
 } from "@/lib/quality/issue-report-status";
 import { LEGACY_ISSUE_REPORT_STATUS, type LegacyIssueReportStatus } from "@/lib/quality/issue-report-queue";
+import { evaluateBuildStudioDecision } from "@/lib/build/decision-service";
+import {
+  buildEscalationDecisionRequest,
+  type ConsultEscalationResult,
+} from "@/lib/quality/escalation-responder";
 
 export async function reportQualityIssue(input: {
   type: "runtime_error" | "user_report" | "feedback";
@@ -172,6 +177,46 @@ export async function updateIssueReportStatus(
     where: { reportId },
     data: { status },
   });
+}
+
+/**
+ * Operator-triggered WWMD consult for a held escalation (BI-0ACD9AB2 §5.3 /
+ * §14 dial-low). Runs the governed decision with the OPERATOR's own principal —
+ * HITL-first by construction: the human asks, the kernel advises, the human
+ * decides. Returns the operator-safe recommendation for the /ops attention lens.
+ * No autonomous side effects; a system-principal sweep (dial-up) layers on later.
+ */
+export async function consultEscalation(reportId: string): Promise<ConsultEscalationResult> {
+  const session = await auth();
+  const user = session?.user;
+  if (
+    !user?.id ||
+    !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_platform")
+  ) {
+    return { ok: false, error: "Not authorized." };
+  }
+
+  const report = await prisma.platformIssueReport.findUnique({
+    where: { reportId },
+    select: {
+      reportId: true,
+      title: true,
+      description: true,
+      selfFixClass: true,
+      featureBuildId: true,
+    },
+  });
+  if (!report) return { ok: false, error: "Escalation not found." };
+
+  try {
+    const result = await evaluateBuildStudioDecision({
+      userId: user.id,
+      request: buildEscalationDecisionRequest(report),
+    });
+    return { ok: true, result };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Consult failed." };
+  }
 }
 
 // ─── Send to Build Studio as a fix ────────────────────────────────────────────

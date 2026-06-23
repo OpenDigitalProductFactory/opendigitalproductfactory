@@ -2,7 +2,7 @@
 
 | Field | Value |
 | ----- | ----- |
-| Status | Draft - chief architect review applied 2026-06-20; responder WWMD-consult mechanism + unified decision front door (5.7) + trust dial / autopilot maturation (§14, operator doctrine) completed 2026-06-20. Root-cause prevention (planner kernel-lens, BI-C2CB3073) shipped #2195. **Slice 1 (classifier + projection guard) shipped #2265.** **Slice 4 first cut (surface convergence): the Attention lens now surfaces in /ops; /admin/issue-reports reframed as evidence.** Receiving loop (BI-0ACD9AB2) is HITL-first per §14. Responder disposition (Slice 2) next. |
+| Status | Draft - chief architect review applied 2026-06-20; responder WWMD-consult mechanism + unified decision front door (5.7) + trust dial / autopilot maturation (§14, operator doctrine) completed 2026-06-20. Root-cause prevention (planner kernel-lens, BI-C2CB3073) shipped #2195. **Slice 1 (classifier + projection guard) shipped #2265.** **Slice 4 first cut (surface convergence): the Attention lens now surfaces in /ops; /admin/issue-reports reframed as evidence.** Receiving loop (BI-0ACD9AB2) is HITL-first per §14. **Slice 2 first cut: operator-triggered WWMD consult (dial-low / HITL-first) on each /ops escalation card — `consultEscalation` action runs the governed decision with the operator's own principal.** Autonomous system-principal sweep (dial-up) follows. |
 | Date | 2026-06-20 |
 | Trigger | Operator asked: "what process is working `/admin/issue-reports`, and what progress is made daily?" Live investigation found: no human or agent is actively attending the surface. |
 | Related epic | `EP-INTAKE-UNIFY`, especially BI-EDFBE081, re-scoped here as provenance and routing convergence. This surface is not a redundant backlog queue. |
@@ -323,6 +323,8 @@ This is an operational cleanup, not proof that the design is implemented.
 Refactor budget: shared classifier + shared status helpers replace local if/else checks in the writer, event handler, and cron.
 
 ### Slice 2 - Responder Task and SLA
+
+**Dial-low first cut shipped (§14):** an OPERATOR-triggered WWMD consult on each escalation in the `/ops` attention lens — `consultEscalation` action → `buildEscalationDecisionRequest` → `evaluateBuildStudioDecision`, run with the operator's own principal so it needs no system-responder identity and clears the system-user-sentinel guard. The kernel returns resume / defer / escalate-human with confidence + reasoning (operator-sanitized); the human decides, no autonomous side effects. The autonomous, system-principal version below is the dial-up step (its principal/authority is the careful TAK design the dial-low cut deliberately defers).
 
 - Create/claim one responder `TaskRun` per stream-3 report.
 - Link `reportId`, `featureBuildId`, `taskRunId`, trace id, and responder agent id.
