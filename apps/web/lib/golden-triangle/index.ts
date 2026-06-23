@@ -8,3 +8,5 @@ export {
   GOLDEN_TRIANGLE_COMPILER_VERSION,
   GOLDEN_TRIANGLE_PRESET_VERSION,
 } from "./compile";
+export { applyPostureToRouteContext } from "./compose";
+export type { AppliedPosture, PostureRouteContext } from "./compose";

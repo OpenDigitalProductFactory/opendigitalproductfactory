@@ -118,6 +118,12 @@ export async function inferContract(
     requiresWebSearch?: boolean;
     requiresComputerUse?: boolean;
     requiredModelClass?: ModelClass;
+    // EP-GOLDEN-TRIANGLE Slice 3: posture-compiler caller overrides (additive).
+    // The Golden Triangle compiler maps a posture into these fields; when absent,
+    // existing behaviour is unchanged.
+    reasoningDepth?: string;
+    minimumTier?: string;
+    minimumDimensions?: Record<string, number>;
   },
 ): Promise<RequestContract> {
   // ── Deterministic flags ─────────────────────────────────────────────────
@@ -227,6 +233,7 @@ export async function inferContract(
   // of Perplexity's "Best" auto-router. This only affects task types that were
   // already hitting the neutral default; every mapped type is unchanged.
   const reasoningDepth = (
+    routeContext?.reasoningDepth ??
     taskReq?.reasoningDepthDefault ??
     DEFAULT_REASONING_DEPTH[taskType] ??
     classifyTask(messages).reasoningDepth
@@ -300,6 +307,22 @@ export async function inferContract(
           ...(contract.minimumDimensions ?? {}),
         };
       }
+    }
+    // EP-GOLDEN-TRIANGLE Slice 3: a posture/caller may RAISE the floor (stricter
+    // wins, per-dimension max). Only runs when the caller supplies an override,
+    // so existing callers (no routeContext.minimumTier/minimumDimensions) are
+    // byte-for-byte unaffected.
+    const callerTier = routeContext?.minimumTier;
+    const callerDims: Record<string, number> = {
+      ...(callerTier && isValidTier(callerTier) ? TIER_MINIMUM_DIMENSIONS[callerTier] : {}),
+      ...(routeContext?.minimumDimensions ?? {}),
+    };
+    if (Object.keys(callerDims).length > 0) {
+      const merged: Record<string, number> = { ...(contract.minimumDimensions ?? {}) };
+      for (const [key, value] of Object.entries(callerDims)) {
+        merged[key] = Math.max(merged[key] ?? 0, value);
+      }
+      contract.minimumDimensions = merged;
     }
   } catch {
     // Non-fatal: if the tier lookup fails, contract continues without

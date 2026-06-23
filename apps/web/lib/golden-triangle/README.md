@@ -34,6 +34,14 @@ const decoded = compileGoldenTrianglePolicy({
 - **Fail-closed is first-class:** unmet hard floor → `state: "blocked"`; no healthy models → `state: "defer"`. It never throws and never silently routes to a weaker path.
 - **`verificationDepth` is inert** until a verify step exists (no evaluator in the loop yet — design §0.1 / Slice 0).
 
+## Composition → routing (Slice 3a)
+
+`applyPostureToRouteContext(postureOverride)` ([compose.ts](compose.ts)) splits a compiled `PostureOverride` into:
+- a `routeContext` object to spread into `inferContract()`'s caller-override argument (`budgetClass`, `reasoningDepth`, `minimumTier`, `minimumDimensions`, `maxLatencyMs`, `residencyPolicy`), and
+- `effort`, returned separately because it is **not** a `RequestContract` field — it rides `AgentRouteConfig`/routeOptions.
+
+`inferContract()` was extended **additively** to accept `reasoningDepth` / `minimumTier` / `minimumDimensions` as caller overrides (caller-wins for `reasoningDepth`; stricter-wins, per-dimension max, for the tier/dimension floor). When the caller supplies none, contract inference is byte-for-byte unchanged (asserted in `request-contract.golden-triangle.test.ts`).
+
 ## Scope / not-yet
 
-This slice is the compiler only. The receipt/telemetry join + predicted-vs-actual drift (Slice 3, `BI-CF28CCF0`), the accessible posture-selector UI (Slice 2, `BI-D48EB34C`), and the WWMD/WWWD default editor (Slice 4, `BI-85B2E96C`) are separate slices and are not implemented here.
+Present: the compiler (Slice 1) and the routing composition + `inferContract` extension (Slice 3a). Still pending: the **receipt/telemetry join + predicted-vs-actual drift** (Slice 3b, `BI-CF28CCF0`) — needs schema additions and is the source of the *"see the difference in outcome"* comparison data; the **accessible posture-selector UI** (Slice 2, `BI-D48EB34C`); and the **WWMD/WWWD default editor** (Slice 4, `BI-85B2E96C`). Nothing here is wired into a live caller yet.
