@@ -29,11 +29,18 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import type { Prisma } from "@dpf/db";
+
 export type ContinuityVerdict = "first-boot" | "ok" | "reverted" | "skipped";
 
 export const DB_CONTINUITY_EPOCH_KEY = "db.continuity.epoch";
 export const DB_CONTINUITY_ALERT_KEY = "db.continuity.alert";
 const DEFAULT_MARKER_PATH = "/backups/.dpf-db-continuity.json";
+
+/** Serialize a typed value to a plain JSON value Prisma accepts (mirrors self-upgrade/run-store.ts). */
+function toJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
 
 /**
  * Pure comparator. `reverted` ONLY when the host has durably seen a later epoch
@@ -195,10 +202,13 @@ export async function assertDbContinuityOnBoot(
           await prisma.platformConfig.deleteMany({ where: { key: DB_CONTINUITY_ALERT_KEY } });
           return;
         }
+        // A named interface (ContinuityAlert) lacks the index signature Prisma's
+        // InputJsonValue requires, so serialize through plain JSON first.
+        const value = toJson(alert);
         await prisma.platformConfig.upsert({
           where: { key: DB_CONTINUITY_ALERT_KEY },
-          update: { value: alert },
-          create: { key: DB_CONTINUITY_ALERT_KEY, value: alert },
+          update: { value },
+          create: { key: DB_CONTINUITY_ALERT_KEY, value },
         });
       },
     };
