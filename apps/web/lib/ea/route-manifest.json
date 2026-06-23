@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 506,
+  "routeCount": 507,
   "routes": [
     {
       "routePath": "/",
@@ -4556,6 +4556,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/platform/ai/priority/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/priority/outcomes",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "priority",
+        "outcomes"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/priority/outcomes/page.tsx"
     },
     {
       "routePath": "/platform/ai/prompts",
