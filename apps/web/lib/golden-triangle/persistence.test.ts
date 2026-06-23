@@ -1,0 +1,114 @@
+import { describe, expect, it } from "vitest";
+
+import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
+
+import {
+  getGoldenTrianglePosture,
+  isGoldenTrianglePreference,
+  setGoldenTrianglePosture,
+  type GoldenTrianglePersistenceClient,
+} from "./persistence";
+
+const ASSURED: GoldenTrianglePreference = { preset: "assured", qualityWeight: 0.8, costWeight: 0.1, timeWeight: 0.1 };
+
+interface Calls {
+  findFirst: unknown[];
+  updateMany: Array<{ where: unknown; data: { autonomyPolicy: Record<string, unknown> } }>;
+}
+
+function makeClient(initialPolicy: unknown = null) {
+  let policy: unknown = initialPolicy;
+  const calls: Calls = { findFirst: [], updateMany: [] };
+  const client: GoldenTrianglePersistenceClient = {
+    decisionPerspectiveProfile: {
+      findFirst: async (args) => {
+        calls.findFirst.push(args);
+        return policy === null ? null : { autonomyPolicy: policy };
+      },
+      updateMany: async (args) => {
+        const a = args as { where: unknown; data: { autonomyPolicy: Record<string, unknown> } };
+        calls.updateMany.push(a);
+        policy = a.data.autonomyPolicy;
+        return { count: 1 };
+      },
+    },
+  };
+  return { client, calls, getPolicy: () => policy };
+}
+
+function throwingClient(): GoldenTrianglePersistenceClient {
+  return {
+    decisionPerspectiveProfile: {
+      findFirst: async () => {
+        throw new Error("db down");
+      },
+      updateMany: async () => {
+        throw new Error("db down");
+      },
+    },
+  };
+}
+
+describe("setGoldenTrianglePosture", () => {
+  it("writes the posture onto the platform profile under goldenTriangle", async () => {
+    const { client, calls } = makeClient();
+    const ok = await setGoldenTrianglePosture({ kind: "platform" }, ASSURED, client);
+    expect(ok).toBe(true);
+    expect(calls.updateMany[0]?.where).toEqual({ profileId: "mark-dpf-platform" });
+    expect(calls.updateMany[0]?.data.autonomyPolicy.goldenTriangle).toEqual(ASSURED);
+  });
+
+  it("preserves existing autonomyPolicy keys when merging", async () => {
+    const { client, getPolicy } = makeClient({ allowRecommendation: true, allowArbitration: false });
+    await setGoldenTrianglePosture({ kind: "platform" }, ASSURED, client);
+    expect(getPolicy()).toMatchObject({
+      allowRecommendation: true,
+      allowArbitration: false,
+      goldenTriangle: ASSURED,
+    });
+  });
+
+  it("targets the org profile for an organization scope", async () => {
+    const { client, calls } = makeClient();
+    await setGoldenTrianglePosture({ kind: "organization", organizationId: "org_1" }, ASSURED, client);
+    expect(calls.updateMany[0]?.where).toEqual({ ownerOrganizationId: "org_1", kind: "organization" });
+  });
+
+  it("is fail-open: returns false when the db throws", async () => {
+    const ok = await setGoldenTrianglePosture({ kind: "platform" }, ASSURED, throwingClient());
+    expect(ok).toBe(false);
+  });
+});
+
+describe("getGoldenTrianglePosture", () => {
+  it("reads a previously saved posture back", async () => {
+    const { client } = makeClient({ goldenTriangle: ASSURED });
+    expect(await getGoldenTrianglePosture({ kind: "platform" }, client)).toEqual(ASSURED);
+  });
+
+  it("returns null when no posture is stored", async () => {
+    const { client } = makeClient({ allowRecommendation: true });
+    expect(await getGoldenTrianglePosture({ kind: "platform" }, client)).toBeNull();
+  });
+
+  it("returns null for a malformed stored value", async () => {
+    const { client } = makeClient({ goldenTriangle: { preset: "assured" } });
+    expect(await getGoldenTrianglePosture({ kind: "platform" }, client)).toBeNull();
+  });
+
+  it("is fail-open: returns null when the db throws", async () => {
+    expect(await getGoldenTrianglePosture({ kind: "platform" }, throwingClient())).toBeNull();
+  });
+});
+
+describe("isGoldenTrianglePreference", () => {
+  it("accepts a well-formed preference", () => {
+    expect(isGoldenTrianglePreference(ASSURED)).toBe(true);
+  });
+  it("rejects wrong shapes", () => {
+    expect(isGoldenTrianglePreference(null)).toBe(false);
+    expect(isGoldenTrianglePreference({ preset: "assured" })).toBe(false);
+    expect(isGoldenTrianglePreference({ ...ASSURED, preset: "nope" })).toBe(false);
+    expect(isGoldenTrianglePreference({ ...ASSURED, costWeight: "x" })).toBe(false);
+  });
+});

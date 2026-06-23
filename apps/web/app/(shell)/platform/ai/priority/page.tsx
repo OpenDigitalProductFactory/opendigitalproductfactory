@@ -1,10 +1,13 @@
 // apps/web/app/(shell)/platform/ai/priority/page.tsx
-// EP-GOLDEN-TRIANGLE Slice 2 — the Golden Triangle priority control surface.
+// EP-GOLDEN-TRIANGLE Slice 2/4 — the Golden Triangle priority control surface.
 // A non-technical operator sets a Cost / Quality / Time posture; the platform
-// compiles it into model tier, effort, verification, and retries.
+// compiles it into model tier, effort, verification, and retries. Seeds from the
+// saved WWMD/platform default (migration-free, on the platform profile).
 import { GoldenTrianglePriorityPanel } from "@/components/golden-triangle/GoldenTrianglePriorityPanel";
+import { getGoldenTrianglePosture } from "@/lib/golden-triangle/persistence";
 
-export default function GoldenTrianglePriorityPage() {
+export default async function GoldenTrianglePriorityPage() {
+  const saved = await getGoldenTrianglePosture({ kind: "platform" });
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
@@ -12,10 +15,10 @@ export default function GoldenTrianglePriorityPage() {
         <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
           Set the Cost / Quality / Time priority for AI work. Pick a preset or fine-tune the triangle — the
           platform compiles it into the right model, effort, and verification, and shows in plain language
-          exactly what it configured.
+          exactly what it configured. Save it as the platform default for new work.
         </p>
       </div>
-      <GoldenTrianglePriorityPanel />
+      <GoldenTrianglePriorityPanel initial={saved ?? undefined} />
     </div>
   );
 }
