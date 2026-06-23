@@ -45,7 +45,7 @@ describe("persistAssuranceFindings", () => {
       observedAt,
     });
 
-    expect(result).toEqual({ created: 1, updated: 0, reopened: 0 });
+    expect(result).toEqual({ created: 1, updated: 0, reopened: 0, resolved: 0, resolvedBacklogItemIds: [] });
     expect(db.assuranceFinding.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         findingKey: "finding-key-1",
@@ -79,7 +79,7 @@ describe("persistAssuranceFindings", () => {
       observedAt,
     });
 
-    expect(result).toEqual({ created: 0, updated: 1, reopened: 0 });
+    expect(result).toEqual({ created: 0, updated: 1, reopened: 0, resolved: 0, resolvedBacklogItemIds: [] });
     expect(db.assuranceFinding.update).toHaveBeenCalledWith({
       where: { findingKey: "finding-key-1" },
       data: expect.not.objectContaining({ status: expect.any(String) }),
@@ -101,7 +101,7 @@ describe("persistAssuranceFindings", () => {
       observedAt: new Date("2026-05-22T05:00:00.000Z"),
     });
 
-    expect(result).toEqual({ created: 0, updated: 1, reopened: 1 });
+    expect(result).toEqual({ created: 0, updated: 1, reopened: 1, resolved: 0, resolvedBacklogItemIds: [] });
     expect(db.assuranceFinding.update).toHaveBeenCalledWith({
       where: { findingKey: "finding-key-1" },
       data: expect.objectContaining({
@@ -110,5 +110,92 @@ describe("persistAssuranceFindings", () => {
         reopenCount: { increment: 1 },
       }),
     });
+  });
+
+  it("auto-resolves findings absent from the latest scan and returns their linked BIs (P3)", async () => {
+    const update = vi.fn();
+    const db = {
+      assuranceFinding: {
+        findMany: vi
+          .fn()
+          .mockResolvedValueOnce([]) // main upsert query (present finding is new)
+          .mockResolvedValueOnce([   // absent sweep
+            { findingKey: "gone-1", evidence: { backlogItemId: "BI-OLD-1" } },
+            { findingKey: "gone-2", evidence: {} },
+          ]),
+        create: vi.fn(async () => ({ id: "af" })),
+        update,
+      },
+    };
+    const observedAt = new Date("2026-06-23T03:00:00.000Z");
+
+    const result = await persistAssuranceFindings(db, {
+      assuranceRunId: "run",
+      buildId: "FB-1",
+      findings: [normalizedFinding({ findingKey: "present-1" })],
+      observedAt,
+      resolveAbsent: { adapterKey: "pnpm-audit" },
+    });
+
+    expect(result.resolved).toBe(2);
+    expect(result.resolvedBacklogItemIds).toEqual(["BI-OLD-1"]);
+    expect(update).toHaveBeenCalledWith({
+      where: { findingKey: "gone-1" },
+      data: expect.objectContaining({ status: "resolved", resolvedAt: observedAt }),
+    });
+    expect(db.assuranceFinding.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          buildId: "FB-1",
+          adapterKey: "pnpm-audit",
+          findingKey: { notIn: ["present-1"] },
+        }),
+      }),
+    );
+  });
+
+  it("resolves all active findings on an empty all-clear scan", async () => {
+    const db = {
+      assuranceFinding: {
+        findMany: vi.fn(async () => [{ findingKey: "gone-1", evidence: {} }]),
+        create: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const result = await persistAssuranceFindings(db, {
+      assuranceRunId: "run",
+      buildId: "FB-1",
+      findings: [],
+      observedAt: new Date("2026-06-23T03:00:00.000Z"),
+      resolveAbsent: { adapterKey: "pnpm-audit" },
+    });
+    expect(result.resolved).toBe(1);
+    expect(result.created).toBe(0);
+  });
+
+  it("skips the absent-sweep without resolveAbsent or without a buildId", async () => {
+    const noOpts = {
+      assuranceFinding: { findMany: vi.fn(async () => []), create: vi.fn(async () => ({ id: "x" })), update: vi.fn() },
+    };
+    const r1 = await persistAssuranceFindings(noOpts, {
+      assuranceRunId: "r",
+      buildId: "FB-1",
+      findings: [normalizedFinding()],
+      observedAt: new Date(),
+    });
+    expect(r1.resolved).toBe(0);
+    expect(noOpts.assuranceFinding.findMany).toHaveBeenCalledTimes(1);
+
+    const noBuild = {
+      assuranceFinding: { findMany: vi.fn(async () => []), create: vi.fn(async () => ({ id: "x" })), update: vi.fn() },
+    };
+    const r2 = await persistAssuranceFindings(noBuild, {
+      assuranceRunId: "r",
+      findings: [normalizedFinding()],
+      observedAt: new Date(),
+      resolveAbsent: { adapterKey: "pnpm-audit" },
+    });
+    expect(r2.resolved).toBe(0);
+    expect(noBuild.assuranceFinding.findMany).toHaveBeenCalledTimes(1);
   });
 });

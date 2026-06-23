@@ -89,6 +89,19 @@ When a later scan no longer reports a finding, mark previously-open findings
 **absent from the latest scan** as `resolved` (scoped to the same build+adapter)
 and close the linked BI. Makes the loop converge instead of leaving transient BIs.
 
+**Implemented — finding auto-resolve (BI-4D5C702F):** `finding-persistence.ts` gains
+an opt-in `resolveAbsent: { adapterKey }` — after upserting the present findings it
+resolves previously-open findings (status open/planned/blocked) for the
+build+adapter scope that are ABSENT from the current scan (`findingKey notIn` the
+scanned keys; runs even on an empty all-clear scan), stamps `evidence.autoResolved`,
+and returns the resolved count + the linked BI ids. Wired in `scan-job.ts` (passes
+`resolveAbsent`, surfaces `resolved`). + tests.
+
+**Staged — linked-BI close-out (P3.2):** the auto-resolved findings return their
+`backlogItemId`s; closing those remediation BIs should go through the proper backlog
+lifecycle (status→done + activity + epic rollup), not a raw persist write — a clean
+follow-on rather than coupling persist to the backlog.
+
 ## Sequencing
 
 Land PR #2290 (the create-side foundation) first; then P1 → P3. P1 is safe
