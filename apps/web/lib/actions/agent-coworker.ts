@@ -1182,6 +1182,26 @@ export async function sendMessage(input: {
     activeBuildPhase,
   });
 
+  // Right-size the per-turn tool ATTACHMENT without touching authority. A page
+  // coworker's grants + the universal read baseline can expand to ~100 tools
+  // (~34k tokens of schema), overflowing a budget local model's served context
+  // and failing every tool turn. Attach a capped core+role set and defer the
+  // rest (still authorized); the model pulls deferred tools back on demand via
+  // load_tools. Keeps capability, cuts per-turn cost.
+  const { selectCoworkerToolBudget, LOAD_TOOLS_TOOL, LOAD_TOOLS_TOOL_NAME } = await import(
+    "@/lib/actions/coworker-tool-budget"
+  );
+  const { getAgentToolGrantsAsync } = await import("@/lib/tak/agent-grants");
+  const roleGrants = await getAgentToolGrantsAsync(agent.agentId);
+  const { attached: budgetedTools, deferred: deferredTools } = selectCoworkerToolBudget({
+    tools: availableTools,
+    roleGrants,
+    pageActionNames: new Set(pageActions.map((t) => t.name)),
+    alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
+  });
+  // Advertise the load_tools meta-tool only when something was actually deferred.
+  const attachedTools = deferredTools.length > 0 ? [LOAD_TOOLS_TOOL, ...budgetedTools] : budgetedTools;
+
   let disabledExternalTools: Array<{ name: string; description: string }> = [];
   if (input.externalAccessEnabled !== true) {
     const externalEnabledPlatformTools = await getAvailableTools(toolUserContext, {
@@ -1216,8 +1236,8 @@ export async function sendMessage(input: {
   const isTrivialSocial = isTrivialSocialMessage(trimmedContent);
   const isConversationOnly = isExplicitConversationSkill || isPageExplanationOnly || isExpansionFollowup || isMechanismQuestion || isTrivialSocial;
 
-  const toolsForProvider = (!isConversationOnly && availableTools.length > 0)
-    ? toolsToOpenAIFormat(availableTools)
+  const toolsForProvider = (!isConversationOnly && attachedTools.length > 0)
+    ? toolsToOpenAIFormat(attachedTools)
     : undefined;
 
   // Log tools available so we can diagnose why a model claims it can't see a
@@ -1226,15 +1246,17 @@ export async function sendMessage(input: {
   // CodeQL js/log-injection: input.routeContext + agent.agentId + tool names
   // are user-influenced. Compose the line, then route it through the registered
   // sanitizeForLog sanitizer so embedded control chars can't forge log entries.
-  // `attached` reflects what the model ACTUALLY receives: on a conversation-only
-  // turn (greeting, page-explanation, mechanism question) tools are stripped, so
-  // `count` (the available surface) overstates it. Logging both removes the
-  // long-standing ambiguity where count=38 implied 38 tools were sent.
+  // Log three distinct numbers so a small-context overflow is diagnosable at a
+  // glance: `authorized` = the full grant-allowed surface, `attached` = how many
+  // schemas the model ACTUALLY receives this turn (0 on conversation-only turns,
+  // where tools are stripped), `deferred` = authorized tools held back and
+  // loadable on demand. `tools=[…]` lists the attached set (what the model sees).
   const toolsLogLine =
     `[tools] thread=${JSON.stringify(input.threadId)} route=${JSON.stringify(input.routeContext)} agent=${JSON.stringify(agent.agentId)} ` +
     `${activeBuildPhase ? `buildPhase=${JSON.stringify(activeBuildPhase)} ` : ""}` +
-    `count=${availableTools.length} attached=${toolsForProvider !== undefined}${isConversationOnly ? " (conversation-only)" : ""} ` +
-    `tools=[${availableTools.map(t => JSON.stringify(t.name)).join(", ")}]`;
+    `authorized=${availableTools.length} attached=${toolsForProvider !== undefined ? attachedTools.length : 0} ` +
+    `deferred=${deferredTools.length}${isConversationOnly ? " (conversation-only)" : ""} ` +
+    `tools=[${attachedTools.map(t => JSON.stringify(t.name)).join(", ")}]`;
   console.log(sanitizeForLog(toolsLogLine));
   if (activeBuildPhase) {
 
@@ -1663,8 +1685,9 @@ export async function sendMessage(input: {
       chatHistory,
       systemPrompt: populatedPrompt,
       sensitivity: agent.sensitivity,
-      tools: availableTools,
+      tools: attachedTools,
       toolsForProvider,
+      deferredTools,
       userId: user.id!,
       routeContext: input.routeContext,
       agentId: agent.agentId,
