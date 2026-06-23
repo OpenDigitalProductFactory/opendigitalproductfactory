@@ -1,0 +1,38 @@
+name: Merge Queue Churn Watch
+
+# When a PR fails merge_group CI it is silently removed from the merge queue;
+# re-enabling auto-merge on the same commit churns it again. PR #2157 did this
+# for hours before a human noticed. This scheduled watch comments ONCE on a PR
+# that has been kicked from the queue >= 2x in 24h, so the churn is visible and
+# the author knows to push a fix instead of re-queueing. Pairs with the
+# shift-left decision-baseline guard (PR #2194), which prevents the most common
+# cause; this catches drift that breaks a PR while it sits in the queue.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *" # every 30 minutes
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write # post the churn comment
+  actions: read # list merge_group workflow runs
+
+concurrency:
+  group: merge-queue-churn-watch
+  cancel-in-progress: true
+
+jobs:
+  watch:
+    name: Watch merge-queue churn
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Flag PRs churning in the merge queue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-merge-queue-churn.mjs
