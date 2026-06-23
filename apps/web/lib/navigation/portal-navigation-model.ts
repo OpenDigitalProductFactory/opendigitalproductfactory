@@ -562,6 +562,16 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     capabilityKey: "view_platform",
   },
   {
+    key: "platform-ai-priority",
+    label: "Priority",
+    path: "/platform/ai/priority",
+    parentPath: "/platform/ai",
+    domain: "platform",
+    audienceModes: ["operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_platform",
+  },
+  {
     key: "platform-ai-capacity-continuity",
     label: "Capacity Continuity",
     path: "/platform/ai/capacity-continuity",
