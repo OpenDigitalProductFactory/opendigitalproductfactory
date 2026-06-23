@@ -101,12 +101,40 @@ conservative 6 (backups ×2, retention, model-discovery, material-decay, infra-p
 skill-metrics/curator) are deliberately NOT included — adding them broadens the busy band enough
 to push even a deep-sleep slot off a clear window for no real contention benefit.
 
-### Part B — per-org scheduled work (staged, same BI)
+### Part B — per-org blackout gate — **DONE** (this PR)
 
-Compose `BlackoutPeriod` (hard avoid), `DeploymentWindow` allowed bands, and `ScheduledAgentTask`
-crons (per-org tz) into the scorer via a DB-backed collector that passes busy-intervals into the
-pure picker (keeps `auto-window.ts`/`maintenance-calendar.ts` prisma-free). Deferred to keep each
-PR one-concern.
+An operator `BlackoutPeriod` ("no changes during our launch week") now pauses the *unattended
+scheduled* self-upgrade. A self-upgrade drains + restarts the customer's portal and registers as a
+`standard` `ChangeRequest`, so it respects the same blackouts that gate other changes
+(`deployment-windows.ts`) — **unless** the blackout excepts self-upgrade (`exceptions` includes
+`self-upgrade`/`standard`, mirroring the existing exceptions rule; no new scope policy invented).
+
+- `apps/web/lib/self-upgrade/blackout.ts` (new): pure `findActiveSelfUpgradeBlackout(blackouts, now)`
+  + fail-open DB reader `getActiveSelfUpgradeBlackout(now)`.
+- Cron gate (`self-upgrade.ts`, scheduled + non-force): skips with reason `blackout-period` BEFORE
+  the window resolution — a clean no-op (no drain, no run, no cooldown) that resumes automatically
+  when the blackout ends. Manual / Emergency-override bypasses (the operator chose this moment).
+- Status (`promotions.ts`) + Upgrade Center note (`SelfUpgradeClient.tsx`): surface
+  `blackoutUntil`/`blackoutName` so a paused schedule is explained, not opaque (a scheduled skip
+  writes no run row, so without this the pause would be invisible).
+- This is the **proactive** guard quiescence can't give: a blackout may be declared days ahead with
+  nothing yet running, so the reactive drain would never see it.
+
+### Part B — `ScheduledAgentTask` / `DeploymentWindow` — evaluated, intentionally NOT built
+
+Decided against (responsible-capacity / architecture-over-shortcuts), documented so it isn't left
+ambiguously "staged forever":
+- **`ScheduledAgentTask` proactive avoidance:** per-org agent jobs use *arbitrary* operator crons
+  (not the limited shape the calendar parses) and are typically business-hours + light (LLM prompts,
+  not heavy I/O). The quiescence coordinator already defers an upgrade that collides with an
+  *actively running* agent task, so proactively shifting the overnight window to dodge a rare
+  overnight agent job is complexity for negligible benefit.
+- **`DeploymentWindow` "allowed bands":** for a 24/7 store the derived deployment windows are empty,
+  and the inverse "constrain to allowed bands" semantics conflict with the auto-overnight model; the
+  blackout gate already covers the "don't deploy now" governance need.
+
+If real demand appears (e.g. an install that schedules heavy overnight agent jobs), reopen under a
+fresh BI — the pure picker already accepts an injected busy predicate shape, so it's an additive change.
 
 ## 6. Phases & verification
 

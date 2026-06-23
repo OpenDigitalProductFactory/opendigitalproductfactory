@@ -69,6 +69,11 @@ vi.mock("@/lib/self-upgrade/auto-window", () => ({
   describeWindows: vi.fn().mockReturnValue("2:00 AM–4:00 AM"),
 }));
 
+// Operator blackout (BI-59591B14). Default null = no active blackout.
+vi.mock("@/lib/self-upgrade/blackout", () => ({
+  getActiveSelfUpgradeBlackout: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock("@/lib/operating-hours-read", () => ({
   resolveOperatingScheduleForSystem: vi
     .fn()
@@ -159,6 +164,7 @@ import { createRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgra
 import { getCurrentImpactSummaryId } from "@/lib/self-upgrade/impact";
 import { isUpgradeWindowOpen, nextUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { resolveAutoUpgradeWindow, nextAutoWindowOpen } from "@/lib/self-upgrade/auto-window";
+import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import { inngest } from "@/lib/queue/inngest-client";
 import { revalidatePath } from "next/cache";
@@ -230,6 +236,7 @@ beforeEach(() => {
   // leaves return values intact, so a prior 24/7 test would otherwise leak).
   vi.mocked(resolveAutoUpgradeWindow).mockReturnValue({ kind: "operating-hours" });
   vi.mocked(nextAutoWindowOpen).mockReturnValue(null);
+  vi.mocked(getActiveSelfUpgradeBlackout).mockResolvedValue(null); // no blackout by default
   // Default: treat triggers as in-window so dispatch tests exercise the happy
   // path. Tests that care about the window gate override this explicitly.
   vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);
@@ -516,6 +523,35 @@ describe("getSelfUpgradeStatus", () => {
     expect(isUpgradeWindowOpen).toHaveBeenCalledWith(
       expect.objectContaining({ explicitWindows: undefined }),
     );
+  });
+
+  // BI-59591B14 — surface an active operator blackout so the panel can explain a
+  // paused schedule instead of leaving it opaque.
+  it("surfaces an active operator blackout (blackoutUntil + blackoutName)", async () => {
+    vi.mocked(getActiveSelfUpgradeBlackout).mockResolvedValue({
+      name: "Launch week freeze",
+      endAt: new Date("2026-07-08T00:00:00Z"),
+    });
+    vi.mocked(getDeployedSha).mockResolvedValue("abc1234");
+    vi.mocked(resolveTargetSha).mockResolvedValue("def5678");
+    vi.mocked(isShaFresh).mockReturnValue(false);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
+
+    const result = await getSelfUpgradeStatus();
+
+    expect(result.blackoutUntil).toBe("2026-07-08T00:00:00.000Z");
+    expect(result.blackoutName).toBe("Launch week freeze");
+  });
+
+  it("leaves blackout fields null when no blackout is active", async () => {
+    vi.mocked(getDeployedSha).mockResolvedValue("abc1234");
+    vi.mocked(resolveTargetSha).mockResolvedValue(null);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
+
+    const result = await getSelfUpgradeStatus();
+
+    expect(result.blackoutUntil).toBeNull();
+    expect(result.blackoutName).toBeNull();
   });
 
   it("passes channel and source config to resolveTargetSha", async () => {

@@ -3,6 +3,7 @@ import { inngest } from "../inngest-client";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { resolveAutoUpgradeWindow } from "@/lib/self-upgrade/auto-window";
+import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt, recordCheckedAt, isCheckIntervalElapsed } from "@/lib/self-upgrade/last-check";
 import { buildFetchCommand, buildRemoteHeadCommand } from "@/lib/self-upgrade/version";
@@ -139,6 +140,21 @@ export async function runSelfUpgrade(
   // with a distinct reason and the Upgrade Center prompts for a timezone — a clean
   // no-op (no drain, no cooldown), never a silent never-runs.
   if (params.scheduled && !params.force) {
+    // Operator blackout gate (BI-59591B14): a declared no-change period pauses the
+    // unattended upgrade. A self-upgrade is a disruptive (standard) change, so it
+    // respects the same blackouts that gate other changes — unless the blackout
+    // excepts self-upgrade. Manual / force bypass. Clean no-op skip (no drain, no
+    // cooldown); it resumes automatically once the blackout ends. This is the
+    // proactive guard quiescence can't provide (a blackout may be declared ahead
+    // of time with nothing yet running).
+    const blackout = await getActiveSelfUpgradeBlackout(now);
+    if (blackout) {
+      return await skipAttempt(
+        "blackout-period",
+        `blackout-period: ${blackout.name} until ${blackout.endAt.toISOString()}`,
+        { blackoutUntil: blackout.endAt.toISOString() },
+      );
+    }
     const { schedule, timezone, timezoneKnown, lowTrafficWindows } =
       await resolveOperatingScheduleForSystem();
     const auto =
