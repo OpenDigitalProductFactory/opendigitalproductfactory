@@ -13,7 +13,24 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 import { contributePostureDefault } from "@/lib/golden-triangle/hive";
-import { getEffectiveGoldenTrianglePosture, setGoldenTrianglePosture } from "@/lib/golden-triangle/persistence";
+import {
+  getEffectiveGoldenTrianglePosture,
+  getGoldenTrianglePosture,
+  setGoldenTrianglePosture,
+} from "@/lib/golden-triangle/persistence";
+
+/**
+ * Read the saved platform (WWMD) default so a client surface (e.g. the coworker
+ * header chip) can reflect what actually governs AI work. Read-only and only
+ * requires a session — any signed-in user may SEE the active priority; changing
+ * it stays gated by `view_platform` on the save actions. Returns null when unset
+ * (the caller shows Balanced).
+ */
+export async function getGoldenTrianglePlatformDefault(): Promise<GoldenTrianglePreference | null> {
+  const session = await auth();
+  if (!session?.user) return null;
+  return getGoldenTrianglePosture({ kind: "platform" });
+}
 
 async function requirePlatformAdmin() {
   const session = await auth();

@@ -6,6 +6,13 @@ vi.mock("./AgentSkillsDropdown", () => ({
   AgentSkillsDropdown: () => <span>Skills</span>,
 }));
 
+// The coworker priority chip now loads/saves the platform default via server
+// actions; stub them so this header render test doesn't pull server-only modules.
+vi.mock("@/lib/actions/golden-triangle", () => ({
+  getGoldenTrianglePlatformDefault: async () => null,
+  saveGoldenTrianglePlatformDefault: async () => ({ ok: true }),
+}));
+
 const baseProps = {
   agent: {
     agentId: "agent-1",
