@@ -133,6 +133,7 @@ export type RunBuildScanResult =
       autoFiled: number;
       suppressed: number;
       evidenceOnly: number;
+      resolved: number;
     };
 
 function buildLookup(document: ScanJobBomDocumentRow): PnpmAuditComponentLookup {
@@ -289,6 +290,9 @@ export async function runBuildAssuranceScan(input: RunBuildScanInput): Promise<R
     digitalProductId: build.digitalProductId,
     bomDocumentId: document.id,
     componentIdsByAffectedId: adapterOutput.componentIdsByAffectedId,
+    // P3 (BI-4D5C702F): close the loop — auto-resolve findings for this
+    // build+adapter scope that vanished from this scan (the remediation landed).
+    resolveAbsent: { adapterKey: PNPM_AUDIT_ADAPTER_KEY },
   });
 
   // Auto-file: turn GENUINE findings into backlog items with no manual click,
@@ -313,7 +317,7 @@ export async function runBuildAssuranceScan(input: RunBuildScanInput): Promise<R
     data: {
       buildId: build.buildId,
       tool: "assurance-scan",
-      summary: `pnpm audit scan: ${adapterOutput.findings.length} findings (${Number(adapterOutput.summary.blockingCount ?? 0)} blocking, ${persistResult.reopened} reopened) · auto-filed ${dispositions.filed}, suppressed ${dispositions.suppressed}, evidence ${dispositions.evidenceOnly}.`,
+      summary: `pnpm audit scan: ${adapterOutput.findings.length} findings (${Number(adapterOutput.summary.blockingCount ?? 0)} blocking, ${persistResult.reopened} reopened) · auto-filed ${dispositions.filed}, suppressed ${dispositions.suppressed}, evidence ${dispositions.evidenceOnly}, resolved ${persistResult.resolved}.`,
     },
   });
 
@@ -334,6 +338,7 @@ export async function runBuildAssuranceScan(input: RunBuildScanInput): Promise<R
     reopened: persistResult.reopened,
     blockingCount: Number(adapterOutput.summary.blockingCount ?? 0),
     findingCount: adapterOutput.findings.length,
+    resolved: persistResult.resolved,
     autoFiled: dispositions.filed,
     suppressed: dispositions.suppressed,
     evidenceOnly: dispositions.evidenceOnly,
