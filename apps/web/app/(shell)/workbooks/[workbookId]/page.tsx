@@ -13,6 +13,7 @@ import { WorkbookGrid } from "@/components/workbooks/Grid";
 import { CreateTableButton } from "@/components/workbooks/CreateTableButton";
 import { AddColumnButton } from "@/components/workbooks/AddColumnButton";
 import { ImportSheetButton } from "@/components/workbooks/ImportSheetButton";
+import { CreateEmployeesButton } from "@/components/workbooks/CreateEmployeesButton";
 
 export const dynamic = "force-dynamic";
 
@@ -102,11 +103,16 @@ export default async function WorkbookDetailPage({ params, searchParams }: Props
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
           {canManage && activeTableId && (
-            <AddColumnButton
-              workbookId={workbookId}
-              tableId={activeTableId}
-              columns={grid.schema.columns}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <AddColumnButton
+                workbookId={workbookId}
+                tableId={activeTableId}
+                columns={grid.schema.columns}
+              />
+              {grid.schema.dataSource === "custom" && (
+                <CreateEmployeesButton tableId={activeTableId} />
+              )}
+            </div>
           )}
           <div className="min-h-0 flex-1">
             <WorkbookGrid

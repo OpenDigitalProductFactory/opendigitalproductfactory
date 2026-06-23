@@ -4,7 +4,8 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { importSheetAction } from "@/lib/actions/workbooks";
 
-/** Upload an .xlsx and create a new workbook table from it (columns + rows inferred). */
+/** Upload a spreadsheet (.xlsx or .csv/.tsv) and create a new workbook table from
+ *  it (columns + rows inferred). */
 export function ImportSheetButton({ workbookId }: { workbookId: string }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -43,12 +44,12 @@ export function ImportSheetButton({ workbookId }: { workbookId: string }) {
         onClick={() => inputRef.current?.click()}
         className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-text)] disabled:opacity-50"
       >
-        {pending ? "Importing…" : "Import .xlsx"}
+        {pending ? "Importing…" : "Import sheet"}
       </button>
       <input
         ref={inputRef}
         type="file"
-        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        accept=".xlsx,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
         className="hidden"
         onChange={onFile}
       />
