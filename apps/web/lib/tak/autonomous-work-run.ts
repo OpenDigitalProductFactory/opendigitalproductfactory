@@ -174,6 +174,9 @@ export async function executeAutonomousAgenticLoop(input: {
   sensitivity: AgentSensitivity;
   tools: ToolDefinition[];
   toolsForProvider?: Array<Record<string, unknown>>;
+  /** Authorized-but-not-attached tools forwarded to runAgenticLoop for on-demand
+   *  load_tools. Empty/undefined for non-chat callers (behavior unchanged). */
+  deferredTools?: ToolDefinition[];
   userId: string;
   routeContext: string;
   agentId: string;
@@ -221,6 +224,7 @@ export async function executeAutonomousAgenticLoop(input: {
     sensitivity: input.sensitivity,
     tools: input.tools,
     toolsForProvider: input.toolsForProvider,
+    deferredTools: input.deferredTools,
     userId: input.userId,
     routeContext: input.routeContext,
     agentId: input.agentId,

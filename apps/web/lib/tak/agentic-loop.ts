@@ -5,7 +5,8 @@
 import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
 import { detectRepeatedToolCall, recordRepeatedToolIssue } from "@/lib/tak/runtime-issues";
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
-import { PLATFORM_TOOLS, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
+import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
+import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/actions/coworker-tool-budget";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
@@ -97,6 +98,20 @@ export function describeToolRouteFailure(
 
   if (msg.startsWith("REQUEST_TOO_LARGE:")) {
     return "Your conversation is too long for this AI provider. Please start a new thread to continue.";
+  }
+
+  // Local runner rejected the request because prompt + tool schemas exceed the
+  // model's served context window (e.g. Docker Model Runner HTTP 400
+  // exceed_context_size_error). This is DETERMINISTIC, not a transient rate-limit,
+  // so the "try again shortly" branches below would mislead — and a fresh thread
+  // alone won't help if the tool surface itself is too big. Point at the real
+  // levers (shorter input / fewer active tools / larger-context model).
+  if (/exceed_context_size|exceeds the available context size/i.test(msg)) {
+    return (
+      "That request was too large for the active AI model's context window — usually too many " +
+      "tools active at once, or a long conversation. Try a shorter message or start a new thread. " +
+      "If it keeps happening, this coworker has more tools active than the local model can hold and needs right-sizing."
+    );
   }
 
   // Permanent configuration gap: a non-local provider is in the chain but has no
@@ -954,6 +969,14 @@ export async function runAgenticLoop(params: {
   sensitivity: "public" | "internal" | "confidential" | "restricted";
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>> | undefined;
+  /**
+   * Authorized-but-not-attached tools (EP-COWORKER-INTERACTIVITY, BI-6A745E3C).
+   * The chat coworker path right-sizes the per-turn attached set and passes the
+   * remaining granted tools here; the model pulls them back on demand via the
+   * load_tools meta-tool (intercepted in the tool loop, like the plan tools).
+   * Undefined/empty for autonomous + build callers, whose behavior is unchanged.
+   */
+  deferredTools?: ToolDefinition[];
   userId: string;
   routeContext: string;
   agentId: string;
@@ -1130,6 +1153,14 @@ export async function runAgenticLoop(params: {
       ...planProviderTools,
     ];
   }
+
+  // EP-COWORKER-INTERACTIVITY (BI-6A745E3C): on-demand tool attachment. The chat
+  // coworker path right-sizes the attached tool set and hands the remaining
+  // authorized tools here as a deferred pool; the model pulls them back via the
+  // load_tools meta-tool (intercepted below, like the plan tools). Empty for
+  // autonomous/build callers, so their behavior is byte-for-byte unchanged.
+  const deferredPool: ToolDefinition[] = [...(params.deferredTools ?? [])];
+  const loadedToolDefs: ToolDefinition[] = [];
 
   // Append the current plan as an ephemeral reminder to the messages handed to
   // the model. NOT stored in `messages`, so it is regenerated from live plan
@@ -1937,7 +1968,65 @@ export async function runAgenticLoop(params: {
         continue;
       }
 
-      const toolDef = tools.find((t) => t.name === tc.name);
+      // Loop-intrinsic: load_tools attaches deferred (already-authorized) tools
+      // on demand so a right-sized coworker can reach its full granted surface
+      // without paying every schema up front. Like the plan tools, it mutates
+      // loop state, returns a synthetic result, and never reaches
+      // governedExecuteTool (EP-COWORKER-INTERACTIVITY, BI-6A745E3C).
+      if (tc.name === LOAD_TOOLS_TOOL_NAME) {
+        const req = (tc.arguments ?? {}) as { names?: string[]; query?: string };
+        const toLoad = selectLoadableTools(deferredPool, req);
+        for (const t of toLoad) {
+          const idx = deferredPool.findIndex((d) => d.name === t.name);
+          if (idx >= 0) deferredPool.splice(idx, 1);
+          loadedToolDefs.push(t);
+        }
+        if (toLoad.length > 0) {
+          // Reassign provider tools so the NEXT iteration advertises the newly
+          // loaded schemas (mirrors the plan-tool append above).
+          routeOptions.tools = [
+            ...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? []),
+            ...toolsToOpenAIFormat(toLoad),
+          ];
+        }
+        const loadedNames = toLoad.map((t) => t.name);
+        console.log(
+          `[agentic-tool] LOAD_TOOLS iter=${iteration} loaded=${loadedNames.length} ` +
+          `remaining=${deferredPool.length} names=${JSON.stringify(loadedNames)}`,
+        );
+        iterationResults.push({
+          tc,
+          toolResult: {
+            success: true,
+            message:
+              toLoad.length > 0
+                ? `Loaded ${toLoad.length} tool(s): ${loadedNames.join(", ")}. Call them on your next step.`
+                : "No deferred tools matched. Use search_tool_marketplace to discover tools, or proceed with your current set.",
+          },
+        });
+        continue;
+      }
+
+      let toolDef =
+        tools.find((t) => t.name === tc.name) ?? loadedToolDefs.find((t) => t.name === tc.name);
+
+      // Authority-preserving on-demand attach: if the model calls an authorized
+      // tool that was deferred (not in this turn's attached set), promote it from
+      // the deferred pool and execute it now. Deferral caps per-turn COST without
+      // ever removing CAPABILITY — whether or not the model first called load_tools.
+      if (!toolDef) {
+        const idx = deferredPool.findIndex((d) => d.name === tc.name);
+        if (idx >= 0) {
+          const [promoted] = deferredPool.splice(idx, 1);
+          loadedToolDefs.push(promoted);
+          routeOptions.tools = [
+            ...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? []),
+            ...toolsToOpenAIFormat([promoted]),
+          ];
+          toolDef = promoted;
+          console.log(`[agentic-tool] AUTO_LOAD iter=${iteration} tool=${tc.name} (deferred → attached on direct call)`);
+        }
+      }
 
       // Proposal tools (side-effecting, need approval) — break the loop and return
       // Check for explicit "proposal" only — undefined executionMode defaults to immediate
