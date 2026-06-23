@@ -9003,7 +9003,7 @@ export async function executeTool(
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
-      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews, applyTestFirstLenienceForKind, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
+      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews, applyTestFirstLenienceForKind, relaxTestFirstAfterRounds, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
       // BI-4396EFEC (D38) — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
       // ReviewResult.iteration on the output. Round is 1-based: first
@@ -9061,7 +9061,27 @@ export async function executeTool(
       // feature-grade gate). Enforced in code so it does not depend on the
       // reviewer model honoring the rubric's prose exemption — the local model
       // in particular over-applies TDD to comment/chore tasks.
-      const mergedReview = applyTestFirstLenienceForKind(rawMergedReview, build.kind);
+      let mergedReview = applyTestFirstLenienceForKind(rawMergedReview, build.kind);
+      // Round-aware test-first relaxation. The kind-lenience above excludes
+      // feature builds by design, but a weak reviewer (notably the on-host local
+      // model) over-applies test-first to feature plans and invents
+      // non-requirements ("add a test that a function is exported"), wedging the
+      // gate so a feature can never converge and escalates forever. Once a plan
+      // has cycled through its genuine fix rounds (currentRound >= the relax
+      // floor; default 3 = the initial review + 2 PLAN_FIX_MAX_ROUNDS fix rounds)
+      // and the ONLY remaining blockers are test-first complaints, downgrade them
+      // so the build proceeds — the test-first requirement is still enforced
+      // downstream at the build/build-review gates (which review the actual code).
+      // Real blockers never match the matchers, so a genuinely-broken plan still
+      // fails and escalates. Early rounds (1..2) are completely unaffected.
+      const testFirstRelaxFloor = Number(process.env.FEATURE_TESTFIRST_RELAX_ROUND) || 3;
+      if (mergedReview.decision === "fail" && currentRound >= testFirstRelaxFloor) {
+        const relaxed = relaxTestFirstAfterRounds(mergedReview, currentRound);
+        if (relaxed.decision === "pass") {
+          mergedReview = relaxed;
+          logBuildActivity(buildId, "reviewBuildPlan", `Round ${currentRound}: remaining plan-review blockers were test-first-only — downgraded so the build proceeds; downstream gates still enforce tests.`);
+        }
+      }
       // BI-4396EFEC (D38) — Compute the iteration delta against the prior
       // round and attach to the ReviewResult. computeReviewDelta + isOscillating
       // live in feature-build-types so they're independently unit-testable.

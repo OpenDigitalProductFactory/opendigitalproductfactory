@@ -482,21 +482,55 @@ export function applyTestFirstLenienceForKind(
   kind: string | null | undefined,
 ): ReviewResult {
   if (!kind || !TEST_FIRST_LENIENT_KINDS.has(kind)) return review;
+  return downgradeTestFirstCriticals(
+    review,
+    `[non-blocking for a ${kind} build — test-first is a feature-grade gate]`,
+  );
+}
+
+/**
+ * Core downgrade: turn every test-first *critical* into a non-blocking *minor*
+ * and recompute the severity-driven decision. `note` is appended to each
+ * downgraded issue so the reason stays visible in the review trail. Genuine
+ * blockers (missing files, broken logic, oversized tasks) never match the
+ * test-first matchers and are left untouched. Pure + side-effect-free.
+ */
+function downgradeTestFirstCriticals(review: ReviewResult, note: string): ReviewResult {
   let changed = false;
   const issues = review.issues.map((i) => {
     if (i.severity === "critical" && (TEST_FIRST_ISSUE_RE.test(i.description) || TEST_BEFORE_IMPL_RE.test(i.description))) {
       changed = true;
-      return {
-        ...i,
-        severity: "minor" as const,
-        description: `${i.description} [non-blocking for a ${kind} build — test-first is a feature-grade gate]`,
-      };
+      return { ...i, severity: "minor" as const, description: `${i.description} ${note}` };
     }
     return i;
   });
   if (!changed) return review;
   const decision: "pass" | "fail" = issues.some((i) => i.severity === "critical") ? "fail" : "pass";
   return { ...review, issues, decision };
+}
+
+/**
+ * BI-5ED28E2D — Round-aware test-first relaxation (kind-agnostic).
+ *
+ * applyTestFirstLenienceForKind above EXCLUDES feature builds by design —
+ * features should carry tests. But a weak reviewer (notably the on-host local
+ * model) over-applies test-first to feature *plans* and invents non-requirements
+ * ("add a test that a function is exported"), wedging the plan gate so a feature
+ * can never converge and escalates to a human forever.
+ *
+ * This relaxes test-first criticals for ANY kind. The CALLER gates it on round:
+ * only after a plan has cycled through its genuine fix rounds and the ONLY
+ * remaining blockers are test-first complaints does it apply — and the test-first
+ * requirement is still enforced downstream at the build/build-review gates (which
+ * review the actual code, not the plan's prose). Real (non-test-first) blockers
+ * never match the matchers, so they keep failing the gate and the build still
+ * escalates. Pure + side-effect-free so it is trivially unit-testable.
+ */
+export function relaxTestFirstAfterRounds(review: ReviewResult, round: number): ReviewResult {
+  return downgradeTestFirstCriticals(
+    review,
+    `[downgraded after ${round} plan-review rounds — only test-first complaints remained; downstream build + review gates still enforce tests]`,
+  );
 }
 
 // ─── Response Parsing ────────────────────────────────────────────────────────

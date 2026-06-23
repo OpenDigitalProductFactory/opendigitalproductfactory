@@ -8,6 +8,7 @@ import {
   ARCHITECTURE_REVIEW_REFERENCES,
   parseReviewResponse,
   applyTestFirstLenienceForKind,
+  relaxTestFirstAfterRounds,
   extractClaimsFromReview,
   buildReviewBranchArtifacts,
   collectReviewerVerdicts,
@@ -235,7 +236,49 @@ describe("applyTestFirstLenienceForKind", () => {
     expect(out.decision).toBe("fail");
     expect(out.issues[0].severity).toBe("critical");
   });
+});
 
+describe("relaxTestFirstAfterRounds (round-aware, kind-agnostic)", () => {
+  const featureTestFirst = {
+    decision: "fail" as const,
+    issues: [
+      { severity: "critical" as const, description: "Task 2 does not specify a real failing test to write first for the new counter." },
+      { severity: "important" as const, description: "Task 1 omits the expected function signature." },
+    ],
+    summary: "test-first on a feature",
+  };
+
+  it("relaxes test-first criticals for a FEATURE plan once rounds are exhausted → decision flips to pass", () => {
+    const out = relaxTestFirstAfterRounds(featureTestFirst, 3);
+    expect(out.decision).toBe("pass");
+    expect(out.issues.find((i) => i.description.includes("test to write first"))?.severity).toBe("minor");
+    // unrelated non-test-first issues are preserved as-is
+    expect(out.issues.find((i) => i.description.includes("function signature"))?.severity).toBe("important");
+  });
+
+  it("annotates the downgrade with the round so the review trail stays legible", () => {
+    const out = relaxTestFirstAfterRounds(featureTestFirst, 4);
+    expect(out.issues.find((i) => i.severity === "minor")?.description).toMatch(/after 4 plan-review rounds/);
+  });
+
+  it("does NOT relax a genuine non-test-first blocker — stays failing so the build still escalates", () => {
+    const realBlocker = {
+      decision: "fail" as const,
+      issues: [{ severity: "critical" as const, description: "Plan refers to a missing modify target: lib/gone.ts" }],
+      summary: "missing file",
+    };
+    const out = relaxTestFirstAfterRounds(realBlocker, 3);
+    expect(out.decision).toBe("fail");
+    expect(out.issues[0].severity).toBe("critical");
+  });
+
+  it("returns the same review unchanged when there are no test-first criticals", () => {
+    const clean = { decision: "pass" as const, issues: [], summary: "ok" };
+    expect(relaxTestFirstAfterRounds(clean, 5)).toBe(clean);
+  });
+});
+
+describe("buildPlanReviewPrompt (task context + delta-aware)", () => {
   it("includes task count for reviewer context", () => {
     const prompt = buildPlanReviewPrompt({
       fileStructure: [],
