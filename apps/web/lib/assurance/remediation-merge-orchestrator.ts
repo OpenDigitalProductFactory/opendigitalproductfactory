@@ -24,6 +24,9 @@ export interface ReadyRemediationPR {
   backlogItemId: string;
   prNumber: number;
   title: string;
+  /** Dependency package name (null when not extractable). Used by the live
+   *  cooldown/OSV verifiers in P2.2b. */
+  packageName?: string | null;
   /** Old → new dependency version from the PR diff (null when not extractable). */
   fromVersion: string | null;
   toVersion: string | null;
