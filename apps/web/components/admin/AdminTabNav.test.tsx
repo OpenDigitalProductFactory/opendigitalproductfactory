@@ -25,42 +25,50 @@ vi.mock("next/link", () => ({
 
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 
-// EP-NAV-COHERENCE P1: AdminTabNav is now the shared operator-console tab row (it
-// re-exports ConsoleTabNav). On /admin the SAME row as /platform renders, with the
-// Administration family active — so crossing the boundary never swaps the whole context.
-describe("AdminTabNav (shared operator-console row)", () => {
-  it("renders the one console family row with Administration active on admin paths", () => {
+describe("AdminTabNav", () => {
+  it("renders grouped admin families and removes the portal tab", () => {
     pathname = "/admin";
     const html = renderToStaticMarkup(<AdminTabNav />);
 
-    // The same console families as /platform — the row persists across the boundary.
-    expect(html).toContain(">Overview<");
-    expect(html).toContain(">AI Operations<");
-    expect(html).toContain(">Tools &amp; Services<");
-    expect(html).toContain(">Governance &amp; Audit<");
-    expect(html).toContain(">Administration<");
-    // The old separate admin family row (Access/Organization/Configuration/Advanced) is gone.
-    expect(html).not.toContain(">Access<");
-    expect(html).not.toContain(">Advanced<");
-    expect(html).not.toContain(">Core Admin<");
+    expect(html).toContain('href="/admin"');
+    expect(html).toContain(">Access<");
+    expect(html).toContain(">Organization<");
+    expect(html).toContain(">Configuration<");
+    expect(html).toContain(">Advanced<");
+    expect(html).not.toContain(">Portal<");
+    expect(html).not.toContain(">Reference Data<");
+    expect(html).not.toContain(">Prompts<");
+    // The admin secondary nav never links out to /platform (no cross-section jump).
+    expect(html).not.toContain('href="/platform/ai"');
+    expect(html).not.toContain(">AI Operations<");
   });
 
-  it("exposes the admin areas in the Administration sub-nav", () => {
-    pathname = "/admin/settings";
+  it("shows only configuration sub-navigation for operating hours routes", () => {
+    pathname = "/admin/operating-hours";
     const html = renderToStaticMarkup(<AdminTabNav />);
 
+    expect(html).toContain(">Organization<");
     expect(html).toContain('href="/admin/settings"');
     expect(html).toContain('href="/admin/reference-data"');
     expect(html).toContain('href="/admin/business-models"');
-    expect(html).toContain('href="/admin/platform-development"');
-    expect(html).toContain('href="/admin/diagnostics"');
+    expect(html).not.toContain('href="/admin/operating-hours"');
+    expect(html).not.toContain(">Operating Hours<");
+    expect(html).not.toContain(">Your Business<");
+    expect(html).not.toContain('href="/admin/prompts"');
   });
 
-  it("can reach the platform families from within Admin (one console, no dead end)", () => {
-    pathname = "/admin";
+  it("shows only advanced sub-navigation for prompt administration routes", () => {
+    pathname = "/admin/prompts";
     const html = renderToStaticMarkup(<AdminTabNav />);
-    // The AI Operations / Tools family tabs link back into /platform — the way out.
-    expect(html).toContain('href="/platform/ai"');
-    expect(html).toContain('href="/platform/tools"');
+
+    expect(html).toContain('href="/admin/platform-development"');
+    expect(html).toContain('href="/admin/issue-reports"');
+    expect(html).toContain('href="/admin/diagnostics"');
+    expect(html).not.toContain('href="/admin/prompts"');
+    expect(html).not.toContain('href="/admin/skills"');
+    expect(html).not.toContain(">Prompts<");
+    expect(html).not.toContain(">Skills<");
+    expect(html).not.toContain(">Settings<");
+    expect(html).not.toContain(">Your Business<");
   });
 });
