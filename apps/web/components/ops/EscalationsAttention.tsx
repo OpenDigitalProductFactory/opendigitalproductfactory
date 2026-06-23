@@ -56,7 +56,7 @@ export function EscalationsAttention({ escalations }: { escalations: OpenEscalat
                 <span className="text-[10px] text-[var(--dpf-muted)]">· {e.reportId}</span>
               </div>
               <p className="mt-1 truncate text-xs text-[var(--dpf-text)]">{e.title}</p>
-              <EscalationConsult reportId={e.reportId} />
+              <EscalationConsult reportId={e.reportId} initial={e.responderDecision} />
             </div>
             {e.buildId ? (
               <Link

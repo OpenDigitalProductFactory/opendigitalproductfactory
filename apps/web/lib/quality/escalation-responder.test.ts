@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildEscalationDecisionRequest,
   escalationOptionLabel,
   escalationConsultStatusLabel,
   ESCALATION_DECISION_OPTIONS,
+  runEscalationResponderSweep,
+  toStoredResponderDecision,
 } from "./escalation-responder";
 
 describe("buildEscalationDecisionRequest", () => {
@@ -72,5 +74,95 @@ describe("escalationConsultStatusLabel", () => {
     expect(escalationConsultStatusLabel("blocked")).toBe("Blocked by a commandment");
     expect(escalationConsultStatusLabel("captured-gap")).toBe("No governed decision");
     expect(escalationConsultStatusLabel("whatever")).toBe("Consulted");
+  });
+});
+
+describe("toStoredResponderDecision", () => {
+  it("projects only the display-only slice of a decision result", () => {
+    expect(
+      toStoredResponderDecision({
+        status: "needs-human",
+        operatorActionLabel: "Ask for human decision",
+        reasonSummary: "Genuine product call.",
+      }),
+    ).toEqual({
+      status: "needs-human",
+      operatorActionLabel: "Ask for human decision",
+      reasonSummary: "Genuine product call.",
+    });
+  });
+});
+
+describe("runEscalationResponderSweep", () => {
+  const candidate = {
+    reportId: "PIR-ESC01",
+    title: "Build Studio needs a human",
+    description: "Missing input validation.",
+    selfFixClass: "needs-human",
+    featureBuildId: "fb-1",
+  };
+
+  const decisionResult = {
+    status: "recommended" as const,
+    recommendation: { optionId: "resume", confidence: "high", margin: 0.4 },
+    reasonSummary: "Resolvable by injecting the validation requirement.",
+    operatorActionLabel: "Resume the build",
+    auditSummary: "Governed decision recommended resume.",
+  };
+
+  it("consults each held escalation and stores the recommendation", async () => {
+    const stored: Array<{ reportId: string; decision: unknown }> = [];
+    const consult = vi.fn().mockResolvedValue(decisionResult);
+
+    const result = await runEscalationResponderSweep({
+      getCandidates: async () => [candidate],
+      consult,
+      store: async (reportId, decision) => {
+        stored.push({ reportId, decision });
+      },
+    });
+
+    expect(result).toEqual({ consulted: 1, failed: 0 });
+    expect(consult).toHaveBeenCalledOnce();
+    expect(stored).toEqual([
+      {
+        reportId: "PIR-ESC01",
+        decision: {
+          status: "recommended",
+          operatorActionLabel: "Resume the build",
+          reasonSummary: "Resolvable by injecting the validation requirement.",
+        },
+      },
+    ]);
+  });
+
+  it("is best-effort: a failed consult is counted, not stored; others still run", async () => {
+    const stored: string[] = [];
+    const consult = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("kernel down"))
+      .mockResolvedValueOnce(decisionResult);
+
+    const result = await runEscalationResponderSweep({
+      getCandidates: async () => [candidate, { ...candidate, reportId: "PIR-ESC02" }],
+      consult,
+      store: async (reportId) => {
+        stored.push(reportId);
+      },
+    });
+
+    expect(result).toEqual({ consulted: 1, failed: 1 });
+    expect(stored).toEqual(["PIR-ESC02"]);
+  });
+
+  it("does nothing when there are no held escalations", async () => {
+    const consult = vi.fn();
+    const result = await runEscalationResponderSweep({
+      getCandidates: async () => [],
+      consult,
+      store: async () => {},
+    });
+    expect(result).toEqual({ consulted: 0, failed: 0 });
+    expect(consult).not.toHaveBeenCalled();
   });
 });
