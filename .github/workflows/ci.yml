@@ -351,6 +351,8 @@ jobs:
         run: node --test packages/dpf-skill-pack/hooks/lease-guard.test.mjs
       - name: Test root-clone-guard hook
         run: node --test packages/dpf-skill-pack/hooks/root-clone-guard.test.mjs
+      - name: Test compose-guard hook
+        run: node --test packages/dpf-skill-pack/hooks/compose-guard.test.mjs
       - name: Test worktree-create hook
         run: node --test packages/dpf-skill-pack/hooks/worktree-create.test.mjs
       - name: Conformance — DPF guards stay wired in the dpf-platform plugin (hooks/hooks.json)
@@ -380,7 +382,8 @@ jobs:
           node --test \
             scripts/lib/runtime-artifact-janitor.test.mjs \
             scripts/runtime-artifact-janitor.cli.test.mjs \
-            scripts/lib/junction-safe-worktree-remove.test.mjs
+            scripts/lib/junction-safe-worktree-remove.test.mjs \
+            scripts/lib/compose-safety.test.mjs
       - name: Smoke --help (must exit 0, no docker required)
         run: node scripts/runtime-artifact-janitor.mjs --help > /dev/null
 

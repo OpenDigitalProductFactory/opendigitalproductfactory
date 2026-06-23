@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
+  composeServiceOperands,
   deriveWorktreeComposeProjectName,
+  isRootDataServiceRecreateIntent,
+  parseComposeIntent,
   validateComposeSafety,
 } from "./compose-safety.mjs";
 
@@ -58,6 +61,52 @@ test("explicit override can run destructive cleanup against the root project", (
   });
 
   assert.equal(result.ok, true);
+});
+
+test("root-project full 'up' of data services is refused without an override (BI-B61779DB)", () => {
+  const result = validateComposeSafety({ args: ["up", "-d"], env: { COMPOSE_PROJECT_NAME: "dpf" } });
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /stale or wrong\s+volume|root dpf project/);
+});
+
+test("root-project 'up postgres' is refused without an override", () => {
+  const result = validateComposeSafety({ args: ["up", "-d", "postgres"], env: { COMPOSE_PROJECT_NAME: "dpf" } });
+  assert.equal(result.ok, false);
+});
+
+test("root-project 'up' is allowed with the explicit install/recovery override", () => {
+  const result = validateComposeSafety({
+    args: ["up", "-d"],
+    env: { COMPOSE_PROJECT_NAME: "dpf", DPF_ALLOW_ROOT_COMPOSE_UP: "1" },
+  });
+  assert.equal(result.ok, true);
+});
+
+test("the redeploy/promoter path (--no-deps portal portal-init) stays allowed on the root project", () => {
+  const result = validateComposeSafety({
+    args: ["up", "-d", "--no-deps", "--force-recreate", "portal-init", "portal"],
+    env: { COMPOSE_PROJECT_NAME: "dpf" },
+  });
+  assert.equal(result.ok, true);
+});
+
+test("an isolated worktree project can freely 'up' its own stack", () => {
+  const result = validateComposeSafety({
+    args: ["up", "-d"],
+    env: { COMPOSE_PROJECT_NAME: "dpf-routing-fix" },
+  });
+  assert.equal(result.ok, true);
+});
+
+test("composeServiceOperands skips flags and their values", () => {
+  const intent = parseComposeIntent(["up", "-d", "--scale", "portal=2", "--wait", "postgres"]);
+  assert.deepEqual(composeServiceOperands(intent.commandArgs), ["postgres"]);
+});
+
+test("isRootDataServiceRecreateIntent ignores down/build and non-root projects", () => {
+  assert.equal(isRootDataServiceRecreateIntent(parseComposeIntent(["build", "portal"]), "dpf"), false);
+  assert.equal(isRootDataServiceRecreateIntent(parseComposeIntent(["up", "-d"]), "dpf-topic"), false);
+  assert.equal(isRootDataServiceRecreateIntent(parseComposeIntent(["up", "-d"]), "dpf"), true);
 });
 
 test("worktree Compose project names are deterministic and dpf-prefixed", () => {
