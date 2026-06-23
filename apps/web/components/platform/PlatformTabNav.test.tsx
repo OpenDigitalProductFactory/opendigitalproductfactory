@@ -60,12 +60,20 @@ describe("PlatformTabNav", () => {
     expect(html).not.toContain('href="/platform/audit/ledger"');
   });
 
-  it("exposes coworker capability needs under AI Operations", () => {
-    pathname = "/platform/ai/capability-needs";
+  it("does not expose a Capability Needs tab that redirects out to the Backlog", () => {
+    // Capability needs converged into the Backlog (EP-INTAKE-UNIFY); the old route
+    // redirects to /ops?origin=capability-need. A secondary-nav tab pointing at it is a
+    // cross-section jump (AI Operations → Backlog), so the AI family must not render it.
+    pathname = "/platform/ai";
     const html = renderToStaticMarkup(<PlatformTabNav />);
 
-    expect(html).toContain('href="/platform/ai/capability-needs"');
-    expect(html).toContain(">Capability Needs<");
+    // The AI family still renders its in-section sub-items…
+    expect(html).toContain(">AI Operations<");
+    expect(html).toContain('href="/platform/ai/skills"');
+    expect(html).toContain('href="/platform/ai/providers"');
+    // …but no Capability Needs tab that teleports the operator to /ops.
+    expect(html).not.toContain('href="/platform/ai/capability-needs"');
+    expect(html).not.toContain(">Capability Needs<");
   });
 
   it("uses compact chrome on the operations map so the visual route map starts sooner", () => {

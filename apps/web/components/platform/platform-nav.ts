@@ -59,7 +59,11 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       { label: "Assignments", href: "/platform/ai/assignments" },
       { label: "Prompts", href: "/platform/ai/prompts" },
       { label: "Skills", href: "/platform/ai/skills" },
-      { label: "Capability Needs", href: "/platform/ai/capability-needs" },
+      // No "Capability Needs" tab: coworker capability needs converged into the Backlog
+      // (EP-INTAKE-UNIFY) and /platform/ai/capability-needs now redirects to
+      // /ops?origin=capability-need. A secondary-nav tab that redirects to /ops is a
+      // cross-section jump (AI Operations → Backlog) — exactly the teleport founder
+      // feedback (2026-06-22) flagged. Capability needs are seen + worked in /ops.
       { label: "Providers & Routing", href: "/platform/ai/providers" },
       { label: BUILD_STUDIO_CONFIG_ROUTE_COPY.navLabel, href: "/platform/ai/build-studio" },
     ],

@@ -529,7 +529,7 @@ export function PerformancePanel({ record }: { record: CoworkerRecord }) {
       <Section
         title="Improvement loop — self-assessments"
         count={assessments.length}
-        action={deepLink("/platform/ai/capability-needs", "Capability needs queue")}
+        action={deepLink("/ops?origin=capability-need", "Capability needs queue")}
       >
         {assessments.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
