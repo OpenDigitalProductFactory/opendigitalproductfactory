@@ -11,6 +11,7 @@ import {
   escalationAgeLabel,
   type OpenEscalation,
 } from "@/lib/quality/escalation-attention";
+import { EscalationConsult } from "./EscalationConsult";
 
 export function EscalationsAttention({ escalations }: { escalations: OpenEscalation[] }) {
   if (escalations.length === 0) return null;
@@ -55,6 +56,7 @@ export function EscalationsAttention({ escalations }: { escalations: OpenEscalat
                 <span className="text-[10px] text-[var(--dpf-muted)]">· {e.reportId}</span>
               </div>
               <p className="mt-1 truncate text-xs text-[var(--dpf-text)]">{e.title}</p>
+              <EscalationConsult reportId={e.reportId} />
             </div>
             {e.buildId ? (
               <Link
