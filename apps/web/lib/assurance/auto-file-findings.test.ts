@@ -34,7 +34,9 @@ function finding(overrides: Partial<NormalizedAssuranceFinding> = {}): Normalize
 
 function createDb() {
   return {
-    assuranceFinding: { update: vi.fn(async () => ({ id: "x" })) },
+    assuranceFinding: {
+      update: vi.fn(async (_args: { where: unknown; data: Record<string, unknown> }) => ({ id: "x" })),
+    },
   };
 }
 
@@ -115,7 +117,7 @@ describe("autoFileFindingsFromScan", () => {
 
     expect(totals).toEqual({ filed: 0, suppressed: 1, evidenceOnly: 0 });
     expect(ingest).not.toHaveBeenCalled();
-    const call = db.assuranceFinding.update.mock.calls[0]![0] as { data: Record<string, unknown> };
+    const call = db.assuranceFinding.update.mock.calls[0]![0];
     expect(call.data.status).toBe("accepted");
     expect(call.data.resolvedAt).toBeUndefined();
   });
@@ -134,7 +136,7 @@ describe("autoFileFindingsFromScan", () => {
 
     expect(totals).toEqual({ filed: 0, suppressed: 0, evidenceOnly: 1 });
     expect(ingest).not.toHaveBeenCalled();
-    const call = db.assuranceFinding.update.mock.calls[0]![0] as { data: Record<string, unknown> };
+    const call = db.assuranceFinding.update.mock.calls[0]![0];
     expect(call.data.status).toBeUndefined();
     expect(call.data.evidence).toMatchObject({ autoFile: { action: "evidence-only" } });
   });
