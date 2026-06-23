@@ -185,6 +185,33 @@ Common back-fill mistakes to avoid:
 
 ---
 
+## 8B. Calibrating a new commandment against the decision baseline
+
+A `commandment`-tier principle loads into **every** `principle_decide` call at weight 1.0 — commandments are always in scope, never ring-filtered. So its `principleDimensionVector` shifts the composite of *every* option in *every* canonical decision, not just the ones the principle is "about." Adding a commandment is a corpus-wide change; treat it as one.
+
+**The hard gate.** [`apps/web/lib/decision/golden-decisions.test.ts`](../../apps/web/lib/decision/golden-decisions.test.ts) loads the **real** `wiki/principles/*.md` corpus — the same files you just edited — scores a curated scenario panel through the same `decide()` engine the MCP handler uses, and fails CI when a scenario's winner flips **or** its margin drops below that scenario's `marginFloor` (e.g. `quick-vs-proper-normal` floor 0.3, `cheap-sound-vs-rebuild-guard` floor 0.1). Because it reads the live corpus, simply adding your principle file changes what the test sees — there's no fixture to wire up. And a branch that's green at cut time can still fail at the **merge queue** once it scores against a newer main: that is exactly how [PR #2157](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/2157) (the `consult-scopes-before-asking` commandment) was caught — only on `merge_group`. Check the baseline before you merge, not just at branch time.
+
+**You can't opt out of the vector.** `principle-missing-vector` is a **blocking error** for commandment tier (warn-only for `core`). A commandment must declare an inspectable signed vector, so its corpus-wide pull is something you design up front, not something you can defer.
+
+**Shrinking the vector numbers does nothing — change the weight instead.** Structured alignment is **scale-invariant**: `alignment = Σ option[dim]·vector[dim] / Σ |vector[dim]|`. Multiply every vector entry by a positive constant and numerator and denominator scale together — alignment is unchanged. The only knob that scales a principle's contribution to a composite is `principleWeight` (contribution = `weight × alignment`). So "make the vector values smaller to play it safe" is a no-op; reach for `principleWeight`.
+
+**Procedural meta-commandments: focus the vector, drop the weight.** A commandment that governs *how you work* rather than a substantive trade-off (e.g. "consult the governed scopes before asking a human") has no business tilting shortcut-vs-proper-fix. Two moves keep it from perturbing decisions it has no bearing on:
+
+1. **Focus the vector on the 1–2 axes that actually characterize the rule.** Don't pad it with axes like `governance_compliance` / `evidence_density` that the canonical "shortcut" options happen to score high on — PR #2157's first cut did exactly that and dragged `quick-vs-proper-normal` to margin 0.228 < 0.3.
+2. **Set a low `principleWeight`** (with `principleWeightRationale`). Divergence from the tier default trips `principle-tier-weight-mismatch`, which is **warn-only** — supply the rationale and the divergence is documented intent, not a blocker.
+
+The fix in PR #2157 used exactly this shape: `principleDimensionVector: {"human_cognitive_load": -0.9, "governance_compliance": 0.5}` with `principleWeight: 0.3`.
+
+**Verify before you merge.**
+
+```bash
+pnpm --filter web exec vitest run lib/decision/golden-decisions.test.ts
+```
+
+The per-scenario `marginFloor` is a **hard gate you must clear** — a flipped winner or a sub-floor margin means your commandment moved a canonical decision; revisit the vector or the weight rather than re-blessing it. The committed snapshot ([`golden-decisions.baseline.json`](../../apps/web/lib/decision/golden-decisions.baseline.json)) is **soft** — it only reports numeric drift. Regenerate it with `UPDATE_GOLDEN_BASELINE=1 pnpm --filter web exec vitest run lib/decision/golden-decisions.test.ts` **only after** a deliberate, reviewed corpus change — never to paper over a margin-floor failure.
+
+---
+
 ## 9. Org overlay (later phase)
 
 Customers will be able to override kernel pages with their own takes via the `kernelPageId` foreign key on `WikiPage`. That UX (Phase 6b — propose-edit form) is not yet shipped. For now, all content authored under `docs/founder-kernel/wiki/` becomes part of the kernel; customers see it everywhere.
