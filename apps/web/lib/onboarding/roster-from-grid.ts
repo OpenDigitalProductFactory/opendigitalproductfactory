@@ -19,7 +19,7 @@ export function cellToString(v: CellValue): string {
     return v.map((it) => cellToString(it as CellValue)).filter(Boolean).join("; ");
   }
   if (typeof v === "object") {
-    const o = v as Record<string, unknown>;
+    const o = v as unknown as Record<string, unknown>;
     if (typeof o.label === "string" && o.label) return o.label; // reference / link label
     if (typeof o.referenceId === "string") return o.referenceId;
     if (typeof o.name === "string") return o.name; // attachment
