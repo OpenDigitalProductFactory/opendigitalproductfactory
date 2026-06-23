@@ -156,10 +156,29 @@ Renting safely means validating versions as they *change*, not just at acquisiti
   signature), provenance continuity, and OSV-clean target.
 - The daily OSV re-scan keeps watching everything already resolved.
 
+## Dual-package-hazard guard (singleton safety)
+
+Most duplicate package versions are harmless — pure utilities where multiple
+copies are just bytes that never disagree at runtime. The exception is
+**singleton / `instanceof` / global-state** libraries (`react`, `react-dom`,
+`zod`, `redux`, `immer`, `graphql`, emotion, `@tanstack/react-query`, …): two
+copies in one runtime cause `instanceof` failures and state desync — the
+duplication that actually "causes disparities over time." `scripts/sbom/check-singleton-safety.mjs`
+(`pnpm check:singletons`, CI job **Singleton Safety Guard**) fails when such a
+library goes **multi-major in the production-runtime closure** (where it bites —
+not build/dev tooling, not apps/mobile's separate react-native renderer),
+ignoring the ~200 harmless utility dups. Reviewed exceptions (currently `immer`
+10/11 and `react-is` 16/19 — both assessed contained) live in
+`sbom/singleton-baseline.json`. This is *why* a blanket "eliminate all
+duplication" refactor is the wrong tool: only this small class causes real
+disparities, and it's guarded; the rest is the irreducible nature of a
+transitive dependency tree.
+
 ## Schedules
 
 - **Reduction guard** — every PR / push / merge_group (`ci.yml` → `SBOM Divergence Guard`).
 - **New Dependency Gate** — every PR / push / merge_group (`ci.yml` → `New Dependency Gate`).
+- **Singleton safety guard** — every PR / push / merge_group (`ci.yml` → `Singleton Safety Guard`).
 - **Platform SBOM** — weekly Mon 07:17 UTC + lockfile change + dispatch (`sbom-platform.yml`).
 - **Vulnerability scan** — daily 06:41 UTC + dep-change PRs + dispatch (`dependency-scan.yml`).
 

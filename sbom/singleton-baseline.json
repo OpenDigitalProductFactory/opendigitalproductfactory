@@ -1,0 +1,17 @@
+{
+  "note": "Accepted dual-package-hazard duplicates for scripts/sbom/check-singleton-safety.mjs. A singleton/instanceof/state library at multiple MAJORS in the production-runtime closure (apps/web + services/adp + services/edge-node) is gated; entries here are reviewed exceptions. The guard's value is catching a NEW hazard (e.g. react/react-dom/zod/redux going multi-major in prod), not the accepted set below. See docs/architecture/dependency-reduction-routine.md.",
+  "accepted": [
+    {
+      "name": "react-is",
+      "versions": ["16.13.1", "19.2.7"],
+      "majors": [16, 19],
+      "reason": "Harmless by design: react-is identifies elements via Symbol.for('react.*'), a realm-global symbol registry, so its checks work ACROSS copies — there is no instanceof-identity hazard regardless of version. The 16.x is a transitive of an older consumer. No action needed."
+    },
+    {
+      "name": "immer",
+      "versions": ["10.2.0", "11.1.8"],
+      "majors": [10, 11],
+      "reason": "Assessed contained, pending confirmation: 10.x is transitive, first-party state uses 11.x. The hazard only fires if an immer draft is created by one copy and finalized by the other; consumers don't pass drafts across that boundary. Follow-up: trace the 10.x consumer and align to 11 if its range allows. Not an active bug."
+    }
+  ]
+}
