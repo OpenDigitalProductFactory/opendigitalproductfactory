@@ -7,6 +7,10 @@ import {
   type PnpmAuditComponentLookup,
 } from "./pnpm-audit-adapter";
 import { persistAssuranceFindings, type AssuranceFindingPersistenceDb } from "./finding-persistence";
+import { autoFileFindingsFromScan } from "./auto-file-findings";
+import { loadReconcileContext } from "./advisory-context";
+import { emptyDispositionTotals, type ReconcileContext } from "./finding-reconcile";
+import type { BacklogIngestInput, BacklogIngestResult } from "@/lib/operate/backlog-ingest";
 
 export interface ScanJobBomDocumentRow {
   id: string;
@@ -91,6 +95,21 @@ export const defaultRunPnpmAudit: RunPnpmAuditCommand = ({ projectRoot, signal }
     });
   });
 
+/**
+ * Auto-file configuration. Disabled by default so unit tests (which run from a
+ * cwd that DOES have a real lockfile) never reach the real backlog front door —
+ * the production caller opts in explicitly. See auto-file-findings.ts.
+ */
+export interface ScanAutoFileConfig {
+  enabled?: boolean;
+  /** Pre-built context (tests inject a deterministic one). */
+  context?: ReconcileContext;
+  /** Canonical root for the reconcile context (default: PROJECT_ROOT/cwd). */
+  root?: string;
+  /** Injectable backlog front door (defaults to ingestBacklogItem). */
+  ingest?: (input: BacklogIngestInput) => Promise<BacklogIngestResult>;
+}
+
 export interface RunBuildScanInput {
   db: ScanJobDb;
   buildId: string;
@@ -98,6 +117,7 @@ export interface RunBuildScanInput {
   projectRoot: string;
   now: Date;
   runAudit?: RunPnpmAuditCommand;
+  autoFile?: ScanAutoFileConfig;
 }
 
 export type RunBuildScanResult =
@@ -110,6 +130,9 @@ export type RunBuildScanResult =
       reopened: number;
       blockingCount: number;
       findingCount: number;
+      autoFiled: number;
+      suppressed: number;
+      evidenceOnly: number;
     };
 
 function buildLookup(document: ScanJobBomDocumentRow): PnpmAuditComponentLookup {
@@ -268,11 +291,29 @@ export async function runBuildAssuranceScan(input: RunBuildScanInput): Promise<R
     componentIdsByAffectedId: adapterOutput.componentIdsByAffectedId,
   });
 
+  // Auto-file: turn GENUINE findings into backlog items with no manual click,
+  // reconciling against main first so stale/accepted findings never spawn
+  // phantom work. Opt-in (the production caller enables it); fails closed when
+  // the reconcile context cannot be loaded.
+  let dispositions = emptyDispositionTotals();
+  if (input.autoFile?.enabled) {
+    const context = input.autoFile.context ?? loadReconcileContext(input.autoFile.root);
+    dispositions = await autoFileFindingsFromScan({
+      db: input.db,
+      findings: adapterOutput.findings,
+      context,
+      buildId: build.buildId,
+      digitalProductId: build.digitalProductId,
+      now: input.now,
+      ingest: input.autoFile.ingest,
+    });
+  }
+
   await input.db.buildActivity?.create({
     data: {
       buildId: build.buildId,
       tool: "assurance-scan",
-      summary: `pnpm audit scan: ${adapterOutput.findings.length} findings (${Number(adapterOutput.summary.blockingCount ?? 0)} blocking, ${persistResult.reopened} reopened).`,
+      summary: `pnpm audit scan: ${adapterOutput.findings.length} findings (${Number(adapterOutput.summary.blockingCount ?? 0)} blocking, ${persistResult.reopened} reopened) · auto-filed ${dispositions.filed}, suppressed ${dispositions.suppressed}, evidence ${dispositions.evidenceOnly}.`,
     },
   });
 
@@ -293,5 +334,8 @@ export async function runBuildAssuranceScan(input: RunBuildScanInput): Promise<R
     reopened: persistResult.reopened,
     blockingCount: Number(adapterOutput.summary.blockingCount ?? 0),
     findingCount: adapterOutput.findings.length,
+    autoFiled: dispositions.filed,
+    suppressed: dispositions.suppressed,
+    evidenceOnly: dispositions.evidenceOnly,
   };
 }

@@ -29,6 +29,10 @@ export interface ActiveAssuranceFindingRow {
     version: string | null;
     packageUrl: string | null;
   };
+  /** Linked backlog item (set once the finding is filed / auto-filed). */
+  backlogItemId: string | null;
+  /** Auto-file disposition reason (e.g. "suppressed: stale-sandbox …"). */
+  autoFileReason: string | null;
 }
 
 type FindingSummaryRow = {
@@ -134,12 +138,28 @@ type FindingListRow = {
   affectedType: string;
   affectedId: string;
   lastSeenAt: Date;
+  evidence?: unknown;
   bomComponent?: null | {
     name: string;
     version: string | null;
     packageUrl: string | null;
   };
 };
+
+function readEvidenceLinks(evidence: unknown): { backlogItemId: string | null; autoFileReason: string | null } {
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
+    return { backlogItemId: null, autoFileReason: null };
+  }
+  const e = evidence as Record<string, unknown>;
+  const backlogItemId = typeof e.backlogItemId === "string" && e.backlogItemId ? e.backlogItemId : null;
+  let autoFileReason: string | null = null;
+  const autoFile = e.autoFile;
+  if (autoFile && typeof autoFile === "object" && !Array.isArray(autoFile)) {
+    const reason = (autoFile as Record<string, unknown>).reason;
+    if (typeof reason === "string" && reason) autoFileReason = reason;
+  }
+  return { backlogItemId, autoFileReason };
+}
 
 type FindingListDb = {
   assuranceFinding?: {
@@ -161,6 +181,7 @@ function toActiveFindingRow(row: FindingListRow): ActiveAssuranceFindingRow {
   const severity = ASSURANCE_POLICY_SEVERITIES.includes(row.policySeverity as AssurancePolicySeverity)
     ? (row.policySeverity as AssurancePolicySeverity)
     : "info";
+  const { backlogItemId, autoFileReason } = readEvidenceLinks(row.evidence);
   return {
     findingKey: row.findingKey,
     findingKind: row.findingKind,
@@ -178,6 +199,8 @@ function toActiveFindingRow(row: FindingListRow): ActiveAssuranceFindingRow {
       version: row.bomComponent.version,
       packageUrl: row.bomComponent.packageUrl,
     } : null,
+    backlogItemId,
+    autoFileReason,
   };
 }
 
@@ -217,6 +240,7 @@ async function listActiveFindings(
       affectedType: true,
       affectedId: true,
       lastSeenAt: true,
+      evidence: true,
       bomComponent: {
         select: {
           name: true,

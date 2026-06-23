@@ -39,6 +39,8 @@ const baseFinding = {
     version: "1.2.0",
     packageUrl: "pkg:npm/vulnerable-lib@1.2.0",
   },
+  backlogItemId: null,
+  autoFileReason: null,
 };
 
 describe("AssuranceFindingsList", () => {
@@ -91,5 +93,29 @@ describe("AssuranceFindingsList", () => {
 
     expect(screen.queryByTestId("assurance-finding-status-select")).not.toBeInTheDocument();
     expect(screen.queryByTestId("assurance-finding-create-backlog")).not.toBeInTheDocument();
+  });
+
+  it("shows the linked backlog item in read-only mode when auto-filed", () => {
+    render(
+      <AssuranceFindingsList
+        findings={[{ ...baseFinding, backlogItemId: "BI-AUTO-1", autoFileReason: "auto-file:critical" }]}
+        readOnly
+      />,
+    );
+
+    expect(screen.getByTestId("assurance-finding-linked")).toHaveTextContent("Linked BI-AUTO-1");
+  });
+
+  it("shows a friendly disposition label when a finding is suppressed", () => {
+    render(
+      <AssuranceFindingsList
+        findings={[{ ...baseFinding, autoFileReason: "stale-sandbox: hono@4.12.19 not resolved on main (main: 4.12.25)" }]}
+        readOnly
+      />,
+    );
+
+    const disposition = screen.getByTestId("assurance-finding-disposition");
+    expect(disposition).toHaveTextContent("Resolved on main (stale build)");
+    expect(disposition).toHaveAttribute("title", expect.stringContaining("stale-sandbox"));
   });
 });

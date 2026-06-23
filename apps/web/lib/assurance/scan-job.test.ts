@@ -167,4 +167,49 @@ describe("runBuildAssuranceScan", () => {
 
     expect(db.toolExecution.create).not.toHaveBeenCalled();
   });
+
+  it("does not auto-file by default (no backlog writes without opt-in)", async () => {
+    const db = createDb();
+    const runAudit = vi.fn(async () => ({ stdout: SAMPLE_AUDIT_JSON, exitCode: 1 }));
+
+    const result = await runBuildAssuranceScan({
+      db: db as never,
+      buildId: "BUILD-1",
+      requestedByUserId: "user-1",
+      projectRoot: "/app",
+      now: new Date("2026-05-22T00:00:00.000Z"),
+      runAudit,
+    });
+
+    expect(result).toEqual(expect.objectContaining({ autoFiled: 0, suppressed: 0, evidenceOnly: 0 }));
+  });
+
+  it("auto-files genuine findings through the injected front door when enabled", async () => {
+    const db = createDb();
+    const runAudit = vi.fn(async () => ({ stdout: SAMPLE_AUDIT_JSON, exitCode: 1 }));
+    const ingest = vi.fn(async () => ({ itemId: "BI-AF-1", id: "cuid-af-1", created: true }));
+
+    const result = await runBuildAssuranceScan({
+      db: db as never,
+      buildId: "BUILD-1",
+      requestedByUserId: "user-1",
+      projectRoot: "/app",
+      now: new Date("2026-06-22T00:00:00.000Z"),
+      runAudit,
+      autoFile: {
+        enabled: true,
+        context: { available: true, acceptedAdvisoryIds: new Set(), resolvedVersionsByPackage: new Map() },
+        ingest,
+      },
+    });
+
+    expect(result).toEqual(expect.objectContaining({ skipped: false, autoFiled: 1, suppressed: 0, evidenceOnly: 0 }));
+    expect(ingest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Remediate: Critical issue in alpha",
+        workType: "bug",
+        origin: { kind: "assuranceFinding", id: expect.any(String) },
+      }),
+    );
+  });
 });

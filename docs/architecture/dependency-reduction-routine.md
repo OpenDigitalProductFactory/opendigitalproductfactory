@@ -182,6 +182,32 @@ scripts here are written to be that reusable engine (importable, no install). Th
 assurance-ledger design already anticipates this — scanners are *adapters* that
 read the BOM (`adapterKey`, e.g. `osv-scanner`) and emit `AssuranceFinding`s.
 
+## In-platform Assurance Gate: auto-file + reconcile (BI-91D1524F)
+
+The scripts above are the GitHub-side routine. Inside the platform runtime the
+**Build Studio Assurance Gate** runs the same OSV/pnpm-audit idea per build
+(`apps/web/lib/assurance/*`). Its findings used to convert to backlog items only
+via a **manual per-finding button**, so they accumulated as an invisible parallel
+queue, and it did not honor `sbom/vuln-baseline.json` — so an accepted advisory
+(js-yaml) was re-filed, and a build whose tree lagged main's overrides filed 24
+already-fixed "Remediate" items.
+
+The gate now **auto-files genuine findings** through the shared `ingestBacklogItem`
+front door (EP-INTAKE-UNIFY) after a **reconcile** step, and the findings panel is
+read-only evidence (linked BI / disposition, no manual button):
+
+- **Reconcile before filing** (`finding-reconcile.ts` + `advisory-context.ts`):
+  suppress findings that are accepted+unexpired in `sbom/vuln-baseline.json`,
+  already linked, or whose vulnerable version main no longer resolves
+  (`pnpm-lock.yaml`). **Fails closed** — if the canonical context can't be loaded
+  it does not auto-create work.
+- **Severity policy** (founder kernel `principle_decide`, 2026-06-22, severity-
+  tiered): high/critical → build BI, moderate → deferred BI, low/info → evidence.
+
+Plan: `docs/superpowers/plans/2026-06-22-assurance-gate-auto-file-fold-plan.md`.
+The script-side baseline (`vuln-baseline.json`) is the shared accept ledger both
+the OSV script and the in-platform gate honor.
+
 ## Backlog
 
 Under `EP-ASSURANCE-LEDGER`.
