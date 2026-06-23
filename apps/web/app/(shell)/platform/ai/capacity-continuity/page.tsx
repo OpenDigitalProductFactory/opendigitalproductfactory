@@ -122,7 +122,7 @@ export default function CapacityContinuityPage() {
               <Link href="/platform/ai/operations-map" className="text-[var(--dpf-accent)] hover:underline">
                 Operations Map
               </Link>
-              <Link href="/platform/ai/capability-needs" className="text-[var(--dpf-accent)] hover:underline">
+              <Link href="/ops?origin=capability-need" className="text-[var(--dpf-accent)] hover:underline">
                 Capability Needs
               </Link>
               <Link href="/workspace" className="text-[var(--dpf-accent)] hover:underline">

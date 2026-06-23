@@ -12,7 +12,7 @@ import { SurfacePlatformGrid } from "@/components/workbooks/SurfacePlatformGrid"
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams?: Promise<{ itemId?: string; view?: string }>;
+  searchParams?: Promise<{ itemId?: string; view?: string; origin?: string }>;
 };
 
 export default async function OpsPage({ searchParams }: Props) {
@@ -66,6 +66,7 @@ export default async function OpsPage({ searchParams }: Props) {
           epics={epics}
           portfolios={portfolios}
           focusedItemId={sp?.itemId}
+          initialOrigin={sp?.origin}
         />
       )}
     </div>

@@ -541,7 +541,9 @@ function buildCommandStrip(input: WorkspaceCommandCenterInput): CommandCenterIte
       label: "Capability investment",
       description: `${input.openCapabilityNeedCount} coworker capability need${input.openCapabilityNeedCount !== 1 ? "s are" : " is"} waiting in review`,
       severity: "info",
-      href: "/platform/ai/capability-needs",
+      // Capability needs converged into the Backlog (EP-INTAKE-UNIFY); link straight to
+      // the /ops origin lens rather than the /platform/ai/capability-needs redirect shim.
+      href: "/ops?origin=capability-need",
     });
   }
 

@@ -37,6 +37,11 @@ type Props = {
   epics: EpicWithRelations[];
   portfolios: PortfolioForSelect[];
   focusedItemId?: string;
+  /** Origin lens to pre-apply from the URL (?origin=…), e.g. a "Capability Needs"
+   *  deep-link landing on /ops?origin=capability-need shows the filtered backlog with
+   *  the Source pill already active — so the navigation reads as "capability needs live
+   *  here", not an unexplained jump into the full backlog. */
+  initialOrigin?: string;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -96,12 +101,18 @@ function SortButton({ label, field, sort, onSort }: {
   );
 }
 
-export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfolios, focusedItemId }: Props) {
+export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfolios, focusedItemId, initialOrigin }: Props) {
   const [panel, setPanel] = useState<ItemPanelState>({ open: false });
   const [epicPanel, setEpicPanel] = useState<EpicPanelState>(null);
   const [epicSort, setEpicSort] = useState<SortState>(null);
   const [hideDone, setHideDone] = useState(true);
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<Record<string, string>>(
+    // Pre-apply a valid ?origin=… lens from the URL so origin deep-links (e.g. the
+    // converged "Capability Needs" links) land on the filtered backlog, not the raw list.
+    initialOrigin && BACKLOG_ORIGIN_FILTERS.some((f) => f.value === initialOrigin)
+      ? { origin: initialOrigin }
+      : {},
+  );
   const originFilter = filters.origin ?? "";
   const portfolioFilter = filters.portfolio ?? "";
 
