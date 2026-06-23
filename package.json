@@ -34,6 +34,7 @@
     "audit:provenance": "node scripts/sbom/audit-provenance.mjs",
     "surface": "node scripts/sbom/runtime-surface.mjs",
     "candidates": "node scripts/sbom/internalization-candidates.mjs",
+    "check:singletons": "node scripts/sbom/check-singleton-safety.mjs",
     "security:secrets": "node scripts/security/run-gitleaks-local.mjs --tree",
     "security:secrets:staged": "node scripts/security/run-gitleaks-local.mjs --staged",
     "docs:tak": "node docs/architecture/generate-tak-docx.mjs",

@@ -239,6 +239,27 @@ jobs:
       - name: Run guard
         run: node scripts/sbom/check-new-dependencies.mjs
 
+  singleton-safety-guard:
+    name: Singleton Safety Guard
+    runs-on: ubuntu-latest
+    # Dual-package-hazard gate. Most duplicate packages are harmless utilities,
+    # but a singleton / instanceof / global-state library (react, react-dom, zod,
+    # redux, immer, graphql, emotion, @tanstack/react-query, ...) breaks when two
+    # copies load in one runtime: instanceof fails across them and state desyncs.
+    # Fails when such a library goes MULTI-MAJOR in the PRODUCTION-RUNTIME closure
+    # (where it bites — not build/dev tooling, not apps/mobile's separate
+    # react-native renderer). Ignores the ~200 harmless utility dups. Reviewed
+    # exceptions live in sbom/singleton-baseline.json. Pure Node, network-free.
+    # See docs/architecture/dependency-reduction-routine.md.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/sbom/check-singleton-safety.mjs
+
   decision-baseline:
     name: Decision Baseline
     runs-on: ubuntu-latest
