@@ -15,20 +15,13 @@
 // why. The DB read/write lives in escalation-hygiene-runner.ts so this stays
 // trivially unit-testable.
 
-/** Originating-item triage outcomes that mean the work will NOT be done. */
+// Originating-item triage outcomes that mean the work will NOT be done. Note:
+// a `deferred` status spans BOTH "parked, still wanted" (triageOutcome build /
+// runbook / coworker-task / defer) AND "discarded" (triageOutcome discard /
+// duplicate), so staleness keys off triageOutcome, not status alone. Everything
+// not proven stale (still triaging/open/in-progress, or deferred-and-wanted, or
+// an unknown future status) is conservatively kept by resolveReason's fall-through.
 const WONT_DO_TRIAGE_OUTCOMES = new Set(["discard", "duplicate"]);
-
-/**
- * Backlog statuses that mean the originating work is still a live, pending
- * decision — an escalation against one of these is NOT stale and is kept.
- *
- * `deferred` is deliberately NOT in this set, and also NOT treated as stale:
- * a `deferred` item spans BOTH "parked, still wanted" (triageOutcome build /
- * runbook / coworker-task / defer) AND "discarded" (triageOutcome discard /
- * duplicate). The won't-do case is caught by triageOutcome below; everything
- * else deferred is the genuine "waiting for a human" state and is kept.
- */
-const PENDING_BACKLOG_STATUSES = new Set(["triaging", "open", "in-progress"]);
 
 export interface EscalationStalenessRow {
   reportId: string;
