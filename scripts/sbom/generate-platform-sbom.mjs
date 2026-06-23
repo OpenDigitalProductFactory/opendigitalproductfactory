@@ -310,7 +310,7 @@ function renderMarkdown({ analysis, images, gitRef, generatedAt }) {
   L.push(`- **${t.excessInstances}** redundant package instances could in principle be collapsed (sum of versions − 1 per name).`);
   L.push(`- **${t.multiMajorNames}** of those span **multiple major versions** — the high-value targets (real duplicate code, larger trees, version-skew risk), as opposed to cheap patch drift.`);
   L.push(`- **${t.firstPartyDivergentNames}** are **first-party divergent** — *our own* workspace declarations resolve to different versions. Fully controllable now, no upstream wait.`);
-  L.push(`- **${t.dedupeCandidateNames}** are **same-major drift, not yet pinned** — zero-risk \`pnpm dedupe\` candidates.`);
+  L.push(`- **${t.dedupeCandidateNames}** are **same-major drift** — an UPPER BOUND on \`pnpm dedupe\` (it only collapses the subset whose consumer ranges overlap; run \`pnpm dedupe --check\` for the real count).`);
   L.push(`- **${t.directButTransitiveNames}** are declared by us but **our specifiers already agree** — the extra versions are transitive, so an override risks breaking the consumer that needs the other version.`);
   L.push("");
   L.push("### Tier 1 — first-party divergence (we control these now)");
@@ -323,9 +323,9 @@ function renderMarkdown({ analysis, images, gitRef, generatedAt }) {
     L.push(`| \`${d.name}\` | **${d.ourVersions.join(", ")}** | ${d.versions.join(", ")} | ${d.majors.join(", ")} | ${d.directInWorkspaces.join(", ")} |`);
   }
   L.push("");
-  L.push(`### Tier 2 — safe \`pnpm dedupe\` candidates (${t.dedupeCandidateNames} names, same-major drift)`);
+  L.push(`### Tier 2 — same-major duplicates (${t.dedupeCandidateNames} names — UPPER BOUND on dedupe)`);
   L.push("");
-  L.push("Same major, multiple minor/patch versions, not already pinned. `pnpm dedupe` collapses these against the existing semver ranges with no API risk.");
+  L.push("Same major, multiple minor/patch versions, not already pinned. This is an UPPER BOUND — `pnpm dedupe` only collapses the subset whose consumer ranges actually overlap; the rest are pinned to distinct sub-ranges by their consumers and are NOT safely collapsible. `pnpm dedupe --check` gives the true count.");
   L.push("");
   L.push("| Package | Versions |");
   L.push("| --- | --- |");
