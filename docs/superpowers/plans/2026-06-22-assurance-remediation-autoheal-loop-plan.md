@@ -35,9 +35,22 @@ selects `status=open` + `triageOutcome=build`) never picks them up.
 - Per item (within budget): set `status=open` + `triageOutcome=build`, then
   `promoteBacklogItemToBuildDraft` → Ideate → BS builds the override bump → PR.
   **No auto-merge here** (awaits P2).
-- General 14:00 tee-up **excludes assurance-origin BIs** so this lane stays
-  off-hours + own-budget.
+- General 14:00 tee-up: no exclusion needed — the triage transition + promote run
+  in ONE transaction (rollback on failure) and `promoteBacklogItemToBuildDraft`
+  sets `activeBuildId`, which the general tee-up's `activeBuildId: null` filter
+  already excludes. So an assurance BI is never visible to the general lane as a
+  bare open+build item.
 - Tests: selector matrix + off-hours gating. Register in the scheduling catalog.
+
+**Implemented (BI-7C121CCF):** `apps/web/lib/assurance/remediation-teeup.ts`
+(`selectAssuranceRemediationCandidates` + `isAssuranceRemediationWindowOpen` +
+`resolveRemediationBudget` + `runAssuranceRemediationTeeUp`) + test;
+`apps/web/lib/queue/functions/assurance-remediation-teeup.ts` (inngest cron
+`assurance/remediation-tee-up-scheduled`, `41 * * * *`, gated to 02:00–06:00 UTC +
+quiescence); registered in `queue/functions/index.ts` + the scheduled-jobs catalog
+(parity test). Budget: per-run cap `ASSURANCE_REMEDIATION_BUDGET` (default 2);
+gated on `governedBacklogEnabled`. A spend-based budget (spend-intelligence) is a
+later refinement.
 
 ## Phase 2 — WWMD-gated autonomous merge + escalate (BI-204EE70B)
 

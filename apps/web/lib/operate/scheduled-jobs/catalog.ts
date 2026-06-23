@@ -279,6 +279,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "assurance-remediation-tee-up",
+    inngestId: "assurance/remediation-tee-up-scheduled",
+    name: "Assurance remediation tee-up",
+    purpose:
+      "Off-hours, budget-capped auto-promotion of genuine high/critical assurance findings into Build Studio remediation builds. If it stops, auto-filed vulnerability BIs sit unworked.",
+    cron: "41 * * * *",
+    cadence: "Hourly at :41 — acts only in the 02:00–06:00 UTC off-hours window",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "material-freshness-decay",
     inngestId: "decision/material-freshness-decay",
     name: "Material freshness decay",

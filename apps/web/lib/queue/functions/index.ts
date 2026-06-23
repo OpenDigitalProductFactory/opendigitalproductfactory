@@ -25,6 +25,7 @@ import {
   governedBacklogTeeUpRequested,
   governedBacklogTeeUpScheduled,
 } from "./governed-backlog-tee-up";
+import { assuranceRemediationTeeUpScheduled } from "./assurance-remediation-teeup";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
 import {
   contributorInventorySyncCron,
@@ -68,6 +69,7 @@ export const scheduledFunctions = [
   agentTaskDispatch,
   taskrunWatchdog,
   governedBacklogTeeUpScheduled,
+  assuranceRemediationTeeUpScheduled, // BI-7C121CCF: off-hours, budget-capped assurance remediation lane
   tokenExpiryMonitor,
   contributorInventorySyncCron,
   wikiLint,
