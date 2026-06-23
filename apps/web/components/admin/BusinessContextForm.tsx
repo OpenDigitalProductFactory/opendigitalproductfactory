@@ -9,6 +9,7 @@ import {
 import { EmailInput } from "@/components/ui/EmailInput";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { BusinessDocumentUpload } from "@/components/admin/BusinessDocumentUpload";
+import { RosterImport } from "@/components/admin/RosterImport";
 import { MarketContextFields } from "@/components/admin/MarketContextFields";
 import {
   COUNTRY_OPTIONS,
@@ -373,6 +374,9 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
 
         {/* Business document upload (optional) */}
         <BusinessDocumentUpload />
+
+        {/* Employee-roster CSV import (optional) — EP-ONBOARDING-INTAKE P4 */}
+        <RosterImport />
 
         {/* Target market */}
         <label style={labelStyle}>
