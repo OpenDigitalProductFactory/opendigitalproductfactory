@@ -9,6 +9,7 @@
 
 import { prisma } from "@dpf/db";
 import { ISSUE_REPORT_STATUS } from "./issue-report-status";
+import type { StoredResponderDecision } from "./escalation-responder";
 
 export interface OpenEscalation {
   reportId: string;
@@ -21,6 +22,8 @@ export interface OpenEscalation {
   createdAt: string;
   /** FeatureBuild public id (FB-*) for the /build deep-link, if linked. */
   buildId: string | null;
+  /** Pre-computed WWMD recommendation from the responder sweep (§14), if consulted. */
+  responderDecision: StoredResponderDecision | null;
 }
 
 /** Human label for a self-fix-feasibility class (escalate-build-to-human's
@@ -80,6 +83,7 @@ export async function getOpenEscalations(): Promise<OpenEscalation[]> {
       status: true,
       createdAt: true,
       featureBuildId: true,
+      responderDecision: true,
     },
   });
 
@@ -105,5 +109,26 @@ export async function getOpenEscalations(): Promise<OpenEscalation[]> {
     status: r.status,
     createdAt: r.createdAt.toISOString(),
     buildId: r.featureBuildId ? buildIdByPk.get(r.featureBuildId) ?? null : null,
+    responderDecision: asStoredResponderDecision(r.responderDecision),
   }));
+}
+
+/** Coerce the stored responder JSON back to the display shape. We control the
+ *  shape the sweep writes, so a light structural guard is enough. */
+function asStoredResponderDecision(value: unknown): StoredResponderDecision | null {
+  if (
+    value &&
+    typeof value === "object" &&
+    "status" in value &&
+    "operatorActionLabel" in value &&
+    "reasonSummary" in value
+  ) {
+    const o = value as Record<string, unknown>;
+    return {
+      status: String(o.status),
+      operatorActionLabel: String(o.operatorActionLabel),
+      reasonSummary: String(o.reasonSummary),
+    };
+  }
+  return null;
 }

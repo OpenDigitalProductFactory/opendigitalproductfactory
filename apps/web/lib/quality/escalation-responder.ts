@@ -105,3 +105,61 @@ export function escalationConsultStatusLabel(status: string): string {
       return "Consulted";
   }
 }
+
+// ─── Dial-up: autonomous pre-consult sweep (§14) ─────────────────────────────
+// The cron sweep consults each held escalation ONCE (advisory) and stores the
+// recommendation, so the /ops lens shows it without an operator click. Still
+// HITL-first: it RECORDS a recommendation, it does NOT dispose of the build —
+// the human decides. Attributed to a real bootstrap-owner principal (the runner
+// resolves it), never the banned "system" sentinel.
+
+/** The display-only slice of a decision result persisted on the escalation. */
+export interface StoredResponderDecision {
+  status: string;
+  operatorActionLabel: string;
+  reasonSummary: string;
+}
+
+/** Project a governed decision result down to the stored, display-only shape. Pure. */
+export function toStoredResponderDecision(
+  result: Pick<BuildStudioDecisionResult, "status" | "operatorActionLabel" | "reasonSummary">,
+): StoredResponderDecision {
+  return {
+    status: result.status,
+    operatorActionLabel: result.operatorActionLabel,
+    reasonSummary: result.reasonSummary,
+  };
+}
+
+export interface ResponderSweepDeps {
+  /** Held escalations not yet consulted (responderDecidedAt IS NULL), capped. */
+  getCandidates: () => Promise<EscalationDecisionInput[]>;
+  /** Run the governed consult for one escalation's request. */
+  consult: (request: BuildStudioDecisionRequest) => Promise<BuildStudioDecisionResult>;
+  /** Persist the recommendation + decidedAt marker for one escalation. */
+  store: (reportId: string, decision: StoredResponderDecision) => Promise<void>;
+}
+
+/**
+ * Consult every held escalation that has not been consulted yet and store the
+ * recommendation. Best-effort per escalation: a failed consult leaves the row
+ * un-consulted so the next sweep retries. Pure orchestration — deps injected, so
+ * the runner wires prisma + the owner principal + evaluateBuildStudioDecision.
+ */
+export async function runEscalationResponderSweep(
+  deps: ResponderSweepDeps,
+): Promise<{ consulted: number; failed: number }> {
+  const candidates = await deps.getCandidates();
+  let consulted = 0;
+  let failed = 0;
+  for (const candidate of candidates) {
+    try {
+      const result = await deps.consult(buildEscalationDecisionRequest(candidate));
+      await deps.store(candidate.reportId, toStoredResponderDecision(result));
+      consulted += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { consulted, failed };
+}

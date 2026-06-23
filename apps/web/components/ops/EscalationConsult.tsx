@@ -1,35 +1,51 @@
-// Operator-triggered WWMD consult widget for an escalation card (BI-0ACD9AB2).
-// HITL-first (§14 dial-low): the operator clicks, the governed decision runs with
-// THEIR principal, and the kernel's recommendation is shown for the operator to
-// act on — no autonomous side effects. The autonomous sweep (dial-up) layers on
-// later once a system responder principal is designed.
+// WWMD consult widget for an escalation card (BI-0ACD9AB2).
+// Shows the recommendation either way: PRE-COMPUTED by the autonomous responder
+// sweep (§14 dial-up, passed as `initial`) or ON-DEMAND when the operator clicks
+// (dial-low, run with the operator's own principal). Advisory only — the human
+// decides; the widget never disposes of the build.
 "use client";
 
 import { useState, useTransition } from "react";
 import { consultEscalation } from "@/lib/actions/quality";
 import {
   escalationConsultStatusLabel,
-  type ConsultEscalationResult,
+  type StoredResponderDecision,
 } from "@/lib/quality/escalation-responder";
 
-export function EscalationConsult({ reportId }: { reportId: string }) {
+export function EscalationConsult({
+  reportId,
+  initial,
+}: {
+  reportId: string;
+  initial?: StoredResponderDecision | null;
+}) {
   const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<ConsultEscalationResult | null>(null);
+  const [view, setView] = useState<StoredResponderDecision | null>(initial ?? null);
+  const [error, setError] = useState<string | null>(null);
 
   const run = () =>
     startTransition(async () => {
-      setResult(await consultEscalation(reportId));
+      const res = await consultEscalation(reportId);
+      if (res.ok) {
+        setView({
+          status: res.result.status,
+          operatorActionLabel: res.result.operatorActionLabel,
+          reasonSummary: res.result.reasonSummary,
+        });
+        setError(null);
+      } else {
+        setError(res.error);
+      }
     });
 
-  if (result?.ok) {
-    const r = result.result;
+  if (view) {
     return (
       <div className="mt-1.5 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[10px] font-semibold text-[var(--dpf-accent)]">
-            WWMD: {escalationConsultStatusLabel(r.status)}
+            WWMD: {escalationConsultStatusLabel(view.status)}
           </span>
-          <span className="text-[10px] text-[var(--dpf-text)]">→ {r.operatorActionLabel}</span>
+          <span className="text-[10px] text-[var(--dpf-text)]">→ {view.operatorActionLabel}</span>
           <button
             type="button"
             onClick={run}
@@ -39,35 +55,23 @@ export function EscalationConsult({ reportId }: { reportId: string }) {
             {pending ? "…" : "Re-consult"}
           </button>
         </div>
-        <p className="mt-1 text-[11px] leading-snug text-[var(--dpf-muted)]">{r.reasonSummary}</p>
-      </div>
-    );
-  }
-
-  if (result && !result.ok) {
-    return (
-      <div className="mt-1 flex items-center gap-2">
-        <span className="text-[10px] text-[var(--dpf-muted)]">{result.error}</span>
-        <button
-          type="button"
-          onClick={run}
-          disabled={pending}
-          className="text-[10px] font-semibold text-[var(--dpf-accent)] hover:opacity-80 disabled:opacity-50"
-        >
-          {pending ? "…" : "Retry"}
-        </button>
+        <p className="mt-1 text-[11px] leading-snug text-[var(--dpf-muted)]">{view.reasonSummary}</p>
+        {error ? <p className="mt-1 text-[10px] text-[var(--dpf-muted)]">{error}</p> : null}
       </div>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={run}
-      disabled={pending}
-      className="mt-1 text-[10px] font-semibold text-[var(--dpf-accent)] hover:opacity-80 disabled:opacity-50"
-    >
-      {pending ? "Consulting WWMD…" : "Consult WWMD"}
-    </button>
+    <div className="mt-1 flex items-center gap-2">
+      <button
+        type="button"
+        onClick={run}
+        disabled={pending}
+        className="text-[10px] font-semibold text-[var(--dpf-accent)] hover:opacity-80 disabled:opacity-50"
+      >
+        {pending ? "Consulting WWMD…" : "Consult WWMD"}
+      </button>
+      {error ? <span className="text-[10px] text-[var(--dpf-muted)]">{error}</span> : null}
+    </div>
   );
 }

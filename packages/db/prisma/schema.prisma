@@ -4539,6 +4539,12 @@ model PlatformIssueReport {
   // that produced them so reflection can avoid route/time-window heuristics.
   threadId            String?
   taskRunId           String?
+  // BI-0ACD9AB2 §5.3/§14 dial-up: the autonomous responder sweep pre-computes a
+  // WWMD recommendation (status / recommended action / reason) here so the /ops
+  // attention lens shows it without an operator click. Advisory only — the human
+  // still decides. responderDecidedAt is also the "already consulted" marker.
+  responderDecision   Json?
+  responderDecidedAt  DateTime?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   upstreamIssueNumber Int?
