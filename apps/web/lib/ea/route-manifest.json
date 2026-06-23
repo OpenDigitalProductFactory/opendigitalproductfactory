@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 503,
+  "routeCount": 505,
   "routes": [
     {
       "routePath": "/",
@@ -906,6 +906,29 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/onboarding/market-context/route.ts"
+    },
+    {
+      "routePath": "/api/onboarding/roster",
+      "kind": "route",
+      "segments": [
+        "api",
+        "onboarding",
+        "roster"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/onboarding/roster/route.ts"
+    },
+    {
+      "routePath": "/api/onboarding/roster/import",
+      "kind": "route",
+      "segments": [
+        "api",
+        "onboarding",
+        "roster",
+        "import"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/onboarding/roster/import/route.ts"
     },
     {
       "routePath": "/api/ops/self-upgrade/impact-summary",
