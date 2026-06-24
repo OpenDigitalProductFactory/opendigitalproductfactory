@@ -33,6 +33,10 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // `browser_read` (navigate / extract / screenshot). One-way, as ever —
   // `browser_read` alone never implies the drive grant.
   browser_drive: ["browser_read"],
+  // CRM drafting (crm_write) implies CRM inspection (crm_read): a coworker that
+  // can draft an opportunity or quote can always read the accounts/pipeline it
+  // is drafting against. One-way — crm_read alone never implies crm_write.
+  crm_write: ["crm_read"],
 };
 
 /** Expand a list of held grants by applying GRANT_IMPLICATIONS one-way.
@@ -402,6 +406,22 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   run_traversal_pattern:  ["ea_graph_read"],
   export_archimate:       ["ea_graph_read"],
   describe_ea_view:       ["ea_graph_read"],
+
+  // Customer / CRM (EP-CRM-COWORKER). The customer workspace (accounts,
+  // engagements, pipeline, opportunities, quotes, orders) had a rich backend
+  // (lib/actions/crm.ts) and read-only pages but NO coworker tools — so the
+  // Customer Success Manager (customer-advisor) was left with only generic
+  // backlog/registry grants and flailed (it had no way to qualify an
+  // opportunity or draft a quote). These two finer grants carry the CRM tool
+  // surface: `crm_read` for inspection, `crm_write` for drafting internal
+  // records (draft opportunities/quotes — reversible, not external sends).
+  list_customer_accounts: ["crm_read"],
+  list_opportunities:     ["crm_read"],
+  get_opportunity:        ["crm_read"],
+  list_quotes:            ["crm_read"],
+  create_customer_account: ["crm_write"],
+  create_opportunity:      ["crm_write"],
+  create_quote:            ["crm_write"],
 
   // Finance
   get_finance_period_summary:   ["financial_report_create"],
