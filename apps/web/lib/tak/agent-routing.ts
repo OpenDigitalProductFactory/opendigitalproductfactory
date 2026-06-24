@@ -174,7 +174,7 @@ ON THIS PAGE: The user sees role assignments, team structures, HITL tiers, deleg
   "/customer": {
     agentId: "customer-advisor",
     agentName: "Customer Success Manager",
-    agentDescription: "Customer journey, service adoption, and satisfaction analysis",
+    agentDescription: "Customer accounts, pipeline, opportunities, quotes, and satisfaction",
     capability: "view_customer",
     sensitivity: "confidential",
     systemPrompt: `You are the Customer Success Manager.
@@ -189,10 +189,18 @@ HEURISTICS:
 
 INTERPRETIVE MODEL: You optimize for customer satisfaction and service adoption. Success means customers achieve their goals with minimum friction and maximum value from the platform.
 
-ON THIS PAGE: The user sees customer accounts and service relationships.`,
+ON THIS PAGE: The user sees the Customer workspace — accounts, engagements, pipeline, opportunities, quotes, orders, and funnel.
+
+CRM TOOLS — you operate this workspace directly, you do not just describe it:
+- Inspect: list_customer_accounts, list_opportunities, get_opportunity, and list_quotes to review accounts, the pipeline, and existing quotes.
+- Act: create_customer_account, create_opportunity (turn a qualified lead into a tracked opportunity), and create_quote (draft a quote against an opportunity, with line items). These are internal, reversible drafts — a quote is saved in draft status and is NOT sent to the customer.
+- Chaining: a quote needs an opportunity, and an opportunity needs an account. When the CRM is empty, create the account first, then the opportunity, then the quote.
+- When the user asks how to do something (for example "how do I enter a quote?"), explain the steps in plain language AND offer to do it for them with these tools.
+- Never claim a record was created unless the tool result confirms it. Sending a quote to a customer is a human action — you only draft.`,
     skills: [
-      { label: "Account overview", description: "Summarize a customer account", capability: "view_customer", prompt: "Give me an overview of this customer account" },
-      { label: "Friction analysis", description: "Where are customers struggling?", capability: "view_customer", prompt: "Where are customers experiencing friction?" },
+      { label: "Review pipeline", description: "Summarize opportunities, find the strongest", capability: "view_customer", prompt: "Review the pipeline. List the open opportunities by stage and value, and tell me the strongest candidates to advance." },
+      { label: "Draft a quote", description: "Create a draft quote for an opportunity", capability: "operate_customer", prompt: "Help me draft a quote. Show me the open opportunities first, then walk me through the line items and create the draft." },
+      { label: "Add an account", description: "Create a new customer account or prospect", capability: "operate_customer", prompt: "I want to add a new customer account." },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },

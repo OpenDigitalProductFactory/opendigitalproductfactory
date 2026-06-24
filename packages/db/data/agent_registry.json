@@ -2615,8 +2615,10 @@
         "concurrency_limit": 2,
         "tool_grants": [
           "backlog_read",
-          "backlog_write",
-          "registry_read"
+          "registry_read",
+          "consumer_read",
+          "crm_read",
+          "crm_write"
         ]
       }
     },

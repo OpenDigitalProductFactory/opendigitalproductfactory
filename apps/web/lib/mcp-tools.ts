@@ -1455,6 +1455,138 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "list_customer_accounts",
+    description: "List customer accounts in the CRM (name, status, industry, and open-opportunity count). Use this on the Customer workspace to see who the accounts/prospects are before qualifying opportunities or drafting a quote.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", description: "Optional status filter, e.g. prospect, active, at_risk, closed." },
+        limit: { type: "number", description: "Max rows (default 25, max 100)." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_customer",
+    sideEffect: false,
+  },
+  {
+    name: "list_opportunities",
+    description: "List sales-pipeline opportunities (title, stage, probability, expected value, account). Use this to review the pipeline and find the strongest candidates to qualify. Stages: qualification, discovery, proposal, negotiation, closed_won, closed_lost.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        stage: { type: "string", description: "Optional stage filter." },
+        accountId: { type: "string", description: "Filter to one account (CustomerAccount.id)." },
+        includeDormant: { type: "boolean", description: "Include dormant opportunities (default false)." },
+        limit: { type: "number", description: "Max rows (default 25, max 100)." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_customer",
+    sideEffect: false,
+  },
+  {
+    name: "get_opportunity",
+    description: "Get one opportunity with its account, contact, and existing quotes. Use this to confirm an opportunity's details and its id before drafting a quote against it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        opportunityId: { type: "string", description: "Opportunity.id or the OPP-… opportunityId." },
+      },
+      required: ["opportunityId"],
+    },
+    requiredCapability: "view_customer",
+    sideEffect: false,
+  },
+  {
+    name: "list_quotes",
+    description: "List quotes (number, status, total, account, opportunity). Use this to see existing quotes before drafting a new one. Quote statuses: draft, sent, accepted, rejected, expired, superseded.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", description: "Optional status filter, e.g. draft, sent, accepted." },
+        opportunityId: { type: "string", description: "Filter to one opportunity (Opportunity.id)." },
+        limit: { type: "number", description: "Max rows (default 25, max 100)." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_customer",
+    sideEffect: false,
+  },
+  {
+    name: "create_customer_account",
+    description: "Create a customer account (a company or prospect) in the CRM. This is the first step when the CRM is empty — an account is required before an opportunity or quote can exist. Creates an internal record only; nothing is sent to the customer.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Company / account name." },
+        website: { type: "string", description: "Optional website URL." },
+        industry: { type: "string", description: "Optional industry." },
+        status: { type: "string", description: "prospect (default) | active | at_risk | closed." },
+        notes: { type: "string", description: "Optional free-text notes." },
+      },
+      required: ["name"],
+    },
+    requiredCapability: "operate_customer",
+    sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
+    name: "create_opportunity",
+    description: "Create (propose) a sales-pipeline opportunity against an existing account. Use this to turn a qualified lead into a tracked opportunity. Defaults to the 'qualification' stage. Creates an internal record for human review; nothing is sent externally.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short opportunity title." },
+        accountId: { type: "string", description: "CustomerAccount.id this opportunity belongs to (from list_customer_accounts)." },
+        stage: { type: "string", description: "qualification (default) | discovery | proposal | negotiation." },
+        expectedValue: { type: "number", description: "Estimated deal value." },
+        currency: { type: "string", description: "ISO currency code, default USD." },
+        expectedClose: { type: "string", description: "ISO date the deal is expected to close." },
+        notes: { type: "string", description: "Optional qualification notes." },
+      },
+      required: ["title", "accountId"],
+    },
+    requiredCapability: "operate_customer",
+    sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
+    name: "create_quote",
+    description: "Draft a quote against an existing opportunity with one or more line items. Line totals, subtotal, discount, tax, and grand total are computed automatically and the quote is saved in 'draft' status — it is NOT sent to the customer. Get the opportunity id from list_opportunities / get_opportunity first.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        opportunityId: { type: "string", description: "Opportunity.id the quote is for (from list_opportunities)." },
+        validUntil: { type: "string", description: "ISO date the quote is valid until, e.g. 2026-07-31." },
+        lineItems: {
+          type: "array",
+          description: "One or more quote line items.",
+          items: {
+            type: "object",
+            properties: {
+              description: { type: "string", description: "Line description." },
+              quantity: { type: "number", description: "Quantity (default 1)." },
+              unitPrice: { type: "number", description: "Unit price." },
+              discountPercent: { type: "number", description: "Optional per-line discount %." },
+              taxPercent: { type: "number", description: "Optional per-line tax %." },
+              productId: { type: "string", description: "Optional DigitalProduct id." },
+            },
+            required: ["description", "quantity", "unitPrice"],
+          },
+        },
+        currency: { type: "string", description: "ISO currency code, default USD." },
+        discountType: { type: "string", description: "percentage (default) | fixed — header-level discount." },
+        discountValue: { type: "number", description: "Header discount amount (percent or fixed per discountType)." },
+        terms: { type: "string", description: "Optional terms text." },
+        notes: { type: "string", description: "Optional notes." },
+      },
+      required: ["opportunityId", "validUntil", "lineItems"],
+    },
+    requiredCapability: "operate_customer",
+    sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
     name: "get_finance_period_summary",
     description: "Return verified income, expenses, and net for a finance period (defaults to month-to-date). Income = sum of paid invoices; expenses = sum of paid bills + paid expense claims; net = income - expenses. Includes pending receivables/payables, multi-currency flags, source paths, and explicit gap descriptions when activity is missing. Use this whenever the user asks for a P&L figure, income vs expenses, or net cash position for a period - it is the canonical numeric answer for the Finance Specialist coworker.",
     inputSchema: {
@@ -15159,6 +15291,181 @@ export async function executeTool(
           };
         case "error":
           return { success: false, message: result.message, error: result.message };
+      }
+    }
+
+    case "list_customer_accounts": {
+      const status = typeof params["status"] === "string" ? params["status"].trim() : undefined;
+      const take = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 100) : 25;
+      const accounts = await prisma.customerAccount.findMany({
+        where: status ? { status } : undefined,
+        orderBy: { createdAt: "desc" },
+        take,
+        select: {
+          id: true, accountId: true, name: true, status: true, industry: true,
+          _count: { select: { opportunities: true, quotes: true } },
+        },
+      });
+      if (accounts.length === 0) {
+        return { success: true, message: "No customer accounts yet. Use create_customer_account to add the first one.", data: { accounts: [] } };
+      }
+      const lines = accounts.map((a) =>
+        `${a.name} (${a.accountId}) — ${a.status}${a.industry ? `, ${a.industry}` : ""} · ${a._count.opportunities} opp / ${a._count.quotes} quote`);
+      return { success: true, message: `${accounts.length} account(s):\n${lines.join("\n")}`, data: { accounts } };
+    }
+
+    case "list_opportunities": {
+      const stage = typeof params["stage"] === "string" ? params["stage"].trim() : undefined;
+      const accountId = typeof params["accountId"] === "string" ? params["accountId"].trim() : undefined;
+      const includeDormant = params["includeDormant"] === true;
+      const take = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 100) : 25;
+      const opportunities = await prisma.opportunity.findMany({
+        where: {
+          ...(stage ? { stage } : {}),
+          ...(accountId ? { accountId } : {}),
+          ...(includeDormant ? {} : { isDormant: false }),
+        },
+        orderBy: { stageChangedAt: "desc" },
+        take,
+        select: {
+          id: true, opportunityId: true, title: true, stage: true, probability: true,
+          expectedValue: true, currency: true, expectedClose: true,
+          account: { select: { name: true } },
+        },
+      });
+      if (opportunities.length === 0) {
+        return { success: true, message: "No opportunities in the pipeline yet. Use create_opportunity to add one against an account.", data: { opportunities: [] } };
+      }
+      const lines = opportunities.map((o) =>
+        `${o.title} (${o.opportunityId}) — ${o.stage} ${o.probability}% · ${o.account.name}${o.expectedValue != null ? ` · ${o.currency} ${Number(o.expectedValue).toLocaleString()}` : ""}`);
+      return { success: true, message: `${opportunities.length} opportunit${opportunities.length === 1 ? "y" : "ies"}:\n${lines.join("\n")}`, data: { opportunities } };
+    }
+
+    case "get_opportunity": {
+      const idRaw = typeof params["opportunityId"] === "string" ? params["opportunityId"].trim() : "";
+      if (!idRaw) return { success: false, error: "missing_opportunityId", message: "opportunityId is required." };
+      const opp = await prisma.opportunity.findFirst({
+        where: { OR: [{ id: idRaw }, { opportunityId: idRaw }] },
+        include: {
+          account: { select: { id: true, accountId: true, name: true } },
+          quotes: { select: { quoteNumber: true, status: true, totalAmount: true, currency: true } },
+        },
+      });
+      if (!opp) return { success: false, error: "not_found", message: `Opportunity ${idRaw} not found.` };
+      const quoteLine = opp.quotes.length
+        ? `\nQuotes: ${opp.quotes.map((q) => `${q.quoteNumber} (${q.status}, ${q.currency} ${Number(q.totalAmount).toLocaleString()})`).join("; ")}`
+        : "\nQuotes: none yet";
+      return {
+        success: true,
+        message: `${opp.title} (${opp.opportunityId}) — ${opp.stage} ${opp.probability}% · account ${opp.account.name} (id ${opp.account.id})${opp.expectedValue != null ? ` · ${opp.currency} ${Number(opp.expectedValue).toLocaleString()}` : ""}${quoteLine}`,
+        data: { opportunity: opp },
+      };
+    }
+
+    case "list_quotes": {
+      const status = typeof params["status"] === "string" ? params["status"].trim() : undefined;
+      const opportunityId = typeof params["opportunityId"] === "string" ? params["opportunityId"].trim() : undefined;
+      const take = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 100) : 25;
+      const quotes = await prisma.quote.findMany({
+        where: { ...(status ? { status } : {}), ...(opportunityId ? { opportunityId } : {}) },
+        orderBy: { createdAt: "desc" },
+        take,
+        select: {
+          quoteId: true, quoteNumber: true, status: true, totalAmount: true, currency: true, version: true,
+          account: { select: { name: true } },
+          opportunity: { select: { title: true } },
+        },
+      });
+      if (quotes.length === 0) {
+        return { success: true, message: "No quotes yet. Use create_quote to draft one against an opportunity.", data: { quotes: [] } };
+      }
+      const lines = quotes.map((q) =>
+        `${q.quoteNumber} v${q.version} — ${q.status} · ${q.currency} ${Number(q.totalAmount).toLocaleString()} · ${q.account.name} / ${q.opportunity.title}`);
+      return { success: true, message: `${quotes.length} quote(s):\n${lines.join("\n")}`, data: { quotes } };
+    }
+
+    case "create_customer_account": {
+      const name = typeof params["name"] === "string" ? params["name"].trim() : "";
+      if (!name) return { success: false, error: "missing_name", message: "name is required to create a customer account." };
+      const { createCustomerAccount } = await import("@/lib/actions/crm");
+      try {
+        const account = await createCustomerAccount({
+          name,
+          website: typeof params["website"] === "string" ? params["website"] : undefined,
+          industry: typeof params["industry"] === "string" ? params["industry"] : undefined,
+          status: typeof params["status"] === "string" ? params["status"] : undefined,
+          notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
+        });
+        return { success: true, message: `Created customer account "${account.name}" (${account.accountId}). Use its id ${account.id} as accountId when creating an opportunity.`, data: { accountId: account.id, accountRef: account.accountId } };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: "create_failed", message: `create_customer_account failed: ${msg}` };
+      }
+    }
+
+    case "create_opportunity": {
+      const title = typeof params["title"] === "string" ? params["title"].trim() : "";
+      const accountId = typeof params["accountId"] === "string" ? params["accountId"].trim() : "";
+      if (!title || !accountId) {
+        return { success: false, error: "missing_fields", message: "title and accountId are required. Use list_customer_accounts to find the accountId." };
+      }
+      const { createOpportunity } = await import("@/lib/actions/crm");
+      try {
+        const opp = await createOpportunity({
+          title,
+          accountId,
+          stage: typeof params["stage"] === "string" ? params["stage"] : undefined,
+          expectedValue: typeof params["expectedValue"] === "number" ? params["expectedValue"] : undefined,
+          currency: typeof params["currency"] === "string" ? params["currency"] : undefined,
+          expectedClose: typeof params["expectedClose"] === "string" ? params["expectedClose"] : undefined,
+          notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
+          userId,
+        });
+        return { success: true, message: `Created opportunity "${opp.title}" (${opp.opportunityId}) in ${opp.stage} for ${opp.account.name}. Use its id ${opp.id} as opportunityId when drafting a quote.`, data: { opportunityId: opp.id, opportunityRef: opp.opportunityId } };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: "create_failed", message: `create_opportunity failed: ${msg}` };
+      }
+    }
+
+    case "create_quote": {
+      const opportunityId = typeof params["opportunityId"] === "string" ? params["opportunityId"].trim() : "";
+      const validUntil = typeof params["validUntil"] === "string" ? params["validUntil"].trim() : "";
+      const rawLines = Array.isArray(params["lineItems"]) ? params["lineItems"] : [];
+      if (!opportunityId || !validUntil || rawLines.length === 0) {
+        return { success: false, error: "missing_fields", message: "opportunityId, validUntil, and at least one lineItem are required." };
+      }
+      const lineItems = rawLines.map((li) => {
+        const o = (li ?? {}) as Record<string, unknown>;
+        return {
+          description: typeof o["description"] === "string" ? o["description"] : "",
+          quantity: typeof o["quantity"] === "number" ? o["quantity"] : 1,
+          unitPrice: typeof o["unitPrice"] === "number" ? o["unitPrice"] : 0,
+          discountPercent: typeof o["discountPercent"] === "number" ? o["discountPercent"] : undefined,
+          taxPercent: typeof o["taxPercent"] === "number" ? o["taxPercent"] : undefined,
+          productId: typeof o["productId"] === "string" ? o["productId"] : undefined,
+        };
+      });
+      if (lineItems.some((l) => !l.description)) {
+        return { success: false, error: "invalid_line", message: "every lineItem needs a description." };
+      }
+      const { createQuote } = await import("@/lib/actions/crm");
+      try {
+        const quote = await createQuote({
+          opportunityId,
+          validUntil,
+          lineItems,
+          discountType: typeof params["discountType"] === "string" ? params["discountType"] : undefined,
+          discountValue: typeof params["discountValue"] === "number" ? params["discountValue"] : undefined,
+          currency: typeof params["currency"] === "string" ? params["currency"] : undefined,
+          terms: typeof params["terms"] === "string" ? params["terms"] : undefined,
+          notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
+          userId,
+        });
+        return { success: true, message: `Drafted quote ${quote.quoteNumber} — ${quote.currency} ${Number(quote.totalAmount).toLocaleString()} (status ${quote.status}). It is a draft and has not been sent to the customer.`, data: { quoteId: quote.quoteId, quoteNumber: quote.quoteNumber, totalAmount: Number(quote.totalAmount) } };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: "create_failed", message: `create_quote failed: ${msg}` };
       }
     }
 

@@ -377,6 +377,33 @@
       "implies": []
     },
     {
+      "key": "crm_read",
+      "description": "Read CRM records: customer accounts, sales-pipeline opportunities, and quotes.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "list_customer_accounts",
+        "list_opportunities",
+        "get_opportunity",
+        "list_quotes"
+      ],
+      "implies": []
+    },
+    {
+      "key": "crm_write",
+      "description": "Draft internal CRM records: customer accounts, opportunities, and draft quotes. Does not send quotes to customers.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "create_customer_account",
+        "create_opportunity",
+        "create_quote"
+      ],
+      "implies": [
+        "crm_read"
+      ]
+    },
+    {
       "key": "contract_read",
       "description": "Read contract.",
       "category": "explore",

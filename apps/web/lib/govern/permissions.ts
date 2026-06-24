@@ -21,6 +21,7 @@ export type CapabilityKey =
   | "view_inventory"
   | "view_employee"
   | "view_customer"
+  | "operate_customer"
   | "view_operations"
   | "view_platform"
   | "view_admin"
@@ -58,6 +59,10 @@ export const PERMISSIONS: Record<CapabilityKey, Permission> = {
   view_inventory:              { roles: ["HR-000", "HR-300"] },
   view_employee:               { roles: ["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500"] },
   view_customer:               { roles: ["HR-000", "HR-200"] },
+  // CRM write (draft opportunities/quotes/accounts) — same role tier as
+  // view_customer; the Customer Success Manager coworker drafts internal,
+  // reversible records (status=draft), never external sends.
+  operate_customer:            { roles: ["HR-000", "HR-200"] },
   view_operations:             { roles: ["HR-000", "HR-500"] },
   view_platform:               { roles: ["HR-000", "HR-200", "HR-300"] },
   view_admin:                  { roles: ["HR-000"] },

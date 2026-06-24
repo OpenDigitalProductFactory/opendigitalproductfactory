@@ -79,7 +79,11 @@ export default async function QuotesPage({ searchParams }: { searchParams?: Prom
       </div>
 
       {quotes.length === 0 && (
-        <p className="text-sm text-[var(--dpf-muted)]">No quotes created yet.</p>
+        <p className="text-sm text-[var(--dpf-muted)]">
+          No quotes yet. Ask the Customer Success Manager (top right) to draft one —
+          it can set up the account, opportunity, and quote for you. A quote is built
+          against an opportunity, so it will create that first if the pipeline is empty.
+        </p>
       )}
       </>)}
     </div>
