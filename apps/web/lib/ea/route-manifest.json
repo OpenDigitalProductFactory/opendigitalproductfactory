@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 516,
+  "routeCount": 517,
   "routes": [
     {
       "routePath": "/",
@@ -3566,6 +3566,15 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/customer/(crm)/sales-orders/page.tsx"
+    },
+    {
+      "routePath": "/delivery",
+      "kind": "page",
+      "segments": [
+        "delivery"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/delivery/page.tsx"
     },
     {
       "routePath": "/docs/[[...slug]]",
