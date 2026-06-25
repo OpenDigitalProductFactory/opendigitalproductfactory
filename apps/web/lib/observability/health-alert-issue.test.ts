@@ -60,6 +60,49 @@ describe("upsertHealthAlertIssue", () => {
   });
 });
 
+describe("per-customer estate scope (EP-MSP-FEDERATION A1)", () => {
+  it("leaves self-monitoring keys unprefixed (backward compatible)", () => {
+    expect(healthAlertIssueKey({ alertname: "PostgresDown" })).toBe("health-alert-PostgresDown");
+    expect(healthAlertIssueKey({ alertname: "PostgresDown" }, {})).toBe("health-alert-PostgresDown");
+  });
+
+  it("prefixes customer-scoped keys so two customers never collide on one row", () => {
+    const labels = { alertname: "InterfaceDown", service: "fw-01" };
+    const a = healthAlertIssueKey(labels, {
+      customerAccountId: "acc_a",
+      customerSiteId: "s1",
+      scopeKey: "customer:acc_a:site:s1",
+    });
+    const b = healthAlertIssueKey(labels, {
+      customerAccountId: "acc_b",
+      customerSiteId: "s1",
+      scopeKey: "customer:acc_b:site:s1",
+    });
+    expect(a).toBe("customer:acc_a:site:s1|health-alert-InterfaceDown:fw-01");
+    expect(b).toBe("customer:acc_b:site:s1|health-alert-InterfaceDown:fw-01");
+    expect(a).not.toBe(b);
+  });
+
+  it("persists scope columns on create; defaults to organization-internal", async () => {
+    const { db, upsert } = mockDb();
+    await upsertHealthAlertIssue(
+      db,
+      { labels: { alertname: "InterfaceDown", service: "fw-01" } },
+      { customerAccountId: "acc_a", customerSiteId: "s1", scopeKey: "customer:acc_a:site:s1" },
+    );
+    const create = upsert.mock.calls[0][0].create;
+    expect(create.customerAccountId).toBe("acc_a");
+    expect(create.customerSiteId).toBe("s1");
+    expect(create.scopeKey).toBe("customer:acc_a:site:s1");
+
+    const { db: db2, upsert: upsert2 } = mockDb();
+    await upsertHealthAlertIssue(db2, { labels: { alertname: "PostgresDown" } });
+    const create2 = upsert2.mock.calls[0][0].create;
+    expect(create2.customerAccountId).toBeNull();
+    expect(create2.scopeKey).toBe("organization:internal");
+  });
+});
+
 describe("resolveHealthAlertIssue", () => {
   it("flips only the open row for the key to resolved", async () => {
     const { db, updateMany } = mockDb();

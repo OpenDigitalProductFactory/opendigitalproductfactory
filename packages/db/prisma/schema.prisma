@@ -239,6 +239,10 @@ model Principal {
   // host-attributes side table keyed by `principalId`. 1:1 cardinality.
   edgeNode                            EdgeNode?                           @relation("EdgeNodeIdentity")
   edgeNodesApproved                   EdgeNode[]                          @relation("EdgeNodeApprover")
+  // EP-MSP-FEDERATION · B1 — a federated peer (another DPF deployment) is a
+  // Principal(kind="federated-peer") with FederationLink as its side table,
+  // exactly as EdgeNode is for an edge agent. No parallel identity table.
+  federationLink                      FederationLink?                     @relation("FederationLinkIdentity")
   bootstrapTokensIssued               BootstrapToken[]                    @relation("BootstrapTokenIssuer")
   ownedDocuments                      Document[]                          @relation("DocumentOwner")
   createdDocuments                    Document[]                          @relation("DocumentCreator")
@@ -2337,6 +2341,8 @@ model CustomerAccount {
   inventoryEntities      InventoryEntity[]           @relation("InventoryEntityCustomerAccount")
   inventoryRelationships InventoryRelationship[]     @relation("InventoryRelationshipCustomerAccount")
   masterDataSourceRefs   MasterDataSourceRef[]       @relation("CustomerAccountMdmSourceRef")
+  qualityIssues          PortfolioQualityIssue[]     @relation("QualityIssueCustomerAccount")
+  serviceTickets         ServiceTicket[]             @relation("ServiceTicketCustomerAccount")
 
   @@index([status])
   @@index([parentAccountId])
@@ -2367,11 +2373,82 @@ model CustomerSite {
   discoveryConnections   DiscoveryConnection[]
   inventoryEntities      InventoryEntity[]           @relation("InventoryEntityCustomerSite")
   inventoryRelationships InventoryRelationship[]     @relation("InventoryRelationshipCustomerSite")
+  qualityIssues          PortfolioQualityIssue[]     @relation("QualityIssueCustomerSite")
+  serviceTickets         ServiceTicket[]             @relation("ServiceTicketCustomerSite")
 
   @@index([accountId])
   @@index([primaryAddressId])
   @@index([status])
   @@index([siteType])
+}
+
+// ── EP-MSP-FEDERATION · A3 — customer service desk (BI-99FEA7FA) ──────────────
+// ONE canonical customer-facing work record discriminated by `ticketKind`
+// (incident | request | change | scheduled-review) — not four premature tables
+// (reviewed spec §6.A3). Distinct from the internal-ops PlatformIssueReport.
+// Born from A2 correlated incidents (correlatedIncidentKey) and routed by the
+// A1 estate-scope columns. Status/kind closed unions live in
+// packages/db/src/service-ticket-types.ts (hyphenated per the WS-0 convergence
+// rule). Soft references (configurationItemId, serviceAgreementId, edgeNodeId,
+// correlatedIncidentKey, ownerPrincipalId) keep cross-model blast radius low in
+// this slice; FK relations are added when the linked behaviors land.
+model ServiceTicket {
+  id                    String                 @id @default(cuid())
+  ticketId              String                 @unique
+  ticketKind            String                 @default("incident")
+  status                String                 @default("open")
+  priority              String                 @default("normal")
+  severity              String?
+  title                 String
+  description           String?
+  // Estate scope (A1 routing columns; canonical source is the owning node/CI).
+  customerAccountId     String?
+  customerSiteId        String?
+  scopeKey              String?
+  // Linkage (soft references this slice).
+  configurationItemId   String?
+  serviceAgreementId    String?
+  edgeNodeId            String?
+  correlatedIncidentKey String?
+  // SLA + ownership.
+  slaPolicy             Json?
+  slaDueAt              DateTime?
+  ownerPrincipalId      String?
+  // Lifecycle timestamps.
+  openedAt              DateTime               @default(now())
+  acknowledgedAt        DateTime?
+  resolvedAt            DateTime?
+  closedAt              DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  customerAccount       CustomerAccount?       @relation("ServiceTicketCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite          CustomerSite?          @relation("ServiceTicketCustomerSite", fields: [customerSiteId], references: [id], onDelete: SetNull)
+  comments              ServiceTicketComment[]
+
+  @@index([ticketKind])
+  @@index([status])
+  @@index([priority])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
+  @@index([scopeKey])
+  @@index([correlatedIncidentKey])
+  @@index([slaDueAt])
+}
+
+model ServiceTicketComment {
+  id                String        @id @default(cuid())
+  ticketId          String
+  authorPrincipalId String?
+  // operator | customer | agent | system
+  authorKind        String        @default("operator")
+  body              String
+  // internal | customer  — gates what a federated/customer viewer may read.
+  visibility        String        @default("internal")
+  createdAt         DateTime      @default(now())
+  ticket            ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
 }
 
 model CustomerConfigurationItem {
@@ -3790,11 +3867,22 @@ model PortfolioQualityIssue {
   portfolioId             String?
   taxonomyNodeId          String?
   digitalProductId        String?
+  // EP-MSP-FEDERATION · A1 (BI-8777B85A) — per-customer/site routing scope.
+  // Denormalized from the originating EdgeNode / InventoryEntity (the canonical
+  // scope source) via the estate-scope resolver so the operator inbox can route
+  // a firing issue to the right customer queue instead of one global inbox.
+  // NULL customerAccountId / scopeKey="organization:internal" = the operator's
+  // own estate (self-monitoring), preserving backward-compatible behavior.
+  customerAccountId       String?
+  customerSiteId          String?
+  scopeKey                String?
   digitalProduct          DigitalProduct?           @relation(fields: [digitalProductId], references: [id])
   inventoryEntity         InventoryEntity?          @relation(fields: [inventoryEntityId], references: [id])
   inventoryRelationship   InventoryRelationship?    @relation(fields: [inventoryRelationshipId], references: [id])
   portfolio               Portfolio?                @relation(fields: [portfolioId], references: [id])
   taxonomyNode            TaxonomyNode?             @relation(fields: [taxonomyNodeId], references: [id])
+  customerAccount         CustomerAccount?          @relation("QualityIssueCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite            CustomerSite?             @relation("QualityIssueCustomerSite", fields: [customerSiteId], references: [id], onDelete: SetNull)
   triageDecisions         DiscoveryTriageDecision[]
 
   @@index([issueType])
@@ -3803,6 +3891,9 @@ model PortfolioQualityIssue {
   @@index([portfolioId])
   @@index([taxonomyNodeId])
   @@index([digitalProductId])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
+  @@index([scopeKey])
 }
 
 model DiscoveryTriageDecision {
@@ -10413,6 +10504,170 @@ model ChangeEvent {
   @@index([edgeNodeId, occurredAt])
   @@index([source])
   @@index([occurredAt])
+}
+
+// ── EP-MSP-FEDERATION · B1 — sovereign-peer federation link (BI-130107D6) ─────
+// The edge-node enrollment handshake generalized to deployment-to-deployment.
+// Two sovereign DPF Authority Cores connect through a dual-approved, outbound-
+// only, revocable channel. Identity lives on Principal(kind="federated-peer")
+// with FederationLink as the side table — mirrors EdgeNode↔Principal. Trust is
+// derived via resolveLinkTrust (trust-link-lifecycle.ts) from the approval
+// timestamps; authorization resolves on Principal + AuthorityBinding (soft ref).
+model FederationLink {
+  id                    String                     @id @default(cuid())
+  linkId                String                     @unique
+  principalId           String                     @unique
+  // This deployment's perspective: "manages" (we are the MSP) or "managed-by"
+  // (we are the sovereign customer being managed).
+  role                  String
+  // Outbound-only base URL of the peer Authority Core. No inbound listener is
+  // required on a sovereign customer.
+  peerAuthorityUrl      String
+  // The peer's org identifier + our own org, for the B5 CustomerAccount↔Org crosswalk.
+  peerOrganizationRef   String?
+  localOrganizationId   String?
+  // Trust state — derived from the approval/revoke/quarantine timestamps below.
+  linkState             String                     @default("pending")
+  // Dual approval: trusted only when BOTH approvedAt* are set.
+  approvedAtLocal       DateTime?
+  approvedAtPeer        DateTime?
+  approvedByPrincipalId String?
+  quarantinedAt         DateTime?
+  quarantineReason      String?
+  revokedAt             DateTime?
+  revocationReason      String?
+  // Auth: dpflink_* link token, hashed at rest, rotating (mirrors EdgeNode).
+  tokenHash             String?                    @unique
+  tokenPrefix           String?
+  tokenRotatedAt        DateTime?
+  // Negotiated scope + authority (soft refs to ProjectionContract (B2) and
+  // AuthorityBinding (the band) to keep cross-model blast radius low).
+  projectionContractId  String?
+  authorityBindingId    String?
+  metadata              Json?
+  enrolledAt            DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  principal             Principal                  @relation("FederationLinkIdentity", fields: [principalId], references: [id], onDelete: Cascade)
+  bootstrapTokens       FederationBootstrapToken[] @relation("FederationBootstrapConsumer")
+
+  @@index([linkState])
+  @@index([role])
+  @@index([tokenHash])
+  @@index([peerOrganizationRef])
+}
+
+// Single-use invitation, mirrors BootstrapToken. The inviting peer issues a
+// dpffboot_* token bound to the role offered, a proposed projection scope, and a
+// proposed authority band; the accepting peer redeems it once at enrollment.
+model FederationBootstrapToken {
+  id                    String          @id @default(cuid())
+  tokenHash             String          @unique
+  prefix                String
+  // Role OFFERED to the accepting peer (it receives the inverse of the inviter's role).
+  offeredRole           String
+  proposedProjection    Json?
+  proposedAuthorityBand Json?
+  issuedAt              DateTime        @default(now())
+  issuedByPrincipalId   String
+  expiresAt             DateTime
+  consumedAt            DateTime?
+  consumedByLinkId      String?
+  revokedAt             DateTime?
+
+  link                  FederationLink? @relation("FederationBootstrapConsumer", fields: [consumedByLinkId], references: [id])
+
+  @@index([consumedByLinkId])
+  @@index([expiresAt])
+}
+
+// ── EP-MSP-FEDERATION · B2 — scoped estate projection contract (BI-4F8F50FD) ──
+// Per-link allow-list of exactly what crosses the FederationLink — never raw
+// data. The pure serializer (projection-serialization.ts) enforces this plus a
+// hard forbidden-field guard at egress. Stored as a dedicated table (not JSON on
+// the link) so per-field allow/deny + CADA posture are queryable at egress and
+// the last negative-egress test result is auditable (spec §15.1).
+model ProjectionContract {
+  id                String    @id @default(cuid())
+  contractId        String    @unique
+  // Soft ref to the FederationLink (which carries projectionContractId back).
+  federationLinkId  String?
+  includeSlices     String[]
+  excludeSlices     String[]
+  fieldAllowList    Json?
+  retentionClass    String    @default("standard")
+  cadaPosture       Json?
+  reviewCadenceDays Int?
+  lastTestResult    Json?
+  lastTestedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([federationLinkId])
+}
+
+// ── EP-MSP-FEDERATION · B3 + B5 — generic federated record mirror (BI-3179B48E /
+// BI-E2398997). One mirror/crosswalk table for everything that syncs over a
+// link: incident→ticket mirrors (B3) and CustomerAccount↔Organization crosswalk
+// (B5). Canonical record stays SOURCE-SIDE; the peer holds a governed mirror.
+// recordType discriminates rather than spawning per-kind tables (spec §7.4).
+model FederatedRecordMirror {
+  id               String    @id @default(cuid())
+  mirrorId         String    @unique
+  federationLinkId String
+  // "incident" | "service-ticket" | "organization-crosswalk"
+  recordType       String
+  // Which side holds the canonical record: "local" | "peer".
+  canonicalSide    String
+  localRecordRef   String?
+  peerRecordRef    String?
+  // pending | synced | conflict | revoked
+  syncStatus       String    @default("pending")
+  version          Int       @default(1)
+  conflictReason   String?
+  lastSyncedAt     DateTime?
+  // Last projected (already minimized) payload that crossed — never raw data.
+  payload          Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([federationLinkId, recordType, localRecordRef], map: "FederatedRecordMirror_link_type_local_key")
+  @@index([federationLinkId])
+  @@index([recordType])
+  @@index([syncStatus])
+}
+
+// ── EP-MSP-FEDERATION · B4 — cross-org remediation proposal (BI-3C21D4E2) ──────
+// The specialized side table over the AgentActionProposal + AuthorityBinding
+// substrate (spec §11.5 — audited as not covering headless cross-org proposals,
+// so a specialization, NOT a second approval engine). A proposal crosses the
+// link as a PROPOSAL; it lands on the CUSTOMER's Attention Surface and executes
+// on the CUSTOMER's own runner. The MSP never gains standing execute rights.
+model FederatedRemediationProposal {
+  id                   String    @id @default(cuid())
+  proposalId           String    @unique
+  federationLinkId     String
+  incidentKey          String
+  edgeNodeId           String?
+  // RemediationActionDraft[] (each with its per-action authority decision).
+  actions              Json
+  // auto-approve | needs-human-approval | refuse (the band gate).
+  overallDecision      String
+  // proposed | approved | rejected | executed | expired
+  status               String    @default("proposed")
+  // Attention Surface item on the CUSTOMER side, when human approval is needed.
+  attentionItemRef     String?
+  decidedAt            DateTime?
+  decidedByPrincipalId String?
+  executedAt           DateTime?
+  executionEvidenceRef String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([federationLinkId])
+  @@index([status])
+  @@index([incidentKey])
 }
 
 // ─── Integration Coverage Matrix ─────────────────────────────────────────────

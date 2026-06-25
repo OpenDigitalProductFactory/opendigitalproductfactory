@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 508,
+  "routeCount": 509,
   "routes": [
     {
       "routePath": "/",
@@ -2128,6 +2128,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/edge/metrics/route.ts"
+    },
+    {
+      "routePath": "/api/v1/federation/enroll",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "enroll"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/enroll/route.ts"
     },
     {
       "routePath": "/api/v1/finance/assets",

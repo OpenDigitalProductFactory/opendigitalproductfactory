@@ -15,6 +15,27 @@
 
 export type HealthAlertSeverity = "info" | "warn" | "error";
 
+/**
+ * EP-MSP-FEDERATION · A1 (BI-8777B85A) — per-customer/site routing scope.
+ *
+ * Resolved by the caller via the `@dpf/db` estate-scope resolver from the
+ * originating EdgeNode / InventoryEntity (the canonical source). Self-monitoring
+ * alerts (Prometheus/Loki on the operator's own containers) pass no scope and
+ * stay organization-internal, which is backward-compatible. Edge-derived issues
+ * pass scope so the operator inbox routes them to the right customer queue and
+ * two customers with the same alert never collide on one row.
+ */
+export interface HealthAlertScope {
+  customerAccountId?: string | null;
+  customerSiteId?: string | null;
+  /** e.g. `customer:acc_1:site:s_1` or `organization:internal`. */
+  scopeKey?: string | null;
+}
+
+function isCustomerScopedAlert(scope?: HealthAlertScope): boolean {
+  return Boolean(scope?.customerAccountId);
+}
+
 /** Normalized alert input shared by the push (webhook) and poll (cron) paths. */
 export interface IncomingHealthAlert {
   labels: Record<string, string>;
@@ -49,10 +70,36 @@ export interface HealthAlertDb {
  * no service/instance/job label fall back to the bare alertname (backward
  * compatible with the original webhook key shape).
  */
-export function healthAlertIssueKey(labels: Record<string, string>): string {
+export function healthAlertIssueKey(
+  labels: Record<string, string>,
+  estateScope?: HealthAlertScope,
+): string {
   const name = labels.alertname ?? "unknown";
-  const scope = labels.service || labels.instance || labels.job || null;
-  return scope ? `health-alert-${name}:${scope}` : `health-alert-${name}`;
+  const label = labels.service || labels.instance || labels.job || null;
+  const base = label ? `health-alert-${name}:${label}` : `health-alert-${name}`;
+  // Customer-scoped issues are prefixed with the estate scope key so two
+  // customers (or a customer and the operator's own estate) firing the same
+  // alert never collapse onto one row. Canonical key grammar: estate-scope.ts.
+  if (isCustomerScopedAlert(estateScope)) {
+    const prefix = estateScope!.scopeKey || `customer:${estateScope!.customerAccountId}`;
+    return `${prefix}|${base}`;
+  }
+  return base;
+}
+
+/** Persisted routing columns. Prefer a caller-resolved `scopeKey` (from the
+ *  estate-scope resolver); fall back to the minimal grammar only defensively. */
+function scopeColumns(scope?: HealthAlertScope) {
+  const customerAccountId = scope?.customerAccountId ?? null;
+  const customerSiteId = scope?.customerSiteId ?? null;
+  const scopeKey =
+    scope?.scopeKey ??
+    (customerAccountId
+      ? customerSiteId
+        ? `customer:${customerAccountId}:site:${customerSiteId}`
+        : `customer:${customerAccountId}`
+      : "organization:internal");
+  return { customerAccountId, customerSiteId, scopeKey };
 }
 
 function detailsFor(alert: IncomingHealthAlert) {
@@ -74,8 +121,9 @@ function detailsFor(alert: IncomingHealthAlert) {
 export async function upsertHealthAlertIssue(
   db: HealthAlertDb,
   alert: IncomingHealthAlert,
+  scope?: HealthAlertScope,
 ): Promise<string> {
-  const issueKey = healthAlertIssueKey(alert.labels);
+  const issueKey = healthAlertIssueKey(alert.labels, scope);
   const alertName = alert.labels.alertname ?? "unknown";
   const severity: HealthAlertSeverity = alert.labels.severity === "critical" ? "error" : "warn";
   const summary = alert.annotations?.summary ?? alertName;
@@ -97,6 +145,7 @@ export async function upsertHealthAlertIssue(
       status: "open",
       firstDetectedAt,
       lastDetectedAt: new Date(),
+      ...scopeColumns(scope),
     },
     update: {
       severity,
