@@ -7,7 +7,6 @@
 import Link from "next/link";
 import type { AttentionItem, AttentionSource } from "@/lib/attention/types";
 import {
-  orderReason,
   residueReasonLabel,
   riskLabel,
   decideEffortLabel,

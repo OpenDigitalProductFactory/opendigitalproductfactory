@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   isOverrideTier,
   overrideReason,
-  compareAttention,
   orderAttention,
   orderReason,
   residueReasonLabel,
