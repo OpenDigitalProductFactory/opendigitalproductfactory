@@ -170,6 +170,17 @@ describe("per-coworker (per-agent) posture", () => {
     expect(await getAgentGoldenTrianglePosture("a", throwingClient())).toBeNull();
     expect(await setAgentGoldenTrianglePosture("a", ASSURED, throwingClient())).toBe(false);
   });
+
+  it("rejects prototype-pollution / malformed agent keys (js/remote-property-injection)", async () => {
+    const { client, calls } = makeClient({});
+    for (const bad of ["__proto__", "constructor", "prototype", "has space", "a/b", ""]) {
+      expect(await setAgentGoldenTrianglePosture(bad, ASSURED, client)).toBe(false);
+      expect(await getAgentGoldenTrianglePosture(bad, client)).toBeNull();
+    }
+    // No write reached the store, and the prototype is intact.
+    expect(calls.updateMany).toHaveLength(0);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
 });
 
 describe("isGoldenTrianglePreference", () => {
