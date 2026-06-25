@@ -116,23 +116,52 @@ groups:
         annotations:
           summary: "Neo4j graph DB is unreachable -- code graph + architecture views offline"
 
+      # model-runner + stt have no /metrics; the portal probes them into
+      # dpf_dependency_up{service}. Gate on "was up in the last 6h" so these never
+      # false-fire on installs that don't run a local model runner / STT (e.g. a
+      # cloud install) -- only alert when a previously-working service drops. [BI-963DBB05]
+      - alert: ModelRunnerDown
+        expr: dpf_dependency_up{service="model-runner"} == 0 and max_over_time(dpf_dependency_up{service="model-runner"}[6h]) == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Local model runner is unreachable -- local AI inference offline"
+
+      - alert: SttDown
+        expr: dpf_dependency_up{service="stt"} == 0 and max_over_time(dpf_dependency_up{service="stt"}[6h]) == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Speech-to-text service is unreachable -- voice input offline"
+
+      # Restart-loop / scrape-flap detection -- Windows-viable (keys on `up`,
+      # collected for every scraped target). cAdvisor's container_restart_count
+      # is NOT collectable on Docker Desktop (no /proc,/sys,/var/lib/docker
+      # mounts -- see monitoring/alloy/config.alloy), so this is how a crashing+
+      # recovering service is caught on Windows -- the 2026-06-24 qdrant loop that
+      # ContainerRestarting missed. [BI-573438C1]
+      - alert: ServiceFlapping
+        expr: changes(up{job!~"prometheus|windows-host"}[15m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Service {{ $labels.job }} is flapping (restart loop) -- >5 up/down transitions in 15m"
+
   - name: dpf_application
     rules:
-      - alert: HighRequestLatency
-        expr: histogram_quantile(0.95, rate(dpf_http_request_duration_seconds_bucket[5m])) > 5
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "95th percentile request latency above 5s"
-
-      - alert: HighErrorRate
-        expr: rate(dpf_http_requests_total{status_code=~"5.."}[5m]) / rate(dpf_http_requests_total[5m]) * 100 > 5
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "HTTP 5xx error rate above 5%"
+      # HighRequestLatency / HighErrorRate (RETIRED 2026-06-25, BI-994B504C):
+      # both keyed on dpf_http_request_duration_seconds / dpf_http_requests_total,
+      # which are defined but never observed -- Next App Router has no global
+      # per-request hook and DPF has no shared route-handler wrapper, so
+      # populating them would mean wrapping every route or running a custom server
+      # (a separate architecture decision, unsafe to retrofit blind). They could
+      # never fire, so they are removed rather than left as dead rules. The real
+      # error signal is UnhandledServerErrors (below, via the onRequestError
+      # instrumentation hook); AI latency is AIInferenceHighLatency. Re-add WITH
+      # per-request instrumentation if general HTTP SLOs are ever needed.
 
       # AIInferenceDown was removed: Docker Model Runner does not expose a
       # Prometheus metrics endpoint, so `up{job="model-runner"}` was always 0.

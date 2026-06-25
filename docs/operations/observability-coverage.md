@@ -46,20 +46,36 @@ profile — so on the **Windows GA host they collect nothing and never fire**. T
 (`windows_*`)** series, which the `windows-host` job already scrapes. Linux installs
 keep the `node_*` rules; Windows installs get the `windows_*` rules.
 
-## Known follow-ups (deliberately not yet done)
+## Status & decisions (2026-06-25 — objective completed)
 
-- **HTTP latency / error-ratio** (`HighRequestLatency`, `HighErrorRate`) need
-  per-request timing+status instrumentation (`dpf_http_request_duration_seconds`,
-  `dpf_http_requests_total` are *defined* in `lib/operate/metrics.ts` but never
-  `.observe()`d). A route wrapper rollout is the remaining half of **BI-994B504C**;
-  `UnhandledServerErrors` (via `onRequestError`) is the zero-route-change interim.
-- **model-runner / stt ServiceDown alerts** — gauges ship now; alerting is gated on
-  install-type detection (a cloud install has no local model runner), to avoid
-  cross-install false positives. Follow-up under EP-FULL-OBS.
-- **Per-container restart/CPU/memory on Windows** — needs a cAdvisor-equivalent for
-  WSL2 (e.g. an alloy cadvisor exporter); a deployment-doctrine decision.
-- **TTS/voice self-heal at boot** — `assertVoiceServiceOnBoot` (BI-264565A4) is
-  detection/fail-loud only; auto-starting the sidecar needs host exec.
+- **model-runner / stt alerts** — DONE. `ModelRunnerDown` / `SttDown` fire on
+  `dpf_dependency_up{service} == 0 and max_over_time(...[6h]) == 1` — i.e. only when
+  a service that was working in the last 6h drops. Install-agnostic, so a cloud
+  install that never runs a local model runner / STT never false-fires.
+- **Restart-loop detection (all platforms)** — DONE via `ServiceFlapping`
+  (`changes(up[15m]) > 5`), which catches a crashing+recovering scraped service
+  (the qdrant loop `ContainerRestarting` missed) using the `up` series.
+- **Per-container CPU/memory + restart_count on Windows** — NOT POSSIBLE, by
+  platform constraint. cAdvisor/node-exporter require `/proc`, `/sys`,
+  `/var/lib/docker` host mounts that Docker Desktop (WSL2/macOS) does not provide
+  (see the `monitoring/alloy/config.alloy` header — exactly why log capture uses
+  the socket, not bind mounts). The `dpf_infrastructure` Container*/Host(`node_*`)
+  rules remain for Linux installs; Windows is covered by `dpf_windows_host` (host)
+  + `up`-based `ContainerDown` / `ServiceFlapping` + the portal-side
+  `dpf_dependency_up` / `dpf_voice_tts_*` probes.
+- **HTTP latency / error-ratio alerts** — RETIRED (BI-994B504C). `HighRequestLatency`
+  / `HighErrorRate` keyed on per-request metrics Next App Router cannot populate
+  without a shared route wrapper (none exists in DPF) or a custom server — a
+  separate architecture decision, unsafe to retrofit blind. Removed rather than
+  left as permanently-dead rules. Error detection is `UnhandledServerErrors`
+  (`onRequestError`); AI latency is `AIInferenceHighLatency`. Re-add with real
+  per-request instrumentation if general HTTP SLOs are ever needed.
+- **TTS/voice runtime self-heal** — BY DESIGN NOT DONE (BI-264565A4).
+  `assertVoiceServiceOnBoot` detects + fails loud at boot; auto-*starting* the
+  sidecar would require the portal to exec host Docker, crossing the portal's
+  security/governance boundary. First-run actuation is owned by the installer
+  (BI-3C812E4E, GPU-gated auto-start); a governed runtime host-action rail is the
+  proper future path if runtime auto-recovery is ever wanted.
 
 ## Alert delivery
 
