@@ -105,8 +105,16 @@ describe("proposeResponseHandler", () => {
     );
     expect(res.success).toBe(true);
     expect(res.message).toMatch(/NOT executed/);
+    // P3: a mutating action (isolate_host = high) is gated needs-human at the band.
+    expect(res.data?.authorityDecision).toBe("needs-human-approval");
+    expect(res.message).toMatch(/needs-human-approval/);
     const data = m.securityCaseUpdate.mock.calls[0]![0].data;
     const timeline = data.timeline as Array<Record<string, unknown>>;
-    expect(timeline[0]).toMatchObject({ kind: "response-proposal", actionType: "isolate_host", status: "proposed" });
+    expect(timeline[0]).toMatchObject({
+      kind: "response-proposal",
+      actionType: "isolate_host",
+      status: "proposed",
+      authorityDecision: "needs-human-approval",
+    });
   });
 });
