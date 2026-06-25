@@ -1,7 +1,7 @@
 # Estate Patch Management — P0 implementation plan
 
 - **Date:** 2026-06-25
-- **Status:** In progress (slice 1 landed)
+- **Status:** In progress (slice 1 + OSV/KEV advisory extractors landed)
 - **Spec:** `docs/superpowers/specs/2026-06-24-estate-patch-management-design.md`
 - **Epic:** `EP-PATCH-MANAGEMENT`
 - **Backlog:** BI-CAA0043C (version-intel feed), BI-489A8BB4 (assessment projector), BI-676A7960 (identity convergence), BI-020EE402 (posture UX)
@@ -27,11 +27,11 @@ This is the shared brain for both BI-CAA0043C and BI-489A8BB4 and is independent
 
 ### Slice 2 — Version-intelligence adapters → feed (BI-CAA0043C)
 Adapter interfaces + implementations that produce `assessPatchState` inputs, each gated by the Tool Evaluation Pipeline before embed:
-- `osv` adapter — generalize the existing npm OSV usage (`scripts/sbom/scan-dependencies.mjs`) to all ecosystems incl. OS packages and container images; returns advisories with `fixedVersion`.
-- `cisa-kev` adapter — KEV catalog membership for CVE ids.
-- `native-manager` adapter — the Edge Node's on-host "installed → available" output (`winget show`, `apt-cache policy`, `dnf check-update`, `brew outdated`).
-- `eol` adapter — end-of-life dates.
-Scheduled projector entry in `SCHEDULED_JOB_CATALOG`.
+- **`osv` adapter — LANDED (pure):** `packages/db/src/patch/osv-adapter.ts` turns OSV vuln objects into `AdvisoryInput` (severity band, lowest fixed version, CVE/GHSA aliases), generalized beyond npm to any ecosystem. Mirrors the proven shape in `scripts/sbom/scan-dependencies.mjs`.
+- **`cisa-kev` adapter — LANDED (pure):** `parseKevCatalog` + KEV enrichment in `osvVulnToAdvisory` mark an advisory exploited when its CVE alias is in the catalog.
+- `native-manager` adapter — the Edge Node's on-host "installed → available" output (`winget show`, `apt-cache policy`, `dnf check-update`, `brew outdated`). **Remaining — depends on the Edge Node software-inventory capability.**
+- `eol` adapter — end-of-life dates. **Remaining.**
+- Live fetch (OSV `querybatch` + `/vulns/{id}`, KEV catalog download) + scheduled projector entry in `SCHEDULED_JOB_CATALOG`. **Remaining — runtime-bound, verified via the sandbox.**
 
 ### Slice 3 — Assessment projector → AssuranceFinding (BI-489A8BB4)
 For each in-use `(InventoryEntity, DiscoveredSoftwareEvidence)`, run `assessPatchState` and upsert `AssuranceFinding` rows (`findingKind` ∈ patch-gap|vulnerability|end-of-life; `adapterKey` patch-intel|osv|cisa-kev|native-manager; `vendorIdentifier` = primary advisory; `remediationHint` JSON; `acceptedUntil` preserved). **No new findings table** — composes the Assurance Ledger (`schema.prisma:4968`). Carries a coverage metric so missing inventory is not read as clean.
