@@ -1,7 +1,7 @@
 # Estate Patch Management — P0 implementation plan
 
 - **Date:** 2026-06-25
-- **Status:** In progress (slices 1–2a + projector core landed; runtime binding next)
+- **Status:** In progress (slices 1–2a merged; projector core + Prisma binding landed; live feed + scheduled job next)
 - **Spec:** `docs/superpowers/specs/2026-06-24-estate-patch-management-design.md`
 - **Epic:** `EP-PATCH-MANAGEMENT`
 - **Backlog:** BI-CAA0043C (version-intel feed), BI-489A8BB4 (assessment projector), BI-676A7960 (identity convergence), BI-020EE402 (posture UX)
@@ -35,7 +35,7 @@ Adapter interfaces + implementations that produce `assessPatchState` inputs, eac
 
 ### Slice 3 — Assessment projector → AssuranceFinding (BI-489A8BB4)
 - **Pure core — LANDED:** `packages/db/src/patch/patch-projector.ts`. A `PatchAssessmentStore` port + `runPatchAssessment` orchestration (read evidence → `assessEvidence` → `evidenceToPatchFinding` → upsert actionable findings → resolve now-clean ones → posture summary), plus `applyViaForPackageManager`. Decoupled from Prisma so the whole read→assess→upsert→resolve flow is unit-tested against an in-memory fake store. Emits the AssuranceFinding upsert shape (`findingKind` ∈ patch-gap|vulnerability|end-of-life; `adapterKey` patch-intel|osv|cisa-kev; stable `findingKey` = `patch:<evidenceKey>`). **No new findings table** — composes the Assurance Ledger (`schema.prisma:4968`).
-- **Prisma binding — remaining (runtime-bound):** a `PatchAssessmentStore` adapter in `apps/web/lib/patch/` that lists `DiscoveredSoftwareEvidence` and **delegates finding writes to the existing `apps/web/lib/assurance/finding-persistence.ts`** (single source of truth for `AssuranceFinding` create/update/reopen — do not hand-roll a parallel upsert). Verified via the local-CI sandbox lease. Carries a coverage metric so missing inventory is not read as clean.
+- **Prisma binding — LANDED (unit-verified):** `apps/web/lib/patch/patch-assessment-store.ts` (`createPrismaPatchStore` + `runEstatePatchAssessment`) implements the port against the live DB: lists `DiscoveredSoftwareEvidence`, **delegates finding writes to the existing `apps/web/lib/assurance/finding-persistence.ts`** (single source of truth — no parallel upsert), opens/closes an `AssuranceRun` (`scopeType=estate`), and resolves now-clean findings scoped by the `patch:` key prefix. `apps/web/lib/patch/finding-mapping.ts` translates the patch vocabulary to the canonical Assurance enums (patch-gap→`missing-patch`, end-of-life→`unsupported-component`, affected→`inventory-entity`) — verified by 7 apps/web vitest cases against an in-memory fake db; both `@dpf/db` and `web` typecheck clean. Pure modules exposed via the new `@dpf/db/patch` subpath. **Remaining:** a real-DB write smoke via the local-CI sandbox lease, and a coverage metric.
 
 ### Slice 4 — Identity convergence (BI-676A7960) — gated
 Map the `DiscoveryFingerprint*` subsystem first; decide whether the software-identity spine extends it or lands a focused `CatalogIdentity` + `SoftwarePatchProfile`. Then the reviewable migration for `softwareIdentityId` (rename→`legacy…` + add `catalogIdentityId`, or drop-with-evidence) per the lifecycle-evidence spec §7.4. Runs through Prisma in the sandbox/canonical install, never blind. Until then, slice 3 keys findings on `DiscoveredSoftwareEvidence`/`InventoryEntity` directly.
