@@ -36,12 +36,8 @@ import {
   DELIBERATION_STRATEGY_PROFILES,
   DELIBERATION_TRIGGER_SOURCES,
 } from "@/lib/deliberation/types";
+import { deliberateOnMcpHandler } from "@/lib/mcp-tools-deliberation";
 import {
-  DELIBERATION_TOOLS,
-  deliberateOnMcpHandler,
-} from "@/lib/mcp-tools-deliberation";
-import {
-  SIEM_TOOLS,
   querySecurityEventsHandler,
   queryDetectionsHandler,
   getSecurityCaseHandler,
@@ -50,6 +46,10 @@ import {
   proposeDetectionTuningHandler,
   proposeResponseHandler,
 } from "@/lib/mcp-tools-siem";
+// BI-ARCH-TOOLPACKS: deliberation + SIEM tool DEFINITIONS now compose from the
+// first scoped tool pack (the handlers above stay wired into the executeTool
+// switch; dispatch migrates onto the pack registry in a follow-up).
+import { deliberationSiemPack } from "@/lib/mcp/packs/deliberation-siem-pack";
 import {
   createLicenseReadinessIssue,
   saveLicensingInvestigationFinding,
@@ -441,8 +441,7 @@ const WORK_CAPSULE_TOOL_ENUMS = workCapsuleToolEnums();
 const RUNTIME_COORDINATION_TOOL_ENUMS = runtimeCoordinationToolEnums();
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
-  ...DELIBERATION_TOOLS,
-  ...SIEM_TOOLS,
+  ...deliberationSiemPack.definitions,
   {
     name: "create_backlog_item",
     description: "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake). When triageOutcome=build, effortSize is required.",
