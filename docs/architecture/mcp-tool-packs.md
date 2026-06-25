@@ -67,11 +67,14 @@ mixed arities). Its five definitions were moved verbatim out of the inline `PLAT
 array (and the now-unused `RUNTIME_COORDINATION_TOOL_ENUMS` plumbing removed); they compose
 back through the registry, dispatch through `registry.getHandler(...)`, and the five switch
 cases are gone. `tool-registry.test.ts` + `mcp-tools-runtime-coordination.test.ts` prove
-parity. This de-risks the remaining lazy domains (work-capsules, workbooks).
+parity.
+[`work-capsules-pack`](../../apps/web/lib/mcp/packs/work-capsules-pack.ts) followed it as the
+third pack on the same lazy pattern (10 tools, mixed handler arities); `workbooks` is the one
+remaining small lazy domain.
 
 ## Next packs
 
 Per the spec, the highest-value remaining extractions are the largest cohesive clusters:
-`backlog` + `build-evidence`, `work-capsules`, `sandbox`, then `wiki/knowledge`. Each follows
-the same parity-first discipline and keeps the existing MCP-route, grant-filter, and
+`backlog` + `build-evidence`, `workbooks`, `sandbox`, then `wiki/knowledge`. Each follows the
+same parity-first discipline and keeps the existing MCP-route, grant-filter, and
 `mcp-governed-execute` tests green.

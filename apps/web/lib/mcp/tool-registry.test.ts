@@ -7,6 +7,7 @@ import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 
 import { deliberationSiemPack } from "./packs/deliberation-siem-pack";
 import { runtimeCoordinationPack } from "./packs/runtime-coordination-pack";
+import { workCapsulesPack } from "./packs/work-capsules-pack";
 import { composeToolPacks } from "./tool-registry";
 
 // BI-ARCH-TOOLPACKS parity guard: the first extracted pack must stay
@@ -66,6 +67,27 @@ describe("runtime-coordination tool pack", () => {
   });
 });
 
+describe("work-capsules tool pack", () => {
+  it("has a (lazy) handler for every definition", () => {
+    for (const def of workCapsulesPack.definitions) {
+      expect(workCapsulesPack.handlers[def.name], def.name).toBeTypeOf("function");
+    }
+  });
+
+  it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
+    for (const [name, grants] of Object.entries(workCapsulesPack.grants)) {
+      expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
+    }
+  });
+
+  it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
+    const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
+    for (const def of workCapsulesPack.definitions) {
+      expect(platformNames.has(def.name), def.name).toBe(true);
+    }
+  });
+});
+
 describe("composeToolPacks", () => {
   it("composes definitions + handler/grant lookup from packs", () => {
     const registry = composeToolPacks([deliberationSiemPack]);
@@ -75,12 +97,15 @@ describe("composeToolPacks", () => {
     expect(registry.getGrants("open_security_case")).toEqual(["siem_investigate"]);
   });
 
-  it("composes the two real packs without collision", () => {
-    const registry = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack]);
+  it("composes all three real packs without collision", () => {
+    const registry = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack]);
     expect(registry.definitions).toHaveLength(
-      deliberationSiemPack.definitions.length + runtimeCoordinationPack.definitions.length,
+      deliberationSiemPack.definitions.length +
+        runtimeCoordinationPack.definitions.length +
+        workCapsulesPack.definitions.length,
     );
     expect(registry.getHandler("register_runtime_target")).toBeTypeOf("function");
+    expect(registry.getHandler("create_work_capsule")).toBeTypeOf("function");
   });
 
   it("rejects the same tool name claimed by two packs", () => {
