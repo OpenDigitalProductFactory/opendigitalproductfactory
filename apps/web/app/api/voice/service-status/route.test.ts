@@ -4,6 +4,13 @@ vi.mock("@/lib/auth", () => ({
   auth: vi.fn(async () => ({ user: { id: "user-1" } })),
 }))
 
+// The route now imports the shared service-status helper, which pulls in @dpf/db
+// (for isVoiceNarrationEnabled). The route itself never queries it, so a thin
+// mock keeps this test hermetic.
+vi.mock("@dpf/db", () => ({
+  prisma: { voiceProfile: { count: vi.fn(async () => 0) } },
+}))
+
 // Keep defaultProvider real (env-driven) so the route resolves the probe URL
 // exactly as production does.
 import { auth } from "@/lib/auth"
