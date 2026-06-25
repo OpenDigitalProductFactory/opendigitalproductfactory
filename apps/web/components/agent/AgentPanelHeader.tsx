@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { AgentSkillsDropdown } from "./AgentSkillsDropdown";
-import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPriorityControl";
 
 function formatSensitivityLabel(value: AgentInfo["sensitivity"]): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -435,20 +434,8 @@ export function AgentPanelHeader({
                     : "Off: this page's coworker cannot reach public web tools"
                 }
               />
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  padding: "8px 12px 4px",
-                  borderTop: "1px solid color-mix(in srgb, var(--dpf-border) 60%, transparent)",
-                  marginTop: 4,
-                }}
-              >
-                <span style={{ fontSize: 12, color: "var(--dpf-text)" }}>Priority</span>
-                <CoworkerPriorityControl agentId={agent.agentId} />
-              </div>
+              {/* Priority moved out of this menu — it now lives in-flow at the composer
+                  (CoworkerPriorityDock), so the triangle stays in view and nothing clips. */}
             </div>
           )}
         </div>

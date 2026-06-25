@@ -12,6 +12,7 @@ import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
+import { CoworkerPriorityDock } from "@/components/golden-triangle/CoworkerPriorityDock";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
 import { CollaborationActivityPanel } from "./CollaborationActivityPanel";
 import type { CollaborationCard } from "./HandoffCard";
@@ -1122,6 +1123,7 @@ export function AgentCoworkerPanel({
       </div>
 
       <CoworkerHealthStatus />
+      <CoworkerPriorityDock agentId={agent.agentId} />
       <AgentMessageInput
         onSend={handleSend}
         disabled={isClearing || !threadId}
