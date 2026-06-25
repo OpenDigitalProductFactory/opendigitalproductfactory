@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 
 import {
+  buildDeliberationPrompt,
   buildReviewerUserPrompt,
+  DEBATER_SYSTEM_PROMPT,
   interpretReviewVerdict,
   resolveCoworkerReviewPattern,
   REVIEW_APPROVED,
+  REVIEWER_SYSTEM_PROMPT,
 } from "./coworker-review";
 import type { GoldenTrianglePersistenceClient } from "./persistence";
 
@@ -62,5 +65,20 @@ describe("buildReviewerUserPrompt", () => {
     const p = buildReviewerUserPrompt("what is 6x7?", "42");
     expect(p).toContain("what is 6x7?");
     expect(p).toContain("42");
+  });
+});
+
+describe("buildDeliberationPrompt", () => {
+  it("uses the reviewer prompts for the review pattern", () => {
+    const { system, user } = buildDeliberationPrompt("review", "q", "draft");
+    expect(system).toBe(REVIEWER_SYSTEM_PROMPT);
+    expect(user).toContain("draft");
+  });
+  it("uses the debater prompts for the debate pattern", () => {
+    const { system, user } = buildDeliberationPrompt("debate", "q", "draft");
+    expect(system).toBe(DEBATER_SYSTEM_PROMPT);
+    expect(system).toMatch(/debate/i);
+    expect(user).toMatch(/for vs\.? against|Debate it/i);
+    expect(user).toContain("draft");
   });
 });
