@@ -805,6 +805,28 @@ export async function enqueueFirstBootEvals(providerId: string): Promise<{
   }
 }
 
+/**
+ * Next.js global error hook — fires for every unhandled server-side error.
+ * Counts them into dpf_http_unhandled_errors_total{route,method} so the
+ * UnhandledServerErrors alert can fire. The portal has no per-request HTTP
+ * instrumentation, so this is the zero-route-change global error signal.
+ * [BI-994B504C]
+ */
+export async function onRequestError(
+  _error: unknown,
+  request: { path?: string; method?: string },
+  context: { routePath?: string },
+): Promise<void> {
+  try {
+    const { httpUnhandledErrors } = await import("@/lib/metrics");
+    const route = context?.routePath || request?.path || "unknown";
+    const method = request?.method || "unknown";
+    httpUnhandledErrors.labels(route, method).inc();
+  } catch {
+    /* never let metrics bookkeeping interfere with error reporting */
+  }
+}
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs" && process.env.NEXT_PHASE !== "phase-production-build") {
     // Fire the deprecation warning up front so operators see it on first
@@ -828,6 +850,18 @@ export async function register() {
       const { assertDbContinuityOnBoot } = await import("@/lib/operate/db-continuity");
       await assertDbContinuityOnBoot();
     }
+
+    // Voice-service desired-state fail-loud (BI-264565A4): if narration is
+    // enabled but the TTS sidecar is down, log CRITICAL at boot — Prometheus
+    // can't scrape a /health-only sidecar, and this beats the VoiceServiceDown
+    // alert's scrape+2m delay. Non-fatal; detection only (self-heal is a
+    // separate follow-up).
+    void (async () => {
+      const { assertVoiceServiceOnBoot } = await import(
+        "@/lib/operate/voice-service-continuity"
+      );
+      await assertVoiceServiceOnBoot();
+    })();
 
     // Self-heal a quiescence level left stuck by a swap that killed the
     // coordinator mid-protocol — otherwise the portal refuses gated requests
