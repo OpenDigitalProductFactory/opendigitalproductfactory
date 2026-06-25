@@ -6,6 +6,7 @@ import { ReferenceModelElementTree } from "@/components/ea/ReferenceModelElement
 import { ReferenceProjectionActions } from "@/components/ea/ReferenceProjectionActions";
 import { ReferenceProposalQueue } from "@/components/ea/ReferenceProposalQueue";
 import { It4itCoverageHeatmap } from "@/components/ea/It4itCoverageHeatmap";
+import { It4itParticipationGrid } from "@/components/ea/It4itParticipationGrid";
 import { projectReferenceModelValueStreams } from "@/lib/actions/ea";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -14,6 +15,7 @@ import {
   getReferenceModelElements,
   getReferenceModelPortfolioRollup,
   getIt4itCoverageHeatmap,
+  getIt4itParticipationGrid,
 } from "@/lib/ea-data";
 
 type Props = {
@@ -24,11 +26,12 @@ export default async function ReferenceModelPage({ params }: Props) {
   const { slug } = await params;
 
   try {
-    const [detail, rollup, elements, coverage, session] = await Promise.all([
+    const [detail, rollup, elements, coverage, participation, session] = await Promise.all([
       getReferenceModelDetail(slug),
       getReferenceModelPortfolioRollup(slug),
       getReferenceModelElements(slug),
       getIt4itCoverageHeatmap(slug),
+      getIt4itParticipationGrid(slug),
       auth(),
     ]);
 
@@ -96,6 +99,8 @@ export default async function ReferenceModelPage({ params }: Props) {
         <ReferenceModelElementTree elements={elements} />
 
         {coverage.groups.length > 0 && <It4itCoverageHeatmap data={coverage} canOverride={canOverride} />}
+
+        {participation.hasData && <It4itParticipationGrid data={participation} />}
 
         <section className="mb-6">
           <div className="mb-3">

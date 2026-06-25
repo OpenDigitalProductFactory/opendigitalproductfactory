@@ -385,10 +385,11 @@ Refactoring tasks:
 - Add architecture review brief export with disclaimer. [deferred — the heatmap CSV export + disclaimer already cover the responsible-export need; a prose "brief" generator is a later enhancement.]
 - Add product/partner documentation that explains the baseline without reproducing standard text. [deferred — follow-up doc task; the spec + disclaimers define the boundary in the meantime.]
 
-### Optional Phase 5 - Participation Matrix
+### Optional Phase 5 - Participation Matrix (landing, BI-D51A5A4A)
 
-- Build a reusable report-kit `CoverageGrid` if the nested-tile view does not satisfy value-stream-stage by functional-component analysis.
-- Use the workbook participation matrix only inside the license boundary.
+- Build a reusable grid if the nested-tile view does not satisfy value-stream-stage by functional-component analysis. [done — `It4itParticipationGrid` (server component) cross-tabs the 35 functional components (rows, grouped by capability group) x the 7 value streams (columns) from the seeded FC Participation Matrix (`participationByColumn`), tinted by coverage status. Pure `shapeIt4itParticipationGrid` (`it4it-participation-view.ts`, collapses the 28 stages up to streams) + cached `getIt4itParticipationGrid`. Rendered on the model page below the heatmap.]
+- Use the workbook participation matrix only inside the license boundary. [done — participation marks + local element names only; non-certification disclaimer on the grid; no raw criteria text exported.]
+- Scope choice: collapsed stage->stream (35x7) rather than the raw 28x35 stage grid, for a renderable matrix; participation is shown by a filled cell vs a middot (not colour alone) for accessibility.
 
 ## Acceptance Criteria
 
