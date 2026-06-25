@@ -173,6 +173,7 @@ export async function advanceReviewedBuildToShip(
       verificationOut: true,
       acceptanceMet: true,
       threadId: true,
+      diffPatch: true,
     },
   });
 
@@ -222,6 +223,51 @@ export async function advanceReviewedBuildToShip(
   await log(
     "Advanced review→ship (diff already extracted). Push to GitHub remains a human gate.",
   );
+
+  // EP-QUALITY-RIGHTSIZING P3 (BI-CFEB2B22): the diff now exists, so derive the
+  // ACTUAL blast-radius sensitivity and compare it to the pre-codegen keyword
+  // sizing. When the real reach EXCEEDS the keyword guess — the "keyword miss"
+  // (e.g. a styling tweak that edited a shared module imported by auth/billing) —
+  // surface it at this human ship gate so the change gets the scrutiny its real
+  // blast radius warrants. Non-blocking + fail-open; gated on the same flag.
+  try {
+    const { isQualityFirstRightsizingEnabled } = await import("./build-studio-config");
+    if (isQualityFirstRightsizingEnabled()) {
+      const { deriveBlastRadiusSensitivity } = await import("./change-impact");
+      const { deriveDeliverableSensitivity, DELIVERABLE_SENSITIVITIES } = await import(
+        "@/lib/explore/build-process-matrix"
+      );
+      const blast = await deriveBlastRadiusSensitivity((build.diffPatch as string | null) ?? "");
+      const briefObj = build.brief as
+        | { title?: string; description?: string; acceptanceCriteria?: unknown }
+        | null;
+      const sensitivityText = [
+        briefObj?.title,
+        briefObj?.description,
+        ...(Array.isArray(briefObj?.acceptanceCriteria) ? briefObj.acceptanceCriteria : []),
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const riskPosture = await prisma.businessContext
+        .findFirst({ select: { riskPosture: true } })
+        .then((r) => r?.riskPosture ?? null)
+        .catch(() => null);
+      const keyword = deriveDeliverableSensitivity(
+        { text: sensitivityText, workType: build.kind },
+        riskPosture,
+      );
+      if (DELIVERABLE_SENSITIVITIES.indexOf(blast) > DELIVERABLE_SENSITIVITIES.indexOf(keyword)) {
+        await log(
+          `⚠ Blast-radius check: this change actually reaches ${blast}-sensitivity scope — above the "${keyword}" it was sized for. Recommend extra review before pushing to GitHub.`,
+        );
+      }
+    }
+  } catch (err) {
+    console.warn(
+      "[ship-on-review-approval] blast-radius sensitivity check failed (non-blocking):",
+      err instanceof Error ? err.message : err,
+    );
+  }
 
   // Best-effort: live UI update.
   try {
