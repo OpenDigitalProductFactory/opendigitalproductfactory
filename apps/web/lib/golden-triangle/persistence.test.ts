@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 
 import {
+  getAgentGoldenTrianglePosture,
   getEffectiveGoldenTrianglePosture,
+  getEffectivePostureForAgent,
   getGoldenTrianglePosture,
   isGoldenTrianglePreference,
+  setAgentGoldenTrianglePosture,
   setGoldenTrianglePosture,
   type GoldenTrianglePersistenceClient,
 } from "./persistence";
@@ -139,6 +142,33 @@ describe("getEffectiveGoldenTrianglePosture", () => {
 
   it("is fail-open: returns null when the db throws", async () => {
     expect(await getEffectiveGoldenTrianglePosture("org_1", throwingClient())).toBeNull();
+  });
+});
+
+describe("per-coworker (per-agent) posture", () => {
+  it("writes a coworker posture into the per-agent map, preserving other keys", async () => {
+    const { client, getPolicy } = makeClient({ goldenTriangle: FRUGAL });
+    expect(await setAgentGoldenTrianglePosture("agent-x", ASSURED, client)).toBe(true);
+    const pol = getPolicy() as Record<string, Record<string, unknown>>;
+    expect(pol.goldenTriangle).toEqual(FRUGAL);
+    expect(pol.goldenTrianglePerAgent["agent-x"]).toEqual(ASSURED);
+  });
+
+  it("reads a coworker's own posture back; null for an unset coworker", async () => {
+    const { client } = makeClient({ goldenTrianglePerAgent: { "agent-x": ASSURED } });
+    expect(await getAgentGoldenTrianglePosture("agent-x", client)).toEqual(ASSURED);
+    expect(await getAgentGoldenTrianglePosture("agent-y", client)).toBeNull();
+  });
+
+  it("layers agent over platform (the coworker's own choice wins)", async () => {
+    const { client } = makeClient({ goldenTriangle: FRUGAL, goldenTrianglePerAgent: { "agent-x": ASSURED } });
+    expect(await getEffectivePostureForAgent("agent-x", null, client)).toEqual({ preference: ASSURED, source: "agent" });
+    expect(await getEffectivePostureForAgent("agent-y", null, client)).toEqual({ preference: FRUGAL, source: "platform" });
+  });
+
+  it("is fail-open on read and write", async () => {
+    expect(await getAgentGoldenTrianglePosture("a", throwingClient())).toBeNull();
+    expect(await setAgentGoldenTrianglePosture("a", ASSURED, throwingClient())).toBe(false);
   });
 });
 

@@ -15,7 +15,9 @@ import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 import { contributePostureDefault } from "@/lib/golden-triangle/hive";
 import {
   getEffectiveGoldenTrianglePosture,
+  getEffectivePostureForAgent,
   getGoldenTrianglePosture,
+  setAgentGoldenTrianglePosture,
   setGoldenTrianglePosture,
 } from "@/lib/golden-triangle/persistence";
 
@@ -30,6 +32,33 @@ export async function getGoldenTrianglePlatformDefault(): Promise<GoldenTriangle
   const session = await auth();
   if (!session?.user) return null;
   return getGoldenTrianglePosture({ kind: "platform" });
+}
+
+/**
+ * Read the EFFECTIVE posture for a coworker (agent → org → platform), so the
+ * coworker chip reflects what actually governs that coworker's runs even before
+ * it has its own override. Session-gated read.
+ */
+export async function getCoworkerGoldenTrianglePosture(agentId: string): Promise<GoldenTrianglePreference | null> {
+  const session = await auth();
+  if (!session?.user) return null;
+  const resolved = await getEffectivePostureForAgent(agentId, null);
+  return resolved?.preference ?? null;
+}
+
+/**
+ * Save a coworker's OWN (per-agent) posture. This is what makes the priority real
+ * per coworker: the saved posture layers above org/platform and tunes that
+ * coworker's dispatch. `view_platform`-gated (a per-agent setting is shared, not
+ * per-user); a non-admin caller gets "Couldn't save" client-side.
+ */
+export async function saveCoworkerGoldenTrianglePosture(
+  agentId: string,
+  preference: GoldenTrianglePreference,
+): Promise<{ ok: boolean }> {
+  await requirePlatformAdmin();
+  const ok = await setAgentGoldenTrianglePosture(agentId, preference);
+  return { ok };
 }
 
 async function requirePlatformAdmin() {

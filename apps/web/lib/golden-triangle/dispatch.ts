@@ -12,27 +12,30 @@
 // It only FEEDS routing (the compiler never re-implements routing).
 import { compileGoldenTrianglePolicy } from "./compile";
 import { applyPostureToRouteContext, type AppliedPosture } from "./compose";
-import { getEffectiveGoldenTrianglePosture, type GoldenTrianglePersistenceClient } from "./persistence";
+import { getEffectivePostureForAgent, type GoldenTrianglePersistenceClient } from "./persistence";
 import type { GoldenTrianglePreset } from "./types";
 
 export interface DispatchPosture extends AppliedPosture {
   preset: GoldenTrianglePreset;
   /** Which scope supplied the posture — for telemetry/explanation, never routing. */
-  source: "organization" | "platform";
+  source: "agent" | "organization" | "platform";
 }
 
 /**
  * Resolve the posture to apply to a dispatch, or null when nothing should change.
- * `organizationId` is null in single-org installs (falls back to the platform
- * default). Returns null for Balanced/no-op postures so callers can skip work.
+ * Layers the calling coworker's own posture ABOVE org/platform: agent → org →
+ * platform → null. `agentId` is the dispatching coworker (null for non-coworker
+ * runs); `organizationId` is null in single-org installs. Returns null for
+ * Balanced/no-op postures so callers can skip work.
  */
 export async function resolveDispatchPosture(
-  organizationId: string | null = null,
+  agentId: string | null = null,
   taskClass = "conversation",
+  organizationId: string | null = null,
   db?: GoldenTrianglePersistenceClient,
 ): Promise<DispatchPosture | null> {
   try {
-    const resolved = await getEffectiveGoldenTrianglePosture(organizationId, db);
+    const resolved = await getEffectivePostureForAgent(agentId, organizationId, db);
     if (!resolved) return null;
     const decoded = compileGoldenTrianglePolicy({
       preference: resolved.preference,

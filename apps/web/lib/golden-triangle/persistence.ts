@@ -94,7 +94,7 @@ export async function setGoldenTrianglePosture(
 }
 
 /** The scope a resolved posture came from — surfaced so the UI can show "why this default". */
-export type ResolvedPostureSource = "organization" | "platform";
+export type ResolvedPostureSource = "agent" | "organization" | "platform";
 
 export interface ResolvedPosture {
   preference: GoldenTrianglePreference;
@@ -119,4 +119,77 @@ export async function getEffectiveGoldenTrianglePosture(
   const platform = await getGoldenTrianglePosture({ kind: "platform" }, db);
   if (platform) return { preference: platform, source: "platform" };
   return null;
+}
+
+// ─── Per-coworker (per-agent) posture ────────────────────────────────────────
+//
+// Each AI coworker can remember its OWN Cost/Quality/Time posture. Stored
+// migration-free as a map keyed by agentId under the platform profile's
+// autonomyPolicy.goldenTrianglePerAgent — a single existing JSON column, no new
+// rows or schema. The per-agent posture layers ABOVE org/platform at dispatch so
+// a coworker's own choice tunes its runs (see getEffectivePostureForAgent).
+
+const PER_AGENT_KEY = "goldenTrianglePerAgent";
+
+/** Read a coworker's own saved posture, or null if it has none. Fail-open. */
+export async function getAgentGoldenTrianglePosture(
+  agentId: string,
+  db?: GoldenTrianglePersistenceClient,
+): Promise<GoldenTrianglePreference | null> {
+  const client = db ?? (prisma as unknown as GoldenTrianglePersistenceClient);
+  try {
+    const row = await client.decisionPerspectiveProfile.findFirst({
+      where: whereForScope({ kind: "platform" }),
+      select: { autonomyPolicy: true },
+    });
+    const map = asRecord(asRecord(row?.autonomyPolicy)[PER_AGENT_KEY]);
+    const gt = map[agentId];
+    return isGoldenTrianglePreference(gt) ? gt : null;
+  } catch (err) {
+    console.warn("[golden-triangle] per-agent posture read failed (fail-open):", err);
+    return null;
+  }
+}
+
+/** Merge a coworker's posture into the per-agent map. Returns true if a row was updated. */
+export async function setAgentGoldenTrianglePosture(
+  agentId: string,
+  preference: GoldenTrianglePreference,
+  db?: GoldenTrianglePersistenceClient,
+): Promise<boolean> {
+  const client = db ?? (prisma as unknown as GoldenTrianglePersistenceClient);
+  try {
+    const row = await client.decisionPerspectiveProfile.findFirst({
+      where: whereForScope({ kind: "platform" }),
+      select: { autonomyPolicy: true },
+    });
+    const policy = asRecord(row?.autonomyPolicy);
+    const nextMap = { ...asRecord(policy[PER_AGENT_KEY]), [agentId]: preference };
+    const res = await client.decisionPerspectiveProfile.updateMany({
+      where: whereForScope({ kind: "platform" }),
+      data: { autonomyPolicy: { ...policy, [PER_AGENT_KEY]: nextMap } },
+    });
+    return res.count > 0;
+  } catch (err) {
+    console.warn("[golden-triangle] per-agent posture write failed (fail-open):", err);
+    return false;
+  }
+}
+
+/**
+ * Resolve the posture for a specific coworker, layering most-specific first:
+ * agent (the coworker's own choice) → organization (WWWD) → platform (WWMD) →
+ * null (caller falls back to Balanced). This is what dispatch consults so a
+ * coworker's posture actually tunes its runs.
+ */
+export async function getEffectivePostureForAgent(
+  agentId: string | null,
+  organizationId: string | null,
+  db?: GoldenTrianglePersistenceClient,
+): Promise<ResolvedPosture | null> {
+  if (agentId) {
+    const agent = await getAgentGoldenTrianglePosture(agentId, db);
+    if (agent) return { preference: agent, source: "agent" };
+  }
+  return getEffectiveGoldenTrianglePosture(organizationId, db);
 }
