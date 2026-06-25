@@ -34,10 +34,12 @@ describe("reconcileSysmlProjections", () => {
     expect(r.integrations.status).toBe("skipped"); // no IntegrationCredential rows
     expect(r.scheduledJobs.status).toBe("skipped"); // notation null -> applySysmlModel skips
     expect(r.it4itCoverage.status).toBe("skipped"); // IT4IT reference model absent -> skips
-    // mcp + coworker + routes + navigation + process + scheduling are notation-backed
-    // (all sysml2 except process=bpmn20); value-streams + it4it-coverage check the
-    // reference model first; code-structure checks graph freshness first.
-    expect(db.eaNotation.findUnique).toHaveBeenCalledTimes(6);
+    expect(r.securityPosture.status).toBe("skipped"); // notation null -> applySysmlModel skips
+    // mcp + coworker + routes + navigation + process + scheduling + security are
+    // notation-backed (all sysml2 except process=bpmn20); value-streams +
+    // it4it-coverage check the reference model first; code-structure checks graph
+    // freshness first.
+    expect(db.eaNotation.findUnique).toHaveBeenCalledTimes(7);
     // value-streams and it4it-coverage both look up the IT4IT reference model.
     expect(db.eaReferenceModel.findUnique).toHaveBeenCalledTimes(2);
     expect(getFreshness).toHaveBeenCalledTimes(1);
