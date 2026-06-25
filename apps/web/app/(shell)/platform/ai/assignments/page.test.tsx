@@ -35,6 +35,12 @@ vi.mock("@dpf/db", () => ({
     agentToolGrant: {
       groupBy: vi.fn(),
     },
+    // EP-GOLDEN-TRIANGLE surface consolidation: the page now loads the platform
+    // posture (getGoldenTrianglePosture → decisionPerspectiveProfile) for the
+    // embedded priority panel. Default to no saved posture.
+    decisionPerspectiveProfile: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
   },
 }));
 
@@ -96,7 +102,12 @@ describe("AssignmentsPage", () => {
     const { default: AssignmentsPage } = await import("./page");
     const html = renderToStaticMarkup(await AssignmentsPage({ searchParams: Promise.resolve({}) }));
 
-    expect(html).toContain("AI Coworker Model Assignment");
+    // EP-GOLDEN-TRIANGLE surface consolidation: the page is now the unified
+    // "Priority & Models" surface — the everyday priority panel on top, the
+    // model-assignment guardrails below, bindings below that. All still present.
+    expect(html).toContain("AI Coworker Priority");
+    expect(html).toContain("Everyday priority");
+    expect(html).toContain("Advanced guardrails per coworker");
     expect(html).toContain("Resource Bindings");
     expect(html).toContain("Filter bindings");
     expect(html).toContain("Refresh inferred bindings");
