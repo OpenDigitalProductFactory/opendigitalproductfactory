@@ -2,7 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // Isomorphic fetch client: declare the Web platform libs it uses (fetch,
+    // Response, FormData, URLSearchParams, File) directly instead of leaning on
+    // a transitive @types/node leak from the (now removed) @dpf/db dependency.
+    "lib": ["ES2022", "DOM"]
   },
   "include": ["src"]
 }

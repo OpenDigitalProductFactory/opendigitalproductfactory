@@ -194,6 +194,24 @@ jobs:
       - name: Run guard
         run: node scripts/check-no-raw-event-source.mjs
 
+  package-boundary-guard:
+    name: Package Boundary Guard
+    runs-on: ubuntu-latest
+    # BI-ARCH-PACKAGES. The portable contract/client packages (@dpf/types,
+    # @dpf/validators, @dpf/api-client) are shared with the mobile app and must
+    # never depend on server persistence. This guard fails any PR that makes a
+    # portable package declare or import @dpf/db / Prisma. The same check runs as
+    # a web unit test (apps/web/lib/contracts/package-boundaries.test.ts). See
+    # docs/architecture/package-boundaries.md.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/check-package-boundaries.mjs
+
   sbom-divergence-guard:
     name: SBOM Divergence Guard
     runs-on: ubuntu-latest
