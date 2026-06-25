@@ -7,13 +7,6 @@ vi.mock("./AgentSkillsDropdown", () => ({
   AgentSkillsDropdown: () => <span>Skills</span>,
 }));
 
-// The posture menu hosts the coworker priority chip; stub it so this header
-// render test stays focused on the header's own structure (and doesn't pull the
-// chip's server actions).
-vi.mock("@/components/golden-triangle/CoworkerPriorityControl", () => ({
-  CoworkerPriorityControl: () => <span>Priority control</span>,
-}));
-
 const baseProps = {
   agent: {
     agentId: "agent-1",
