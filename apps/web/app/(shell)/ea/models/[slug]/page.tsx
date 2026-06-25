@@ -7,6 +7,8 @@ import { ReferenceProjectionActions } from "@/components/ea/ReferenceProjectionA
 import { ReferenceProposalQueue } from "@/components/ea/ReferenceProposalQueue";
 import { It4itCoverageHeatmap } from "@/components/ea/It4itCoverageHeatmap";
 import { projectReferenceModelValueStreams } from "@/lib/actions/ea";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import {
   getReferenceModelDetail,
   getReferenceModelElements,
@@ -22,12 +24,16 @@ export default async function ReferenceModelPage({ params }: Props) {
   const { slug } = await params;
 
   try {
-    const [detail, rollup, elements, coverage] = await Promise.all([
+    const [detail, rollup, elements, coverage, session] = await Promise.all([
       getReferenceModelDetail(slug),
       getReferenceModelPortfolioRollup(slug),
       getReferenceModelElements(slug),
       getIt4itCoverageHeatmap(slug),
+      auth(),
     ]);
+
+    const user = session?.user;
+    const canOverride = !!user && can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_ea_model");
 
     async function loadValueStreamProjection(formData: FormData) {
       "use server";
@@ -89,7 +95,7 @@ export default async function ReferenceModelPage({ params }: Props) {
 
         <ReferenceModelElementTree elements={elements} />
 
-        {coverage.groups.length > 0 && <It4itCoverageHeatmap data={coverage} />}
+        {coverage.groups.length > 0 && <It4itCoverageHeatmap data={coverage} canOverride={canOverride} />}
 
         <section className="mb-6">
           <div className="mb-3">

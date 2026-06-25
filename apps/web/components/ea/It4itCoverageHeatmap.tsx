@@ -10,17 +10,22 @@
 // verified) is shown on every tile; the rollup method + a non-certification disclaimer are
 // always visible.
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { StatCard } from "@/components/ui/report-kit/StatCard";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { DataTable, type Column } from "@/components/ui/report-kit/DataTable";
 import { ExportButton } from "@/components/ui/report-kit/ExportButton";
 import { intentStyle, resolveIntent } from "@/components/ui/report-kit/statusColors";
+import { setIt4itCoverageOverride } from "@/lib/actions/ea";
 import type {
+  CoverageStatus,
   It4itCoverageHeatmap as It4itCoverageHeatmapData,
   It4itComponentCoverage,
   It4itCriterionCoverage,
 } from "@/lib/explore/reference-model-types";
+
+const COVERAGE_OPTIONS: CoverageStatus[] = ["implemented", "partial", "planned", "not_started", "out_of_mvp"];
 
 const DISCLAIMER =
   "This is a DPF evidence-derived IT4IT coverage baseline. It is not an Open Group certification or formal conformance claim.";
@@ -55,10 +60,25 @@ function ConfidenceBadge({ confidence }: { confidence: string | null }) {
   );
 }
 
-export function It4itCoverageHeatmap({ data }: { data: It4itCoverageHeatmapData }) {
+export function It4itCoverageHeatmap({
+  data,
+  canOverride = false,
+}: {
+  data: It4itCoverageHeatmapData;
+  canOverride?: boolean;
+}) {
   const allComponents = data.groups.flatMap((g) => g.components);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = allComponents.find((c) => c.id === selectedId) ?? null;
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function applyOverride(modelElementId: string, coverageStatus: CoverageStatus) {
+    startTransition(async () => {
+      await setIt4itCoverageOverride({ modelSlug: data.modelSlug, modelElementId, coverageStatus });
+      router.refresh();
+    });
+  }
 
   if (!data.hasData) {
     return (
@@ -216,6 +236,29 @@ export function It4itCoverageHeatmap({ data }: { data: It4itCoverageHeatmapData 
               Close
             </button>
           </div>
+          {canOverride && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+              <label htmlFor="it4it-override" className="text-xs text-[var(--dpf-muted)]">
+                Set verified coverage:
+              </label>
+              <select
+                id="it4it-override"
+                defaultValue={selected.status}
+                disabled={pending}
+                onChange={(e) => applyOverride(selected.id, e.target.value as CoverageStatus)}
+                className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-xs text-[var(--dpf-text)]"
+              >
+                {COVERAGE_OPTIONS.map((s) => (
+                  <option key={s} value={s} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                    {s.replace("_", " ")}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[10px] text-[var(--dpf-muted)]">
+                {pending ? "saving..." : "marks this component operator-verified; survives steward refresh"}
+              </span>
+            </div>
+          )}
           <DataTable<It4itCriterionCoverage>
             columns={criteriaColumns}
             rows={selected.criteria}
