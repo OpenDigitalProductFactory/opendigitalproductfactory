@@ -48,6 +48,19 @@ export type GovernedExecuteContext = {
    * skill metrics can attribute action evidence to the originating skill.
    */
   skillId?: string;
+  /**
+   * In-portal coworker chat turns surface COWORKER_READ_BASELINE_GRANTS on the
+   * attached tool set (getAvailableTools' `additionalGrants` option, called from
+   * actions/agent-coworker.ts — BI-FD7E4D72). Set true by runAgenticLoop for
+   * interactive `chat` turns so the execution-time agent-grant check honours the
+   * SAME baseline the attach side used; without it a coworker whose own role
+   * grants omit a baseline read grant (e.g. ops-coordinator without
+   * code_graph_read) gets search_code_graph / read_project_file attached but
+   * rejected on call. Left unset for autonomous/build turns so their authority is
+   * unchanged. The baseline is read-only and still bounded by the user-capability
+   * gate, so honouring it here never escalates beyond what the operator may see.
+   */
+  coworkerReadBaseline?: boolean;
 };
 
 export type GovernedExecuteArgs = {
@@ -416,7 +429,20 @@ export async function governedExecuteTool(
   // Agent grant check — when an agentId is in the context, the agent must
   // have a grant that authorises this tool.
   if (args.context?.agentId) {
-    const grants = await resolveGrants(args.context.agentId);
+    let grants = await resolveGrants(args.context.agentId);
+    // In-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS to the
+    // tool surface at resolution time (getAvailableTools' `additionalGrants` in
+    // actions/agent-coworker.ts, BI-FD7E4D72). Mirror that here so the same
+    // baseline reads the model was offered are also executable — otherwise a
+    // coworker whose own role grants omit a baseline grant gets a read tool
+    // (search_code_graph, read_project_file, doc_search, …) attached but rejected
+    // on call. Read-only by construction and already bounded by the
+    // user-capability gate above; scoped to coworker chat turns (runAgenticLoop
+    // sets the flag), so autonomous/build authority is unchanged.
+    if (args.context.coworkerReadBaseline) {
+      const { COWORKER_READ_BASELINE_GRANTS } = await import("./tak/agent-grants");
+      grants = Array.from(new Set([...grants, ...COWORKER_READ_BASELINE_GRANTS]));
+    }
     const allowed = await isAllowedByGrants(args.toolName, grants);
     if (!allowed) {
       const result = rejectionResult(

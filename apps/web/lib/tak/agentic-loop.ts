@@ -2109,6 +2109,13 @@ export async function runAgenticLoop(params: {
             taskRunId: taskRunId ?? undefined,
             apiTokenId: apiTokenId ?? undefined,
             skillId: activeSkillId ?? undefined,
+            // In-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS
+            // to the tool surface (actions/agent-coworker.ts). Flag the turn so
+            // the governed grant check honours the same baseline at execution
+            // time (BI-FD7E4D72) — otherwise a coworker whose own grants lack a
+            // baseline read grant gets the tool attached but rejected on call.
+            // Autonomous turns leave this false, so their authority is unchanged.
+            coworkerReadBaseline: interactionMode === "chat",
             // BI-F4A30FCB (Dale dogfood 2026-05-24): plumb the build the
             // user is messaging from into tool context so phase-scoped
             // tools (start_ideate_research, start_scout_research) can
