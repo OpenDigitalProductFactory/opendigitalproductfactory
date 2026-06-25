@@ -8789,7 +8789,21 @@ export async function executeTool(
       // UI can show which named reviewer cleared vs flagged. Nested on the JSON
       // column — no migration. Same r1/r2/archReview the deliberation trail uses.
       const reviewers = collectReviewerVerdicts(r1, r2, archReview);
-      const reviewWithSize = { ...review, sizeAssessment, ...(reviewers.length > 0 ? { reviewers } : {}) };
+      // Preserve an operator decomposition override across review re-runs.
+      // record_decomposition_override writes designReview.decompositionOverride; the
+      // Phase-4b gate below (and resume-pre-build-phase) reads it to let an overridden
+      // build advance past decompose-required. Re-attach it here — otherwise this write
+      // replaces designReview and wipes the override, the gate sees !hasOverride, and the
+      // build re-parks at the decompose gate forever (the override→advance path, incl.
+      // resume re-running reviewDesignDoc, never completes).
+      const priorOverride =
+        (build.designReview as { decompositionOverride?: unknown } | null)?.decompositionOverride ?? null;
+      const reviewWithSize = {
+        ...review,
+        sizeAssessment,
+        ...(reviewers.length > 0 ? { reviewers } : {}),
+        ...(priorOverride != null ? { decompositionOverride: priorOverride } : {}),
+      };
       await prisma.featureBuild.update({ where: { buildId }, data: { designReview: reviewWithSize as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
