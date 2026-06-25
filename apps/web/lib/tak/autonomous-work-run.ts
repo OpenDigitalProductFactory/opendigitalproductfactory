@@ -1,8 +1,19 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@dpf/db";
 import type { ChatMessage } from "@/lib/ai-inference";
+import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-review";
+import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { AgentEvent } from "@/lib/tak/agent-event-bus";
+
+/** Best-effort latest user-turn text, for the reviewer's context. */
+function lastUserRequest(history: ChatMessage[]): string {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m && m.role === "user" && typeof m.content === "string") return m.content;
+  }
+  return "";
+}
 
 export type AutonomousWorkTrigger =
   | "interactive"
@@ -241,6 +252,29 @@ export async function executeAutonomousAgenticLoop(input: {
     ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
     onProgress: input.onProgress,
   });
+
+  // EP-GOLDEN-TRIANGLE: leverage the "review" rung of the rigor ladder. This is the
+  // SINGLE seam for both chat and autonomous coworker turns. When the coworker's
+  // posture sits high on Quality/effort, run one lightweight reviewer pass over the
+  // draft before it's returned. Fail-open (original draft on any error); skipped for
+  // proposals and for Balanced/low postures. (Full multi-perspective debate via the
+  // deliberation engine — minutes-long — is reserved for a follow-up; the lightweight
+  // pass is the floor for both review and debate postures here.)
+  if (result.content && !result.proposal) {
+    try {
+      const pattern = await resolveCoworkerReviewPattern(input.agentId);
+      if (pattern === "review" || pattern === "debate") {
+        const verdict = await reviewCoworkerDraft({
+          userRequest: lastUserRequest(input.chatHistory),
+          draft: result.content,
+          sensitivity: input.sensitivity,
+        });
+        if (verdict.revised) result.content = verdict.content;
+      }
+    } catch (err) {
+      console.warn("[golden-triangle] coworker review (unified seam) failed (fail-open):", err);
+    }
+  }
 
   // Governed Hermes learning Slice 2: fire-and-forget reflection trigger.
   // Inspects PlatformIssueReport rows produced during this run and emits
