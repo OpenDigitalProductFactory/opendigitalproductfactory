@@ -1,6 +1,6 @@
 # IT4IT Conformance Coverage Heatmap Design
 
-- **Status:** Draft, architecture-reviewed
+- **Status:** In progress — Phase 0+1 (projection) shipped in PR #2354 (merged); Phase 2 (heatmap) landing now
 - **Date:** 2026-06-24
 - **Reviewed:** 2026-06-25
 - **Epic:** EP-IT4IT-CONFORMANCE
@@ -353,7 +353,7 @@ Refactoring tasks:
 - Add license-safe display helpers.
 - Tests: constants, normalization, upsert, no-clobber.
 
-### Phase 1 - Projection
+### Phase 1 - Projection (shipped, PR #2354)
 
 - Implement `buildIt4itCoverageModel`.
 - Implement `reconcileIt4itCoverage`.
@@ -362,13 +362,14 @@ Refactoring tasks:
 - File `EaConformanceIssue` for required gaps and hygiene findings.
 - Tests: idempotency, first-run baseline creation, verified-row preservation, no-data neutral, crosswalk correctness.
 
-### Phase 2 - Heatmap
+### Phase 2 - Heatmap (landing now)
 
-- Add `it4itCoverage` domain to report-kit `STATUS_INTENT`.
-- Add an IT4IT coverage view model for `/ea/models/[slug]`.
-- Add nested-tile heatmap section for `it4it_v3_0_1`.
-- Add summary strip, scope selector, confidence filter, drill-down rail, and CSV export.
-- Tests: render empty state, render populated state, confidence badges, no raw colors, CSV output.
+- Add `it4itCoverage` domain to report-kit `STATUS_INTENT`. [done]
+- Add an IT4IT coverage view model for `/ea/models/[slug]` — pure `shapeIt4itCoverageHeatmap` in `lib/explore/it4it-coverage-view.ts` + cached `getIt4itCoverageHeatmap` query. [done]
+- Add nested-tile heatmap section for `it4it_v3_0_1` (`components/ea/It4itCoverageHeatmap.tsx`), rendered on the model page only when the model has functional components. [done]
+- Summary StatCards, capability-group bands, colour-mix intensity by evidence score, tile drill-down to a criteria DataTable, CSV export, empty state, non-certification disclaimer. [done]
+- Tests: pure view-shaping (`it4it-coverage-view.test.ts`) — grouping, ordering, status/score/confidence derivation, weighted rollup, empty state, evidence-score fallback. [done]
+- Deferred follow-ups: by-value-stream lens (needs the crosswalk inverse), per-portfolio scope selector, operator override actions (BI-25066DD8). Live UX verification against populated data runs after this deploys and the steward writes the baseline.
 
 ### Phase 3 - Override UX
 

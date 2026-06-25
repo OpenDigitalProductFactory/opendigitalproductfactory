@@ -5,11 +5,13 @@ import { ReferenceModelPortfolioTable } from "@/components/ea/ReferenceModelPort
 import { ReferenceModelElementTree } from "@/components/ea/ReferenceModelElementTree";
 import { ReferenceProjectionActions } from "@/components/ea/ReferenceProjectionActions";
 import { ReferenceProposalQueue } from "@/components/ea/ReferenceProposalQueue";
+import { It4itCoverageHeatmap } from "@/components/ea/It4itCoverageHeatmap";
 import { projectReferenceModelValueStreams } from "@/lib/actions/ea";
 import {
   getReferenceModelDetail,
   getReferenceModelElements,
   getReferenceModelPortfolioRollup,
+  getIt4itCoverageHeatmap,
 } from "@/lib/ea-data";
 
 type Props = {
@@ -20,10 +22,11 @@ export default async function ReferenceModelPage({ params }: Props) {
   const { slug } = await params;
 
   try {
-    const [detail, rollup, elements] = await Promise.all([
+    const [detail, rollup, elements, coverage] = await Promise.all([
       getReferenceModelDetail(slug),
       getReferenceModelPortfolioRollup(slug),
       getReferenceModelElements(slug),
+      getIt4itCoverageHeatmap(slug),
     ]);
 
     async function loadValueStreamProjection(formData: FormData) {
@@ -85,6 +88,8 @@ export default async function ReferenceModelPage({ params }: Props) {
         </section>
 
         <ReferenceModelElementTree elements={elements} />
+
+        {coverage.groups.length > 0 && <It4itCoverageHeatmap data={coverage} />}
 
         <section className="mb-6">
           <div className="mb-3">
