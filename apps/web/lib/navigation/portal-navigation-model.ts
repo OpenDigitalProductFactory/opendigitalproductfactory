@@ -24,6 +24,7 @@ export type PortalShellSectionKey =
   | "workspace"
   | "business"
   | "products"
+  | "delivery"
   | "platform"
   | "knowledge";
 
@@ -435,6 +436,27 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     },
   },
   {
+    // BI-ARCH-DELIVERY-IA: one operator home for delivery work. A hub that
+    // launches the delivery surfaces (Build Studio, work capsules, change lanes,
+    // promotions, dev loop, self-upgrade status) — it does not own a second
+    // tracking model; it links to the existing surfaces. Build Studio *config*
+    // stays under Platform (/platform/ai/build-studio); the operator path for
+    // *doing* delivery work is here (spec §6.3).
+    key: "delivery",
+    label: "Delivery",
+    path: "/delivery",
+    parentPath: "/delivery",
+    domain: "delivery",
+    audienceModes: ["operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_platform",
+    primaryOrder: 65,
+    shellNav: {
+      sectionKey: "delivery",
+      description: "Build, ship, and track delivery work from one operator home.",
+    },
+  },
+  {
     key: "build",
     label: "Build Studio",
     path: "/build",
@@ -445,7 +467,10 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     capabilityKey: "view_platform",
     primaryOrder: 70,
     shellNav: {
-      sectionKey: "platform",
+      // BI-ARCH-DELIVERY-IA: the Build Studio *work* surface belongs to the
+      // Delivery rail section (it is already domain:"delivery"); model/provider
+      // configuration stays under Platform at /platform/ai/build-studio.
+      sectionKey: "delivery",
       description: "Create and ship new capability with AI help.",
     },
   },

@@ -82,4 +82,24 @@ describe("portal navigation model", () => {
       expect(getRouteNavRecord(href), href).toBeDefined();
     }
   });
+
+  it("groups the Delivery home and Build Studio under a Delivery section (BI-ARCH-DELIVERY-IA)", () => {
+    const delivery = getRouteNavRecord("/delivery");
+    expect(delivery?.domain).toBe("delivery");
+    expect(delivery?.shellNav?.sectionKey).toBe("delivery");
+
+    const sections = getShellNavSections(adminUser);
+    const deliverySection = sections.find((section) => section.key === "delivery");
+    expect(deliverySection, "Delivery shell section should exist").toBeDefined();
+
+    const deliveryHrefs = deliverySection?.items.map((item) => item.href) ?? [];
+    expect(deliveryHrefs).toContain("/delivery");
+    expect(deliveryHrefs).toContain("/build");
+
+    // Build Studio's work surface moved out of the Platform rail section into
+    // Delivery (its model/provider config stays under Platform at
+    // /platform/ai/build-studio).
+    const platformSection = sections.find((section) => section.key === "platform");
+    expect(platformSection?.items.map((item) => item.href) ?? []).not.toContain("/build");
+  });
 });

@@ -203,6 +203,11 @@ const SHELL_SECTIONS: Array<Pick<ShellNavSection, "key" | "label" | "description
     description: "Guide product lifecycle work from portfolio through delivery.",
   },
   {
+    key: "delivery",
+    label: "Delivery",
+    description: "Build, ship, and track delivery work from one operator home.",
+  },
+  {
     key: "platform",
     label: "Platform",
     description: "Direct AI coworkers and operate the platform itself.",
