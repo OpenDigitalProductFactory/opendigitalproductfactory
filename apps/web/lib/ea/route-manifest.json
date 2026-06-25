@@ -4794,6 +4794,16 @@
       "file": "apps/web/app/(shell)/platform/edge-nodes/page.tsx"
     },
     {
+      "routePath": "/platform/federation-links",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "federation-links"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/federation-links/page.tsx"
+    },
+    {
       "routePath": "/platform/identity",
       "kind": "page",
       "segments": [
@@ -4927,6 +4937,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/platform/schedule/page.tsx"
+    },
+    {
+      "routePath": "/platform/service-desk",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "service-desk"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/service-desk/page.tsx"
     },
     {
       "routePath": "/platform/services",

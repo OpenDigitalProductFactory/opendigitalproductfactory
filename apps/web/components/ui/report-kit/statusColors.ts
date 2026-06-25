@@ -314,6 +314,29 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     not_started: "neutral",
     out_of_mvp: "neutral",
   },
+  // EP-MSP-FEDERATION · B1 — sovereign-peer link trust state (dual-approval).
+  // pending until BOTH sides approve; quarantined is a held/investigate state.
+  federationLinkState: {
+    pending: "info",
+    trusted: "success",
+    quarantined: "warning",
+    revoked: "neutral",
+  },
+  // EP-MSP-FEDERATION · A3 — customer service-desk ticket lifecycle.
+  serviceTicketStatus: {
+    open: "info",
+    acknowledged: "accent",
+    "in-progress": "accent",
+    "waiting-customer": "warning",
+    resolved: "success",
+    closed: "neutral",
+  },
+  serviceTicketPriority: {
+    low: "neutral",
+    normal: "info",
+    high: "warning",
+    urgent: "danger",
+  },
 };
 
 /**
