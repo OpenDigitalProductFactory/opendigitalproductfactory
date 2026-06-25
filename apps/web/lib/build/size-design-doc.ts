@@ -139,11 +139,17 @@ export function sizeDesignDoc(
 // enforcement lands) operator-facing decompose recommendation is defensible.
 // ---------------------------------------------------------------------------
 
-const MODEL_FIELD_PRIORITY: ReadonlyArray<keyof BuildDesignDoc> = [
-  "dataModel",
-  "proposedApproach",
-  "problemStatement",
-];
+// Count models ONLY from the structured `dataModel` field. Counting PascalCase
+// identifiers in the prose fields (proposedApproach / problemStatement) badly
+// false-positived: a docs-only design that merely *mentions* component/product
+// names in prose scored "8 models -> decompose-required" and parked at the
+// Phase-4b gate (FB-4227B23B, author docs/install/windows.md). Models are
+// declared in dataModel; PascalCase in prose is a reference, not a new model.
+// The other dimensions (endpoints / acs / multipliers / routes) still read prose,
+// so a genuinely-large design still trips. Every existing sizing fixture already
+// declares its models in dataModel, so this narrows false positives without
+// lowering true positives (verified by size-design-doc.test.ts).
+const MODEL_FIELD_PRIORITY: ReadonlyArray<keyof BuildDesignDoc> = ["dataModel"];
 
 // PascalCase identifier with at least two CamelHumps — captures
 // "MobileInventoryLocation", "InventoryItem", but not single-word "Truck".

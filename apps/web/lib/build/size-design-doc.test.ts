@@ -262,6 +262,30 @@ describe("sizeDesignDoc — heuristic edge cases", () => {
     expect(result.breakdown.models.count).toBe(1);
   });
 
+  it("does NOT count PascalCase prose mentions as models (docs false-positive regression)", () => {
+    // Regression for FB-4227B23B: a docs-only design (author docs/install/windows.md)
+    // that merely *mentions* component/product names in prose was scored as
+    // "8 models -> decompose-required" and parked at the Phase-4b gate. Models are
+    // counted only from the structured dataModel field; prose PascalCase is a
+    // reference, not a new data model.
+    const doc: BuildDesignDoc = {
+      problemStatement:
+        "The WindowsInstaller and DockerDesktop setup for DpfPlatform is undocumented; the InstallGuide must cover ModelRunner and QdrantStore.",
+      dataModel: "",
+      reusePlan: "Reuse the existing MacOsGuide and LinuxGuide structure.",
+      proposedApproach:
+        "Author docs/install/windows.md mirroring the MacOsGuide. Cover the InstallScript, the VerifyScript, and the BootstrapToken flow.",
+      acceptanceCriteria: [
+        "Guide exists.",
+        "Guide is discoverable.",
+        "Guide matches the InstallScript.",
+      ],
+    };
+    const result = sizeDesignDoc(doc, {}, FIXED_NOW);
+    expect(result.breakdown.models.count).toBe(0);
+    expect(result.decision).toBe("ok");
+  });
+
   it("counts HTTP-verb-prefixed endpoint mentions", () => {
     const doc: BuildDesignDoc = {
       problemStatement: "",
