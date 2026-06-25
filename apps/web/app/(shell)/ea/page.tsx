@@ -4,7 +4,8 @@ import { prisma } from "@dpf/db";
 import { EaTabNav } from "@/components/ea/EaTabNav";
 import { ReferenceModelSummary } from "@/components/ea/ReferenceModelSummary";
 import { CreateViewButton } from "@/components/ea/CreateViewButton";
-import { getReferenceModelsSummary } from "@/lib/ea-data";
+import { It4itConformanceCard } from "@/components/ea/It4itConformanceCard";
+import { getReferenceModelsSummary, getIt4itCoverageHeatmap } from "@/lib/ea-data";
 
 const LAYOUT_LABELS: Record<string, string> = {
   graph:    "Graph",
@@ -20,7 +21,7 @@ const SCOPE_LABELS: Record<string, string> = {
 };
 
 export default async function EaPage() {
-  const [views, models] = await Promise.all([
+  const [views, models, it4itCoverage] = await Promise.all([
     prisma.eaView.findMany({
       orderBy: [{ createdAt: "desc" }],
       select: {
@@ -35,6 +36,7 @@ export default async function EaPage() {
       },
     }),
     getReferenceModelsSummary(),
+    getIt4itCoverageHeatmap("it4it_v3_0_1").catch(() => null),
   ]);
 
   return (
@@ -65,6 +67,8 @@ export default async function EaPage() {
         </div>
         <ReferenceModelSummary models={models} />
       </section>
+
+      {it4itCoverage && <It4itConformanceCard data={it4itCoverage} />}
 
       {views.length > 0 ? (
         <>

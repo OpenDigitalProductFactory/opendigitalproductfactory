@@ -381,9 +381,9 @@ Refactoring tasks:
 
 ### Phase 4 - Business And Partner Artifact
 
-- Add compact overview card after the heatmap exists.
-- Add architecture review brief export with disclaimer.
-- Add product/partner documentation that explains the baseline without reproducing standard text.
+- Add compact overview card after the heatmap exists. [done, BI-BDA1A04F — `It4itConformanceCard` (server component) on the EA home (`/ea`): honest headline counts (platform coverage %, components with evidence, required criteria covered, verified count) + deep-link to the heatmap; neutral not-generated state; non-certification disclaimer; report-kit `StatCard`, no charting dependency. Defensive fetch so a missing model never breaks `/ea`.]
+- Add architecture review brief export with disclaimer. [deferred — the heatmap CSV export + disclaimer already cover the responsible-export need; a prose "brief" generator is a later enhancement.]
+- Add product/partner documentation that explains the baseline without reproducing standard text. [deferred — follow-up doc task; the spec + disclaimers define the boundary in the meantime.]
 
 ### Optional Phase 5 - Participation Matrix
 
