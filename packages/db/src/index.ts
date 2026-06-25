@@ -184,6 +184,13 @@ export {
   type RetentionClass,
 } from "./projection-serialization";
 export {
+  DEFAULT_INCIDENT_PROJECTION,
+  INCIDENT_SLICE,
+  projectIncidentForEgress,
+  resolveIncidentProjectionSpec,
+  type IncidentEgressResult,
+} from "./projection-egress";
+export {
   buildOrganizationCrosswalk,
   FEDERATED_RECORD_TYPES,
   reconcileMirror,
