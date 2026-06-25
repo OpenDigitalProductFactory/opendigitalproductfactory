@@ -98,7 +98,7 @@ export async function handleIncomingIncident(
       priority,
       severity: incident.highestSeverity,
       title: incident.summary,
-      description: `Federated incident from peer (link ${linkId}). ${incident.alertCount} alert(s).`,
+      description: `Federated incident from peer (link ${linkId}). ${incident.alertCount} alerts.`,
       correlatedIncidentKey: incident.incidentKey,
     },
     update: { priority, severity: incident.highestSeverity, title: incident.summary },
