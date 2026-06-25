@@ -184,6 +184,18 @@ export {
   type RetentionClass,
 } from "./projection-serialization";
 export {
+  buildOrganizationCrosswalk,
+  FEDERATED_RECORD_TYPES,
+  reconcileMirror,
+  type CanonicalSide,
+  type FederatedRecordType,
+  type IncomingMirrorUpdate,
+  type MirrorDecision,
+  type MirrorState,
+  type MirrorSyncStatus,
+  type OrganizationCrosswalk,
+} from "./federated-record-sync";
+export {
   syncDigitalProduct,
   syncTaxonomyNode,
   syncPortfolio,

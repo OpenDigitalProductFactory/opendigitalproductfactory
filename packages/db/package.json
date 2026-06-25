@@ -17,6 +17,7 @@
     "./trust-link-lifecycle": "./src/trust-link-lifecycle.ts",
     "./federation-link-types": "./src/federation-link-types.ts",
     "./projection-serialization": "./src/projection-serialization.ts",
+    "./federated-record-sync": "./src/federated-record-sync.ts",
     "./discovery-triage": "./src/discovery-triage.ts",
     "./discovery-triage-enums": "./src/discovery-triage-enums.ts",
     "./discovery-collectors-arp-scan": "./src/discovery-collectors/arp-scan.ts",

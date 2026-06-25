@@ -10607,6 +10607,69 @@ model ProjectionContract {
   @@index([federationLinkId])
 }
 
+// ── EP-MSP-FEDERATION · B3 + B5 — generic federated record mirror (BI-3179B48E /
+// BI-E2398997). One mirror/crosswalk table for everything that syncs over a
+// link: incident→ticket mirrors (B3) and CustomerAccount↔Organization crosswalk
+// (B5). Canonical record stays SOURCE-SIDE; the peer holds a governed mirror.
+// recordType discriminates rather than spawning per-kind tables (spec §7.4).
+model FederatedRecordMirror {
+  id               String    @id @default(cuid())
+  mirrorId         String    @unique
+  federationLinkId String
+  // "incident" | "service-ticket" | "organization-crosswalk"
+  recordType       String
+  // Which side holds the canonical record: "local" | "peer".
+  canonicalSide    String
+  localRecordRef   String?
+  peerRecordRef    String?
+  // pending | synced | conflict | revoked
+  syncStatus       String    @default("pending")
+  version          Int       @default(1)
+  conflictReason   String?
+  lastSyncedAt     DateTime?
+  // Last projected (already minimized) payload that crossed — never raw data.
+  payload          Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([federationLinkId, recordType, localRecordRef], map: "FederatedRecordMirror_link_type_local_key")
+  @@index([federationLinkId])
+  @@index([recordType])
+  @@index([syncStatus])
+}
+
+// ── EP-MSP-FEDERATION · B4 — cross-org remediation proposal (BI-3C21D4E2) ──────
+// The specialized side table over the AgentActionProposal + AuthorityBinding
+// substrate (spec §11.5 — audited as not covering headless cross-org proposals,
+// so a specialization, NOT a second approval engine). A proposal crosses the
+// link as a PROPOSAL; it lands on the CUSTOMER's Attention Surface and executes
+// on the CUSTOMER's own runner. The MSP never gains standing execute rights.
+model FederatedRemediationProposal {
+  id                   String    @id @default(cuid())
+  proposalId           String    @unique
+  federationLinkId     String
+  incidentKey          String
+  edgeNodeId           String?
+  // RemediationActionDraft[] (each with its per-action authority decision).
+  actions              Json
+  // auto-approve | needs-human-approval | refuse (the band gate).
+  overallDecision      String
+  // proposed | approved | rejected | executed | expired
+  status               String    @default("proposed")
+  // Attention Surface item on the CUSTOMER side, when human approval is needed.
+  attentionItemRef     String?
+  decidedAt            DateTime?
+  decidedByPrincipalId String?
+  executedAt           DateTime?
+  executionEvidenceRef String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([federationLinkId])
+  @@index([status])
+  @@index([incidentKey])
+}
+
 // ─── Integration Coverage Matrix ─────────────────────────────────────────────
 
 enum WriteGateRequirement {
