@@ -39,8 +39,6 @@ import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import type { PortalContextEnvelope, PortalObjectAnchor } from "@/lib/portal-context";
 import { formatCoworkerOperationalCloseout } from "@/lib/tak/coworker-interaction-contract";
-import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-review";
-import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
 import {
   extractInvokedSkillId,
   getSkillsForAgent,
@@ -1756,28 +1754,12 @@ export async function sendMessage(input: {
       return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, proposal) };
     }
 
-    // EP-GOLDEN-TRIANGLE: leverage the "review" rung of the rigor ladder. When this
-    // coworker's posture sits high on Quality/effort, run ONE lightweight reviewer
-    // pass over the draft before it's sent. Fail-open (original draft on any issue);
-    // skipped for Balanced/low postures. "debate" is intentionally NOT run inline
-    // (too slow for an interactive reply) — it's reserved for autonomous runs.
-    let reviewedContent = agenticResult.content;
-    try {
-      if ((await resolveCoworkerReviewPattern(agent.agentId)) === "review") {
-        const verdict = await reviewCoworkerDraft({
-          userRequest: input.content,
-          draft: agenticResult.content,
-          sensitivity: agent.sensitivity,
-        });
-        reviewedContent = verdict.content;
-      }
-    } catch (err) {
-      console.warn("[golden-triangle] coworker review wrap failed (fail-open):", err);
-    }
-
-    // Map agentic result to the shape downstream code expects
+    // Map agentic result to the shape downstream code expects. (The Golden Triangle
+    // "review" pass now runs inside executeAutonomousAgenticLoop — the single seam
+    // for both chat and autonomous turns — so agenticResult.content is already
+    // reviewed when the coworker's posture calls for it.)
     const result = {
-      content: reviewedContent,
+      content: agenticResult.content,
       providerId: agenticResult.providerId,
       modelId: agenticResult.modelId,
       downgraded: agenticResult.downgraded,
