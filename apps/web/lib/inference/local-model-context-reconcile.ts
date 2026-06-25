@@ -111,3 +111,48 @@ export async function reconcileLocalModelContext(
     return none("unreachable", `context reconcile failed: ${(err as Error).message}`);
   }
 }
+
+/**
+ * The local generation model's EFFECTIVE served context in tokens — the DMR
+ * runtime `_configure` override when set, else the model-card default (what DMR
+ * actually serves with no override). Returns null when there is no reachable
+ * local generation model (caller then applies no cap shrink).
+ *
+ * Read this — NOT `ModelProfile.maxContextTokens` — when sizing the per-turn
+ * coworker tool cap: model discovery/profiling can reset the ModelProfile column
+ * to null, which silently defeats the cap (it reads null → full 48 → overflow).
+ * DMR is the source of truth. Best-effort with short timeouts; never throws.
+ */
+export async function resolveLocalServedContextTokens(
+  fetchImpl: typeof fetch = fetch,
+): Promise<number | null> {
+  // Wrap so getServedContextTokens' internal GET also gets a timeout (it issues
+  // its own fetch without a signal), so a hung DMR can never stall a coworker turn.
+  const withTimeout: typeof fetch = (url, init) =>
+    fetchImpl(url, { ...init, signal: init?.signal ?? AbortSignal.timeout(2500) });
+  try {
+    const oaiBase = getOllamaBaseUrl().replace(/\/$/, "");
+    const apiRoot = getOllamaApiRoot();
+    const modelsUrl = oaiBase.endsWith("/v1") ? `${oaiBase}/models` : `${oaiBase}/v1/models`;
+    let modelId: string | null = null;
+    let cardDefault: number | null = null;
+    try {
+      const res = await withTimeout(modelsUrl, {});
+      if (!res.ok) return null;
+      const body = (await res.json()) as {
+        data?: Array<{ id?: string; dmr?: { context_window?: number } }>;
+      };
+      const gen = (body.data ?? []).find((m) => m.id && !isEmbeddingModelId(m.id));
+      modelId = gen?.id ?? null;
+      cardDefault = typeof gen?.dmr?.context_window === "number" ? gen.dmr.context_window : null;
+    } catch {
+      return null;
+    }
+    if (!modelId) return null;
+    const served = await getServedContextTokens(apiRoot, modelId, withTimeout);
+    // Override wins; else the card default is what DMR actually serves right now.
+    return served.contextTokens ?? cardDefault ?? null;
+  } catch {
+    return null;
+  }
+}

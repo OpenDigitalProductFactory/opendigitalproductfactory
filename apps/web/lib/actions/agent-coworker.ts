@@ -1188,16 +1188,30 @@ export async function sendMessage(input: {
   // and failing every tool turn. Attach a capped core+role set and defer the
   // rest (still authorized); the model pulls deferred tools back on demand via
   // load_tools. Keeps capability, cuts per-turn cost.
-  const { selectCoworkerToolBudget, LOAD_TOOLS_TOOL, LOAD_TOOLS_TOOL_NAME } = await import(
+  const { selectCoworkerToolBudget, deriveCoworkerToolCap, LOAD_TOOLS_TOOL, LOAD_TOOLS_TOOL_NAME } = await import(
     "@/lib/actions/coworker-tool-budget"
   );
   const { getAgentToolGrantsAsync } = await import("@/lib/tak/agent-grants");
   const roleGrants = await getAgentToolGrantsAsync(agent.agentId);
+  // Size the per-turn attachment cap to the LOCAL model's served context. The
+  // 48-tool default assumes a ~32k window; a VRAM-constrained local model served
+  // at ~24.5k overflows (exceed_context_size_error) with 48 tool schemas (~16k
+  // tokens) plus a long thread. This binds on the local context even when a cloud
+  // provider is preferred — the cloud→local FALLBACK is exactly where the overflow
+  // bites — at the cost of only a few extra load_tools round-trips on a cloud turn.
+  // Reads the DMR served-context TRUTH (not ModelProfile, which model discovery can
+  // reset to null); no reachable local generation model → the full 48.
+  const { resolveLocalServedContextTokens } = await import(
+    "@/lib/inference/local-model-context-reconcile"
+  );
+  const localServedContext = await resolveLocalServedContextTokens();
+  const toolCap = deriveCoworkerToolCap(localServedContext);
   const { attached: budgetedTools, deferred: deferredTools } = selectCoworkerToolBudget({
     tools: availableTools,
     roleGrants,
     pageActionNames: new Set(pageActions.map((t) => t.name)),
     alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
+    cap: toolCap,
   });
   // Advertise the load_tools meta-tool only when something was actually deferred.
   const attachedTools = deferredTools.length > 0 ? [LOAD_TOOLS_TOOL, ...budgetedTools] : budgetedTools;
@@ -1255,7 +1269,7 @@ export async function sendMessage(input: {
     `[tools] thread=${JSON.stringify(input.threadId)} route=${JSON.stringify(input.routeContext)} agent=${JSON.stringify(agent.agentId)} ` +
     `${activeBuildPhase ? `buildPhase=${JSON.stringify(activeBuildPhase)} ` : ""}` +
     `authorized=${availableTools.length} attached=${toolsForProvider !== undefined ? attachedTools.length : 0} ` +
-    `deferred=${deferredTools.length}${isConversationOnly ? " (conversation-only)" : ""} ` +
+    `cap=${toolCap} deferred=${deferredTools.length}${isConversationOnly ? " (conversation-only)" : ""} ` +
     `tools=[${attachedTools.map(t => JSON.stringify(t.name)).join(", ")}]`;
   console.log(sanitizeForLog(toolsLogLine));
   if (activeBuildPhase) {

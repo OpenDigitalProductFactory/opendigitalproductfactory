@@ -3,10 +3,49 @@ import type { ToolDefinition } from "@/lib/mcp-tools";
 import {
   selectCoworkerToolBudget,
   selectLoadableTools,
+  deriveCoworkerToolCap,
   LOAD_TOOLS_TOOL,
   LOAD_TOOLS_TOOL_NAME,
   MAX_COWORKER_ATTACHED_TOOLS,
+  MIN_COWORKER_ATTACHED_TOOLS,
 } from "./coworker-tool-budget";
+
+describe("deriveCoworkerToolCap", () => {
+  it("keeps the full 48 ceiling at a 32k window (unchanged behavior)", () => {
+    expect(deriveCoworkerToolCap(32_768)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+  });
+
+  it("shrinks the cap on a VRAM-constrained 24,576 window so a long thread fits", () => {
+    // (24576 - 12000 reserve) / 330 ≈ 38 — below 48, leaving room for prompt+history+reply.
+    const cap = deriveCoworkerToolCap(24_576);
+    expect(cap).toBeLessThan(MAX_COWORKER_ATTACHED_TOOLS);
+    expect(cap).toBe(38);
+    // The observed overflow (49 tools → 24,730 prompt) now fits: 38 tools is ~3.6k
+    // fewer tokens, dropping the prompt well under the 24,576 window.
+    expect(cap * 330).toBeLessThan(24_576 - 8_000);
+  });
+
+  it("floors the cap rather than returning zero on a tiny window", () => {
+    expect(deriveCoworkerToolCap(4_096)).toBe(MIN_COWORKER_ATTACHED_TOOLS);
+    expect(deriveCoworkerToolCap(1_000)).toBe(MIN_COWORKER_ATTACHED_TOOLS);
+  });
+
+  it("returns the full ceiling when there is no small-context local model", () => {
+    expect(deriveCoworkerToolCap(null)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+    expect(deriveCoworkerToolCap(undefined)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+    expect(deriveCoworkerToolCap(0)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+  });
+
+  it("never exceeds the 48 ceiling even for a huge cloud window", () => {
+    expect(deriveCoworkerToolCap(200_000)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+  });
+
+  it("is monotonic — a larger window never yields fewer tools", () => {
+    const sizes = [4_096, 12_000, 16_000, 20_000, 24_576, 28_000, 32_768, 64_000];
+    const caps = sizes.map(deriveCoworkerToolCap);
+    for (let i = 1; i < caps.length; i++) expect(caps[i]).toBeGreaterThanOrEqual(caps[i - 1]);
+  });
+});
 
 const tool = (name: string, description = ""): ToolDefinition => ({
   name,

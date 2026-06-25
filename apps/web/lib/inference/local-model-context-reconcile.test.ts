@@ -5,7 +5,7 @@ const { mockPrisma } = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma, DISCOVERY_TRIAGE_AGENT_ID: "discovery-triage" }));
 
-import { reconcileLocalModelContext } from "./local-model-context-reconcile";
+import { reconcileLocalModelContext, resolveLocalServedContextTokens } from "./local-model-context-reconcile";
 import { RECOMMENDED_BUILD_CONTEXT_TOKENS } from "./local-model-policy";
 
 afterEach(() => vi.clearAllMocks());
@@ -106,5 +106,50 @@ describe("reconcileLocalModelContext", () => {
     const r = await reconcileLocalModelContext(f.fetchImpl);
     expect(r.status).toBe("unreachable");
     expect(f.calls.post).toBe(0);
+  });
+});
+
+function makeResolveFetch(opts: {
+  models?: Array<{ id: string; dmr?: { context_window?: number } }>;
+  override?: number | null;
+  modelsStatus?: number;
+}) {
+  return (async (url: string) => {
+    const u = String(url);
+    if (u.includes("_configure")) {
+      const entry = opts.override == null ? {} : { Config: { "context-size": opts.override } };
+      return { ok: true, status: 200, json: async () => [entry] } as unknown as Response;
+    }
+    if (u.includes("/models")) {
+      const status = opts.modelsStatus ?? 200;
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => ({ data: opts.models ?? [{ id: GEN, dmr: { context_window: 4096 } }] }),
+      } as unknown as Response;
+    }
+    throw new Error(`unexpected url ${u}`);
+  }) as unknown as typeof fetch;
+}
+
+describe("resolveLocalServedContextTokens", () => {
+  it("returns the DMR runtime override when one is set (the steady state)", async () => {
+    const f = makeResolveFetch({ models: [{ id: GEN, dmr: { context_window: 4096 } }], override: 24_576 });
+    expect(await resolveLocalServedContextTokens(f)).toBe(24_576);
+  });
+
+  it("falls back to the model-card default when no override is set (regressed state)", async () => {
+    const f = makeResolveFetch({ models: [{ id: GEN, dmr: { context_window: 4096 } }], override: null });
+    expect(await resolveLocalServedContextTokens(f)).toBe(4096);
+  });
+
+  it("returns null when only an embedding model is installed", async () => {
+    const f = makeResolveFetch({ models: [{ id: EMBED, dmr: { context_window: 2048 } }], override: null });
+    expect(await resolveLocalServedContextTokens(f)).toBeNull();
+  });
+
+  it("returns null (best-effort) when the models endpoint is unreachable", async () => {
+    const f = makeResolveFetch({ modelsStatus: 503 });
+    expect(await resolveLocalServedContextTokens(f)).toBeNull();
   });
 });
