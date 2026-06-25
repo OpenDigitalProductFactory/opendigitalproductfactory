@@ -68,10 +68,31 @@ never in a portable package.
 | `@dpf/api-client` | Keep | Mobile and external consumers need a stable client boundary. |
 | `@dpf/dpf-bootstrap` | Keep | Distribution / install tooling is not app runtime. |
 | `@dpf/dpf-skill-pack` | Keep | Plugin / skill payload is a distribution artifact. |
-| `storefront-templates`, `finance-templates` | Evaluate | Could become one template/archetype registry once contracts are clean. |
+| `@dpf/storefront-templates` | Keep | Archetype + capability-activation registry. Evaluated for merge with finance-templates — kept separate (distinct domain, see below). |
+| `@dpf/finance-templates` | Keep | Finance profile templates. Distinct domain from the archetype registry — kept separate (see below). |
 | `services/adp` | Keep | Runtime service boundary. |
 | `services/edge-node` | Keep | Deployment / runtime boundary. |
 | `services/integration-test-harness` | Keep | Verification harness boundary. |
+
+## Template registry consolidation — evaluation (BI-ARCH-PACKAGES)
+
+The spec (§6.7) flagged `storefront-templates` + `finance-templates` to evaluate for merging
+into "one template/archetype registry once contracts are clean." Both are now confirmed pure
+leaves (only `typescript` + `vitest` devDependencies — no `@dpf/db`, no runtime deps), so the
+"clean contracts" precondition is met. The evaluation outcome is **keep them separate**:
+
+- `@dpf/storefront-templates` is the **archetype + capability-activation registry** — a large
+  domain (capability registry, applicability rules, activation profiles, composition,
+  archetypes, sections, field dispatch, operational value streams).
+- `@dpf/finance-templates` is a small **finance profile** package (`types` + `profiles`) of
+  accounting/tax defaults. It *references* archetypes but is a distinct finance concern.
+
+They share only the word "templates." Merging them would couple two unrelated domains into one
+package purely by naming similarity — an **accidental** seam, which is exactly what this
+standard (and the spec's R1) says not to create. Clean contracts make a merge *possible*, not
+*beneficial*. If a future spec proves the finance profiles are tightly enough archetype-keyed
+to belong inside the archetype system, that is a data-model decision to make then — not a
+packaging win to force now.
 
 ## Adding a new package
 
