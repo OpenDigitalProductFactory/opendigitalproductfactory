@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useRef, useCallback } from "react"
+import { useState, useTransition, useRef, useCallback, useEffect } from "react"
 import { VoiceConsentForm } from "@/components/admin/VoiceConsentForm"
 import { setVoiceEnabled, resetVoiceProfile, saveVoiceSettings } from "@/lib/actions/voice-profile"
 import { resolveRecordingBlobMimeType, selectSupportedMimeType } from "@/components/agent/hooks/mime-probe"
@@ -75,6 +75,35 @@ export function VoiceProfileSetup({
     voiceProfile?.consentRecord &&
     !voiceProfile.consentRecord.revokedAt &&
     new Date(voiceProfile.consentRecord.expiresAt) > new Date()
+
+  // Proactive TTS service liveness — surface an "offline" notice instead of a
+  // "ready" profile whose Preview only reveals the failure after a click (the
+  // click-to-discover latch in useVoiceSynth).
+  const [serviceStatus, setServiceStatus] = useState<{ available: boolean; reason: string | null } | null>(null)
+
+  useEffect(() => {
+    if (voiceProfile?.status !== "ready") return
+    let cancelled = false
+    fetch("/api/voice/service-status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d) setServiceStatus({ available: !!d.available, reason: d.reason ?? null })
+      })
+      .catch(() => {
+        /* leave unknown — the button still falls back to call-time detection */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [voiceProfile?.status])
+
+  // "Offline" only once the probe returns negative; while unknown (null) or
+  // positive, defer to the hook's call-time availability.
+  const serviceOffline = serviceStatus?.available === false
+  const previewAvailable = voiceSynth.available && !serviceOffline
+  const previewReason = serviceOffline
+    ? serviceStatus?.reason ?? "The text-to-speech service is not running."
+    : voiceSynth.unavailableReason
 
   const handleToggle = () => {
     const next = !enabled
@@ -162,6 +191,14 @@ export function VoiceProfileSetup({
           <p className="text-sm text-muted-foreground pl-8">Complete step 1 first.</p>
         ) : voiceProfile?.status === "ready" ? (
           <>
+          {serviceOffline && (
+            <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3 text-sm">
+              <p className="font-medium text-[var(--dpf-text)]">Voice service offline</p>
+              <p className="mt-1 text-[var(--dpf-muted)]">
+                {previewReason} The profile is ready, but narration cannot play until the service is running again.
+              </p>
+            </div>
+          )}
           <div className="rounded-md border border-green-500/20 bg-green-500/5 px-4 py-3 text-sm flex flex-wrap items-center gap-3">
             <span>
               Voice profile ready.
@@ -174,29 +211,29 @@ export function VoiceProfileSetup({
             <button
               type="button"
               onClick={() => {
-                if (!voiceSynth.available) return
+                if (!previewAvailable) return
                 if (voiceSynth.isPlaying) {
                   voiceSynth.stop()
                 } else {
                   voiceSynth.synthesize(PREVIEW_TEXT, profileId, tuning)
                 }
               }}
-              disabled={!voiceSynth.available || voiceSynth.isSynthesizing}
+              disabled={!previewAvailable || voiceSynth.isSynthesizing}
               aria-label={
-                !voiceSynth.available
+                !previewAvailable
                   ? "Voice preview unavailable"
                   : voiceSynth.isPlaying
                     ? "Stop voice preview"
                     : "Preview voice"
               }
               title={
-                !voiceSynth.available
-                  ? voiceSynth.unavailableReason ?? "Voice preview unavailable. Start the text-to-speech service or replace the voice sample."
+                !previewAvailable
+                  ? previewReason ?? "Voice preview unavailable. Start the text-to-speech service or replace the voice sample."
                   : undefined
               }
               className="inline-flex items-center gap-1.5 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-1 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
             >
-              {!voiceSynth.available ? (
+              {!previewAvailable ? (
                 <>
                   <VolumeX aria-hidden="true" size={13} strokeWidth={2} />
                   Voice unavailable
