@@ -140,6 +140,20 @@ export function isModelTierRoutingEnabled(): boolean {
 }
 
 /**
+ * EP-QUALITY-RIGHTSIZING: quality-first defaults + the deliverable-sensitivity
+ * risk axis are opt-in (default off) so the change merges inert and byte-identical
+ * to today. Set DPF_BUILD_QUALITY_FIRST_RIGHTSIZING=1 to route substantive work
+ * to the robust tier by default (local only for the trivial doc/chore tail) and
+ * to let a HIGH-sensitivity deliverable escalate its build process regardless of
+ * size. Honored in tandem with DPF_BUILD_MODEL_TIER_ROUTING — the tier decision
+ * is still only acted on when routing is enabled + a robust engine is configured.
+ */
+export function isQualityFirstRightsizingEnabled(): boolean {
+  const v = process.env.DPF_BUILD_QUALITY_FIRST_RIGHTSIZING;
+  return v === "1" || v === "true";
+}
+
+/**
  * Resolve the first available robust (frontier) provider, preferring Claude >
  * Codex > Grok. Only active + credentialed providers qualify (the same
  * findConfiguredProvider gate the auto-detect uses). Returns null when no robust
