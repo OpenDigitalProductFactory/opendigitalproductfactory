@@ -1,7 +1,7 @@
 # Estate Patch Management — P0 implementation plan
 
 - **Date:** 2026-06-25
-- **Status:** In progress (slice 1 + OSV/KEV advisory extractors landed)
+- **Status:** In progress (slices 1–2a + projector core landed; runtime binding next)
 - **Spec:** `docs/superpowers/specs/2026-06-24-estate-patch-management-design.md`
 - **Epic:** `EP-PATCH-MANAGEMENT`
 - **Backlog:** BI-CAA0043C (version-intel feed), BI-489A8BB4 (assessment projector), BI-676A7960 (identity convergence), BI-020EE402 (posture UX)
@@ -34,7 +34,8 @@ Adapter interfaces + implementations that produce `assessPatchState` inputs, eac
 - Live fetch (OSV `querybatch` + `/vulns/{id}`, KEV catalog download) + scheduled projector entry in `SCHEDULED_JOB_CATALOG`. **Remaining — runtime-bound, verified via the sandbox.**
 
 ### Slice 3 — Assessment projector → AssuranceFinding (BI-489A8BB4)
-For each in-use `(InventoryEntity, DiscoveredSoftwareEvidence)`, run `assessPatchState` and upsert `AssuranceFinding` rows (`findingKind` ∈ patch-gap|vulnerability|end-of-life; `adapterKey` patch-intel|osv|cisa-kev|native-manager; `vendorIdentifier` = primary advisory; `remediationHint` JSON; `acceptedUntil` preserved). **No new findings table** — composes the Assurance Ledger (`schema.prisma:4968`). Carries a coverage metric so missing inventory is not read as clean.
+- **Pure core — LANDED:** `packages/db/src/patch/patch-projector.ts`. A `PatchAssessmentStore` port + `runPatchAssessment` orchestration (read evidence → `assessEvidence` → `evidenceToPatchFinding` → upsert actionable findings → resolve now-clean ones → posture summary), plus `applyViaForPackageManager`. Decoupled from Prisma so the whole read→assess→upsert→resolve flow is unit-tested against an in-memory fake store. Emits the AssuranceFinding upsert shape (`findingKind` ∈ patch-gap|vulnerability|end-of-life; `adapterKey` patch-intel|osv|cisa-kev; stable `findingKey` = `patch:<evidenceKey>`). **No new findings table** — composes the Assurance Ledger (`schema.prisma:4968`).
+- **Prisma binding — remaining (runtime-bound):** a `PatchAssessmentStore` adapter in `apps/web/lib/patch/` that lists `DiscoveredSoftwareEvidence` and **delegates finding writes to the existing `apps/web/lib/assurance/finding-persistence.ts`** (single source of truth for `AssuranceFinding` create/update/reopen — do not hand-roll a parallel upsert). Verified via the local-CI sandbox lease. Carries a coverage metric so missing inventory is not read as clean.
 
 ### Slice 4 — Identity convergence (BI-676A7960) — gated
 Map the `DiscoveryFingerprint*` subsystem first; decide whether the software-identity spine extends it or lands a focused `CatalogIdentity` + `SoftwarePatchProfile`. Then the reviewable migration for `softwareIdentityId` (rename→`legacy…` + add `catalogIdentityId`, or drop-with-evidence) per the lifecycle-evidence spec §7.4. Runs through Prisma in the sandbox/canonical install, never blind. Until then, slice 3 keys findings on `DiscoveredSoftwareEvidence`/`InventoryEntity` directly.
