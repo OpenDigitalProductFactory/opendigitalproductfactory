@@ -157,6 +157,15 @@ export const PRINCIPLE_DIMENSIONS = [
   "data_privacy",
   "cost_efficiency",
   "vendor_lock_in",
+  // Added for EP-SOVEREIGN-SOC security-response governance (P2). The kernel
+  // governs SOC ACTION decisions (escalate/close/respond, may-auto-execute) over
+  // these commensurable axes — never the analytical verdict. `blast_radius`
+  // (already a cost axis above) is reused for estate reach; the response gate +
+  // security principles that weight these land in P3.
+  "reversibility", // benefit: can the action be undone?
+  "evidence_confidence", // benefit: investigation confidence in the verdict
+  "customer_consent_state", // benefit: breadth of standing customer approval
+  "business_disruption", // COST: does containment break production?
 ] as const;
 export type PrincipleDimension = (typeof PRINCIPLE_DIMENSIONS)[number];
 
@@ -185,6 +194,9 @@ export const PRINCIPLE_COST_DIMENSIONS = [
   "blast_radius",
   "human_cognitive_load",
   "vendor_lock_in",
+  // EP-SOVEREIGN-SOC: a security response that breaks production is a cost the
+  // governing principle must pull AGAINST (negative weight), same as blast_radius.
+  "business_disruption",
 ] as const satisfies readonly PrincipleDimension[];
 export type PrincipleCostDimension = (typeof PRINCIPLE_COST_DIMENSIONS)[number];
 

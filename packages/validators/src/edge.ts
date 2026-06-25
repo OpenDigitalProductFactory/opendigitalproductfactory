@@ -197,6 +197,79 @@ export const edgeEventSchema = z.object({
 
 export type EdgeEvent = z.infer<typeof edgeEventSchema>;
 
+// ---------------------------------------------------------------------------
+// SecurityEvent — OCSF-normalized security telemetry on the edge envelope.
+//
+// EP-SOVEREIGN-SOC P0. Spec: docs/superpowers/specs/2026-06-24-sovereign-soc-
+// siem-design.md §4.1 + §6.1. Rides the existing /api/v1/edge/events route and
+// envelope via the eventType discriminator — the same pattern alert/change use.
+// "security" carries an already-OCSF-normalized event; the portal dispatches it
+// to the SecurityEvent table. A "security" record fails edgeEventSchema's
+// eventType enum, so the envelope union routes it here unambiguously.
+//
+// Scope (customer/site) is NEVER taken from this wire body — the route derives
+// it from the authenticated EdgeNode row. rawRef is a pointer/hash to edge-local
+// raw evidence, never the raw payload (the sovereignty boundary).
+// ---------------------------------------------------------------------------
+
+export const SECURITY_EVENT_CONFIDENCE = [
+  "source-reported",
+  "low",
+  "medium",
+  "high",
+  "confirmed",
+] as const;
+export type SecurityEventConfidence =
+  (typeof SECURITY_EVENT_CONFIDENCE)[number];
+
+export const securityEventWireSchema = z.object({
+  /** Discriminator selecting the SecurityEvent persistence path. */
+  eventType: z.literal("security"),
+  /**
+   * Globally-unique, producer-composed idempotency key. A replay with the same
+   * eventKey collapses — append-only telemetry, re-submission is a no-op.
+   */
+  eventKey: z.string().min(1).max(255),
+  /** OCSF schema version the producer normalized to (e.g. "1.8.0"). */
+  ocsfVersion: z.string().min(1).max(20),
+  /** OCSF class_uid — the event class (required). */
+  ocsfClassUid: z.number().int(),
+  /** OCSF category_uid (optional). */
+  ocsfCategoryUid: z.number().int().optional(),
+  /** OCSF activity_id (optional). */
+  ocsfActivityId: z.number().int().optional(),
+  /** OCSF severity_id, 0..6 (0 Unknown … 5 Critical … 6 Fatal). */
+  severityId: z.number().int().min(0).max(6).optional(),
+  /** RFC 3339 time the activity occurred (set by the detector). */
+  time: z.string().datetime(),
+  /** Source family — "windows.security", "syslog", "aws.cloudtrail", "dpf.internal". */
+  sourceKind: z.string().min(1).max(100),
+  /** Operator-readable source name — host, account, or service. */
+  sourceName: z.string().min(1).max(200),
+  /** Principal id when the actor is a known platform identity; else omitted. */
+  actorPrincipalId: z.string().max(255).optional(),
+  /** OCSF actor object (user / process). */
+  actor: z.record(z.string(), z.unknown()).optional(),
+  /** OCSF device / endpoint object. */
+  device: z.record(z.string(), z.unknown()).optional(),
+  /** OCSF src_endpoint. */
+  srcEndpoint: z.record(z.string(), z.unknown()).optional(),
+  /** OCSF dst_endpoint. */
+  dstEndpoint: z.record(z.string(), z.unknown()).optional(),
+  /** OCSF observables array. */
+  observables: z.array(z.record(z.string(), z.unknown())).optional(),
+  /** Full normalized OCSF body. */
+  normalized: z.record(z.string(), z.unknown()).optional(),
+  /** Pointer / hash to edge-local raw evidence — NOT the raw blob. */
+  rawRef: z.record(z.string(), z.unknown()).optional(),
+  confidence: z
+    .enum(SECURITY_EVENT_CONFIDENCE)
+    .optional()
+    .default("source-reported"),
+});
+
+export type SecurityEventWire = z.infer<typeof securityEventWireSchema>;
+
 export const edgeEventEnvelopeSchema = z.object({
   /** UUID idempotency key — same pattern as discovery-runs + metrics. */
   runKey: z.string().uuid(),
@@ -208,7 +281,15 @@ export const edgeEventEnvelopeSchema = z.object({
   /** ISO 8601 timestamp when the batch left the edge node. */
   observedAt: z.string().datetime(),
   eventsVersion: z.literal("1"),
-  events: z.array(edgeEventSchema).min(1).max(500),
+  // alert/change share the PD-CEF edgeEventSchema; security carries the OCSF
+  // securityEventWireSchema. The route discriminates on eventType: "security"
+  // fails edgeEventSchema's eventType enum and so matches only the security
+  // branch, while bare/alert/change records match only edgeEventSchema.
+  events: z
+    .array(z.union([edgeEventSchema, securityEventWireSchema]))
+    .min(1)
+    .max(500),
 });
 
 export type EdgeEventEnvelope = z.infer<typeof edgeEventEnvelopeSchema>;
+export type EdgeEventEnvelopeEvent = EdgeEventEnvelope["events"][number];

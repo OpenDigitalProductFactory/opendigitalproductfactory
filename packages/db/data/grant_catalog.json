@@ -404,6 +404,55 @@
       ]
     },
     {
+      "key": "siem_read",
+      "description": "Read security telemetry: OCSF security events, detections, and security cases.",
+      "category": "operate",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "query_security_events",
+        "query_detections",
+        "get_security_case"
+      ],
+      "implies": []
+    },
+    {
+      "key": "siem_investigate",
+      "description": "Open and update security cases: timeline, evidence-based verdict, detection links. Does not execute response.",
+      "category": "operate",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "open_security_case",
+        "update_security_case"
+      ],
+      "implies": [
+        "siem_read"
+      ]
+    },
+    {
+      "key": "siem_tune",
+      "description": "Propose detection-rule tuning or suppression for operator review. Does not change rule behavior.",
+      "category": "operate",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "propose_detection_tuning"
+      ],
+      "implies": [
+        "siem_read"
+      ]
+    },
+    {
+      "key": "incident_respond",
+      "description": "Propose a containment/remediation action for a security case. Recorded for human approval; never executed directly.",
+      "category": "operate",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "propose_response"
+      ],
+      "implies": [
+        "siem_read"
+      ]
+    },
+    {
       "key": "contract_read",
       "description": "Read contract.",
       "category": "explore",

@@ -37,6 +37,12 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // can draft an opportunity or quote can always read the accounts/pipeline it
   // is drafting against. One-way — crm_read alone never implies crm_write.
   crm_write: ["crm_read"],
+  // SIEM (EP-SOVEREIGN-SOC): a coworker that can investigate, tune detections,
+  // or propose a response can always read the security events/detections/cases
+  // it acts on. One-way — siem_read alone never implies the write grants.
+  siem_investigate: ["siem_read"],
+  siem_tune: ["siem_read"],
+  incident_respond: ["siem_read"],
 };
 
 /** Expand a list of held grants by applying GRANT_IMPLICATIONS one-way.
@@ -422,6 +428,16 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_customer_account: ["crm_write"],
   create_opportunity:      ["crm_write"],
   create_quote:            ["crm_write"],
+
+  // Security Operations / SIEM (EP-SOVEREIGN-SOC). Writes are propose-only +
+  // coworkerArtifact; siem_investigate/siem_tune/incident_respond imply siem_read.
+  query_security_events:    ["siem_read"],
+  query_detections:         ["siem_read"],
+  get_security_case:        ["siem_read"],
+  open_security_case:       ["siem_investigate"],
+  update_security_case:     ["siem_investigate"],
+  propose_detection_tuning: ["siem_tune"],
+  propose_response:         ["incident_respond"],
 
   // Finance
   get_finance_period_summary:   ["financial_report_create"],

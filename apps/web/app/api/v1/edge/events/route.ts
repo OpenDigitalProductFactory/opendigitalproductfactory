@@ -23,6 +23,9 @@
 //        "change"           — upsert ChangeEvent on (edgeNodeId, dedupKey);
 //                             point-in-time fact, no lifecycle, action
 //                             accepted but ignored
+//        "security"         — upsert SecurityEvent on eventKey (EP-SOVEREIGN-SOC
+//                             P0): OCSF-normalized, append-only; scope copied
+//                             from the auth'd EdgeNode row, never the body
 //
 // Alert lifecycle on replay:
 //   action="trigger"     — new row, or re-open resolved row (resolvedAt
@@ -41,10 +44,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { prisma } from "@dpf/db";
-import { edgeEventEnvelopeSchema, type EdgeEvent } from "@dpf/validators";
+import {
+  edgeEventEnvelopeSchema,
+  type EdgeEvent,
+  type SecurityEventWire,
+} from "@dpf/validators";
 
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { checkEdgeRateLimit } from "@/lib/edge-node/rate-limit";
+import { deriveSecurityScopeKey } from "@/lib/security/scope";
 
 const BODY_SIZE_CAP_BYTES = 256 * 1024; // 256 KB — generous for batched events
 const FRESHNESS_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
@@ -60,6 +68,9 @@ type IngestSummary = {
   // updated because changes have no meaningful "re-opened" semantics and the
   // operator-facing distinction is low value at this layer.
   changes: number;
+  // EP-SOVEREIGN-SOC P0: SecurityEvent rows accepted (created or replayed —
+  // append-only telemetry, so created vs replayed is not surfaced here).
+  security: number;
 };
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -160,16 +171,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     resolved: 0,
     updated: 0,
     changes: 0,
+    security: 0,
   };
 
   try {
     await prisma.$transaction(async (tx) => {
       for (const ev of parsed.data.events) {
-        // Slice 1 (BI-8405FDA5): dispatch by eventType. The Zod default of
-        // "alert" guarantees ev.eventType is always set after parsing, so
-        // a bare equality check is safe; existing Slice 0 producers omit
-        // the field and land on the alert branch unchanged.
-        if (ev.eventType === "change") {
+        // Dispatch by eventType. The Zod default of "alert" guarantees
+        // ev.eventType is always set after parsing, so a bare equality check is
+        // safe; existing Slice 0 producers omit the field and land on the alert
+        // branch unchanged. EP-SOVEREIGN-SOC P0 adds the "security" branch (the
+        // envelope union narrows it to SecurityEventWire); Slice 1 (BI-8405FDA5)
+        // added "change".
+        if (ev.eventType === "security") {
+          await ingestSecurityEvent(
+            tx,
+            {
+              edgeNodeRowId,
+              customerAccountId: authResult.customerAccountId,
+              customerSiteId: authResult.customerSiteId,
+            },
+            ev,
+            summary,
+          );
+        } else if (ev.eventType === "change") {
           await ingestChange(tx, edgeNodeRowId, ev, summary);
         } else {
           await ingestOne(tx, edgeNodeRowId, ev, summary);
@@ -387,4 +412,62 @@ async function ingestChange(
     },
   });
   summary.changes++;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// ingestSecurityEvent — EP-SOVEREIGN-SOC P0. Upsert one OCSF-normalized
+// SecurityEvent keyed on the globally-unique eventKey. Append-only telemetry:
+// a replay of the same eventKey is a no-op (empty update) — the alert/change
+// lifecycle does not apply here; that lives on Detection / SecurityCase.
+//
+// Scope is taken from the authenticated EdgeNode row (passed in), NEVER the
+// wire body — the same auth-boundary invariant the rest of this route holds.
+// JSON columns mirror the ingestChange pattern: pass the value or leave it
+// undefined so Prisma applies the column default ('{}' / '[]').
+// ──────────────────────────────────────────────────────────────────────────
+async function ingestSecurityEvent(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  scope: {
+    edgeNodeRowId: string;
+    customerAccountId: string | null;
+    customerSiteId: string | null;
+  },
+  ev: SecurityEventWire,
+  summary: IngestSummary,
+): Promise<void> {
+  const json = (v: unknown): object | undefined =>
+    v === undefined ? undefined : (v as object);
+
+  await tx.securityEvent.upsert({
+    where: { eventKey: ev.eventKey },
+    update: {}, // append-only: replay of the same eventKey is a no-op
+    create: {
+      eventKey: ev.eventKey,
+      ocsfVersion: ev.ocsfVersion,
+      ocsfClassUid: ev.ocsfClassUid,
+      ocsfCategoryUid: ev.ocsfCategoryUid ?? null,
+      ocsfActivityId: ev.ocsfActivityId ?? null,
+      severityId: ev.severityId ?? null,
+      time: new Date(ev.time),
+      scopeKey: deriveSecurityScopeKey(
+        scope.customerAccountId,
+        scope.customerSiteId,
+      ),
+      customerAccountId: scope.customerAccountId,
+      customerSiteId: scope.customerSiteId,
+      edgeNodeId: scope.edgeNodeRowId,
+      sourceKind: ev.sourceKind,
+      sourceName: ev.sourceName,
+      actorPrincipalId: ev.actorPrincipalId ?? null,
+      actor: json(ev.actor),
+      device: json(ev.device),
+      srcEndpoint: json(ev.srcEndpoint),
+      dstEndpoint: json(ev.dstEndpoint),
+      observables: json(ev.observables),
+      normalized: json(ev.normalized),
+      rawRef: json(ev.rawRef),
+      confidence: ev.confidence,
+    },
+  });
+  summary.security++;
 }

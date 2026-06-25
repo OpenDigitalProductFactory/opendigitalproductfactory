@@ -7,6 +7,7 @@ const {
   mockEdgeEventCreate,
   mockEdgeEventUpdate,
   mockChangeEventUpsert,
+  mockSecurityEventUpsert,
   mockTransaction,
 } = vi.hoisted(() => ({
   mockResolveAuth: vi.fn(),
@@ -14,6 +15,7 @@ const {
   mockEdgeEventCreate: vi.fn(),
   mockEdgeEventUpdate: vi.fn(),
   mockChangeEventUpsert: vi.fn(),
+  mockSecurityEventUpsert: vi.fn(),
   mockTransaction: vi.fn(),
 }));
 
@@ -31,6 +33,9 @@ vi.mock("@dpf/db", () => ({
     },
     changeEvent: {
       upsert: mockChangeEventUpsert,
+    },
+    securityEvent: {
+      upsert: mockSecurityEventUpsert,
     },
   },
 }));
@@ -123,12 +128,14 @@ type CapturedUpsert = {
 const creates: CapturedCreate[] = [];
 const updates: CapturedUpdate[] = [];
 const changeUpserts: CapturedUpsert[] = [];
+const securityUpserts: CapturedUpsert[] = [];
 
 beforeEach(() => {
   vi.resetAllMocks();
   creates.length = 0;
   updates.length = 0;
   changeUpserts.length = 0;
+  securityUpserts.length = 0;
 
   // Default: $transaction simply runs the callback with the same prisma-
   // shaped mock; tests that need rollback behavior override per-test.
@@ -141,6 +148,9 @@ beforeEach(() => {
       },
       changeEvent: {
         upsert: mockChangeEventUpsert,
+      },
+      securityEvent: {
+        upsert: mockSecurityEventUpsert,
       },
     });
   });
@@ -157,6 +167,10 @@ beforeEach(() => {
   mockChangeEventUpsert.mockImplementation(async (args: CapturedUpsert) => {
     changeUpserts.push(args);
     return { id: `changeevent_${changeUpserts.length}` };
+  });
+  mockSecurityEventUpsert.mockImplementation(async (args: CapturedUpsert) => {
+    securityUpserts.push(args);
+    return { id: `securityevent_${securityUpserts.length}` };
   });
 
   _resetEdgeRateLimits();
@@ -531,5 +545,99 @@ describe("POST /api/v1/edge/events — rate limit", () => {
     const json = await overflow.json();
     expect(json.error).toBe("rate_limited");
     expect(json.retryAfterSec).toBeGreaterThan(0);
+  });
+});
+
+// EP-SOVEREIGN-SOC P0: security-event discriminator path. eventType="security"
+// routes to SecurityEvent.upsert; scope is derived from the authenticated
+// EdgeNode row, never the wire body.
+describe("POST /api/v1/edge/events — security events (EP-SOVEREIGN-SOC P0)", () => {
+  const AUTHED_CUSTOMER = {
+    ...AUTHED,
+    customerAccountId: "acct_42",
+    customerSiteId: "site_7",
+  };
+
+  function makeSecurityEvent(
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    return {
+      eventType: "security",
+      eventKey: "windows.security:HOST1:42",
+      ocsfVersion: "1.8.0",
+      ocsfClassUid: 3002,
+      severityId: 3,
+      time: freshObservedAt(),
+      sourceKind: "windows.security",
+      sourceName: "HOST1",
+      actor: { user: { name: "alice" } },
+      ...overrides,
+    };
+  }
+
+  it("routes eventType=security to SecurityEvent.upsert with scope from auth", async () => {
+    mockResolveAuth.mockResolvedValue(AUTHED_CUSTOMER);
+    const res = await POST(makeReq(makeValidBody({ events: [makeSecurityEvent()] })));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.security).toBe(1);
+    expect(json.created).toBe(0);
+    expect(creates).toHaveLength(0);
+    expect(securityUpserts).toHaveLength(1);
+    expect(securityUpserts[0]!.where).toEqual({
+      eventKey: "windows.security:HOST1:42",
+    });
+    expect(securityUpserts[0]!.create).toMatchObject({
+      eventKey: "windows.security:HOST1:42",
+      ocsfClassUid: 3002,
+      // scope copied from the authenticated EdgeNode row, not the body
+      scopeKey: "customer:acct_42",
+      customerAccountId: "acct_42",
+      customerSiteId: "site_7",
+      edgeNodeId: "edgenode_cuid_1",
+      confidence: "source-reported",
+    });
+  });
+
+  it("ignores any scope claimed in the wire body", async () => {
+    mockResolveAuth.mockResolvedValue(AUTHED_CUSTOMER);
+    await POST(
+      makeReq(
+        makeValidBody({
+          events: [
+            makeSecurityEvent({
+              customerAccountId: "acct_victim",
+              scopeKey: "customer:acct_victim",
+            }),
+          ],
+        }),
+      ),
+    );
+    expect(securityUpserts[0]!.create).toMatchObject({
+      scopeKey: "customer:acct_42",
+      customerAccountId: "acct_42",
+    });
+  });
+
+  it("dispatches a mixed alert + security batch in one transaction", async () => {
+    mockResolveAuth.mockResolvedValue(AUTHED_CUSTOMER);
+    const res = await POST(
+      makeReq(
+        makeValidBody({
+          events: [
+            makeValidEvent({ dedupKey: "alert-1" }),
+            makeSecurityEvent({ eventKey: "k-sec-1" }),
+          ],
+        }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.accepted).toBe(2);
+    expect(json.created).toBe(1);
+    expect(json.security).toBe(1);
+    expect(creates).toHaveLength(1);
+    expect(securityUpserts).toHaveLength(1);
+    expect(mockTransaction).toHaveBeenCalledTimes(1);
   });
 });
