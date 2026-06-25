@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@dpf/db";
 import { isFederationRole, type FederationRole } from "@dpf/db/federation-link-types";
 
+import { resolveAppBaseUrl } from "@/lib/app-url";
 import { auth } from "@/lib/auth";
 import {
   approveFederationLinkLocal,
@@ -18,8 +19,10 @@ import {
   quarantineFederationLink,
   revokeFederationLink,
 } from "@/lib/federation/enrollment";
+import { enrollWithPeer, relayApprovalToPeer } from "@/lib/federation/outbound";
 import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { can } from "@/lib/permissions";
+import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 const ADMIN_PATH = "/platform/federation-links";
 
@@ -118,6 +121,21 @@ export async function approveFederationLinkAction(linkId: string): Promise<LinkL
   }
   try {
     const linkState = await approveFederationLinkLocal(linkId, gate.principalId);
+    // Relay our approval to the peer so they flip their approvedAtPeer. Best-effort:
+    // a relay failure must never fail our local approval (the peer can be re-notified).
+    if (envFlagEnabled(process.env, "DPF_FEDERATION_EXCHANGE_ENABLED")) {
+      const full = await prisma.federationLink.findUnique({
+        where: { linkId },
+        select: { linkId: true, peerAuthorityUrl: true, peerTokenEnc: true },
+      });
+      if (full?.peerTokenEnc) {
+        try {
+          await relayApprovalToPeer(full);
+        } catch {
+          /* best-effort relay */
+        }
+      }
+    }
     revalidatePath(ADMIN_PATH);
     return { ok: true, linkId, linkState };
   } catch (err) {
@@ -168,5 +186,44 @@ export async function revokeFederationLinkAction(
     return { ok: true, linkId, linkState };
   } catch (err) {
     return { ok: false, error: "internal_error", message: err instanceof Error ? err.message : "revoke failed" };
+  }
+}
+
+// ── Connect to a peer (outbound enroll) ──────────────────────────────────────
+
+export type EnrollWithPeerActionResult =
+  | { ok: true; linkId: string; linkState: string; role: string }
+  | ActionFailure;
+
+/** Redeem a peer's invitation token to establish our side of a link. The
+ *  peer-issued link token is stored encrypted for outbound calls. */
+export async function enrollWithPeerAction(input: {
+  peerAuthorityUrl: string;
+  bootstrapToken: string;
+  displayName: string;
+  peerOrganizationRef?: string | null;
+}): Promise<EnrollWithPeerActionResult> {
+  const gate = await assertManagePlatform();
+  if (!gate.ok) return gate;
+  if (!input.peerAuthorityUrl?.trim() || !input.bootstrapToken?.trim() || !input.displayName?.trim()) {
+    return { ok: false, error: "invalid_input", message: "peer URL, invitation token, and a name are required" };
+  }
+  const localAuthorityUrl = resolveAppBaseUrl();
+  if (!localAuthorityUrl) {
+    return { ok: false, error: "internal_error", message: "this deployment's base URL is not configured (set APP_URL)" };
+  }
+  try {
+    const result = await enrollWithPeer({
+      peerAuthorityUrl: input.peerAuthorityUrl.trim(),
+      bootstrapToken: input.bootstrapToken.trim(),
+      localAuthorityUrl,
+      displayName: input.displayName.trim(),
+      ...(input.peerOrganizationRef ? { peerOrganizationRef: input.peerOrganizationRef } : {}),
+    });
+    if (!result.ok) return { ok: false, error: "internal_error", message: result.message };
+    revalidatePath(ADMIN_PATH);
+    return { ok: true, linkId: result.linkId, linkState: result.linkState, role: result.role };
+  } catch (err) {
+    return { ok: false, error: "internal_error", message: err instanceof Error ? err.message : "enroll failed" };
   }
 }

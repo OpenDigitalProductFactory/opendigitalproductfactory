@@ -16,6 +16,7 @@ import {
   type IncidentExchangeDb,
   type IncomingIncident,
 } from "@/lib/federation/exchange-handlers";
+import { autoDiagnoseAndSendProposal, type AutoProposeDb } from "@/lib/federation/auto-propose";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 const ERROR_STATUS: Record<string, number> = {
@@ -64,6 +65,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     payloadHash: data.payloadHash,
     ...(typeof data.baseVersion === "number" ? { baseVersion: data.baseVersion } : {}),
   });
+
+  // AI-MSP loop: if we manage this peer, auto-diagnose + propose remediation back
+  // (best-effort; the customer re-evaluates through their own consent gate).
+  try {
+    await autoDiagnoseAndSendProposal(prisma as unknown as AutoProposeDb, authz.linkId, {
+      incidentKey: data.incidentKey,
+      summary: data.summary,
+      highestSeverity: typeof data.highestSeverity === "string" ? data.highestSeverity : "warn",
+    });
+  } catch {
+    /* best-effort */
+  }
 
   return NextResponse.json({ ok: true, ...result }, { status: 200 });
 }

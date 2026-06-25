@@ -337,6 +337,14 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     high: "warning",
     urgent: "danger",
   },
+  // EP-MSP-FEDERATION · B4 — cross-org remediation proposal lifecycle.
+  federatedProposalStatus: {
+    proposed: "warning",
+    approved: "success",
+    rejected: "neutral",
+    executed: "success",
+    expired: "neutral",
+  },
 };
 
 /**

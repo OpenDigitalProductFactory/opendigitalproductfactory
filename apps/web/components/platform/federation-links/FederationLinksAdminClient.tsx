@@ -6,6 +6,7 @@ import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
 import { StatusBadge } from "@/components/ui/report-kit";
 import {
   approveFederationLinkAction,
+  enrollWithPeerAction,
   issueFederationBootstrapAction,
   quarantineFederationLinkAction,
   revokeFederationLinkAction,
@@ -30,7 +31,30 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
   const [role, setRole] = useState<"manages" | "managed-by">("manages");
   const [ttlMinutes, setTtlMinutes] = useState(15);
   const [issued, setIssued] = useState<{ plaintext: string; expiresAt: string } | null>(null);
+  const [peerUrl, setPeerUrl] = useState("");
+  const [peerToken, setPeerToken] = useState("");
+  const [peerName, setPeerName] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  function onConnect() {
+    setFlash(null);
+    startTransition(async () => {
+      const result = await enrollWithPeerAction({
+        peerAuthorityUrl: peerUrl.trim(),
+        bootstrapToken: peerToken.trim(),
+        displayName: peerName.trim() || "Peer deployment",
+      });
+      if (result.ok) {
+        setPeerToken("");
+        setFlash({
+          kind: "success",
+          text: `Connected — link ${result.linkId} is ${result.linkState}. Approve it below; it is trusted once both sides approve.`,
+        });
+      } else {
+        setFlash({ kind: "error", text: `Connect failed: ${result.message}` });
+      }
+    });
+  }
 
   function onIssue() {
     setFlash(null);
@@ -177,6 +201,58 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
             </p>
           </div>
         )}
+      </div>
+
+      {/* Connect to a peer (outbound enroll) */}
+      <div
+        className="rounded border p-4"
+        style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-1)" }}
+      >
+        <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Connect to a peer</h2>
+        <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">
+          Redeem an invitation a peer issued you. Their link token is stored encrypted for outbound calls.
+        </p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="text-xs text-[var(--dpf-muted)]">
+            Peer URL
+            <input
+              value={peerUrl}
+              onChange={(e) => setPeerUrl(e.target.value)}
+              placeholder="https://peer.example"
+              className="mt-1 block w-56 rounded border px-2 py-1 text-sm text-[var(--dpf-text)]"
+              style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}
+            />
+          </label>
+          <label className="text-xs text-[var(--dpf-muted)]">
+            Invitation token
+            <input
+              value={peerToken}
+              onChange={(e) => setPeerToken(e.target.value)}
+              placeholder="dpffboot_…"
+              className="mt-1 block w-56 rounded border px-2 py-1 font-mono text-xs text-[var(--dpf-text)]"
+              style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}
+            />
+          </label>
+          <label className="text-xs text-[var(--dpf-muted)]">
+            Peer name
+            <input
+              value={peerName}
+              onChange={(e) => setPeerName(e.target.value)}
+              placeholder="Acme MSP"
+              className="mt-1 block w-40 rounded border px-2 py-1 text-sm text-[var(--dpf-text)]"
+              style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={onConnect}
+            disabled={isPending || !peerUrl.trim() || !peerToken.trim()}
+            className="rounded px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            style={{ backgroundColor: "var(--dpf-accent)" }}
+          >
+            Connect
+          </button>
+        </div>
       </div>
 
       {/* Links table */}

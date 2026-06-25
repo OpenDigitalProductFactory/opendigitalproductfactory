@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 512,
+  "routeCount": 516,
   "routes": [
     {
       "routePath": "/",
@@ -2128,6 +2128,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/edge/metrics/route.ts"
+    },
+    {
+      "routePath": "/api/v1/federation/approval-relay",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "approval-relay"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/approval-relay/route.ts"
     },
     {
       "routePath": "/api/v1/federation/enroll",
@@ -4802,6 +4814,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/platform/federation-links/page.tsx"
+    },
+    {
+      "routePath": "/platform/federation-proposals",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "federation-proposals"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/federation-proposals/page.tsx"
     },
     {
       "routePath": "/platform/identity",
