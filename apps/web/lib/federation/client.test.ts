@@ -28,6 +28,33 @@ describe("postToPeer", () => {
     expect(JSON.parse(init.body as string).data).toEqual({ x: 1 });
   });
 
+  it("refuses an SSRF target (link-local / cloud-metadata host) by default and never dials", async () => {
+    const f = mockFetch();
+    const result = await postToPeer({
+      peerAuthorityUrl: "https://169.254.169.254",
+      linkToken: "dpflink_secret",
+      path: "/api/v1/federation/incident",
+      cloudEvent: {},
+      fetchImpl: f,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(0);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("refuses a non-https peer scheme by default and never dials", async () => {
+    const f = mockFetch();
+    const result = await postToPeer({
+      peerAuthorityUrl: "http://peer.example",
+      linkToken: "dpflink_secret",
+      path: "/api/v1/federation/incident",
+      cloudEvent: {},
+      fetchImpl: f,
+    });
+    expect(result.ok).toBe(false);
+    expect(f).not.toHaveBeenCalled();
+  });
+
   it("returns a soft failure on a network error (no throw)", async () => {
     const f = vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) as unknown as typeof fetch;
     const result = await postToPeer({

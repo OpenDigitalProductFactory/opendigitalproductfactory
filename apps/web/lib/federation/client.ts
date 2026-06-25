@@ -7,6 +7,25 @@
 
 import { toCloudEvent } from "@dpf/db/projection-serialization";
 
+import { envFlagEnabled } from "@/lib/runtime/env-flags";
+import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
+
+// peerAuthorityUrl is operator-supplied → an SSRF sink (CWE-918). Validate it at
+// this single chokepoint that every outbound federation call funnels through
+// (incident / proposal / enroll / approval-relay). Safe-by-default: https +
+// public hosts only. Local/LAN federation — two on-prem DPF instances or dev —
+// opts in explicitly via DPF_FEDERATION_ALLOW_INSECURE_PEERS (permits http +
+// private/loopback networks). The peer route `path` is our own constant, not
+// user input, so it is appended to the validated origin.
+function safePeerRequestUrl(peerAuthorityUrl: string, path: string): string {
+  const allowInsecure = envFlagEnabled(process.env, "DPF_FEDERATION_ALLOW_INSECURE_PEERS");
+  const validated = assertSafeOutboundUrl(peerAuthorityUrl, {
+    allowedSchemes: allowInsecure ? ["https:", "http:"] : ["https:"],
+    blockPrivateNetworks: !allowInsecure,
+  });
+  return validated.href.replace(/\/+$/, "") + path;
+}
+
 export interface PeerPostResult {
   ok: boolean;
   status: number;
@@ -22,7 +41,13 @@ export async function postToPeer(input: {
   fetchImpl?: typeof fetch;
 }): Promise<PeerPostResult> {
   const f = input.fetchImpl ?? fetch;
-  const url = input.peerAuthorityUrl.replace(/\/+$/, "") + input.path;
+  let url: string;
+  try {
+    url = safePeerRequestUrl(input.peerAuthorityUrl, input.path);
+  } catch (err) {
+    // A peer URL that fails the SSRF guard is never dialed.
+    return { ok: false, status: 0, error: err instanceof Error ? err.message : "unsafe peer url" };
+  }
   try {
     const res = await f(url, {
       method: "POST",
