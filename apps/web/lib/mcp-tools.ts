@@ -42,6 +42,7 @@ import {
 import { deliberationSiemPack } from "@/lib/mcp/packs/deliberation-siem-pack";
 import { runtimeCoordinationPack } from "@/lib/mcp/packs/runtime-coordination-pack";
 import { workCapsulesPack } from "@/lib/mcp/packs/work-capsules-pack";
+import { workbooksPack } from "@/lib/mcp/packs/workbooks-pack";
 import { composeToolPacks } from "@/lib/mcp/tool-registry";
 import {
   createLicenseReadinessIssue,
@@ -431,7 +432,7 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 
 // Scoped tool packs compose into the registry; mcp-tools.ts is the thin layer
 // over them (definitions spread into PLATFORM_TOOLS below; dispatch in executeTool).
-const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack]);
+const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack]);
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,
@@ -673,93 +674,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
     buildPhases: ["ideate"],
-  },
-  // ─── Work Capsule control harness (spec 2026-05-14) ────────────────────────
-  {
-    name: "workbook_list_tables",
-    description: "List the Workbook tables the agent can access (grid/spreadsheet data). Read-only. Pass workbookId to scope to one workbook.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        workbookId: { type: "string", description: "Optional semantic workbook id (WB-*) to scope to." },
-      },
-      required: [],
-    },
-    requiredCapability: "view_workbooks",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
-  {
-    name: "workbook_get_schema",
-    description: "Get a Workbook table's column definitions and the agent's capabilities on it. Read-only.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
-      },
-      required: ["tableId"],
-    },
-    requiredCapability: "view_workbooks",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
-  {
-    name: "workbook_query_rows",
-    description: "Query rows from a Workbook table with optional sort/filter and cursor pagination. Read-only. Cells are keyed by columnId (COL-*).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
-        limit: { type: "number", description: "Max rows (default 50, max 200)." },
-        cursor: { type: "string", description: "Pagination cursor (rowId of the last row from the previous page)." },
-        sort: {
-          type: "array",
-          description: "Sort specs.",
-          items: {
-            type: "object",
-            properties: {
-              columnId: { type: "string" },
-              direction: { type: "string", enum: ["asc", "desc"] },
-            },
-          },
-        },
-      },
-      required: ["tableId"],
-    },
-    requiredCapability: "view_workbooks",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
-  {
-    name: "workbook_create_row",
-    description: "Insert a new row into a custom Workbook table. cells is a map of columnId (COL-*) to value; values are validated against each column's field type.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
-        cells: { type: "object", description: "Map of columnId -> value.", additionalProperties: true },
-      },
-      required: ["tableId"],
-    },
-    requiredCapability: "manage_workbooks",
-    executionMode: "immediate",
-    sideEffect: true,
-  },
-  {
-    name: "workbook_update_cells",
-    description: "Update specific cells in a Workbook row. cells is a map of columnId (COL-*) to new value, validated against each column's field type.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
-        rowId: { type: "string", description: "Semantic row id (ROW-*)." },
-        cells: { type: "object", description: "Map of columnId -> new value.", additionalProperties: true },
-      },
-      required: ["tableId", "rowId"],
-    },
-    requiredCapability: "manage_workbooks",
-    executionMode: "immediate",
-    sideEffect: true,
   },
   // ─── Governed MCP backlog surface (spec 2026-04-25) ─────────────────────────
   {
@@ -5245,26 +5159,6 @@ export async function executeTool(
         success: true,
         message: "probe tool body — should not be reached when gate is wired and DPF_TEST_MCP_REFUSE_PROBE=1",
       };
-    }
-    case "workbook_list_tables": {
-      const { workbookListTablesTool } = await import("@/lib/workbooks/mcp-handlers");
-      return workbookListTablesTool(params, userId);
-    }
-    case "workbook_get_schema": {
-      const { workbookGetSchemaTool } = await import("@/lib/workbooks/mcp-handlers");
-      return workbookGetSchemaTool(params, userId);
-    }
-    case "workbook_query_rows": {
-      const { workbookQueryRowsTool } = await import("@/lib/workbooks/mcp-handlers");
-      return workbookQueryRowsTool(params, userId);
-    }
-    case "workbook_create_row": {
-      const { workbookCreateRowTool } = await import("@/lib/workbooks/mcp-handlers");
-      return workbookCreateRowTool(params, userId);
-    }
-    case "workbook_update_cells": {
-      const { workbookUpdateCellsTool } = await import("@/lib/workbooks/mcp-handlers");
-      return workbookUpdateCellsTool(params, userId);
     }
     case "spawn_work_thread": {
       if (!context?.threadId) {

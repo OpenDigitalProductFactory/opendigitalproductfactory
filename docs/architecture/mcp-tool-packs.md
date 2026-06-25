@@ -68,13 +68,15 @@ array (and the now-unused `RUNTIME_COORDINATION_TOOL_ENUMS` plumbing removed); t
 back through the registry, dispatch through `registry.getHandler(...)`, and the five switch
 cases are gone. `tool-registry.test.ts` + `mcp-tools-runtime-coordination.test.ts` prove
 parity.
-[`work-capsules-pack`](../../apps/web/lib/mcp/packs/work-capsules-pack.ts) followed it as the
-third pack on the same lazy pattern (10 tools, mixed handler arities); `workbooks` is the one
-remaining small lazy domain.
+[`work-capsules-pack`](../../apps/web/lib/mcp/packs/work-capsules-pack.ts) (10 tools, mixed
+arities) and [`workbooks-pack`](../../apps/web/lib/mcp/packs/workbooks-pack.ts) (5 tools)
+followed on the same lazy pattern as the third and fourth packs — **every sibling-module
+domain (static + lazy) is now extracted.**
 
 ## Next packs
 
-Per the spec, the highest-value remaining extractions are the largest cohesive clusters:
-`backlog` + `build-evidence`, `workbooks`, `sandbox`, then `wiki/knowledge`. Each follows the
-same parity-first discipline and keeps the existing MCP-route, grant-filter, and
-`mcp-governed-execute` tests green.
+The remaining tools have **inline handler bodies** (giant `case` blocks in `mcp-tools.ts`),
+not sibling modules — a larger extraction than the four sibling-module packs done so far. The
+highest-value clusters are `backlog` + `build-evidence`, `sandbox`, then `wiki/knowledge`:
+extract each handler body into a domain module first, then pack it the same parity-first way,
+keeping the existing MCP-route, grant-filter, and `mcp-governed-execute` tests green.
