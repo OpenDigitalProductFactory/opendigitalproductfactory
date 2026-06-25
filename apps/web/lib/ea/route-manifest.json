@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 517,
+  "routeCount": 519,
   "routes": [
     {
       "routePath": "/",
@@ -1075,6 +1075,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/platform/metrics/targets/route.ts"
+    },
+    {
+      "routePath": "/api/platform/security/overview",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "security",
+        "overview"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/security/overview/route.ts"
     },
     {
       "routePath": "/api/platform/status",
@@ -4403,6 +4415,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/promotions/page.tsx"
+    },
+    {
+      "routePath": "/ops/security",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "security"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/security/page.tsx"
     },
     {
       "routePath": "/ops/self-upgrade",
