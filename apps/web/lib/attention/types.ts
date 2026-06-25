@@ -13,7 +13,12 @@ export type AttentionSource =
   | "escalation" // PlatformIssueReport awaiting_escalation_ack (build-stall) — re-homed off /ops
   | "ai-decision" // DecisionInteraction outcomeType escalate/defer, humanOutcome null
   | "paused-ai" // TaskRun input-required / auth-required
-  | "agent-proposal"; // AgentActionProposal status=proposed
+  | "agent-proposal" // AgentActionProposal status=proposed
+  | "approval-outbound" // OutboundDraft pending-review (marketing)
+  | "approval-bill" // Bill awaiting_approval (AP — carries a dueDate)
+  | "approval-expense" // ExpenseClaim submitted
+  | "compliance-submission" // RegulatorySubmission draft (carries a dueDate)
+  | "research-proposal"; // ResearchProposal pending
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";

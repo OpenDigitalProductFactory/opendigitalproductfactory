@@ -21,6 +21,11 @@ const SOURCE_LABEL: Record<AttentionSource, string> = {
   "ai-decision": "AI decision",
   "paused-ai": "Paused AI",
   "agent-proposal": "Approval",
+  "approval-outbound": "Marketing",
+  "approval-bill": "Bill",
+  "approval-expense": "Expense",
+  "compliance-submission": "Compliance",
+  "research-proposal": "Research",
 };
 
 export function AttentionInbox({

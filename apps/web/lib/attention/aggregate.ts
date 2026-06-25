@@ -10,6 +10,13 @@ import { loadEscalationItems } from "./sources/escalation";
 import { loadAiDecisionItems } from "./sources/ai-decision";
 import { loadPausedAiItems } from "./sources/paused-ai";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
+import {
+  loadOutboundItems,
+  loadBillItems,
+  loadExpenseItems,
+  loadRegulatoryItems,
+  loadResearchItems,
+} from "./sources/business-approvals";
 
 type Db = typeof prisma;
 
@@ -68,5 +75,10 @@ export async function loadAttentionItems(db: Db): Promise<AttentionResult> {
     { source: "ai-decision", load: () => loadAiDecisionItems(db) },
     { source: "paused-ai", load: () => loadPausedAiItems(db) },
     { source: "agent-proposal", load: () => loadAgentProposalItems(db) },
+    { source: "approval-outbound", load: () => loadOutboundItems(db) },
+    { source: "approval-bill", load: () => loadBillItems(db) },
+    { source: "approval-expense", load: () => loadExpenseItems(db) },
+    { source: "compliance-submission", load: () => loadRegulatoryItems(db) },
+    { source: "research-proposal", load: () => loadResearchItems(db) },
   ]);
 }

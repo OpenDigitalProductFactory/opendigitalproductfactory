@@ -6,7 +6,7 @@
 | Date | 2026-06-23 |
 | Spec | [2026-06-23 human attention surface design](../specs/2026-06-23-human-attention-surface-design.md) (§4, §4.4, §6) |
 | Epic | `EP-ATTENTION-SURFACE` |
-| Delivers | BI-D39484E7 (keystone), BI-61B9EB88 (triage model) |
+| Delivers | BI-D39484E7 (keystone), BI-61B9EB88 (triage model), BI-8EA88797 (business-approval adapters — partial: adapters + deadline triage; worker-principal scoping deferred) |
 
 ## What shipped
 
@@ -16,7 +16,8 @@ The decisions plane (escalations / AI-decision residue / paused-AI / agent-propo
 - `types.ts` — `AttentionItem` projector contract incl. `triage{}` (time-to-act, residue-reason, blast-radius, decide-effort, irreversible). No persisted entity, no priority number.
 - `triage.ts` — the tiered order: **override tier** (hard-deadline-imminent OR irreversible-high-risk, shown with reason) → time-to-act → risk → blast → age (FIFO). Pure; reuses the `command-center` rank idiom. Plus explainability helpers (`orderReason`, residue/risk/effort labels, `attentionAgeLabel`, `timeToActFromDeadline`).
 - `sources/{escalation,ai-decision,paused-ai,agent-proposal}.ts` — pure mappers + loaders over the verified source models. **All four are `unscorable` residue** (the kernel already could not decide them) → honest facts, never a 0.000 ledger.
-- `aggregate.ts` — `Promise.all` fan-out, tiered ordering, audience filter; a failing source degrades to `failedSources` (never a blank inbox).
+- `sources/business-approvals.ts` — the five business-approval queues (outbound / bill / expense / regulatory / research). **Bill and regulatory carry real `dueDate`s**, so they exercise the override tier (a bill or filing due today floats to the top with its reason). Each is registered as its own degradable source.
+- `aggregate.ts` — `Promise.all` fan-out over **all nine sources**, tiered ordering, audience filter; a failing source degrades to `failedSources` (never a blank inbox).
 
 ### Surface
 - `components/attention/{AttentionInbox,NeedsYouBand}.tsx` — full inbox + first-viewport band (renders nothing when empty); theme tokens only; "why it's here / what's blocked" context per row; "Pinned · reason" affordance for the override tier.
@@ -27,20 +28,21 @@ The decisions plane (escalations / AI-decision residue / paused-AI / agent-propo
 ### Re-home
 - `app/(shell)/ops/page.tsx` — the escalation band is **removed from `/ops`** (it now projects into the inbox via the `escalation` source). `runEscalationHygiene` (auto-resolve) stays; `/ops` is work-only.
 
-## Tests (40, green)
+## Tests (47, green)
 - `triage.test.ts` — override tier, tiered ordering, FIFO tie-break, determinism, `orderReason`, deadline mapping, age labels.
-- `sources/sources.test.ts` — each mapper: residue reason, risk mapping, unscorable, irreversible-high-risk pause, auth-required ≠ judgment.
+- `sources/sources.test.ts` — each keystone mapper: residue reason, risk mapping, unscorable, irreversible-high-risk pause, auth-required ≠ judgment.
+- `sources/business-approvals.test.ts` — bill/regulatory deadline → override tier, regulatory high-risk, the no-deadline approvals (outbound/expense/research).
 - `aggregate.test.ts` — fan-out collection + ordering, failing-source degradation, operator vs worker audience scoping.
 
 ## Verification
 - `pnpm --filter web typecheck` — 0 errors.
-- `pnpm --filter web exec vitest run lib/attention` — 3 files, 40 tests pass.
+- `pnpm --filter web exec vitest run lib/attention` — 4 files, 47 tests pass.
 - `pnpm --filter web build:route-manifest` — 508 routes, `/workspace/inbox` present.
 
 ## Not in this slice (the remaining filed BIs)
 - BI-04ECEE9F (`decisionClass.scorability` routing tag + 0.000-guard test for kernel-scorable build decisions) — the keystone sources are all unscorable, so this lands with the first kernel-scorable source.
 - BI-094A124F (`Notification`/`HitlNotificationEvent` spine + badge + SSE).
-- BI-8EA88797 (finance/business adapters: outbound/bill/expense/compliance/research — these carry real deadlines, exercising the override tier + worker audience scoping).
+- BI-8EA88797 — adapters + deadline triage are **delivered**; the remaining part is **worker-principal scoping** for finance approvals (needs approver-role → principal resolution; the `audience` field + `filterAttentionForAudience` are in place and tested, so this is a population step, not new substrate).
 - BI-C7D25599 (email/message channel), BI-7D99B25C (record-outcome write-back), BI-C1B96972 (trust-dial overview).
 
 ## Notes
