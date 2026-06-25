@@ -61,6 +61,26 @@ describe("pushIncidentsToManagingPeer", () => {
     const db = { federationLink: { findFirst: vi.fn() } } as unknown as OutboundPushDb;
     expect(await pushIncidentsToManagingPeer(db, [])).toEqual({ pushed: 0, skipped: 0 });
   });
+
+  it("minimizes the payload at egress — non-allow-listed fields never cross the link", async () => {
+    const f = mockFetch({ ok: true, json: { ok: true } });
+    const db = {
+      federationLink: {
+        findFirst: vi.fn().mockResolvedValue({ linkId: "link_1", peerAuthorityUrl: "https://msp.example", peerTokenEnc: "dpflink_peertoken" }),
+      },
+    } as unknown as OutboundPushDb;
+    // An incident that (wrongly) carries customer-identifying + forbidden fields.
+    const leaky = [{ incidentKey: "k1", summary: "s1", highestSeverity: "critical", alertCount: 3, internalCustomerName: "Acme Health LLP", patientId: "p-9" }];
+    const res = await pushIncidentsToManagingPeer(db, leaky as never, { fetchImpl: f });
+    expect(res.pushed).toBe(1);
+    const [, init] = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
+    const sent = JSON.parse(init.body as string).data;
+    expect(sent.incidentKey).toBe("k1");
+    expect(sent.payloadHash).toBeDefined();
+    // The minimum-necessary contract dropped both the off-list and forbidden fields.
+    expect(sent.internalCustomerName).toBeUndefined();
+    expect(sent.patientId).toBeUndefined();
+  });
 });
 
 describe("enrollWithPeer (error paths, no prisma)", () => {

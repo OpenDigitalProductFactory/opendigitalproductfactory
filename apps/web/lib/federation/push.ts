@@ -7,6 +7,8 @@
 
 import { createHash } from "crypto";
 
+import { projectIncidentForEgress, resolveIncidentProjectionSpec } from "@dpf/db/projection-egress";
+
 import { sendIncidentToPeer } from "./client";
 import { decryptPeerToken } from "./outbound";
 
@@ -16,6 +18,9 @@ export interface OutboundPushDb {
       linkId: string;
       peerAuthorityUrl: string;
       peerTokenEnc: string | null;
+      // The inviter's negotiated projection rides here (enrollment persists
+      // proposedProjection on the link); undefined ⇒ minimum-necessary default.
+      metadata?: unknown;
     } | null>;
   };
 }
@@ -50,8 +55,24 @@ export async function pushIncidentsToManagingPeer(
   const token = decryptPeerToken(link.peerTokenEnc);
   if (!token) return { pushed: 0, skipped: incidents.length, reason: "no-peer-token" };
 
+  // Egress gate (R5): resolve the link's projection contract (proposedProjection
+  // persisted on the link, else minimum-necessary default) and minimize every
+  // payload through it before it crosses the boundary. Nothing leaves the customer
+  // except contract-allow-listed, non-forbidden fields — and an incident whose
+  // projection still proves a violation is withheld, never sent.
+  const meta = (link.metadata ?? {}) as Record<string, unknown>;
+  const spec = resolveIncidentProjectionSpec(meta.proposedProjection);
+
   let pushed = 0;
+  let withheld = 0;
   for (const incident of incidents) {
+    const raw = { ...incident, payloadHash: incidentPayloadHash(incident) };
+    const { payload, violations } = projectIncidentForEgress(spec, raw);
+    if (violations.length > 0) {
+      // Refuse to egress a payload that fails the negative-egress proof.
+      withheld++;
+      continue;
+    }
     const res = await sendIncidentToPeer(
       {
         peerAuthorityUrl: link.peerAuthorityUrl,
@@ -59,9 +80,13 @@ export async function pushIncidentsToManagingPeer(
         linkId: link.linkId,
         ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
       },
-      { ...incident, payloadHash: incidentPayloadHash(incident) },
+      payload,
     );
     if (res.ok) pushed++;
   }
-  return { pushed, skipped: incidents.length - pushed };
+  return {
+    pushed,
+    skipped: incidents.length - pushed,
+    ...(withheld > 0 ? { reason: `withheld-${withheld}-projection-violation` } : {}),
+  };
 }
