@@ -16,7 +16,6 @@ import {
   PRESET_ORDER,
   balanceState,
   decodePostureForDisplay,
-  isAxisStarved,
   pointToWeights,
   preferenceFromPreset,
   weightsToPoint,
@@ -97,8 +96,6 @@ export function GoldenTriangleControl({
 
   const balanceColor = `var(${balance.token})`;
   const triStroke = `color-mix(in srgb, ${balanceColor} 45%, var(--dpf-border-strong))`;
-  const vertexColor = (axis: "Quality" | "Cost" | "Time") =>
-    isAxisStarved(balance, axis) ? "var(--dpf-error)" : "var(--dpf-text-secondary)";
 
   function setFromEvent(clientX: number, clientY: number) {
     const svg = svgRef.current;
@@ -166,21 +163,14 @@ export function GoldenTriangleControl({
         draggingRef.current = false;
       }}
     >
+      {/* No vertex labels — the gradient colour conveys the state (founder direction).
+          Axis identity stays accessible via the SVG aria-label + the numeric inputs. */}
       <polygon
         points={`${vQuality.x},${vQuality.y} ${vCost.x},${vCost.y} ${vTime.x},${vTime.y}`}
         fill="transparent"
         stroke={triStroke}
         strokeWidth={0.9}
       />
-      <text x={vQuality.x} y={vQuality.y - 3} textAnchor="middle" fontSize={6} fill={vertexColor("Quality")}>
-        Quality
-      </text>
-      <text x={vCost.x - 2} y={vCost.y + 6} textAnchor="start" fontSize={6} fill={vertexColor("Cost")}>
-        Cost
-      </text>
-      <text x={vTime.x + 2} y={vTime.y + 6} textAnchor="end" fontSize={6} fill={vertexColor("Time")}>
-        Time
-      </text>
       <circle
         cx={thumb.x}
         cy={thumb.y}
