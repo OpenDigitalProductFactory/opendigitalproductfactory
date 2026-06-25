@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 507,
+  "routeCount": 508,
   "routes": [
     {
       "routePath": "/",
@@ -2947,6 +2947,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/voice/reference/route.ts"
+    },
+    {
+      "routePath": "/api/voice/service-status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "voice",
+        "service-status"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/voice/service-status/route.ts"
     },
     {
       "routePath": "/api/voice/synthesize",

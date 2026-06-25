@@ -46,6 +46,7 @@ The STT input path extends this to full voice interaction: operators can speak t
 - **TTS output** for `DecisionInteraction.rationale` — async synthesis job after each gate invocation
 - **Voice profile management** — upload samples, run training job, store provider voice ID, linked to `DecisionPerspectiveProfile`
 - **Audio player** in `DecisionPerspectiveGatePanel` — plays synthesized rationale audio
+- **Service health surfacing** (added 2026-06-24) — the Voice profile page probes `GET /api/voice/service-status` (a cheap, provider-aware liveness check of the self-hosted `dpf-tts` sidecar's `/health`) and shows an explicit "voice service offline" notice instead of a "ready" profile whose Preview only reveals the failure after a click. The `dpf-tts` sidecar is profile-gated and can be down on a given install; proactively ensuring an enabled-but-down profile is running (runtime reconcile) is tracked separately under BI-264565A4. This surfaces the dependency rather than letting it fail silently (the 2026-06-24 incident: voice was dead for ~a month while the page showed "ready").
 - **Voice tier config** — cloud (Cartesia Sonic 3 default) vs. self-hosted (Fish Audio S2 / XTTS v2) provider setting, mirroring the existing LLM provider tier pattern
 - **WWTD profile kind** — new `kind` values on `DecisionPerspectiveProfile`: `persona-real`, `persona-fictional`, `persona-synthetic`
 - **Generation style field** — `personaConfig.systemPrompt` added to profiles; LLM rationale generation uses this as a style layer
