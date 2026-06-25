@@ -16,9 +16,9 @@ The differentiator: AI Coworkers perform the SOC analyst labor — triage, inves
 - `apps/web/lib/security/case-grouping.ts` — pure `deriveGroupingKey` (stable scope|entity|family) + `groupDetectionsIntoCases` (max severity, spanning window, deterministic, idempotent caseKey). Tests: `case-grouping.test.ts`.
 - Retention: `securityCase` → `RETAINED_DATASETS` (regulated incident record, never auto-purged) — distinct from the `security-audit` purge window for `SecurityEvent`/`Detection`. Retention guard still green.
 
-### P2b — kernel dimensions + security principles (next)
-- Register in `packages/db/src/wiki-taxonomy.ts`: `reversibility`, `evidence_confidence`, `customer_consent_state` (benefit) + `business_disruption` (cost — also `PRINCIPLE_COST_DIMENSIONS`). The `seed-wiki-kernel.test.ts` sign-convention guard enforces correctness. Reuse the existing `blast_radius` cost dim.
-- Author the security principles (wiki-kind, kernel seed): commandment "never auto-execute irreversible/estate-wide response without human approval"; core "prefer reversible containment, escalate identity-anomaly + external-IP"; contextual "single-host quarantine of a non-critical asset may auto-approve within standing consent".
+### P2b — kernel dimensions registered (DONE); principles → P3
+- Registered in `packages/db/src/wiki-taxonomy.ts`: `reversibility`, `evidence_confidence`, `customer_consent_state` (benefit) + `business_disruption` (cost — also added to `PRINCIPLE_COST_DIMENSIONS`). `blast_radius` (existing cost dim) reused for estate reach. Verified: db typecheck + the full `seed-wiki-kernel`/`wiki-taxonomy` guard suite (86/86) stay green with the registry growth.
+- **Security principle pages + the response-autonomy gate move to P3.** They are consumed by the *response* decision (close vs escalate vs auto-execute vs propose), which is P3's surface — authoring the founder-kernel principle `.md` (doctrine, `authoredBy: mark-bodman`) together with `scoreSecurityResponseAction` (modeled on `decision/ui-surface-features.ts`) keeps the doctrine and the code that uses it in one reviewable change. Registering the dims now means those principles validate the moment they're authored (`extractPrinciplePayload` throws on unregistered keys).
 
 ### P2c — siem grants + MCP tools
 - Grants `siem_read` / `siem_investigate` / `siem_tune` / `incident_respond` in `agent-grants.ts` (+ `TOOL_TO_GRANTS`).
