@@ -106,6 +106,16 @@ groups:
         annotations:
           summary: "Qdrant vector DB is unreachable -- AI Coworker memory offline"
 
+      # neo4j exposes no Prometheus metrics, so it cannot be a scrape target;
+      # the portal probes its HTTP API and exports dpf_dependency_up{service}. [BI-963DBB05]
+      - alert: Neo4jDown
+        expr: dpf_dependency_up{service="neo4j"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Neo4j graph DB is unreachable -- code graph + architecture views offline"
+
   - name: dpf_application
     rules:
       - alert: HighRequestLatency
@@ -159,6 +169,18 @@ groups:
           summary: "Voice narration enabled but the TTS service is down"
           description: "A voice profile has narration enabled but the text-to-speech sidecar (dpf-tts) is unreachable -- WWMD decision narration and voice previews will fail."
 
+      # Global unhandled-error signal via the Next.js onRequestError hook (the
+      # portal has no per-request HTTP instrumentation). NOTE: HighRequestLatency
+      # / HighErrorRate above additionally need per-request timing+status wiring
+      # (a route wrapper) to go live -- the remaining half of BI-994B504C.
+      - alert: UnhandledServerErrors
+        expr: sum(rate(dpf_http_unhandled_errors_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Portal is throwing unhandled server errors (sustained > 3/min)"
+
       # ─── Log Aggregation (EP-FULL-OBS Tier 2) ──────────────────
       # Loki drops lines when a container floods stdout past the per-stream
       # rate cap (disk-safety). A throttle is itself a strong "something is
@@ -172,3 +194,44 @@ groups:
           severity: warning
         annotations:
           summary: "Loki is dropping logs -- a container is flooding stdout past the rate cap"
+
+  # ─── Windows Host Resources (windows_exporter) ─────────────────
+  # The dpf_infrastructure Host* rules key on node_exporter (node_*) metrics,
+  # which are NOT collected on Windows (node-exporter is linux-monitoring-
+  # profiled). windows_exporter IS scraped (job windows-host) but no rule used
+  # it -- so host CPU/mem/disk on the Windows GA platform had ZERO alerting.
+  # These mirror the node_* rules using windows_* series; Linux installs keep
+  # the node_* rules. [BI-573438C1]
+  - name: dpf_windows_host
+    rules:
+      - alert: WindowsHostHighCPU
+        expr: 100 - (avg(rate(windows_cpu_time_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Windows host CPU above 85% for 10 minutes"
+
+      - alert: WindowsHostHighMemory
+        expr: (1 - windows_memory_available_bytes / windows_cs_physical_memory_bytes) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Windows host memory above 85%"
+
+      - alert: WindowsHostDiskPressure
+        expr: (1 - windows_logical_disk_free_bytes{volume=~"[A-Z]:"} / windows_logical_disk_size_bytes{volume=~"[A-Z]:"}) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Windows host disk {{ $labels.volume }} above 80%"
+
+      - alert: WindowsHostDiskCritical
+        expr: (1 - windows_logical_disk_free_bytes{volume=~"[A-Z]:"} / windows_logical_disk_size_bytes{volume=~"[A-Z]:"}) * 100 > 90
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Windows host disk {{ $labels.volume }} above 90% -- immediate attention required"

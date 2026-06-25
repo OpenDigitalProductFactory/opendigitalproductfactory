@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { metricsRegistry } from "@/lib/metrics";
 import { refreshVoiceTtsMetrics } from "@/lib/voice-synthesis/service-status";
+import { refreshDependencyMetrics } from "@/lib/operate/dependency-health";
 
 // Force dynamic: each scrape must reflect current state, and we refresh
 // point-in-time health gauges below before serializing.
@@ -10,7 +11,7 @@ export async function GET() {
   // Refresh point-in-time service-health gauges (dpf_voice_tts_up/_enabled)
   // before serializing so a down /health-only sidecar (which can't be its own
   // scrape target) is visible to Prometheus. Fully guarded internally.
-  await refreshVoiceTtsMetrics();
+  await Promise.all([refreshVoiceTtsMetrics(), refreshDependencyMetrics()]);
 
   const metrics = await metricsRegistry.metrics();
   return new NextResponse(metrics, {

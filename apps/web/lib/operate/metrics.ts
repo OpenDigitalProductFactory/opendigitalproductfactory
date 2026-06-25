@@ -364,6 +364,27 @@ export const voiceTtsEnabled = new Gauge({
   registers: [metricsRegistry],
 });
 
+// --- Dependency health (BI-963DBB05) ---
+// /metrics-less core services (neo4j, model-runner, stt) probed per /api/metrics
+// scrape by lib/operate/dependency-health.ts. up==0 => unreachable. These cannot
+// be Prometheus scrape targets, so ContainerDown (up==0) can never see them.
+export const dependencyUp = new Gauge({
+  name: "dpf_dependency_up",
+  help: "1 when a /metrics-less core dependency is reachable, 0 when down. Labelled by service (neo4j | model-runner | stt).",
+  labelNames: ["service"] as const,
+  registers: [metricsRegistry],
+});
+
+// --- Unhandled server errors (BI-994B504C) ---
+// Incremented by the Next.js onRequestError instrumentation hook — the global,
+// zero-route-change error signal (the portal has no per-request HTTP wrapper yet).
+export const httpUnhandledErrors = new Counter({
+  name: "dpf_http_unhandled_errors_total",
+  help: "Unhandled server errors caught by the Next.js onRequestError hook, labelled by route + method.",
+  labelNames: ["route", "method"] as const,
+  registers: [metricsRegistry],
+});
+
 // ─── Voice Slice 2 — Transcript Cleanup ─────────────────────────────────────
 // Spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §9
 
