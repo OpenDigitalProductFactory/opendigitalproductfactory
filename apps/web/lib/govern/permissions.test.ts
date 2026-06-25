@@ -86,6 +86,7 @@ describe("getShellNavSections()", () => {
       "workspace",
       "business",
       "products",
+      "delivery",
       "platform",
       "knowledge",
     ]);
