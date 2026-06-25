@@ -226,8 +226,10 @@ async function prepareRoute(
   // feed it into routing as DEFAULTS (caller options + the local-only sovereignty
   // switch below still win). Fail-open + Balanced-inert: null when no non-Balanced
   // default is set, so this is byte-identical to flag-off until a posture is chosen.
-  // Single-org install → null org id resolves the platform (WWMD) default.
-  const posture = await resolveDispatchPosture(null, taskType);
+  // The calling coworker's own posture (if any) layers above org/platform, so a
+  // per-coworker priority actually tunes that coworker's runs. Single-org install
+  // → null org id; non-coworker runs pass null agentId (platform default).
+  const posture = await resolveDispatchPosture(options?.agentId ?? null, taskType);
 
   // 1. Infer contract
   const contract = await inferContract(
