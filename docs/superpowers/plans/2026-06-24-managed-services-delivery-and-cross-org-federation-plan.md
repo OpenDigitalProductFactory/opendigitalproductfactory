@@ -55,6 +55,12 @@ One projection, two boundaries (spec §5). Build Topology A's shared seams first
 4. **Authority bands for regulated pilots:** founder/operator business decision — BLOCKED on Mark. Default until set: read-only projection + proposal-only remediation, every action above a conservative floor requires human approval at the customer.
 5. **Monthly evidence pack:** deferred to Phase 4.
 
+## Progress log
+
+- **Phase 1 — Topology A (committed `6328d8648`).** WS-0a estate-scope resolver, A1 quality-issue estate scope + migration, A2 edge-event correlation engine, A3 ServiceTicket model + migration + unions/mapper, A4 remediation authority bands. 40 unit tests; packages/db + apps/web typecheck clean.
+- **Phase 2 — federation foundation.** WS-0b trust-link-lifecycle (dual approval), B1 FederationLink + FederationBootstrapToken models + migration + `/api/v1/federation/enroll` route + enroll/approve/revoke lib + tokens, federation-link-types, WS-0c + B2 projection-serialization library (minimum-necessary allow-list + forbidden-field egress guard + CloudEvents envelope) + ProjectionContract model + migration. 24 unit tests; route manifest regenerated; typecheck clean.
+- **Remaining:** A4 grant-registry unblock + operate-orchestrator loop wiring (runtime); Phase 3 (B3 record mirror, B4 cross-org proposal + Attention Surface, B5 crosswalk/presence/artifact-sharing); UX surfaces (§8); founder authority-band decision (§15.4) before any federation auto-approve.
+
 ## Verification
 
 - Pure libraries: vitest (no DB).

@@ -239,6 +239,10 @@ model Principal {
   // host-attributes side table keyed by `principalId`. 1:1 cardinality.
   edgeNode                            EdgeNode?                           @relation("EdgeNodeIdentity")
   edgeNodesApproved                   EdgeNode[]                          @relation("EdgeNodeApprover")
+  // EP-MSP-FEDERATION · B1 — a federated peer (another DPF deployment) is a
+  // Principal(kind="federated-peer") with FederationLink as its side table,
+  // exactly as EdgeNode is for an edge agent. No parallel identity table.
+  federationLink                      FederationLink?                     @relation("FederationLinkIdentity")
   bootstrapTokensIssued               BootstrapToken[]                    @relation("BootstrapTokenIssuer")
   ownedDocuments                      Document[]                          @relation("DocumentOwner")
   createdDocuments                    Document[]                          @relation("DocumentCreator")
@@ -10500,6 +10504,107 @@ model ChangeEvent {
   @@index([edgeNodeId, occurredAt])
   @@index([source])
   @@index([occurredAt])
+}
+
+// ── EP-MSP-FEDERATION · B1 — sovereign-peer federation link (BI-130107D6) ─────
+// The edge-node enrollment handshake generalized to deployment-to-deployment.
+// Two sovereign DPF Authority Cores connect through a dual-approved, outbound-
+// only, revocable channel. Identity lives on Principal(kind="federated-peer")
+// with FederationLink as the side table — mirrors EdgeNode↔Principal. Trust is
+// derived via resolveLinkTrust (trust-link-lifecycle.ts) from the approval
+// timestamps; authorization resolves on Principal + AuthorityBinding (soft ref).
+model FederationLink {
+  id                    String                     @id @default(cuid())
+  linkId                String                     @unique
+  principalId           String                     @unique
+  // This deployment's perspective: "manages" (we are the MSP) or "managed-by"
+  // (we are the sovereign customer being managed).
+  role                  String
+  // Outbound-only base URL of the peer Authority Core. No inbound listener is
+  // required on a sovereign customer.
+  peerAuthorityUrl      String
+  // The peer's org identifier + our own org, for the B5 CustomerAccount↔Org crosswalk.
+  peerOrganizationRef   String?
+  localOrganizationId   String?
+  // Trust state — derived from the approval/revoke/quarantine timestamps below.
+  linkState             String                     @default("pending")
+  // Dual approval: trusted only when BOTH approvedAt* are set.
+  approvedAtLocal       DateTime?
+  approvedAtPeer        DateTime?
+  approvedByPrincipalId String?
+  quarantinedAt         DateTime?
+  quarantineReason      String?
+  revokedAt             DateTime?
+  revocationReason      String?
+  // Auth: dpflink_* link token, hashed at rest, rotating (mirrors EdgeNode).
+  tokenHash             String?                    @unique
+  tokenPrefix           String?
+  tokenRotatedAt        DateTime?
+  // Negotiated scope + authority (soft refs to ProjectionContract (B2) and
+  // AuthorityBinding (the band) to keep cross-model blast radius low).
+  projectionContractId  String?
+  authorityBindingId    String?
+  metadata              Json?
+  enrolledAt            DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  principal             Principal                  @relation("FederationLinkIdentity", fields: [principalId], references: [id], onDelete: Cascade)
+  bootstrapTokens       FederationBootstrapToken[] @relation("FederationBootstrapConsumer")
+
+  @@index([linkState])
+  @@index([role])
+  @@index([tokenHash])
+  @@index([peerOrganizationRef])
+}
+
+// Single-use invitation, mirrors BootstrapToken. The inviting peer issues a
+// dpffboot_* token bound to the role offered, a proposed projection scope, and a
+// proposed authority band; the accepting peer redeems it once at enrollment.
+model FederationBootstrapToken {
+  id                    String          @id @default(cuid())
+  tokenHash             String          @unique
+  prefix                String
+  // Role OFFERED to the accepting peer (it receives the inverse of the inviter's role).
+  offeredRole           String
+  proposedProjection    Json?
+  proposedAuthorityBand Json?
+  issuedAt              DateTime        @default(now())
+  issuedByPrincipalId   String
+  expiresAt             DateTime
+  consumedAt            DateTime?
+  consumedByLinkId      String?
+  revokedAt             DateTime?
+
+  link                  FederationLink? @relation("FederationBootstrapConsumer", fields: [consumedByLinkId], references: [id])
+
+  @@index([consumedByLinkId])
+  @@index([expiresAt])
+}
+
+// ── EP-MSP-FEDERATION · B2 — scoped estate projection contract (BI-4F8F50FD) ──
+// Per-link allow-list of exactly what crosses the FederationLink — never raw
+// data. The pure serializer (projection-serialization.ts) enforces this plus a
+// hard forbidden-field guard at egress. Stored as a dedicated table (not JSON on
+// the link) so per-field allow/deny + CADA posture are queryable at egress and
+// the last negative-egress test result is auditable (spec §15.1).
+model ProjectionContract {
+  id                String    @id @default(cuid())
+  contractId        String    @unique
+  // Soft ref to the FederationLink (which carries projectionContractId back).
+  federationLinkId  String?
+  includeSlices     String[]
+  excludeSlices     String[]
+  fieldAllowList    Json?
+  retentionClass    String    @default("standard")
+  cadaPosture       Json?
+  reviewCadenceDays Int?
+  lastTestResult    Json?
+  lastTestedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([federationLinkId])
 }
 
 // ─── Integration Coverage Matrix ─────────────────────────────────────────────
