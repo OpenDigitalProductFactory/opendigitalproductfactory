@@ -459,20 +459,23 @@ async function stepGenerateCode(
   // parses the local model's native <function=…> tool format itself and drives
   // the read-edit-write loop in the sandbox. Gated on provider === "opencode"
   // so installs with a frontier CLI/provider keep the existing agentic path.
-  const { getBuildStudioConfig, isQualityFirstRightsizingEnabled } = await import("./build-studio-config");
+  const { getBuildStudioConfig, isQualityFirstRightsizingEnabled, getBuildGoldenTrianglePosture } =
+    await import("./build-studio-config");
   const { getModelTier, deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
-  // EP-MODEL-TIER-ROUTING: route this build's codegen to the model tier its
-  // size deserves — local (opencode) for small/medium, the configured robust
-  // (frontier) engine for large/xlarge. Inert unless DPF_BUILD_MODEL_TIER_ROUTING
-  // is enabled; falls back to local when no robust engine is configured.
+  // EP-MODEL-TIER-ROUTING: route this build's codegen to the model tier it
+  // deserves — local (opencode) for the trivial tail, the configured robust
+  // (frontier) engine otherwise. Inert unless DPF_BUILD_MODEL_TIER_ROUTING is
+  // enabled; falls back to local when no robust engine is configured.
   //
-  // EP-QUALITY-RIGHTSIZING (§4.1/§4.2): when DPF_BUILD_QUALITY_FIRST_RIGHTSIZING
-  // is on, derive the deliverable's sensitivity (keyword heuristic over the brief
-  // + org risk posture as a floor) and pass quality-first opts — substantive work
-  // routes to robust by default, and a HIGH-sensitivity deliverable always does.
-  // Off-flag → rightsizing is undefined → getModelTier is byte-identical (size-only).
-  let rightsizing: Parameters<typeof getModelTier>[2];
+  // EP-QUALITY-RIGHTSIZING (§4.1–4.3): when DPF_BUILD_QUALITY_FIRST_RIGHTSIZING is
+  // on, the build's golden-triangle dial — the per-build plan override, else the
+  // global default (pinned to Quality) — compiles, FLOORED by the deliverable's
+  // derived sensitivity, into the model tier (P2 composes the compiler with P1's
+  // risk axis; Cost/Speed cannot discount a sensitive deliverable below its floor).
+  // Off-flag → plain size-based routing (byte-identical).
+  let modelTier: "local" | "robust";
   if (isQualityFirstRightsizingEnabled()) {
+    const { resolveBuildSizing, coerceBuildPosture } = await import("@/lib/explore/build-rightsizing-dial");
     const riskPosture = await prisma.businessContext
       .findFirst({ select: { riskPosture: true } })
       .then((r) => r?.riskPosture ?? null)
@@ -490,10 +493,21 @@ async function stepGenerateCode(
       { text: sensitivityText, workType: build.kind },
       riskPosture,
     );
-    rightsizing = { qualityFirst: true, sensitivity };
-    console.log("[build-pipeline] quality-first rightsizing:", { buildId, processSize, sensitivity });
+    const posture =
+      coerceBuildPosture(plan["goldenTrianglePosture"]) ?? (await getBuildGoldenTrianglePosture());
+    const resolved = resolveBuildSizing({ type: build.kind, size: processSize, posture, sensitivity });
+    modelTier = resolved.modelTier;
+    console.log("[build-pipeline] golden-triangle dial:", {
+      buildId,
+      processSize,
+      sensitivity,
+      preset: posture.preset,
+      modelTier,
+      review: resolved.policy.reviewIntensity,
+    });
+  } else {
+    modelTier = getModelTier(build.kind, processSize);
   }
-  const modelTier = getModelTier(build.kind, processSize, rightsizing);
   const dispatchConfig = await getBuildStudioConfig({ modelTier });
   if (dispatchConfig.provider === "opencode") {
     const { dispatchOpencodeTask } = await import("./opencode-dispatch");

@@ -91,6 +91,22 @@ honest interim that lets P1 ship; this is the accurate version. Same
 `DeliverableSensitivity` output contract, so it drops in behind the same callers.
 Depends on P1.
 
+## Implementation status
+
+- **P1 (BI-163B4D28)** — shipped (#2386). Matrix capability + flag + live model-tier
+  flip + heuristic sensitivity.
+- **P2 (BI-9AF9595A)** — engine shipped: `build-rightsizing-dial.ts` composes the
+  golden-triangle compiler with the sensitivity floor (`resolveBuildSizing`,
+  `sensitivityToTierFloor`, `coerceBuildPosture`), `getBuildGoldenTrianglePosture`
+  reads the global default (pinned Quality) from PlatformConfig, and the build
+  dispatch resolves the dial (per-build plan override → global default), floored by
+  sensitivity. Same `DPF_BUILD_QUALITY_FIRST_RIGHTSIZING` flag; off-flag unchanged.
+  *Follow-up (P2.1):* the operator UI to set the global default / per-build override
+  (reuses `GoldenTrianglePriorityPanel` on the Priority & Models surface) + threading
+  the dial's `reviewIntensity` into the build-orchestrator's deliberation choice.
+- **P3 (BI-CFEB2B22)** — pending: blast-radius sensitivity behind the same
+  `deriveDeliverableSensitivity` contract.
+
 ## Sequencing
 
 P1 (matrix capability + flag + live model-tier flip + heuristic sensitivity) →
