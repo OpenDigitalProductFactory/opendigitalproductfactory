@@ -87,9 +87,46 @@ Replace P1's path/keyword heuristic with **code-graph blast-radius derivation**
 (`apps/web/lib/integrate/change-impact.ts`): sensitivity is a function of *what
 the change actually reaches* — the set of downstream modules/contracts impacted —
 not a keyword guess. Satisfies Architecture-Over-Shortcuts: the heuristic is an
-honest interim that lets P1 ship; this is the accurate version. Same
-`DeliverableSensitivity` output contract, so it drops in behind the same callers.
-Depends on P1.
+honest interim that lets P1 ship; this is the accurate version.
+
+**Design constraint discovered during P2 (2026-06-25):** `analyzeChangeImpact()`
+computes blast-radius **from a git diff**, which only exists *after* codegen. At
+build-sizing time (dispatch — where P1's keyword heuristic runs) there is **no
+diff yet**. So P3 is **not** a drop-in swap at sizing time; it is a **two-phase**
+design:
+
+1. **Pre-codegen (size):** keep P1's keyword heuristic — the best signal before any
+   code exists. Unchanged.
+2. **Post-codegen (verify):** at the review/ship gate, where the build's diff
+   exists, run `analyzeChangeImpact(diff)`, map its `riskLevel`
+   (`critical|high → high`, `medium → elevated`, `low → low`) plus route/schema
+   counts via a pure `changeImpactToSensitivity(report): DeliverableSensitivity`,
+   and **monotonically raise** the build's process if the *actual* reach exceeds
+   the keyword guess (`max(keywordSensitivity, blastSensitivity)`). This catches the
+   "small styling tweak that actually edits a shared util imported by auth + billing"
+   case: keyword said low, the diff reveals high reach → escalate review before ship.
+
+So the `DeliverableSensitivity` output contract is preserved (the pure mapper drops
+in behind the same callers), but the *integration point* is the verify gate, not
+dispatch — a more involved wiring than P1/P2 (find the review-time diff, thread the
+monotonic escalation into the review intensity / gate). Depends on P1; should land
+on merged P2 (which calls `deriveDeliverableSensitivity`).
+
+## Implementation status
+
+- **P1 (BI-163B4D28)** — shipped (#2386). Matrix capability + flag + live model-tier
+  flip + heuristic sensitivity.
+- **P2 (BI-9AF9595A)** — engine shipped: `build-rightsizing-dial.ts` composes the
+  golden-triangle compiler with the sensitivity floor (`resolveBuildSizing`,
+  `sensitivityToTierFloor`, `coerceBuildPosture`), `getBuildGoldenTrianglePosture`
+  reads the global default (pinned Quality) from PlatformConfig, and the build
+  dispatch resolves the dial (per-build plan override → global default), floored by
+  sensitivity. Same `DPF_BUILD_QUALITY_FIRST_RIGHTSIZING` flag; off-flag unchanged.
+  *Follow-up (P2.1):* the operator UI to set the global default / per-build override
+  (reuses `GoldenTrianglePriorityPanel` on the Priority & Models surface) + threading
+  the dial's `reviewIntensity` into the build-orchestrator's deliberation choice.
+- **P3 (BI-CFEB2B22)** — pending: blast-radius sensitivity behind the same
+  `deriveDeliverableSensitivity` contract.
 
 ## Sequencing
 

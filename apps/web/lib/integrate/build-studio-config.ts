@@ -5,6 +5,8 @@
 import { prisma } from "@dpf/db";
 
 import type { BuildModelTier } from "@/lib/explore/build-process-matrix";
+import { DEFAULT_BUILD_POSTURE, coerceBuildPosture } from "@/lib/explore/build-rightsizing-dial";
+import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
 
 export type BuildStudioDispatchConfig = {
   provider: "claude" | "codex" | "grok" | "opencode" | "agentic";
@@ -151,6 +153,26 @@ export function isModelTierRoutingEnabled(): boolean {
 export function isQualityFirstRightsizingEnabled(): boolean {
   const v = process.env.DPF_BUILD_QUALITY_FIRST_RIGHTSIZING;
   return v === "1" || v === "true";
+}
+
+/** PlatformConfig key for the global build Cost/Quality/Time posture (P2). */
+export const BUILD_GOLDEN_TRIANGLE_POSTURE_KEY = "BUILD_GOLDEN_TRIANGLE_POSTURE";
+
+/**
+ * EP-QUALITY-RIGHTSIZING P2 (BI-9AF9595A): the global default build posture — the
+ * operator's Cost/Quality/Time dial for Build Studio. Stored migration-free in
+ * PlatformConfig; absent/malformed → DEFAULT_BUILD_POSTURE (pinned to Quality).
+ * Fail-open: any read error returns the Quality default rather than throwing.
+ */
+export async function getBuildGoldenTrianglePosture(): Promise<GoldenTrianglePreference> {
+  try {
+    const cfg = await prisma.platformConfig.findUnique({
+      where: { key: BUILD_GOLDEN_TRIANGLE_POSTURE_KEY },
+    });
+    return coerceBuildPosture(cfg?.value) ?? DEFAULT_BUILD_POSTURE;
+  } catch {
+    return DEFAULT_BUILD_POSTURE;
+  }
 }
 
 /**
