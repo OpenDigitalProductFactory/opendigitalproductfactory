@@ -405,6 +405,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
+  {
+    jobId: "siem-correlation-sweep",
+    inngestId: "ops/siem-correlation-sweep",
+    name: "SIEM correlation sweep",
+    purpose:
+      "EP-SOVEREIGN-SOC P1: projects the platform's own audit telemetry into SecurityEvents, then scans the recent window against enabled DetectionRules + the active threat-intel index and emits Detections. If it stops, no new security detections are produced.",
+    cron: "3,18,33,48 * * * *",
+    cadence: "Every 15 minutes",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
 ] as const;
 
 const CATALOG_BY_JOB_ID = new Map<string, ScheduledJobCatalogEntry>(

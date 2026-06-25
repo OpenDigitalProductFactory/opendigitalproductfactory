@@ -56,6 +56,7 @@ import { alertDeliveryBridge } from "./alert-delivery-bridge";
 import { releaseHealthCheck } from "./release-health-check";
 import { marketingSchedulerDispatch } from "./marketing-scheduler-dispatch";
 import { recurringInvoiceDispatch } from "./recurring-invoice-dispatch";
+import { siemCorrelationSweep } from "./siem-correlation-sweep";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 export const scheduledFunctions = [
@@ -89,6 +90,7 @@ export const scheduledFunctions = [
   releaseHealthCheck,    // BI-3630773C: EP-FULL-OBS release stamp verify-gate watch, every 15m
   marketingSchedulerDispatch, // BI-SCHED-DORMANT: wire ScheduledOutboundAction dispatch, every 30m
   recurringInvoiceDispatch,   // BI-SCHED-DORMANT: wire recurring-invoice generation, daily 06:30
+  siemCorrelationSweep,       // BI-6D9496F1: EP-SOVEREIGN-SOC P1 — project internal audit -> SecurityEvent + run detection rules, every 15m
 ];
 
 export const eventFunctions = [
