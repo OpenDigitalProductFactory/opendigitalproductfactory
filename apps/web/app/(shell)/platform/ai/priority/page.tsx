@@ -15,10 +15,15 @@ export default async function GoldenTrianglePriorityPage() {
       <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
         <div>
           <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>Priority</h1>
-          <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
-            Set the Cost / Quality / Time priority for AI work. Pick a preset or fine-tune the triangle — the
-            platform compiles it into the right model, effort, and verification, and shows in plain language
-            exactly what it configured. Save it as the platform default for new work.
+          <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2, maxWidth: 720, lineHeight: 1.5 }}>
+            Set the Cost / Quality / Time priority for AI work — the everyday control. Pick a preset or fine-tune the
+            triangle; the platform compiles it into the right model, effort, verification, and review/debate, and shows
+            in plain language exactly what it configured. This is the platform default; each coworker can override it
+            from its own priority chip at the composer, and hard model guardrails (a tier floor, a pinned model) live in{" "}
+            <Link href="/platform/ai/assignments" style={{ color: "var(--dpf-accent)" }}>
+              Assignments
+            </Link>
+            .
           </p>
         </div>
         <Link
