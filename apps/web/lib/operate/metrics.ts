@@ -348,6 +348,22 @@ export const voiceSttErrors = new Counter({
   registers: [metricsRegistry],
 });
 
+// --- Voice TTS service health (BI-B2E777EB) ---
+// dpf-tts (Chatterbox) is /health-only (no /metrics), so it cannot be a scrape
+// target and ContainerDown (up==0) cannot see it. Refreshed per /api/metrics
+// scrape by refreshVoiceTtsMetrics() (lib/voice-synthesis/service-status.ts).
+export const voiceTtsUp = new Gauge({
+  name: "dpf_voice_tts_up",
+  help: "1 when the active TTS provider is reachable/ready, 0 when down. Managed providers report 1 (not probed).",
+  registers: [metricsRegistry],
+});
+
+export const voiceTtsEnabled = new Gauge({
+  name: "dpf_voice_tts_enabled",
+  help: "1 when at least one voice profile has narration enabled (TTS is expected to work), else 0.",
+  registers: [metricsRegistry],
+});
+
 // ─── Voice Slice 2 — Transcript Cleanup ─────────────────────────────────────
 // Spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §9
 

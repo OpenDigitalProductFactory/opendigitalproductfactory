@@ -145,6 +145,20 @@ groups:
         annotations:
           summary: "Semantic memory store/recall failing -- AI Coworker context degraded"
 
+      # Voice (TTS) service health (BI-B2E777EB).
+      # dpf-tts is /health-only (no /metrics) -> not a scrape target, so
+      # ContainerDown (up==0) cannot see it. The portal exposes
+      # dpf_voice_tts_up/_enabled on /api/metrics. Alert only when narration is
+      # actually enabled, to avoid noise on installs that do not use voice.
+      - alert: VoiceServiceDown
+        expr: dpf_voice_tts_enabled == 1 and dpf_voice_tts_up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Voice narration enabled but the TTS service is down"
+          description: "A voice profile has narration enabled but the text-to-speech sidecar (dpf-tts) is unreachable -- WWMD decision narration and voice previews will fail."
+
       # ─── Log Aggregation (EP-FULL-OBS Tier 2) ──────────────────
       # Loki drops lines when a container floods stdout past the per-stream
       # rate cap (disk-safety). A throttle is itself a strong "something is
