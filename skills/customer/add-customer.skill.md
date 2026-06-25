@@ -1,6 +1,6 @@
 ---
 name: add-customer
-description: "Register a new customer account via backlog item"
+description: "Register a new customer account (CRM draft for operator confirmation)"
 category: customer
 assignTo: ["customer-advisor"]
 capability: "view_customer"
@@ -8,7 +8,7 @@ taskType: "conversation"
 triggerPattern: "add|register|new customer"
 userInvocable: true
 agentInvocable: true
-allowedTools: [create_backlog_item]
+allowedTools: [create_customer_account]
 composesFrom: []
 contextRequirements: []
 riskBand: low
@@ -16,19 +16,18 @@ riskBand: low
 
 # Add a New Customer
 
-The user wants to register a new customer account. Direct customer creation is not yet available as an agent action — explain this briefly, then ask what details they have and create a backlog item.
+The user wants to register a new customer account. Gather the details, then use `create_customer_account` to draft the account — CRM writes land as a draft for an operator to confirm, not an instant live record.
 
 ## Steps
 
-1. Explain that direct customer account creation is not yet available as an agent tool.
-2. Ask the user for the customer details: name, contact info, account type.
-3. Gather any additional context: industry, size, relationship type.
-4. Use `create_backlog_item` to create a task for the customer registration.
-5. Confirm the backlog item was created and explain the next steps.
+1. Ask the user for the customer details: name, contact info, account type.
+2. Gather any additional context: industry, size, relationship type.
+3. Use `create_customer_account` to draft the customer account with the captured details.
+4. Confirm the draft was created and explain that an operator will review and confirm it.
 
 ## Guidelines
 
-- Be upfront that this will create a tracked task, not an instant account.
-- Capture as much detail as possible so the person fulfilling the task has what they need.
-- Suggest a priority level based on the user's urgency.
-- Do not promise a timeline for account creation — that depends on the workflow.
+- Be upfront that this creates a draft for operator confirmation, not an instant live account.
+- Capture as much detail as possible so the draft is complete and the reviewer has what they need.
+- Do not promise a timeline for confirmation — that depends on the operator's review.
+- This skill does not file backlog items; customer registration goes through the CRM, not the backlog.
