@@ -154,8 +154,8 @@ export function correlateEdgeEvents(
     ].join("|");
 
     const summary = triggeringChange
-      ? `${nodeAlerts.length} alert(s) after ${triggeringChange.source} change "${triggeringChange.summary}"`
-      : `${nodeAlerts.length} alert(s) on node ${edgeNodeId}`;
+      ? `${nodeAlerts.length} alerts after ${triggeringChange.source} change "${triggeringChange.summary}"`
+      : `${nodeAlerts.length} alerts on node ${edgeNodeId}`;
 
     incidents.push({
       incidentKey,

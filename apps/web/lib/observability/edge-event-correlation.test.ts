@@ -9,7 +9,7 @@ import {
 
 const T = (iso: string) => new Date(iso);
 
-function alert(over: Partial<CorrelationAlert> = {}): CorrelationAlert {
+function mkAlert(over: Partial<CorrelationAlert> = {}): CorrelationAlert {
   return {
     id: over.id ?? "a1",
     edgeNodeId: over.edgeNodeId ?? "node_1",
@@ -37,9 +37,9 @@ function change(over: Partial<CorrelationChange> = {}): CorrelationChange {
 describe("correlateEdgeEvents (A2 / BI-0A9D7F60)", () => {
   it("correlates an alert storm to the preceding change with lead time", () => {
     const alerts = [
-      alert({ id: "a1", dedupKey: "k1", occurredAt: T("2026-06-24T02:31:00Z") }),
-      alert({ id: "a2", dedupKey: "k2", occurredAt: T("2026-06-24T02:32:00Z") }),
-      alert({ id: "a3", dedupKey: "k3", occurredAt: T("2026-06-24T02:33:00Z") }),
+      mkAlert({ id: "a1", dedupKey: "k1", occurredAt: T("2026-06-24T02:31:00Z") }),
+      mkAlert({ id: "a2", dedupKey: "k2", occurredAt: T("2026-06-24T02:32:00Z") }),
+      mkAlert({ id: "a3", dedupKey: "k3", occurredAt: T("2026-06-24T02:33:00Z") }),
     ];
     const [incident] = correlateEdgeEvents(alerts, [change()]);
     expect(incident.alertCount).toBe(3);
@@ -51,7 +51,7 @@ describe("correlateEdgeEvents (A2 / BI-0A9D7F60)", () => {
   });
 
   it("produces an incident with no triggering change when none precedes the spike", () => {
-    const alerts = [alert({ id: "a1" }), alert({ id: "a2", dedupKey: "k2" }), alert({ id: "a3", dedupKey: "k3" })];
+    const alerts = [mkAlert({ id: "a1" }), mkAlert({ id: "a2", dedupKey: "k2" }), mkAlert({ id: "a3", dedupKey: "k3" })];
     const [incident] = correlateEdgeEvents(alerts, []);
     expect(incident.triggeringChange).toBeNull();
     expect(incident.summary).toContain("node_1");
@@ -59,13 +59,13 @@ describe("correlateEdgeEvents (A2 / BI-0A9D7F60)", () => {
 
   it("does not correlate a change that falls outside the look-back window", () => {
     const oldChange = change({ occurredAt: T("2026-06-24T02:00:00Z") }); // 31 min before onset
-    const alerts = [alert({ id: "a1" }), alert({ id: "a2", dedupKey: "k2" }), alert({ id: "a3", dedupKey: "k3" })];
+    const alerts = [mkAlert({ id: "a1" }), mkAlert({ id: "a2", dedupKey: "k2" }), mkAlert({ id: "a3", dedupKey: "k3" })];
     const [incident] = correlateEdgeEvents(alerts, [oldChange], { windowMinutes: 15 });
     expect(incident.triggeringChange).toBeNull();
   });
 
   it("picks the most recent change within the window as the trigger", () => {
-    const alerts = [alert({ id: "a1" }), alert({ id: "a2", dedupKey: "k2" }), alert({ id: "a3", dedupKey: "k3" })];
+    const alerts = [mkAlert({ id: "a1" }), mkAlert({ id: "a2", dedupKey: "k2" }), mkAlert({ id: "a3", dedupKey: "k3" })];
     const incidents = correlateEdgeEvents(alerts, [
       change({ changeKey: "old", occurredAt: T("2026-06-24T02:20:00Z") }),
       change({ changeKey: "recent", occurredAt: T("2026-06-24T02:29:00Z") }),
@@ -74,22 +74,22 @@ describe("correlateEdgeEvents (A2 / BI-0A9D7F60)", () => {
   });
 
   it("treats a single critical alert as an incident even below the storm threshold", () => {
-    const incidents = correlateEdgeEvents([alert({ severity: "critical" })], []);
+    const incidents = correlateEdgeEvents([mkAlert({ severity: "critical" })], []);
     expect(incidents).toHaveLength(1);
     expect(incidents[0].highestSeverity).toBe("critical");
   });
 
   it("ignores sub-threshold non-critical alerts (handled individually elsewhere)", () => {
-    const incidents = correlateEdgeEvents([alert({ severity: "warn" }), alert({ id: "a2", dedupKey: "k2", severity: "warn" })], []);
+    const incidents = correlateEdgeEvents([mkAlert({ severity: "warn" }), mkAlert({ id: "a2", dedupKey: "k2", severity: "warn" })], []);
     expect(incidents).toHaveLength(0);
   });
 
   it("excludes resolved/suppressed alerts from the cluster", () => {
     const incidents = correlateEdgeEvents(
       [
-        alert({ id: "a1", dedupKey: "k1", status: "resolved" }),
-        alert({ id: "a2", dedupKey: "k2", status: "suppressed" }),
-        alert({ id: "a3", dedupKey: "k3", status: "triggered", severity: "warn" }),
+        mkAlert({ id: "a1", dedupKey: "k1", status: "resolved" }),
+        mkAlert({ id: "a2", dedupKey: "k2", status: "suppressed" }),
+        mkAlert({ id: "a3", dedupKey: "k3", status: "triggered", severity: "warn" }),
       ],
       [],
     );
@@ -98,8 +98,8 @@ describe("correlateEdgeEvents (A2 / BI-0A9D7F60)", () => {
 
   it("separates incidents per node", () => {
     const alerts = [
-      alert({ id: "a1", edgeNodeId: "node_1", severity: "critical" }),
-      alert({ id: "a2", edgeNodeId: "node_2", dedupKey: "k2", severity: "critical" }),
+      mkAlert({ id: "a1", edgeNodeId: "node_1", severity: "critical" }),
+      mkAlert({ id: "a2", edgeNodeId: "node_2", dedupKey: "k2", severity: "critical" }),
     ];
     const incidents = correlateEdgeEvents(alerts, []);
     expect(incidents).toHaveLength(2);
@@ -107,7 +107,7 @@ describe("correlateEdgeEvents (A2 / BI-0A9D7F60)", () => {
   });
 
   it("is idempotent: same spike yields the same incidentKey", () => {
-    const alerts = [alert({ id: "a1" }), alert({ id: "a2", dedupKey: "k2" }), alert({ id: "a3", dedupKey: "k3" })];
+    const alerts = [mkAlert({ id: "a1" }), mkAlert({ id: "a2", dedupKey: "k2" }), mkAlert({ id: "a3", dedupKey: "k3" })];
     const a = correlateEdgeEvents(alerts, [change()]);
     const b = correlateEdgeEvents(alerts, [change()]);
     expect(a[0].incidentKey).toBe(b[0].incidentKey);
@@ -119,7 +119,7 @@ describe("persistCorrelatedIncident", () => {
     const upsert = vi.fn().mockResolvedValue({});
     const db = { portfolioQualityIssue: { upsert } } as unknown as CorrelationDb;
     const [incident] = correlateEdgeEvents(
-      [alert({ id: "a1" }), alert({ id: "a2", dedupKey: "k2" }), alert({ id: "a3", dedupKey: "k3" })],
+      [mkAlert({ id: "a1" }), mkAlert({ id: "a2", dedupKey: "k2" }), mkAlert({ id: "a3", dedupKey: "k3" })],
       [change()],
     );
     const key = await persistCorrelatedIncident(db, incident, {
@@ -138,7 +138,7 @@ describe("persistCorrelatedIncident", () => {
   it("defaults to organization-internal scope when none provided", async () => {
     const upsert = vi.fn().mockResolvedValue({});
     const db = { portfolioQualityIssue: { upsert } } as unknown as CorrelationDb;
-    const [incident] = correlateEdgeEvents([alert({ severity: "critical" })], []);
+    const [incident] = correlateEdgeEvents([mkAlert({ severity: "critical" })], []);
     await persistCorrelatedIncident(db, incident);
     expect(upsert.mock.calls[0][0].create.scopeKey).toBe("organization:internal");
   });

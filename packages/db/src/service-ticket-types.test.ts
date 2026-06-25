@@ -47,7 +47,7 @@ describe("serviceTicketDraftFromIncident", () => {
   const incident: IncidentLike = {
     incidentKey: "edge-incident|node_1|deploy-abc|2026-06-24T02:31:00.000Z",
     edgeNodeId: "node_1",
-    summary: "3 alert(s) after git.deploy change \"ship v2\"",
+    summary: "3 alerts after git.deploy change \"ship v2\"",
     highestSeverity: "critical",
     alertCount: 3,
     onsetAt: new Date("2026-06-24T02:31:00Z"),
