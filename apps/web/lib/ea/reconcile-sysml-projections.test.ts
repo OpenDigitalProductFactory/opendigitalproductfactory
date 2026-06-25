@@ -42,4 +42,32 @@ describe("reconcileSysmlProjections", () => {
     expect(db.eaReferenceModel.findUnique).toHaveBeenCalledTimes(2);
     expect(getFreshness).toHaveBeenCalledTimes(1);
   });
+
+  it("isolates a throwing domain so the rest of the engine still runs", async () => {
+    const empty = { findMany: vi.fn().mockResolvedValue([]) };
+    // eaReferenceModel.findUnique throws — this is the dependency value-streams AND
+    // it4it-coverage hit first. Before domain isolation, that throw aborted the whole
+    // orchestrator and blocked every later domain (the live nightly failure mode).
+    const db = {
+      eaNotation: { findUnique: vi.fn().mockResolvedValue(null) },
+      eaReferenceModel: { findUnique: vi.fn().mockRejectedValue(new Error("missing EaRelationshipType")) },
+      skillDefinition: { findMany: vi.fn().mockResolvedValue([]) },
+      runtimeTarget: empty,
+      edgeNode: empty,
+      inventoryEntity: empty,
+      integrationCredential: empty,
+    };
+    const getFreshness = vi.fn().mockResolvedValue({ available: false, indexStatus: "missing", warnings: [], summary: "" });
+
+    // Must resolve (not reject) despite the throwing domain.
+    const r = await reconcileSysmlProjections({ db: db as never, codeGraph: { getFreshness: getFreshness as never } });
+
+    // The throwing domains fall back to skipped instead of aborting the run...
+    expect(r.valueStreams.status).toBe("skipped");
+    expect(r.it4itCoverage.status).toBe("skipped");
+    // ...and unrelated domains still ran.
+    expect(r.routes.status).toBe("skipped");
+    expect(r.mcpAuthority.status).toBe("skipped");
+    expect(r.scheduledJobs.status).toBe("skipped");
+  });
 });
