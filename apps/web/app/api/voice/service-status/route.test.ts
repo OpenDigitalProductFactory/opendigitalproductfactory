@@ -14,7 +14,8 @@ describe("GET /api/voice/service-status", () => {
     vi.restoreAllMocks()
     vi.unstubAllEnvs()
     vi.mocked(auth).mockResolvedValue({ user: { id: "user-1" } } as never)
-    vi.stubEnv("DPF_TTS_URL", "")
+    // DPF_TTS_URL intentionally left unset so the route's `?? default` applies;
+    // the mlx test below stubs it explicitly. (Stubbing "" would defeat `??`.)
     vi.stubEnv("TTS_PROVIDER", "chatterbox")
   })
 
