@@ -2,11 +2,9 @@
 import { getBacklogItems, getDigitalProductsForSelect, getTaxonomyNodesFlat, getEpics, getPortfoliosForSelect } from "@/lib/backlog-data";
 import { reconcileImprovementBacklog } from "@/lib/evaluate/improvement-backlog-reconcile";
 import { reconcileCapabilityNeedBacklog } from "@/lib/coworker-self-assessment/capability-backlog-reconcile";
-import { getOpenEscalations } from "@/lib/quality/escalation-attention";
 import { runEscalationHygiene } from "@/lib/quality/escalation-hygiene-runner";
 import { OpsClient } from "@/components/ops/OpsClient";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
-import { EscalationsAttention } from "@/components/ops/EscalationsAttention";
 import { SurfaceViewSwitcher } from "@/components/workbooks/SurfaceViewSwitcher";
 import { SurfacePlatformGrid } from "@/components/workbooks/SurfacePlatformGrid";
 
@@ -29,21 +27,19 @@ export default async function OpsPage({ searchParams }: Props) {
   await Promise.all([
     reconcileImprovementBacklog().catch(() => {}),
     reconcileCapabilityNeedBacklog().catch(() => {}),
-    // BI-467E8F8D: clear stale build-stall escalations on render so /ops stays a
-    // trustworthy attention queue without waiting for the 15-min cron. Non-fatal;
-    // zero-write once converged.
+    // BI-467E8F8D: clear stale build-stall escalations so the queue stays trustworthy
+    // without waiting for the 15-min cron. The escalation BAND moved to the /workspace
+    // "Needs you" inbox (EP-ATTENTION-SURFACE: attention ≠ backlog); the hygiene stays
+    // here too since /ops still reconciles work. Non-fatal; zero-write once converged.
     runEscalationHygiene().catch(() => {}),
   ]);
 
-  const [items, digitalProducts, taxonomyNodes, epics, portfolios, escalations] = await Promise.all([
+  const [items, digitalProducts, taxonomyNodes, epics, portfolios] = await Promise.all([
     getBacklogItems(),
     getDigitalProductsForSelect(),
     getTaxonomyNodesFlat(),
     getEpics(),
     getPortfoliosForSelect(),
-    // Surface convergence (BI-0ACD9AB2): self-fix escalations held for a responder
-    // are attended HERE, in the one operator surface — not a separate /admin queue.
-    getOpenEscalations().catch(() => []),
   ]);
 
   return (
@@ -56,8 +52,6 @@ export default async function OpsPage({ searchParams }: Props) {
       </div>
 
       <OpsTabNav />
-
-      <EscalationsAttention escalations={escalations} />
 
       <SurfaceViewSwitcher entityType="backlog_item" current={view ?? "list"} />
 

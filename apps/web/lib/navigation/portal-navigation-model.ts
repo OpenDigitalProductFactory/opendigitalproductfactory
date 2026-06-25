@@ -94,7 +94,21 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       sectionKey: "workspace",
       description: "See what needs attention next.",
     },
-    sectionSiblings: ["/workspace", "/workspace/documents"],
+    sectionSiblings: ["/workspace", "/workspace/inbox", "/workspace/documents"],
+  },
+  {
+    // EP-ATTENTION-SURFACE keystone (BI-D39484E7): the "Needs you" attention inbox.
+    // A workspace-section SIBLING, not a new rail destination (kernel-ratified
+    // elevate-workspace 0.69 vs new-rail 0.06) — so no cross-rail-section teleport
+    // (EP-NAV-COHERENCE hard rule). Audience-aware: operator-primary, worker later.
+    key: "workspace-inbox",
+    label: "Needs you",
+    path: "/workspace/inbox",
+    parentPath: "/workspace",
+    domain: "workspace",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "section-page",
+    capabilityKey: null,
   },
   {
     key: "documents",
