@@ -41,6 +41,16 @@ import {
   deliberateOnMcpHandler,
 } from "@/lib/mcp-tools-deliberation";
 import {
+  SIEM_TOOLS,
+  querySecurityEventsHandler,
+  queryDetectionsHandler,
+  getSecurityCaseHandler,
+  openSecurityCaseHandler,
+  updateSecurityCaseHandler,
+  proposeDetectionTuningHandler,
+  proposeResponseHandler,
+} from "@/lib/mcp-tools-siem";
+import {
   createLicenseReadinessIssue,
   saveLicensingInvestigationFinding,
 } from "@/lib/actions/licensing-compliance";
@@ -432,6 +442,7 @@ const RUNTIME_COORDINATION_TOOL_ENUMS = runtimeCoordinationToolEnums();
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...DELIBERATION_TOOLS,
+  ...SIEM_TOOLS,
   {
     name: "create_backlog_item",
     description: "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake). When triageOutcome=build, effortSize is required.",
@@ -5532,6 +5543,27 @@ export async function executeTool(
     }
     case "deliberate_on": {
       return deliberateOnMcpHandler(params, userId, context);
+    }
+    case "query_security_events": {
+      return querySecurityEventsHandler(params, userId, context);
+    }
+    case "query_detections": {
+      return queryDetectionsHandler(params, userId, context);
+    }
+    case "get_security_case": {
+      return getSecurityCaseHandler(params, userId, context);
+    }
+    case "open_security_case": {
+      return openSecurityCaseHandler(params, userId, context);
+    }
+    case "update_security_case": {
+      return updateSecurityCaseHandler(params, userId, context);
+    }
+    case "propose_detection_tuning": {
+      return proposeDetectionTuningHandler(params, userId, context);
+    }
+    case "propose_response": {
+      return proposeResponseHandler(params, userId, context);
     }
     case "workbook_list_tables": {
       const { workbookListTablesTool } = await import("@/lib/workbooks/mcp-handlers");
