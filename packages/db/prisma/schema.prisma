@@ -10537,9 +10537,14 @@ model FederationLink {
   revokedAt             DateTime?
   revocationReason      String?
   // Auth: dpflink_* link token, hashed at rest, rotating (mirrors EdgeNode).
+  // tokenHash is the INBOUND token (the one we issued for the peer to call us).
   tokenHash             String?                    @unique
   tokenPrefix           String?
   tokenRotatedAt        DateTime?
+  // The OUTBOUND token: the peer-issued link token WE use to call the peer.
+  // Encrypted at rest (AES-256-GCM, credential-crypto) because we must replay it,
+  // not hash it. Set when this deployment enrolled outbound with the peer.
+  peerTokenEnc          String?
   // Negotiated scope + authority (soft refs to ProjectionContract (B2) and
   // AuthorityBinding (the band) to keep cross-model blast radius low).
   projectionContractId  String?

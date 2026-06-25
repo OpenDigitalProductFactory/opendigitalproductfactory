@@ -34,18 +34,32 @@ Boundary stubs (intentional — separate substrate, not yet built):
 - **Attention Surface posting** (EP-ATTENTION-SURFACE): `attentionItemRef` stays null
   until that surface lands.
 
-## R4 — outbound half + agent loop (next)
+## R4 — outbound half (landed in this slice)
 
-- **Peer-token storage**: the outbound client needs the peer-ISSUED link token. That
-  is a secret-at-rest (encrypt, not hash, since we must replay it) — add an encrypted
-  `peerTokenEnc` column on `FederationLink` + the enroll-acceptor flow that stores it.
-- **Outbound triggers**: when R1 creates a correlated incident on a `managed-by`
-  estate, push it to the managing peer (`sendIncidentToPeer`). When the MSP agent
-  produces a proposal, `sendProposalToPeer`.
-- **In-org agent loop (A4)**: operate-orchestrator diagnoses incidents and produces
-  remediation proposals (reusing `remediation-authority`).
-- **Approval relay + execution**: customer approval → relay to MSP; approved actions
-  execute on the customer's own control runner (when EP-CTRL-5E21A4 lands).
+- **Peer-token storage (LANDED)**: encrypted `peerTokenEnc` column on `FederationLink`
+  (AES-256-GCM via credential-crypto — we must replay the token, not hash it) + migration.
+- **Outbound enrollment (LANDED)**: `enrollWithPeer` redeems a peer's invitation,
+  creates our side of the link (`role = inverse` of the peer's), and stores the
+  peer-issued token encrypted. Error paths unit-tested; success path typecheck-validated.
+- **Outbound push building block (LANDED)**: `pushIncidentsToManagingPeer` — when we are
+  the managed-by side of a trusted link, push our incidents to the managing peer
+  (`sendIncidentToPeer`, idempotent via a payload hash the peer reconciles). DB + fetch
+  injected; unit-tested.
+
+## Genuine remaining boundaries (need other epics or two-instance design)
+
+- **Dual-approval RELAY**: a link only reaches `trusted` when both sides approve AND the
+  peer-approval is relayed to flip our `approvedAtPeer`. That relay is a two-instance
+  protocol best designed + verified against two live installs — not built blind here.
+  Until it lands, the push building block stays dormant (no trusted managing link).
+- **Control-runner execution** (`EP-CTRL-5E21A4`): approved remediation executes on the
+  customer's own runner — owned by that epic. Proposals stay `proposed`.
+- **Attention-Surface approval UI** (`EP-ATTENTION-SURFACE`): where above-band proposals
+  surface for human approval — owned by that epic.
+- **LLM agent diagnosis (A4)**: operate-orchestrator producing proposals via the coworker
+  runtime (vs. the deterministic authority-band path already built).
+- **Connect-to-peer admin button**: a small form on the `/platform/federation-links`
+  surface (R2) to call `enrollWithPeer` — follow-up once R2 merges.
 
 ## Verification
 
