@@ -10742,6 +10742,89 @@ model SecurityEvent {
   @@index([createdAt])
 }
 
+// ─── Detection content + fired detections + threat intel ────────────────────
+// EP-SOVEREIGN-SOC P1. Spec §6.2–6.5. DetectionRule is executable content (NOT
+// wiki storage) carrying a kernel-pack baseline + per-tenant overlay via
+// scopeKey; the correlation sweep evaluates enabled rules over SecurityEvent
+// windows and emits Detection rows; ThreatIndicator is the IOC store matched at
+// enrichment + detection. Detections later group into SecurityCase (P2).
+
+model DetectionRule {
+  id              String  @id @default(cuid())
+  ruleKey         String  @unique
+  rulePackKey     String
+  rulePackVersion String
+  name            String
+  description     String?
+  // sigma | ocsf-query | dpf-correlation — how `predicate` is interpreted.
+  ruleFormat      String
+  // Executable predicate (the DetectionPredicate DSL for dpf-correlation).
+  predicate       Json
+  // ATT&CK technique ids carried by the rule (string[]), for coverage rollups.
+  mitreTechniques Json     @default("[]")
+  severity        String
+  // kernel (shared pack) | customer:<id> | site:<id> overlay.
+  scopeKey        String
+  enabled         Boolean  @default(true)
+  // Per-tenant tuning — thresholds, allow-lists, suppression with expiry.
+  tuning          Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([scopeKey, enabled])
+  @@index([rulePackKey, rulePackVersion])
+}
+
+model Detection {
+  id                String   @id @default(cuid())
+  // Idempotency: a rule firing on the same event-set collapses on this key.
+  detectionKey      String   @unique
+  ruleId            String
+  scopeKey          String
+  customerAccountId String?
+  customerSiteId    String?
+  severity          String
+  // open | triaged | linked | suppressed | closed
+  status            String   @default("open")
+  riskScore         Int?
+  // SecurityEvent.eventKey[] that fired this detection.
+  matchedEventRefs  Json     @default("[]")
+  enrichment        Json     @default("{}")
+  firstSeenAt       DateTime
+  lastSeenAt        DateTime
+  // Set when the detection is grouped into a SecurityCase (P2). Soft ref.
+  securityCaseId    String?
+  createdAt         DateTime @default(now())
+
+  @@index([scopeKey, status, lastSeenAt])
+  @@index([customerAccountId, severity, status])
+  @@index([ruleId, lastSeenAt])
+  // Ingest-time index for the data-retention sweep (security-audit category).
+  @@index([createdAt])
+}
+
+model ThreatIndicator {
+  id           String  @id @default(cuid())
+  indicatorKey String  @unique
+  // ip | domain | url | hash | email | user | process | registry
+  indicatorType String
+  value         String
+  source        String
+  confidence    String
+  severity      String?
+  validFrom     DateTime?
+  validUntil    DateTime?
+  tags          Json      @default("[]")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Value-first index powers the observable-match path (value IN (...)).
+  @@index([value])
+  @@index([indicatorType, value])
+  @@index([source])
+  @@index([validUntil])
+}
+
 // ─── Integration Coverage Matrix ─────────────────────────────────────────────
 
 enum WriteGateRequirement {
