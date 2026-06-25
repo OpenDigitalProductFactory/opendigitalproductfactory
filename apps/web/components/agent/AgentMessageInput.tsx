@@ -8,6 +8,7 @@ import {
   type QuestionPacketExpectedArtifact,
 } from "@/lib/tak/question-packet";
 import { AgentFileUpload } from "./AgentFileUpload";
+import { CoworkerPostureControl } from "./CoworkerPostureControl";
 import { MicButton } from "./MicButton";
 import { useVoiceCapture } from "./hooks/useVoiceCapture";
 import { Volume2, VolumeOff, VolumeX, ArrowUp, Square } from "lucide-react";
@@ -34,6 +35,16 @@ type Props = {
   voicePlaybackEnabled?: boolean;
   /** Toggle handler — flips voicePlaybackEnabled and persists to localStorage. */
   onVoicePlaybackToggle?: () => void;
+  // ── Posture (input-lip) controls. When the toggle handlers are provided the
+  //    composer renders the posture chip in its lip (mode / page-edit / web).
+  //    Work priority is a separate concern (CoworkerPriorityDock). ──────────
+  elevatedAssistEnabled?: boolean;
+  onToggleElevatedAssist?: () => void;
+  externalAccessEnabled?: boolean;
+  onToggleExternalAccess?: () => void;
+  coworkerMode?: "advise" | "act";
+  onToggleCoworkerMode?: () => void;
+  useUnified?: boolean;
 };
 
 const EMPTY_EXPECTED_ARTIFACT = "";
@@ -77,7 +88,7 @@ function truncate(value: string, max = 32): string {
   return `${value.slice(0, max - 1)}…`;
 }
 
-export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voicePlaybackUnavailableReason, voicePlaybackEnabled, onVoicePlaybackToggle }: Props) {
+export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voicePlaybackUnavailableReason, voicePlaybackEnabled, onVoicePlaybackToggle, elevatedAssistEnabled, onToggleElevatedAssist, externalAccessEnabled, onToggleExternalAccess, coworkerMode, onToggleCoworkerMode, useUnified }: Props) {
   const [value, setValue] = useState("");
   const [intentCenter, setIntentCenter] = useState("");
   const [sources, setSources] = useState<string[]>([]);
@@ -295,6 +306,7 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
     !!expectedArtifact;
   const showStop = !!busy;
   const sendDisabled = disabled || !!busy || !value.trim() || overLimit;
+  const showPosture = Boolean(onToggleElevatedAssist && onToggleExternalAccess);
 
   // ── Render helpers ────────────────────────────────────────────────────────
 
@@ -747,6 +759,21 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
             </button>
             {renderContextPopover()}
           </div>
+
+          {showPosture && (
+            <CoworkerPostureControl
+              elevatedAssistEnabled={!!elevatedAssistEnabled}
+              onToggleElevatedAssist={onToggleElevatedAssist!}
+              externalAccessEnabled={!!externalAccessEnabled}
+              onToggleExternalAccess={onToggleExternalAccess!}
+              {...(coworkerMode ? { coworkerMode } : {})}
+              {...(onToggleCoworkerMode ? { onToggleCoworkerMode } : {})}
+              useUnified={useUnified}
+              openDirection="up"
+              align="left"
+              disabled={disabled}
+            />
+          )}
 
           <span style={{ flex: 1 }} />
 
