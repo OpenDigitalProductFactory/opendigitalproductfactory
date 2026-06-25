@@ -10825,6 +10825,49 @@ model ThreatIndicator {
   @@index([validUntil])
 }
 
+// ─── Security case (the AI-SOC analyst worklist) ────────────────────────────
+// EP-SOVEREIGN-SOC P2. Spec §6.4. Operational SOC record: groups Detections and
+// owns the investigation timeline, verdict, SLA, and assignment. The federation
+// projection unit (P5). It COMPOSES ComplianceIncident for the regulated path
+// (complianceIncidentId link) rather than duplicating regulatoryNotifiable /
+// notificationDeadline / CorrectiveAction — those stay on ComplianceIncident.
+// The verdict is an evidence conclusion (set by investigation), NOT a kernel
+// vote; the kernel governs the action decisions layered on top (spec §6, §7.3).
+model SecurityCase {
+  id                String  @id @default(cuid())
+  caseKey           String  @unique
+  scopeKey          String
+  customerAccountId String?
+  customerSiteId    String?
+  title             String
+  severity          String
+  // new | triaging | investigating | contained | resolved | closed
+  status            String  @default("new")
+  // unknown | false-positive | benign-true-positive | malicious | needs-human
+  verdict           String  @default("unknown")
+  // low | medium | high | confirmed
+  confidence        String  @default("low")
+  assignedAgentId   String?
+  assignedUserId    String?
+  // Investigation timeline entries (actor, action, evidence ref, decision).
+  timeline          Json    @default("[]")
+  evidence          Json    @default("{}")
+  // SLA timers (MTTD / MTTR clocks, due-by markers).
+  sla               Json    @default("{}")
+  // Soft link to the regulated incident record when the notifiable threshold
+  // is crossed (ComplianceIncident owns regulatoryNotifiable / deadlines).
+  complianceIncidentId String?
+  openedAt          DateTime  @default(now())
+  resolvedAt        DateTime?
+  closedAt          DateTime?
+
+  @@index([scopeKey, status, openedAt])
+  @@index([customerAccountId, severity, status])
+  @@index([complianceIncidentId])
+  // Ingest-time-equivalent index (openedAt) already covers retention scans;
+  // SecurityCase is a RETAINED record (never auto-purged) per policies.ts.
+}
+
 // ─── Integration Coverage Matrix ─────────────────────────────────────────────
 
 enum WriteGateRequirement {

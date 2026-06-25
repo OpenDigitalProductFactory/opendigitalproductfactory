@@ -367,6 +367,11 @@ export const RETAINED_DATASETS: readonly RetainedDataset[] = [
 
   // Compliance / regulatory evidence.
   { model: "complianceEvidence", label: "Compliance evidence", regulatoryBasis: "GRC evidence (per-record retentionUntil)", minRetentionYears: 7 },
+  // Security incident records (EP-SOVEREIGN-SOC) — a SecurityCase is the SOC's
+  // regulated incident record; breach-notification, forensic, and legal-hold
+  // obligations forbid auto-purge. Raw SecurityEvent/Detection telemetry purges
+  // on the security-audit window above; the CASE is retained.
+  { model: "securityCase", label: "Security cases", regulatoryBasis: "Security incident record (breach-notification / forensic / legal-hold)", minRetentionYears: 7 },
   { model: "complianceAuditLog", label: "Compliance audit log", regulatoryBasis: "Compliance change audit", minRetentionYears: 7 },
   { model: "complianceAudit", label: "Compliance audits", regulatoryBasis: "Audit record retention", minRetentionYears: 7 },
   { model: "auditFinding", label: "Audit findings", regulatoryBasis: "Audit record retention", minRetentionYears: 7 },
