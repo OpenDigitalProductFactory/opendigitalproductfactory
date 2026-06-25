@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { prisma, type Prisma } from "@dpf/db";
 import { projectReferenceModel } from "@dpf/db/reference-model-projection";
 import { auth } from "@/lib/auth";
@@ -454,6 +455,67 @@ export async function updateReferenceAssessment(input: UpdateReferenceAssessment
       confidence: true,
     },
   });
+}
+
+// Operator/coworker override for IT4IT coverage (EP-IT4IT-CONFORMANCE, BI-25066DD8).
+// Upserts a platform-scope assessment for one reference-model element and marks it verified,
+// so a human can promote or correct the steward's derived coverage. The coverage projection
+// preserves verified rows (no-clobber), so this survives subsequent steward passes.
+type SetIt4itCoverageOverrideInput = {
+  modelSlug: string;
+  modelElementId: string;
+  coverageStatus: ReferenceCoverageStatus;
+  rationale?: string;
+};
+
+export async function setIt4itCoverageOverride(input: SetIt4itCoverageOverrideInput) {
+  const { userId } = await requireManageEaModel();
+  assertCoverageStatus(input.coverageStatus);
+
+  const element = await prisma.eaReferenceModelElement.findUnique({
+    where: { id: input.modelElementId },
+    select: { modelId: true },
+  });
+  if (!element) throw new Error("Reference model element not found");
+
+  const scope = await prisma.eaAssessmentScope.upsert({
+    where: { scopeType_scopeRef: { scopeType: "platform", scopeRef: "dpf" } },
+    create: {
+      scopeType: "platform",
+      scopeRef: "dpf",
+      name: "DPF Platform",
+      description: "Platform-wide IT4IT coverage baseline (evidence-derived).",
+    },
+    update: {},
+    select: { id: true },
+  });
+
+  const rationale = input.rationale?.trim()
+    ? `operator-verified: ${input.rationale.trim()}`
+    : "operator-verified override";
+
+  await prisma.eaReferenceAssessment.upsert({
+    where: { scopeId_modelElementId: { scopeId: scope.id, modelElementId: input.modelElementId } },
+    create: {
+      scopeId: scope.id,
+      modelId: element.modelId,
+      modelElementId: input.modelElementId,
+      coverageStatus: input.coverageStatus,
+      confidence: "verified",
+      rationale,
+      assessedById: userId,
+      mvpIncluded: true,
+    },
+    update: {
+      coverageStatus: input.coverageStatus,
+      confidence: "verified",
+      rationale,
+      assessedById: userId,
+    },
+  });
+
+  revalidatePath(`/ea/models/${input.modelSlug}`);
+  return { ok: true };
 }
 
 type ReviewReferenceProposalInput = {

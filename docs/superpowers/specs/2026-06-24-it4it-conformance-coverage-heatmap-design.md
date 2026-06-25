@@ -1,6 +1,6 @@
 # IT4IT Conformance Coverage Heatmap Design
 
-- **Status:** In progress — Phase 0+1 (projection) shipped in PR #2354 (merged); Phase 2 (heatmap) landing now
+- **Status:** In progress — Phase 0+1 (projection, #2354) + Phase 2 (heatmap, #2361) shipped; Phase 3 (operator override) + evidence hygiene (#2366) landing now
 - **Date:** 2026-06-24
 - **Reviewed:** 2026-06-25
 - **Epic:** EP-IT4IT-CONFORMANCE
@@ -371,12 +371,13 @@ Refactoring tasks:
 - Tests: pure view-shaping (`it4it-coverage-view.test.ts`) — grouping, ordering, status/score/confidence derivation, weighted rollup, empty state, evidence-score fallback. [done]
 - Deferred follow-ups: by-value-stream lens (needs the crosswalk inverse), per-portfolio scope selector, operator override actions (BI-25066DD8). Live UX verification against populated data runs after this deploys and the steward writes the baseline.
 
-### Phase 3 - Override UX
+### Phase 3 - Override UX (landing, BI-25066DD8)
 
-- Add create/correct/promote actions behind `manage_ea_model`.
-- Record evidence/rationale and confidence.
-- Make projection preserve verified rows.
-- Tests: authorization, create new row, promote derived row, preserve verified row after reconcile.
+- Add create/correct/promote actions behind `manage_ea_model`. [done — `setIt4itCoverageOverride` server action in `lib/actions/ea.ts`: upserts the platform-scope assessment by `(scopeId, modelElementId)`, sets `confidence="verified"` + `assessedById`, `revalidatePath`s the model page.]
+- Record evidence/rationale and confidence. [done — rationale prefixed `operator-verified:`.]
+- Make projection preserve verified rows. [done in Phase 1 — the builder's no-clobber skips `verified`/`high` confidence rows.]
+- Heatmap drill-down: a `manage_ea_model`-gated coverage `<select>` on the selected component that marks it operator-verified (page computes `canOverride` via `auth()` + `can()`). [done]
+- Deferred: per-criterion override (component-level ships now); a richer evidence/rationale modal. Live verification of the verified-survives-reconcile loop runs post-deploy.
 
 ### Phase 4 - Business And Partner Artifact
 
