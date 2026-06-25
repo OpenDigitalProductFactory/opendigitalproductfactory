@@ -1,6 +1,7 @@
 "use client";
-// EP-GOLDEN-TRIANGLE Slice 2/4 — stateful host for the posture control on the
-// /platform/ai/priority surface. Seeds from the saved WWMD/platform default and
+// EP-GOLDEN-TRIANGLE Slice 2/4 — stateful host for the posture control, embedded
+// on the unified "Priority & Models" surface (/platform/ai/assignments). Seeds
+// from the saved WWMD/platform default and
 // saves edits back via the server action (migration-free; stored on the platform
 // DecisionPerspectiveProfile's autonomyPolicy JSON).
 import { useState } from "react";

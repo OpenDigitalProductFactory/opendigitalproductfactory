@@ -575,16 +575,11 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "section-page",
     capabilityKey: "view_platform",
   },
-  {
-    key: "platform-ai-priority",
-    label: "Priority",
-    path: "/platform/ai/priority",
-    parentPath: "/platform/ai",
-    domain: "platform",
-    audienceModes: ["operator"],
-    destinationKind: "section-page",
-    capabilityKey: "view_platform",
-  },
+  // EP-GOLDEN-TRIANGLE surface consolidation: no "platform-ai-priority" record —
+  // /platform/ai/priority is now a redirect-only shim into the unified
+  // "Priority & Models" surface (mirrors /platform/ai/model-assignment, which
+  // likewise has no nav record). Redirect-only routes carry neither a nav subItem
+  // nor a record.
   {
     key: "platform-ai-capacity-continuity",
     label: "Capacity Continuity",
@@ -597,7 +592,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "platform-ai-assignments",
-    label: "Assignments",
+    label: "Priority & Models",
     path: "/platform/ai/assignments",
     parentPath: "/platform/ai",
     domain: "platform",

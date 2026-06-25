@@ -70,6 +70,23 @@ describe("platform-nav", () => {
     expect(toolsFamily.subItems.some((item) => item.label === "Built-in Tools")).toBe(true);
   });
 
+  it("merges Priority into a single 'Priority & Models' coworker-tuning tab (EP-GOLDEN-TRIANGLE)", () => {
+    // The everyday Cost/Quality/Time priority and the advanced per-coworker model
+    // guardrails were two competing tabs. They consolidated into ONE surface, so
+    // there is no standalone "Priority" tab and no separate "Assignments" tab —
+    // just "Priority & Models" pointing at the unified /platform/ai/assignments.
+    const aiFamily = getPlatformFamily("/platform/ai/assignments");
+    const labels = aiFamily.subItems.map((item) => item.label);
+
+    expect(labels).not.toContain("Priority");
+    expect(labels).not.toContain("Assignments");
+    expect(labels).toContain("Priority & Models");
+    const unified = aiFamily.subItems.find((item) => item.label === "Priority & Models");
+    expect(unified?.href).toBe("/platform/ai/assignments");
+    // No subItem still points at the now-redirect-only /platform/ai/priority route.
+    expect(aiFamily.subItems.some((item) => item.href === "/platform/ai/priority")).toBe(false);
+  });
+
   it("removes redirect-only audit items from the AI family", () => {
     const aiFamily = getPlatformFamily("/platform/ai");
 
