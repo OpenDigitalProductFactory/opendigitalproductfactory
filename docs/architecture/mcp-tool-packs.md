@@ -73,10 +73,27 @@ arities) and [`workbooks-pack`](../../apps/web/lib/mcp/packs/workbooks-pack.ts) 
 followed on the same lazy pattern as the third and fourth packs — **every sibling-module
 domain (static + lazy) is now extracted.**
 
+## Fifth pack — first inline extraction
+
+[`feedback-pack`](../../apps/web/lib/mcp/packs/feedback-pack.ts) is the first pack whose
+handlers came from **inline** `case` bodies rather than a sibling handler module. It owns the
+three platform-feedback tools — `report_quality_issue` (→ `createPlatformIssueReport`),
+`escalate_feedback_upstream` (→ `escalateReportUpstream`), and `register_tech_debt`
+(`createTechDebtItem` + a direct `prisma` write). Each handler lazy-imports its dependency and
+reproduces the former switch case verbatim; the three definitions and switch cases (and the
+now-unused helper imports) are gone from `mcp-tools.ts`.
+
+`register_tech_debt` reads `context.agentId`, which the original pack-handler context
+(`{ routeContext, threadId }`) didn't expose — even though the registry already forwards the
+full runtime `ToolExecutionContext` to every handler. So `ToolPackHandler`'s context type was
+widened to `{ routeContext?, threadId?, agentId? }` (a purely additive, type-only change). The
+two thin-delegation tools plus the one prisma-writing tool prove the inline path across both
+shapes before the larger clusters.
+
 ## Next packs
 
-The remaining tools have **inline handler bodies** (giant `case` blocks in `mcp-tools.ts`),
-not sibling modules — a larger extraction than the four sibling-module packs done so far. The
-highest-value clusters are `backlog` + `build-evidence`, `sandbox`, then `wiki/knowledge`:
-extract each handler body into a domain module first, then pack it the same parity-first way,
-keeping the existing MCP-route, grant-filter, and `mcp-governed-execute` tests green.
+The remaining tools have **inline handler bodies with real logic** (not thin delegations) in
+`mcp-tools.ts` — a larger extraction than the five packs done so far. The highest-value
+clusters are `backlog` + `build-evidence`, `sandbox`, then `wiki/knowledge`: extract each
+handler body into a domain module first, then pack it the same parity-first way, keeping the
+existing MCP-route, grant-filter, and `mcp-governed-execute` tests green.
