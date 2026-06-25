@@ -335,8 +335,8 @@ Refactoring tasks:
 
 - Centralize reference coverage statuses in one shared module.
 - Add and test `it4it-crosswalk.ts`.
-- Normalize agent value-stream evidence, including legacy labels and null.
-- Backfill or steward `EaElement.itValueStream` so EA elements can become a real scoring signal.
+- Normalize agent value-stream evidence, including legacy labels and null. [done, BI-B431D1D1 — 3 legacy labels in `agent_registry.json` fixed to canonical v3 slugs (`Strategy to Portfolio`->`evaluate` x2, `Request to Deploy`->`integrate`); invariant guard test `agent-registry-value-stream.test.ts` blocks regressions; the crosswalk already normalizes null/unknown to a hygiene finding.]
+- Backfill or steward `EaElement.itValueStream` so EA elements can become a real scoring signal. [deferred, BI-B431D1D1 — no non-fabricated source exists today: business capabilities have 0/28 trace links to EA elements, and most EA elements (routes, code, processes) are not value-stream-specific, so a blanket tag would be fabrication. The projection treats it as an optional signal that activates if/when populated; the real near-term refinement is the operator/coworker override (BI-25066DD8), not a synthetic backfill.]
 - Convert `updateReferenceAssessment` from update-only to create/upsert-capable behavior.
 - Add no-clobber assessment ownership helpers.
 - Add license-safe display helpers for IT4IT labels and references.
