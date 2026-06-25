@@ -35,6 +35,43 @@ import { CORE_MCP_TOOL_NAMES } from "@/lib/mcp/tool-tier";
  */
 export const MAX_COWORKER_ATTACHED_TOOLS = 48;
 
+/** Rough serialized-JSON token cost of one tool schema. The 48-tool default was
+ *  sized against ~330 tok apiece. */
+export const TOOL_SCHEMA_TOKEN_ESTIMATE = 330;
+
+/** Tokens reserved per turn for everything that is NOT tool schemas — the system
+ *  prompt, accumulated conversation history, and the model's reply. The default
+ *  48-tool ceiling implicitly assumed a ~32k window (16k tools + ~16k else); on a
+ *  smaller window we must reserve this explicitly or a long thread overflows. */
+export const COWORKER_NON_TOOL_RESERVE_TOKENS = 12_000;
+
+/** Never attach fewer than this — below it a coworker is too crippled to be
+ *  useful, and the agentic loop's overflow handling covers the pathological case. */
+export const MIN_COWORKER_ATTACHED_TOOLS = 12;
+
+/**
+ * Derive the per-turn tool-attachment cap from the served context window of the
+ * model that will run the turn. The hardcoded 48 was sized for a ~32k window;
+ * on a VRAM-constrained local model served at 24,576 tokens, 48 tool schemas
+ * (~16k tokens) plus a long conversation overflow `exceed_context_size_error`.
+ * This scales the cap down so the tool block always leaves room for the prompt,
+ * history, and reply — and back up to the 48 ceiling once the window is large.
+ *
+ * It binds on the LOCAL model's served context even when a cloud provider is
+ * preferred, because the cloud→local FALLBACK path is exactly where these
+ * overflows happen; the cost on a cloud turn is only a few extra load_tools
+ * round-trips, never a failure. `null`/unknown (no small-context local model)
+ * → the full 48.
+ *
+ *   32_768 → 48 (ceiling; unchanged)   24_576 → 38   16_000 → 12 (floor)   null → 48
+ */
+export function deriveCoworkerToolCap(servedContextTokens: number | null | undefined): number {
+  if (!servedContextTokens || servedContextTokens <= 0) return MAX_COWORKER_ATTACHED_TOOLS;
+  const toolBudgetTokens = servedContextTokens - COWORKER_NON_TOOL_RESERVE_TOKENS;
+  const fitted = Math.floor(toolBudgetTokens / TOOL_SCHEMA_TOKEN_ESTIMATE);
+  return Math.max(MIN_COWORKER_ATTACHED_TOOLS, Math.min(MAX_COWORKER_ATTACHED_TOOLS, fitted));
+}
+
 /** Name of the meta-tool that lets a coworker pull deferred tools back on demand. */
 export const LOAD_TOOLS_TOOL_NAME = "load_tools";
 
