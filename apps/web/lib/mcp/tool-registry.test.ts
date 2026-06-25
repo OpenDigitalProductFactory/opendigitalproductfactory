@@ -6,6 +6,7 @@ import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 
 import { deliberationSiemPack } from "./packs/deliberation-siem-pack";
+import { runtimeCoordinationPack } from "./packs/runtime-coordination-pack";
 import { composeToolPacks } from "./tool-registry";
 
 // BI-ARCH-TOOLPACKS parity guard: the first extracted pack must stay
@@ -37,6 +38,34 @@ describe("deliberation-siem tool pack", () => {
   });
 });
 
+describe("runtime-coordination tool pack", () => {
+  it("bundles its five runtime tools, each with a (lazy) handler", () => {
+    expect(runtimeCoordinationPack.definitions.map((t) => t.name).sort()).toEqual([
+      "get_runtime_coordination_map",
+      "heartbeat_runtime_target",
+      "record_runtime_verification",
+      "register_runtime_target",
+      "release_runtime_target",
+    ]);
+    for (const def of runtimeCoordinationPack.definitions) {
+      expect(runtimeCoordinationPack.handlers[def.name], def.name).toBeTypeOf("function");
+    }
+  });
+
+  it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
+    for (const [name, grants] of Object.entries(runtimeCoordinationPack.grants)) {
+      expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
+    }
+  });
+
+  it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
+    const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
+    for (const def of runtimeCoordinationPack.definitions) {
+      expect(platformNames.has(def.name), def.name).toBe(true);
+    }
+  });
+});
+
 describe("composeToolPacks", () => {
   it("composes definitions + handler/grant lookup from packs", () => {
     const registry = composeToolPacks([deliberationSiemPack]);
@@ -44,6 +73,14 @@ describe("composeToolPacks", () => {
     expect(registry.getHandler("deliberate_on")).toBeTypeOf("function");
     expect(registry.getHandler("not_a_tool")).toBeUndefined();
     expect(registry.getGrants("open_security_case")).toEqual(["siem_investigate"]);
+  });
+
+  it("composes the two real packs without collision", () => {
+    const registry = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack]);
+    expect(registry.definitions).toHaveLength(
+      deliberationSiemPack.definitions.length + runtimeCoordinationPack.definitions.length,
+    );
+    expect(registry.getHandler("register_runtime_target")).toBeTypeOf("function");
   });
 
   it("rejects the same tool name claimed by two packs", () => {

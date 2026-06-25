@@ -56,9 +56,22 @@ grant metadata matches `TOOL_TO_GRANTS`, and every pack tool is still present in
 `PLATFORM_TOOLS`; `mcp-tools-{siem,deliberation}.test.ts` + `mcp-governed-execute.test.ts`
 keep the dispatch path honest.
 
+## Second pack — lazy handlers
+
+[`runtime-coordination-pack`](../../apps/web/lib/mcp/packs/runtime-coordination-pack.ts)
+proves the pattern handles **lazy** handlers. Unlike Deliberation/SIEM (static imports), the
+runtime handlers live in a sibling module that the switch cases `await import(...)`-ed per
+call. The pack preserves that: each handler is a thin wrapper that lazy-imports the module
+only when the tool is invoked (passing the same arguments the switch case did, including the
+mixed arities). Its five definitions were moved verbatim out of the inline `PLATFORM_TOOLS`
+array (and the now-unused `RUNTIME_COORDINATION_TOOL_ENUMS` plumbing removed); they compose
+back through the registry, dispatch through `registry.getHandler(...)`, and the five switch
+cases are gone. `tool-registry.test.ts` + `mcp-tools-runtime-coordination.test.ts` prove
+parity. This de-risks the remaining lazy domains (work-capsules, workbooks).
+
 ## Next packs
 
-Per the spec, the highest-value next extractions are the largest cohesive clusters:
-`backlog` + `build-evidence`, `work-capsules` + `runtime-coordination`, `sandbox`, then
-`wiki/knowledge`. Each follows the same parity-first discipline and keeps the existing
-MCP-route, grant-filter, and `mcp-governed-execute` tests green.
+Per the spec, the highest-value remaining extractions are the largest cohesive clusters:
+`backlog` + `build-evidence`, `work-capsules`, `sandbox`, then `wiki/knowledge`. Each follows
+the same parity-first discipline and keeps the existing MCP-route, grant-filter, and
+`mcp-governed-execute` tests green.
