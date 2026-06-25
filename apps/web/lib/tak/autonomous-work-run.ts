@@ -253,13 +253,14 @@ export async function executeAutonomousAgenticLoop(input: {
     onProgress: input.onProgress,
   });
 
-  // EP-GOLDEN-TRIANGLE: leverage the "review" rung of the rigor ladder. This is the
-  // SINGLE seam for both chat and autonomous coworker turns. When the coworker's
-  // posture sits high on Quality/effort, run one lightweight reviewer pass over the
-  // draft before it's returned. Fail-open (original draft on any error); skipped for
-  // proposals and for Balanced/low postures. (Full multi-perspective debate via the
-  // deliberation engine — minutes-long — is reserved for a follow-up; the lightweight
-  // pass is the floor for both review and debate postures here.)
+  // EP-GOLDEN-TRIANGLE: leverage the rigor ladder. This is the SINGLE seam for both
+  // chat and autonomous coworker turns. When the coworker's posture sits high on
+  // Quality/effort, run one deliberation pass over the draft before it's returned —
+  // a "review" (critique → improve) or a "debate" (steelman for/against → synthesize),
+  // per the compiled posture. Fail-open (original draft on any error); skipped for
+  // proposals and for Balanced/low postures. (The full multi-agent deliberation
+  // engine — minutes-long, build-artifact-coupled — stays the build-phase mechanism;
+  // this is the synchronous, output-revising leverage for coworker turns.)
   if (result.content && !result.proposal) {
     try {
       const pattern = await resolveCoworkerReviewPattern(input.agentId);
@@ -268,11 +269,12 @@ export async function executeAutonomousAgenticLoop(input: {
           userRequest: lastUserRequest(input.chatHistory),
           draft: result.content,
           sensitivity: input.sensitivity,
+          pattern,
         });
         if (verdict.revised) result.content = verdict.content;
       }
     } catch (err) {
-      console.warn("[golden-triangle] coworker review (unified seam) failed (fail-open):", err);
+      console.warn("[golden-triangle] coworker deliberation (unified seam) failed (fail-open):", err);
     }
   }
 

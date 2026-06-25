@@ -59,6 +59,37 @@ export function buildReviewerUserPrompt(userRequest: string, draft: string): str
   ].join("\n");
 }
 
+export const DEBATER_SYSTEM_PROMPT =
+  "You are running a fast structured debate over another AI coworker's draft reply before it is sent to the user. " +
+  "Internally steelman the strongest case FOR the draft and the strongest case AGAINST it, find the decisive tension, " +
+  "then decide. You are an adversarial second mind, not the author. " +
+  `If the draft still wins the debate, reply with exactly "${REVIEW_APPROVED}" and nothing else. ` +
+  "Otherwise reply with the strongest synthesized reply only — no preamble, no 'for/against' notes, just the better reply.";
+
+/** Pure: the debater's user-turn content for a given request + draft. */
+export function buildDebaterUserPrompt(userRequest: string, draft: string): string {
+  return [
+    "The user asked:",
+    userRequest.trim(),
+    "",
+    "The draft reply is:",
+    draft.trim(),
+    "",
+    `Debate it (for vs. against), then reply "${REVIEW_APPROVED}" if it already wins, otherwise return the strongest synthesized reply.`,
+  ].join("\n");
+}
+
+/** Pure: pick the system + user prompt for a deliberation pattern. */
+export function buildDeliberationPrompt(
+  pattern: "review" | "debate",
+  userRequest: string,
+  draft: string,
+): { system: string; user: string } {
+  return pattern === "debate"
+    ? { system: DEBATER_SYSTEM_PROMPT, user: buildDebaterUserPrompt(userRequest, draft) }
+    : { system: REVIEWER_SYSTEM_PROMPT, user: buildReviewerUserPrompt(userRequest, draft) };
+}
+
 export interface ReviewVerdict {
   content: string;
   revised: boolean;
