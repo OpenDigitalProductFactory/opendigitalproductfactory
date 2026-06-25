@@ -428,3 +428,86 @@ describe("governedExecuteTool — JSON-string arg coercion (BI-16A80690)", () =>
     expect(dispatchedParams.callingPopulation).toBe("human");
   });
 });
+
+// BI-FD7E4D72: in-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS
+// to the tool surface (agent-coworker.ts), so the execution-time agent-grant check
+// must honour the SAME baseline when context.coworkerReadBaseline is set —
+// otherwise a coworker whose own role grants omit a baseline grant (e.g.
+// ops-coordinator without code_graph_read) gets the read tool attached but
+// rejected on call. These tests use the REAL isToolAllowedByGrants (no predicate
+// override) so the actual grant merge + TOOL_TO_GRANTS mapping are exercised.
+describe("governedExecuteTool — coworker read-baseline at execution time", () => {
+  // ops-coordinator-style grants: backlog reads only, NO code_graph_read and NO
+  // backlog_write. search_code_graph requires code_graph_read (in the baseline);
+  // create_backlog_item requires backlog_write (NOT in the baseline).
+  const ROLE_GRANTS_WITHOUT_BASELINE = ["backlog_read"];
+
+  it("ALLOWS a baseline-only read tool when coworkerReadBaseline is set, even though the agent's own grants lack code_graph_read", async () => {
+    _setGovernanceForTests({
+      resolveAgentGrants: async () => ROLE_GRANTS_WITHOUT_BASELINE,
+      // No isAllowedByGrants override → real isToolAllowedByGrants runs, so the
+      // baseline merge in governedExecuteTool is what makes this pass.
+      executeTool: executeMock,
+      toolExecutionCreate: captureAudit(auditRows),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "search_code_graph",
+      rawParams: { query: "coworker tool-attachment cap" },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      context: { agentId: "ops-coordinator", coworkerReadBaseline: true },
+      source: "agentic-loop",
+    });
+
+    expect(result.error).not.toBe("forbidden_grant");
+    expect(result.success).toBe(true);
+    expect(executeMock).toHaveBeenCalledOnce();
+    expect(auditRows[0]?.success).toBe(true);
+  });
+
+  it("still DENIES a tool whose required grant is in neither the agent's grants nor the baseline (backlog_write)", async () => {
+    _setGovernanceForTests({
+      resolveAgentGrants: async () => ROLE_GRANTS_WITHOUT_BASELINE, // no backlog_write
+      executeTool: executeMock,
+      toolExecutionCreate: captureAudit(auditRows),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "x", type: "product", source: "user-request" },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      context: { agentId: "ops-coordinator", coworkerReadBaseline: true },
+      source: "agentic-loop",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("forbidden_grant");
+    expect(executeMock).not.toHaveBeenCalled();
+    expect(auditRows[0]?.success).toBe(false);
+  });
+
+  it("does NOT widen authority when coworkerReadBaseline is unset (autonomous/build scope unchanged)", async () => {
+    _setGovernanceForTests({
+      resolveAgentGrants: async () => ROLE_GRANTS_WITHOUT_BASELINE,
+      executeTool: executeMock,
+      toolExecutionCreate: captureAudit(auditRows),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "search_code_graph",
+      rawParams: { query: "coworker tool-attachment cap" },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      // No coworkerReadBaseline flag — an autonomous turn that never attached the
+      // baseline must not gain it at execution time.
+      context: { agentId: "ops-coordinator" },
+      source: "agentic-loop",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("forbidden_grant");
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+});
