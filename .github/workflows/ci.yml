@@ -212,6 +212,24 @@ jobs:
       - name: Run guard
         run: node scripts/check-package-boundaries.mjs
 
+  build-studio-namespace-guard:
+    name: Build Studio Namespace Guard
+    runs-on: ubuntu-latest
+    # BI-ARCH-BUILDSTUDIO-NS. components/build is the single production Build
+    # Studio namespace. components/build-studio is a quarantined, stale V2
+    # prototype (reachable only via /build?v=2). This guard fails any PR that
+    # adds a NEW production import of @/components/build-studio beyond the two
+    # known frozen importers, so new Build Studio UI lands in components/build.
+    # See docs/architecture/build-studio-namespace.md.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/check-build-namespace.mjs
+
   sbom-divergence-guard:
     name: SBOM Divergence Guard
     runs-on: ubuntu-latest
