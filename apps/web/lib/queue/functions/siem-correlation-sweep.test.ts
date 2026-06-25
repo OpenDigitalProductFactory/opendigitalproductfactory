@@ -66,6 +66,7 @@ describe("runCorrelationSweep", () => {
 
     const result = await runCorrelationSweep({
       since: new Date("2026-06-25T11:00:00.000Z"),
+      seedPack: false,
     });
 
     expect(result.detectionsUpserted).toBe(1);
@@ -111,7 +112,7 @@ describe("runCorrelationSweep", () => {
       },
     ]);
 
-    const result = await runCorrelationSweep();
+    const result = await runCorrelationSweep({ seedPack: false });
     expect(result.detectionsUpserted).toBe(0);
     expect(mockDetectionUpsert).not.toHaveBeenCalled();
   });

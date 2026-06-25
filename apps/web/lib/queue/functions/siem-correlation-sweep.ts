@@ -20,6 +20,7 @@ import {
   type DetectionRuleView,
   type SecurityEventView,
 } from "@/lib/security/detection";
+import { ensureKernelDetectionPack } from "@/lib/security/detection-pack";
 import { runInternalSecurityProjection } from "@/lib/security/internal-projector";
 import {
   buildIndicatorIndex,
@@ -98,12 +99,20 @@ function toEventView(ev: {
 export async function runCorrelationSweep(opts?: {
   since?: Date;
   limit?: number;
+  /** Create-if-missing seed of the kernel detection pack (default true). */
+  seedPack?: boolean;
 }): Promise<CorrelationSweepResult> {
   const { prisma } = await import("@dpf/db");
   const since =
     opts?.since ?? new Date(Date.now() - SWEEP_LOOKBACK_MIN * 60 * 1000);
   const limit = opts?.limit ?? SWEEP_EVENT_CAP;
   const now = new Date();
+
+  // Ensure the kernel detection pack exists (create-if-missing; operator tuning
+  // of existing rules is preserved) so the sweep always has baseline rules.
+  if (opts?.seedPack !== false) {
+    await ensureKernelDetectionPack();
+  }
 
   const [rules, indicators] = await Promise.all([
     prisma.detectionRule.findMany({
