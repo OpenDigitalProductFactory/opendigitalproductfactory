@@ -49,22 +49,42 @@ export interface SysmlProjectionsResult {
   it4itCoverage: SysmlSeedResult;
 }
 
+const SKIPPED: SysmlSeedResult = { status: "skipped", created: 0, updated: 0, removed: 0 };
+
+// Run one domain reconcile in isolation. A thrown error in a single domain (e.g. a missing
+// EaRelationshipType in one extractor) must NOT abort the orchestrator or block later
+// domains — previously a fail-fast sequence meant one bad domain blinded every projection,
+// including IT4IT coverage (last in the list). On failure we log and fall back to a skipped
+// result; the architecture-parity steward then surfaces that domain as a conformance finding.
+async function runDomain<T>(name: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    console.error(`[sysml-projections] domain "${name}" failed; isolating so other domains still run:`, err);
+    return fallback;
+  }
+}
+
 export async function reconcileSysmlProjections(
   opts: { db?: typeof prisma; codeGraph?: Omit<CodeStructureReconcileOpts, "db"> } = {},
 ): Promise<SysmlProjectionsResult> {
-  const mcpAuthority = await reconcileMcpAuthorityModel({ db: opts.db });
-  const coworkerAuthority = await reconcileCoworkerAuthority({ db: opts.db });
-  const valueStreams = await reconcileValueStreams({ db: opts.db });
-  const routes = await reconcileRoutes({ db: opts.db });
-  const navigation = await reconcileNavigation({ db: opts.db });
-  const codeStructure = await reconcileCodeStructure({ db: opts.db, ...opts.codeGraph });
-  const processModels = await reconcileProcessModels({ db: opts.db });
-  const skillToolchain = await reconcileSkillToolchain({ db: opts.db });
-  const operationalGraph = await reconcileOperationalGraph({ db: opts.db });
-  const networkTopology = await reconcileNetworkTopology({ db: opts.db });
-  const integrations = await reconcileIntegrations({ db: opts.db });
-  const scheduledJobs = await reconcileScheduledJobs({ db: opts.db });
-  const it4itCoverage = await reconcileIt4itCoverage({ db: opts.db });
+  const mcpAuthority = await runDomain(
+    "mcpAuthority",
+    () => reconcileMcpAuthorityModel({ db: opts.db }),
+    { ...SKIPPED, toolCount: 0, grantCount: 0 },
+  );
+  const coworkerAuthority = await runDomain("coworkerAuthority", () => reconcileCoworkerAuthority({ db: opts.db }), SKIPPED);
+  const valueStreams = await runDomain("valueStreams", () => reconcileValueStreams({ db: opts.db }), SKIPPED);
+  const routes = await runDomain("routes", () => reconcileRoutes({ db: opts.db }), SKIPPED);
+  const navigation = await runDomain("navigation", () => reconcileNavigation({ db: opts.db }), SKIPPED);
+  const codeStructure = await runDomain("codeStructure", () => reconcileCodeStructure({ db: opts.db, ...opts.codeGraph }), SKIPPED);
+  const processModels = await runDomain("processModels", () => reconcileProcessModels({ db: opts.db }), SKIPPED);
+  const skillToolchain = await runDomain("skillToolchain", () => reconcileSkillToolchain({ db: opts.db }), SKIPPED);
+  const operationalGraph = await runDomain("operationalGraph", () => reconcileOperationalGraph({ db: opts.db }), SKIPPED);
+  const networkTopology = await runDomain("networkTopology", () => reconcileNetworkTopology({ db: opts.db }), SKIPPED);
+  const integrations = await runDomain("integrations", () => reconcileIntegrations({ db: opts.db }), SKIPPED);
+  const scheduledJobs = await runDomain("scheduledJobs", () => reconcileScheduledJobs({ db: opts.db }), SKIPPED);
+  const it4itCoverage = await runDomain("it4itCoverage", () => reconcileIt4itCoverage({ db: opts.db }), SKIPPED);
   return {
     mcpAuthority, coworkerAuthority, valueStreams, routes, navigation, codeStructure, processModels, skillToolchain,
     operationalGraph, networkTopology, integrations, scheduledJobs, it4itCoverage,
