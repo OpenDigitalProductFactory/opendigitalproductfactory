@@ -8,9 +8,6 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@dpf/db": "workspace:*"
-  },
   "devDependencies": {
     "typescript": "^6.0.3"
   }
