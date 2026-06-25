@@ -124,3 +124,20 @@ Follow-on requested by Mark, taking lessons from two reference composers (Claude
 - Quiet right cluster: voice-playback · mic · submit.
 
 **Files:** `AgentMessageInput.tsx` (rewrite), `AgentFileUpload.tsx` (`variant`), `e2e/helpers/coworker.ts` (submit by `aria-label`). **No header/panel changes** — so no overlap with the golden-triangle dock work. The existing composer test passes unchanged because every accessible name it relies on (`Send`, `Add context`, the menuitems, the inline editors, the placeholder) is preserved. UX-fit: same progressive-disclosure decision as §5 — no raw control is promoted to the resting surface; submit is one small affordance.
+
+## 10. Phase 3 — Posture into the composer lip (2026-06-25, BI-E4CC8E71)
+
+The input-lip convergence deferred in §9. The collision risk that drove the "typing area only" scope has resolved — the golden-triangle composer burst (`CoworkerPriorityDock`, header posture-menu rework) has landed and recent main is non-coworker — so the convergence is now safe to complete.
+
+**The move:** the coworker **posture** (mode / page-editing / web access) leaves the header and lives in the **composer lip**, next to where you type — matching how Claude Code / Cursor / Cline place permission controls at the input. The header then sheds posture entirely → **identity + Skills + overflow only**.
+
+**Reconciliation with the priority dock.** Work *priority* (the Golden Triangle) is a separate concern that already lives in its own `CoworkerPriorityDock` strip at the composer (#2337). So the new `CoworkerPostureControl` deliberately holds **only mode + page-edit + web** — no priority row. The composer area now carries two input-anchored, collapsed controls — the posture chip (lip) and the priority dock (strip) — both matching the references.
+
+**Changes:**
+
+- New `CoworkerPostureControl.tsx` (+ test) — the posture summary chip that expands into the real switches; opens **upward** for the bottom-anchored composer; pure UI (no server imports).
+- `AgentPanelHeader.tsx` — sheds the posture block + props (slim header: identity + Skills + overflow + erase). Header test trimmed accordingly.
+- `AgentMessageInput.tsx` — renders `CoworkerPostureControl` in its lip when posture handlers are provided. The existing composer test passes unchanged (posture isn't rendered without those props).
+- `AgentCoworkerPanel.tsx` — moves the posture props from the header call to the composer call.
+
+No schema, no server actions; theme tokens only. UX-fit: same progressive-disclosure decision as §5.

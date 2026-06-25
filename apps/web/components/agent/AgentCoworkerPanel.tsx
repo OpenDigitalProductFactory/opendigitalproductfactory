@@ -843,20 +843,13 @@ export function AgentCoworkerPanel({
         onConfirmClear={handleConfirmClear}
         clearDisabled={isClearDisabled(messages, isBusy, isClearing, threadId)}
         clearConfirmOpen={clearConfirmOpen}
-        elevatedAssistEnabled={elevatedAssistEnabled}
-        onToggleElevatedAssist={handleToggleElevatedAssist}
-        externalAccessEnabled={externalAccessEnabled}
-        onToggleExternalAccess={handleToggleExternalAccess}
         onClose={onClose}
         onDragStart={onDragStart}
         providerInfo={lastProviderInfo}
         devMode={devMode}
         canUseDev={canUseDev}
         onToggleDev={() => setDevMode((prev) => !prev)}
-        coworkerMode={coworkerMode}
-        onToggleCoworkerMode={handleToggleCoworkerMode}
         onViewProfile={() => setShowProfile(true)}
-        useUnified={useUnifiedCoworker}
         marketingSkillRules={marketingSkillRules}
         isDocked={isDocked}
       />
@@ -1136,6 +1129,13 @@ export function AgentCoworkerPanel({
         voicePlaybackUnavailableReason={voiceSynth.unavailableReason}
         voicePlaybackEnabled={voicePlaybackEnabled}
         onVoicePlaybackToggle={toggleVoicePlayback}
+        elevatedAssistEnabled={elevatedAssistEnabled}
+        onToggleElevatedAssist={handleToggleElevatedAssist}
+        externalAccessEnabled={externalAccessEnabled}
+        onToggleExternalAccess={handleToggleExternalAccess}
+        coworkerMode={coworkerMode}
+        onToggleCoworkerMode={handleToggleCoworkerMode}
+        useUnified={useUnifiedCoworker}
       />
     </>
   );
