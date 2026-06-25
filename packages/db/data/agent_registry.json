@@ -457,6 +457,7 @@
           "role_registry_read",
           "telemetry_read",
           "incident_create",
+          "incident_read",
           "change_event_emit",
           "spec_plan_read",
           "thread_write"
