@@ -114,3 +114,24 @@ export function decryptPeerToken(peerTokenEnc: string | null | undefined): strin
   if (!peerTokenEnc) return null;
   return decryptSecret(peerTokenEnc);
 }
+
+/**
+ * Relay OUR local approval to the peer (dual-approval). Best-effort: a relay
+ * failure must not fail our local approval — the peer can be re-notified. Returns
+ * whether the peer accepted. Needs the peer-issued token (from outbound enroll).
+ */
+export async function relayApprovalToPeer(
+  link: { linkId: string; peerAuthorityUrl: string; peerTokenEnc: string | null },
+  fetchImpl?: typeof fetch,
+): Promise<{ ok: boolean; reason?: string }> {
+  const token = decryptPeerToken(link.peerTokenEnc);
+  if (!token) return { ok: false, reason: "no-peer-token" };
+  const res = await postToPeer({
+    peerAuthorityUrl: link.peerAuthorityUrl,
+    linkToken: token,
+    path: "/api/v1/federation/approval-relay",
+    cloudEvent: { type: "dpf.federation.approval", linkId: link.linkId },
+    ...(fetchImpl ? { fetchImpl } : {}),
+  });
+  return res.ok ? { ok: true } : { ok: false, reason: `peer responded ${res.status}` };
+}
