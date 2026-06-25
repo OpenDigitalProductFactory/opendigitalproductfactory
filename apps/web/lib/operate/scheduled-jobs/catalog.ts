@@ -370,6 +370,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "edge-incident-correlation",
+    inngestId: "ops/edge-incident-correlation",
+    name: "Edge incident correlation",
+    purpose:
+      "EP-MSP-FEDERATION A2+A3 — correlates a burst of edge alerts to the preceding change into one change-before-spike incident, then routes it to the right customer as a quality issue + ServiceTicket. Dark-launched behind DPF_EDGE_INCIDENT_CORRELATION_ENABLED. Cadence and lookback are tunable.",
+    cron: "4,14,24,34,44,54 * * * *",
+    cadence: "Every 10 min (at :04)",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "release-health-check",
     inngestId: "ops/release-health-check",
     name: "Release health check",
