@@ -62,6 +62,12 @@ export default defineConfig({
         replacement: resolve(rootDir, "packages/db/src/discovery-collectors/snmp.ts"),
       },
       {
+        // Barrel subpath: maps to patch/index.ts, not patch.ts, so it must precede
+        // the generic regex below (which would resolve to a nonexistent patch.ts).
+        find: "@dpf/db/patch",
+        replacement: resolve(rootDir, "packages/db/src/patch/index.ts"),
+      },
+      {
         find: /^@dpf\/db\/(.+)$/,
         replacement: resolve(rootDir, "packages/db/src/$1.ts"),
       },
