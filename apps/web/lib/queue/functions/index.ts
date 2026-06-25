@@ -58,6 +58,7 @@ import { releaseHealthCheck } from "./release-health-check";
 import { marketingSchedulerDispatch } from "./marketing-scheduler-dispatch";
 import { recurringInvoiceDispatch } from "./recurring-invoice-dispatch";
 import { siemCorrelationSweep } from "./siem-correlation-sweep";
+import { patchAssessmentSweep } from "./patch-assessment-sweep";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 export const scheduledFunctions = [
@@ -93,6 +94,7 @@ export const scheduledFunctions = [
   marketingSchedulerDispatch, // BI-SCHED-DORMANT: wire ScheduledOutboundAction dispatch, every 30m
   recurringInvoiceDispatch,   // BI-SCHED-DORMANT: wire recurring-invoice generation, daily 06:30
   siemCorrelationSweep,       // BI-6D9496F1: EP-SOVEREIGN-SOC P1 — project internal audit -> SecurityEvent + run detection rules, every 15m
+  patchAssessmentSweep,       // EP-PATCH-MANAGEMENT P0: daily estate patch posture sweep (OSV+KEV -> AssuranceFinding), 05:00
 ];
 
 export const eventFunctions = [

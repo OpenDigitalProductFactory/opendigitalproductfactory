@@ -429,6 +429,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
+  {
+    jobId: "patch-assessment-sweep",
+    inngestId: "ops/patch-assessment-sweep",
+    name: "Estate patch assessment",
+    purpose:
+      "EP-PATCH-MANAGEMENT P0: projects discovered installed software into patch findings (OSV vulnerabilities + CISA KEV prioritization) on the Assurance Ledger, and resolves findings that became clean. If it stops, estate patch posture goes stale.",
+    cron: "0 5 * * *",
+    cadence: "Daily at 05:00",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
 ] as const;
 
 const CATALOG_BY_JOB_ID = new Map<string, ScheduledJobCatalogEntry>(
