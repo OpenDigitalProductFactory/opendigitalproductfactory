@@ -109,3 +109,18 @@ Ran `principle_decide` (population `external_coding_agent`, surface `coworker-pa
 - **Unit (`AgentPanelHeader.test.tsx`):** resting header renders identity + posture summary + overflow trigger; posture summary string reflects active state (mode/edits/web); exactly one sensitivity indicator (regression guard for the duplicate); opening the posture popover reveals the edit-fields and web switches; opening overflow reveals profile/erase; erase-confirm popover renders when `clearConfirmOpen`.
 - **Build gate:** `pnpm --filter web typecheck` + `pnpm --filter web build` run in CI (this is a source-only worktree; runtime-bound gates run in CI / the shared local-CI sandbox per §5).
 - **UX verification:** exercise the panel on the canonical install after the change reaches it via the governed path; confirm the posture/overflow disclosures, the switch affordances, and that no second sensitivity badge appears.
+
+## 9. Phase 2 — Composer typing-area refresh (2026-06-25, BI-4931A5FE)
+
+Follow-on requested by Mark, taking lessons from two reference composers (Claude Code's input lip and the Claude desktop composer). Decisive cues: **submit is a small arrow, not a "Send" button**, and the controls tuck into one integrated input.
+
+**Reconciliation note.** Between the header slice (#2329) merging and this slice, concurrent EP-GOLDEN-TRIANGLE work landed on main: it **docked the priority triangle at the composer** (`CoworkerPriorityDock`, #2337), removed Priority from the header posture menu, and replaced `CoworkerPriorityControl` with `CoworkerPriorityDock`. Operator decision (AskUserQuestion): scope this slice to the **typing area only** — do not move posture into the lip (it stays in the header, beside the new priority dock), to avoid colliding with the actively-iterating golden-triangle area.
+
+**Changes (`AgentMessageInput` only — self-contained):**
+
+- The textarea + controls become **one integrated rounded card** (the textarea goes borderless), replacing the flat toolbar of six separate bordered controls.
+- **Submit is a small circular arrow** (↑, `aria-label="Send"`). While the coworker works it becomes a **stop square** (`aria-label="Stop"`) that POSTs `/api/agent/cancel` directly — the composer owns its `threadId`, so it cancels without a new parent callback. An always-visible cancel (previously only after 15s in the thinking bubble). Enter still sends.
+- **One `+ Add`** merges the former file-clip and the context `+`: Attach file · Set intent · Add source · Scope edge · Output shape (`AgentFileUpload` gains `variant="menu"`).
+- Quiet right cluster: voice-playback · mic · submit.
+
+**Files:** `AgentMessageInput.tsx` (rewrite), `AgentFileUpload.tsx` (`variant`), `e2e/helpers/coworker.ts` (submit by `aria-label`). **No header/panel changes** — so no overlap with the golden-triangle dock work. The existing composer test passes unchanged because every accessible name it relies on (`Send`, `Add context`, the menuitems, the inline editors, the placeholder) is preserved. UX-fit: same progressive-disclosure decision as §5 — no raw control is promoted to the resting surface; submit is one small affordance.

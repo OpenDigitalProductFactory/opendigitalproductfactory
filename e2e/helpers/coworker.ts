@@ -36,9 +36,9 @@ export async function askCoworker(page: Page, prompt: string): Promise<string> {
 
     await input.fill(prompt);
 
-    // Send button: type="button" text "Send" inside the panel
+    // Submit is a small arrow button (aria-label="Send"); Enter is the fallback.
     const panel = page.locator('[data-agent-panel="true"]').first();
-    const sendBtn = panel.locator('button:has-text("Send")').first();
+    const sendBtn = panel.locator('button[aria-label="Send"]').first();
     if (await sendBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
       await sendBtn.click();
     } else {

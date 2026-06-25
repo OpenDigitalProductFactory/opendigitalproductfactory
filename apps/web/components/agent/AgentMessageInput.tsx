@@ -10,7 +10,7 @@ import {
 import { AgentFileUpload } from "./AgentFileUpload";
 import { MicButton } from "./MicButton";
 import { useVoiceCapture } from "./hooks/useVoiceCapture";
-import { Volume2, VolumeOff, VolumeX } from "lucide-react";
+import { Volume2, VolumeOff, VolumeX, ArrowUp, Square } from "lucide-react";
 
 type PendingFile = {
   attachmentId: string;
@@ -169,6 +169,18 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
     textareaRef.current?.focus();
   }
 
+  // Stop the in-flight turn — the composer owns its threadId, so it cancels
+  // directly (mirrors the inline Cancel in the thinking bubble) rather than
+  // threading a callback through the parent.
+  function handleStop() {
+    if (!threadId) return;
+    fetch("/api/agent/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ threadId }),
+    }).catch(() => {});
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -281,6 +293,8 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
     sources.length > 0 ||
     hardEdges.length > 0 ||
     !!expectedArtifact;
+  const showStop = !!busy;
+  const sendDisabled = disabled || !!busy || !value.trim() || overLimit;
 
   // ── Render helpers ────────────────────────────────────────────────────────
 
@@ -376,7 +390,7 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           display: "flex",
           alignItems: "center",
           gap: 6,
-          padding: "6px 12px 0",
+          padding: "0 0 6px",
           flexWrap: "wrap",
         }}
       >
@@ -454,7 +468,7 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           display: "flex",
           flexWrap: "wrap",
           gap: 4,
-          padding: "6px 12px 0",
+          padding: "0 0 6px",
         }}
       >
         {pendingFile &&
@@ -528,6 +542,16 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           zIndex: 20,
         }}
       >
+        <AgentFileUpload
+          threadId={threadId}
+          disabled={disabled || !!busy}
+          onUploaded={(result) => {
+            onFileUploaded(result);
+            setPopoverOpen(false);
+          }}
+          variant="menu"
+        />
+        <div style={{ borderTop: "1px solid var(--dpf-border)", margin: "4px 0" }} />
         <PopoverItem
           icon={CHIP_ICONS.intent}
           label={intentCenter ? "Edit intent" : "Set intent…"}
@@ -606,7 +630,7 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
   }
 
   return (
-    <div style={{ borderTop: "1px solid var(--dpf-border)" }}>
+    <div style={{ borderTop: "1px solid var(--dpf-border)", padding: "8px 10px" }}>
       {/*
         Voice Slice 2 follow-up: surface voice errors INLINE, not just in the
         button tooltip. Operators were clicking the mic, getting silent
@@ -621,9 +645,11 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
             display: "flex",
             alignItems: "flex-start",
             gap: 8,
-            padding: "6px 12px",
+            padding: "6px 8px",
+            marginBottom: 6,
+            borderRadius: 8,
             background: "rgba(211, 51, 51, 0.08)",
-            borderBottom: "1px solid rgba(211, 51, 51, 0.25)",
+            border: "1px solid rgba(211, 51, 51, 0.25)",
             fontSize: 11,
             color: "var(--dpf-text)",
           }}
@@ -650,42 +676,21 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           </button>
         </div>
       )}
-      {renderChipTray()}
-      {renderPendingEntryRow()}
-      <div style={{
-        display: "flex",
-        gap: 6,
-        padding: "10px 12px",
-        alignItems: "flex-end",
-        flexWrap: "wrap",
-      }}>
-        <div ref={popoverContainerRef} style={{ position: "relative", flexShrink: 0 }}>
-          <button
-            type="button"
-            onClick={togglePopover}
-            aria-expanded={popoverOpen}
-            aria-haspopup="menu"
-            aria-label="Add context"
-            title="Add context (intent, sources, scope edges, output shape)"
-            disabled={disabled || !!busy}
-            style={{
-              background: "var(--dpf-surface-2)",
-              border: "1px solid var(--dpf-border)",
-              borderRadius: 6,
-              color: "var(--dpf-text)",
-              cursor: disabled || busy ? "not-allowed" : "pointer",
-              fontSize: 18,
-              lineHeight: 1,
-              height: 32,
-              width: 32,
-              opacity: disabled || busy ? 0.5 : 1,
-              padding: 0,
-            }}
-          >
-            +
-          </button>
-          {renderContextPopover()}
-        </div>
+
+      {/* One integrated composer: textarea on top, control lip beneath. */}
+      <div
+        style={{
+          border: `1px solid ${overLimit ? "var(--dpf-error)" : "var(--dpf-border)"}`,
+          borderRadius: 14,
+          background: "color-mix(in srgb, var(--dpf-bg) 55%, transparent)",
+          padding: "8px 10px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+        }}
+      >
+        {renderChipTray()}
+        {renderPendingEntryRow()}
         <textarea
           ref={textareaRef}
           value={value}
@@ -695,110 +700,152 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           placeholder={disabled ? "Sending..." : busy ? "Agent is working... type your next message" : "Ask your co-worker..."}
           rows={1}
           style={{
-            flex: "1 1 180px",
-            minWidth: 0,
-            background: "color-mix(in srgb, var(--dpf-bg) 80%, transparent)",
-            border: `1px solid ${overLimit ? "var(--dpf-error)" : "var(--dpf-border)"}`,
-            borderRadius: 6,
-            padding: "6px 10px",
-            fontSize: 12,
+            width: "100%",
+            boxSizing: "border-box",
+            background: "transparent",
+            border: "none",
+            padding: "2px",
+            fontSize: 13,
             color: "var(--dpf-text)",
             outline: "none",
             resize: "none",
             overflow: "auto",
             lineHeight: "1.4",
-            minHeight: 32,
+            minHeight: 24,
             maxHeight: 160,
           }}
         />
-        {overLimit && (
-          <span style={{ fontSize: 10, color: "var(--dpf-error)", flexShrink: 0, alignSelf: "center" }}>
-            {value.trim().length.toLocaleString()}/{MAX_MESSAGE_LENGTH.toLocaleString()}
-          </span>
-        )}
-        <MicButton
-          state={voice.state}
-          errorMessage={voice.error}
-          errorCode={voice.errorCode}
-          supported={voice.supported}
-          onStart={() => void voice.start()}
-          onStop={voice.stop}
-          onReset={voice.reset}
-          disabled={disabled || !!busy}
-        />
-        {onVoicePlaybackToggle && (
+
+        {/* Control lip */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <div ref={popoverContainerRef} style={{ position: "relative", flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={togglePopover}
+              aria-expanded={popoverOpen}
+              aria-haspopup="menu"
+              aria-label="Add context"
+              title="Add files and context (intent, sources, scope edges, output shape)"
+              disabled={disabled || !!busy}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                background: "transparent",
+                border: "1px solid var(--dpf-border)",
+                borderRadius: 999,
+                color: "var(--dpf-muted)",
+                cursor: disabled || busy ? "not-allowed" : "pointer",
+                fontSize: 12,
+                lineHeight: 1,
+                height: 28,
+                padding: "0 10px",
+                opacity: disabled || busy ? 0.5 : 1,
+              }}
+            >
+              <span aria-hidden="true" style={{ fontSize: 15 }}>+</span> Add
+            </button>
+            {renderContextPopover()}
+          </div>
+
+          <span style={{ flex: 1 }} />
+
+          {overLimit && (
+            <span style={{ fontSize: 10, color: "var(--dpf-error)", flexShrink: 0 }}>
+              {value.trim().length.toLocaleString()}/{MAX_MESSAGE_LENGTH.toLocaleString()}
+            </span>
+          )}
+
+          {onVoicePlaybackToggle && (
+            <button
+              type="button"
+              onClick={voicePlaybackUnavailable ? undefined : onVoicePlaybackToggle}
+              title={
+                voicePlaybackUnavailable
+                  ? voicePlaybackUnavailableTitle
+                  : voicePlaybackEnabled
+                    ? "Mute voice playback"
+                    : "Unmute voice playback"
+              }
+              aria-label={
+                voicePlaybackUnavailable
+                  ? "Voice playback unavailable"
+                  : voicePlaybackEnabled
+                    ? "Mute voice playback"
+                    : "Unmute voice playback"
+              }
+              aria-pressed={voicePlaybackEnabled}
+              disabled={voicePlaybackUnavailable}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: voicePlaybackUnavailable ? "not-allowed" : "pointer",
+                color: voicePlaybackUnavailable
+                  ? "var(--dpf-muted)"
+                  : voicePlaybackEnabled
+                    ? "var(--dpf-accent)"
+                    : "var(--dpf-muted)",
+                lineHeight: 1,
+                padding: "0 2px",
+                flexShrink: 0,
+                height: 30,
+                display: "flex",
+                alignItems: "center",
+                opacity: voicePlaybackUnavailable || !voicePlaybackEnabled ? 0.5 : 1,
+                transition: "color 0.15s, opacity 0.15s",
+              }}
+            >
+              {voicePlaybackUnavailable ? (
+                <VolumeX aria-hidden="true" size={16} strokeWidth={2} />
+              ) : voicePlaybackEnabled ? (
+                <Volume2 aria-hidden="true" size={16} strokeWidth={2} />
+              ) : (
+                <VolumeOff aria-hidden="true" size={16} strokeWidth={2} />
+              )}
+            </button>
+          )}
+
+          <MicButton
+            state={voice.state}
+            errorMessage={voice.error}
+            errorCode={voice.errorCode}
+            supported={voice.supported}
+            onStart={() => void voice.start()}
+            onStop={voice.stop}
+            onReset={voice.reset}
+            disabled={disabled || !!busy}
+          />
+
+          {/* Submit — a small arrow; a stop square while the coworker works. */}
           <button
             type="button"
-            onClick={voicePlaybackUnavailable ? undefined : onVoicePlaybackToggle}
-            title={
-              voicePlaybackUnavailable
-                ? voicePlaybackUnavailableTitle
-                : voicePlaybackEnabled
-                  ? "Mute voice playback"
-                  : "Unmute voice playback"
-            }
-            aria-label={
-              voicePlaybackUnavailable
-                ? "Voice playback unavailable"
-                : voicePlaybackEnabled
-                  ? "Mute voice playback"
-                  : "Unmute voice playback"
-            }
-            aria-pressed={voicePlaybackEnabled}
-            disabled={voicePlaybackUnavailable}
+            onClick={showStop ? handleStop : handleSubmit}
+            disabled={showStop ? !threadId : sendDisabled}
+            aria-label={showStop ? "Stop" : "Send"}
+            title={showStop ? "Stop the coworker" : "Send"}
             style={{
-              background: "none",
-              border: "none",
-              cursor: voicePlaybackUnavailable ? "not-allowed" : "pointer",
-              color: voicePlaybackUnavailable
-                ? "var(--dpf-muted)"
-                : voicePlaybackEnabled
-                  ? "var(--dpf-accent)"
-                  : "var(--dpf-muted)",
-              lineHeight: 1,
-              padding: "0 2px",
-              flexShrink: 0,
-              height: 32,
-              display: "flex",
+              display: "inline-flex",
               alignItems: "center",
-              opacity: voicePlaybackUnavailable || !voicePlaybackEnabled ? 0.5 : 1,
-              transition: "color 0.15s, opacity 0.15s",
+              justifyContent: "center",
+              width: 30,
+              height: 30,
+              borderRadius: "50%",
+              flexShrink: 0,
+              border: "none",
+              background: showStop ? "var(--dpf-surface-2)" : "var(--dpf-accent)",
+              color: showStop ? "var(--dpf-text)" : "#ffffff",
+              cursor: (showStop ? !threadId : sendDisabled) ? "not-allowed" : "pointer",
+              opacity: (showStop ? !threadId : sendDisabled) ? 0.4 : 1,
+              transition: "opacity 0.15s",
             }}
           >
-            {voicePlaybackUnavailable ? (
-              <VolumeX aria-hidden="true" size={16} strokeWidth={2} />
-            ) : voicePlaybackEnabled ? (
-              <Volume2 aria-hidden="true" size={16} strokeWidth={2} />
+            {showStop ? (
+              <Square aria-hidden="true" size={13} strokeWidth={2.5} />
             ) : (
-              <VolumeOff aria-hidden="true" size={16} strokeWidth={2} />
+              <ArrowUp aria-hidden="true" size={17} strokeWidth={2.5} />
             )}
           </button>
-        )}
-        <AgentFileUpload
-          threadId={threadId}
-          disabled={disabled || !!busy}
-          onUploaded={onFileUploaded}
-        />
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={disabled || busy || !value.trim() || overLimit}
-          title={busy ? "Agent is still working" : undefined}
-          style={{
-            background: "var(--dpf-accent)",
-            border: "none",
-            borderRadius: 6,
-            padding: "6px 12px",
-            fontSize: 12,
-            color: "#ffffff",
-            cursor: disabled || busy || !value.trim() || overLimit ? "not-allowed" : "pointer",
-            opacity: disabled || busy || !value.trim() || overLimit ? 0.5 : 1,
-            flexShrink: 0,
-            height: 32,
-          }}
-        >
-          Send
-        </button>
+        </div>
       </div>
     </div>
   );
