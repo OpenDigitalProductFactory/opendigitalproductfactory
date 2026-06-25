@@ -24,6 +24,7 @@ import { reconcileOperationalGraph } from "./reconcile-operational-bridge";
 import { reconcileNetworkTopology } from "./reconcile-network-bridge";
 import { reconcileIntegrations } from "./reconcile-integration-bridge";
 import { reconcileScheduledJobs } from "./reconcile-scheduled-jobs";
+import { reconcileIt4itCoverage } from "./reconcile-it4it-coverage";
 import type { SysmlSeedResult } from "./sysml-model-seed";
 
 export interface SysmlProjectionsResult {
@@ -43,6 +44,9 @@ export interface SysmlProjectionsResult {
   integrations: SysmlSeedResult;
   // Scheduling surface — all scheduled work, across substrates (EP-SCHEDULING-SURFACE).
   scheduledJobs: SysmlSeedResult;
+  // IT4IT conformance coverage — evidence-derived baseline vs the IT4IT functional
+  // criteria, persisted to EaReferenceAssessment (EP-IT4IT-CONFORMANCE).
+  it4itCoverage: SysmlSeedResult;
 }
 
 export async function reconcileSysmlProjections(
@@ -60,8 +64,9 @@ export async function reconcileSysmlProjections(
   const networkTopology = await reconcileNetworkTopology({ db: opts.db });
   const integrations = await reconcileIntegrations({ db: opts.db });
   const scheduledJobs = await reconcileScheduledJobs({ db: opts.db });
+  const it4itCoverage = await reconcileIt4itCoverage({ db: opts.db });
   return {
     mcpAuthority, coworkerAuthority, valueStreams, routes, navigation, codeStructure, processModels, skillToolchain,
-    operationalGraph, networkTopology, integrations, scheduledJobs,
+    operationalGraph, networkTopology, integrations, scheduledJobs, it4itCoverage,
   };
 }

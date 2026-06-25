@@ -29,6 +29,7 @@ function projectionResult(overrides: Partial<SysmlProjectionsResult> = {}): Sysm
     networkTopology: healthy,
     integrations: healthy,
     scheduledJobs: healthy,
+    it4itCoverage: healthy,
     ...overrides,
   };
 }

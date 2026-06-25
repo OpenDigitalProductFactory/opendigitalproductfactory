@@ -62,6 +62,7 @@ const DOMAIN_LABELS: Record<ProjectionDomain, string> = {
   networkTopology: "network topology (discovered)",
   integrations: "connected-application integrations",
   scheduledJobs: "scheduling surface (all scheduled work)",
+  it4itCoverage: "IT4IT functional-criteria coverage",
 };
 
 function projectionEntries(result: SysmlProjectionsResult): Array<[ProjectionDomain, ProjectionStatus]> {
