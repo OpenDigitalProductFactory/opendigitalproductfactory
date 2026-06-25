@@ -1,0 +1,84 @@
+// The aggregator — fan out the source adapters, order by the tiered triage rule,
+// scope by audience. Read-only and idempotent; never mutates a source row.
+// A failing source degrades to `failedSources` — never a blank inbox (spec §6.3).
+// Spec: docs/superpowers/specs/2026-06-23-human-attention-surface-design.md §4.1, §6.2.
+
+import type { prisma } from "@dpf/db";
+import type { AttentionItem, AttentionSource } from "./types";
+import { orderAttention } from "./triage";
+import { loadEscalationItems } from "./sources/escalation";
+import { loadAiDecisionItems } from "./sources/ai-decision";
+import { loadPausedAiItems } from "./sources/paused-ai";
+import { loadAgentProposalItems } from "./sources/agent-proposal";
+import {
+  loadOutboundItems,
+  loadBillItems,
+  loadExpenseItems,
+  loadRegulatoryItems,
+  loadResearchItems,
+} from "./sources/business-approvals";
+
+type Db = typeof prisma;
+
+export type AttentionSourceLoader = {
+  source: AttentionSource;
+  load: () => Promise<AttentionItem[]>;
+};
+
+export type AttentionResult = {
+  /** Ordered by the tiered triage rule (override → time → risk → blast → age). */
+  items: AttentionItem[];
+  /** Sources whose adapter threw — surfaced as a "couldn't load <source>" note. */
+  failedSources: AttentionSource[];
+};
+
+/** Fan out the source loaders in parallel, collect, and order. Deps-injected so
+ *  the fan-out + resilience is unit-testable without a live database. */
+export async function aggregateAttention(loaders: AttentionSourceLoader[]): Promise<AttentionResult> {
+  const settled = await Promise.all(
+    loaders.map(async (l) => {
+      try {
+        return { source: l.source, items: await l.load() };
+      } catch {
+        return { source: l.source, items: null };
+      }
+    }),
+  );
+
+  const items: AttentionItem[] = [];
+  const failedSources: AttentionSource[] = [];
+  for (const r of settled) {
+    if (r.items === null) failedSources.push(r.source);
+    else items.push(...r.items);
+  }
+  return { items: orderAttention(items), failedSources };
+}
+
+export type AttentionAudienceQuery = { operator: boolean; principalId?: string };
+
+/** Audience scoping (pure). Operators see the full residue; a worker sees only
+ *  the items assigned to their principal. Spec §6.2. */
+export function filterAttentionForAudience(
+  items: AttentionItem[],
+  q: AttentionAudienceQuery,
+): AttentionItem[] {
+  if (q.operator) return items.filter((i) => i.audience.operator);
+  return items.filter(
+    (i) => q.principalId != null && i.audience.assigneePrincipalId === q.principalId,
+  );
+}
+
+/** Production entry point — wires the real source loaders over the db client. */
+export async function loadAttentionItems(db: Db): Promise<AttentionResult> {
+  return aggregateAttention([
+    { source: "escalation", load: () => loadEscalationItems() },
+    { source: "ai-decision", load: () => loadAiDecisionItems(db) },
+    { source: "paused-ai", load: () => loadPausedAiItems(db) },
+    { source: "agent-proposal", load: () => loadAgentProposalItems(db) },
+    { source: "approval-outbound", load: () => loadOutboundItems(db) },
+    { source: "approval-bill", load: () => loadBillItems(db) },
+    { source: "approval-expense", load: () => loadExpenseItems(db) },
+    { source: "compliance-submission", load: () => loadRegulatoryItems(db) },
+    { source: "research-proposal", load: () => loadResearchItems(db) },
+  ]);
+}

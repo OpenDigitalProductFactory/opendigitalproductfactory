@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { PlatformWorkspaceHome } from "@/components/workspace-home/PlatformWorkspaceHome";
+import { NeedsYouBand } from "@/components/attention/NeedsYouBand";
 import { LocalOnlyProviderNotice } from "@/components/workspace-home/LocalOnlyProviderNotice";
 import { UnconfiguredWorkspaceHomeNotice } from "@/components/workspace-home/UnconfiguredWorkspaceHomeNotice";
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
@@ -40,6 +41,10 @@ export default async function WorkspacePage() {
       {workspaceHomeResolution.mode !== "unconfigured" && !hasCloudProvider && (
         <LocalOnlyProviderNotice />
       )}
+      {/* The "Needs you" attention band — first-viewport decisions that need a human
+          now, separate from the work backlog (EP-ATTENTION-SURFACE). Renders nothing
+          when the queue is empty. */}
+      <NeedsYouBand />
       <PlatformWorkspaceHome data={platformHomeData} />
     </div>
   );

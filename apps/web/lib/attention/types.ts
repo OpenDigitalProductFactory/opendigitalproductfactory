@@ -1,0 +1,103 @@
+// The Attention Surface — projector output types (EP-ATTENTION-SURFACE, BI-D39484E7 + BI-61B9EB88).
+// Spec: docs/superpowers/specs/2026-06-23-human-attention-surface-design.md §4.1, §4.4.
+//
+// `AttentionItem` is a READ-MODEL projection, NOT a persisted entity. Each queue's
+// truth stays in its owning model (single-source-of-truth); the inbox projects over
+// them, exactly as command-center.ts projects WorkspaceAttentionItem[]. There is
+// deliberately NO single composite "priority" number on this type — incommensurable
+// items are made comparable by the SAME objective factors (triage) + a tiered order,
+// never a fabricated score (the #2315 0.000-theater rule, applied to ranking).
+
+/** Which scattered queue an item was projected from. */
+export type AttentionSource =
+  | "escalation" // PlatformIssueReport awaiting_escalation_ack (build-stall) — re-homed off /ops
+  | "ai-decision" // DecisionInteraction outcomeType escalate/defer, humanOutcome null
+  | "paused-ai" // TaskRun input-required / auth-required
+  | "agent-proposal" // AgentActionProposal status=proposed
+  | "approval-outbound" // OutboundDraft pending-review (marketing)
+  | "approval-bill" // Bill awaiting_approval (AP — carries a dueDate)
+  | "approval-expense" // ExpenseClaim submitted
+  | "compliance-submission" // RegulatorySubmission draft (carries a dueDate)
+  | "research-proposal"; // ResearchProposal pending
+
+/** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
+export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";
+
+/** The primary, objective triage key. Deadline-bearing sources (bills/expenses/
+ *  compliance, BI-AS-4) populate the imminent tiers; the keystone sources have no
+ *  hard deadline, so they resolve to "none" and are ordered by risk→blast→age. */
+export type TimeToAct = "overdue" | "due-today" | "due-soon" | "none";
+
+/** WHY the governed scopes couldn't resolve it — the honest "why it's here" line.
+ *  An inclusive, source-honest superset of the §4.4 illustrative list. */
+export type ResidueReason =
+  | "coverage-gap" // kernel had no applicable material (DecisionInteraction defer)
+  | "principle-conflict" // kernel torn (DecisionInteraction principleConflict)
+  | "high-risk-gate" // policy requires a human for this risk (DecisionInteraction escalate)
+  | "self-fix-exhausted" // Build Studio could not self-repair (escalation)
+  | "input-required" // a coworker needs human input to continue (TaskRun)
+  | "needs-credential" // missing credential / authority, NOT judgment (TaskRun auth-required)
+  | "policy-approval"; // an agent action awaits approval (AgentActionProposal)
+
+/** How much the human must do. The human_cognitive_load cost axis. */
+export type DecideEffort = "one-tap" | "review" | "judgment";
+
+/** A bounded, source-specific action. Rendered as a control on the card; the
+ *  actual mutation is owned by the source's surface (deep-link) until the decision
+ *  modules land (BI-AS-5/6). `open` and `dismiss`/`snooze` are safe in the keystone. */
+export type AttentionActionKind =
+  | "open-in-context"
+  | "dismiss"
+  | "snooze"
+  | "approve"
+  | "reject"
+  | "request-changes"
+  | "answer";
+
+export type AttentionAction = {
+  kind: AttentionActionKind;
+  label: string;
+  /** Present for navigations; absent for in-place mutations wired in later slices. */
+  href?: string;
+};
+
+/** The SAME comparable factors on every item, surfaced AS context. No composite score. */
+export type AttentionTriage = {
+  timeToAct: TimeToAct;
+  /** ISO deadline when a hard one exists (bill due, filing deadline, SLA breach). */
+  deadlineIso?: string;
+  residueReason: ResidueReason;
+  /** What/who is blocked until decided — the "if you don't act…" line. */
+  blastRadius?: string;
+  decideEffort: DecideEffort;
+  /** True for actions that cannot be undone — feeds the irreversible-high-risk override. */
+  irreversible: boolean;
+};
+
+export type AttentionAudience = {
+  /** Visible to operators (founder/admin) — the full residue. */
+  operator: boolean;
+  /** When set, also visible to this principal as their own/role item (worker scope). */
+  assigneePrincipalId?: string;
+};
+
+export type AttentionItem = {
+  /** Stable per source row, e.g. "escalation:PIR-…", "ai-decision:DI-…". */
+  id: string;
+  source: AttentionSource;
+  title: string;
+  /** The honest one-liner: top blocker / question / what + why-paused. */
+  context: string;
+  /** Scorability governs rendering: kernel-scorable → ledger; unscorable → honest
+   *  facts (never a 0.000 verdict). All keystone sources are residue the kernel
+   *  already could not decide, so they are "unscorable" by construction. */
+  decisionClass: { scorability: "kernel-scorable" | "unscorable" | "org-business" };
+  riskClass: AttentionRiskClass;
+  triage: AttentionTriage;
+  /** ISO creation time — drives the age tie-break and the relative-age label. */
+  createdAtIso: string;
+  actions: AttentionAction[];
+  /** To the owning surface for heavy context; never reimplemented in the inbox. */
+  deepLink: string;
+  audience: AttentionAudience;
+};

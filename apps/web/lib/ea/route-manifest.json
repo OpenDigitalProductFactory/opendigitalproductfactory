@@ -5981,6 +5981,16 @@
       "file": "apps/web/app/(shell)/workspace/documents/[documentId]/page.tsx"
     },
     {
+      "routePath": "/workspace/inbox",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "inbox"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/inbox/page.tsx"
+    },
+    {
       "routePath": "/workspace/my-queue",
       "kind": "page",
       "segments": [
