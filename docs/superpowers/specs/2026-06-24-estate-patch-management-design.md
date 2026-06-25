@@ -1,326 +1,644 @@
-# Estate Patch Management — inventory → version intelligence → governed scheduling → apply
+# Estate Patch Management - inventory, intelligence, governed change, verified apply
 
 - **Date:** 2026-06-24
-- **Status:** Design (research-first). No code in this pass.
-- **Author:** Claude (external coding agent), on Mark's `/goal`.
+- **Reviewed:** 2026-06-25 by Codex, as enterprise architect and business-development reviewer.
+- **Status:** Design, research-first. No code in this pass.
+- **Author:** Claude (initial draft), revised by Codex.
 - **Epic:** `EP-PATCH-MANAGEMENT` (new; composes `EP-EDGE-NODE`, `EP-EDGE-TOPOLOGY`, `EP-ASSURANCE-LEDGER`, `EP-UPGRADE-LIFECYCLE`, `EP-SCHEDULING-SURFACE`, `EP-MSP-FEDERATION`, `EP-ESTATE-SOVEREIGNTY`, `EP-ATTENTION-SURFACE`).
 
 ---
 
-## 1. Problem & goal
+## 1. Executive Decision
 
-Patch management is the loop: **know what software is installed on a computer → know whether a newer (or safer) version is available → schedule the change → apply it → verify it.** DPF must run this loop for three populations of hosts:
+DPF should build **estate patch management as a governed control loop**, not as a new RMM clone:
 
-1. **Itself** — the DPF install (already partly solved by the self-upgrade machinery, but only for DPF's own image, not the OS or third-party software around it).
-2. **The discovered estate** — hosts and software found by infrastructure discovery on the local network.
-3. **Remote customer networks** — reached through the **Edge Node**, the host-resident agent DPF already enrolls on customer sites.
+1. **Inventory:** reuse the existing discovery substrate and deepen it with evaluated host tooling.
+2. **Version intelligence:** compose public standards and feeds such as OSV, CISA KEV, CPE/PURL coordinates, native package-manager metadata, and DPF's Assurance Ledger.
+3. **Scheduling and authority:** reuse `DeploymentWindow`, `BlackoutPeriod`, quiescence, recovery, rollback, `ChangeRequest`, and DPF's kernel/authority model.
+4. **Apply:** extend the Edge Node with a tightly scoped, disabled-by-default execution primitive only after machine-bound trust lands.
+5. **MSP federation:** never let an MSP-owned DPF execute inside a sovereign customer DPF. MSPs may send proposals; the customer authority core approves and executes.
 
-This is a **load-bearing capability for the MSP (Managed Service Provider) archetype**: patch compliance is one of the two or three things an SMB actually pays a managed-IT provider for, and it must work unattended across many remote clients with sovereignty preserved.
-
-The brief asks the right framing questions, so the design answers each explicitly:
-
-- **"Understand what's installed"** → §3.1 (inventory leg — ~70% already built).
-- **"Understand if a new version is available"** → §6.2 (version-intelligence leg — the first real gap).
-- **"Schedule and implement the patch"** → §6.3–6.4 (scheduling reuse + the apply leg — the second real gap: the Edge Node cannot execute anything today).
-- **"We may need an agent installed"** → §7 (the Edge Node *is* that agent; it needs a governed execution capability, not a new agent).
-- **"Write our own or embed open-source"** → §5 (build-vs-embed decision: **embed standards, build the governance**).
+The first shippable wedge is **read-only patch posture**: "what is installed, what is behind, what is actively exploited, what needs attention, and what is accepted until a date." That gives immediate MSP and compliance value without remote execution risk.
 
 ---
 
-## 2. Substrate audit — what already exists (verified against live code)
+## 2. Problem And Business Goal
 
-The DPF architecture is denser than the brief assumes. Three of the four legs are partly or wholly built; only two genuinely new pieces are required.
+Patch management is the repeatable loop: **identify installed software -> prioritize risk -> acquire or identify the safer version -> schedule the change -> apply it -> verify the outcome**. NIST SP 800-40 Rev. 4 uses the same shape: enterprise patch management identifies, prioritizes, acquires, installs, and verifies patches, updates, and upgrades across an organization.
 
-### 2.1 Inventory — mostly built
+DPF must support three host populations:
 
-| Capability | Where | Status |
+| Population | Why it matters | First capability |
 | --- | --- | --- |
-| Host/asset model with version + multi-tenant scope | `InventoryEntity` — `packages/db/prisma/schema.prisma:3688` (`observedVersion`, `normalizedVersion`, `supportStatus`, `customerAccountId`, `customerSiteId`) | **Built** |
-| **Per-host installed-software inventory** | `DiscoveredSoftwareEvidence` — `schema.prisma:3542` (`packageManager`, `rawVendor`, `rawProductName`, `rawVersion`, `installLocation`, `normalizationStatus`, `softwareIdentityId`) | **Built** |
-| Cross-platform software collection | `packages/db/src/discovery-collectors/host.ts` — Windows (PowerShell registry), macOS (pkgutil + Homebrew), Linux (dpkg/rpm) | **Built** |
-| Software normalization (raw → vendor/product/version) | `packages/db/src/software-normalization.ts` | **Built** |
-| Multi-tenant / MSP estate scoping | `CustomerAccount` (`schema.prisma:2302`), `CustomerSite` (`2346`) — FK'd onto every inventory/discovery model | **Built** |
-| Edge-node discovery ingestion | `POST /api/v1/edge/discovery-runs` → `DiscoveryRun` (`schema.prisma:3479`) | **Built** |
-| SBOM (CycloneDX, off pnpm-lock) | `scripts/sbom/generate-platform-sbom.mjs`; `BomDocument` / `BomComponent` models | **Built (DPF's own deps)** |
+| DPF's own install | Keeps the platform healthy and provides a reference implementation. | DPF self-upgrade is partly built, but it covers DPF image/version updates more than OS and third-party software around the install. |
+| The discovered estate | Converts discovery into risk posture and compliance evidence. | Read-only patch posture from `DiscoveredSoftwareEvidence`, `InventoryEntity`, and `AssuranceFinding`. |
+| Remote customer networks | Makes the MSP archetype operationally valuable. | Edge Node collection first; governed execution later. |
 
-> **The one dangling thread:** `DiscoveredSoftwareEvidence.softwareIdentityId` (`schema.prisma:3556`) is a nullable string with **no catalog table behind it** — there is no `SoftwareIdentity`/`SoftwareProduct` model. This is the precise seam where the catalog (§6.1) plugs in.
+### 2.1 MSP Business Thesis
 
-### 2.2 Scheduling & apply-governance — built and reusable (DPF's differentiator)
+For the MSP archetype, patch management is not a side feature. It is a core paid outcome: "keep my machines current, prove it, and do not break my business." DPF's differentiation is not having another patch button; it is **governed patch operations across many customers with sovereignty, evidence, and proposal boundaries**.
 
-| Capability | Where | Status |
+Sellable offers:
+
+| Offer | Buyer promise | DPF capability required |
 | --- | --- | --- |
-| Maintenance windows + blackout periods | `DeploymentWindow` (`schema.prisma:845`), `BlackoutPeriod` (`866`); pure evaluator `apps/web/lib/self-upgrade/windows-eval.ts` | **Built** |
-| Auto-selected overnight window (24/7 stores) | `apps/web/lib/self-upgrade/auto-window.ts`; heavy-job avoidance `maintenance-calendar.ts` | **Built** |
-| Window-gate MCP tool (by change type + risk) | `check_deployment_windows` — `apps/web/lib/mcp-tools.ts:11050` | **Built** |
-| Quiescence / graceful drain | `apps/web/lib/self-upgrade/quiescence.ts` (3-level state machine) | **Built** |
-| Recovery point + layered rollback | `recovery-point.ts`, `rollback.ts` | **Built (DPF self)** |
-| Change governance (ITIL) | every `SelfUpgradeRun` (`schema.prisma:5526`) mirrors to `ChangeRequest` | **Built** |
-| Scheduling registry / de-confliction | `SCHEDULED_JOB_CATALOG`, `scheduling-allocator.ts` (EP-SCHEDULING-SURFACE) | **Built** |
+| Patch Posture Assessment | "We can show what is exposed before touching anything." | P0 read-only inventory, version intelligence, risk-ranked `AssuranceFinding` rows, exportable report. |
+| Governed Patch Operations | "We apply approved patches inside your windows and prove the result." | `PatchPolicy`, `PatchPlan`, `RemoteAction`, change mirror, execution evidence, rollback/health checks. |
+| Sovereign MSP Federation | "Your MSP proposes work, but your DPF approves and executes it." | `FederationLink`, proposal-only remote actions, customer-side approval, scoped result projection. |
 
-**This is the moat.** Commodity RMM tools schedule patches; almost none of them wrap patching in change-management, quiescence, recovery points, and a governance kernel. DPF already has all of that for its own upgrades — patch management generalizes it.
+Commercial metrics should be bottom-up, not guessed from vendor price pages:
 
-### 2.3 Edge Node — enrolled, trusted… and inert
+- **Coverage:** percentage of endpoints reporting software inventory; percentage with normalized catalog identity; percentage with patch posture computed.
+- **Risk reduction:** open critical/high patch gaps, CISA KEV overlaps, accepted-risk expirations, mean age of unpatched critical findings.
+- **Operational efficiency:** patches per maintenance window, failed-action rate, rollback rate, manual approvals avoided, customer-visible report generation time.
+- **MSP economics:** endpoints per technician, assessments converted to managed-service contracts, per-customer gross margin after tooling and labor.
 
-| Capability | Where | Status |
-| --- | --- | --- |
-| Enrolled host-resident agent, per-platform (Go native for macOS/Windows, TS container for Linux) | `EdgeNode` (`schema.prisma:10103`); spec `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md`; runtime decision `2026-05-16-edge-node-runtime-decision.md` | **Built (Phase 0)** |
-| Enrollment ceremony (bootstrap token → enroll → node token), trust lifecycle | `BootstrapToken` (`schema.prisma:10199`); `apps/web/lib/edge-node/remote-provisioning.ts` (one-liner remote install) | **Built** |
-| Identity as a `Principal`/`PrincipalAlias` (`edge-node`) | AGENTS.md §11 | **Built** |
-| Capability envelope with **per-capability mode** (`enabled`/`reporting-only`/`disabled`) | `EdgeNodeCapability` (`schema.prisma:10258`) | **Built** |
-| Discovery submission, change-event + alert ingest, heartbeat/rotation | token scopes `discovery:submit`, `edge:heartbeat`, `edge:rotate` | **Built** |
-| **Remote command/script/patch execution** | — | **ABSENT** |
-
-The Edge Node today is a **discovery / telemetry / enrollment beacon**. There is no `action:execute` (or `patch:apply`) token scope, no `RemoteAction`/`RemoteJob`/`PatchJob` model, no dispatch-and-collect-result path. The capability envelope *reserves* future slots (`capability.discovery.software`, `capability.policy.enforcement`, etc.) but ships none of the execution side. **This is the largest single gap and the heart of the apply leg (§7).**
-
-### 2.4 Version intelligence & remediation — npm-only, plus the right homes for more
-
-| Capability | Where | Status |
-| --- | --- | --- |
-| "Is a newer version available?" for DPF itself | `apps/web/lib/self-upgrade/version.ts` (git-SHA, **not** semver; HEAD of a git remote) | **Built (DPF self only)** |
-| Vulnerability scan | `scripts/sbom/scan-dependencies.mjs` → OSV.dev batch API, severity gate, `vuln-baseline.json` accept-with-expiry | **Built (npm ecosystem only)** |
-| Finding model with severity, source adapter, CVE id, remediation hint, risk-accept-with-expiry | `AssuranceFinding` — `schema.prisma:4968` (`findingKind`, `affectedType`/`affectedId`, `vendorIdentifier`, `policySeverity`, `remediationHint`, `acceptedUntil`, `bomComponentId`) | **Built — reuse for patch gaps** |
-| Human/audit remediation workflow tracking | `CorrectiveAction` — `schema.prisma:6666` (audit/incident-scoped, owner, due date, verification) | **Built — distinct from machine execution** |
-
-`AssuranceFinding` already models exactly what a "patch gap" is — an affected element, a severity, a CVE identifier, a remediation hint, and a risk-accept-until date. **A patch gap is an assurance finding.** What is missing is (a) a software **catalog** to anchor identity and (b) a **version-intelligence feed** beyond npm to populate "latest safe version."
+Public vendor claims and pricing pages are useful benchmark signals only. They must not become DPF sales claims without separate validation.
 
 ---
 
-## 3. Research & Benchmarking (AGENTS.md §10)
+## 3. Standards And Market Research
 
-### 3.1 The market (commercial)
+Research last checked: 2026-06-25.
 
-The 2026 patch-management market splits into **cloud-native dedicated** tools, **RMM-integrated** modules, and **enterprise endpoint-management** suites. Leaders: Action1, NinjaOne, Ivanti Neurons for Patch Management, HCL BigFix, ManageEngine Patch Manager Plus, Patch My PC, Tanium, Automox, Atera. ([Action1 — best patch management 2026](https://www.action1.com/blog/10-best-patch-management-software/), [PDQ — top patch tools 2026](https://www.pdq.com/blog/best-patch-management-tools/), [NinjaOne — best for MSPs](https://www.ninjaone.com/blog/best-patch-management-software/))
+### 3.1 Standards And Public Feeds
 
-- **Architecture pattern:** cloud control plane + lightweight host agent + maintenance windows + approve/test/deploy rings + compliance reporting. Automox and Action1 are "cloud-only, no infrastructure"; NinjaOne/Atera/Kaseya bundle patching into a broader RMM. ([Automox 2026 buyer's guide](https://www.automox.com/blog/automated-patching-solutions-compared-2026))
-- **Pricing:** ~$5–10/endpoint/month cloud-native; free tiers exist (Action1 ≤200 endpoints); five-figure+ annual for Tanium/Ivanti.
-- **Coverage is the differentiator:** Automox advertises Windows/macOS/Linux + 100+ third-party apps; ManageEngine 900+. The breadth of the **third-party application catalog** is the moat these vendors sell.
-
-**Patterns adopted:** agent-on-host; maintenance windows + blackouts; test/approve/deploy rings (canary → broad); compliance reporting as the primary operator surface; "security patches auto, feature updates manual" as the default policy split.
-
-**Anti-patterns identified:** (1) **The catalog supply chain is a perpetual cost** — vendors either lean on public package repos (Automox uses public Winget/Chocolatey/Homebrew) or hand-curate (Action1 builds & malware-scans every package in-house under SOC2/ISO). ([Action1 third-party repo](https://www.action1.com/patch-management/third-party-app-patch-repository/), [Automox third-party support](https://docs.automox.com/product/Product_Documentation/Third-Party_Software/Third_Party_Software_Support.htm)). DPF should **not** start by hand-curating an installer repo — that is a staffed, ongoing, audited operation. (2) Most tools are a **second control plane** with their own identity, scheduling, and change records — duplicative if you already have an authority core.
-
-### 3.2 Open-source leaders (data models read, per §10)
-
-- **osquery + Fleet** (osquery: Apache-2.0; Fleet core: MIT). osquery exposes the host OS as a SQL database; installed software lives in concrete tables — `programs` (Windows: name, version, install_location, publisher), `apps` (macOS), `deb_packages` / `rpm_packages` / `homebrew_packages` (Linux). The `osqueryd` agent enrolls to a TLS server with an enroll secret, runs **scheduled query packs**, and answers **distributed (live) queries**. **Fleet** layers a software-inventory → **CPE** (NVD CPE dictionary) → **CVE** (NVD feeds) pipeline on top, storing a `software` + `software↔CVE` model. ([Fleet/osquery](https://fleetdm.com/guides/osquery-a-tool-to-easily-ask-questions-about-operating-systems), [Fleet — endpoint mgmt](https://fleetdm.com/articles/rethinking-endpoint-management)). **Adopted:** osquery as the inventory engine and its tables as the canonical software shape; CPE→CVE as the gap-detection model. **Rejected:** the Fleet *server* — it is a second control plane (its own enrollment, scheduling, policies) that duplicates DPF's Authority Core + Edge Node.
-- **OSV.dev + OSV-Scanner** (Apache-2.0; free API). Aggregates GitHub advisories, OSS-Fuzz, **and distribution security advisories** (Debian, Ubuntu, Alpine, Rocky/RHEL, SUSE), keyed by package + version range with fixed-in versions. OSV-Scanner ingests lockfiles, **SBOMs (CycloneDX/SPDX)**, Debian packages, and **container images**. ([OSV-Scanner](https://google.github.io/osv-scanner/)). **Adopted:** OSV as the cross-ecosystem "is this version vulnerable / what's fixed-in" oracle — DPF already uses it for npm (`scan-dependencies.mjs`); generalize it. DPF already emits CycloneDX, so the SBOM→OSV path is a short hop.
-- **Tactical RMM** (source-available, **non-OSI "Tactical RMM License"**). Go agent (`tacticalagent`) + NATS transport + Django backend; Windows patching via the **Windows Update Agent (WUA) COM API**; arbitrary script execution. ([Tactical RMM review](https://www.openmsp.ai/blog/tactical-rmm-review)). **Rejected for embedding:** its license restricts using it to provide a competing commercial RMM/MSP service to third parties — a direct conflict with the MSP archetype. Studied for its agent/dispatch mechanics, not adopted.
-- **Uyuni** (GPLv2; SUSE Manager upstream). Salt-based Linux fleet patch/config management with structured package lifecycles. **Rejected:** copyleft, Linux-only, heavyweight (Salt master) — wrong shape for an embeddable cross-platform agent.
-- **NetLock RMM** (open-source, newer): one global "approved patches" queue + fleet compliance scoring. **Adopted (as a model):** the single approved-state queue is a clean mental model for `PatchPolicy` (§6.4).
-
-### 3.3 Apply mechanics per OS (the executor backends)
-
-- **Windows:** **WinGet** (CLI + PowerShell module + COM API) for applications (`winget upgrade --all --silent --accept-package-agreements --accept-source-agreements`), and the **Windows Update Agent** for OS/driver/Microsoft updates. ([winget automation](https://www.edtechirl.com/p/set-it-and-forget-it-daily-silent), [winget-cli](https://github.com/microsoft/winget-cli)).
-- **Linux:** `apt` / `unattended-upgrades` (configurable security-only scope), `dnf`/`yum`.
-- **macOS:** `softwareupdate` (OS) + Homebrew (apps).
-
-**Implication:** for the *apply* backend, DPF should **drive the native package managers** rather than ship its own installer payloads. That sidesteps the curated-catalog cost (§3.1 anti-pattern 1) and inherits each platform's signing/verification.
-
----
-
-## 4. The control loop (architecture overview)
-
-```
-                        ┌──────────────────────── DPF Authority Core ───────────────────────┐
-                        │                                                                    │
-  ┌─────────┐  inventory │  ┌────────────┐   ┌────────────────┐   ┌──────────────────────┐   │
-  │ Host /  │───────────►│  │ Inventory  │──►│ Version Intel  │──►│ Patch Assessment     │   │
-  │ Edge    │            │  │ (built)    │   │ (NEW: catalog  │   │ = AssuranceFinding   │   │
-  │ Node    │◄───────────│  │ Discovered │   │  + OSV/feeds)  │   │  findingKind=patch   │   │
-  └─────────┘  action    │  │ Software   │   └────────────────┘   └─────────┬────────────┘   │
-       ▲       dispatch   │  └────────────┘                                  │ "needs patch"  │
-       │                  │                                                  ▼                │
-       │                  │  ┌──────────────┐   ┌───────────────┐   ┌──────────────────────┐ │
-       │   RemoteAction   │  │ Schedule     │◄──│ PatchPolicy   │◄──│ Patch Plan / Job     │ │
-       └──────────────────│──│ (REUSE win-  │   │ (NEW: auto-   │   │ (NEW: rings, targets)│ │
-         result + evidence│  │ dows/quiesce/│   │  approve class│   └──────────────────────┘ │
-                          │  │ recovery/CR) │   └───────────────┘                            │
-                          │  └──────────────┘                                                │
-                          └────────────────────────────────────────────────────────────────┘
-```
-
-Four legs: **Inventory** (built) → **Version Intelligence** (new feed + catalog) → **Schedule** (reuse) → **Apply** (new governed execution). The loop is read-only end-to-end until the apply leg is explicitly armed.
-
----
-
-## 5. Build vs. embed — decision
-
-**Decision: embed open-source standards for the commodity parts; build natively only the governance/orchestration that is DPF's differentiation.**
-
-Three options were weighed and run through the governance kernel (`principle_decide`, population `external_coding_agent`). The kernel returned **no commandment conflict** for any option and a **degenerate composite (0.000 across the board)** — the options carried no structured feature scores, so it fell back to generic commandments (PR discipline, DCO) that do not discriminate an architecture call. Per DPF's honest-context doctrine, that is recorded as "kernel surfaced no blocker," **not** as a real score; the decision rests on the named principles below.
-
-| Option | Verdict | Why |
+| Source | What it contributes | DPF adoption |
 | --- | --- | --- |
-| **Build everything bespoke** (own agent + own catalog) | ✗ | Reinvents osquery and OSV; the third-party catalog is a perpetual staffed cost (§3.1); violates *Research-and-use-standards*; slowest to cover the long tail. |
-| **Embed standards, build the governance** | ✓ **chosen** | osquery (inventory) + OSV/native package managers (intelligence + apply) are mature, permissively licensed, cross-platform. DPF builds only what no OSS gives it: the **governed remote-execution capability**, scheduling/quiescence/recovery reuse, change governance, kernel-gated approval, and the MSP federation boundary. Aligns with *Architecture Over Shortcuts* and *Single Source of Truth*. |
-| **Adopt a whole OSS RMM** (Tactical RMM / Fleet server) | ✗ | Stands up a **second control plane** — its own identity, enrollment, scheduling, change records — duplicating the Authority Core and Edge Node (violates *Single Source of Truth* + the Edge Node spec's authority-preservation binding). Tactical RMM's license also **bars commercial MSP resale**. |
+| [NIST SP 800-40 Rev. 4](https://csrc.nist.gov/pubs/sp/800/40/r4/final) | Enterprise patching lifecycle and risk-management framing. | Use as the canonical lifecycle vocabulary: identify, prioritize, acquire, install, verify. |
+| [CISA Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) | Prioritization signal for vulnerabilities known to be exploited. | Treat KEV overlap as a first-class severity/routing multiplier in patch posture. |
+| [OSV-Scanner / OSV.dev](https://google.github.io/osv-scanner/) | Machine-readable affected-version and fixed-version intelligence for open-source ecosystems, lockfiles, SBOMs, containers, and some distro packages. | Generalize the existing DPF npm OSV scan into a reusable `patch-intel` adapter. |
+| [Microsoft WinGet](https://learn.microsoft.com/en-us/windows/package-manager/winget/) | Windows package discovery/install/upgrade commands, including `list`, `upgrade`, and `install`. | Use as one Windows application backend after Tool Evaluation approval. |
+| [osquery](https://github.com/osquery/osquery) | SQL-backed cross-platform host instrumentation for Linux, macOS, and Windows. | Evaluate as a supervised inventory helper under Edge Node, not as an independent control plane. |
 
-**Governing constraint (AGENTS.md §9):** osquery and OSV-Scanner are external tools and must pass the **Tool Evaluation Pipeline (EP-GOVERN-002)** before adoption (security/architecture/compliance/integration review, then version-pin in `approved_tools_registry.json`). The design assumes that gate; it does not pre-approve.
+### 3.2 Commercial Benchmarks
+
+| Product family | Public pattern observed | DPF lesson |
+| --- | --- | --- |
+| [Action1](https://www.action1.com/) | Cloud patch/vulnerability remediation with OS and third-party patching, endpoint scale, and compliance reporting. | Patch posture and compliance reporting are buyer-facing outcomes, not admin afterthoughts. |
+| [NinjaOne Patch Management](https://www.ninjaone.com/patch-management/) | RMM-style patching across Windows, macOS, Linux, OS and third-party apps, with policy, scheduling, reboot, and reporting surfaces. | MSP buyers expect patching to sit with endpoint/RMM workflows and not require VPN-only operations. |
+| [PDQ](https://www.pdq.com/solutions/patch-management-software/) | Emphasizes centralized policy, inventory, testing, schedules, remote/hybrid reach, and reporting. | The operator mental model is "scan, approve, deploy, verify, report." DPF should mirror this, but use its own authority spine. |
+| [Fleet software management](https://fleetdm.com/software-management) | Device-management platform with software inventory, policies, deployment rings, diagnostics, and automated updates. | Deployment rings and clear failure diagnostics are table stakes. Avoid adopting a second Fleet server/control plane unless Tool Evaluation proves it is worth the identity/scheduling duplication. |
+
+Patterns adopted:
+
+- Agent-on-host or supervised host collector.
+- Maintenance windows, blackout periods, canary/rolling rings, and reboot policies.
+- Compliance/reporting as the primary user-facing surface.
+- Security patches eligible for auto-in-window policy; major/feature updates require explicit approval.
+
+Patterns rejected:
+
+- Hand-curating a broad third-party installer repository in P0-P3. That is a staffed supply-chain operation with malware scanning, signing, vendor drift, and support obligations.
+- Embedding a full RMM server as DPF's patch-control plane. That duplicates identity, scheduling, audit, policy, and customer-boundary models.
+- Treating patch execution as "remote script run with a label." Mutating actions require authority, scheduling, health evidence, and rollback semantics.
+
+### 3.3 Open-Source And Native Backend Position
+
+DPF should **compose standards and native package managers**:
+
+- Windows applications: WinGet first, with Windows Update Agent considered separately for OS/Microsoft updates.
+- Linux: `apt`, `dnf`/`yum`, and distribution security metadata.
+- macOS: `softwareupdate` for OS updates, Homebrew where present for developer/workstation packages.
+- Vulnerability intelligence: OSV where ecosystem coverage exists; CISA KEV and NVD/CPE-style coordinates as prioritization and matching inputs.
+- Inventory: existing host collectors first; osquery only after the Tool Evaluation Pipeline approves it.
+
+Every external tool or service named here is a candidate, not an approved dependency. AGENTS.md section 9 still applies: external tools must pass the Tool Evaluation Pipeline and be version-pinned in the approved tools registry before adoption.
 
 ---
 
-## 6. New & composed substrate
+## 4. DPF Substrate Audit
 
-### 6.1 Software catalog — `SoftwareProduct` (NEW; resolves the dangling FK)
+### 4.1 Inventory - mostly built
 
-The canonical identity for a piece of software, independent of any one host's raw evidence. Backfills `DiscoveredSoftwareEvidence.softwareIdentityId` (`schema.prisma:3556`).
+| Capability | Where verified | Status |
+| --- | --- | --- |
+| Host/asset model with versions and customer/site scope | `InventoryEntity` in `packages/db/prisma/schema.prisma` (`observedVersion`, `normalizedVersion`, `supportStatus`, `customerAccountId`, `customerSiteId`) | Built |
+| Per-host installed-software evidence | `DiscoveredSoftwareEvidence` (`packageManager`, `rawVendor`, `rawProductName`, `rawVersion`, `installLocation`, `normalizationStatus`, `softwareIdentityId`) | Built, but identity link is dangling |
+| Cross-platform software collection | `packages/db/src/discovery-collectors/host.ts` for Windows, macOS, and Linux collectors | Built |
+| Software normalization helpers | `packages/db/src/software-normalization.ts` and tests | Built, still using legacy `SoftwareIdentityCandidate` types |
+| Multi-tenant/MSP scoping | `CustomerAccount`, `CustomerSite`, and discovery/inventory FKs | Built |
+| Edge-node discovery ingestion | `POST /api/v1/edge/discovery-runs` and `DiscoveryRun` | Built |
+| SBOM for DPF's own dependencies | `scripts/sbom/generate-platform-sbom.mjs`, `BomDocument`, `BomComponent` | Built for platform dependencies |
 
+### 4.2 Identity Correction - do not create `SoftwareProduct`
+
+The original draft proposed a new `SoftwareProduct` model to resolve `DiscoveredSoftwareEvidence.softwareIdentityId`. That would create a second canonical identity direction.
+
+Prior durable architecture already names the better path: `docs/superpowers/specs/2026-04-18-lifecycle-evidence-specialist-design.md` specifies `CatalogIdentity` + `FingerprintRule` and explicitly calls out the dangling `softwareIdentityId` cleanup. Current schema still has only the loose `softwareIdentityId` string; no `CatalogIdentity` model has landed yet.
+
+Required correction:
+
+1. **Do not add `SoftwareProduct` as a standalone catalog.**
+2. Land or compose the lifecycle-evidence identity migration first.
+3. Rename `DiscoveredSoftwareEvidence.softwareIdentityId` to `legacySoftwareIdentityId` or drop it with evidence.
+4. Add `catalogIdentityId` as the canonical FK once `CatalogIdentity` exists.
+5. Add patch-specific metadata beside the canonical identity as `SoftwarePatchProfile`, not as a second identity table.
+
+Post-state invariant:
+
+> No discovery, inventory, or patch-management field points at a nonexistent identity table, and host-facing software, SBOM components, and lifecycle evidence converge through one catalog identity spine.
+
+### 4.3 Scheduling And Governance - built and reusable
+
+| Capability | Existing substrate | Patch-management reuse |
+| --- | --- | --- |
+| Maintenance windows and blackout periods | `DeploymentWindow`, `BlackoutPeriod`, `windows-eval.ts` | Gate every mutating patch action. |
+| Auto-selected low-impact windows | `auto-window.ts`, `maintenance-calendar.ts` | Suggest default patch windows per site/store. |
+| Window-gate tool | `check_deployment_windows` | Reuse for patch plans and remote actions. |
+| Quiescence/graceful drain | `self-upgrade/quiescence.ts` | Reuse for DPF-managed services and local install patching. |
+| Recovery and rollback | `recovery-point.ts`, `rollback.ts` | Reuse where DPF can create a recovery point; otherwise require explicit "no rollback available" evidence. |
+| Change governance | `SelfUpgradeRun` mirrors to `ChangeRequest` | `PatchPlan`/`RemoteAction` must mirror to `ChangeRequest` for audit continuity. |
+| Scheduling registry/deconfliction | `SCHEDULED_JOB_CATALOG`, scheduling allocator | Add version-intelligence and patch-plan jobs here. |
+
+This is DPF's moat. Commodity RMM tools can push patches; DPF can make patching part of governed business operations with authority, evidence, quiescence, and rollback.
+
+### 4.4 Edge Node - enrolled and trusted, but not an executor
+
+The Edge Node already has enrollment, principal identity, heartbeat/rotation, scoped tokens, discovery submission, and per-capability modes. It does **not** have:
+
+- `action:dispatch` or `action:report` token scopes.
+- `patch.apply`, `script.run`, `service.restart`, or `reboot` execution capabilities.
+- A dispatch/result/evidence model.
+- Machine-bound trust sufficient for mutation.
+
+The Edge Node is the right agent. It needs a governed execution capability after hardening; DPF does not need a second agent identity.
+
+### 4.5 Findings And Remediation - reuse, do not duplicate
+
+`AssuranceFinding` already models affected asset, severity, adapter/source, external identifier, remediation hint, accepted-risk expiry, and linkage to evidence. A patch gap is an assurance finding.
+
+`CorrectiveAction` already models human remediation workflows. It should not be overloaded as a machine execution job.
+
+---
+
+## 5. Architecture Overview
+
+```mermaid
+flowchart LR
+  Host["Host / Edge Node"] --> Inventory["Inventory evidence"]
+  Inventory --> Identity["CatalogIdentity + SoftwarePatchProfile"]
+  Identity --> Intel["Version intelligence"]
+  Intel --> Finding["AssuranceFinding: patch gap or vulnerability"]
+  Finding --> Policy["PatchPolicy"]
+  Policy --> Plan["PatchPlan"]
+  Plan --> Window["DeploymentWindow / BlackoutPeriod"]
+  Window --> Change["ChangeRequest"]
+  Change --> Action["RemoteAction"]
+  Action --> Host
+  Action --> Evidence["Result, post-version, health evidence"]
+  Evidence --> Finding
 ```
-SoftwareProduct
-  productKey            String  @unique         // canonical slug, e.g. "mozilla/firefox"
-  vendor                String
-  product               String
-  edition               String?                 // Community / Enterprise / LTS
-  cpe23                 String?                  // NVD CPE 2.3 URI — the CVE join key
-  category              String                  // browser | runtime | db | os-package | driver | ...
-  ecosystem             Json                     // coordinates per manager: {winget, choco, brew, apt, rpm, npm, pypi}
-  latestStableVersion   String?                  // populated by version-intelligence feed (§6.2)
-  channels              Json    @default("{}")   // {stable, lts, beta} -> latest version
-  eolDate               DateTime?                // end-of-life / end-of-support
-  supportStatus         String  @default("unknown")
-  // relations: discoveredEvidence[], bomComponents[] (relate to existing BomComponent where overlap)
+
+The control loop is deliberately split:
+
+- **Assessment loop:** inventory -> identity -> intelligence -> findings. Read-only.
+- **Decision loop:** findings -> policy -> plan -> approval/window. Governed.
+- **Execution loop:** approved plan -> remote actions -> result evidence -> verification/rollback. Mutating and gated.
+
+This lets DPF ship useful assessment early while keeping the dangerous part behind explicit prerequisites.
+
+---
+
+## 6. Build Vs Embed Decision
+
+DPF kernel consultation (`principle_decide`, population `external_coding_agent`, ring scope `external-coordination` + `universal-ring`) compared three options:
+
+| Option | Kernel result | Decision |
+| --- | --- | --- |
+| Compose standards, build governance | Composite 8.365, margin 3.690, high confidence, no commandment conflict | Chosen |
+| Build bespoke catalog and agent | Composite 4.660 | Rejected |
+| Embed an RMM/control-plane platform | Composite 4.674 | Rejected |
+
+Decision:
+
+> Embed or supervise proven standards for commodity collection/intelligence/apply mechanics, but build the governance, authority, evidence, scheduling, and federation layer natively in DPF.
+
+Why:
+
+- Aligns with "Research and use standards" and "Architecture over shortcuts."
+- Avoids a permanent third-party installer-catalog burden.
+- Preserves DPF's single source of truth for principals, authority, scheduling, change requests, and audit evidence.
+- Keeps MSP federation proposal-only instead of outsourcing sovereignty to another control plane.
+- Reduces execution blast radius by keeping P0/P1 read-only.
+
+---
+
+## 7. Target Substrate
+
+### 7.1 `CatalogIdentity` And `SoftwarePatchProfile`
+
+`CatalogIdentity` is the canonical identity from the lifecycle-evidence design. Patch management extends it rather than replacing it.
+
+```prisma
+// Conceptual shape. Exact fields belong with the CatalogIdentity migration.
+model SoftwarePatchProfile {
+  id                String   @id @default(cuid())
+  catalogIdentityId String   @unique
+  catalogIdentity   CatalogIdentity @relation(fields: [catalogIdentityId], references: [id])
+
+  ecosystem         String   // windows-app | windows-update | deb | rpm | brew | npm | pypi | container | firmware | unknown
+  managerCoordinates Json    @default("{}") // winget id, apt package, rpm name, brew formula, purl, cpe23 URIs
+  defaultApplyVia    String? // winget | wua | apt | dnf | brew | manual | vendor-adapter
+  latestStableVersion String?
+  latestSafeVersion   String?
+  eolDate            DateTime?
+  supportStatus      String   @default("unknown")
+  confidence         String   @default("unverified") // unverified | inferred | verified | vendor-confirmed
+  lastRefreshedAt    DateTime?
+}
 ```
 
-> **Stewardship (§11):** relate `SoftwareProduct` to the existing `BomComponent` (DPF's SBOM already models components with versions). `SoftwareProduct` is the *host-facing installed-software* identity; `BomComponent` is the *build-time dependency* identity. They share CPE/PURL keys and should cross-reference, not duplicate.
+Stewardship rules:
 
-### 6.2 Version intelligence — a feed, not a hand-maintained table (NEW)
+- `CatalogIdentity` is the identity; `SoftwarePatchProfile` is patch metadata.
+- `BomComponent` remains build-time dependency evidence. It should link through PURL/CPE/catalog identity where possible, not be folded into host-installed software.
+- Raw vendor/product strings stay raw on evidence. Normalization rules decide canonical identity.
+- If statuses become closed sets, define constants and tool schemas together per AGENTS.md enum doctrine.
 
-A scheduled projector (new entry in `SCHEDULED_JOB_CATALOG`) that, for each `SoftwareProduct` in use across the estate, resolves **latest safe version** and **known vulnerabilities** from:
+### 7.2 Version Intelligence Projector
 
-1. **OSV.dev** (already wired for npm in `scan-dependencies.mjs`) — generalize the adapter to all ecosystems incl. OS packages and container images. Returns CVE/GHSA + affected ranges + fixed-in.
-2. **Native package-manager metadata** — `winget show`, `apt-cache policy`, `dnf check-update`, `brew outdated` give "installed → available" directly on-host (collected by the Edge Node), which is the most authoritative "is an update available" signal.
-3. **EOL feed** (e.g., endoflife.date) for `eolDate`.
+Add a scheduled projector in `SCHEDULED_JOB_CATALOG`:
 
-Output is **not** a new findings table — it writes **`AssuranceFinding`** rows:
+Inputs:
 
+- `DiscoveredSoftwareEvidence` and `InventoryEntity` rows with customer/site scope.
+- `SoftwarePatchProfile` coordinates.
+- OSV advisory/version-range results.
+- CISA KEV membership for CVE prioritization.
+- Native "available update" metadata from WinGet, Windows Update Agent, apt/dnf/yum, Homebrew, or other approved backends.
+- Optional EOL feed after Tool Evaluation.
+
+Outputs:
+
+- Update `SoftwarePatchProfile.latestStableVersion`, `latestSafeVersion`, `supportStatus`, `eolDate`, and `lastRefreshedAt` where confidence is sufficient.
+- Write or update `AssuranceFinding` rows:
+
+```text
+findingKind:      patch-gap | vulnerability | end-of-life
+affectedType:     InventoryEntity | DiscoveredSoftwareEvidence | BomComponent
+affectedId:       existing row id
+adapterKey:       patch-intel | osv | cisa-kev | native-manager
+vendorIdentifier: CVE/GHSA/manager advisory id where present
+policySeverity:   critical | high | medium | low | info
+remediationHint:  { targetVersion, applyVia, rebootLikely, cisaKev, confidence }
+acceptedUntil:    existing risk-acceptance expiry
 ```
-AssuranceFinding (existing — schema.prisma:4968)
-  findingKind     = "patch-gap" | "vulnerability"
-  affectedType    = "InventoryEntity" | "DiscoveredSoftwareEvidence"
-  affectedId      = <host or evidence id>
-  adapterKey      = "patch-intel" | "osv"
-  vendorIdentifier= <CVE/GHSA id>            // already on the model
-  policySeverity  = critical | high | ...
-  remediationHint = { targetVersion, ecosystem, channel, applyVia: "winget|apt|wua|..." }
-  acceptedUntil   = <risk-accept expiry>     // already on the model — mirrors vuln-baseline.json
-```
 
-This means **the entire read-only assessment leg (Phase 0, §8) ships with no new findings table** — it composes the Assurance Ledger. "What needs patching across the estate" is a query over `AssuranceFinding where findingKind='patch-gap'`.
+The assessment surface is a query over `AssuranceFinding`, not a new findings table.
 
-### 6.3 Governed remote execution — `RemoteAction` (NEW; the apply primitive)
+### 7.3 `RemoteAction` - Governed Execution Primitive
 
-The Edge Node's missing execution side. Deliberately **generic** (patching is the first consumer, not the only one — script run, service restart, inventory-on-demand all reuse it). Distinct from `CorrectiveAction` (which is human/audit-workflow remediation, `schema.prisma:6666`).
+`RemoteAction` is generic on purpose. Patching is the first consumer; future inventory-on-demand, service restart, or controlled script execution can reuse it.
 
-```
-RemoteAction
-  actionKey           String  @unique
-  edgeNodeId          String                    // executor
-  inventoryEntityId   String?                   // target host (may equal the edge host)
-  customerAccountId   String?                   // MSP scope (consistent with all estate models)
-  customerSiteId      String?
-  actionType          String                    // inventory.collect | patch.apply | script.run | service.restart | reboot
-  parameters          Json                      // e.g. { softwareProductId, targetVersion, applyVia }
+```prisma
+model RemoteAction {
+  id                   String   @id @default(cuid())
+  actionKey            String   @unique
+  edgeNodeId           String
+  inventoryEntityId    String?
+  customerAccountId    String?
+  customerSiteId       String?
+  actionType           String   // inventory.collect | patch.apply | service.restart | reboot | script.run
+  parameters           Json     @default("{}")
+
   requestedByPrincipalId String
-  approvalState       String  @default("proposed")   // proposed | approved | rejected
+  approvalState          String @default("proposed") // proposed | approved | rejected | cancelled
   approvedByPrincipalId  String?
-  changeRequestId     String?                   // mirrors to ChangeRequest, like SelfUpgradeRun
-  scheduledWindowId   String?                   // DeploymentWindow
-  recoveryPointId     String?                   // pre-action snapshot where DPF-managed
-  status              String  @default("queued") // queued|dispatched|running|succeeded|failed|rolled-back|timed-out
-  result              Json    @default("{}")     // exit code, stdout/stderr summary, post-version
-  evidence            Json    @default("{}")     // health-check, before/after version, signatures
-  rollbackOf          String?                   // self-relation for rollback actions
-  startedAt / completedAt  DateTime?
-  // + PatchPlan FK (§6.4)
+  changeRequestId        String?
+  deploymentWindowId     String?
+  patchPlanId            String?
+
+  status               String   @default("queued") // queued | dispatched | running | succeeded | failed | rolled-back | timed-out
+  result               Json     @default("{}")
+  evidence             Json     @default("{}")
+  rollbackOf           String?
+  createdAt            DateTime @default(now())
+  startedAt            DateTime?
+  completedAt          DateTime?
+}
 ```
 
-**New Edge Node token scope + capability** (extends the *closed* vocabularies in the Edge Node spec):
-- Token scope `action:dispatch` (server→node delivery), `action:report` (node→server result).
-- Capability `capability.action.execute` with the existing per-capability **mode** (`disabled` by default; operator flips to `enabled` per node) **and an `actionType` allowlist** so a node may be allowed `inventory.collect` but not `patch.apply`.
+Guardrails:
 
-### 6.4 Orchestration — `PatchPlan` + `PatchPolicy` (NEW)
+- Mutating actions require a `ChangeRequest`.
+- `patch.apply`, `service.restart`, `reboot`, and `script.run` require deployment-window approval.
+- `script.run` is out of scope until a separate threat model approves it.
+- Remote actions are scoped by `customerAccountId`/`customerSiteId` whenever the target belongs to a customer estate.
+- Result evidence must include before version, intended target version, post version, backend used, exit status, stderr/stdout summary, and health-check outcome.
 
+### 7.4 `PatchPolicy` And `PatchPlan`
+
+```prisma
+model PatchPolicy {
+  id                String @id @default(cuid())
+  policyKey         String @unique
+  customerAccountId String?
+  customerSiteId    String?
+  scope             Json   @default("{}") // host group, site, role, tag, archetype
+  autoApprove       Json   @default("{}") // e.g. critical security in-window; major manual
+  rebootPolicy      String @default("in-window") // never | in-window | prompt | manual
+  blackoutRefs      Json   @default("[]")
+  windowRefs        Json   @default("[]")
+  status            String @default("active") // draft | active | disabled | archived
+}
+
+model PatchPlan {
+  id                String @id @default(cuid())
+  planKey           String @unique
+  customerAccountId String?
+  customerSiteId    String?
+  scope             Json   @default("{}")
+  target            Json   @default("{}") // catalogIdentityId/profileId, target version, backend
+  strategy          String @default("rolling") // canary | rolling | all-at-once | manual
+  approvalState     String @default("proposed") // proposed | approved | rejected | cancelled
+  status            String @default("draft") // draft | scheduled | running | succeeded | failed | cancelled
+  changeRequestId   String?
+  deploymentWindowId String?
+}
 ```
-PatchPlan                                   PatchPolicy (per customer/site/host-group)
-  planKey        @unique                      policyKey       @unique
-  scope          Json  // host group/site     scope           Json
-  softwareProductId / targetVersion           autoApprove     Json  // { securityCritical:"auto-in-window",
-  strategy       String // canary|rolling|all                        //   major:"manual", feature:"manual" }
-  windowId       String?                       rebootPolicy    String // never|in-window|prompt
-  approvalState  String                        blackoutRefs    Json
-  status         String                        windowRefs      Json
-  // children: RemoteAction[]                   // the "single approved-state queue" model (NetLock)
-```
 
-`PatchPlan` fans a target set into per-host `RemoteAction` children, ordered by `strategy` (canary first → observe health → rolling → broad). `PatchPolicy` is the standing rule that decides which gaps auto-promote into plans (the universal default: **security-critical auto-applies in-window; major versions are always manual**).
+Default policy:
 
-### 6.5 Reuse map (no new code where DPF already has it)
+- Critical security updates with high confidence and no major-version jump: eligible for auto-approve in window.
+- CISA KEV overlap: route to urgent attention and shorter SLA; still respect blackout/window unless an explicit emergency override exists.
+- Major versions, driver/firmware, database/runtime upgrades, and reboot-required server patches: manual approval.
+- Unknown identity or low-confidence version match: assessment only, no auto-plan.
 
-`DeploymentWindow` · `BlackoutPeriod` · `windows-eval` · `auto-window` · `quiescence` · `recovery-point`/`rollback` · `ChangeRequest` · `check_deployment_windows` · `AssuranceFinding` · `BomComponent` · `DiscoveredSoftwareEvidence` · `InventoryEntity` · `EdgeNode`/`EdgeNodeCapability` · `CustomerAccount`/`CustomerSite` · `SCHEDULED_JOB_CATALOG`.
+### 7.5 API And Tool Surface
+
+Candidate internal APIs/MCP tools, subject to normal tool-result budget and permission grants:
+
+- `list_patch_posture`: paginated posture by customer/site/host/product/severity.
+- `propose_patch_plan`: creates `PatchPlan` from findings and policy.
+- `approve_patch_plan`: authority-gated; writes `ChangeRequest`.
+- `dispatch_remote_action`: internal-only dispatcher after approval/window checks.
+- `record_remote_action_result`: Edge Node result/evidence ingestion.
+
+Tool outputs must be capped, paginated, and provenance-free in their descriptions per AGENTS.md context-engineering standards.
 
 ---
 
-## 7. The agent question — extend the Edge Node, don't add a second agent
+## 8. Edge Node Execution Posture
 
-The brief says "we may need an agent installed." **DPF already installs one** — the Edge Node, with a battle-tested enrollment ceremony, principal identity, trust lifecycle, per-capability modes, secure token storage, and a one-liner remote installer (`remote-provisioning.ts`). Adding a second agent (osquery's own server, a Tactical RMM agent) would fragment trust and identity.
+The brief asks whether DPF needs an agent installed. It already has one: the Edge Node.
 
-**Plan:** the Edge Node **supervises** osquery (spawns it, reads its tables) for deep inventory, and gains a governed execution capability that shells the native package managers for apply. osquery and the package managers are *tools the node drives*, not independent agents with their own control plane.
+Plan:
 
-**Security posture for execution (non-negotiable):**
-1. **Off by default.** `capability.action.execute` mode is `disabled` until an operator enables it per node, per `actionType`.
-2. **Every mutating action requires:** capability enabled ∧ token scope present ∧ a `ChangeRequest` ∧ (for non-security-routine) approval ∧ inside a `DeploymentWindow` and not in a `BlackoutPeriod`.
-3. **Recovery before mutation** where the host is DPF-managed; **health-check after**; **auto-rollback** on failed health (reusing the self-upgrade pattern).
-4. **Machine-bound trust is a prerequisite.** The Phase-0 Edge Node token is a per-node bearer, **not machine-bound** (Edge Node spec §"Phase 0 token-binding posture"). Execution capability must **depend on** the Phase-1 hardened binding (mTLS / DPoP / platform-attested key) — we do not ship `patch.apply` on a bearer token. This is an explicit cross-epic dependency on `EP-EDGE-NODE`.
-5. **Least privilege, deny by default** (kernel commandment) — the `actionType` allowlist and per-node mode enforce it.
+- Edge Node supervises approved inventory helpers such as osquery.
+- Edge Node invokes native package managers only through `RemoteAction`.
+- Edge Node reports result evidence back to DPF.
+- Edge Node never becomes an independent authority.
+
+Non-negotiable execution prerequisites:
+
+1. `capability.action.execute` is disabled by default.
+2. Capabilities are action-type allowlisted per node: for example `inventory.collect` may be enabled while `patch.apply` remains disabled.
+3. Token scopes are split: `action:dispatch` for delivery and `action:report` for result reporting.
+4. Mutating actions require capability enabled, token scope present, policy approval, `ChangeRequest`, and a valid maintenance window with no blackout conflict.
+5. Execution must wait for hardened machine-bound Edge Node trust (mTLS, DPoP, platform-attested key, or equivalent). Bearer-token-only Edge Nodes may collect posture but may not apply patches.
+6. Where rollback is impossible, the action must say so before approval and store compensating evidence.
+7. Reboot is a first-class action, not a hidden side effect.
+
+Threat-model requirement:
+
+- Before P2 execution work starts, run a focused threat model covering command injection, package-manager abuse, token theft, replay, confused deputy across customer scope, downgrade attacks, rollback failure, and malicious/compromised Edge Node reporting.
 
 ---
 
-## 8. MSP cross-org pattern — proposal, not action
+## 9. MSP Cross-Org Pattern
 
-For the MSP archetype there are two topologies (from `EP-MSP-FEDERATION` / the federation design):
+### 9.1 Topology A - MSP Runs DPF, Customer Is A Scoped Estate
 
-- **Topology A — MSP runs DPF, customer is a scoped estate.** The customer's hosts enroll Edge Nodes into the MSP's DPF. Patch actions are MSP-internal and scoped by `customerAccountId`/`customerSiteId`. The substrate is fully present; this is the near-term delivery path.
-- **Topology B — both sides run DPF (customer keeps sovereignty).** The MSP must **never** execute directly inside the customer's boundary. The MSP's patch assessment produces a **proposal** carried over the `FederationLink` (the cross-org primitive proposed in `EP-MSP-FEDERATION`); the proposal lands on the customer's **Attention Surface** (`EP-ATTENTION-SURFACE`); the customer's **own Authority Core approves**, and the customer's **own Edge Node executes**. A consented, scoped projection of the result returns to the MSP. This is **proposal-not-action**, the same boundary the federation work already established for remediation.
+Near-term path. Customer hosts enroll into the MSP's DPF via Edge Nodes and are scoped by `customerAccountId` and `customerSiteId`.
 
-`RemoteAction.approvalState` + the federation link are what make this safe: an MSP-originated action on a sovereign customer can reach at most `proposed`; only a customer principal can move it to `approved`.
+Allowed:
+
+- MSP views posture.
+- MSP proposes and approves patch plans within its own DPF if contractually authorized.
+- MSP-owned Edge Nodes execute approved actions.
+
+Required:
+
+- Per-customer reporting and audit separation.
+- No cross-customer query leaks.
+- Customer/site filters in every posture, plan, action, and evidence query.
+
+### 9.2 Topology B - MSP And Customer Both Run DPF
+
+Sovereign path. The MSP does not execute inside the customer boundary.
+
+Allowed:
+
+- MSP DPF sends a patch assessment or plan proposal over the federation link.
+- Customer DPF receives it as an attention item.
+- Customer authority approves, schedules, and executes through the customer's own Edge Node.
+- Customer DPF sends back a scoped result projection.
+
+Not allowed:
+
+- MSP-originated `RemoteAction` moving beyond `proposed` in a customer-owned DPF.
+- MSP direct execution using customer Edge Node credentials.
+- MSP visibility into raw host evidence beyond the consented projection.
+
+This proposal-not-action rule is the architectural boundary that makes patch management compatible with `EP-MSP-FEDERATION` and `EP-ESTATE-SOVEREIGNTY`.
 
 ---
 
-## 9. Phasing (value early, risk gated)
+## 10. UX And Information Architecture
 
-| Phase | Deliverable | Risk | Composes |
+Patch management is an operations and compliance surface. It should feel dense, calm, scan-friendly, and evidence-backed.
+
+### 10.1 Placement
+
+Primary route candidate:
+
+- `/ops/patches` for operator workflow, because existing ops routes already cover self-upgrade, health, changes, promotions, and improvements.
+
+Secondary projections:
+
+- Customer detail pages: scoped patch posture for that customer estate.
+- `/compliance/posture`: aggregate evidence and audit posture, if the compliance module is active.
+- Attention/work surfaces: approvals, expired risk acceptances, failed actions, and urgent KEV overlaps.
+
+Do not add a new global navigation family for patching until the workflow earns it. Start in existing ops/compliance/customer surfaces.
+
+### 10.2 First Screen
+
+The first screen answers four operator questions:
+
+1. **Are we exposed?** Critical/high patch gaps, KEV overlaps, unsupported software.
+2. **Where is the exposure?** Customer/site/host/product grouping.
+3. **What needs me?** Approval queue, failed actions, expired acceptances, reboot decisions.
+4. **What happened?** Recent plans/actions with before/after version and evidence.
+
+Use report-kit primitives:
+
+- `StatCard` for counts and risk posture.
+- `StatusBadge` through `statusColors.ts`, not page-local maps.
+- `FilterBar` for customer, site, severity, status, ecosystem, reboot required, KEV overlap.
+- `DataTable` for patch gaps and plan/action history.
+- `ExportButton` for customer-facing CSV/report export.
+- `Chart` only for trends that help decisions, such as critical gaps over time or compliance by site.
+
+### 10.3 Interaction Model
+
+Primary actions:
+
+- **Assess only:** default, no mutation.
+- **Propose plan:** groups selected findings into a `PatchPlan`.
+- **Approve schedule:** authority-gated, writes `ChangeRequest`.
+- **Pause/deny:** records rationale.
+- **Accept risk until date:** uses existing `acceptedUntil` semantics.
+- **View evidence:** shows source, confidence, before/after versions, and action result.
+
+Controls:
+
+- Use segmented controls for posture views: `Gaps`, `Plans`, `History`, `Policies`.
+- Use toggles for policy booleans such as "auto-approve critical security patches in window."
+- Use date/time controls for maintenance windows and risk-acceptance expiry.
+- Use confirmation modals for mutating dispatch, with explicit target count, reboot risk, rollback availability, and customer/site scope.
+
+Empty/failure states:
+
+- Empty posture: "No patch gaps found from the latest assessment" with last assessment time and coverage percentage.
+- Low coverage: prioritize the collection gap over a false green posture.
+- Unknown identity: show as "Needs identity mapping" and route to catalog/fingerprint contribution, not patch execution.
+- Failed action: show likely cause, captured output summary, retry eligibility, rollback status, and evidence link.
+
+Accessibility and design:
+
+- WCAG 2.2 AA.
+- Theme tokens only; no raw hex or local Tailwind status palettes.
+- Table text must wrap and remain legible on mobile.
+- No in-app explanatory copy that documents implementation mechanics; keep operator language outcome-oriented.
+
+### 10.4 UX Fit Decision
+
+This surface passes UX fit only if:
+
+- Patch posture can be scanned by non-technical operators in under one minute.
+- The first mutating action is impossible without seeing target scope, window, reboot risk, rollback availability, and approval state.
+- The customer/MSP boundary is visible in the UI wherever actions or exports cross accounts.
+- Unknown/low-confidence matches cannot be approved for automatic patching.
+- Tests verify report-kit usage and status-intent mapping for new domains.
+
+---
+
+## 11. Phasing
+
+| Phase | Deliverable | Risk | Dependencies |
 | --- | --- | --- | --- |
-| **P0 — Assessment (keystone)** | `SoftwareProduct` catalog (resolve `softwareIdentityId`) + version-intelligence feed (OSV generalized beyond npm + native "available" metadata) → emit `AssuranceFinding(patch-gap)` → **read-only "what's out of date / vulnerable across the estate" surface + MCP tool.** No execution. | **None** (read-only) | EP-ASSURANCE-LEDGER, EP-ARCH-GRAPH-LIVE |
-| **P1 — Deep inventory** | osquery through the Tool Evaluation Pipeline; Edge Node supervises it; wire `capability.discovery.software` to enrich `DiscoveredSoftwareEvidence`. | Low | EP-EDGE-NODE, EP-GOVERN-002 |
-| **P2 — Execution primitive (keystone)** | `RemoteAction` model + `capability.action.execute` + `action:dispatch`/`action:report` scopes; dispatch + result capture; **safest actions first** (`inventory.collect`, then DPF-self patch); ChangeRequest mirror + recovery + health-check + rollback. **Depends on EP-EDGE-NODE hardened token binding.** | Med (gated) | EP-EDGE-NODE, EP-UPGRADE-LIFECYCLE |
-| **P3 — Apply backends + orchestration** | winget/apt/dnf/brew/WUA executors; `PatchPlan` (canary→rolling) + `PatchPolicy` (auto security-critical in-window); reboot handling. | Med (gated) | EP-SCHEDULING-SURFACE |
-| **P4 — MSP cross-org** | proposal-not-action over `FederationLink`; customer-side approve + execute; scoped projection back. | High (sovereignty) | EP-MSP-FEDERATION, EP-ESTATE-SOVEREIGNTY, EP-ATTENTION-SURFACE |
+| P0 - Read-only posture | Patch intelligence projector writes `AssuranceFinding` rows from existing discovery/SBOM data. Operator can view/export estate patch posture. No execution. | Low | Assurance Ledger, discovery substrate |
+| P0.5 - Identity convergence | Land `CatalogIdentity` path or compose the lifecycle-evidence migration; remove/rename dangling `softwareIdentityId`; add `catalogIdentityId`; add `SoftwarePatchProfile`. | Medium schema risk | Lifecycle evidence specialist design |
+| P1 - Deep inventory | Tool Evaluation for osquery or equivalent; Edge Node supervises approved collector; improve `DiscoveredSoftwareEvidence` coverage/confidence. | Low/medium | EP-GOVERN-002, Edge Node discovery capability |
+| P2 - Governed execution primitive | `RemoteAction`, scopes, capability allowlist, result evidence, change mirror. Start with non-mutating `inventory.collect`. | Medium | Hardened Edge Node trust, threat model |
+| P3 - Patch apply backends | WinGet/WUA/apt/dnf/brew adapters, health checks, reboot action, rollback/compensating evidence. | High | P2 plus backend Tool Evaluation |
+| P4 - Plans and policy automation | `PatchPlan`, `PatchPolicy`, canary/rolling strategies, auto-approve critical security patches in window. | Medium/high | P3, scheduling surface |
+| P5 - MSP federation | Proposal-not-action over federation link; customer-side approve/execute; scoped result projection. | High sovereignty risk | MSP federation, estate sovereignty, attention surface |
 
-**The keystone is P0** — it lands the single most valuable thing (a live, estate-wide "you are N patches / M CVEs behind" picture for self + discovered hosts) with **zero execution risk and almost no new tables**, because it composes the Assurance Ledger.
+Engineering allocation:
 
----
-
-## 10. UX surface (non-technical operator)
-
-Patch posture is a **compliance-reporting** surface, so it composes the report-kit palette (AGENTS.md §12) — `StatusBadge` / `DataTable` / `StatCard`, status→intent via `statusColors`, never a hand-rolled badge. The default view answers three plain questions (progressive disclosure, 3–5 choices, derive don't ask):
-
-1. **"Is my estate up to date?"** — one posture badge per host/site (Green / Behind / At-risk), derived from `AssuranceFinding(patch-gap)` severity.
-2. **"What needs me?"** — the patches awaiting a decision land on the **Attention Surface** ("Needs you" inbox, `EP-ATTENTION-SURFACE`), never buried in a backlog.
-3. **"What happened?"** — patch history via `RemoteAction` + `ChangeRequest`, same change-ledger the self-upgrade path already populates.
-
-The UX-Fit gate (§12) applies to every new control; "apply now vs. schedule" and "auto-approve security patches" are the only operator switches, both with safe defaults.
+- Reserve the first **20% of implementation effort** for refactoring and data-model convergence: identity cleanup, status constants, test fixtures, and migration invariants.
+- Do not start execution work while `softwareIdentityId` remains a dangling identity pointer.
+- Do not start P3 apply backends before P2 execution evidence is verified with a harmless action.
 
 ---
 
-## 11. Risks & open questions
+## 12. Acceptance Criteria And Verification
 
-1. **Third-party catalog cost.** Driving native package managers (§3.3) avoids a curated installer repo, but coverage = "whatever winget/apt/brew know." Gaps (niche line-of-business apps) will need either vendor adapters or a curated tier later — explicitly out of P0–P3 scope.
-2. **Reboot orchestration** is the operational hard part (especially Windows servers); P3 must treat reboot as a first-class, policy-gated, windowed action, not a side effect.
-3. **Machine-bound trust dependency.** P2 cannot ship until Edge Node token binding hardens (§7.4). If that slips, P0/P1 (read-only) still deliver standalone value.
-4. **osquery footprint.** ~50–100 MB agent; acceptable for servers/desktops, reconsider for constrained edge. The existing lightweight host collector remains the fallback.
-5. **License vigilance.** osquery (Apache-2.0) and OSV (Apache-2.0) are safe to embed; **Tactical RMM and Chocolatey-for-Business are not** for an MSP offering — keep them out of the dependency boundary (New Dependency Gate, `EP-ASSURANCE-LEDGER`).
+### P0 Acceptance
+
+- Patch posture uses existing `AssuranceFinding`; no duplicate findings table.
+- Findings include affected host/evidence, severity, source adapter, target version when known, confidence, and remediation hint.
+- CISA KEV overlap changes routing/priority and is visible in UX.
+- Coverage percentage is visible so operators do not mistake missing inventory for clean posture.
+- Export/report is scoped by customer/site.
+
+### P0.5 Acceptance
+
+- `DiscoveredSoftwareEvidence.softwareIdentityId` is no longer a live pointer to a nonexistent table.
+- `CatalogIdentity` is the canonical identity for host software and related lifecycle evidence.
+- `SoftwarePatchProfile` hangs from `CatalogIdentity`.
+- Migration includes backfill or explicit evidence for safe drop/rename.
+- Tests cover legacy identity handling and no dangling FK/string pointer remains.
+
+### P2/P3 Acceptance
+
+- `RemoteAction` cannot dispatch unless capability, token scope, approval, change request, and window gates pass.
+- A bearer-token-only Edge Node cannot run mutating actions.
+- Action result evidence captures before/after versions and health outcome.
+- Reboot is explicit and policy-gated.
+- Failed action has retry/rollback/compensating evidence state.
+- Cross-customer dispatch attempts are rejected.
+
+### Required Verification Gates
+
+- Targeted unit tests for intelligence projection, identity migration helpers, policy derivation, and remote-action gate checks.
+- Production build for affected app/package before PR.
+- UX verification for `/ops/patches` or whichever route lands.
+- Migration apply/rollback evidence for schema phases.
+- Tool Evaluation records before osquery, OSV generalization beyond existing use, WinGet automation, WUA automation, or any new external backend is embedded.
+- Threat model before mutating Edge Node execution.
 
 ---
 
-## 12. Backlog mapping
+## 13. Risks And Open Questions
 
-New epic **`EP-PATCH-MANAGEMENT`** with the phased BIs of §9; keystone = the P0 read-only assessment. Each BI names the epic(s) it composes so the work relates rather than duplicates. The osquery/OSV adoption is gated by an `EP-GOVERN-002` Tool Evaluation Pipeline item before any embed lands.
+| Risk | Impact | Mitigation |
+| --- | --- | --- |
+| Catalog identity drift | False positives or unsafe auto-patching. | P0.5 identity convergence, confidence scoring, no auto-apply for unknown/low-confidence identities. |
+| Third-party catalog coverage gaps | Niche apps remain manual. | Native-manager first, vendor adapters later, clear "manual remediation" finding state. |
+| Package-manager inconsistency | Different hosts report/apply differently. | Store backend and confidence per finding/action; verify post-version. |
+| Reboot disruption | Server/business downtime. | Reboot as explicit action, windows/blackouts, customer/site policy, quiescence where possible. |
+| Edge Node token theft | Remote code execution risk. | No mutation until machine-bound trust; least privilege scopes; action allowlists; replay protection in threat model. |
+| MSP sovereignty breach | Customer trust and compliance failure. | Proposal-not-action in federated topology; customer-side approval/execution only. |
+| Over-automation | Bad patch broadly deployed. | Canary/rolling strategy, health checks, pause/rollback, major versions manual. |
+| External tool licensing | Commercial/MSP conflict. | Tool Evaluation Pipeline and approved registry before adoption. |
+| False green posture | Missing inventory interpreted as secure. | Coverage metrics beside every posture score. |
+
+Open questions:
+
+1. Which identity migration owner lands `CatalogIdentity`: lifecycle-evidence epic or patch-management epic?
+2. Does `AssuranceFinding.findingKind` already have a governed constant registry, or does P0 create one?
+3. Which Windows OS update backend is acceptable after Tool Evaluation: WUA COM API, PowerShell module, or another supported mechanism?
+4. What is the minimum machine-bound Edge Node trust posture accepted for P2?
+5. Should firmware/driver patching be explicitly out of P0-P4 and handled as a later high-risk category?
+
+---
+
+## 14. Backlog Mapping
+
+Create `EP-PATCH-MANAGEMENT` with these initial backlog items:
+
+| BI | Work type | Outcome |
+| --- | --- | --- |
+| BI-PATCH-001 | doc | Ratify this design and link it to lifecycle-evidence, Edge Node, scheduling, assurance, and MSP federation specs. |
+| BI-PATCH-002 | refactor | Converge software identity on `CatalogIdentity`; remove or rename dangling `softwareIdentityId`; add `SoftwarePatchProfile`. |
+| BI-PATCH-003 | feature | Build read-only patch-intelligence projector into `AssuranceFinding`. |
+| BI-PATCH-004 | feature | Add patch posture UX under ops/compliance/customer projections using report-kit. |
+| BI-PATCH-005 | tool | Run Tool Evaluation for osquery/deep inventory. |
+| BI-PATCH-006 | security | Threat-model Edge Node remote execution. |
+| BI-PATCH-007 | feature | Add `RemoteAction` for non-mutating action dispatch and evidence reporting. |
+| BI-PATCH-008 | feature | Add approved native apply backends and reboot policy after P2 evidence. |
+| BI-PATCH-009 | feature | Add `PatchPlan`/`PatchPolicy` automation. |
+| BI-PATCH-010 | feature | Add MSP federation proposal-not-action flow. |
+
+Backlog creation must use live MCP/backlog state first. If MCP is unavailable, use explicit DB fallback per AGENTS.md.
+
+---
+
+## 15. References
+
+- NIST, [SP 800-40 Rev. 4: Guide to Enterprise Patch Management Planning](https://csrc.nist.gov/pubs/sp/800/40/r4/final).
+- CISA, [Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog).
+- Google/OpenSSF, [OSV-Scanner](https://google.github.io/osv-scanner/).
+- Microsoft Learn, [Use WinGet to install and manage applications](https://learn.microsoft.com/en-us/windows/package-manager/winget/).
+- osquery, [GitHub repository](https://github.com/osquery/osquery).
+- Fleet, [Software management](https://fleetdm.com/software-management).
+- Action1, [Unified Cross-Platform Patch Management](https://www.action1.com/).
+- NinjaOne, [Patch Management](https://www.ninjaone.com/patch-management/).
+- PDQ, [Patch Management Software](https://www.pdq.com/solutions/patch-management-software/).
+- DPF, `docs/superpowers/specs/2026-04-18-lifecycle-evidence-specialist-design.md`.
+- DPF, `docs/platform-usability-standards.md`.
+- DPF, `apps/web/components/ui/report-kit/README.md`.
