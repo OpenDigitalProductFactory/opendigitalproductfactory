@@ -158,6 +158,24 @@ jobs:
       - name: Run guard
         run: node scripts/check-bundle-boundaries.mjs
 
+  style-drift-guard:
+    name: Style Drift Guard
+    runs-on: ubuntu-latest
+    # BI-ARCH-UI-PRIMS. DPF surfaces are themed with --dpf-* tokens + the
+    # report-kit status palette so light/dark/branding work (AGENTS.md §12).
+    # This ratchet fails a PR that adds a NEW hardcoded hex color (or grows an
+    # existing file's hex count) against scripts/style-drift-baseline.json, while
+    # not forcing a mass rewrite of the files that predate it. Migrate a surface,
+    # then `--update` the baseline. See docs/architecture/ui-token-styling.md.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/check-style-drift.mjs
+
   native-dialog-guard:
     name: Native Dialog Guard
     runs-on: ubuntu-latest
