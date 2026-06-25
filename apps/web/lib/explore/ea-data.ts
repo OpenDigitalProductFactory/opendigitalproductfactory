@@ -1,6 +1,11 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import { shapeIt4itCoverageHeatmap } from "./it4it-coverage-view";
+import {
+  shapeIt4itParticipationGrid,
+  type It4itParticipationGrid,
+  type It4itStageParticipationRow,
+} from "./it4it-participation-view";
 import type { SerializedViewElement, SerializedEdge, CanvasState } from "./ea-types";
 import type {
   CoverageStatus,
@@ -413,5 +418,40 @@ export const getIt4itCoverageHeatmap = cache(
     ]);
 
     return shapeIt4itCoverageHeatmap({ slug, modelName: model.name, elements, assessments });
+  },
+);
+
+// ── IT4IT participation grid (EP-IT4IT-CONFORMANCE, BI-D51A5A4A) ──────────────
+// Cross-tabs functional components against the 7 value streams using the seeded FC
+// Participation Matrix (participationByColumn on each value-stream stage), tinted by each
+// component's coverage status. Grouping/collapse math lives in it4it-participation-view.
+export const getIt4itParticipationGrid = cache(
+  async (slug: string): Promise<It4itParticipationGrid> => {
+    const heatmap = await getIt4itCoverageHeatmap(slug);
+    const components = heatmap.groups.flatMap((g) => g.components);
+
+    const model = await prisma.eaReferenceModel.findUnique({ where: { slug }, select: { id: true } });
+    if (!model) return { hasData: false, streams: [], groups: [] };
+
+    const elements = await prisma.eaReferenceModelElement.findMany({
+      where: { modelId: model.id, kind: { in: ["value_stream", "value_stream_stage"] } },
+      select: { id: true, kind: true, name: true, parentId: true, properties: true },
+    });
+
+    const streamNameById = new Map<string, string>();
+    for (const e of elements) if (e.kind === "value_stream") streamNameById.set(e.id, e.name);
+    const valueStreams = elements.filter((e) => e.kind === "value_stream").map((e) => e.name);
+
+    const stageParticipation: It4itStageParticipationRow[] = [];
+    for (const e of elements) {
+      if (e.kind !== "value_stream_stage" || !e.parentId) continue;
+      const stream = streamNameById.get(e.parentId);
+      if (!stream) continue;
+      const props =
+        (e.properties as { participationByColumn?: Record<string, string | null> } | null) ?? {};
+      stageParticipation.push({ stream, participation: props.participationByColumn ?? {} });
+    }
+
+    return shapeIt4itParticipationGrid({ components, valueStreams, stageParticipation });
   },
 );
