@@ -353,6 +353,129 @@ const DEFAULT_LIFECYCLE_MATRIX: Readonly<
   },
 };
 
+// ─── Quality-first + risk axis (EP-QUALITY-RIGHTSIZING) ──────────────────────
+//
+// Spec: docs/superpowers/specs/2026-06-23-quality-first-risk-aware-build-rightsizing-design.md
+//
+// A second axis — deliverableSensitivity — rides alongside (type, size). It can
+// only ever RAISE process (more review, fuller phases, deeper tier), never lower
+// it (MONOTONIC). Both the quality-first bump and the sensitivity escalation are
+// opt-in via `RightsizingOpts`; when no opts are supplied (or they are inert) the
+// matrix is BYTE-IDENTICAL to today — the default-cell contract test still holds.
+
+/** Risk/sensitivity of what a build touches. Orthogonal to effort size. */
+export const DELIVERABLE_SENSITIVITIES = ["low", "elevated", "high"] as const;
+export type DeliverableSensitivity = (typeof DELIVERABLE_SENSITIVITIES)[number];
+
+const SENSITIVITY_RANK: Record<DeliverableSensitivity, number> = { low: 0, elevated: 1, high: 2 };
+const REVIEW_RANK: Record<ReviewIntensity, number> = { minimal: 0, standard: 1, thorough: 2 };
+
+export type RightsizingOpts = {
+  /** DPF_BUILD_QUALITY_FIRST_RIGHTSIZING is on: substantive work gets thorough
+   *  review + the robust tier; the trivial tail (doc/chore × small) stays light. */
+  qualityFirst?: boolean;
+  /** Derived sensitivity of the deliverable; HIGH escalates to the deepest
+   *  policy for the type regardless of size. */
+  sensitivity?: DeliverableSensitivity;
+};
+
+/** Quality-first raises the substantive cell's review one notch (standard →
+ *  thorough); the trivial tail (minimal) is left light on purpose. Monotonic. */
+function raiseReviewForQuality(r: ReviewIntensity): ReviewIntensity {
+  return r === "standard" ? "thorough" : r;
+}
+
+/** The fullest gate set for a TYPE — used to escalate a high-sensitivity build
+ *  to the most ceremony its type allows, without cross-typing (a fix stays a fix). */
+const FULL_GATES_BY_TYPE: Record<BuildProcessType, LifecyclePolicy["gates"]> = {
+  feature: FEATURE_FULL_GATES,
+  fix: FIX_FULL_GATES,
+  chore: FEATURE_FULL_GATES, // refactor-grade chores already promote to feature gates
+  doc: DOC_GATES,
+};
+
+/** Monotonic union of two gate maps: per transition, the required list is the
+ *  union of both (never drops a requirement the base already enforced). */
+function unionGates(
+  base: LifecyclePolicy["gates"],
+  add: LifecyclePolicy["gates"],
+): LifecyclePolicy["gates"] {
+  const out: LifecyclePolicy["gates"] = { ...base };
+  for (const key of Object.keys(add) as BuildTransition[]) {
+    const merged = new Set<GateRequirement>([...(base[key] ?? []), ...(add[key] ?? [])]);
+    out[key] = Array.from(merged);
+  }
+  return out;
+}
+
+/** Apply the quality-first bump + monotonic sensitivity escalation to a base
+ *  cell. Returns the base UNCHANGED when nothing actually escalates, so an inert
+ *  opts object is byte-identical to no opts at all. */
+function escalatePolicy(
+  base: LifecyclePolicy,
+  type: BuildProcessType,
+  opts: RightsizingOpts,
+): LifecyclePolicy {
+  const sens = opts.sensitivity ?? "low";
+  let phases = base.phases;
+  let reviewIntensity = base.reviewIntensity;
+  let gates = base.gates;
+  const tags: string[] = [];
+
+  if (opts.qualityFirst) {
+    reviewIntensity = raiseReviewForQuality(reviewIntensity);
+    if (reviewIntensity !== base.reviewIntensity) tags.push("quality");
+  }
+  if (SENSITIVITY_RANK[sens] >= SENSITIVITY_RANK.elevated && REVIEW_RANK[reviewIntensity] < REVIEW_RANK.standard) {
+    reviewIntensity = "standard";
+  }
+  if (sens === "high") {
+    phases = PHASES_FULL;
+    reviewIntensity = "thorough";
+    gates = unionGates(base.gates, FULL_GATES_BY_TYPE[type]);
+    tags.push("high-sensitivity");
+  } else if (SENSITIVITY_RANK[sens] >= SENSITIVITY_RANK.elevated && reviewIntensity !== base.reviewIntensity) {
+    tags.push("elevated");
+  }
+
+  if (phases === base.phases && reviewIntensity === base.reviewIntensity && gates === base.gates) {
+    return base; // nothing escalated → byte-identical
+  }
+  return { ...base, phases, reviewIntensity, gates, label: `${base.label} · ${tags.join(" · ")}` };
+}
+
+/**
+ * Derive a deliverable's sensitivity from a path/keyword heuristic over its text
+ * (BI title/body + brief) plus the org risk posture as a FLOOR. The result is
+ * `max(keyword-signal, posture-floor)` — monotonic. This is the P1 interim;
+ * BI-CFEB2B22 (P3) replaces the heuristic with code-graph blast-radius.
+ *
+ * `riskPosture` is accepted as a plain string (conservative|balanced|progressive)
+ * to keep this module decoupled from govern/risk-posture; an unknown value is
+ * treated as the balanced (no-floor) default.
+ */
+// Bare "card"/"charge" are deliberately excluded — they over-match benign UI
+// copy ("dashboard card", "charge up"). Payment exposure is caught by the
+// billing/payment/PCI/cardholder/credit-card terms instead.
+const HIGH_SENSITIVITY_PATTERN =
+  /\b(auth|authn|authz|authentication|authorization|login|sign[- ]?in|password|credential|secret|token|api[- ]?key|billing|payment|invoice|pci|cardholder|credit[- ]?card|debit[- ]?card|customer[- ]?data|pii|personal[- ]?data|gdpr|hipaa|security|vulnerab|encrypt|crypto|kernel|governance|rbac|permission|access[- ]?control|compliance)\b/i;
+const ELEVATED_SENSITIVITY_PATTERN =
+  /\b(database|migration|schema|prisma|integration|external|webhook|email|outbound|federation|edge|endpoint|deploy|infrastructure)\b/i;
+
+export function deriveDeliverableSensitivity(
+  input: { text?: string | null; workType?: string | null },
+  riskPosture?: string | null,
+): DeliverableSensitivity {
+  const text = input.text ?? "";
+  let keyword: DeliverableSensitivity = "low";
+  if (HIGH_SENSITIVITY_PATTERN.test(text)) keyword = "high";
+  else if (ELEVATED_SENSITIVITY_PATTERN.test(text)) keyword = "elevated";
+  // Org posture is a floor that can only RAISE caution: a conservative org
+  // starts everything at least "elevated". Balanced/progressive add no floor.
+  const postureFloor: DeliverableSensitivity = riskPosture === "conservative" ? "elevated" : "low";
+  return SENSITIVITY_RANK[keyword] >= SENSITIVITY_RANK[postureFloor] ? keyword : postureFloor;
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
@@ -360,14 +483,22 @@ const DEFAULT_LIFECYCLE_MATRIX: Readonly<
  * to "feature"; unknown / absent size defaults to "medium". This is the
  * back-compat contract — pre-existing call sites that pass nothing get the
  * exact same policy as before.
+ *
+ * `opts` (EP-QUALITY-RIGHTSIZING) is additive + monotonic: it can only raise the
+ * resolved policy. Absent/inert opts → the exact base cell (byte-identical).
  */
 export function getProcessPolicy(
   type: BuildProcessType | FeatureBuildKind | string | null | undefined,
   size: BuildProcessSize | string | null | undefined,
+  opts?: RightsizingOpts,
 ): LifecyclePolicy {
   const t = normalizeType(type);
   const s = normalizeSize(size);
-  return DEFAULT_LIFECYCLE_MATRIX[t][s];
+  const base = DEFAULT_LIFECYCLE_MATRIX[t][s];
+  if (!opts || (!opts.qualityFirst && (opts.sensitivity ?? "low") === "low")) {
+    return base;
+  }
+  return escalatePolicy(base, t, opts);
 }
 
 export function normalizeType(
@@ -449,12 +580,23 @@ export type BuildModelTier = "local" | "robust";
 export function getModelTier(
   type: BuildProcessType | FeatureBuildKind | string | null | undefined,
   size: BuildProcessSize | string | null | undefined,
+  opts?: RightsizingOpts,
 ): BuildModelTier {
-  // `type` is accepted for forward-compat (per-cell refinement) but P1 routes
-  // purely on size. normalizeType keeps the signature total + lint-clean.
-  void normalizeType(type);
+  const t = normalizeType(type);
   const s = normalizeSize(size);
-  return s === "large" || s === "xlarge" ? "robust" : "local";
+  // Legacy (EP-MODEL-TIER-ROUTING): route purely on size. This is the
+  // byte-identical behavior when no quality-first/sensitivity opts are supplied.
+  const legacy: BuildModelTier = s === "large" || s === "xlarge" ? "robust" : "local";
+  if (!opts) return legacy;
+  // A HIGH-sensitivity deliverable is always robust, regardless of size.
+  if (opts.sensitivity === "high") return "robust";
+  // Quality-first (EP-QUALITY-RIGHTSIZING §4.1): robust for all substantive work;
+  // local ONLY for the trivial tail (small doc/chore).
+  if (opts.qualityFirst) {
+    const trivialTail = (t === "doc" || t === "chore") && s === "small";
+    return trivialTail ? "local" : "robust";
+  }
+  return legacy;
 }
 
 // ─── Requirement check primitive ────────────────────────────────────────────
@@ -627,6 +769,17 @@ import type { PhaseGateResult } from "./feature-build-types";
  *                          happyPathIntake-ready reason string only)
  *   (everything else)    — same as before
  */
+/** Read the additive rightsizing opts a caller threaded through the gate
+ *  evidence. Returns undefined when neither field is present, so gates for
+ *  callers that don't set them are byte-identical (EP-QUALITY-RIGHTSIZING). */
+function rightsizingOptsFromEvidence(evidence: GateEvidence): RightsizingOpts | undefined {
+  const qualityFirst = evidence.qualityFirst === true;
+  const sensitivity = evidence.deliverableSensitivity as DeliverableSensitivity | undefined;
+  const hasSensitivity = sensitivity != null && (DELIVERABLE_SENSITIVITIES as readonly string[]).includes(sensitivity);
+  if (!qualityFirst && !hasSensitivity) return undefined;
+  return { qualityFirst, ...(hasSensitivity ? { sensitivity } : {}) };
+}
+
 export function checkPhaseGate(
   from: BuildPhase,
   to: BuildPhase,
@@ -638,6 +791,7 @@ export function checkPhaseGate(
   const policy = getProcessPolicy(
     evidence.kind as string | undefined,
     evidence.processSize as string | undefined,
+    rightsizingOptsFromEvidence(evidence),
   );
   const transition = `${from}->${to}` as BuildTransition;
   const required = policy.gates[transition] ?? [];

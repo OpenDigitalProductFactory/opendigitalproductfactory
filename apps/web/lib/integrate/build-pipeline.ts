@@ -459,13 +459,41 @@ async function stepGenerateCode(
   // parses the local model's native <function=…> tool format itself and drives
   // the read-edit-write loop in the sandbox. Gated on provider === "opencode"
   // so installs with a frontier CLI/provider keep the existing agentic path.
-  const { getBuildStudioConfig } = await import("./build-studio-config");
-  const { getModelTier } = await import("@/lib/explore/build-process-matrix");
+  const { getBuildStudioConfig, isQualityFirstRightsizingEnabled } = await import("./build-studio-config");
+  const { getModelTier, deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
   // EP-MODEL-TIER-ROUTING: route this build's codegen to the model tier its
   // size deserves — local (opencode) for small/medium, the configured robust
   // (frontier) engine for large/xlarge. Inert unless DPF_BUILD_MODEL_TIER_ROUTING
   // is enabled; falls back to local when no robust engine is configured.
-  const modelTier = getModelTier(build.kind, processSize);
+  //
+  // EP-QUALITY-RIGHTSIZING (§4.1/§4.2): when DPF_BUILD_QUALITY_FIRST_RIGHTSIZING
+  // is on, derive the deliverable's sensitivity (keyword heuristic over the brief
+  // + org risk posture as a floor) and pass quality-first opts — substantive work
+  // routes to robust by default, and a HIGH-sensitivity deliverable always does.
+  // Off-flag → rightsizing is undefined → getModelTier is byte-identical (size-only).
+  let rightsizing: Parameters<typeof getModelTier>[2];
+  if (isQualityFirstRightsizingEnabled()) {
+    const riskPosture = await prisma.businessContext
+      .findFirst({ select: { riskPosture: true } })
+      .then((r) => r?.riskPosture ?? null)
+      .catch(() => null);
+    const sensitivityText = [
+      brief?.title,
+      brief?.description,
+      build.title,
+      build.description,
+      ...(Array.isArray(brief?.acceptanceCriteria) ? brief.acceptanceCriteria : []),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const sensitivity = deriveDeliverableSensitivity(
+      { text: sensitivityText, workType: build.kind },
+      riskPosture,
+    );
+    rightsizing = { qualityFirst: true, sensitivity };
+    console.log("[build-pipeline] quality-first rightsizing:", { buildId, processSize, sensitivity });
+  }
+  const modelTier = getModelTier(build.kind, processSize, rightsizing);
   const dispatchConfig = await getBuildStudioConfig({ modelTier });
   if (dispatchConfig.provider === "opencode") {
     const { dispatchOpencodeTask } = await import("./opencode-dispatch");

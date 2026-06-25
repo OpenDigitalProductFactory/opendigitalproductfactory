@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   BUILD_PROCESS_TYPE_VALUES,
   BUILD_PROCESS_SIZES,
+  DELIVERABLE_SENSITIVITIES,
   deriveBuildProcessSize,
   deriveBuildProcessType,
+  deriveDeliverableSensitivity,
   describePolicy,
   getModelTier,
   getProcessPolicy,
@@ -354,6 +356,101 @@ describe("getModelTier (EP-MODEL-TIER-ROUTING)", () => {
     expect(getModelTier("feature", null)).toBe("local");
     expect(getModelTier("feature", undefined)).toBe("local");
     expect(getModelTier(null, "bogus")).toBe("local");
+  });
+});
+
+// ─── EP-QUALITY-RIGHTSIZING: quality-first + sensitivity axis ────────────────
+
+describe("DELIVERABLE_SENSITIVITIES", () => {
+  it("is a closed low/elevated/high ordinal", () => {
+    expect(DELIVERABLE_SENSITIVITIES).toEqual(["low", "elevated", "high"]);
+  });
+});
+
+describe("deriveDeliverableSensitivity", () => {
+  it("flags auth/billing/security/kernel keywords as high", () => {
+    expect(deriveDeliverableSensitivity({ text: "Add OAuth login + password reset" })).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "Fix the billing invoice charge bug" })).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "Harden the decision kernel governance gate" })).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "Encrypt customer PII at rest" })).toBe("high");
+  });
+  it("flags integration/schema keywords as elevated", () => {
+    expect(deriveDeliverableSensitivity({ text: "Add a Prisma migration for the new schema" })).toBe("elevated");
+    expect(deriveDeliverableSensitivity({ text: "Wire an outbound webhook integration" })).toBe("elevated");
+  });
+  it("defaults benign copy to low", () => {
+    expect(deriveDeliverableSensitivity({ text: "Tweak the dashboard card spacing" })).toBe("low");
+    expect(deriveDeliverableSensitivity({ text: "" })).toBe("low");
+  });
+  it("treats a conservative org posture as a floor (low → elevated) but never lowers", () => {
+    expect(deriveDeliverableSensitivity({ text: "spacing tweak" }, "conservative")).toBe("elevated");
+    expect(deriveDeliverableSensitivity({ text: "OAuth token" }, "conservative")).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "spacing tweak" }, "balanced")).toBe("low");
+    expect(deriveDeliverableSensitivity({ text: "spacing tweak" }, "progressive")).toBe("low");
+  });
+});
+
+describe("getModelTier — quality-first opts (byte-identical without)", () => {
+  it("is unchanged (size-based) when no opts are supplied", () => {
+    expect(getModelTier("feature", "small")).toBe("local");
+    expect(getModelTier("feature", "medium")).toBe("local");
+    expect(getModelTier("feature", "large")).toBe("robust");
+  });
+  it("inert opts (qualityFirst off, no sensitivity) stay size-based", () => {
+    expect(getModelTier("feature", "small", { qualityFirst: false })).toBe("local");
+  });
+  it("quality-first routes substantive work to robust, trivial tail stays local", () => {
+    expect(getModelTier("feature", "small", { qualityFirst: true })).toBe("robust");
+    expect(getModelTier("feature", "medium", { qualityFirst: true })).toBe("robust");
+    expect(getModelTier("doc", "small", { qualityFirst: true })).toBe("local"); // trivial tail
+    expect(getModelTier("chore", "small", { qualityFirst: true })).toBe("local"); // trivial tail
+    expect(getModelTier("doc", "medium", { qualityFirst: true })).toBe("robust"); // not trivial
+  });
+  it("a HIGH-sensitivity deliverable is always robust regardless of size/type", () => {
+    expect(getModelTier("doc", "small", { sensitivity: "high" })).toBe("robust");
+    expect(getModelTier("feature", "small", { qualityFirst: false, sensitivity: "high" })).toBe("robust");
+  });
+});
+
+describe("getProcessPolicy — monotonic escalation (byte-identical without)", () => {
+  it("returns the exact base cell with no/inert opts", () => {
+    const base = getProcessPolicy("feature", "medium");
+    expect(getProcessPolicy("feature", "medium", undefined)).toBe(base);
+    expect(getProcessPolicy("feature", "medium", { sensitivity: "low" })).toBe(base);
+    expect(getProcessPolicy("feature", "medium", { qualityFirst: false })).toBe(base);
+  });
+  it("quality-first bumps the substantive cell's review (standard → thorough), trivial tail stays light", () => {
+    expect(getProcessPolicy("feature", "medium").reviewIntensity).toBe("standard");
+    expect(getProcessPolicy("feature", "medium", { qualityFirst: true }).reviewIntensity).toBe("thorough");
+    // doc/small is minimal — quality-first leaves the trivial tail alone.
+    expect(getProcessPolicy("doc", "small", { qualityFirst: true }).reviewIntensity).toBe("minimal");
+  });
+  it("HIGH sensitivity escalates to full phases + thorough review, monotonically", () => {
+    const escalated = getProcessPolicy("chore", "small", { sensitivity: "high" });
+    expect(escalated.phases).toEqual(["ideate", "plan", "build", "review", "ship"]);
+    expect(escalated.reviewIntensity).toBe("thorough");
+    // Union of gates — the chore/small ideate->plan (empty) gains the feature-full set.
+    expect(escalated.gates["ideate->plan"]).toContain("designDoc-present");
+  });
+  it("never lowers a base that is already thorough/full (monotonic)", () => {
+    const base = getProcessPolicy("feature", "large"); // already thorough
+    const escalated = getProcessPolicy("feature", "large", { qualityFirst: true });
+    expect(escalated.reviewIntensity).toBe("thorough");
+    expect(escalated.phases).toEqual(base.phases);
+  });
+});
+
+describe("checkPhaseGate — honors threaded sensitivity (byte-identical without)", () => {
+  it("a chore/small ideate->plan auto-passes today (no rightsizing evidence)", () => {
+    expect(checkPhaseGate("ideate", "plan", { kind: "chore", processSize: "small" }).allowed).toBe(true);
+  });
+  it("a HIGH-sensitivity chore/small ideate->plan now demands the escalated gates", () => {
+    const result = checkPhaseGate("ideate", "plan", {
+      kind: "chore",
+      processSize: "small",
+      deliverableSensitivity: "high",
+    });
+    expect(result.allowed).toBe(false); // designDoc-present now required
   });
 });
 
