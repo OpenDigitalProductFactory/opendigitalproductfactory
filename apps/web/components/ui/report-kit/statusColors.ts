@@ -305,6 +305,15 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     "in-motion": "accent",
     unknown: "neutral",
   },
+  // IT4IT functional-criteria coverage (EP-IT4IT-CONFORMANCE). not_started/no-data is
+  // neutral (never green); out_of_mvp is an intentional exclusion, also neutral.
+  it4itCoverage: {
+    implemented: "success",
+    partial: "warning",
+    planned: "info",
+    not_started: "neutral",
+    out_of_mvp: "neutral",
+  },
 };
 
 /**

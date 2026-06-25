@@ -1,8 +1,10 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
+import { shapeIt4itCoverageHeatmap } from "./it4it-coverage-view";
 import type { SerializedViewElement, SerializedEdge, CanvasState } from "./ea-types";
 import type {
   CoverageStatus,
+  It4itCoverageHeatmap,
   ReferenceModelDetail,
   ReferenceModelElementNode,
   ReferenceModelPortfolioRollup,
@@ -381,4 +383,35 @@ export const getReferenceModelDetail = cache(
       },
     };
   }
+);
+
+// ── IT4IT functional-coverage heatmap (EP-IT4IT-CONFORMANCE) ──────────────────
+// Cached query over the platform-scope EaReferenceAssessment rows written by the
+// it4it-coverage steward projection; the grouping + rollup math lives in the pure,
+// unit-tested it4it-coverage-view module. Renders an empty state until the first steward
+// pass has written assessments.
+export const getIt4itCoverageHeatmap = cache(
+  async (slug: string): Promise<It4itCoverageHeatmap> => {
+    const model = await prisma.eaReferenceModel.findUnique({
+      where: { slug },
+      select: { id: true, name: true },
+    });
+    if (!model) throw new Error("Reference model not found");
+
+    const [elements, assessments] = await Promise.all([
+      prisma.eaReferenceModelElement.findMany({
+        where: {
+          modelId: model.id,
+          kind: { in: ["capability_group", "function", "component", "criterion"] },
+        },
+        select: { id: true, parentId: true, kind: true, name: true, normativeClass: true, sourceReference: true },
+      }),
+      prisma.eaReferenceAssessment.findMany({
+        where: { modelId: model.id, scope: { scopeType: "platform" } },
+        select: { modelElementId: true, coverageStatus: true, confidence: true, evidenceSummary: true, updatedAt: true },
+      }),
+    ]);
+
+    return shapeIt4itCoverageHeatmap({ slug, modelName: model.name, elements, assessments });
+  },
 );
