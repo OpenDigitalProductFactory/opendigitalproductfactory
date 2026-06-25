@@ -114,3 +114,41 @@ describe("balanceState (triangle colouring)", () => {
     expect(b.starved).toEqual([]);
   });
 });
+
+import { postureAxisColor, postureBlendColor } from "./posture-display";
+
+describe("postureAxisColor (red→yellow→green ramp)", () => {
+  it("is red when an axis is starved (0)", () => {
+    const [r, g] = postureAxisColor(0);
+    expect(r).toBeGreaterThan(200);
+    expect(g).toBeLessThan(120);
+  });
+  it("is yellow at a fair/balanced share (~0.42)", () => {
+    const [r, g, b] = postureAxisColor(0.42);
+    expect(r).toBeGreaterThan(200);
+    expect(g).toBeGreaterThan(150);
+    expect(b).toBeLessThan(60);
+  });
+  it("is green when an axis dominates (1)", () => {
+    const [r, g] = postureAxisColor(1);
+    expect(g).toBeGreaterThan(150);
+    expect(r).toBeLessThan(120);
+  });
+  it("clamps out-of-range weights", () => {
+    expect(postureAxisColor(-1)).toEqual(postureAxisColor(0));
+    expect(postureAxisColor(2)).toEqual(postureAxisColor(1));
+  });
+});
+
+describe("postureBlendColor", () => {
+  it("reads green-dominant when one axis is maxed (corner)", () => {
+    const [r, g] = postureBlendColor(1, 0, 0);
+    expect(g).toBeGreaterThan(r);
+  });
+  it("reads yellow-ish when balanced (centre)", () => {
+    const [r, g, b] = postureBlendColor(0.34, 0.33, 0.33);
+    expect(r).toBeGreaterThan(150);
+    expect(g).toBeGreaterThan(150);
+    expect(b).toBeLessThan(100);
+  });
+});

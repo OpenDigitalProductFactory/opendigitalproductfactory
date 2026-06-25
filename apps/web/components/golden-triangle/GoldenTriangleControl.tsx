@@ -10,6 +10,7 @@ import { useId, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 
+import { GoldenTriangleGradient } from "./GoldenTriangleGradient";
 import {
   PRESET_META,
   PRESET_ORDER,
@@ -95,7 +96,6 @@ export function GoldenTriangleControl({
   const activeLabel = value.preset === "custom" ? "Custom" : PRESET_META[value.preset].label;
 
   const balanceColor = `var(${balance.token})`;
-  const triFill = `color-mix(in srgb, ${balanceColor} 12%, var(--dpf-surface-2))`;
   const triStroke = `color-mix(in srgb, ${balanceColor} 45%, var(--dpf-border-strong))`;
   const vertexColor = (axis: "Quality" | "Cost" | "Time") =>
     isAxisStarved(balance, axis) ? "var(--dpf-error)" : "var(--dpf-text-secondary)";
@@ -136,11 +136,21 @@ export function GoldenTriangleControl({
   );
 
   const triangle = (
-    <svg
-      ref={svgRef}
-      viewBox="0 0 100 100"
-      className={["h-auto w-full touch-none select-none", compact ? "max-w-[150px]" : "max-w-[220px]"].join(" ")}
-      role="img"
+    <div
+      className={["relative h-auto w-full", compact ? "max-w-[150px]" : "max-w-[220px]"].join(" ")}
+      style={{ aspectRatio: "1 / 1" }}
+    >
+      <GoldenTriangleGradient
+        qualityWeight={w.qualityWeight}
+        costWeight={w.costWeight}
+        timeWeight={w.timeWeight}
+        className="absolute inset-0"
+      />
+      <svg
+        ref={svgRef}
+        viewBox="0 0 100 100"
+        className="absolute inset-0 h-full w-full touch-none select-none"
+        role="img"
       aria-label={`Cost, quality and time priority triangle. Quality ${pct(w.qualityWeight)} percent, cost ${pct(
         w.costWeight,
       )} percent, time ${pct(w.timeWeight)} percent. Balance: ${balance.label}. Drag the point or use the inputs to fine-tune.`}
@@ -158,7 +168,7 @@ export function GoldenTriangleControl({
     >
       <polygon
         points={`${vQuality.x},${vQuality.y} ${vCost.x},${vCost.y} ${vTime.x},${vTime.y}`}
-        fill={triFill}
+        fill="transparent"
         stroke={triStroke}
         strokeWidth={0.9}
       />
@@ -185,7 +195,8 @@ export function GoldenTriangleControl({
         onKeyDown={onThumbKeyDown}
         style={{ cursor: "grab", outline: "none" }}
       />
-    </svg>
+      </svg>
+    </div>
   );
 
   const readout = (

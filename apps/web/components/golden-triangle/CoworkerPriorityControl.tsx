@@ -1,75 +1,88 @@
 "use client";
-// EP-GOLDEN-TRIANGLE Slice 2/4 — a small posture area for the AI coworker header.
-// A balance-coloured chip (green centred → yellow → red as axes get starved) opens
-// the compact control. It LOADS the saved platform (WWMD) default so the chip shows
-// what actually governs AI work, and SAVES edits back via the same server action as
-// the /platform/ai/priority page — so the two surfaces stay in sync. Saving is
-// view_platform-gated server-side; a non-admin simply sees "Couldn't save".
-import { useEffect, useState } from "react";
+// EP-GOLDEN-TRIANGLE — the per-coworker priority chip for the AI coworker header.
+// Compact at rest (a small colour-graded triangle glyph + label), it expands to
+// the full control on click and AUTO-COLLAPSES on click-away / Done — replacing
+// the model + effort pickers with one higher-level control. It loads and saves
+// THIS coworker's own posture (per-agent), so each coworker remembers its
+// priority and that posture tunes its runs.
+import { useEffect, useRef, useState } from "react";
 
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 
-import { getGoldenTrianglePlatformDefault, saveGoldenTrianglePlatformDefault } from "@/lib/actions/golden-triangle";
+import { getCoworkerGoldenTrianglePosture, saveCoworkerGoldenTrianglePosture } from "@/lib/actions/golden-triangle";
 
 import { GoldenTriangleControl } from "./GoldenTriangleControl";
-import { PRESET_META, balanceState, preferenceFromPreset } from "./posture-display";
+import { GoldenTriangleGradient } from "./GoldenTriangleGradient";
+import { PRESET_META, preferenceFromPreset } from "./posture-display";
 
-export function CoworkerPriorityControl() {
+export function CoworkerPriorityControl({ agentId }: { agentId: string }) {
   const [open, setOpen] = useState(false);
   const [pref, setPref] = useState<GoldenTrianglePreference>(preferenceFromPreset("balanced"));
-  const [saved, setSaved] = useState<"idle" | "saved" | "error">("idle");
-  const [pending, setPending] = useState(false);
+  const savedRef = useRef<string>(JSON.stringify(preferenceFromPreset("balanced")));
+  const rootRef = useRef<HTMLDivElement>(null);
+  const prefRef = useRef(pref);
+  prefRef.current = pref;
 
-  // Reflect the active platform default (fail-open: stay on Balanced if it can't load).
   useEffect(() => {
     let alive = true;
-    getGoldenTrianglePlatformDefault()
+    getCoworkerGoldenTrianglePosture(agentId)
       .then((p) => {
-        if (alive && p) setPref(p);
+        if (alive && p) {
+          setPref(p);
+          savedRef.current = JSON.stringify(p);
+        }
       })
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, []);
+  }, [agentId]);
 
-  const balance = balanceState(pref.qualityWeight, pref.costWeight, pref.timeWeight);
   const activeLabel = pref.preset === "custom" ? "Custom" : PRESET_META[pref.preset].label;
-  const color = `var(${balance.token})`;
 
-  function onChange(next: GoldenTrianglePreference) {
-    setPref(next);
-    setSaved("idle");
-  }
-
-  async function save() {
-    setPending(true);
-    setSaved("idle");
-    try {
-      const res = await saveGoldenTrianglePlatformDefault(pref);
-      setSaved(res.ok ? "saved" : "error");
-    } catch {
-      setSaved("error");
-    } finally {
-      setPending(false);
+  function close() {
+    setOpen(false);
+    const cur = JSON.stringify(prefRef.current);
+    if (cur !== savedRef.current) {
+      savedRef.current = cur;
+      // Persist this coworker's own posture; fail-open (non-admins simply can't save).
+      saveCoworkerGoldenTrianglePosture(agentId, prefRef.current).catch(() => {});
     }
   }
 
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) close();
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") close();
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   return (
-    <div style={{ position: "relative" }} onMouseDown={(e) => e.stopPropagation()}>
+    <div ref={rootRef} style={{ position: "relative" }} onMouseDown={(e) => e.stopPropagation()}>
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          setOpen((o) => !o);
+          if (open) close();
+          else setOpen(true);
         }}
         aria-expanded={open}
         aria-haspopup="dialog"
-        title={`Priority for AI work: ${activeLabel} — ${balance.label}. Click to balance cost, quality and time.`}
+        title={`Priority for this coworker: ${activeLabel}. Click to balance cost, quality and time — it tunes how this coworker works.`}
         style={{
           display: "inline-flex",
           alignItems: "center",
-          gap: 5,
+          gap: 6,
           fontSize: 9,
           textTransform: "uppercase",
           letterSpacing: "0.08em",
@@ -77,21 +90,24 @@ export function CoworkerPriorityControl() {
           background: "transparent",
           border: "1px solid var(--dpf-border)",
           borderRadius: 999,
-          padding: "2px 6px",
+          padding: "2px 7px 2px 4px",
           cursor: "pointer",
           lineHeight: 1.2,
         }}
       >
-        <span
-          style={{ width: 8, height: 8, borderRadius: "50%", background: color, flex: "0 0 auto" }}
-          aria-hidden="true"
-        />
+        <span style={{ width: 16, height: 14, flex: "0 0 auto", display: "inline-block" }} aria-hidden="true">
+          <GoldenTriangleGradient
+            qualityWeight={pref.qualityWeight}
+            costWeight={pref.costWeight}
+            timeWeight={pref.timeWeight}
+          />
+        </span>
         Priority: {activeLabel}
       </button>
       {open && (
         <div
           role="dialog"
-          aria-label="Set work priority"
+          aria-label="Set this coworker's priority"
           style={{
             position: "absolute",
             top: "calc(100% + 8px)",
@@ -107,16 +123,15 @@ export function CoworkerPriorityControl() {
         >
           <GoldenTriangleControl
             value={pref}
-            onChange={onChange}
+            onChange={setPref}
             compact
             taskClass="conversation"
-            authorityScopeKind="wwmd"
+            authorityScopeKind="wsid"
           />
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 12px 12px" }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", padding: "0 12px 12px" }}>
             <button
               type="button"
-              onClick={save}
-              disabled={pending}
+              onClick={close}
               style={{
                 fontSize: 12,
                 fontWeight: 500,
@@ -124,15 +139,12 @@ export function CoworkerPriorityControl() {
                 background: "var(--dpf-surface-2)",
                 border: "1px solid var(--dpf-border)",
                 borderRadius: 6,
-                padding: "4px 10px",
-                cursor: pending ? "default" : "pointer",
-                opacity: pending ? 0.5 : 1,
+                padding: "4px 12px",
+                cursor: "pointer",
               }}
             >
-              {pending ? "Saving…" : "Save as default"}
+              Done
             </button>
-            {saved === "saved" && <span style={{ fontSize: 11, color: "var(--dpf-success)" }}>Saved</span>}
-            {saved === "error" && <span style={{ fontSize: 11, color: "var(--dpf-error)" }}>Couldn’t save</span>}
           </div>
         </div>
       )}

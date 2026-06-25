@@ -232,3 +232,38 @@ export function balanceState(qualityWeight: number, costWeight: number, timeWeig
 export function isAxisStarved(b: BalanceState, axis: "Quality" | "Cost" | "Time"): boolean {
   return b.starved.includes(axis);
 }
+
+// EP-GOLDEN-TRIANGLE — per-axis health colour for the gradient triangle.
+// A single axis weight maps to a red→yellow→green ramp: starved (0) is red, a
+// fair/­balanced share (~0.42) is yellow, a dominant axis (→1) is green. Pure +
+// deterministic so it can be unit-tested and reused by the canvas renderer.
+export type PostureRGB = [number, number, number];
+
+const RAMP_RED: PostureRGB = [239, 68, 68];
+const RAMP_YELLOW: PostureRGB = [234, 179, 8];
+const RAMP_GREEN: PostureRGB = [34, 197, 94];
+const RAMP_MID = 0.42; // weight that reads as pure yellow (centre ≈ 0.33, edge ≈ 0.5 both read yellow-ish)
+
+function mixRGB(a: PostureRGB, b: PostureRGB, t: number): PostureRGB {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+/** Map one axis weight (0–1) to its health colour on the red→yellow→green ramp. */
+export function postureAxisColor(weight: number): PostureRGB {
+  const w = Math.max(0, Math.min(1, weight));
+  return w <= RAMP_MID ? mixRGB(RAMP_RED, RAMP_YELLOW, w / RAMP_MID) : mixRGB(RAMP_YELLOW, RAMP_GREEN, (w - RAMP_MID) / (1 - RAMP_MID));
+}
+
+/** The blended colour at the selected point — the barycentric mix of the three
+ *  vertex colours, used for the collapsed chip glyph/dot. */
+export function postureBlendColor(qualityWeight: number, costWeight: number, timeWeight: number): PostureRGB {
+  const s = qualityWeight + costWeight + timeWeight || 1;
+  const q = qualityWeight / s, c = costWeight / s, t = timeWeight / s;
+  const Vq = postureAxisColor(q), Vc = postureAxisColor(c), Vt = postureAxisColor(t);
+  return [q * Vq[0] + c * Vc[0] + t * Vt[0], q * Vq[1] + c * Vc[1] + t * Vt[1], q * Vq[2] + c * Vc[2] + t * Vt[2]];
+}
+
+/** `rgb(...)` string for inline styles. */
+export function postureRgbCss(c: PostureRGB): string {
+  return `rgb(${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])})`;
+}
