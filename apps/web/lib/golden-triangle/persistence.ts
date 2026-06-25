@@ -131,11 +131,30 @@ export async function getEffectiveGoldenTrianglePosture(
 
 const PER_AGENT_KEY = "goldenTrianglePerAgent";
 
+/**
+ * Guard the agentId before it is used as an object property name, so a hostile
+ * value can never inject into Object.prototype (CWE-915 / js/remote-property-
+ * injection). Rejects the prototype-pollution keys outright and constrains the
+ * shape to the real agentId charset (e.g. "build-specialist", "coo").
+ */
+function isSafeAgentKey(agentId: string): boolean {
+  return (
+    typeof agentId === "string" &&
+    agentId.length > 0 &&
+    agentId.length <= 128 &&
+    agentId !== "__proto__" &&
+    agentId !== "prototype" &&
+    agentId !== "constructor" &&
+    /^[A-Za-z0-9_.:-]+$/.test(agentId)
+  );
+}
+
 /** Read a coworker's own saved posture, or null if it has none. Fail-open. */
 export async function getAgentGoldenTrianglePosture(
   agentId: string,
   db?: GoldenTrianglePersistenceClient,
 ): Promise<GoldenTrianglePreference | null> {
+  if (!isSafeAgentKey(agentId)) return null;
   const client = db ?? (prisma as unknown as GoldenTrianglePersistenceClient);
   try {
     const row = await client.decisionPerspectiveProfile.findFirst({
@@ -157,6 +176,7 @@ export async function setAgentGoldenTrianglePosture(
   preference: GoldenTrianglePreference,
   db?: GoldenTrianglePersistenceClient,
 ): Promise<boolean> {
+  if (!isSafeAgentKey(agentId)) return false;
   const client = db ?? (prisma as unknown as GoldenTrianglePersistenceClient);
   try {
     const row = await client.decisionPerspectiveProfile.findFirst({
