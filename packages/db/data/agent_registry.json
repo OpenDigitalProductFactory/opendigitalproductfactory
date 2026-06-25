@@ -2795,6 +2795,174 @@
       }
     },
     {
+      "agent_id": "AGT-SOC-TRIAGE",
+      "agent_name": "soc-triage-analyst",
+      "tier": "specialist",
+      "value_stream": "operate",
+      "capability_domain": "AI SOC Tier-1 analyst (EP-SOVEREIGN-SOC). Consumes Detections; enriches with asset/identity/threat-intel context; assigns a verdict (true/false-positive), severity, and confidence; opens and updates SecurityCases; closes low-risk cases. Reviews before closing critical detections. The verdict is an evidence conclusion, never a kernel vote.",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 2,
+      "delegates_to": [
+        "AGT-SOC-INVESTIGATOR"
+      ],
+      "escalates_to": "AGT-SOC-IR-LEAD",
+      "it4it_sections": [
+        "6.1.5 Service Operations FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": [
+          "siem_read",
+          "siem_investigate",
+          "registry_read"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-SOC-INVESTIGATOR",
+      "agent_name": "soc-investigator",
+      "tier": "specialist",
+      "value_stream": "operate",
+      "capability_domain": "AI SOC Tier-2 analyst (EP-SOVEREIGN-SOC). Deep investigation on escalated cases: pivots across SecurityEvents, builds the incident timeline, scopes blast radius, maps ATT&CK, recommends a verdict. Drafts case evidence and response proposals only — never executes.",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-SOC-IR-LEAD",
+      "it4it_sections": [
+        "6.1.5 Service Operations FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": [
+          "siem_read",
+          "siem_investigate",
+          "siem_tune",
+          "registry_read"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-SOC-HUNTER",
+      "agent_name": "soc-threat-hunter",
+      "tier": "specialist",
+      "value_stream": "operate",
+      "capability_domain": "AI SOC Tier-3 threat hunter (EP-SOVEREIGN-SOC). Proactive, hypothesis-driven hunts across the estate from indicators, incidents, and detection-rule gaps. Proposes new detection content; propose-only, never acts.",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-SOC-IR-LEAD",
+      "it4it_sections": [
+        "6.1.5 Service Operations FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": [
+          "siem_read",
+          "siem_tune",
+          "registry_read"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-SOC-IR-LEAD",
+      "agent_name": "soc-incident-commander",
+      "tier": "specialist",
+      "value_stream": "operate",
+      "capability_domain": "AI SOC incident commander (EP-SOVEREIGN-SOC). Coordinates containment/remediation: drafts RemediationProposals on the proposal-not-action rail, owns the SecurityCase, manages customer communications. Never executes a response on a customer estate unilaterally — the customer approves and the customer's own runner acts.",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 2,
+      "delegates_to": [
+        "AGT-SOC-TRIAGE",
+        "AGT-SOC-INVESTIGATOR",
+        "AGT-SOC-HUNTER"
+      ],
+      "escalates_to": "AGT-ORCH-000",
+      "it4it_sections": [
+        "6.1.5 Service Operations FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": [
+          "siem_read",
+          "siem_investigate",
+          "incident_respond",
+          "registry_read"
+        ]
+      }
+    },
+    {
       "agent_id": "AGT-WS-PLATFORM",
       "agent_name": "platform-engineer",
       "tier": "specialist",

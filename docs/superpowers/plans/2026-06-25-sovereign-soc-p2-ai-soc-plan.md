@@ -24,8 +24,9 @@ The differentiator: AI Coworkers perform the SOC analyst labor — triage, inves
 - Grants `siem_read` / `siem_investigate` / `siem_tune` / `incident_respond` in `agent-grants.ts` (+ `TOOL_TO_GRANTS`).
 - Tools (writes are `coworkerArtifact` draft/proposal, never direct estate mutation): `query_security_events`, `query_detections`, `get_security_case`, `open_security_case`, `update_security_case`, `propose_response`. Handlers in `mcp-tools.ts`.
 
-### P2d — AGT-SOC-* roster
-- Seed `AGT-SOC-TRIAGE` / `-INVESTIGATOR` / `-HUNTER` / `-IR-LEAD` in `agent_registry.json` (`value_stream=operate`, `sensitivity=confidential`, `delegatesTo`/`escalatesTo` graph, `hitlTierDefault`, the siem grants). Per §7.2: triage drafts cases only; IR-lead proposes response, never executes on a customer estate.
+### P2d — AGT-SOC-* roster (DONE)
+- Seeded `AGT-SOC-TRIAGE` / `-INVESTIGATOR` / `-HUNTER` / `-IR-LEAD` in `packages/db/data/agent_registry.json` (`value_stream=operate`, `human_supervisor_id=HR-500`, the delegate/escalate graph below, `hitl_tier_default`, the siem grants). Per §7.2: triage drafts/closes-low-risk cases (hitl 2, review-before-close-critical); investigator drafts evidence/proposals only; hunter propose-only; IR-lead drafts RemediationProposals + owns the case, never executes on a customer estate (hitl 2). Authority graph: triage→investigator→IR-lead; hunter→IR-lead; IR-lead escalates to AGT-ORCH-000. Registry parses (67 agents), refs consistent, agent seed guards 7/7.
+- The `siem_*` grants the roster references resolve to no tools until **P2c** defines them (harmless — the coworkers exist but can't act on security data until the tool surface lands).
 
 ## Governance contract (§6, §7.3)
 The verdict (`SecurityCase.verdict`) is an evidence conclusion from investigation. The kernel governs the ACTION decisions (close vs escalate, propose vs keep investigating, auto-approve-reversible vs require-human, may-an-MSP-action-cross-a-federation-boundary) over the registered dimensions — never the analytical verdict. This is what keeps `principle_decide` non-degenerate.
