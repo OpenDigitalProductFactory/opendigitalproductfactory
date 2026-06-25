@@ -75,7 +75,7 @@ export async function saveGoldenTrianglePlatformDefault(
 ): Promise<{ ok: boolean }> {
   await requirePlatformAdmin();
   const ok = await setGoldenTrianglePosture({ kind: "platform" }, preference);
-  if (ok) revalidatePath("/platform/ai/priority");
+  if (ok) revalidatePath("/platform/ai/assignments");
   return { ok };
 }
 
@@ -93,7 +93,7 @@ export async function saveGoldenTriangleOrgDefault(
   const org = await prisma.organization.findFirst({ select: { id: true } });
   if (!org) throw new Error("No organization found");
   const ok = await setGoldenTrianglePosture({ kind: "organization", organizationId: org.id }, preference);
-  if (ok) revalidatePath("/platform/ai/priority");
+  if (ok) revalidatePath("/platform/ai/assignments");
   return { ok };
 }
 

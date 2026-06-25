@@ -18,10 +18,13 @@ The triangle shades by balance: **green** when the three axes are centred, throu
 
 ## Surfaces
 
-- **`/platform/ai/priority`** — the full control (preview).
-- **AI coworker dialog header** — `CoworkerPriorityControl`, a compact chip + popover.
+- **`/platform/ai/assignments`** (the unified **"Priority & Models"** surface) — the full platform-default
+  control, embedded on top of the advanced per-coworker guardrails. `/platform/ai/priority` redirects here.
+- **AI coworker composer** — `CoworkerPriorityDock`, a compact chip + popover that sets the per-coworker posture.
 
-Per-scope persistence (Slice 4) and the receipt/outcome view (Slice 3b) are not wired yet; state is view-local.
+Per-scope persistence (Slice 4) and the receipt/outcome view (Slice 3b) are wired: posture is stored
+migration-free on the platform `DecisionPerspectiveProfile.autonomyPolicy`, and outcomes render at
+`/platform/ai/priority/outcomes`.
 
 ## Ease-of-use stance
 

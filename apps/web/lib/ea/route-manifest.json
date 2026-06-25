@@ -4614,7 +4614,8 @@
         "priority"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/platform/ai/priority/page.tsx"
+      "file": "apps/web/app/(shell)/platform/ai/priority/page.tsx",
+      "redirectTo": "/platform/ai/assignments"
     },
     {
       "routePath": "/platform/ai/priority/outcomes",

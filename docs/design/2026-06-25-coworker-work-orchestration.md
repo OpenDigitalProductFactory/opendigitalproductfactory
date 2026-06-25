@@ -81,3 +81,35 @@ backstop, instead of hunting across Priority + Assignments (+ scattered delibera
    full deliberation engine, mirroring the build precedent.
 5. **Surface consolidation** *(UI)* — fold Assignments into the Priority surface as the Advanced
    guardrail layer; show the rigor ladder on the triangle.
+
+## Implementation status — 2026-06-25
+
+All five slices shipped (plus the autonomous half of slice 4):
+
+- **Slice 1 — compiler ladder** ✅ `#2341`. `compile.ts` emits `deliberationPattern`
+  none → `review` → `debate` (debate at `qualityWeight ≥ 0.85`); Balanced inert.
+- **Slice 2 — reconcile the overlap** ✅ `#2341`. Posture owns `budgetClass` in `routed-inference.ts`;
+  tier floor max-merges. No more silent override.
+- **Slice 3 — leverage review (interactive)** ✅ `#2344`, unified at `executeAutonomousAgenticLoop` `#2347`.
+- **Slice 4 — leverage review/debate** ✅. The unified seam (`#2347`) is the SINGLE path for chat
+  *and* autonomous; the debate pass (`#2353`) gives a `debate` posture a real debate (steelman
+  for/against → synthesize), distinct from review. **Mechanism note:** the synchronous inline pass
+  is the leverage for *coworker turns* (a coworker reply has no build artifact for the multi-agent
+  `startDeliberation` engine to debate, and that engine runs 10–30 min — unsuited to a chat turn);
+  the full engine stays the *build-phase* mechanism.
+- **Slice 5 — surface consolidation** ✅ *(this change)*. The everyday Cost/Quality/Time priority
+  and the advanced per-coworker model guardrails are now **one surface**: `/platform/ai/assignments`,
+  re-titled **"Priority & Models"** — everyday priority panel on top, advanced guardrails below.
+  The standalone **Priority** tab is gone and `/platform/ai/priority` **redirects** here.
+
+  **Host decision — Assignments-as-host (not Priority-as-host).** The design sketch said "fold
+  Assignments into the Priority surface", but the realized direction is the reverse, for three
+  concrete reasons: (1) the Assignments page already carries the heavy server data (model-config
+  table, authority bindings, capability-gap detection) — embedding the light priority *panel* there
+  moves far less code than relocating all of that into the Priority page; (2) `/platform/ai/model-assignment`
+  **already** `permanentRedirect`s to `/assignments`, establishing it as the canonical model-tuning
+  URL — Priority joining it is consistent; (3) redirect-only routes in this codebase carry neither a
+  nav subItem nor a `PortalNavRecord` (the model-assignment precedent), so `/priority` collapses to a
+  clean shim. The doctrine is unchanged — **one surface, two layers** (everyday priority + advanced
+  guardrails); only the hosting URL differs from the sketch. Net: `AI Operations` drops from 9 tabs
+  to 8, and a coworker's work is managed from the **triangle at its composer** + this one backstop.

@@ -8,7 +8,7 @@
 //     so dispatch proceeds exactly as it does today.
 //   • Balanced-inert — a Balanced (no-op) posture produces no overrides and
 //     returns null, so merging this in is byte-identical to flag-off until a
-//     non-Balanced default is explicitly chosen on /platform/ai/priority.
+//     non-Balanced default is explicitly chosen on the Priority & Models surface.
 // It only FEEDS routing (the compiler never re-implements routing).
 import { compileGoldenTrianglePolicy } from "./compile";
 import { applyPostureToRouteContext, type AppliedPosture } from "./compose";

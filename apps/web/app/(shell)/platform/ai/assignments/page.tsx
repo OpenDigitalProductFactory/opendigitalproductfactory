@@ -1,10 +1,17 @@
 // apps/web/app/(shell)/platform/ai/assignments/page.tsx
-// EP-INF-012: Admin UI for AI Coworker Model Assignment
+// EP-INF-012: Admin UI for AI Coworker Model Assignment.
+// EP-GOLDEN-TRIANGLE surface consolidation: this is now the single "Coworker
+// Priority & Models" surface. It hosts BOTH the everyday Cost/Quality/Time
+// priority (the platform default — formerly its own /platform/ai/priority tab,
+// which now redirects here) and the advanced per-coworker guardrails below it.
+// One surface to tune how coworkers work, instead of two competing tabs.
 
 import Link from "next/link";
 
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
+import { GoldenTrianglePriorityPanel } from "@/components/golden-triangle/GoldenTrianglePriorityPanel";
+import { getGoldenTrianglePosture } from "@/lib/golden-triangle/persistence";
 import { BindingBootstrapPanel } from "@/components/platform/authority/BindingBootstrapPanel";
 import { BootstrapBindingsButton } from "@/components/platform/authority/BootstrapBindingsButton";
 import { BindingDetailDrawer } from "@/components/platform/authority/BindingDetailDrawer";
@@ -132,6 +139,10 @@ export default async function AssignmentsPage({ searchParams }: Props) {
   ]);
   const bindingFilterOptions = getAuthorityBindingFilterOptions(bindingRecords);
 
+  // EP-GOLDEN-TRIANGLE: the everyday Cost/Quality/Time platform default, seeded
+  // into the priority panel embedded at the top of this surface. Fail-open.
+  const platformPosture = await getGoldenTrianglePosture({ kind: "platform" }).catch(() => null);
+
   // Build provider name lookup
   const providerNames: Record<string, string> = {};
   for (const p of providers) {
@@ -220,34 +231,56 @@ export default async function AssignmentsPage({ searchParams }: Props) {
 
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>
-          AI Coworker Model Assignment
+          AI Coworker Priority &amp; Models
         </h1>
         <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2, maxWidth: 760, lineHeight: 1.5 }}>
-          Advanced guardrails per coworker: a minimum-quality <strong>floor</strong>, an optional pinned model, and
-          capability requirements. For the everyday Cost / Quality / Time priority — which a coworker can raise{" "}
-          <em>above</em> this floor — use{" "}
-          <Link href="/platform/ai/priority" style={{ color: "var(--dpf-accent)" }}>
-            Priority
-          </Link>{" "}
-          (or the triangle on each coworker). Changes take effect on the next routing decision.
+          One place to tune how AI coworkers work. Set the everyday Cost / Quality / Time priority — the platform
+          default every coworker inherits — then set the hard per-coworker guardrails below: a minimum-quality{" "}
+          <strong>floor</strong>, an optional pinned model, and capability requirements. Each coworker can raise its
+          own priority <em>above</em> the floor from the triangle at its composer. Changes take effect on the next
+          routing decision.
         </p>
       </div>
 
-      <div
-        style={{
-          background: "var(--dpf-surface-1)",
-          borderRadius: 8,
-          border: "1px solid var(--dpf-border)",
-          padding: 16,
-        }}
-      >
-        <AgentModelAssignmentTable
-          agents={agents}
-          providers={providerList}
-          canWrite={canWrite}
-          capabilityGapCount={capabilityGapAgents.length}
-        />
-      </div>
+      {/* Everyday priority — the platform default (Cost / Quality / Time). */}
+      <section className="space-y-3">
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Everyday priority</h2>
+            <p className="text-xs text-[var(--dpf-muted)]">
+              The platform-default Cost / Quality / Time posture. The platform compiles it into the right model,
+              effort, verification, and review/debate — shown below in plain language.
+            </p>
+          </div>
+          <Link
+            href="/platform/ai/priority/outcomes"
+            style={{ flex: "0 0 auto", fontSize: 12, color: "var(--dpf-accent)", whiteSpace: "nowrap", marginTop: 2 }}
+          >
+            See outcomes →
+          </Link>
+        </div>
+        <GoldenTrianglePriorityPanel initial={platformPosture ?? undefined} />
+      </section>
+
+      {/* Advanced guardrails — the hard per-coworker floor / pinned model. */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Advanced guardrails per coworker</h2>
+        <div
+          style={{
+            background: "var(--dpf-surface-1)",
+            borderRadius: 8,
+            border: "1px solid var(--dpf-border)",
+            padding: 16,
+          }}
+        >
+          <AgentModelAssignmentTable
+            agents={agents}
+            providers={providerList}
+            canWrite={canWrite}
+            capabilityGapCount={capabilityGapAgents.length}
+          />
+        </div>
+      </section>
 
       <section className="space-y-3">
         <div>
