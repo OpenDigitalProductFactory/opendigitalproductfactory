@@ -246,7 +246,15 @@ async function prepareRoute(
       requiresCodeExecution: options?.requiresCodeExecution,
       requiresWebSearch: options?.requiresWebSearch,
       requiresComputerUse: options?.requiresComputerUse,
-      budgetClass: options?.budgetClass ?? posture?.routeContext.budgetClass,
+      // EP-GOLDEN-TRIANGLE reconciliation: the posture (the everyday Cost/Quality
+      // lever) OWNS budgetClass. AgentModelConfig.budgetClass (which defaults to
+      // "balanced" and is always sent) applies only as the fallback when no
+      // non-Balanced posture is set — so dragging the triangle toward Cost or
+      // Quality is never silently overridden by the Assignments default. (Tier is
+      // already reconciled: AgentModelConfig.minimumTier acts as a floor via the
+      // per-dimension max-merge in inferContract, which the posture can raise but
+      // not drop below. See docs/design/2026-06-25-coworker-work-orchestration.md.)
+      budgetClass: posture?.routeContext.budgetClass ?? options?.budgetClass,
       requiredModelClass: options?.requiredModelClass,
       // EP-MODEL-TIER-ROUTING: a "local"-tier call forces local_only (keep
       // small/simple work on-box) even when the global switch is off; "robust"
