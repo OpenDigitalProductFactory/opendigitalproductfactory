@@ -31,6 +31,11 @@ export const GOLDEN_TRIANGLE_PRESET_VERSION = "presets@1";
 
 const TIER_RANK: Record<QualityTier, number> = { basic: 0, adequate: 1, strong: 2, frontier: 3 };
 
+// The rigor ladder's top rung: a Quality weight at/above this drags past "review"
+// (Assured) into a "debate" (multi-perspective) deliberation. Kept high so only an
+// extreme, deliberate Quality posture buys the heaviest pass.
+const QUALITY_DEBATE_FLOOR = 0.85;
+
 function tierRank(t: QualityTier): number {
   return TIER_RANK[t];
 }
@@ -104,6 +109,15 @@ function deriveCustomPolicy(p: GoldenTrianglePreference): BasePolicy {
   const strong = weight >= 0.55;
 
   if (axis === "quality") {
+    // The top rung of the rigor ladder: an extreme Quality posture buys not just a
+    // frontier model at max effort but a DEBATE pass (multi-perspective), above the
+    // single review the Assured preset buys. (See the work-orchestration design.)
+    if (weight >= QUALITY_DEBATE_FLOOR) {
+      return {
+        postureOverride: { budgetClass: "quality_first", reasoningDepth: "high", effort: "max", minimumTier: "frontier" },
+        orchestrationBudget: { verificationDepth: "deep", retryBudget: 3, deliberationPattern: "debate" },
+      };
+    }
     return strong
       ? cloneBase(PRESET_POLICIES.assured)
       : {

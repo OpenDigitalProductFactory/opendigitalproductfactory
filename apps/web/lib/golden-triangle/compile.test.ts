@@ -101,6 +101,22 @@ describe("compileGoldenTrianglePolicy — custom positions", () => {
     expect(out.orchestrationBudget).toEqual({});
   });
 
+  it("extreme quality lean (0.05/0.9/0.05) → debate + max effort (top of the rigor ladder)", () => {
+    const out = compileGoldenTrianglePolicy(
+      input(pref("custom", { costWeight: 0.05, qualityWeight: 0.9, timeWeight: 0.05 })),
+    );
+    expect(out.postureOverride.effort).toBe("max");
+    expect(out.postureOverride.minimumTier).toBe("frontier");
+    expect(out.orchestrationBudget.deliberationPattern).toBe("debate");
+  });
+
+  it("strong-but-not-extreme quality (0.2/0.6/0.2) stays review, not debate", () => {
+    const out = compileGoldenTrianglePolicy(
+      input(pref("custom", { costWeight: 0.2, qualityWeight: 0.6, timeWeight: 0.2 })),
+    );
+    expect(out.orchestrationBudget.deliberationPattern).toBe("review");
+  });
+
   it("moderate quality lean (0.25/0.45/0.30) → strong tier, not frontier", () => {
     const out = compileGoldenTrianglePolicy(
       input(pref("custom", { costWeight: 0.25, qualityWeight: 0.45, timeWeight: 0.3 })),
