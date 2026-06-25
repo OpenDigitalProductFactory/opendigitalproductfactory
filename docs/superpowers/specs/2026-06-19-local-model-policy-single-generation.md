@@ -122,3 +122,29 @@ already-active runner).
 On the affected build host: removed `gemma4:12B` (qwen3-coder now serves chat +
 codegen), reconciled `.env`/`.host-profile.json` `selectedModel → ai/qwen3-coder`,
 unloaded resident models. VRAM 18 → 1.1 GB used; system RAM freed ~22 GB.
+
+## Addendum (2026-06-24): durable per-boot context re-assert
+
+The first-run context-raise above runs **once**. A Docker Desktop / DMR restart
+wipes DMR's per-model `context-size` override back to the model card default
+(qwen3-coder = 4096) and nothing re-asserts it — so the first restart silently
+drops every local *coworker* turn into `exceed_context_size_error` (a real turn
+is ~20–24k tokens; 4096 is ~6× too small). Observed live: the Scrum Master
+(`ops-coordinator`) failed with `request (24234 tokens) exceeds the available
+context size (4096 tokens)`, surfaced to the user as the honest "this coworker
+has more tools active than the local model can hold" message — which misreads a
+context regression as a tool-surface problem.
+
+Fix: the context-raise is extracted into `reconcileLocalModelContext()`
+([`apps/web/lib/inference/local-model-context-reconcile.ts`](../../../apps/web/lib/inference/local-model-context-reconcile.ts))
+and runs on **every** portal boot plus a 20-minute periodic net from
+`instrumentation.register()` (the boot call covers a Docker restart, which
+restarts the portal too; the interval covers a DMR-only restart while the portal
+stays up). It reads the TRUE served context from DMR's `_configure` endpoint —
+the `/v1/models` `context_window` is a static card value that always reports 4096
+and must not be trusted — and only POSTs when the override is genuinely below
+`RECOMMENDED_BUILD_CONTEXT_TOKENS`, so the steady state is two cheap GETs and zero
+writes. `bootstrap-first-run` now calls the same routine, so first-run and every
+restart converge on one target. Idempotent and best-effort: never throws, never
+blocks boot, and `ModelProfile.maxContextTokens` is kept in sync as the routing
+source of truth.

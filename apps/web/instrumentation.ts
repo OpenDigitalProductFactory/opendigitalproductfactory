@@ -877,6 +877,32 @@ export async function register() {
       setInterval(() => void reconcileStuckBackupRuns(), 20 * 60 * 1000);
     })();
 
+    // Self-heal the local model's served context window. A Docker Desktop / DMR
+    // restart wipes DMR's per-model `context-size` override back to the model
+    // card default (qwen3-coder = 4k), which silently overflows EVERY local
+    // coworker turn (exceed_context_size_error: request ~24k > n_ctx 4096). The
+    // first-run bootstrap raises it once; this re-asserts it on every boot (the
+    // common case: a Docker restart restarts the portal too) plus a periodic net
+    // (a DMR-only restart while the portal stays up). Idempotent + best-effort.
+    void (async () => {
+      const { reconcileLocalModelContext } = await import(
+        "@/lib/inference/local-model-context-reconcile"
+      );
+      const logCtx = (r: Awaited<ReturnType<typeof reconcileLocalModelContext>>) => {
+        if (r.status === "raised") {
+          console.log(
+            `[local-model-context] raised ${r.modelId} ${r.before ?? "unset"} → ${r.after} tokens`,
+          );
+        } else if (r.status === "deferred") {
+          console.warn(
+            `[local-model-context] raise deferred (${r.reason ?? "unknown"}); applies on next model load`,
+          );
+        }
+      };
+      logCtx(await reconcileLocalModelContext());
+      setInterval(() => void reconcileLocalModelContext().then(logCtx), 20 * 60 * 1000);
+    })();
+
     // Backfill the operational value stream (OVSM) EA view for any storefront
     // that completed setup before the #1798 generator was running on it — those
     // installs have a StorefrontConfig + archetype but no archetype_value_stream
