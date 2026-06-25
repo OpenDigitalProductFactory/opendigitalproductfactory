@@ -90,7 +90,7 @@ export async function reconcileSysmlProjections(
   const scheduledJobs = await runDomain("scheduledJobs", () => reconcileScheduledJobs({ db: opts.db }), SKIPPED);
   const it4itCoverage = await runDomain("it4itCoverage", () => reconcileIt4itCoverage({ db: opts.db }), SKIPPED);
   // SOC posture isolated like every other domain (EP-SOVEREIGN-SOC, composed with
-  // the #2385 fail-isolation): a security-extractor error can't blind the engine.
+  // the PR-2385 fail-isolation): a security-extractor error can't blind the engine.
   const securityPosture = await runDomain("securityPosture", () => reconcileSecurityPosture({ db: opts.db }), SKIPPED);
   return {
     mcpAuthority, coworkerAuthority, valueStreams, routes, navigation, codeStructure, processModels, skillToolchain,
