@@ -45,11 +45,16 @@ Extraction is incremental and **parity-preserving** — never a behavior change:
 
 [`deliberation-siem-pack`](../../apps/web/lib/mcp/packs/deliberation-siem-pack.ts) — the
 Deliberation + SIEM tools were the cleanest first extraction (already self-contained
-sibling modules with their own handlers). `mcp-tools.ts` now composes their definitions
-from the pack; their dispatch still runs through the existing switch cases (step 2 is the
-follow-up). `tool-registry.test.ts` proves: the pack bundles exactly those definitions, a
-handler exists per definition, the grant metadata matches `TOOL_TO_GRANTS`, and every pack
-tool is still present in the live `PLATFORM_TOOLS`.
+sibling modules with their own handlers). `mcp-tools.ts` now **fully** owns them through the
+pack: their definitions compose into `PLATFORM_TOOLS` via the registry, and their dispatch
+routes through `registry.getHandler(...)` (run right after the kernel gate, before the
+switch) — the eight inline switch cases and their handler imports are gone. The behaviour is
+identical: the kernel/commandment gate still runs first, the handlers are the same functions
+called with the same arguments, and grant gating is unchanged. `tool-registry.test.ts`
+proves the pack bundles exactly those definitions, a handler exists per definition, the
+grant metadata matches `TOOL_TO_GRANTS`, and every pack tool is still present in the live
+`PLATFORM_TOOLS`; `mcp-tools-{siem,deliberation}.test.ts` + `mcp-governed-execute.test.ts`
+keep the dispatch path honest.
 
 ## Next packs
 

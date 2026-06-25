@@ -36,20 +36,11 @@ import {
   DELIBERATION_STRATEGY_PROFILES,
   DELIBERATION_TRIGGER_SOURCES,
 } from "@/lib/deliberation/types";
-import { deliberateOnMcpHandler } from "@/lib/mcp-tools-deliberation";
-import {
-  querySecurityEventsHandler,
-  queryDetectionsHandler,
-  getSecurityCaseHandler,
-  openSecurityCaseHandler,
-  updateSecurityCaseHandler,
-  proposeDetectionTuningHandler,
-  proposeResponseHandler,
-} from "@/lib/mcp-tools-siem";
-// BI-ARCH-TOOLPACKS: deliberation + SIEM tool DEFINITIONS now compose from the
-// first scoped tool pack (the handlers above stay wired into the executeTool
-// switch; dispatch migrates onto the pack registry in a follow-up).
+// BI-ARCH-TOOLPACKS: deliberation + SIEM are fully owned by the first scoped tool
+// pack — their definitions compose into PLATFORM_TOOLS and their handlers dispatch
+// through the registry (no per-tool handler imports or switch cases here anymore).
 import { deliberationSiemPack } from "@/lib/mcp/packs/deliberation-siem-pack";
+import { composeToolPacks } from "@/lib/mcp/tool-registry";
 import {
   createLicenseReadinessIssue,
   saveLicensingInvestigationFinding,
@@ -440,8 +431,12 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 const WORK_CAPSULE_TOOL_ENUMS = workCapsuleToolEnums();
 const RUNTIME_COORDINATION_TOOL_ENUMS = runtimeCoordinationToolEnums();
 
+// Scoped tool packs compose into the registry; mcp-tools.ts is the thin layer
+// over them (definitions spread into PLATFORM_TOOLS below; dispatch in executeTool).
+const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack]);
+
 export const PLATFORM_TOOLS: ToolDefinition[] = [
-  ...deliberationSiemPack.definitions,
+  ...TOOL_PACK_REGISTRY.definitions,
   {
     name: "create_backlog_item",
     description: "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake). When triageOutcome=build, effortSize is required.",
@@ -5520,6 +5515,15 @@ export async function executeTool(
   // verdict === "allow" — fall through to the existing switch.
 
   try {
+  // BI-ARCH-TOOLPACKS: tools owned by a scoped pack dispatch through the registry
+  // (after the kernel gate above — same gating as any switch case). Packs migrate
+  // off the switch one domain at a time.
+  const packHandler = TOOL_PACK_REGISTRY.getHandler(toolName);
+  if (packHandler) {
+    // Match the switch cases exactly: return the handler promise unawaited so
+    // its rejection propagates the same way (not swallowed by the try/catch).
+    return packHandler(params, userId, context);
+  }
   switch (toolName) {
     case "dpf_test_kernel_refuse_probe": {
       // Test-only synthetic probe (Phase 9 live verification).
@@ -5539,30 +5543,6 @@ export async function executeTool(
         success: true,
         message: "probe tool body — should not be reached when gate is wired and DPF_TEST_MCP_REFUSE_PROBE=1",
       };
-    }
-    case "deliberate_on": {
-      return deliberateOnMcpHandler(params, userId, context);
-    }
-    case "query_security_events": {
-      return querySecurityEventsHandler(params, userId, context);
-    }
-    case "query_detections": {
-      return queryDetectionsHandler(params, userId, context);
-    }
-    case "get_security_case": {
-      return getSecurityCaseHandler(params, userId, context);
-    }
-    case "open_security_case": {
-      return openSecurityCaseHandler(params, userId, context);
-    }
-    case "update_security_case": {
-      return updateSecurityCaseHandler(params, userId, context);
-    }
-    case "propose_detection_tuning": {
-      return proposeDetectionTuningHandler(params, userId, context);
-    }
-    case "propose_response": {
-      return proposeResponseHandler(params, userId, context);
     }
     case "workbook_list_tables": {
       const { workbookListTablesTool } = await import("@/lib/workbooks/mcp-handlers");
