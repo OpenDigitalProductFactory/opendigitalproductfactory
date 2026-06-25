@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 508,
+  "routeCount": 509,
   "routes": [
     {
       "routePath": "/",
