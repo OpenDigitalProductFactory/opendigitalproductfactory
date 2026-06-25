@@ -1,7 +1,7 @@
 # Estate Patch Management — P0 implementation plan
 
 - **Date:** 2026-06-25
-- **Status:** In progress (slices 1–2a merged; projector core + Prisma binding landed; live feed + scheduled job next)
+- **Status:** Read-only posture pipeline complete (feed → projector → binding → daily sweep wired); posture UX next
 - **Spec:** `docs/superpowers/specs/2026-06-24-estate-patch-management-design.md`
 - **Epic:** `EP-PATCH-MANAGEMENT`
 - **Backlog:** BI-CAA0043C (version-intel feed), BI-489A8BB4 (assessment projector), BI-676A7960 (identity convergence), BI-020EE402 (posture UX)
@@ -29,9 +29,9 @@ This is the shared brain for both BI-CAA0043C and BI-489A8BB4 and is independent
 Adapter interfaces + implementations that produce `assessPatchState` inputs, each gated by the Tool Evaluation Pipeline before embed:
 - **`osv` adapter — LANDED (pure):** `packages/db/src/patch/osv-adapter.ts` turns OSV vuln objects into `AdvisoryInput` (severity band, lowest fixed version, CVE/GHSA aliases), generalized beyond npm to any ecosystem. Mirrors the proven shape in `scripts/sbom/scan-dependencies.mjs`.
 - **`cisa-kev` adapter — LANDED (pure):** `parseKevCatalog` + KEV enrichment in `osvVulnToAdvisory` mark an advisory exploited when its CVE alias is in the catalog.
-- `native-manager` adapter — the Edge Node's on-host "installed → available" output (`winget show`, `apt-cache policy`, `dnf check-update`, `brew outdated`). **Remaining — depends on the Edge Node software-inventory capability.**
-- `eol` adapter — end-of-life dates. **Remaining.**
-- Live fetch (OSV `querybatch` + `/vulns/{id}`, KEV catalog download) + scheduled projector entry in `SCHEDULED_JOB_CATALOG`. **Remaining — runtime-bound, verified via the sandbox.**
+- **Live OSV + KEV fetch + provider — LANDED:** `apps/web/lib/patch/osv-client.ts` (OSV `/v1/query` per package), `kev-client.ts` (CISA KEV catalog), `ecosystem-map.ts` (package-manager → OSV ecosystem, null for OS managers needing distro context), `patch-intel-provider.ts` (`createOsvPatchIntelProvider` — injected fetch, unit-tested; returns null rather than fabricate when OSV is unreachable/empty). v1 yields **vulnerability + KEV** findings for language ecosystems; OS-package version-gaps + EOL await the native-manager adapter.
+- **Scheduled job — LANDED:** `apps/web/lib/queue/functions/patch-assessment-sweep.ts` (`ops/patch-assessment-sweep`, daily 05:00) runs `runEstatePatchAssessment` behind the quiescence gate; registered in `scheduledFunctions` + `SCHEDULED_JOB_CATALOG` (parity-test guarded). Exercises the real DB writes end-to-end on the deployed install — the self-upgrade is the integration test.
+- `native-manager` adapter (Edge Node on-host "installed → available") + `eol` adapter — **Remaining**, depend on the Edge Node software-inventory capability.
 
 ### Slice 3 — Assessment projector → AssuranceFinding (BI-489A8BB4)
 - **Pure core — LANDED:** `packages/db/src/patch/patch-projector.ts`. A `PatchAssessmentStore` port + `runPatchAssessment` orchestration (read evidence → `assessEvidence` → `evidenceToPatchFinding` → upsert actionable findings → resolve now-clean ones → posture summary), plus `applyViaForPackageManager`. Decoupled from Prisma so the whole read→assess→upsert→resolve flow is unit-tested against an in-memory fake store. Emits the AssuranceFinding upsert shape (`findingKind` ∈ patch-gap|vulnerability|end-of-life; `adapterKey` patch-intel|osv|cisa-kev; stable `findingKey` = `patch:<evidenceKey>`). **No new findings table** — composes the Assurance Ledger (`schema.prisma:4968`).
