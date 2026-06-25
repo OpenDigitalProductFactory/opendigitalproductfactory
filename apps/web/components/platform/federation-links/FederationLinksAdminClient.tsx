@@ -21,6 +21,10 @@ export interface FederationLinkRow {
   peerOrganizationRef: string | null;
   approvedLocal: boolean;
   approvedPeer: boolean;
+  /** Slices that cross this link to the peer (the egress-enforced projection). */
+  sharedSlices: string[];
+  /** Retention class the peer applies to what we share. */
+  sharedRetention: string;
   createdAtISO: string;
 }
 
@@ -256,6 +260,11 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
       </div>
 
       {/* Links table */}
+      <p className="text-xs text-[var(--dpf-muted)]">
+        <span className="font-medium text-[var(--dpf-text)]">Shared scope</span> is exactly what crosses each
+        link to the peer — the minimum-necessary projection enforced at egress. Nothing outside it leaves this
+        deployment.
+      </p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -264,6 +273,7 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
               <th className="p-2 text-left text-[var(--dpf-muted)]">Role</th>
               <th className="p-2 text-left text-[var(--dpf-muted)]">State</th>
               <th className="p-2 text-left text-[var(--dpf-muted)]">Approvals</th>
+              <th className="p-2 text-left text-[var(--dpf-muted)]">Shared scope</th>
               <th className="p-2 text-left text-[var(--dpf-muted)]">Peer URL</th>
               <th className="p-2 text-left text-[var(--dpf-muted)]">Actions</th>
             </tr>
@@ -271,7 +281,7 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-4 text-center text-[var(--dpf-muted)]">
+                <td colSpan={7} className="p-4 text-center text-[var(--dpf-muted)]">
                   No federation links yet. Invite a peer above, or accept an invitation from one.
                 </td>
               </tr>
@@ -290,6 +300,20 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
                 </td>
                 <td className="p-2 text-xs text-[var(--dpf-muted)]">
                   ours {row.approvedLocal ? "✓" : "—"} · peer {row.approvedPeer ? "✓" : "—"}
+                </td>
+                <td className="p-2 text-xs">
+                  <div className="flex flex-wrap gap-1">
+                    {row.sharedSlices.map((s) => (
+                      <span
+                        key={s}
+                        className="rounded px-1.5 py-0.5 text-[var(--dpf-text)]"
+                        style={{ backgroundColor: "var(--dpf-surface-2)", border: "1px solid var(--dpf-border)" }}
+                      >
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="mt-0.5 block text-[var(--dpf-muted)]">retain: {row.sharedRetention}</span>
                 </td>
                 <td className="p-2 font-mono text-xs text-[var(--dpf-muted)]">{row.peerAuthorityUrl}</td>
                 <td className="p-2">
