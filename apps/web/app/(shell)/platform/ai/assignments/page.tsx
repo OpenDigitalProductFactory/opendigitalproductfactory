@@ -1,6 +1,8 @@
 // apps/web/app/(shell)/platform/ai/assignments/page.tsx
 // EP-INF-012: Admin UI for AI Coworker Model Assignment
 
+import Link from "next/link";
+
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { BindingBootstrapPanel } from "@/components/platform/authority/BindingBootstrapPanel";
@@ -220,8 +222,14 @@ export default async function AssignmentsPage({ searchParams }: Props) {
         <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>
           AI Coworker Model Assignment
         </h1>
-        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
-          Configure minimum quality tier and budget posture per agent. Changes take effect on the next routing decision.
+        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2, maxWidth: 760, lineHeight: 1.5 }}>
+          Advanced guardrails per coworker: a minimum-quality <strong>floor</strong>, an optional pinned model, and
+          capability requirements. For the everyday Cost / Quality / Time priority — which a coworker can raise{" "}
+          <em>above</em> this floor — use{" "}
+          <Link href="/platform/ai/priority" style={{ color: "var(--dpf-accent)" }}>
+            Priority
+          </Link>{" "}
+          (or the triangle on each coworker). Changes take effect on the next routing decision.
         </p>
       </div>
 
