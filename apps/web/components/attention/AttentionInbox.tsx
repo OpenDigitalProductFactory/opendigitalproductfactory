@@ -14,6 +14,7 @@ import {
   attentionAgeLabel,
   isOverrideTier,
   overrideReason,
+  summarizeAttention,
 } from "@/lib/attention/triage";
 
 const SOURCE_LABEL: Record<AttentionSource, string> = {
@@ -55,12 +56,35 @@ export function AttentionInbox({
           </p>
         </section>
       ) : (
-        <ul className="divide-y divide-[var(--dpf-border)] overflow-hidden rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-          {items.map((item) => (
-            <AttentionRow key={item.id} item={item} nowMs={nowMs} />
-          ))}
-        </ul>
+        <>
+          <AttentionSummaryHeader items={items} />
+          <ul className="divide-y divide-[var(--dpf-border)] overflow-hidden rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+            {items.map((item) => (
+              <AttentionRow key={item.id} item={item} nowMs={nowMs} />
+            ))}
+          </ul>
+        </>
       )}
+    </div>
+  );
+}
+
+/** The at-a-glance overview — total, the "act first" override count, high-risk
+ *  count, and grouped per-source counts. Counts only, never a composite score. */
+function AttentionSummaryHeader({ items }: { items: AttentionItem[] }) {
+  const summary = summarizeAttention(items);
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px] text-[var(--dpf-muted)]">
+      <span className="font-semibold text-[var(--dpf-text)]">{summary.total} need you</span>
+      {summary.pinned > 0 ? <span>· {summary.pinned} pinned</span> : null}
+      {summary.highRisk > 0 ? <span>· {summary.highRisk} high-risk</span> : null}
+      <span className="ml-auto flex flex-wrap gap-x-2">
+        {summary.bySource.map((s) => (
+          <span key={s.source}>
+            {SOURCE_LABEL[s.source]} {s.count}
+          </span>
+        ))}
+      </span>
     </div>
   );
 }

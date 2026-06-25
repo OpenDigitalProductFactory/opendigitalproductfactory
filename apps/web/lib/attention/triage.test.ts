@@ -8,6 +8,7 @@ import {
   residueReasonLabel,
   attentionAgeLabel,
   timeToActFromDeadline,
+  summarizeAttention,
 } from "./triage";
 import type { AttentionItem, AttentionTriage } from "./types";
 
@@ -179,5 +180,25 @@ describe("attentionAgeLabel", () => {
     expect(attentionAgeLabel("2026-06-23T11:30:00.000Z", now)).toBe("30m ago");
     expect(attentionAgeLabel("2026-06-23T09:00:00.000Z", now)).toBe("3h ago");
     expect(attentionAgeLabel("2026-06-21T12:00:00.000Z", now)).toBe("2d ago");
+  });
+});
+
+describe("summarizeAttention", () => {
+  it("counts total, pinned (override tier), high-risk, and groups by source", () => {
+    const items = [
+      item({ id: "e1", source: "escalation", riskClass: "high-risk" }),
+      item({ id: "e2", source: "escalation" }),
+      item({ id: "b1", source: "approval-bill", triage: { timeToAct: "overdue" } }),
+      item({ id: "r1", source: "research-proposal", riskClass: "read" }),
+    ];
+    const s = summarizeAttention(items);
+    expect(s.total).toBe(4);
+    expect(s.pinned).toBe(1); // the overdue bill
+    expect(s.highRisk).toBe(1);
+    expect(s.bySource[0]).toEqual({ source: "escalation", count: 2 }); // highest count first
+  });
+
+  it("is empty-safe", () => {
+    expect(summarizeAttention([])).toEqual({ total: 0, pinned: 0, highRisk: 0, bySource: [] });
   });
 });

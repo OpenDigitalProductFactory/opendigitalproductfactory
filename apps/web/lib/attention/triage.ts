@@ -17,6 +17,7 @@
 import type {
   AttentionItem,
   AttentionRiskClass,
+  AttentionSource,
   DecideEffort,
   ResidueReason,
   TimeToAct,
@@ -174,4 +175,32 @@ export function timeToActFromDeadline(
   if (hoursLeft <= dueSoonH) return "due-today";
   if (hoursLeft <= dueSoonH * 7) return "due-soon";
   return "none";
+}
+
+// ─── At-a-glance summary (the lightweight reviewer-of-evidence overview) ──────
+
+export type AttentionSummary = {
+  total: number;
+  /** Items in the override tier — the "act first" count. */
+  pinned: number;
+  highRisk: number;
+  /** Per-source counts, highest first, for the grouped overview chips. */
+  bySource: { source: AttentionSource; count: number }[];
+};
+
+/** Summarize the queue for the overview header. Counts only — no composite score.
+ *  Pure (override membership is computed from the item's own factors). */
+export function summarizeAttention(items: AttentionItem[]): AttentionSummary {
+  const counts = new Map<AttentionSource, number>();
+  let pinned = 0;
+  let highRisk = 0;
+  for (const item of items) {
+    counts.set(item.source, (counts.get(item.source) ?? 0) + 1);
+    if (isOverrideTier(item)) pinned += 1;
+    if (item.riskClass === "high-risk") highRisk += 1;
+  }
+  const bySource = [...counts.entries()]
+    .map(([source, count]) => ({ source, count }))
+    .sort((a, b) => b.count - a.count || (a.source < b.source ? -1 : 1));
+  return { total: items.length, pinned, highRisk, bySource };
 }
