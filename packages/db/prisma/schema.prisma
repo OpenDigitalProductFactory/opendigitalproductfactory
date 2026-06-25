@@ -2337,6 +2337,8 @@ model CustomerAccount {
   inventoryEntities      InventoryEntity[]           @relation("InventoryEntityCustomerAccount")
   inventoryRelationships InventoryRelationship[]     @relation("InventoryRelationshipCustomerAccount")
   masterDataSourceRefs   MasterDataSourceRef[]       @relation("CustomerAccountMdmSourceRef")
+  qualityIssues          PortfolioQualityIssue[]     @relation("QualityIssueCustomerAccount")
+  serviceTickets         ServiceTicket[]             @relation("ServiceTicketCustomerAccount")
 
   @@index([status])
   @@index([parentAccountId])
@@ -2367,11 +2369,82 @@ model CustomerSite {
   discoveryConnections   DiscoveryConnection[]
   inventoryEntities      InventoryEntity[]           @relation("InventoryEntityCustomerSite")
   inventoryRelationships InventoryRelationship[]     @relation("InventoryRelationshipCustomerSite")
+  qualityIssues          PortfolioQualityIssue[]     @relation("QualityIssueCustomerSite")
+  serviceTickets         ServiceTicket[]             @relation("ServiceTicketCustomerSite")
 
   @@index([accountId])
   @@index([primaryAddressId])
   @@index([status])
   @@index([siteType])
+}
+
+// ── EP-MSP-FEDERATION · A3 — customer service desk (BI-99FEA7FA) ──────────────
+// ONE canonical customer-facing work record discriminated by `ticketKind`
+// (incident | request | change | scheduled-review) — not four premature tables
+// (reviewed spec §6.A3). Distinct from the internal-ops PlatformIssueReport.
+// Born from A2 correlated incidents (correlatedIncidentKey) and routed by the
+// A1 estate-scope columns. Status/kind closed unions live in
+// packages/db/src/service-ticket-types.ts (hyphenated per the WS-0 convergence
+// rule). Soft references (configurationItemId, serviceAgreementId, edgeNodeId,
+// correlatedIncidentKey, ownerPrincipalId) keep cross-model blast radius low in
+// this slice; FK relations are added when the linked behaviors land.
+model ServiceTicket {
+  id                    String                 @id @default(cuid())
+  ticketId              String                 @unique
+  ticketKind            String                 @default("incident")
+  status                String                 @default("open")
+  priority              String                 @default("normal")
+  severity              String?
+  title                 String
+  description           String?
+  // Estate scope (A1 routing columns; canonical source is the owning node/CI).
+  customerAccountId     String?
+  customerSiteId        String?
+  scopeKey              String?
+  // Linkage (soft references this slice).
+  configurationItemId   String?
+  serviceAgreementId    String?
+  edgeNodeId            String?
+  correlatedIncidentKey String?
+  // SLA + ownership.
+  slaPolicy             Json?
+  slaDueAt              DateTime?
+  ownerPrincipalId      String?
+  // Lifecycle timestamps.
+  openedAt              DateTime               @default(now())
+  acknowledgedAt        DateTime?
+  resolvedAt            DateTime?
+  closedAt              DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  customerAccount       CustomerAccount?       @relation("ServiceTicketCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite          CustomerSite?          @relation("ServiceTicketCustomerSite", fields: [customerSiteId], references: [id], onDelete: SetNull)
+  comments              ServiceTicketComment[]
+
+  @@index([ticketKind])
+  @@index([status])
+  @@index([priority])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
+  @@index([scopeKey])
+  @@index([correlatedIncidentKey])
+  @@index([slaDueAt])
+}
+
+model ServiceTicketComment {
+  id                String        @id @default(cuid())
+  ticketId          String
+  authorPrincipalId String?
+  // operator | customer | agent | system
+  authorKind        String        @default("operator")
+  body              String
+  // internal | customer  — gates what a federated/customer viewer may read.
+  visibility        String        @default("internal")
+  createdAt         DateTime      @default(now())
+  ticket            ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
 }
 
 model CustomerConfigurationItem {
@@ -3790,11 +3863,22 @@ model PortfolioQualityIssue {
   portfolioId             String?
   taxonomyNodeId          String?
   digitalProductId        String?
+  // EP-MSP-FEDERATION · A1 (BI-8777B85A) — per-customer/site routing scope.
+  // Denormalized from the originating EdgeNode / InventoryEntity (the canonical
+  // scope source) via the estate-scope resolver so the operator inbox can route
+  // a firing issue to the right customer queue instead of one global inbox.
+  // NULL customerAccountId / scopeKey="organization:internal" = the operator's
+  // own estate (self-monitoring), preserving backward-compatible behavior.
+  customerAccountId       String?
+  customerSiteId          String?
+  scopeKey                String?
   digitalProduct          DigitalProduct?           @relation(fields: [digitalProductId], references: [id])
   inventoryEntity         InventoryEntity?          @relation(fields: [inventoryEntityId], references: [id])
   inventoryRelationship   InventoryRelationship?    @relation(fields: [inventoryRelationshipId], references: [id])
   portfolio               Portfolio?                @relation(fields: [portfolioId], references: [id])
   taxonomyNode            TaxonomyNode?             @relation(fields: [taxonomyNodeId], references: [id])
+  customerAccount         CustomerAccount?          @relation("QualityIssueCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite            CustomerSite?             @relation("QualityIssueCustomerSite", fields: [customerSiteId], references: [id], onDelete: SetNull)
   triageDecisions         DiscoveryTriageDecision[]
 
   @@index([issueType])
@@ -3803,6 +3887,9 @@ model PortfolioQualityIssue {
   @@index([portfolioId])
   @@index([taxonomyNodeId])
   @@index([digitalProductId])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
+  @@index([scopeKey])
 }
 
 model DiscoveryTriageDecision {

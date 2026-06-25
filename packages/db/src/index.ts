@@ -114,6 +114,31 @@ export {
   type DiscoveryScopeFields,
 } from "./discovery-scope";
 export {
+  describeEstateScope,
+  estateRoutingFields,
+  estateScopeKey,
+  isCustomerScoped,
+  resolveEstateScope,
+  type EstateRoutingFields,
+  type EstateScopeContext,
+  type EstateScopeInput,
+  type EstateScopeMode,
+} from "./estate-scope";
+export {
+  isValidTicketStatusTransition,
+  priorityFromSeverity,
+  serviceTicketDraftFromIncident,
+  SERVICE_TICKET_KINDS,
+  SERVICE_TICKET_PRIORITIES,
+  SERVICE_TICKET_STATUSES,
+  type IncidentLike,
+  type ServiceTicketDraft,
+  type ServiceTicketKind,
+  type ServiceTicketPriority,
+  type ServiceTicketScope,
+  type ServiceTicketStatus,
+} from "./service-ticket-types";
+export {
   syncDigitalProduct,
   syncTaxonomyNode,
   syncPortfolio,

@@ -12,6 +12,8 @@
     "./reference-model-projection": "./src/reference-model-projection.ts",
     "./archetype-value-stream-projection": "./src/archetype-value-stream-projection.ts",
     "./discovery-attribution": "./src/discovery-attribution.ts",
+    "./estate-scope": "./src/estate-scope.ts",
+    "./service-ticket-types": "./src/service-ticket-types.ts",
     "./discovery-triage": "./src/discovery-triage.ts",
     "./discovery-triage-enums": "./src/discovery-triage-enums.ts",
     "./discovery-collectors-arp-scan": "./src/discovery-collectors/arp-scan.ts",
