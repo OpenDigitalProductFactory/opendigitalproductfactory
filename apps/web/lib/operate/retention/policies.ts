@@ -211,6 +211,15 @@ export const PURGE_POLICIES: readonly PurgePolicy[] = [
       "Every authorization decision (actor, grant, outcome). Security-audit trail; one year baseline, longer for regulated industries.",
   },
   {
+    model: "securityEvent",
+    label: "Security telemetry (OCSF)",
+    category: "security-audit",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "OCSF-normalized security telemetry (EP-SOVEREIGN-SOC P0). One-year security-audit baseline; regulated industries lengthen via floors. Detections derive from this stream; SecurityCase (the regulated incident record) is retained separately and never auto-purged.",
+  },
+  {
     model: "coworkerTurnMetric",
     label: "Coworker turn metrics",
     category: "coworker-metrics",

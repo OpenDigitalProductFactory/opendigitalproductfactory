@@ -10670,6 +10670,78 @@ model FederatedRemediationProposal {
   @@index([incidentKey])
 }
 
+// ─── Security telemetry (OCSF-normalized) ───────────────────────────────────
+// EP-SOVEREIGN-SOC P0 keystone — append-only OCSF-aligned security telemetry.
+// Spec: docs/superpowers/specs/2026-06-24-sovereign-soc-siem-design.md §6.1.
+//
+// Distinct from EdgeEvent/ChangeEvent — the same call the codebase already made
+// splitting ChangeEvent from EdgeEvent: one shared edge envelope (eventType=
+// "security"), distinct model because the lifecycle differs. An EdgeEvent is a
+// dedup'd fire-and-collapse alert; a SecurityEvent is an immutable normalized
+// fact — the triggered/acknowledged/resolved lifecycle lives on Detection /
+// SecurityCase (later phases), never here.
+//
+// Scope is FIRST-CLASS (denormalized), NOT derived through an EdgeNode relation
+// like EdgeEvent, because (a) internal sources (AuthorizationDecisionLog,
+// ToolExecution) have no edge node, and (b) fleet-scale per-tenant reads must
+// not join through EdgeNode. There is intentionally NO foreign key to EdgeNode:
+// a security record must outlive node deletion for forensic / audit purposes.
+//   - Edge-sourced rows: scope copied from the authenticated EdgeNode row
+//     (never the request body — preserves the edge auth-boundary invariant).
+//   - Internal rows: scope set at write time from actor / object context.
+// rawRef is a pointer / hash to edge-local raw evidence — never the raw blob
+// (the sovereignty boundary: raw stays on the edge, detections cross). ocsf-
+// Version pins the schema the producer normalized to (version-pinned-ocsf,
+// the kernel-decided schema authority, spec §8) so schema evolution is explicit.
+model SecurityEvent {
+  id              String  @id @default(cuid())
+  // Globally-unique, producer-composed idempotency / dedup key. Internal
+  // sources namespace it ("dpf.internal:authz:<decisionId>"); edge detectors
+  // compose it from source + node + offset/hash so replays collapse.
+  eventKey        String  @unique
+  // OCSF schema version the producer normalized to (e.g. "1.8.0").
+  ocsfVersion     String
+  ocsfCategoryUid Int?
+  ocsfClassUid    Int
+  ocsfActivityId  Int?
+  // OCSF severity_id (0..6).
+  severityId      Int?
+  // OCSF event time (when the activity occurred, set by the detector).
+  time            DateTime
+
+  // DPF tenancy scope — denormalized, set at the trust boundary.
+  scopeKey          String
+  customerAccountId String?
+  customerSiteId    String?
+  // Soft reference to EdgeNode.id (NO FK — see header). Null for internal sources.
+  edgeNodeId        String?
+  // Source family — "windows.security", "syslog", "aws.cloudtrail", "dpf.internal".
+  sourceKind        String
+  sourceName        String
+
+  // Principal reference when the actor is a known platform identity (AGENTS.md §11).
+  actorPrincipalId String?
+  actor            Json     @default("{}")
+  device           Json     @default("{}")
+  srcEndpoint      Json     @default("{}")
+  dstEndpoint      Json     @default("{}")
+  observables      Json     @default("[]")
+  // Full normalized OCSF object (the canonical body).
+  normalized       Json     @default("{}")
+  // Pointer / hash to edge-local raw evidence — NOT the raw blob.
+  rawRef           Json     @default("{}")
+  // source-reported | low | medium | high | confirmed
+  confidence       String   @default("source-reported")
+  createdAt        DateTime @default(now())
+
+  @@index([scopeKey, time])
+  @@index([customerAccountId, severityId, time])
+  @@index([edgeNodeId, time])
+  @@index([ocsfClassUid, time])
+  // Ingest-time index for the data-retention sweep (security-audit category).
+  @@index([createdAt])
+}
+
 // ─── Integration Coverage Matrix ─────────────────────────────────────────────
 
 enum WriteGateRequirement {
