@@ -20,6 +20,12 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import {
+  decideSecurityResponse,
+  type SecurityBlastRadius,
+  type SecurityResponseConsent,
+  type SecurityResponseInput,
+} from "@/lib/security/response-authority";
 
 type SiemContext = {
   routeContext?: string;
@@ -153,15 +159,17 @@ export const SIEM_TOOLS: ToolDefinition[] = [
   {
     name: "propose_response",
     description:
-      "Propose a containment/remediation action for a security case (does NOT execute). Recorded on the case timeline as a response-proposal for human approval — execution rides the proposal-not-action rail and the customer's own runner.",
+      "Propose a containment/remediation action for a security case (does NOT execute). The governed authority decision (auto-approve / needs-human-approval / refuse) is computed from the action's risk band and the security kernel; the proposal is recorded on the case timeline for approval. Execution rides the proposal-not-action rail and the customer's own runner.",
     inputSchema: {
       type: "object",
       properties: {
         caseKey: { type: "string" },
-        actionType: { type: "string", description: "isolate_host | disable_account | block_ip | kill_process | revoke_token" },
+        actionType: { type: "string", description: "collect_diagnostics | quarantine_host | block_ip | block_domain | revoke_token | disable_account | isolate_host | kill_process | wipe_host" },
         target: { type: "string", description: "the asset/account/indicator the action targets" },
         reversible: { type: "boolean" },
         blastRadius: { type: "string", description: "single-host | account | estate" },
+        evidenceConfidence: { type: "number", description: "investigation confidence justifying the action, 0..1" },
+        consent: { type: "string", description: "standing | per-action | none — customer's standing approval for this action class" },
         rationale: { type: "string" },
       },
       required: ["caseKey", "actionType", "target", "rationale"],
@@ -445,7 +453,7 @@ export async function proposeDetectionTuningHandler(
 
 export async function proposeResponseHandler(
   params: Record<string, unknown>,
-  _userId: string,
+  userId: string,
   context?: SiemContext,
 ): Promise<ToolResult> {
   const caseKey = str(params["caseKey"]);
@@ -460,13 +468,33 @@ export async function proposeResponseHandler(
     return { success: false, error: "not_found", message: `No security case ${caseKey}.` };
   }
 
+  // Compute the governed authority decision: the risk band sets the floor and
+  // the security kernel can only ratchet it more conservative (P3). The kernel
+  // gate fails safe — a degenerate / low-confidence result keeps human approval.
+  const input: SecurityResponseInput = {
+    actionType,
+    target,
+    rationale,
+    evidenceConfidence: typeof params["evidenceConfidence"] === "number" ? (params["evidenceConfidence"] as number) : 0.5,
+    consent: (str(params["consent"]) as SecurityResponseConsent | undefined) ?? "none",
+    reversible: typeof params["reversible"] === "boolean" ? (params["reversible"] as boolean) : undefined,
+    blastRadius: str(params["blastRadius"]) as SecurityBlastRadius | undefined,
+  };
+  const verdict = await decideSecurityResponse(input, {
+    userId,
+    routeContext: context?.routeContext,
+  });
+
   const proposal = {
     kind: "response-proposal",
     actionType,
     target,
-    reversible: typeof params["reversible"] === "boolean" ? params["reversible"] : null,
-    blastRadius: str(params["blastRadius"]) ?? null,
+    reversible: input.reversible ?? null,
+    blastRadius: input.blastRadius ?? null,
     rationale,
+    authorityDecision: verdict.decision,
+    bandDecision: verdict.bandDecision,
+    decisionReason: verdict.reason,
     by: context?.agentId ?? "coworker",
     at: new Date().toISOString(),
     status: "proposed",
@@ -482,7 +510,7 @@ export async function proposeResponseHandler(
   return {
     success: true,
     entityId: sc.id,
-    message: `Proposed ${actionType} on ${target} for case ${caseKey} — recorded for human approval, NOT executed.`,
-    data: { caseKey, proposal },
+    message: `Proposed ${actionType} on ${target} for case ${caseKey} — authority decision: ${verdict.decision}. Recorded for approval, NOT executed.`,
+    data: { caseKey, proposal, authorityDecision: verdict.decision, bandDecision: verdict.bandDecision },
   };
 }

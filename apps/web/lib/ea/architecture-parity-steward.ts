@@ -63,6 +63,7 @@ const DOMAIN_LABELS: Record<ProjectionDomain, string> = {
   integrations: "connected-application integrations",
   scheduledJobs: "scheduling surface (all scheduled work)",
   it4itCoverage: "IT4IT functional-criteria coverage",
+  securityPosture: "security operations (SOC) surface",
 };
 
 function projectionEntries(result: SysmlProjectionsResult): Array<[ProjectionDomain, ProjectionStatus]> {

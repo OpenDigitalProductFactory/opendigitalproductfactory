@@ -25,6 +25,7 @@ import { reconcileNetworkTopology } from "./reconcile-network-bridge";
 import { reconcileIntegrations } from "./reconcile-integration-bridge";
 import { reconcileScheduledJobs } from "./reconcile-scheduled-jobs";
 import { reconcileIt4itCoverage } from "./reconcile-it4it-coverage";
+import { reconcileSecurityPosture } from "./reconcile-security-posture";
 import type { SysmlSeedResult } from "./sysml-model-seed";
 
 export interface SysmlProjectionsResult {
@@ -47,6 +48,9 @@ export interface SysmlProjectionsResult {
   // IT4IT conformance coverage — evidence-derived baseline vs the IT4IT functional
   // criteria, persisted to EaReferenceAssessment (EP-IT4IT-CONFORMANCE).
   it4itCoverage: SysmlSeedResult;
+  // Security Operations (SOC) surface — normalization / detection / cases /
+  // response / roster, tracing to the security data model (EP-SOVEREIGN-SOC).
+  securityPosture: SysmlSeedResult;
 }
 
 const SKIPPED: SysmlSeedResult = { status: "skipped", created: 0, updated: 0, removed: 0 };
@@ -85,8 +89,11 @@ export async function reconcileSysmlProjections(
   const integrations = await runDomain("integrations", () => reconcileIntegrations({ db: opts.db }), SKIPPED);
   const scheduledJobs = await runDomain("scheduledJobs", () => reconcileScheduledJobs({ db: opts.db }), SKIPPED);
   const it4itCoverage = await runDomain("it4itCoverage", () => reconcileIt4itCoverage({ db: opts.db }), SKIPPED);
+  // SOC posture isolated like every other domain (EP-SOVEREIGN-SOC, composed with
+  // the #2385 fail-isolation): a security-extractor error can't blind the engine.
+  const securityPosture = await runDomain("securityPosture", () => reconcileSecurityPosture({ db: opts.db }), SKIPPED);
   return {
     mcpAuthority, coworkerAuthority, valueStreams, routes, navigation, codeStructure, processModels, skillToolchain,
-    operationalGraph, networkTopology, integrations, scheduledJobs, it4itCoverage,
+    operationalGraph, networkTopology, integrations, scheduledJobs, it4itCoverage, securityPosture,
   };
 }

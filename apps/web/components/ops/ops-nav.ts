@@ -23,4 +23,9 @@ export const OPS_NAV_GROUPS: ReadonlyArray<{
       { label: "Dev Loop", href: "/ops/dev-loop" },
     ],
   },
+  {
+    // EP-SOVEREIGN-SOC P4 — the AI SOC console (coverage / detections / cases / SLA).
+    label: "Security",
+    tabs: [{ label: "SOC Console", href: "/ops/security" }],
+  },
 ];

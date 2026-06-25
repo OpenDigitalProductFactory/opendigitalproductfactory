@@ -30,6 +30,7 @@ function projectionResult(overrides: Partial<SysmlProjectionsResult> = {}): Sysm
     integrations: healthy,
     scheduledJobs: healthy,
     it4itCoverage: healthy,
+    securityPosture: healthy,
     ...overrides,
   };
 }

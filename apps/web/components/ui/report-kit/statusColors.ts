@@ -345,6 +345,28 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     executed: "success",
     expired: "neutral",
   },
+  // Security case / detection lifecycle (EP-SOVEREIGN-SOC). Open work is info;
+  // active investigation/containment is accent; resolved is success, closed neutral.
+  security: {
+    open: "info",
+    new: "info",
+    triaging: "warning",
+    triaged: "warning",
+    investigating: "accent",
+    contained: "accent",
+    linked: "accent",
+    suppressed: "neutral",
+    resolved: "success",
+    closed: "neutral",
+  },
+  // Security severity (OCSF-aligned). info/low benign; medium/high warn; critical danger.
+  securitySeverity: {
+    info: "info",
+    low: "success",
+    medium: "warning",
+    high: "warning",
+    critical: "danger",
+  },
 };
 
 /**
