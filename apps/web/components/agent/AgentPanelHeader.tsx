@@ -447,7 +447,7 @@ export function AgentPanelHeader({
                 }}
               >
                 <span style={{ fontSize: 12, color: "var(--dpf-text)" }}>Priority</span>
-                <CoworkerPriorityControl />
+                <CoworkerPriorityControl agentId={agent.agentId} />
               </div>
             </div>
           )}
