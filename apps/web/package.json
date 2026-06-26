@@ -56,7 +56,6 @@
     "react-data-grid": "7.0.0-beta.59",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.7",
-    "react-force-graph-2d": "^1.29.1",
     "react-markdown": "^10.1.0",
     "read-excel-file": "9.2.0",
     "recharts": "^3.8.1",
