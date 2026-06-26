@@ -969,7 +969,11 @@ export default function SelfUpgradeClient({
           {windowTimezone && (
             <div className="mt-1 text-[var(--dpf-muted)]" data-window-timezone={windowTimezone}>
               Times shown in <span className="font-medium text-[var(--dpf-text)]">{windowTimezone}</span> — your
-              operating-hours timezone. Change it in Settings → Operating Hours.
+              operating-hours timezone. Change it in{" "}
+              <a className="underline" href="/storefront/settings/operations">
+                Settings → Operating Hours
+              </a>
+              .
             </div>
           )}
         </div>
