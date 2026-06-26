@@ -12,6 +12,55 @@ import type {
   SensitivityLevel,
 } from "./types";
 
+// ── Request/turn-scoped loader cache ────────────────────────────────────────
+//
+// The three loaders below (loadEndpointManifests, loadPolicyRules, loadOverrides)
+// are re-run on EVERY agentic-loop iteration via prepareRoute (up to 200 times a
+// turn), each time returning identical rows — ~40-60 redundant identical queries
+// on the most latency-sensitive code on the platform. These are loader INPUTS to
+// routing, not the routing DECISION: a short TTL memo collapses the per-iteration
+// reloads to one DB round-trip per turn while routeEndpointV2 still runs every
+// iteration against fresh, process-local circuit-breaker state (markEndpoint
+// Unavailable / getEndpointRuntimeState) — so a cooled-down endpoint is still
+// skipped and a recovered provider still re-selected. Caching the inputs never
+// changes the decision.
+//
+// Mirrors the proven TTL idiom on this same hot path (lib/inference/local-only.ts):
+// a small TTL plus an explicit invalidator that the rare degrade/cooldown
+// mutations call so a status change takes effect on the next iteration rather than
+// waiting out the window. The injectable `now` keeps the behaviour deterministic
+// for tests (no wall-clock flake).
+//
+// TTL sizing: longer than local-only's 5s because a multi-iteration build turn can
+// run for tens of seconds and the goal is one load PER TURN; still bounded so an
+// operator config edit (provider toggled, policy added, endpoint pinned) propagates
+// within the window even absent an explicit bust. Degrade/cooldown mutations bust
+// immediately, so the bound only governs the benign config-edit case.
+const ROUTING_LOADER_TTL_MS = 30_000;
+
+interface LoaderCacheEntry<T> {
+  value: T;
+  at: number;
+}
+
+let manifestsCache: LoaderCacheEntry<EndpointManifest[]> | null = null;
+let policyRulesCache: LoaderCacheEntry<PolicyRuleEval[]> | null = null;
+// Overrides are keyed by taskType — a turn routes one taskType, but a process
+// serves many, so memo per key rather than a single slot.
+const overridesCache = new Map<string, LoaderCacheEntry<EndpointOverride[]>>();
+
+/**
+ * Drop all cached routing-loader inputs. Called by the degrade/cooldown
+ * mutations (markModelDegraded, markEndpointUnavailable) so a candidate-pool
+ * health change is reflected on the very next routing iteration, and exported for
+ * tests. Cheap and idempotent — clearing an already-cold cache is a no-op.
+ */
+export function invalidateRoutingLoaderCache(): void {
+  manifestsCache = null;
+  policyRulesCache = null;
+  overridesCache.clear();
+}
+
 /**
  * Providers that ship with DPF and require no user action to be usable.
  * All other providers are classified as `user_configured` — the user
@@ -94,8 +143,25 @@ export function resolveToolUse(
  * Load all active/degraded endpoints as EndpointManifest objects.
  * Queries ModelProfile joined with ModelProvider — each manifest entry represents
  * a specific model, not just a provider.
+ *
+ * Request/turn-scoped TTL cached (see invalidateRoutingLoaderCache): on the
+ * agentic hot path this is hit once per loop iteration with identical results;
+ * the memo serves the same array for the rest of the turn. Degrade/cooldown
+ * mutations bust the cache so a status change lands on the next iteration. `now`
+ * is injectable for deterministic tests.
  */
-export async function loadEndpointManifests(): Promise<EndpointManifest[]> {
+export async function loadEndpointManifests(
+  now: number = Date.now(),
+): Promise<EndpointManifest[]> {
+  if (manifestsCache && now - manifestsCache.at < ROUTING_LOADER_TTL_MS) {
+    return manifestsCache.value;
+  }
+  const value = await queryEndpointManifests();
+  manifestsCache = { value, at: now };
+  return value;
+}
+
+async function queryEndpointManifests(): Promise<EndpointManifest[]> {
   const profiles = await prisma.modelProfile.findMany({
     where: {
       modelStatus: { in: ["active", "degraded"] },
@@ -195,8 +261,25 @@ export async function loadTaskRequirement(
 
 /**
  * Load active policy rules.
+ *
+ * Request/turn-scoped TTL cached (see invalidateRoutingLoaderCache) — same
+ * per-iteration hot-path memo as loadEndpointManifests. The effectiveFrom/Until
+ * window is evaluated at load time; a rule crossing its boundary mid-window is
+ * served for at most the TTL, acceptable for rarely-edited operator policy.
+ * `nowMs` is injectable for deterministic tests.
  */
-export async function loadPolicyRules(): Promise<PolicyRuleEval[]> {
+export async function loadPolicyRules(
+  nowMs: number = Date.now(),
+): Promise<PolicyRuleEval[]> {
+  if (policyRulesCache && nowMs - policyRulesCache.at < ROUTING_LOADER_TTL_MS) {
+    return policyRulesCache.value;
+  }
+  const value = await queryPolicyRules();
+  policyRulesCache = { value, at: nowMs };
+  return value;
+}
+
+async function queryPolicyRules(): Promise<PolicyRuleEval[]> {
   const now = new Date();
   const rules = await prisma.policyRule.findMany({
     where: {
@@ -218,8 +301,26 @@ export async function loadPolicyRules(): Promise<PolicyRuleEval[]> {
 
 /**
  * Load pinned/blocked overrides for a task type.
+ *
+ * Request/turn-scoped TTL cached per taskType (see invalidateRoutingLoaderCache)
+ * — the per-iteration hot-path memo, keyed because a process serves many task
+ * types while one turn routes a single one. `now` is injectable for deterministic
+ * tests.
  */
-export async function loadOverrides(taskType: string): Promise<EndpointOverride[]> {
+export async function loadOverrides(
+  taskType: string,
+  now: number = Date.now(),
+): Promise<EndpointOverride[]> {
+  const cached = overridesCache.get(taskType);
+  if (cached && now - cached.at < ROUTING_LOADER_TTL_MS) {
+    return cached.value;
+  }
+  const value = await queryOverrides(taskType);
+  overridesCache.set(taskType, { value, at: now });
+  return value;
+}
+
+async function queryOverrides(taskType: string): Promise<EndpointOverride[]> {
   const perf = await prisma.endpointTaskPerformance.findMany({
     where: {
       taskType,

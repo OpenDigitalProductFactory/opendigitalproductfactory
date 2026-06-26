@@ -50,6 +50,13 @@ vi.mock("./rate-recovery", () => ({
   scheduleRecovery: vi.fn(),
 }));
 
+// BI-OPT-ROUTING-CACHE: fallback.ts busts the request-scoped routing-loader
+// cache when it degrades a model / cools an endpoint. Mock the loader so we can
+// assert the bust is wired without exercising the real DB-backed loaders.
+vi.mock("./loader", () => ({
+  invalidateRoutingLoaderCache: vi.fn(),
+}));
+
 vi.mock("@/lib/ai-provider-internals", () => ({
   autoDiscoverAndProfile: vi.fn(),
 }));
@@ -71,6 +78,7 @@ import {
   clearEndpointUnavailable,
 } from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
+import { invalidateRoutingLoaderCache } from "./loader";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 import { recordRouteOutcome } from "./route-outcome";
 import type { RouteDecision } from "./types";
@@ -127,6 +135,7 @@ const mockAutoDiscoverAndProfile = autoDiscoverAndProfile as ReturnType<typeof v
 const mockRecordRouteOutcome = recordRouteOutcome as ReturnType<typeof vi.fn>;
 const mockMarkEndpointUnavailable = markEndpointUnavailable as ReturnType<typeof vi.fn>;
 const mockClearEndpointUnavailable = clearEndpointUnavailable as ReturnType<typeof vi.fn>;
+const mockInvalidateRoutingLoaderCache = invalidateRoutingLoaderCache as ReturnType<typeof vi.fn>;
 
 // ── Setup ────────────────────────────────────────────────────────────────────
 
@@ -196,6 +205,9 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
 
       expect(mockClearEndpointUnavailable).toHaveBeenCalledWith("prov1", "model1");
       expect(mockMarkEndpointUnavailable).not.toHaveBeenCalled();
+      // BI-OPT-ROUTING-CACHE: a clean success must NOT bust the loader cache —
+      // the per-turn memo has to survive an ordinary iteration.
+      expect(mockInvalidateRoutingLoaderCache).not.toHaveBeenCalled();
     });
 
     it("records route outcomes with coworker attribution from the MCP session", async () => {
@@ -317,6 +329,25 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
 
       // Provider NOT updated
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+    });
+
+    // BI-OPT-ROUTING-CACHE: degrading a model changes what loadEndpointManifests
+    // returns (manifest status derives from modelStatus), so the request-scoped
+    // loader cache MUST be busted — otherwise the next routing iteration in the
+    // turn would route against a stale "active" manifest.
+    it("invalidates the routing-loader cache when a model is degraded", async () => {
+      throwRateLimit();
+
+      const pending = callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      const rejection = expect(pending).rejects.toThrow();
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      expect(mockInvalidateRoutingLoaderCache).toHaveBeenCalled();
     });
 
     it("opens the runtime circuit (markEndpointUnavailable) with reason rate_limit", async () => {

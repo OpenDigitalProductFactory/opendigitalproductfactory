@@ -18,6 +18,7 @@ export {
   loadTaskRequirement,
   loadPolicyRules,
   loadOverrides,
+  invalidateRoutingLoaderCache,
   persistRouteDecision,
 } from "./loader";
 export { callWithFallbackChain } from "./fallback";
