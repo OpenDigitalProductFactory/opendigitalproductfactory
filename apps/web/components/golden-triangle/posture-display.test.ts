@@ -100,7 +100,7 @@ describe("balanceState (triangle colouring)", () => {
     expect(b.level).toBe("starved");
     expect(b.token).toBe("--dpf-error");
     expect(b.starved).toEqual(["Cost", "Time"]);
-    expect(b.label).toMatch(/Starving Cost & Time/);
+    expect(b.label).toMatch(/Higher Cost & More Time/);
   });
 
   it("an edge posture starves one axis (red)", () => {
