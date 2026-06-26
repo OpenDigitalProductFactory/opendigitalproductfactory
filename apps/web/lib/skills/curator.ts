@@ -221,7 +221,10 @@ export async function runSkillCurator(
             findings,
           },
         },
-      ] as Prisma.InputJsonValue,
+      // Widen through `unknown`: CuratorFinding.quality.failureRate is
+      // `number | null`, and Prisma's InputJsonValue type excludes null even
+      // though null is valid JSON at runtime. The graph is otherwise plain JSON.
+      ] as unknown as Prisma.InputJsonValue,
       metadata: { kind: CURATOR_REPORT_KIND } as Prisma.InputJsonValue,
     },
   });
