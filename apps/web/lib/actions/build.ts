@@ -109,9 +109,13 @@ export async function createFeatureBuild(input: {
     return { buildId: created.buildId };
   });
 
-  // EP-COST Phase 3: start ideate-phase tracking (fire-and-forget)
+  // EP-COST Phase 3: start ideate-phase tracking (fire-and-forget). The .catch
+  // swallows the QuiescingError startBuildPhaseRun throws during a self-upgrade
+  // drain (BI-QUIESCE-005 entry-point gate) — cost tracking is deliberately
+  // non-blocking, so a refused start is expected. Without it the rejection
+  // escapes this void call as an unhandled rejection in the server process.
   const { startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
-  void startBuildPhaseRun(result.buildId, "ideate");
+  void startBuildPhaseRun(result.buildId, "ideate").catch(() => {});
 
   return result;
 }
