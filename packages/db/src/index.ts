@@ -191,6 +191,20 @@ export {
   type IncidentEgressResult,
 } from "./projection-egress";
 export {
+  canTransitionDispatch,
+  claimableActionsForNode,
+  isClaimableByNode,
+  isReadonlyDispatchActionType,
+  nodeScopeMatchesAction,
+  READONLY_DISPATCH_ACTION_TYPES,
+  REMOTE_ACTION_DISPATCH_STATES,
+  type ClaimDecision,
+  type ClaimingNodeView,
+  type DispatchableActionView,
+  type ReadonlyDispatchActionType,
+  type RemoteActionDispatchState,
+} from "./remote-action-dispatch";
+export {
   buildOrganizationCrosswalk,
   FEDERATED_RECORD_TYPES,
   reconcileMirror,

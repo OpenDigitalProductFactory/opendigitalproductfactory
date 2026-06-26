@@ -18,6 +18,7 @@
     "./federation-link-types": "./src/federation-link-types.ts",
     "./projection-serialization": "./src/projection-serialization.ts",
     "./projection-egress": "./src/projection-egress.ts",
+    "./remote-action-dispatch": "./src/remote-action-dispatch.ts",
     "./federated-record-sync": "./src/federated-record-sync.ts",
     "./discovery-triage": "./src/discovery-triage.ts",
     "./discovery-triage-enums": "./src/discovery-triage-enums.ts",
