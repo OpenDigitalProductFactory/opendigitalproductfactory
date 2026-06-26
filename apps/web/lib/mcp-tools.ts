@@ -8174,7 +8174,7 @@ export async function executeTool(
           if (gate.allowed) {
             const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
             void completeBuildPhaseRun(buildId, "ideate");
-            void startBuildPhaseRun(buildId, "plan");
+            void startBuildPhaseRun(buildId, "plan").catch(() => {}); // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
             if (context?.threadId) {
               const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
               void persistPhaseHandoffSummary(context.threadId, "ideate");
@@ -8579,7 +8579,7 @@ export async function executeTool(
             // EP-COST Phase 3: record ideate-phase cost rollup, start plan tracking, and compact thread
             const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
             void completeBuildPhaseRun(buildId, "ideate");
-            void startBuildPhaseRun(buildId, "plan");
+            void startBuildPhaseRun(buildId, "plan").catch(() => {}); // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
             if (context?.threadId) {
               const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
               void persistPhaseHandoffSummary(context.threadId, "ideate");
@@ -8939,7 +8939,7 @@ export async function executeTool(
                   // EP-COST Phase 3: record plan-phase cost rollup, start build tracking, and compact thread
                   const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
                   void completeBuildPhaseRun(buildId, "plan");
-                  void startBuildPhaseRun(buildId, "build");
+                  void startBuildPhaseRun(buildId, "build").catch(() => {}); // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
                   if (context?.threadId) {
                     const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
                     void persistPhaseHandoffSummary(context.threadId, "plan");
