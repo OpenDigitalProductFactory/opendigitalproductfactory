@@ -458,6 +458,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Marketing / Storefront
   get_marketing_summary:        ["marketing_read"],
   suggest_campaign_ideas:       ["marketing_read"],
+  build_tracked_links:          ["marketing_read"],
   save_marketing_review:        ["marketing_write"],
   create_marketing_campaign_brief: ["marketing_write"],
   create_marketing_asset_task:   ["marketing_write"],
