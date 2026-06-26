@@ -5,6 +5,7 @@ import { can } from "@/lib/permissions";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { prisma, type Prisma } from "@dpf/db";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { slugify } from "@/lib/shared/slugify";
 import { revalidatePath } from "next/cache";
 import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
@@ -173,11 +174,7 @@ function shortSha(value: string | null): string {
 }
 
 function slugPart(value: string | null): string {
-  const slug = (value ?? "unknown")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "unknown";
+  return slugify(value ?? "unknown") || "unknown";
 }
 
 function buildCandidateImpactReport(candidate: {

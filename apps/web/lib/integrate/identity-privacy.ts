@@ -18,6 +18,7 @@
  */
 
 import { prisma } from "@dpf/db";
+import { slugify } from "@/lib/shared/slugify";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -151,11 +152,7 @@ export function generatePrivateBranchName(
   featureSlug: string,
 ): string {
   const shortId = clientId.replace(/-/g, "").slice(0, 8);
-  const slug = featureSlug
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 50);
+  const slug = slugify(featureSlug).slice(0, 50);
   return `dpf/${shortId}/${slug}`;
 }
 

@@ -2,6 +2,7 @@
 
 import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
+import { slugify as kebab } from "@/lib/shared/slugify";
 import { deriveThemeTokens, validateTokenContrast, type Correction, type ThemeTokens } from "@/lib/branding-presets";
 import {
   fetchPublicWebsiteEvidence,
@@ -17,11 +18,7 @@ function readString(value: FormDataEntryValue | null): string {
 }
 
 function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
+  return kebab(value).slice(0, 64);
 }
 
 function buildThemeTokens(formData: FormData): Prisma.InputJsonValue {

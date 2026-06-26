@@ -1,4 +1,5 @@
 import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
+import { slugify as kebab } from "@/lib/shared/slugify";
 
 // `targetPerspective: WikiPerspective | null` replaces the prior local
 // `targetPerspectiveMode` field. `null` represents "neither WWMD nor WWWD"
@@ -70,11 +71,7 @@ function asIso(value: Date | string | null | undefined): string | null {
 }
 
 function slugify(value: string): string {
-  const slug = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "captured-source";
+  return kebab(value) || "captured-source";
 }
 
 function compact(value: string): string {

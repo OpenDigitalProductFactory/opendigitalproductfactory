@@ -1,3 +1,5 @@
+import { slugify } from "@/lib/shared/slugify";
+
 export type BuildStudioBranchBadge = {
   kind: "submission" | "workspace";
   value: string;
@@ -18,11 +20,7 @@ function normalize(value: string | null | undefined): string | null {
 }
 
 function buildSubmissionBranch(shortId: string, buildTitle: string): string {
-  const slug = buildTitle
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 50);
+  const slug = slugify(buildTitle).slice(0, 50);
 
   return `dpf/${shortId}/${slug}`;
 }

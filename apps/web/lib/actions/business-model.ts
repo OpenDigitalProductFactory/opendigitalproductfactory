@@ -3,6 +3,7 @@
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { requireCapability } from "@/lib/actions/shared/guards";
+import { slugify } from "@/lib/shared/slugify";
 import { revalidatePath } from "next/cache";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
@@ -290,10 +291,6 @@ export async function getUserBusinessModelRoles(userId: string): Promise<{
 }
 
 // ─── BI-BIZ-ROLES-006: Custom business model CRUD ────────────────────────────
-
-function slugify(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
 
 /** Create a custom business model (isBuiltIn: false). */
 export async function createCustomBusinessModel(

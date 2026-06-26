@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@dpf/db";
 
 import { requireCapability } from "@/lib/actions/shared/guards";
+import { slugify as kebab } from "@/lib/shared/slugify";
 import {
   IT4IT_VALUE_STREAM_SET,
   TRACE_RELATIONSHIP_SET,
@@ -37,11 +38,7 @@ function assertMaturity(value: number): number {
 }
 
 function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
+  return kebab(value).slice(0, 80);
 }
 
 function nextCapabilityId(): string {

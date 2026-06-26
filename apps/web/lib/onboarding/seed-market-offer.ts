@@ -15,6 +15,7 @@
 // /portfolio surface renders the result; no new UI.
 
 import { prisma } from "@dpf/db";
+import { slugify } from "@/lib/shared/slugify";
 import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 
 /** Stable slug of the Products & Services Sold portfolio root (Portfolio.id is a cuid). */
@@ -48,12 +49,6 @@ export type SeedMarketOfferResult = {
   offeringCount: number;
 };
 
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 /**
  * Seed the org's market offer into the Products & Services Sold portfolio from

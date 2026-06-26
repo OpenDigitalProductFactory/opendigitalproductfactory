@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { slugify } from "@/lib/shared/slugify";
 import { hashPassword } from "../password";
 import { linkSetupToOrg, linkSetupToUser } from "./setup-progress";
 
@@ -20,10 +21,7 @@ export async function createOrganization(
     timezone?: string;
   },
 ) {
-  const baseSlug = data.orgName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+  const baseSlug = slugify(data.orgName);
 
   const existingOrg = await prisma.organization.findFirst({
     orderBy: { createdAt: "asc" },

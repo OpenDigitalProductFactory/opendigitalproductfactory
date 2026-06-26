@@ -224,9 +224,9 @@ describe("getOutstandingInvoicesReport", () => {
 });
 
 describe("exportReportToCsv", () => {
-  it("produces correct CSV for basic data", () => {
+  it("produces correct CSV for basic data (RFC-4180 CRLF line endings)", () => {
     const csv = exportReportToCsv(["Item", "Amount"], [["Revenue", "1000.00"], ["Expenses", "400.00"]]);
-    expect(csv).toBe("Item,Amount\nRevenue,1000.00\nExpenses,400.00");
+    expect(csv).toBe("Item,Amount\r\nRevenue,1000.00\r\nExpenses,400.00");
   });
 
   it("escapes values containing commas", () => {
