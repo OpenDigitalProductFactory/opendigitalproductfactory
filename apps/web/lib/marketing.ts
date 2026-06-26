@@ -249,11 +249,13 @@ export type MarketingWorkspaceSnapshot = {
   workProducts: {
     campaignBriefs: Array<MarketingCampaignBriefArtifact & {
       briefId: string;
+      campaignId?: string | null;
       status: string;
       createdAt: Date;
     }>;
     assetTasks: Array<MarketingAssetTaskArtifact & {
       taskId: string;
+      campaignId?: string | null;
       status: string;
       createdAt: Date;
     }>;
@@ -1299,6 +1301,7 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
     workProducts: {
       campaignBriefs: campaignBriefs.map((brief) => ({
         briefId: brief.briefId,
+        campaignId: brief.campaignId,
         title: brief.title,
         objective: brief.objective,
         audience: cleanText(brief.audience),
@@ -1312,6 +1315,7 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
       })),
       assetTasks: assetTasks.map((task) => ({
         taskId: task.taskId,
+        campaignId: task.campaignId,
         title: task.title,
         assetType: task.assetType,
         channel: normalizeChannel(task.channel),
