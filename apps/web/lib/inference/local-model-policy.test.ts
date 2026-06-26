@@ -11,6 +11,9 @@ import {
   normaliseModelId,
   MAX_CONCURRENT_GENERATION_MODELS,
   RECOMMENDED_BUILD_CONTEXT_TOKENS,
+  MAX_LOCAL_CONTEXT_TOKENS,
+  clampServedContextTokens,
+  recommendServedContextTokens,
 } from "./local-model-policy";
 
 describe("classifyLocalModelRole / isEmbeddingModelId", () => {
@@ -72,6 +75,51 @@ describe("recommendGenerationModelForHost (architecture-aware) + computeMemoryBu
 describe("RECOMMENDED_BUILD_CONTEXT_TOKENS", () => {
   it("clears the OpenCode build floor (22k) so the auto-set context never truncates builds", () => {
     expect(RECOMMENDED_BUILD_CONTEXT_TOKENS).toBeGreaterThanOrEqual(22_000);
+  });
+});
+
+describe("clampServedContextTokens", () => {
+  it("floors below-build values up to the build floor", () => {
+    expect(clampServedContextTokens(4_096)).toBe(RECOMMENDED_BUILD_CONTEXT_TOKENS);
+    expect(clampServedContextTokens(0)).toBe(RECOMMENDED_BUILD_CONTEXT_TOKENS);
+  });
+  it("caps above-ceiling values at MAX_LOCAL_CONTEXT_TOKENS", () => {
+    expect(clampServedContextTokens(999_999)).toBe(MAX_LOCAL_CONTEXT_TOKENS);
+  });
+  it("passes in-band values through", () => {
+    expect(clampServedContextTokens(49_152)).toBe(49_152);
+  });
+  it("falls back to the floor on non-finite input", () => {
+    expect(clampServedContextTokens(NaN)).toBe(RECOMMENDED_BUILD_CONTEXT_TOKENS);
+  });
+});
+
+describe("recommendServedContextTokens (host-aware)", () => {
+  it("scales a big unified Mac up to the ceiling", () => {
+    // 128 GB unified → 96 GB budget; minus 22 GB weights + 5 GB headroom = 69 GB
+    // KV budget → ~690k tokens, clamped to the ceiling.
+    const host = { architecture: "unified" as const, totalRamGb: 128 };
+    expect(recommendServedContextTokens(host, 22)).toBe(MAX_LOCAL_CONTEXT_TOKENS);
+  });
+  it("keeps a 24 GB discrete card near the build floor", () => {
+    // 24 GB VRAM − 16 GB weights − 5 GB headroom = 3 GB KV → ~30k, rounded to 8k.
+    const host = { architecture: "discrete" as const, vramGb: 24 };
+    const ctx = recommendServedContextTokens(host, 16);
+    expect(ctx).toBeGreaterThanOrEqual(RECOMMENDED_BUILD_CONTEXT_TOKENS);
+    expect(ctx).toBeLessThan(MAX_LOCAL_CONTEXT_TOKENS);
+  });
+  it("falls back to the build floor when the budget is undetectable (e.g. DMR reports no VRAM)", () => {
+    expect(recommendServedContextTokens({ architecture: "discrete", vramGb: null }, 16)).toBe(
+      RECOMMENDED_BUILD_CONTEXT_TOKENS,
+    );
+    expect(recommendServedContextTokens({ architecture: "unified", totalRamGb: 128 }, null)).toBe(
+      RECOMMENDED_BUILD_CONTEXT_TOKENS,
+    );
+  });
+  it("falls back to the floor when weights leave no room for KV cache", () => {
+    expect(recommendServedContextTokens({ architecture: "discrete", vramGb: 18 }, 16)).toBe(
+      RECOMMENDED_BUILD_CONTEXT_TOKENS,
+    );
   });
 });
 

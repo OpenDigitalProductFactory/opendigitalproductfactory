@@ -21,8 +21,47 @@
 
 import { prisma } from "@dpf/db";
 import { getOllamaBaseUrl, getOllamaApiRoot } from "./ollama-url";
-import { isEmbeddingModelId, RECOMMENDED_BUILD_CONTEXT_TOKENS } from "./local-model-policy";
+import {
+  isEmbeddingModelId,
+  RECOMMENDED_BUILD_CONTEXT_TOKENS,
+  clampServedContextTokens,
+} from "./local-model-policy";
 import { getServedContextTokens, setServedContextTokens } from "./dmr-runtime-config";
+
+/**
+ * PlatformConfig key holding the operator-chosen served context (tokens) for the
+ * local generation model. The reconcile target is this value (clamped) when set,
+ * else RECOMMENDED_BUILD_CONTEXT_TOKENS. Stored here — NOT in ModelProfile — so it
+ * survives model re-profiling, which periodically rewrites ModelProfile columns
+ * from the model card's small default. First-run bootstrap seeds a host-aware
+ * default; an operator can pin a specific value (e.g. raise a capable box to 128k
+ * so the heaviest coworkers fit).
+ */
+export const LOCAL_SERVED_CONTEXT_CONFIG_KEY = "local.servedContextTokens";
+
+/**
+ * The reconcile target: the operator override from PlatformConfig (clamped to the
+ * supported band) when present, else the build floor. Best-effort — any read
+ * error falls back to the floor so a DB hiccup never lowers a healthy install
+ * below where it was.
+ */
+export async function resolveServedContextTarget(): Promise<number> {
+  try {
+    const row = await prisma.platformConfig.findUnique({
+      where: { key: LOCAL_SERVED_CONTEXT_CONFIG_KEY },
+    });
+    const raw =
+      typeof row?.value === "number"
+        ? row.value
+        : typeof row?.value === "string"
+          ? Number(row.value)
+          : null;
+    if (raw != null && Number.isFinite(raw)) return clampServedContextTokens(raw);
+  } catch {
+    // best-effort — fall through to the floor
+  }
+  return RECOMMENDED_BUILD_CONTEXT_TOKENS;
+}
 
 export type ContextReconcileStatus =
   | "raised" // was below target; override applied (and ModelProfile synced)
@@ -43,12 +82,20 @@ export type ContextReconcileResult = {
 };
 
 /**
- * Ensure the local generation model serves at least RECOMMENDED_BUILD_CONTEXT_TOKENS.
+ * Ensure the local generation model serves at least the reconcile target — the
+ * operator override (PlatformConfig) when set, else RECOMMENDED_BUILD_CONTEXT_TOKENS.
  * Best-effort and idempotent — safe to call on every boot and on an interval.
+ *
+ * Also REPAIRS the routing source of truth (ModelProfile.maxContextTokens) when
+ * the served context already meets target but the DB column has drifted below it
+ * (model re-profiling resets the column to the card's small default). Routing's
+ * context-window filter reads that column, so a stale value silently excludes the
+ * heaviest coworker even though DMR is serving plenty of context.
  */
 export async function reconcileLocalModelContext(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ContextReconcileResult> {
+  const target = await resolveServedContextTarget();
   const none = (status: ContextReconcileStatus, reason: string | null): ContextReconcileResult => ({
     status,
     modelId: null,
@@ -81,11 +128,24 @@ export async function reconcileLocalModelContext(
       return { status: "unsupported", modelId, before: null, after: null, reason: served.reason };
     }
     const before = served.contextTokens; // null = no override set (DMR default ~4k)
-    if (before !== null && before >= RECOMMENDED_BUILD_CONTEXT_TOKENS) {
+    if (before !== null && before >= target) {
+      // DMR already serves enough. Repair the routing column if re-profiling has
+      // drifted it below what is actually served — best-effort, conditional so the
+      // steady state stays write-free.
+      await prisma.modelProfile
+        .updateMany({
+          where: {
+            providerId: { in: ["local", "ollama"] },
+            modelId,
+            OR: [{ maxContextTokens: null }, { maxContextTokens: { lt: before } }],
+          },
+          data: { maxContextTokens: before },
+        })
+        .catch(() => {});
       return { status: "ok", modelId, before, after: before, reason: null };
     }
 
-    const applied = await setServedContextTokens(apiRoot, modelId, RECOMMENDED_BUILD_CONTEXT_TOKENS, fetchImpl);
+    const applied = await setServedContextTokens(apiRoot, modelId, target, fetchImpl);
     if (!applied.ok) {
       // DMR refuses while a runner is active; the override applies on next load.
       return { status: "deferred", modelId, before, after: null, reason: applied.reason };
@@ -96,7 +156,7 @@ export async function reconcileLocalModelContext(
     await prisma.modelProfile
       .updateMany({
         where: { providerId: { in: ["local", "ollama"] }, modelId },
-        data: { maxContextTokens: applied.contextTokens ?? RECOMMENDED_BUILD_CONTEXT_TOKENS },
+        data: { maxContextTokens: applied.contextTokens ?? target },
       })
       .catch(() => {});
 
@@ -104,7 +164,7 @@ export async function reconcileLocalModelContext(
       status: "raised",
       modelId,
       before,
-      after: applied.contextTokens ?? RECOMMENDED_BUILD_CONTEXT_TOKENS,
+      after: applied.contextTokens ?? target,
       reason: null,
     };
   } catch (err) {

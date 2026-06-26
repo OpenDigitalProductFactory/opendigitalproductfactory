@@ -6,8 +6,11 @@ import { activateProvider } from "@/lib/govern/activate-provider";
 import { syncAgentPrincipal } from "@/lib/identity/principal-linking";
 import {
   recommendGenerationModel,
+  recommendServedContextTokens,
+  estimateModelVramGb,
   detectLocalModelOverCommit,
   normaliseModelId,
+  type HostMemory,
 } from "./local-model-policy";
 
 /** Check if first-run bootstrap is needed. */
@@ -193,7 +196,37 @@ export async function executeFirstRunBootstrap(
         // every boot, so first-run and every restart converge on one target.
         // Best-effort — never blocks setup.
         {
-          const { reconcileLocalModelContext } = await import("./local-model-context-reconcile");
+          const { reconcileLocalModelContext, LOCAL_SERVED_CONTEXT_CONFIG_KEY } = await import(
+            "./local-model-context-reconcile"
+          );
+
+          // Seed a host-aware served-context default the FIRST time only, so a
+          // capable box (which can afford a large KV cache) gets the bigger
+          // window the heaviest coworkers need instead of the conservative build
+          // floor. Skip when an operator has already pinned a value. Best-effort.
+          try {
+            const existing = await prisma.platformConfig.findUnique({
+              where: { key: LOCAL_SERVED_CONTEXT_CONFIG_KEY },
+            });
+            if (!existing) {
+              const hw = await getOllamaHardwareInfo(baseUrl);
+              const genId = (tagsData.models ?? [])
+                .map((m) => normaliseModelId(m.name))
+                .find((id) => !id.includes("embed"));
+              const host: HostMemory = { architecture: "discrete", vramGb: hw?.vramGb ?? null };
+              const recommended = recommendServedContextTokens(
+                host,
+                genId ? estimateModelVramGb(genId) : null,
+              );
+              await prisma.platformConfig.create({
+                data: { key: LOCAL_SERVED_CONTEXT_CONFIG_KEY, value: recommended },
+              });
+              console.log(`[bootstrap] Seeded local served-context default → ${recommended} tokens.`);
+            }
+          } catch {
+            // best-effort — reconcile still applies the build floor below
+          }
+
           const ctx = await reconcileLocalModelContext();
           if (ctx.status === "raised") {
             console.log(`[bootstrap] Raised ${ctx.modelId} served context ${ctx.before ?? "unset"} → ${ctx.after} for Build Studio.`);
