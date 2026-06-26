@@ -86,6 +86,71 @@ export const CPU_USABLE_FRACTION = 0.5;
  */
 export const RECOMMENDED_BUILD_CONTEXT_TOKENS = 24_576;
 
+/**
+ * Practical ceiling for the local served context, and the cap on both the
+ * operator override and the host-aware recommendation below.
+ *
+ * WHY THIS MATTERS: the build floor (24k) clears OpenCode but is too small for
+ * the heaviest COWORKER. The COO's assembled prompt — full persona + skills
+ * catalog + tool schemas — is ~16k input tokens before the user types anything,
+ * and routing demands `estimatedInput × 1.5` of context (request-contract.ts).
+ * 16k × 1.5 = 24.6k > 24,576, so a 24k served window HARD-EXCLUDES the COO on a
+ * single-local-model install ("No eligible endpoints for task 'conversation'"),
+ * surfaced to the user as "The AI provider is temporarily unavailable". 128k
+ * clears every coworker with room for long threads (~13 GB KV cache at this
+ * size) and fits comfortably inside a capable box's memory budget.
+ */
+export const MAX_LOCAL_CONTEXT_TOKENS = 131_072;
+
+/**
+ * Approximate KV-cache cost per 1k tokens of served context, GB. Measured on-box
+ * (RTX 4090 / qwen3-coder 30B): ~2.3 GB at 24k ≈ 0.1 GB / 1k. Used to size the
+ * served context to the memory the host can actually spare after model weights.
+ */
+export const KV_CACHE_GB_PER_1K_TOKENS = 0.1;
+
+/** Round a token count DOWN to a clean 8k multiple (what runtimes prefer). */
+function roundDownTo8k(tokens: number): number {
+  return Math.floor(tokens / 8_192) * 8_192;
+}
+
+/**
+ * Clamp a served-context request to the supported band: never below the build
+ * floor (smaller silently truncates local builds / coworker turns), never above
+ * the practical ceiling. Non-finite / non-positive input falls back to the floor.
+ */
+export function clampServedContextTokens(tokens: number): number {
+  if (!Number.isFinite(tokens) || tokens <= 0) return RECOMMENDED_BUILD_CONTEXT_TOKENS;
+  return Math.min(MAX_LOCAL_CONTEXT_TOKENS, Math.max(RECOMMENDED_BUILD_CONTEXT_TOKENS, Math.floor(tokens)));
+}
+
+/**
+ * Recommend the served context window (tokens) for the local generation model,
+ * scaled to the memory the host can spare AFTER the model weights + embedder +
+ * runtime overhead (MODEL_HEADROOM_GB already covers the embedder/overhead, so we
+ * only subtract weights from the budget here). Architecture-aware via
+ * computeMemoryBudgetGb: a 24 GB discrete card lands near the build floor, a
+ * 128 GB unified Mac lands at the ceiling.
+ *
+ * Falls back to the build floor whenever the budget or weights are unknown
+ * (e.g. Docker Model Runner reports no VRAM on Apple Silicon) — in that case the
+ * operator override is the mechanism for going higher. Result is clamped to
+ * [RECOMMENDED_BUILD_CONTEXT_TOKENS, MAX_LOCAL_CONTEXT_TOKENS] and rounded to 8k.
+ */
+export function recommendServedContextTokens(
+  host: HostMemory,
+  modelWeightsGb: number | null,
+): number {
+  const budget = computeMemoryBudgetGb(host);
+  if (!budget || budget <= 0 || modelWeightsGb == null || modelWeightsGb < 0) {
+    return RECOMMENDED_BUILD_CONTEXT_TOKENS;
+  }
+  const kvBudgetGb = budget - modelWeightsGb - MODEL_HEADROOM_GB;
+  if (kvBudgetGb <= 0) return RECOMMENDED_BUILD_CONTEXT_TOKENS;
+  const tokens = roundDownTo8k((kvBudgetGb / KV_CACHE_GB_PER_1K_TOKENS) * 1_000);
+  return clampServedContextTokens(tokens);
+}
+
 export type HostArchitecture = "discrete" | "unified" | "cpu";
 
 export interface HostMemory {

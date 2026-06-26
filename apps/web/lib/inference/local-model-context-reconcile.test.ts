@@ -1,13 +1,20 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockPrisma } = vi.hoisted(() => ({
-  mockPrisma: { modelProfile: { updateMany: vi.fn() } },
+  mockPrisma: {
+    modelProfile: { updateMany: vi.fn() },
+    platformConfig: { findUnique: vi.fn() },
+  },
 }));
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma, DISCOVERY_TRIAGE_AGENT_ID: "discovery-triage" }));
 
 import { reconcileLocalModelContext, resolveLocalServedContextTokens } from "./local-model-context-reconcile";
-import { RECOMMENDED_BUILD_CONTEXT_TOKENS } from "./local-model-policy";
+import { RECOMMENDED_BUILD_CONTEXT_TOKENS, MAX_LOCAL_CONTEXT_TOKENS } from "./local-model-policy";
 
+// Default: no operator override set → target is the build floor. Individual tests
+// override per case. Set in beforeEach because clearAllMocks() clears calls but
+// not implementations, so a prior test's mockResolvedValue would otherwise leak.
+beforeEach(() => mockPrisma.platformConfig.findUnique.mockResolvedValue(null));
 afterEach(() => vi.clearAllMocks());
 
 const GEN = "docker.io/ai/qwen3-coder:latest";
@@ -76,13 +83,59 @@ describe("reconcileLocalModelContext", () => {
     expect(r.after).toBe(RECOMMENDED_BUILD_CONTEXT_TOKENS);
   });
 
-  it("is a no-op when already at/above target — no POST, no DB write", async () => {
+  it("is a no-op (no POST) when already at/above target — DB write is conditional repair only", async () => {
+    mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
     const f = makeFetch({ configured: RECOMMENDED_BUILD_CONTEXT_TOKENS });
     const r = await reconcileLocalModelContext(f.fetchImpl);
     expect(r.status).toBe("ok");
     expect(r.before).toBe(RECOMMENDED_BUILD_CONTEXT_TOKENS);
     expect(f.calls.post).toBe(0);
-    expect(mockPrisma.modelProfile.updateMany).not.toHaveBeenCalled();
+    // No DMR write, but a conditional column-repair update is issued (count 0 = nothing stale).
+    expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: [{ maxContextTokens: null }, { maxContextTokens: { lt: RECOMMENDED_BUILD_CONTEXT_TOKENS } }],
+        }),
+        data: { maxContextTokens: RECOMMENDED_BUILD_CONTEXT_TOKENS },
+      }),
+    );
+  });
+
+  it("targets the operator override from PlatformConfig and raises DMR to it (e.g. 128k)", async () => {
+    mockPrisma.platformConfig.findUnique.mockResolvedValue({ value: MAX_LOCAL_CONTEXT_TOKENS });
+    mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 1 });
+    const f = makeFetch({ configured: RECOMMENDED_BUILD_CONTEXT_TOKENS });
+    const r = await reconcileLocalModelContext(f.fetchImpl);
+    expect(r.status).toBe("raised");
+    expect(r.before).toBe(RECOMMENDED_BUILD_CONTEXT_TOKENS);
+    expect(r.after).toBe(MAX_LOCAL_CONTEXT_TOKENS);
+    expect(f.calls.post).toBe(1);
+    expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { maxContextTokens: MAX_LOCAL_CONTEXT_TOKENS } }),
+    );
+  });
+
+  it("clamps an over-ceiling operator override down to MAX_LOCAL_CONTEXT_TOKENS", async () => {
+    mockPrisma.platformConfig.findUnique.mockResolvedValue({ value: 999_999 });
+    mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 1 });
+    const f = makeFetch({ configured: null });
+    const r = await reconcileLocalModelContext(f.fetchImpl);
+    expect(r.status).toBe("raised");
+    expect(r.after).toBe(MAX_LOCAL_CONTEXT_TOKENS);
+  });
+
+  it("repairs a drifted routing column when DMR already serves at/above target", async () => {
+    // Override unset → target is the floor; DMR serves 49152 (re-profiling left the
+    // ModelProfile column below that). No DMR POST, but the column is synced up.
+    mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 1 });
+    const f = makeFetch({ configured: 49_152 });
+    const r = await reconcileLocalModelContext(f.fetchImpl);
+    expect(r.status).toBe("ok");
+    expect(r.before).toBe(49_152);
+    expect(f.calls.post).toBe(0);
+    expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { maxContextTokens: 49_152 } }),
+    );
   });
 
   it("leaves the embedding model alone (no generation model installed)", async () => {
