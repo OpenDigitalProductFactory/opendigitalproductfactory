@@ -118,7 +118,8 @@ function RosterRowCard({ row }: { row: RosterRow }) {
         flexWrap: "wrap",
       }}
     >
-      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--dpf-text)", minWidth: 180 }}>{row.name}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--dpf-text)", minWidth: 180 }}>{row.displayName}</span>
+      <Badge tone="muted">{row.kind.charAt(0).toUpperCase() + row.kind.slice(1)}</Badge>
       {row.familyLabel ? (
         <Badge tone="accent">{row.familyLabel}</Badge>
       ) : (

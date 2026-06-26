@@ -131,12 +131,13 @@ export default async function AgentDetailPage({
           AI Workforce
         </Link>
         <span style={{ fontSize: 11, color: "var(--dpf-muted)", margin: "0 6px" }}>/</span>
-        <span style={{ fontSize: 11, color: "var(--dpf-text)" }}>{agent.name}</span>
+        <span style={{ fontSize: 11, color: "var(--dpf-text)" }}>{agent.displayName}</span>
       </div>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>{agent.name}</h1>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>{agent.displayName}</h1>
+        <HeaderChip tone="muted">{agent.kind.charAt(0).toUpperCase() + agent.kind.slice(1)}</HeaderChip>
         <HeaderChip tone="accent">{TIER_LABELS[agent.tier] ?? `Tier ${agent.tier}`}</HeaderChip>
         {profession.family && <HeaderChip tone="accent">{profession.family.label}</HeaderChip>}
         {agent.valueStream && <HeaderChip tone="success">{agent.valueStream}</HeaderChip>}
