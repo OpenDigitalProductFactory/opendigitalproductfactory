@@ -26,6 +26,16 @@ tunable dial.
   change, covered by a unit test exercising the override.
 - `DEFAULT_THRESHOLDS` values are the design-pass defaults; tune per risk appetite.
 
+## Regulatory ceiling — now integrated (BI-40CD8ACD)
+
+`recommendTrustChange` now takes an optional `regulatoryCeiling`, and the EFFECTIVE
+cap = `minLevel(riskCeiling, regulatoryCeiling)`. So a regulated activity stays
+capped regardless of agreement ("only a compliance change lifts it"), while the
+risk floor still binds when it is the more restrictive of the two. Omit the param
+for non-regulated activities (trust + risk govern alone). The policy DATA layer —
+which (industry x jurisdiction x activity) maps to which ceiling, versioned and
+compliance-editable — remains a separate build needing the founder's domain input.
+
 ## Deferred (separate BIs)
 
 The DB substrate (`DecisionShadowLedger` + `TrustState` models, recording hooks,

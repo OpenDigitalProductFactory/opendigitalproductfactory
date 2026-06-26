@@ -49,6 +49,11 @@ export function agreementRate(w: AgreementWindow): number | null {
   return Math.min(1, Math.max(0, w.agreements / w.samples));
 }
 
+/** The more-restrictive (lower) of two autonomy levels. */
+export function minLevel(a: AutonomyLevel, b: AutonomyLevel): AutonomyLevel {
+  return levelIndex(a) <= levelIndex(b) ? a : b;
+}
+
 /** Per-level gate to climb to the NEXT level. The tunable dial. */
 export interface GraduationThreshold {
   minSamples: number;
@@ -108,10 +113,21 @@ export function recommendTrustChange(args: {
   window: AgreementWindow;
   thresholds?: Partial<Record<AutonomyLevel, GraduationThreshold>>;
   ceilings?: Record<RiskClass, AutonomyLevel>;
+  /**
+   * Regulatory/compliance cap for this (industry x jurisdiction x activity),
+   * independent of earned trust (BI-40CD8ACD). The EFFECTIVE ceiling is the more
+   * restrictive of the risk ceiling and this. Omit when the activity is not
+   * regulated (trust + risk govern alone). A regulated activity stays capped no
+   * matter how high the agreement -- only a compliance change lifts it.
+   */
+  regulatoryCeiling?: AutonomyLevel;
 }): TrustRecommendation {
   const { level, risk, window } = args;
   const rate = agreementRate(window);
-  const ceiling = (args.ceilings ?? DEFAULT_RISK_CEILINGS)[risk];
+  const riskCeiling = (args.ceilings ?? DEFAULT_RISK_CEILINGS)[risk];
+  const ceiling = args.regulatoryCeiling ? minLevel(riskCeiling, args.regulatoryCeiling) : riskCeiling;
+  const regulatoryBinds =
+    args.regulatoryCeiling != null && levelIndex(args.regulatoryCeiling) < levelIndex(riskCeiling);
 
   // 1. Demotion first.
   if (rate !== null && window.samples >= DEMOTION_MIN_SAMPLES && rate < DEMOTION_RATE) {
@@ -122,13 +138,14 @@ export function recommendTrustChange(args: {
     return { action: "hold", level, reason: `agreement ${pct(rate)} is low but already at shadow` };
   }
 
-  // 2. Risk ceiling reached.
+  // 2. Ceiling reached (risk and/or regulatory -- the more restrictive binds).
   if (levelIndex(level) >= levelIndex(ceiling)) {
     return {
       action: "hold",
       level,
-      reason:
-        ceiling === "propose"
+      reason: regulatoryBinds
+        ? `regulatory ceiling (${ceiling}) caps this activity regardless of agreement -- only a compliance change lifts it`
+        : ceiling === "propose"
           ? `kernel-floor risk (${risk}) is capped at propose -- a human always confirms`
           : `at the ${risk} ceiling (${ceiling})`,
     };
