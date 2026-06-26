@@ -352,11 +352,12 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).not.toMatch(/dpf\/fb8783b9\//);
   });
 
-  it("makes the workflow graph the always-visible primary surface; tabs are gone", () => {
-    // Spec §1 + §9 #11: the global tab selector (Progress/Workflow/Details/
-    // Preview) is removed. The workflow canvas is the active-build pane's
-    // primary surface. Evidence (Progress, Brief, Review, Sandbox, BS Queue)
-    // moves into the DetailsDrawer accordion behind a pill on the canvas edge.
+  it("defaults to the plain overseer bands; the engineer graph is behind the Engineer view toggle (BI-90670010)", () => {
+    // Overseer altitude flip: the plain "Solution & Oversight" bands are the
+    // default first-viewport; the global tab selector is gone (spec §1/§9 #11);
+    // and the engineer-grade ProcessGraph + assurance cards demote behind a
+    // single "Engineer view" toggle (default off). The DetailsDrawer accordion
+    // stays mounted as the bands' dive-in.
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[makeBuild()]}
@@ -373,10 +374,13 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).not.toMatch(/<button[^>]*role="tab"[^>]*>Workflow<\/button>/);
     expect(html).not.toMatch(/<button[^>]*role="tab"[^>]*>Details<\/button>/);
 
-    // Workflow canvas surfaces are rendered eagerly (not gated by tab state).
+    // The graph-panel container + the Engineer view toggle are mounted, but the
+    // engineer-grade ProcessGraph + assurance cards are NOT rendered by default
+    // (they appear only after toggling Engineer view on).
     expect(html).toContain('data-testid="build-studio-graph-panel"');
-    expect(html).toContain('data-testid="code-intelligence-status-card"');
-    expect(html).toContain('data-testid="process-graph"');
+    expect(html).toContain('data-testid="build-studio-engineer-view-toggle"');
+    expect(html).not.toContain('data-testid="code-intelligence-status-card"');
+    expect(html).not.toContain('data-testid="process-graph"');
 
     // DetailsDrawer + Pill are mounted; drawer starts closed.
     expect(html).toContain('data-testid="build-studio-details-drawer-pill"');

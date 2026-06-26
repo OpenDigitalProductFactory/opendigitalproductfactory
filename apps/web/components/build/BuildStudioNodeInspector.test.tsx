@@ -127,6 +127,10 @@ vi.mock("@/components/build/BuildProgressOperationalPanel", () => ({
 
 beforeEach(() => {
   graphState.onNodeClick = null;
+  // The overseer reframe (BI-90670010) hides the ProcessGraph behind the
+  // "Engineer view" toggle by default. These tests exercise the graph/inspector,
+  // so render with engineer view enabled (the toggle is localStorage-persisted).
+  window.localStorage.setItem("dpf:build-studio-engineer-view", "true");
 });
 
 function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
