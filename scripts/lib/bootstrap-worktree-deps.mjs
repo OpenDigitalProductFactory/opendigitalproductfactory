@@ -75,3 +75,16 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
     return { status: "source-only", reason: "bootstrap_threw" };
   }
 }
+
+// CLI entry: `node scripts/lib/bootstrap-worktree-deps.mjs <worktreePath>`.
+// Invoked by seed-worktree-mcp when DPF_WORKTREE_BOOTSTRAP=1 (opt-in). Prints the
+// readiness JSON and ALWAYS exits 0 — a bootstrap failure must never break the
+// seed script (the worktree just stays source-only). Skipped on import so unit
+// tests of the pure helpers never trigger an install (mirrors worktree-create.mjs).
+const invokedDirectly =
+  process.argv[1] && process.argv[1].replace(/\\/g, "/").endsWith("bootstrap-worktree-deps.mjs");
+if (invokedDirectly) {
+  const target = process.argv[2] ?? process.cwd();
+  process.stdout.write(JSON.stringify(bootstrapWorktreeDeps(target)) + "\n");
+  process.exit(0);
+}

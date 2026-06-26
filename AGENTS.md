@@ -132,7 +132,7 @@ Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:3000/api/mcp/token/refresh
 ```
 Then retry the MCP call in the running session. No file edits. No re-registration.
 
-**New worktree MCP sync:** `.mcp.json` and `.vscode/mcp.json` are gitignored, so each worktree needs local MCP config plus its own `COMPOSE_PROJECT_NAME` and readiness marker. For a single new worktree, run the seed script from inside that worktree. To repair or rotate every linked worktree, run:
+**New worktree MCP sync:** `.mcp.json` and `.vscode/mcp.json` are gitignored, so each worktree needs local MCP config plus its own `COMPOSE_PROJECT_NAME` and readiness marker. For a single new worktree, run the seed script from inside that worktree. To have it born **compile-ready** (a managed dependency bootstrap via the shared pnpm store, instead of source-only — no junction dance), set `DPF_WORKTREE_BOOTSTRAP=1` before seeding; the seed step then runs `scripts/lib/bootstrap-worktree-deps.mjs` fail-safe (BI-3047C122 — off by default so it never slows routine creation). To repair or rotate every linked worktree, run:
 ```powershell
 .\scripts\sync-mcp-worktrees.ps1
 ```
