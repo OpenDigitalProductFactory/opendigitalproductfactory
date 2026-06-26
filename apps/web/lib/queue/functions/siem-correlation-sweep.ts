@@ -21,6 +21,12 @@ import {
   type SecurityEventView,
 } from "@/lib/security/detection";
 import { ensureKernelDetectionPack } from "@/lib/security/detection-pack";
+import {
+  detectionRowToGroupingInput,
+  groupDetectionsIntoCases,
+  maxSeverity,
+  type DetectionRowForGrouping,
+} from "@/lib/security/case-grouping";
 import { runInternalSecurityProjection } from "@/lib/security/internal-projector";
 import {
   buildIndicatorIndex,
@@ -40,6 +46,22 @@ export interface CorrelationSweepResult {
   indicators: number;
   eventsScanned: number;
   detectionsUpserted: number;
+  /** SecurityCases opened this cycle from open, un-cased detections (§6.4). */
+  casesOpened: number;
+}
+
+/**
+ * The asset/actor a detection is "about", for case grouping. Device hostname
+ * first (host-scoped events), then the acting user/principal, else "unknown"
+ * (the detection still groups by scope + family). Json-safe.
+ */
+function deriveEntityKey(device: unknown, actor: unknown): string {
+  const host = (device as { hostname?: unknown } | null)?.hostname;
+  if (typeof host === "string" && host) return host;
+  const a = (actor ?? {}) as { user?: { name?: unknown }; name?: unknown; uid?: unknown };
+  const user = a.user?.name ?? a.name ?? a.uid;
+  if (typeof user === "string" && user) return user;
+  return "unknown";
 }
 
 function toRuleView(rule: {
@@ -163,6 +185,8 @@ export async function runCorrelationSweep(opts?: {
       time: true,
       observables: true,
       normalized: true,
+      device: true,
+      actor: true,
     },
   });
 
@@ -171,7 +195,11 @@ export async function runCorrelationSweep(opts?: {
     const candidates = evaluateRulesForEvent(ruleViews, toEventView(ev), {
       indicatorIndex: index,
     });
+    // Stamp the matched entity onto the detection so case grouping can run off
+    // the persisted row without re-joining to the event (case-grouping.ts).
+    const entityKey = deriveEntityKey(ev.device, ev.actor);
     for (const c of candidates) {
+      const enrichment = { ...c.enrichment, entityKey };
       await prisma.detection.upsert({
         where: { detectionKey: c.detectionKey },
         create: {
@@ -184,7 +212,7 @@ export async function runCorrelationSweep(opts?: {
           status: "open",
           riskScore: c.riskScore,
           matchedEventRefs: c.matchedEventRefs as object,
-          enrichment: c.enrichment as object,
+          enrichment: enrichment as object,
           firstSeenAt: c.firstSeenAt,
           lastSeenAt: c.lastSeenAt,
         },
@@ -193,7 +221,7 @@ export async function runCorrelationSweep(opts?: {
         update: {
           severity: c.severity,
           riskScore: c.riskScore,
-          enrichment: c.enrichment as object,
+          enrichment: enrichment as object,
           lastSeenAt: c.lastSeenAt,
         },
       });
@@ -201,12 +229,99 @@ export async function runCorrelationSweep(opts?: {
     }
   }
 
+  // ── Detection --> Case (spec §6.4): group open, un-cased detections into
+  //    SecurityCases so the AI SOC has a case to triage without a human first
+  //    opening one. Idempotent: the grouping key is stable, so a re-run merges
+  //    into the same case rather than spawning duplicates. Coworkers can still
+  //    open cases manually (open_security_case) — both edges feed one model.
+  const casesOpened = await groupOpenDetectionsIntoCases(prisma, now);
+
   return {
     rules: rules.length,
     indicators: index.size,
     eventsScanned: events.length,
     detectionsUpserted,
+    casesOpened,
   };
+}
+
+/**
+ * Group every OPEN, un-cased Detection into a SecurityCase. Detections already
+ * linked to a case (securityCaseId set) are excluded, so each detection is
+ * grouped exactly once; an existing case absorbs new same-key detections and
+ * ratchets to the max severity. Returns the count of NEW cases opened.
+ */
+async function groupOpenDetectionsIntoCases(
+  prisma: typeof import("@dpf/db").prisma,
+  now: Date,
+): Promise<number> {
+  const ungrouped = await prisma.detection.findMany({
+    where: { status: "open", securityCaseId: null },
+    select: {
+      detectionKey: true,
+      scopeKey: true,
+      customerAccountId: true,
+      customerSiteId: true,
+      severity: true,
+      firstSeenAt: true,
+      lastSeenAt: true,
+      enrichment: true,
+    },
+    take: SWEEP_EVENT_CAP,
+  });
+  if (ungrouped.length === 0) return 0;
+
+  const candidates = groupDetectionsIntoCases(
+    ungrouped.map((d) =>
+      detectionRowToGroupingInput(d as unknown as DetectionRowForGrouping),
+    ),
+  );
+
+  let casesOpened = 0;
+  for (const cand of candidates) {
+    const existing = await prisma.securityCase.findUnique({
+      where: { caseKey: cand.caseKey },
+      select: { id: true, severity: true },
+    });
+    let caseId: string;
+    if (existing) {
+      caseId = existing.id;
+      const merged = maxSeverity(existing.severity, cand.severity);
+      if (merged !== existing.severity) {
+        await prisma.securityCase.update({ where: { id: caseId }, data: { severity: merged } });
+      }
+    } else {
+      const created = await prisma.securityCase.create({
+        data: {
+          caseKey: cand.caseKey,
+          scopeKey: cand.scopeKey,
+          customerAccountId: cand.customerAccountId,
+          customerSiteId: cand.customerSiteId,
+          title: cand.title,
+          severity: cand.severity,
+          status: "new",
+          verdict: "unknown",
+          timeline: [
+            {
+              at: now.toISOString(),
+              kind: "auto-opened",
+              note: `Opened by the correlation sweep from ${cand.detectionKeys.length} detection(s).`,
+            },
+          ] as object,
+          openedAt: cand.firstSeenAt,
+        },
+        select: { id: true },
+      });
+      caseId = created.id;
+      casesOpened++;
+    }
+    // Link the grouped detections (only those still un-cased — idempotent).
+    await prisma.detection.updateMany({
+      where: { detectionKey: { in: cand.detectionKeys }, securityCaseId: null },
+      data: { securityCaseId: caseId },
+    });
+  }
+  return casesOpened;
 }
 
 export const siemCorrelationSweep = inngest.createFunction(

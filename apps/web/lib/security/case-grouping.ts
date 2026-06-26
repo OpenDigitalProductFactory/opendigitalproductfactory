@@ -110,3 +110,68 @@ export function groupDetectionsIntoCases(
   // Stable output order: by caseKey.
   return [...byKey.values()].sort((a, b) => a.caseKey.localeCompare(b.caseKey));
 }
+
+// ── Persisted-detection → grouping input (the sweep's bridge) ────────────────
+//
+// The correlation sweep stores the matched entity on each Detection's enrichment
+// (entityKey) plus the rule's name + ATT&CK techniques. These pure helpers turn a
+// persisted Detection row back into a `DetectionForGrouping` so the sweep can
+// group OPEN, un-cased detections into cases (the spec's Detection --> Case edge,
+// §6.4) without re-joining to the source events.
+
+/** Enrichment fields the grouping bridge reads off a Detection row. */
+export interface DetectionEnrichmentForGrouping {
+  ruleKey?: string;
+  ruleName?: string;
+  mitreTechniques?: string[];
+  /** The asset/actor the detection is about (hostname, user, account). */
+  entityKey?: string;
+}
+
+export interface DetectionRowForGrouping {
+  detectionKey: string;
+  scopeKey: string;
+  customerAccountId: string | null;
+  customerSiteId: string | null;
+  severity: string;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+  enrichment: DetectionEnrichmentForGrouping | null;
+}
+
+/**
+ * The grouping family — what KIND of activity the case is about. Primary ATT&CK
+ * technique when known (so e.g. all credential-access on a host coalesce), else
+ * the rule pack/key. Stable: the same rule always yields the same family.
+ */
+export function detectionFamily(enr: DetectionEnrichmentForGrouping): string {
+  const technique = enr.mitreTechniques?.[0];
+  if (technique) return `attack:${technique}`;
+  return enr.ruleKey ? `rule:${enr.ruleKey}` : "uncategorized";
+}
+
+/**
+ * Map a persisted Detection row to the pure grouping input. entityKey defaults to
+ * "unknown" (detections still group by scope + family); the title prefers the
+ * rule name, qualified by the entity when known.
+ */
+export function detectionRowToGroupingInput(
+  row: DetectionRowForGrouping,
+): DetectionForGrouping {
+  const enr = row.enrichment ?? {};
+  const entityKey = enr.entityKey && enr.entityKey.length ? enr.entityKey : "unknown";
+  const family = detectionFamily(enr);
+  const ruleName = enr.ruleName ?? enr.ruleKey ?? "Security detection";
+  const title = entityKey !== "unknown" ? `${ruleName} — ${entityKey}` : ruleName;
+  return {
+    detectionKey: row.detectionKey,
+    scopeKey: row.scopeKey,
+    customerAccountId: row.customerAccountId,
+    customerSiteId: row.customerSiteId,
+    severity: row.severity,
+    groupingKey: deriveGroupingKey({ scopeKey: row.scopeKey, entityKey, family }),
+    title,
+    firstSeenAt: row.firstSeenAt,
+    lastSeenAt: row.lastSeenAt,
+  };
+}

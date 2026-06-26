@@ -6,11 +6,21 @@ const {
   mockThreatIndicatorFindMany,
   mockSecurityEventFindMany,
   mockDetectionUpsert,
+  mockDetectionFindMany,
+  mockDetectionUpdateMany,
+  mockSecurityCaseFindUnique,
+  mockSecurityCaseCreate,
+  mockSecurityCaseUpdate,
 } = vi.hoisted(() => ({
   mockDetectionRuleFindMany: vi.fn(),
   mockThreatIndicatorFindMany: vi.fn(),
   mockSecurityEventFindMany: vi.fn(),
   mockDetectionUpsert: vi.fn(),
+  mockDetectionFindMany: vi.fn(),
+  mockDetectionUpdateMany: vi.fn(),
+  mockSecurityCaseFindUnique: vi.fn(),
+  mockSecurityCaseCreate: vi.fn(),
+  mockSecurityCaseUpdate: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -18,7 +28,16 @@ vi.mock("@dpf/db", () => ({
     detectionRule: { findMany: mockDetectionRuleFindMany },
     threatIndicator: { findMany: mockThreatIndicatorFindMany },
     securityEvent: { findMany: mockSecurityEventFindMany },
-    detection: { upsert: mockDetectionUpsert },
+    detection: {
+      upsert: mockDetectionUpsert,
+      findMany: mockDetectionFindMany,
+      updateMany: mockDetectionUpdateMany,
+    },
+    securityCase: {
+      findUnique: mockSecurityCaseFindUnique,
+      create: mockSecurityCaseCreate,
+      update: mockSecurityCaseUpdate,
+    },
   },
 }));
 
@@ -30,6 +49,11 @@ beforeEach(() => {
   vi.resetAllMocks();
   mockThreatIndicatorFindMany.mockResolvedValue([]);
   mockDetectionUpsert.mockResolvedValue({ id: "det_1" });
+  // Default: no un-cased detections to group (tests opt in below).
+  mockDetectionFindMany.mockResolvedValue([]);
+  mockDetectionUpdateMany.mockResolvedValue({ count: 0 });
+  mockSecurityCaseFindUnique.mockResolvedValue(null);
+  mockSecurityCaseCreate.mockResolvedValue({ id: "case_1" });
 });
 
 describe("runCorrelationSweep", () => {
@@ -115,5 +139,79 @@ describe("runCorrelationSweep", () => {
     const result = await runCorrelationSweep({ seedPack: false });
     expect(result.detectionsUpserted).toBe(0);
     expect(mockDetectionUpsert).not.toHaveBeenCalled();
+    expect(result.casesOpened).toBe(0); // nothing un-cased to group
+  });
+
+  it("groups open, un-cased detections into a SecurityCase (Detection --> Case)", async () => {
+    mockDetectionRuleFindMany.mockResolvedValue([]); // no scan this test
+    mockSecurityEventFindMany.mockResolvedValue([]);
+    // Two open, un-cased detections about the same host + ATT&CK family → one case.
+    mockDetectionFindMany.mockResolvedValue([
+      {
+        detectionKey: "dpf-kernel:windows-audit-log-cleared:e1",
+        scopeKey: "organization:internal",
+        customerAccountId: null,
+        customerSiteId: null,
+        severity: "high",
+        firstSeenAt: NOW,
+        lastSeenAt: NOW,
+        enrichment: { ruleKey: "dpf-kernel:windows-audit-log-cleared", ruleName: "Windows audit log cleared", mitreTechniques: ["T1070.001"], entityKey: "HOST-1" },
+      },
+      {
+        detectionKey: "dpf-kernel:windows-audit-log-cleared:e2",
+        scopeKey: "organization:internal",
+        customerAccountId: null,
+        customerSiteId: null,
+        severity: "high",
+        firstSeenAt: NOW,
+        lastSeenAt: NOW,
+        enrichment: { ruleKey: "dpf-kernel:windows-audit-log-cleared", ruleName: "Windows audit log cleared", mitreTechniques: ["T1070.001"], entityKey: "HOST-1" },
+      },
+    ]);
+
+    const result = await runCorrelationSweep({ seedPack: false });
+
+    expect(result.casesOpened).toBe(1);
+    expect(mockSecurityCaseCreate).toHaveBeenCalledTimes(1);
+    const created = mockSecurityCaseCreate.mock.calls[0]![0].data;
+    expect(created).toMatchObject({
+      scopeKey: "organization:internal",
+      severity: "high",
+      status: "new",
+      verdict: "unknown",
+    });
+    expect(created.caseKey).toContain("attack:T1070.001");
+    expect(created.title).toContain("HOST-1");
+    // Both detections linked to the new case, exactly once.
+    expect(mockDetectionUpdateMany).toHaveBeenCalledTimes(1);
+    const link = mockDetectionUpdateMany.mock.calls[0]![0];
+    expect(link.data).toEqual({ securityCaseId: "case_1" });
+    expect(link.where.detectionKey.in).toHaveLength(2);
+  });
+
+  it("merges into an existing case and ratchets severity, no duplicate", async () => {
+    mockDetectionRuleFindMany.mockResolvedValue([]);
+    mockSecurityEventFindMany.mockResolvedValue([]);
+    mockDetectionFindMany.mockResolvedValue([
+      {
+        detectionKey: "dpf-kernel:aws-mfa-weakened:e9",
+        scopeKey: "organization:internal",
+        customerAccountId: null,
+        customerSiteId: null,
+        severity: "high",
+        firstSeenAt: NOW,
+        lastSeenAt: NOW,
+        enrichment: { ruleKey: "dpf-kernel:aws-mfa-weakened", ruleName: "AWS MFA removed", mitreTechniques: ["T1556"], entityKey: "arn:aws:iam::1:user/x" },
+      },
+    ]);
+    mockSecurityCaseFindUnique.mockResolvedValue({ id: "case_existing", severity: "medium" });
+
+    const result = await runCorrelationSweep({ seedPack: false });
+
+    expect(result.casesOpened).toBe(0); // merged, not opened
+    expect(mockSecurityCaseCreate).not.toHaveBeenCalled();
+    expect(mockSecurityCaseUpdate).toHaveBeenCalledTimes(1); // medium -> high
+    expect(mockSecurityCaseUpdate.mock.calls[0]![0].data).toEqual({ severity: "high" });
+    expect(mockDetectionUpdateMany).toHaveBeenCalledTimes(1);
   });
 });
