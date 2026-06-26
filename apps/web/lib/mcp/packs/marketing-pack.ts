@@ -42,6 +42,82 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_marketing",
     sideEffect: false,
   },
+  {
+    name: "create_marketing_campaign",
+    description:
+      "Establish a first-class marketing campaign: the executable plan that ties objective, audience, channels, budget, timeline, and KPI targets together and owns its briefs and asset tasks. Use this at the start of campaign work so execution status is tracked against one plan. Briefs/tasks attach to it via attach_to_campaign.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Short campaign name" },
+        objective: { type: "string", description: "Measurable objective" },
+        audience: { type: "string", description: "Target audience / ICP" },
+        channels: { type: "array", items: { type: "string" }, description: "Channels in the campaign" },
+        budgetTotalCents: { type: "number", description: "Total budget in minor currency units (e.g. pence/cents)" },
+        budgetByChannel: { type: "object", description: "Optional per-channel budget allocation, channel -> minor units", additionalProperties: { type: "number" } },
+        startDate: { type: "string", description: "ISO start date" },
+        endDate: { type: "string", description: "ISO end date" },
+        kpiTargets: { type: "array", items: { type: "string" }, description: "KPI targets with direction, e.g. '20 inquiries in 30 days'" },
+        primaryCta: { type: "string", description: "Primary call to action" },
+        notes: { type: "string", description: "Execution notes" },
+      },
+      required: ["name", "objective"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
+    name: "update_marketing_campaign",
+    description:
+      "Update a marketing campaign's status (draft/active/paused/complete), budget, timeline, or notes. Use to activate a planned campaign, pause an underperforming one, or mark it complete.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        campaignId: { type: "string", description: "MarketingCampaign.campaignId" },
+        status: { type: "string", enum: ["draft", "active", "paused", "complete"], description: "New lifecycle status" },
+        budgetTotalCents: { type: "number", description: "Revised total budget in minor units" },
+        startDate: { type: "string", description: "ISO start date" },
+        endDate: { type: "string", description: "ISO end date" },
+        notes: { type: "string", description: "Execution notes" },
+      },
+      required: ["campaignId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
+    name: "attach_to_campaign",
+    description:
+      "Attach an existing campaign brief and/or asset task to a campaign so it rolls up under one plan (replacing fuzzy title matching with a real link). Provide campaignId plus a briefId and/or taskId.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        campaignId: { type: "string", description: "MarketingCampaign.campaignId" },
+        briefId: { type: "string", description: "MarketingCampaignBrief.briefId to attach" },
+        taskId: { type: "string", description: "MarketingAssetTask.taskId to attach" },
+      },
+      required: ["campaignId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
+    name: "get_campaign_plan",
+    description:
+      "Read a campaign's full plan (objective, audience, channels, budget, timeline, KPI targets) plus a live execution rollup (brief/task/draft counts and the single most useful next step). Use to report status or decide what to do next on a campaign.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        campaignId: { type: "string", description: "MarketingCampaign.campaignId" },
+      },
+      required: ["campaignId"],
+    },
+    requiredCapability: "view_marketing",
+    sideEffect: false,
+  },
 ];
 
 async function buildTrackedLinksHandler(
@@ -66,13 +142,88 @@ async function buildTrackedLinksHandler(
   return { success: true, message: result.message, data: { links: result.links } };
 }
 
+async function createCampaignHandler(
+  params: Record<string, unknown>,
+  _userId: string,
+  context?: { agentId?: string },
+): Promise<ToolResult> {
+  const { createMarketingCampaign } = await import("@/lib/marketing/campaigns");
+  const result = await createMarketingCampaign({
+    name: String(params["name"] ?? ""),
+    objective: String(params["objective"] ?? ""),
+    audience: typeof params["audience"] === "string" ? params["audience"] : undefined,
+    channels: Array.isArray(params["channels"]) ? (params["channels"] as string[]) : undefined,
+    budgetTotalCents: typeof params["budgetTotalCents"] === "number" ? params["budgetTotalCents"] : undefined,
+    budgetByChannel:
+      params["budgetByChannel"] && typeof params["budgetByChannel"] === "object"
+        ? (params["budgetByChannel"] as Record<string, number>)
+        : undefined,
+    startDate: typeof params["startDate"] === "string" ? params["startDate"] : undefined,
+    endDate: typeof params["endDate"] === "string" ? params["endDate"] : undefined,
+    kpiTargets: params["kpiTargets"],
+    primaryCta: typeof params["primaryCta"] === "string" ? params["primaryCta"] : undefined,
+    notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
+    createdByAgentId: context?.agentId ?? null,
+  });
+  if (!result) {
+    return { success: false, error: "no-workspace", message: "No configured marketing workspace; cannot create a campaign." };
+  }
+  return { success: true, entityId: result.campaignId, message: result.message };
+}
+
+async function updateCampaignHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const { updateMarketingCampaign } = await import("@/lib/marketing/campaigns");
+  const result = await updateMarketingCampaign({
+    campaignId: String(params["campaignId"] ?? ""),
+    status: typeof params["status"] === "string" ? params["status"] : undefined,
+    budgetTotalCents: typeof params["budgetTotalCents"] === "number" ? params["budgetTotalCents"] : undefined,
+    startDate: typeof params["startDate"] === "string" ? params["startDate"] : undefined,
+    endDate: typeof params["endDate"] === "string" ? params["endDate"] : undefined,
+    notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
+  });
+  if ("error" in result) {
+    return { success: false, error: result.error, message: result.message };
+  }
+  return { success: true, entityId: result.campaignId, message: result.message };
+}
+
+async function attachToCampaignHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const { attachToCampaign } = await import("@/lib/marketing/campaigns");
+  const result = await attachToCampaign({
+    campaignId: String(params["campaignId"] ?? ""),
+    briefId: typeof params["briefId"] === "string" ? params["briefId"] : undefined,
+    taskId: typeof params["taskId"] === "string" ? params["taskId"] : undefined,
+  });
+  if ("error" in result) {
+    return { success: false, error: result.error, message: result.message };
+  }
+  return { success: true, message: result.message };
+}
+
+async function getCampaignPlanHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const { getCampaignPlan } = await import("@/lib/marketing/campaigns");
+  const result = await getCampaignPlan(String(params["campaignId"] ?? ""));
+  if ("error" in result) {
+    return { success: false, error: result.error, message: result.message };
+  }
+  return { success: true, message: result.message, data: result.data };
+}
+
 export const marketingPack: ToolPack = {
   packId: "marketing",
   definitions,
   handlers: {
     build_tracked_links: (params) => buildTrackedLinksHandler(params),
+    create_marketing_campaign: (params, userId, context) => createCampaignHandler(params, userId, context),
+    update_marketing_campaign: (params) => updateCampaignHandler(params),
+    attach_to_campaign: (params) => attachToCampaignHandler(params),
+    get_campaign_plan: (params) => getCampaignPlanHandler(params),
   },
   grants: {
     build_tracked_links: ["marketing_read"],
+    create_marketing_campaign: ["marketing_write"],
+    update_marketing_campaign: ["marketing_write"],
+    attach_to_campaign: ["marketing_write"],
+    get_campaign_plan: ["marketing_read"],
   },
 };

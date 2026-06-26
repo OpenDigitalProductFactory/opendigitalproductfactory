@@ -172,10 +172,19 @@ function draftStatusLabel(taskId: string, snapshot: MarketingWorkspaceSnapshot):
   return "Not drafted";
 }
 
-function taskMatchesBrief(
+// Associate an asset task with a campaign brief. Prefers the real campaign
+// relation: when both rows carry the same campaignId it is a definitive match,
+// and when both carry a (different) campaignId it is a definitive non-match — no
+// fuzzy guessing. Only when at least one side has no campaign yet do we fall
+// back to the legacy heuristic (channel overlap or brief-title substring), so
+// pre-campaign rows keep rendering as before.
+export function taskMatchesBrief(
   task: MarketingWorkspaceSnapshot["workProducts"]["assetTasks"][number],
   brief: MarketingWorkspaceSnapshot["workProducts"]["campaignBriefs"][number],
 ): boolean {
+  if (task.campaignId && brief.campaignId) {
+    return task.campaignId === brief.campaignId;
+  }
   if (task.channel && brief.channels.includes(task.channel)) return true;
   const taskText = `${task.title} ${task.brief ?? ""}`.toLowerCase();
   return taskText.includes(brief.title.toLowerCase());

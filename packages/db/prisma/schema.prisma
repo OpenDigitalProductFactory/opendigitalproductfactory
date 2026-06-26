@@ -2927,6 +2927,7 @@ model Organization {
   businessContext               BusinessContext?
   marketingStrategy             MarketingStrategy?
   marketingReviews              MarketingReview[]
+  marketingCampaigns            MarketingCampaign[]
   marketingCampaignBriefs       MarketingCampaignBrief[]
   marketingAssetTasks           MarketingAssetTask[]
   marketingKpiCheckpoints       MarketingKpiCheckpoint[]
@@ -7327,6 +7328,7 @@ model MarketingStrategy {
   organization         Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   storefront           StorefrontConfig?              @relation(fields: [storefrontId], references: [id], onDelete: SetNull)
   reviews              MarketingReview[]
+  campaigns            MarketingCampaign[]
   campaignBriefs       MarketingCampaignBrief[]
   assetTasks           MarketingAssetTask[]
   kpiCheckpoints       MarketingKpiCheckpoint[]
@@ -7335,6 +7337,43 @@ model MarketingStrategy {
   @@index([status])
   @@index([storefrontId])
   @@index([nextReviewAt])
+}
+
+// A first-class marketing campaign: the executable aggregate that ties an
+// objective + audience + channels + budget + timeline + KPI targets together
+// and owns its child briefs and asset tasks. Before this, briefs/tasks were
+// loose siblings off MarketingStrategy and the campaigns view reconstructed the
+// brief<->task link by fuzzy string matching; campaignId makes that a real
+// relation. Additive: campaignId on brief/task is nullable so legacy rows keep
+// working (the view falls back to fuzzy matching for null-campaign rows).
+model MarketingCampaign {
+  campaignId       String    @id @default(cuid())
+  organizationId   String
+  strategyId       String
+  name             String
+  objective        String
+  audience         String?
+  channels         String[]  @default([])
+  status           String    @default("draft")
+  budgetTotalCents Int?
+  budgetByChannel  Json?
+  startDate        DateTime?
+  endDate          DateTime?
+  kpiTargets       Json?
+  primaryCta       String?
+  notes            String?
+  createdByAgentId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  strategy     MarketingStrategy        @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+  briefs       MarketingCampaignBrief[]
+  assetTasks   MarketingAssetTask[]
+
+  @@index([organizationId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([status])
 }
 
 model MarketingReview {
@@ -7362,6 +7401,7 @@ model MarketingCampaignBrief {
   briefId          String   @id @default(cuid())
   organizationId   String
   strategyId       String
+  campaignId       String?
   title            String
   objective        String
   audience         String?
@@ -7377,9 +7417,11 @@ model MarketingCampaignBrief {
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   strategy     MarketingStrategy @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+  campaign     MarketingCampaign? @relation(fields: [campaignId], references: [campaignId], onDelete: SetNull)
 
   @@index([organizationId, createdAt])
   @@index([strategyId, createdAt])
+  @@index([campaignId])
   @@index([status])
 }
 
@@ -7387,6 +7429,7 @@ model MarketingAssetTask {
   taskId           String   @id @default(cuid())
   organizationId   String
   strategyId       String
+  campaignId       String?
   title            String
   assetType        String
   channel          String?
@@ -7399,9 +7442,11 @@ model MarketingAssetTask {
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   strategy     MarketingStrategy @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+  campaign     MarketingCampaign? @relation(fields: [campaignId], references: [campaignId], onDelete: SetNull)
 
   @@index([organizationId, createdAt])
   @@index([strategyId, createdAt])
+  @@index([campaignId])
   @@index([status])
 }
 
