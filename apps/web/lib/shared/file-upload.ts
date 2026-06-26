@@ -1,5 +1,5 @@
 import { prisma, type Prisma } from "@dpf/db";
-import { parseFileContent, capParsedContentSize } from "./file-parsers";
+import { parseFileContent, capParsedContentSize, type ParsedFileContent } from "./file-parsers";
 import { lazyFsPromises, lazyPath, lazyCrypto } from "./lazy-node";
 
 const ALLOWED_EXTENSIONS = new Set(["csv", "xlsx", "pdf", "doc", "docx", "txt", "json", "md", "xml", "yaml", "yml", "tsv", "log", "ppt", "pptx", "rtf", "png", "jpg", "jpeg", "gif", "webp"]);
@@ -78,8 +78,18 @@ export async function handleFileUpload(file: File, threadId: string, userId: str
   await fs.mkdir(path.join(storagePath, threadId), { recursive: true });
   await fs.writeFile(path.join(storagePath, storageKey), buffer);
 
-  let parsedContent = await parseFileContent(buffer, file.type, file.name);
-  if (parsedContent) parsedContent = capParsedContentSize(parsedContent);
+  // A parser failure — a missing/failed optional dependency, a corrupt file, or
+  // a parser bug — must never fail the whole upload. Store the file and let the
+  // attachment exist without parsed content (the agent surfaces "uploaded but
+  // content not available"). Images legitimately have no parser and return null.
+  let parsedContent: ParsedFileContent | null = null;
+  try {
+    parsedContent = await parseFileContent(buffer, file.type, file.name);
+    if (parsedContent) parsedContent = capParsedContentSize(parsedContent);
+  } catch (err) {
+    console.warn(`[file-upload] parse failed for ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
+    parsedContent = null;
+  }
 
   const attachment = await prisma.agentAttachment.create({
     data: {

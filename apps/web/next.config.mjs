@@ -7,6 +7,14 @@ const config = {
   output: "standalone",
   reactStrictMode: true,
   transpilePackages: ["@dpf/db", "@dpf/validators"],
+  // Server-only document parsers loaded via dynamic `import()` in the upload
+  // route (lib/shared/file-parsers.ts). They MUST stay external (not bundled)
+  // so Next's standalone output traces them into the shipped node_modules —
+  // otherwise `import("pdf-parse")` / "mammoth" / "read-excel-file" throw
+  // "Cannot find package" at runtime in the production image and every document
+  // upload 500s. (These are app-level deps; their symlink lives in
+  // apps/web/node_modules, which the standalone trace omits without this.)
+  serverExternalPackages: ["pdf-parse", "mammoth", "read-excel-file"],
   turbopack: {
     root: turbopackRoot,
   },
