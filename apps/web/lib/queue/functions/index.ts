@@ -53,6 +53,7 @@ import {
 } from "./data-retention-sweep";
 import { logSignatureScanner } from "./log-signature-scanner";
 import { edgeIncidentCorrelation } from "./edge-incident-correlation";
+import { remoteActionClaimTimeout } from "./remote-action-claim-timeout";
 import { alertDeliveryBridge } from "./alert-delivery-bridge";
 import { releaseHealthCheck } from "./release-health-check";
 import { marketingSchedulerDispatch } from "./marketing-scheduler-dispatch";
@@ -95,6 +96,7 @@ export const scheduledFunctions = [
   recurringInvoiceDispatch,   // BI-SCHED-DORMANT: wire recurring-invoice generation, daily 06:30
   siemCorrelationSweep,       // BI-6D9496F1: EP-SOVEREIGN-SOC P1 — project internal audit -> SecurityEvent + run detection rules, every 15m
   patchAssessmentSweep,       // EP-PATCH-MANAGEMENT P0: daily estate patch posture sweep (OSV+KEV -> AssuranceFinding), 05:00
+  remoteActionClaimTimeout,   // EP-REMOTE-ACTION P2: time out stale claimed RemoteActions so the pull queue can't wedge, every 10m (flag-gated)
 ];
 
 export const eventFunctions = [

@@ -382,6 +382,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "remote-action-claim-timeout",
+    inngestId: "ops/remote-action-claim-timeout",
+    name: "Remote action claim timeout",
+    purpose:
+      "EP-REMOTE-ACTION P2 — times out RemoteActions a node claimed but never reported a result for (claim-then-die), so the read-only dispatch queue can't wedge. Dark-launched behind DPF_REMOTE_ACTION_DISPATCH_ENABLED. Cadence and timeout window are tunable.",
+    cron: "8,18,28,38,48,58 * * * *",
+    cadence: "Every 10 min (at :08)",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "release-health-check",
     inngestId: "ops/release-health-check",
     name: "Release health check",
