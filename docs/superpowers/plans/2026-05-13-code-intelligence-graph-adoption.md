@@ -2297,7 +2297,7 @@ Call MCP:
 
 ```powershell
 $body = @{ jsonrpc = "2.0"; id = 1; method = "tools/list"; params = @{} } | ConvertTo-Json -Depth 6
-Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/mcp/v1" -Headers @{ Authorization = "Bearer $env:DPF_MCP_TOKEN" } -Body $body -ContentType "application/json"
+Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/mcp/v1" -Headers @{ Authorization = "Bearer $env:DPF_MCP_BEARER_TOKEN" } -Body $body -ContentType "application/json"
 ```
 
 Expected: tool list includes `get_code_graph_freshness`, `inspect_build_code_impact`, `search_code_graph`, `trace_code_surface`, and `find_related_tests`.
