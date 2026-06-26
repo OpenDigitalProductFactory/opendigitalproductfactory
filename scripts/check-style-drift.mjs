@@ -17,7 +17,7 @@
 //   node scripts/check-style-drift.mjs --update   # regenerate the baseline
 
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, relative } from "node:path";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -34,7 +34,22 @@ const APPROVED_NAME_RE = /(chartTheme|chart-theme|chart-colors|color-tokens)\./;
 
 // Color-shaped hex literals: #rgb, #rgba, #rrggbb, #rrggbbaa.
 const HEX_RE = /#[0-9a-fA-F]{8}\b|#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{4}\b|#[0-9a-fA-F]{3}\b/g;
+// Pure-decimal token of a hex-valid length — NOT a color.
+const DECIMAL_ONLY_RE = /^#[0-9]+$/;
 const ALLOW_LINE = "style-drift-allow";
+
+/**
+ * Color-shaped hex matches on a single line, with all-decimal tokens removed.
+ *
+ * HEX_RE matches any `#` + N hex digits where N is a color length (3/4/6/8), so
+ * an all-decimal token like `#2401` (a PR ref) or `#240100` also matches even
+ * though it is not a color. A real CSS color always contains at least one a–f
+ * digit; drop pure-decimal matches so `#2401`-style refs in comments don't
+ * false-flag. (PIR-style false-positive fix, BI-OPT-RATCHETS.)
+ */
+export function colorHexMatches(line) {
+  return (line.match(HEX_RE) || []).filter((m) => !DECIMAL_ONLY_RE.test(m));
+}
 
 function listSourceFiles(dir) {
   const out = [];
@@ -67,8 +82,7 @@ function scan() {
       let count = 0;
       for (const line of readFileSync(file, "utf8").split("\n")) {
         if (line.includes(ALLOW_LINE)) continue;
-        const matches = line.match(HEX_RE);
-        if (matches) count += matches.length;
+        count += colorHexMatches(line).length;
       }
       if (count > 0) counts[rel] = count;
     }
@@ -76,48 +90,55 @@ function scan() {
   return counts;
 }
 
-const counts = scan();
+function main() {
+  const counts = scan();
 
-if (process.argv.includes("--update")) {
-  const sorted = Object.fromEntries(Object.keys(counts).sort().map((k) => [k, counts[k]]));
-  writeFileSync(BASELINE_PATH, `${JSON.stringify(sorted, null, 2)}\n`);
-  console.log(`Wrote style-drift baseline: ${Object.keys(sorted).length} files with hardcoded hex.`);
-  process.exit(0);
-}
-
-let baseline = {};
-try {
-  baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8"));
-} catch {
-  console.error(`Missing baseline ${relative(REPO_ROOT, BASELINE_PATH)} — run: node scripts/check-style-drift.mjs --update`);
-  process.exit(1);
-}
-
-const newFiles = [];
-const increased = [];
-for (const [file, count] of Object.entries(counts)) {
-  const prior = baseline[file] ?? 0;
-  if (prior === 0) newFiles.push(`${file} (+${count})`);
-  else if (count > prior) increased.push(`${file} (${prior} -> ${count})`);
-}
-
-if (newFiles.length > 0 || increased.length > 0) {
-  console.error("Style drift — new hardcoded hex colors. Use --dpf-* tokens or the report-kit");
-  console.error("status palette (AGENTS.md §12). For a genuine non-color literal, add a trailing");
-  console.error("`// style-drift-allow` comment.\n");
-  if (newFiles.length) {
-    console.error("New files with hardcoded hex:");
-    for (const f of newFiles) console.error(`  - ${f}`);
+  if (process.argv.includes("--update")) {
+    const sorted = Object.fromEntries(Object.keys(counts).sort().map((k) => [k, counts[k]]));
+    writeFileSync(BASELINE_PATH, `${JSON.stringify(sorted, null, 2)}\n`);
+    console.log(`Wrote style-drift baseline: ${Object.keys(sorted).length} files with hardcoded hex.`);
+    process.exit(0);
   }
-  if (increased.length) {
-    console.error("More hardcoded hex than the baseline:");
-    for (const f of increased) console.error(`  - ${f}`);
+
+  let baseline = {};
+  try {
+    baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8"));
+  } catch {
+    console.error(`Missing baseline ${relative(REPO_ROOT, BASELINE_PATH)} — run: node scripts/check-style-drift.mjs --update`);
+    process.exit(1);
   }
-  console.error("\nIf you intentionally migrated a file to fewer hex, run --update to retighten the baseline.");
-  process.exit(1);
+
+  const newFiles = [];
+  const increased = [];
+  for (const [file, count] of Object.entries(counts)) {
+    const prior = baseline[file] ?? 0;
+    if (prior === 0) newFiles.push(`${file} (+${count})`);
+    else if (count > prior) increased.push(`${file} (${prior} -> ${count})`);
+  }
+
+  if (newFiles.length > 0 || increased.length > 0) {
+    console.error("Style drift — new hardcoded hex colors. Use --dpf-* tokens or the report-kit");
+    console.error("status palette (AGENTS.md §12). For a genuine non-color literal, add a trailing");
+    console.error("`// style-drift-allow` comment.\n");
+    if (newFiles.length) {
+      console.error("New files with hardcoded hex:");
+      for (const f of newFiles) console.error(`  - ${f}`);
+    }
+    if (increased.length) {
+      console.error("More hardcoded hex than the baseline:");
+      for (const f of increased) console.error(`  - ${f}`);
+    }
+    console.error("\nIf you intentionally migrated a file to fewer hex, run --update to retighten the baseline.");
+    process.exit(1);
+  }
+
+  const total = Object.values(baseline).reduce((a, b) => a + b, 0);
+  console.log(
+    `Style drift OK — no new hardcoded hex. Baseline: ${Object.keys(baseline).length} files / ${total} known hex (migrate as touched).`,
+  );
 }
 
-const total = Object.values(baseline).reduce((a, b) => a + b, 0);
-console.log(
-  `Style drift OK — no new hardcoded hex. Baseline: ${Object.keys(baseline).length} files / ${total} known hex (migrate as touched).`,
-);
+// Run main() only when invoked directly, not when imported by the test.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

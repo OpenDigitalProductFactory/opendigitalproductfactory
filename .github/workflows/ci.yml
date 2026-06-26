@@ -176,6 +176,40 @@ jobs:
       - name: Run guard
         run: node scripts/check-style-drift.mjs
 
+  module-size-guard:
+    name: Module Size Guard
+    runs-on: ubuntu-latest
+    # BI-OPT-RATCHETS. No size guard existed, which is how mcp-tools.ts grew past
+    # 15k LOC unnoticed. This ratchet holds NEW files to an 800-LOC ceiling (1000
+    # hard cap) and lets the already-large files (frozen in
+    # scripts/module-size-baseline.json) only SHRINK — no blind mass split.
+    # Refactor a file smaller, then `--update` the baseline to retighten.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/check-module-size.mjs
+
+  mcp-tool-pack-guard:
+    name: MCP Tool Pack Guard
+    runs-on: ubuntu-latest
+    # BI-OPT-RATCHETS (enforcement teeth for BI-ARCH-TOOLPACKS). executeTool's
+    # `switch (toolName)` in apps/web/lib/mcp-tools.ts is migrating to scoped
+    # packs. This ratchet freezes the inline `case` set in
+    # scripts/mcp-tool-pack-baseline.json and lets it only SHRINK — a NEW inline
+    # case fails CI; new MCP tools must register in a pack instead.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/check-mcp-tool-pack.mjs
+
   native-dialog-guard:
     name: Native Dialog Guard
     runs-on: ubuntu-latest
