@@ -4774,6 +4774,7 @@ model FeatureBuild {
   sandboxPort              Int?
   buildBranch              String? // git branch in sandbox: "build/<buildId>"
   diffSummary              String?
+  changeNarrative          Json?
   diffPatch                String?
   codingProvider           String?
   threadId                 String?

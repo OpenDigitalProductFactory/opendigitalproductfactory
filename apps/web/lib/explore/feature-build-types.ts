@@ -377,6 +377,22 @@ export type BuildDeliberationSummary = Partial<
   Record<BuildDeliberationPhase, BuildDeliberationSummaryEntry>
 >;
 
+/**
+ * BI-D93CF6C0 — plain-language change summary (Band 2 of the overseer layer).
+ * Generated once at build completion from the goal + plan + diff, stored on
+ * FeatureBuild.changeNarrative. Distinct from diffSummary (the raw diff prefix);
+ * this is the "we added X so your customers can Y" narrative for a non-technical
+ * overseer. Spec: docs/superpowers/specs/2026-06-22-build-studio-overseer-ux-design.md.
+ */
+export type BuildChangeNarrative = {
+  headline: string;
+  bullets: string[];
+  whyItMatters: string;
+  openQuestions?: string[];
+  generatedAt: string;
+  model: string;
+};
+
 export type HappyPathFailureStage = "connect" | "fetch" | "parse" | "persist";
 
 export type HappyPathIntakeState = {

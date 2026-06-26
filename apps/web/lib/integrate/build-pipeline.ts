@@ -681,12 +681,48 @@ async function stepComplete(
     listSandboxCommitsAheadOfBase(state.containerId, baseRef, buildWorkdir),
   ]);
 
+  // BI-D93CF6C0 — generate the plain-language change narrative (Band 2 of the
+  // overseer layer) from the goal + plan + diff. Best-effort: a null result just
+  // falls back to the raw diffSummary dive-in, so this never blocks completion.
+  let changeNarrative:
+    | import("@/lib/feature-build-types").BuildChangeNarrative
+    | null = null;
+  try {
+    const buildRow = await prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: { title: true, designDoc: true, buildPlan: true },
+    });
+    if (buildRow) {
+      const designDoc = buildRow.designDoc as
+        | { problemStatement?: string; proposedApproach?: string }
+        | null;
+      const { generateChangeNarrative } = await import("./change-narrative");
+      changeNarrative = await generateChangeNarrative({
+        title: buildRow.title,
+        goal: designDoc?.problemStatement ?? designDoc?.proposedApproach ?? null,
+        planText: buildRow.buildPlan ? JSON.stringify(buildRow.buildPlan) : null,
+        diff: fullDiff,
+      });
+    }
+  } catch (err) {
+    console.warn(
+      "[build-pipeline] change-narrative generation skipped:",
+      (err as Error)?.message,
+    );
+  }
+
   await prisma.featureBuild.update({
     where: { buildId },
     data: {
       diffPatch: fullDiff,
       diffSummary: fullDiff.slice(0, 500),
       gitCommitHashes: commitHashes,
+      ...(changeNarrative
+        ? {
+            changeNarrative:
+              changeNarrative as unknown as import("@dpf/db").Prisma.InputJsonValue,
+          }
+        : {}),
     },
   });
 

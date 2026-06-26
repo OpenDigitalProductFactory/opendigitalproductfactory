@@ -30,11 +30,13 @@ import { deriveFleetCounts, deriveNeedsAttention, deriveQueueState } from "./fle
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
+import { BuildChangeSummaryBand } from "./BuildChangeSummaryBand";
 import { BuildSolutionSummaryBand } from "./BuildSolutionSummaryBand";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
 import { getBuildDecisionLedgerAction } from "@/lib/actions/build-decision-ledger";
+import { getBuildChangeNarrativeAction } from "@/lib/actions/build-change-narrative";
 import { getBuildFlowStateAction } from "@/lib/actions/build-flow";
 import { getBuildProgressVisibilityAction } from "@/lib/actions/build-progress-visibility";
 import { getCodeGraphFreshnessAction } from "@/lib/actions/code-intelligence";
@@ -42,7 +44,7 @@ import { getBuildAssuranceFindings, getBuildBomSummary } from "@/lib/actions/ass
 import type { ActiveAssuranceFindingRow } from "@/lib/assurance/finding-read";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type { BuildFlowState } from "@/lib/build-flow-state";
-import type { FeatureBuildRow } from "@/lib/feature-build-types";
+import type { FeatureBuildRow, BuildChangeNarrative } from "@/lib/feature-build-types";
 import type { EpicRollupView } from "@/lib/build/epic-rollup";
 import type { BomSummary } from "@/lib/assurance/bom-read";
 import type { CodeGraphFreshness } from "@/lib/integrate/code-graph-access";
@@ -186,6 +188,7 @@ export function BuildStudio({
   const [bomSummary, setBomSummary] = useState<BomSummary>(MISSING_BOM_SUMMARY);
   const [assuranceFindings, setAssuranceFindings] = useState<ActiveAssuranceFindingRow[]>([]);
   const [decisionLedger, setDecisionLedger] = useState<BuildDecisionLedgerEntry[]>([]);
+  const [changeNarrative, setChangeNarrative] = useState<BuildChangeNarrative | null>(null);
   const workflowAction = activeBuild
     ? deriveBuildStudioWorkflowAction({
       build: activeBuild,
@@ -312,6 +315,27 @@ export function BuildStudio({
       })
       .catch(() => {
         if (!cancelled) setDecisionLedger([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBuild?.buildId]);
+
+  // Band 2 (overseer "Solution & Oversight") — load the plain-language change
+  // narrative for the active build. Standalone fetch off the hot SSE refresh
+  // path; null until the build completes and the narrative is generated. BI-D93CF6C0.
+  useEffect(() => {
+    if (!activeBuild) {
+      setChangeNarrative(null);
+      return;
+    }
+    let cancelled = false;
+    getBuildChangeNarrativeAction(activeBuild.buildId)
+      .then((narrative) => {
+        if (!cancelled) setChangeNarrative(narrative);
+      })
+      .catch(() => {
+        if (!cancelled) setChangeNarrative(null);
       });
     return () => {
       cancelled = true;
@@ -793,6 +817,11 @@ export function BuildStudio({
                       proposedApproach={activeBuild.designDoc?.proposedApproach ?? null}
                       fallbackIntent={activeBuild.description}
                     />
+                  </div>
+                )}
+                {changeNarrative && (
+                  <div className="border-b border-[var(--dpf-border)] px-4 py-3">
+                    <BuildChangeSummaryBand narrative={changeNarrative} />
                   </div>
                 )}
                 {decisionLedger.length > 0 && (
