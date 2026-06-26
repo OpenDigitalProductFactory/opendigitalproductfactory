@@ -7,8 +7,15 @@ vi.mock("@dpf/db", () => ({
     agentModelConfig: { findUnique: vi.fn().mockResolvedValue(null) },
     modelProvider: { findMany: vi.fn().mockResolvedValue([]) },
     $queryRaw: vi.fn().mockResolvedValue([]),
+    // WS2 Capabilities-editor data (catalog skills assigned + full catalog):
+    skillAssignment: { findMany: vi.fn().mockResolvedValue([]) },
+    skillDefinition: { findMany: vi.fn().mockResolvedValue([]) },
     // loadCoworkerRecord facet queries (HRIS surface):
-    decisionPerspectiveProfile: { findUnique: vi.fn().mockResolvedValue(null) },
+    // findFirst also backs the WS4 posture-inheritance read (golden-triangle persistence).
+    decisionPerspectiveProfile: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
     wikiPage: { findMany: vi.fn().mockResolvedValue([]) },
     voiceProfile: { findUnique: vi.fn().mockResolvedValue(null) },
     decisionInteraction: { groupBy: vi.fn().mockResolvedValue([]) },
@@ -39,6 +46,18 @@ vi.mock("@/components/platform/AgentModelRoutingCard", () => ({
   AgentModelRoutingCard: () => null,
 }));
 
+vi.mock("@/components/platform/coworker-record/CapabilitiesEditor", () => ({
+  CapabilitiesEditor: () => null,
+}));
+
+vi.mock("@/components/platform/coworker-record/RecordActionsMenu", () => ({
+  RecordActionsMenu: () => null,
+}));
+
+vi.mock("@/components/golden-triangle/CoworkerPriorityControl", () => ({
+  CoworkerPriorityControl: () => null,
+}));
+
 import { prisma } from "@dpf/db";
 import { getAgentGaidMap } from "@/lib/identity/principal-linking";
 
@@ -49,6 +68,8 @@ describe("AgentDetailPage", () => {
       agentId: "hr-specialist",
       slugId: "hr-specialist",
       name: "HR Specialist",
+      displayName: "HR Specialist",
+      kind: "specialist",
       tier: 2,
       type: "specialist",
       description: "HR help",

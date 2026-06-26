@@ -5,6 +5,7 @@ import {
   authorEffortSize,
   buildTriageDrainPrompt,
   runBacklogTriageDrain,
+  triageOneItem,
   AUTO_TRIAGE_CONFIDENCE_THRESHOLD,
   type TriageCandidate,
 } from "./backlog-triage-drain";
@@ -93,6 +94,50 @@ describe("autoApplyBuildSize (safety gate)", () => {
         { itemId: "BI-5", title: "t", effortSize: "large" },
       ),
     ).toBeNull();
+  });
+});
+
+describe("triageOneItem (per-item unit the Inngest steps run)", () => {
+  const item: TriageCandidate = { itemId: "BI-A", title: "Clear build" };
+
+  it("auto-builds a confident build and returns 'auto-built'", async () => {
+    const applyBuild = vi.fn(async () => {});
+    const outcome = await triageOneItem(item, {
+      decide: async () => '{"outcome":"build","effortSize":"small","confidence":0.95,"rationale":"r"}',
+      applyBuild,
+    });
+    expect(outcome).toBe("auto-built");
+    expect(applyBuild).toHaveBeenCalledWith("BI-A", "small", expect.stringContaining("Auto-triaged by scheduled drain"));
+  });
+
+  it("leaves a needs-human decision for the operator", async () => {
+    const applyBuild = vi.fn(async () => {});
+    const outcome = await triageOneItem(item, {
+      decide: async () => '{"outcome":"needs-human","confidence":0.5}',
+      applyBuild,
+    });
+    expect(outcome).toBe("left-for-operator");
+    expect(applyBuild).not.toHaveBeenCalled();
+  });
+
+  it("treats a thrown decide() as left-for-operator (never throws)", async () => {
+    const outcome = await triageOneItem(item, {
+      decide: async () => {
+        throw new Error("llm down");
+      },
+      applyBuild: async () => {},
+    });
+    expect(outcome).toBe("left-for-operator");
+  });
+
+  it("treats a thrown applyBuild() as left-for-operator", async () => {
+    const outcome = await triageOneItem(item, {
+      decide: async () => '{"outcome":"build","effortSize":"medium","confidence":0.9}',
+      applyBuild: async () => {
+        throw new Error("db down");
+      },
+    });
+    expect(outcome).toBe("left-for-operator");
   });
 });
 

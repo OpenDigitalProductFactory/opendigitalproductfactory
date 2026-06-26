@@ -125,6 +125,22 @@ jobs:
       - name: Run guard
         run: node scripts/check-no-system-user-sentinel.mjs
 
+  pr-health-test:
+    name: PR Health Logic
+    runs-on: ubuntu-latest
+    # Unit-tests the pure evaluatePrHealth() verdict used by `pnpm pr:health`
+    # (scripts/pr-health.mjs) — the comprehensive PR merge-readiness checker.
+    # The script itself queries a live PR's GitHub state, so only its logic is
+    # tested in CI, not the script.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Test pr-health verdict logic
+        run: node --test scripts/pr-health.test.mjs
+
   mobile-jest-pin-guard:
     name: Mobile Jest Pin Guard
     runs-on: ubuntu-latest

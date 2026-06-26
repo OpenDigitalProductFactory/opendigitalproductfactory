@@ -14,6 +14,7 @@ function stored(overrides: Partial<StoredReceipt["receipt"]> = {}, top: Partial<
     at: top.at ?? "2026-06-22T10:00:00.000Z",
     receipt: {
       preset: "assured",
+      governedBy: "platform",
       requested: { minimumTier: "frontier" },
       actual: { modelId: "claude-opus-4-7", tier: "frontier", costUsd: 0.12, latencyMs: 14000, fallbackOccurred: false, verificationPassed: null, accepted: null },
       deviations: [],

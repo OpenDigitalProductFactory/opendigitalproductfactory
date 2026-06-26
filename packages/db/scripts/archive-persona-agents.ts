@@ -4,8 +4,8 @@ async function archive() {
   // Create the unified coworker agent row
   await prisma.agent.upsert({
     where: { agentId: "coworker" },
-    update: { name: "Coworker", type: "orchestrator", status: "active", archived: false },
-    create: { agentId: "coworker", name: "Coworker", tier: 1, type: "orchestrator", status: "active", archived: false },
+    update: { name: "Coworker", displayName: "Coworker", kind: "orchestrator", type: "orchestrator", status: "active", archived: false },
+    create: { agentId: "coworker", name: "Coworker", displayName: "Coworker", kind: "orchestrator", tier: 1, type: "orchestrator", status: "active", archived: false },
   });
 
   // Archive all persona agents

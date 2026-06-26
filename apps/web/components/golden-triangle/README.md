@@ -14,7 +14,7 @@
 
 ## Balance colouring
 
-The triangle shades by balance: **green** when the three axes are centred, through **yellow** to **red** as one or two axes get starved (the posture pushes toward an edge or vertex). Each vertex is labelled with what pulling toward it buys — **Higher Reasoning** (top), **Lower Cost** (bottom-left), **Lower Time** (bottom-right) — while the gradient colour conveys balance, named by a balance pill ("Well balanced" / "Starving Time"). It is an at-a-glance cue that you are trading something away.
+The triangle shades by balance: **green** when the three axes are centred, through **yellow** to **red** as the posture trades one or two axes away (pushing toward an edge or vertex). Each vertex is labelled with what pulling toward it buys — **Higher Reasoning** (top), **Lower Cost** (bottom-left), **Lower Time** (bottom-right) — while the gradient colour conveys balance, named by a balance pill ("Well balanced" / "Higher Cost & More Time"). It is an at-a-glance cue that you are trading something away.
 
 ## Surfaces
 

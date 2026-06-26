@@ -109,9 +109,9 @@ export async function createFeatureBuild(input: {
     return { buildId: created.buildId };
   });
 
-  // EP-COST Phase 3: start ideate-phase tracking (fire-and-forget)
+  // EP-COST Phase 3: start ideate-phase tracking (fire-and-forget). .catch swallows the drain-time QuiescingError startBuildPhaseRun throws (BI-QUIESCE-005).
   const { startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
-  void startBuildPhaseRun(result.buildId, "ideate");
+  void startBuildPhaseRun(result.buildId, "ideate").catch(() => {});
 
   return result;
 }

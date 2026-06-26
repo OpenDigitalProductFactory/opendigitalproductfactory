@@ -20,6 +20,8 @@ export type RosterRow = {
   agentId: string;
   slugId: string | null;
   name: string;
+  displayName: string;
+  kind: string;
   tier: number;
   valueStream: string | null;
   lifecycleStage: string;
@@ -106,11 +108,13 @@ async function loadDeferRates(profileIds: string[]): Promise<Map<string, number>
 export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterFacets }> {
   const [agents, coverage, modelConfigs, providers, blockerRows] = await Promise.all([
     prisma.agent.findMany({
-      orderBy: [{ tier: "asc" }, { name: "asc" }],
+      orderBy: [{ tier: "asc" }, { displayName: "asc" }],
       select: {
         agentId: true,
         slugId: true,
         name: true,
+        displayName: true,
+        kind: true,
         tier: true,
         valueStream: true,
         lifecycleStage: true,
@@ -158,6 +162,8 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
       agentId: agent.agentId,
       slugId: agent.slugId,
       name: agent.name,
+      displayName: agent.displayName,
+      kind: agent.kind,
       tier: agent.tier,
       valueStream: agent.valueStream,
       lifecycleStage: agent.lifecycleStage,

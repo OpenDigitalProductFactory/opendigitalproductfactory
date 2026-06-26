@@ -9,6 +9,9 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
       update: vi.fn(),
       create: vi.fn(),
     },
+    buildPhaseRun: {
+      upsert: vi.fn(),
+    },
     businessBuildBrief: {
       findUnique: vi.fn(),
       upsert: vi.fn(),
@@ -79,6 +82,10 @@ const { mockRunBuildPipeline } = vi.hoisted(() => ({
   mockRunBuildPipeline: vi.fn(),
 }));
 
+const { mockGetQuiescenceLevel } = vi.hoisted(() => ({
+  mockGetQuiescenceLevel: vi.fn(),
+}));
+
 vi.mock("@/lib/auth", () => ({
   auth: mockAuth,
 }));
@@ -143,6 +150,25 @@ vi.mock("@/lib/agent-event-bus", () => ({
   },
 }));
 
+// createFeatureBuild fires `void startBuildPhaseRun(...)` (cost tracking) which
+// throws QuiescingError whenever the portal is draining for a self-upgrade.
+// Mock the level reader so the test can drive that drain, and mirror the real
+// QuiescingError shape so `instanceof`/`.level` behave like production.
+vi.mock("@/lib/self-upgrade/quiescence", () => ({
+  getQuiescenceLevel: mockGetQuiescenceLevel,
+  QuiescingError: class QuiescingError extends Error {
+    readonly code = "PORTAL_QUIESCING";
+    readonly retryAfterSeconds: number;
+    readonly level: string;
+    constructor(level: string, retryAfterSeconds = 30) {
+      super(`Portal is ${level} for upgrade — new work refused`);
+      this.name = "QuiescingError";
+      this.level = level;
+      this.retryAfterSeconds = retryAfterSeconds;
+    }
+  },
+}));
+
 import { revalidatePath } from "next/cache";
 import { approveBuildStart, advanceBuildPhase, completeBuild, createFeatureBuild, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief, updateFeatureBrief } from "./build";
 
@@ -174,6 +200,8 @@ describe("governed build start approvals", () => {
     mockPrisma.businessBuildBrief.update.mockResolvedValue({});
     mockPrisma.organization.findFirst.mockResolvedValue({ id: "org-1" });
     mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
+    mockPrisma.buildPhaseRun.upsert.mockResolvedValue({});
+    mockGetQuiescenceLevel.mockResolvedValue("normal");
     mockIsSandboxAvailable.mockResolvedValue(false);
     mockStartBuildBranch.mockResolvedValue(undefined);
     mockRunBuildPipeline.mockResolvedValue({ step: "complete" });
@@ -248,6 +276,41 @@ describe("governed build start approvals", () => {
       }),
     );
     expect(mockPrisma.backlogItemActivity.create).not.toHaveBeenCalled();
+  });
+
+  it("createFeatureBuild swallows the fire-and-forget QuiescingError during a self-upgrade drain", async () => {
+    // BI-QUIESCE-005: startBuildPhaseRun throws QuiescingError when the portal
+    // is draining for a self-upgrade. createFeatureBuild fires it as `void …`
+    // cost tracking, so that throw must be swallowed by a `.catch` — otherwise
+    // it escapes as an unhandled promise rejection in the production server
+    // process (not just under test). This locks in the `.catch(() => {})` fix.
+    mockGetQuiescenceLevel.mockResolvedValue("draining");
+    mockPrisma.featureBuild.create.mockImplementation(async (args) => ({
+      id: "build-row-drain",
+      buildId: args.data.buildId,
+      title: "Drain-safe build",
+      description: null,
+      phase: "ideate",
+    }));
+
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const result = await createFeatureBuild({ title: "Drain-safe build" });
+      expect(result.buildId).toMatch(/^FB-[A-F0-9]{8}$/);
+      // Flush microtasks + one macrotask so that, were the `.catch` missing, the
+      // QuiescingError would surface as an unhandledRejection here before we
+      // assert that none was raised.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+
+    expect(unhandled).toEqual([]);
+    // The drain gate refuses the start before any DB write — the cost-tracking
+    // upsert never runs.
+    expect(mockPrisma.buildPhaseRun.upsert).not.toHaveBeenCalled();
   });
 
   it("updateFeatureBrief writes the legacy brief and backfills the BusinessBuildBrief contract", async () => {
