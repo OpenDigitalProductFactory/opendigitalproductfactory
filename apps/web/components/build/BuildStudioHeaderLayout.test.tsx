@@ -388,7 +388,10 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toMatch(/data-testid="build-studio-details-drawer"[^>]*data-open="false"/);
   });
 
-  it("renders the build assurance gate next to code intelligence", () => {
+  it("renders the build assurance gate next to code intelligence (engineer view)", () => {
+    // These engineer-grade surfaces live behind the "Engineer view" toggle after
+    // the reframe (BI-90670010); render with it enabled to verify them.
+    window.localStorage.setItem("dpf:build-studio-engineer-view", "true");
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[makeBuild()]}
@@ -398,6 +401,7 @@ describe("BuildStudio active-build header layout", () => {
         submissionBranchShortId="fb8783b9"
       />,
     );
+    window.localStorage.removeItem("dpf:build-studio-engineer-view");
 
     expect(html).toContain('data-testid="build-assurance-gate-card"');
     expect(html).toContain("Assurance Gate");
