@@ -133,7 +133,7 @@ describe("previewRestoreAction", () => {
   });
 
   it("returns the impact preview for authorized callers", async () => {
-    mockedAuth.mockResolvedValue({ user: { isSuperuser: true } });
+    mockedAuth.mockResolvedValue({ user: { id: "user-1", isSuperuser: true } });
     mockedCan.mockReturnValue(true);
     mockedPreview.mockResolvedValue({
       sourceBackupRunId: "src",
