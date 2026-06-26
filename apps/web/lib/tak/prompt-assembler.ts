@@ -11,6 +11,7 @@ import {
 import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
 import { DECISION_ROUTING_BLOCK } from "./decision-routing-block";
 import { readingLevelDirective, type ReadingLevel } from "@dpf/validators";
+import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "./prompt-boundary";
 
 export type PromptInput = {
   hrRole: string;
@@ -105,10 +106,12 @@ const ACT_MODE_BLOCK = `Mode: ACT. You may execute any tool the employee's role 
 // SYSTEM_PROMPT_DYNAMIC_BOUNDARY pattern revealed in the source leak.
 //
 // The marker itself is invisible to the model — it's consumed by the caller
-// (routed-inference.ts) to split the prompt into cacheable and non-cacheable
+// (routing/anthropic-cache.ts, used by chat-adapter) to split the prompt into cacheable and non-cacheable
 // segments when the provider supports prompt caching.
 
-export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = "\n\n<!-- DYNAMIC_BOUNDARY -->\n\n";
+// Single source of truth lives in ./prompt-boundary (dependency-free so the
+// routing layer can split on it without importing this DB-coupled assembler).
+export { SYSTEM_PROMPT_DYNAMIC_BOUNDARY };
 
 // ─── Block 0: Company Mission (dynamic — admin-editable) ───────────────────
 

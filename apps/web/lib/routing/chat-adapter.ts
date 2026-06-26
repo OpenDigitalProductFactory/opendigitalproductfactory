@@ -26,6 +26,7 @@ import {
 import { isAnthropic } from "./provider-utils";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
+import { buildAnthropicSystem } from "./anthropic-cache";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // A hung local Docker Model Runner endpoint must fail fast so callWithFallbackChain
@@ -171,7 +172,10 @@ export const chatAdapter: ExecutionAdapterHandler = {
       body = {
         model: modelId,
         max_tokens: plan.maxTokens,
-        system: systemPrompt,
+        // BI-79A5C00F: emit a cache_control breakpoint on the stable system
+        // prefix (split on SYSTEM_PROMPT_DYNAMIC_BOUNDARY); plain string when
+        // no boundary is present, so non-assembled prompts are unchanged.
+        system: buildAnthropicSystem(systemPrompt),
         messages: messages
           .filter((m) => m.role !== "system")
           .map((m) => formatMessageForAnthropic(m)),
