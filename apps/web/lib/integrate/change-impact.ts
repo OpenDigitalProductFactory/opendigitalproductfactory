@@ -9,6 +9,7 @@ import { prisma } from "@dpf/db";
 import type { CodeGraphCoverageSummary } from "./code-graph-access";
 import { summarizeCodeGraphCoverage } from "./code-graph-access";
 import { findRelatedTests } from "./code-graph/graph-queries";
+import type { DeliverableSensitivity } from "@/lib/explore/build-process-matrix";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -364,6 +365,49 @@ export async function analyzeChangeImpact(diff: string): Promise<ChangeImpactRep
     summary: summaryParts.join("\n"),
     codeGraph,
   };
+}
+
+// ─── Blast-radius sensitivity (EP-QUALITY-RIGHTSIZING P3 / BI-CFEB2B22) ──────
+//
+// Spec §6: the accurate version of the deliverable-sensitivity signal — what the
+// change ACTUALLY reaches (from the diff), not P1's pre-codegen keyword guess.
+// Same DeliverableSensitivity output contract, so it drops in behind the same
+// callers. Because blast-radius needs a diff, this is a VERIFY-TIME signal
+// (post-codegen), not a sizing-time one — see the design note in the spec.
+
+/**
+ * Map a change-impact report's blast-radius to a deliverable sensitivity (pure).
+ * Destructive schema / deleted models or routes (critical/high risk) are HIGH;
+ * other schema changes (medium) are ELEVATED; new-routes / code-only (low) is LOW.
+ */
+export function changeImpactToSensitivity(report: ChangeImpactReport): DeliverableSensitivity {
+  switch (report.riskLevel) {
+    case "critical":
+    case "high":
+      return "high";
+    case "medium":
+      return "elevated";
+    case "low":
+    default:
+      return "low";
+  }
+}
+
+/**
+ * Derive a deliverable's sensitivity from the ACTUAL blast-radius of its diff
+ * (post-codegen). Fail-open: an empty or unparseable diff returns "low" rather
+ * than throwing, so a verify-time caller can always fall back to the keyword
+ * sensitivity. The heavier graph coverage in analyzeChangeImpact is tolerated —
+ * this runs once per build at the review gate, not in a hot loop.
+ */
+export async function deriveBlastRadiusSensitivity(diff: string): Promise<DeliverableSensitivity> {
+  if (!diff || !diff.trim()) return "low";
+  try {
+    const report = await analyzeChangeImpact(diff);
+    return changeImpactToSensitivity(report);
+  } catch {
+    return "low";
+  }
 }
 
 /**

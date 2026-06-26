@@ -125,8 +125,16 @@ on merged P2 (which calls `deriveDeliverableSensitivity`).
   *Follow-up (P2.1):* the operator UI to set the global default / per-build override
   (reuses `GoldenTrianglePriorityPanel` on the Priority & Models surface) + threading
   the dial's `reviewIntensity` into the build-orchestrator's deliberation choice.
-- **P3 (BI-CFEB2B22)** — pending: blast-radius sensitivity behind the same
-  `deriveDeliverableSensitivity` contract.
+- **P3 (BI-CFEB2B22)** — derivation + surfacing shipped: `changeImpactToSensitivity`
+  (pure, `riskLevel → sensitivity`) + `deriveBlastRadiusSensitivity(diff)` (fail-open)
+  in `change-impact.ts`. Wired at the review→ship advance (`ship-on-review-approval.ts`)
+  — once the diff exists, the ACTUAL blast-radius sensitivity is compared to the
+  pre-codegen keyword sizing, and a "keyword miss" (real reach > sized) is surfaced
+  at the human ship gate. Non-blocking, fail-open, flag-gated. *Follow-up (P3.1):* the
+  loop-safe **enforcement** action — auto-hold or force a thorough re-review on a
+  keyword miss — needs a persistent flag (a build field / attention signal) to avoid
+  re-triggering the reconciler each tick; the derivation + surfacing land first so the
+  signal is proven before it gates anything.
 
 ## Sequencing
 

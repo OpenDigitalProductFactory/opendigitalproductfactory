@@ -19,7 +19,13 @@ vi.mock("./code-graph/graph-queries", () => ({
 import { prisma } from "@dpf/db";
 import { summarizeCodeGraphCoverage } from "./code-graph-access";
 import { findRelatedTests } from "./code-graph/graph-queries";
-import { analyzeChangeImpact, formatImpactForChat } from "./change-impact";
+import {
+  analyzeChangeImpact,
+  changeImpactToSensitivity,
+  deriveBlastRadiusSensitivity,
+  formatImpactForChat,
+  type ChangeImpactReport,
+} from "./change-impact";
 import { buildCodeGraphFreshnessTrust } from "@/lib/trust-vector/adapters/code-graph";
 
 beforeEach(() => {
@@ -190,5 +196,75 @@ describe("formatImpactForChat", () => {
 
     expect(chat).toContain("Code graph trust: **Low trust**");
     expect(chat).toContain("Code graph index is 16 days old.");
+  });
+});
+
+// ─── EP-QUALITY-RIGHTSIZING P3: blast-radius sensitivity ─────────────────────
+
+function reportWithRisk(riskLevel: ChangeImpactReport["riskLevel"]): ChangeImpactReport {
+  return {
+    routes: { new: [], modified: [], deleted: [] },
+    schemaChanges: [],
+    impactedRoles: [],
+    blastRadius: { newRoutes: 0, modifiedRoutes: 0, deletedRoutes: 0, schemaChanges: 0, totalFilesChanged: 0 },
+    riskLevel,
+    rollbackComplexity: "simple",
+    summary: "",
+  };
+}
+
+describe("changeImpactToSensitivity", () => {
+  it("maps blast-radius risk to deliverable sensitivity", () => {
+    expect(changeImpactToSensitivity(reportWithRisk("critical"))).toBe("high");
+    expect(changeImpactToSensitivity(reportWithRisk("high"))).toBe("high");
+    expect(changeImpactToSensitivity(reportWithRisk("medium"))).toBe("elevated");
+    expect(changeImpactToSensitivity(reportWithRisk("low"))).toBe("low");
+  });
+});
+
+describe("deriveBlastRadiusSensitivity", () => {
+  it("returns low for an empty diff (fail-open, no analysis)", async () => {
+    expect(await deriveBlastRadiusSensitivity("")).toBe("low");
+    expect(await deriveBlastRadiusSensitivity("   ")).toBe("low");
+  });
+
+  it("flags a schema-changing diff as HIGH sensitivity", async () => {
+    vi.mocked(summarizeCodeGraphCoverage).mockResolvedValue({
+      graphKey: "source-code",
+      available: false,
+      indexStatus: "unavailable",
+      indexedFiles: [],
+      warnings: [],
+      summary: "",
+    } as never);
+    const schemaDiff = [
+      "diff --git a/packages/db/prisma/schema.prisma b/packages/db/prisma/schema.prisma",
+      "--- a/packages/db/prisma/schema.prisma",
+      "+++ b/packages/db/prisma/schema.prisma",
+      "@@ -1,2 +1,5 @@",
+      "+model Invoice {",
+      "+  id String @id",
+      "+}",
+    ].join("\n");
+    expect(await deriveBlastRadiusSensitivity(schemaDiff)).toBe("high");
+  });
+
+  it("keeps a new-page-only diff at LOW sensitivity", async () => {
+    vi.mocked(summarizeCodeGraphCoverage).mockResolvedValue({
+      graphKey: "source-code",
+      available: false,
+      indexStatus: "unavailable",
+      indexedFiles: [],
+      warnings: [],
+      summary: "",
+    } as never);
+    const newRouteDiff = [
+      "diff --git a/apps/web/app/(shell)/foo/page.tsx b/apps/web/app/(shell)/foo/page.tsx",
+      "new file mode 100644",
+      "--- /dev/null",
+      "+++ b/apps/web/app/(shell)/foo/page.tsx",
+      "+export default function Foo() { return null; }",
+    ].join("\n");
+    expect(await deriveBlastRadiusSensitivity(newRouteDiff)).toBe("low");
   });
 });
