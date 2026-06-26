@@ -6,11 +6,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const credState = vi.hoisted(() => ({
   row: null as Record<string, unknown> | null,
 }));
+const discoveredModelMock = vi.hoisted(() => ({
+  findMany: vi.fn(),
+  update: vi.fn(),
+  createMany: vi.fn(),
+}));
 vi.mock("@dpf/db", () => ({
   prisma: {
     credentialEntry: {
       findUnique: vi.fn(async () => credState.row),
     },
+    discoveredModel: discoveredModelMock,
   },
 }));
 
@@ -19,6 +25,7 @@ import {
   extractTokenUsage,
   providerHasConfiguredCredential,
   resolveSyncedToolUse,
+  upsertDiscoveredModels,
 } from "./ai-provider-internals";
 
 describe("extractTokenUsage", () => {
@@ -189,5 +196,72 @@ describe("resolveSyncedToolUse (sticky-false trap — BI-B6DEBFFE)", () => {
         existing: null,
       }),
     ).toBe(true);
+  });
+});
+
+describe("upsertDiscoveredModels (model-discovery N+1 batching — BI-OPT-DB-HOTPATH)", () => {
+  beforeEach(() => {
+    discoveredModelMock.findMany.mockReset();
+    discoveredModelMock.update.mockReset();
+    discoveredModelMock.createMany.mockReset();
+    discoveredModelMock.findMany.mockResolvedValue([]);
+    discoveredModelMock.update.mockResolvedValue({});
+    discoveredModelMock.createMany.mockResolvedValue({ count: 0 });
+  });
+
+  it("reads existing models with ONE findMany keyed on providerId + modelId IN [...]", async () => {
+    await upsertDiscoveredModels("openrouter", [
+      { modelId: "a", rawMetadata: { id: "a" } },
+      { modelId: "b", rawMetadata: { id: "b" } },
+    ]);
+    expect(discoveredModelMock.findMany).toHaveBeenCalledTimes(1);
+    expect(discoveredModelMock.findMany.mock.calls[0][0]).toMatchObject({
+      where: { providerId: "openrouter", modelId: { in: ["a", "b"] } },
+    });
+  });
+
+  it("createMany's only the new models and returns their count; existing rows are updated, not created", async () => {
+    // "a" already stored, "b" and "c" are new.
+    discoveredModelMock.findMany.mockResolvedValue([{ modelId: "a" }]);
+    const newCount = await upsertDiscoveredModels("p", [
+      { modelId: "a", rawMetadata: { id: "a", v: 2 } },
+      { modelId: "b", rawMetadata: { id: "b" } },
+      { modelId: "c", rawMetadata: { id: "c" } },
+    ]);
+
+    expect(newCount).toBe(2);
+    // existing "a" refreshed via a single update
+    expect(discoveredModelMock.update).toHaveBeenCalledTimes(1);
+    expect(discoveredModelMock.update.mock.calls[0][0]).toMatchObject({
+      where: { providerId_modelId: { providerId: "p", modelId: "a" } },
+      data: { rawMetadata: { id: "a", v: 2 } },
+    });
+    // new "b","c" inserted with one createMany
+    expect(discoveredModelMock.createMany).toHaveBeenCalledTimes(1);
+    const createArg = discoveredModelMock.createMany.mock.calls[0][0];
+    expect(createArg.skipDuplicates).toBe(true);
+    expect(createArg.data.map((r: { modelId: string }) => r.modelId)).toEqual(["b", "c"]);
+  });
+
+  it("counts a model new exactly once and last-write-wins when the batch repeats a new modelId", async () => {
+    discoveredModelMock.findMany.mockResolvedValue([]); // none stored yet
+    const newCount = await upsertDiscoveredModels("p", [
+      { modelId: "dup", rawMetadata: { id: "dup", seq: 1 } },
+      { modelId: "dup", rawMetadata: { id: "dup", seq: 2 } },
+    ]);
+    expect(newCount).toBe(1);
+    expect(discoveredModelMock.createMany).toHaveBeenCalledTimes(1);
+    const createArg = discoveredModelMock.createMany.mock.calls[0][0];
+    expect(createArg.data).toHaveLength(1);
+    // last occurrence's metadata wins, matching the old create-then-update loop
+    expect(createArg.data[0].rawMetadata).toEqual({ id: "dup", seq: 2 });
+  });
+
+  it("no-ops on an empty model list (no DB calls)", async () => {
+    const newCount = await upsertDiscoveredModels("p", []);
+    expect(newCount).toBe(0);
+    expect(discoveredModelMock.findMany).not.toHaveBeenCalled();
+    expect(discoveredModelMock.createMany).not.toHaveBeenCalled();
+    expect(discoveredModelMock.update).not.toHaveBeenCalled();
   });
 });

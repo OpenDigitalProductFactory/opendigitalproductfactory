@@ -388,7 +388,62 @@ export async function discoverChatGptBackendModels(
 
 // ─── Exported internal functions (no auth guard) ─────────────────────────────
 
+/**
+ * Persist a freshly-discovered set of models against DiscoveredModel, returning
+ * the count of genuinely-new rows.
+ *
+ * Replaces the per-model findUnique→update/create N+1 (100s of rows for a large
+ * catalog such as OpenRouter) with: ONE findMany to read the existing modelIds,
+ * a createMany for the new ones, and one update per changed existing row
+ * (Prisma has no single-statement bulk update with per-row values, so the
+ * existing-row metadata refresh stays one update each — the win is collapsing
+ * the read + the inserts). Behaviour is identical to the old loop:
+ *   • existing rows have their rawMetadata overwritten with the fresh value;
+ *   • new rows are inserted with { providerId, modelId, rawMetadata };
+ *   • the returned newCount equals the number of distinct modelIds not already
+ *     present (a modelId repeated within `models` counts once, exactly as the
+ *     old loop did once its first occurrence was created).
+ */
+export async function upsertDiscoveredModels(
+  providerId: string,
+  models: Array<{ modelId: string; rawMetadata: Record<string, unknown> }>,
+): Promise<number> {
+  if (models.length === 0) return 0;
 
+  const existingRows = await prisma.discoveredModel.findMany({
+    where: { providerId, modelId: { in: models.map((m) => m.modelId) } },
+    select: { modelId: true },
+  });
+  const existingIds = new Set(existingRows.map((r) => r.modelId));
+
+  const newRowByModelId = new Map<string, { providerId: string; modelId: string; rawMetadata: Prisma.InputJsonValue }>();
+  for (const m of models) {
+    if (existingIds.has(m.modelId)) {
+      // Refresh rawMetadata for the already-known model (was the update branch).
+      await prisma.discoveredModel.update({
+        where: { providerId_modelId: { providerId, modelId: m.modelId } },
+        data: { rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue },
+      });
+    } else {
+      // Not-yet-stored model. If the same new modelId appears more than once in
+      // this batch, last-write-wins on rawMetadata — exactly as the old loop did
+      // (its first occurrence created the row, later occurrences updated it) —
+      // and it is still created (and counted) once.
+      newRowByModelId.set(m.modelId, {
+        providerId,
+        modelId: m.modelId,
+        rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue,
+      });
+    }
+  }
+
+  const newRows = [...newRowByModelId.values()];
+  if (newRows.length > 0) {
+    await prisma.discoveredModel.createMany({ data: newRows, skipDuplicates: true });
+  }
+
+  return newRows.length;
+}
 
 export async function discoverModelsInternal(
   providerId: string,
@@ -416,23 +471,7 @@ export async function discoverModelsInternal(
       return { discovered: 0, newCount: 0, error: result.error };
     }
 
-    let newCount = 0;
-    for (const m of result.models) {
-      const existing = await prisma.discoveredModel.findUnique({
-        where: { providerId_modelId: { providerId, modelId: m.modelId } },
-      });
-      if (existing) {
-        await prisma.discoveredModel.update({
-          where: { id: existing.id },
-          data: { rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue },
-        });
-      } else {
-        await prisma.discoveredModel.create({
-          data: { providerId, modelId: m.modelId, rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue },
-        });
-        newCount++;
-      }
-    }
+    const newCount = await upsertDiscoveredModels(providerId, result.models);
 
     return { discovered: result.models.length, newCount };
   }
@@ -480,26 +519,10 @@ export async function discoverModelsInternal(
   }
 
   const models = parseModelsResponse(providerId, json);
-  let newCount = 0;
 
   const freshModelIds = new Set(models.map((m) => m.modelId));
 
-  for (const m of models) {
-    const existing = await prisma.discoveredModel.findUnique({
-      where: { providerId_modelId: { providerId, modelId: m.modelId } },
-    });
-    if (existing) {
-      await prisma.discoveredModel.update({
-        where: { id: existing.id },
-        data: { rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue },
-      });
-    } else {
-      await prisma.discoveredModel.create({
-        data: { providerId, modelId: m.modelId, rawMetadata: m.rawMetadata as unknown as Prisma.InputJsonValue },
-      });
-      newCount++;
-    }
-  }
+  const newCount = await upsertDiscoveredModels(providerId, models);
 
   // ── EP-INF-002: Discovery reconciliation — detect gone models ──
   const isLocalProvider = providerId === "local" || providerId === "ollama";

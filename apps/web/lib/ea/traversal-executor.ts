@@ -81,20 +81,52 @@ export async function runTraversalPattern(input: TraversalInput): Promise<Traver
       }
 
       const nextIds: string[] = [];
-      for (const currentId of currentIds) {
-        const relWhere =
-          step.direction === "outbound" ? { fromElementId: currentId } :
-          step.direction === "inbound"  ? { toElementId: currentId } :
-          { OR: [{ fromElementId: currentId }, { toElementId: currentId }] };
 
-        const rels = await prisma.eaRelationship.findMany({
-          where: relWhere,
-          include: {
-            fromElement: { include: { elementType: { select: { slug: true } } } },
-            toElement:   { include: { elementType: { select: { slug: true } } } },
-            relationshipType: { select: { slug: true } },
-          },
-        });
+      // One batched query per depth step (was one findMany PER NODE — N+1 over a
+      // 331+-edge graph). The rows are grouped back by their originating current
+      // node and replayed in the original currentIds order so the per-node
+      // traversal semantics (and therefore run_traversal_pattern output) are
+      // byte-identical to the per-node loop.
+      const relWhere =
+        step.direction === "outbound" ? { fromElementId: { in: currentIds } } :
+        step.direction === "inbound"  ? { toElementId: { in: currentIds } } :
+        { OR: [{ fromElementId: { in: currentIds } }, { toElementId: { in: currentIds } }] };
+
+      const allRels = await prisma.eaRelationship.findMany({
+        where: relWhere,
+        include: {
+          fromElement: { include: { elementType: { select: { slug: true } } } },
+          toElement:   { include: { elementType: { select: { slug: true } } } },
+          relationshipType: { select: { slug: true } },
+        },
+      });
+
+      // Group the batched rows by the current-node id the per-node query would
+      // have matched on. For "either", a single row can match two distinct
+      // current nodes (once via fromElementId, once via toElementId) — exactly
+      // as the old OR-per-node query would have surfaced it under both — so it is
+      // bucketed under each. Encounter order within a bucket follows the DB row
+      // order, matching the per-node query's order for the same table state.
+      const relsByCurrentId = new Map<string, typeof allRels>();
+      const bucket = (id: string, rel: (typeof allRels)[number]) => {
+        const list = relsByCurrentId.get(id);
+        if (list) list.push(rel);
+        else relsByCurrentId.set(id, [rel]);
+      };
+      const currentIdSet = new Set(currentIds);
+      for (const rel of allRels) {
+        if (step.direction === "outbound") {
+          bucket(rel.fromElementId, rel);
+        } else if (step.direction === "inbound") {
+          bucket(rel.toElementId, rel);
+        } else {
+          if (currentIdSet.has(rel.fromElementId)) bucket(rel.fromElementId, rel);
+          if (currentIdSet.has(rel.toElementId)) bucket(rel.toElementId, rel);
+        }
+      }
+
+      for (const currentId of currentIds) {
+        const rels = relsByCurrentId.get(currentId) ?? [];
 
         for (const rel of rels) {
           const nextEl = step.direction === "inbound" ? rel.fromElement : rel.toElement;
