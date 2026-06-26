@@ -38,5 +38,8 @@ export function slugify(s: string): string {
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    // `[^a-z0-9]+` already collapsed every run to a single dash, so at most one
+    // boundary dash can exist — strip a single `-` (linear; the `-+` form is a
+    // polynomial-ReDoS footgun on uncontrolled input, flagged by js/polynomial-redos).
+    .replace(/^-|-$/g, "");
 }
