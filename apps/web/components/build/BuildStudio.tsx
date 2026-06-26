@@ -30,6 +30,7 @@ import { deriveFleetCounts, deriveNeedsAttention, deriveQueueState } from "./fle
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
+import { BuildSolutionSummaryBand } from "./BuildSolutionSummaryBand";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
@@ -783,6 +784,15 @@ export function BuildStudio({
                     {workflowAction.kind === "amend-parent-design" && (
                       <ParentDesignAmendmentCoordinator buildId={activeBuild.buildId} />
                     )}
+                  </div>
+                )}
+                {(activeBuild.designDoc?.problemStatement || activeBuild.designDoc?.proposedApproach || activeBuild.description) && (
+                  <div className="border-b border-[var(--dpf-border)] px-4 py-3">
+                    <BuildSolutionSummaryBand
+                      problemStatement={activeBuild.designDoc?.problemStatement ?? null}
+                      proposedApproach={activeBuild.designDoc?.proposedApproach ?? null}
+                      fallbackIntent={activeBuild.description}
+                    />
                   </div>
                 )}
                 {decisionLedger.length > 0 && (
