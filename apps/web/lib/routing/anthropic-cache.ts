@@ -34,7 +34,7 @@ export type AnthropicTextBlock = {
 export function buildAnthropicSystem(
   systemPrompt: string | undefined | null,
 ): string | AnthropicTextBlock[] {
-  if (!systemPrompt) return systemPrompt ?? "";
+  if (!systemPrompt) return "";
 
   const idx = systemPrompt.indexOf(SYSTEM_PROMPT_DYNAMIC_BOUNDARY);
   if (idx === -1) return systemPrompt;
