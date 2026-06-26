@@ -1,6 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
+import { SectionNav } from "@/components/shell/SectionNav";
 
 const TABS = [
   { label: "Directory", value: "directory" },
@@ -12,6 +13,10 @@ const TABS = [
 ] as const;
 
 export type EmployeeTab = (typeof TABS)[number]["value"];
+
+// Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper
+// owns active state and the in-place `?view=` switch. Employee uses the flat tab style
+// in button mode (the tabs switch a query-param view rather than navigating to a route).
 
 export function EmployeeTabNav() {
   const searchParams = useSearchParams();
@@ -30,21 +35,17 @@ export function EmployeeTabNav() {
   }
 
   return (
-    <div className="flex gap-1 mb-6 border-b border-[var(--dpf-border)]">
-      {TABS.map((t) => (
-        <button
-          key={t.value}
-          onClick={() => handleClick(t.value)}
-          className={[
-            "px-3 py-1.5 text-xs font-medium rounded-t transition-colors",
-            currentTab === t.value
-              ? "text-[var(--dpf-text)] border-b-2 border-[var(--dpf-accent)]"
-              : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
-          ].join(" ")}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
+    <SectionNav
+      config={{
+        variant: "flat",
+        dataComponent: "employee-tab-nav",
+        tabs: TABS.map((t) => ({
+          key: t.value,
+          label: t.label,
+          active: currentTab === t.value,
+          onSelect: () => handleClick(t.value),
+        })),
+      }}
+    />
   );
 }

@@ -1,6 +1,6 @@
 "use client";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SectionNav } from "@/components/shell/SectionNav";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
 
 type Props = {
@@ -10,6 +10,10 @@ type Props = {
   /** Show the Units tab — only for rental archetypes with a stockable fleet. */
   showUnits?: boolean;
 };
+
+// Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper owns
+// the archetype-aware tab labels and resolves active state from the pathname. Storefront
+// admin uses the flat "emphasis" tone (the heavier storefront-management strip).
 
 export function StorefrontAdminTabNav({ vocabulary, showAnimals = false, showUnits = false }: Props) {
   const path = usePathname();
@@ -25,34 +29,25 @@ export function StorefrontAdminTabNav({ vocabulary, showAnimals = false, showUni
     { label: "Settings", href: "/storefront/settings" },
   ];
 
+  const isActive = (href: string) =>
+    href === "/storefront"
+      ? path === "/storefront"
+      : path === href || path.startsWith(`${href}/`);
+
   return (
-    <nav
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 0,
-        borderBottom: "1px solid var(--dpf-border)",
-        marginBottom: 24,
+    <SectionNav
+      config={{
+        variant: "flat",
+        tone: "emphasis",
+        as: "nav",
+        dataComponent: "storefront-admin-tab-nav",
+        tabs: tabs.map((tab) => ({
+          key: tab.href,
+          label: tab.label,
+          href: tab.href,
+          active: isActive(tab.href),
+        })),
       }}
-    >
-      {tabs.map((tab) => {
-        const active = tab.href === "/storefront"
-          ? path === "/storefront"
-          : path === tab.href || path.startsWith(`${tab.href}/`);
-        return (
-          <Link key={tab.href} href={tab.href} style={{
-            padding: "10px 16px",
-            fontSize: 13,
-            fontWeight: active ? 600 : 400,
-            color: active ? "var(--dpf-accent)" : "var(--dpf-muted)",
-            borderBottom: active ? "2px solid var(--dpf-accent)" : "2px solid transparent",
-            textDecoration: "none",
-            whiteSpace: "nowrap",
-          }}>
-            {tab.label}
-          </Link>
-        );
-      })}
-    </nav>
+    />
   );
 }

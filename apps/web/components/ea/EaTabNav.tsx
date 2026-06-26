@@ -1,9 +1,12 @@
 // apps/web/components/ea/EaTabNav.tsx
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SectionNav } from "@/components/shell/SectionNav";
 import { EA_TABS } from "./ea-nav";
+
+// Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper
+// resolves active state from the pathname. EA uses the flat single-row tab style.
 
 export function EaTabNav() {
   const pathname = usePathname();
@@ -11,21 +14,17 @@ export function EaTabNav() {
     href === "/ea" ? pathname === "/ea" : pathname.startsWith(href);
 
   return (
-    <div className="flex gap-1 mb-6 border-b border-[var(--dpf-border)]">
-      {EA_TABS.map((t) => (
-        <Link
-          key={t.href}
-          href={t.href}
-          className={[
-            "px-3 py-1.5 text-xs font-medium rounded-t transition-colors",
-            active(t.href)
-              ? "text-[var(--dpf-text)] border-b-2 border-[var(--dpf-accent)]"
-              : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
-          ].join(" ")}
-        >
-          {t.label}
-        </Link>
-      ))}
-    </div>
+    <SectionNav
+      config={{
+        variant: "flat",
+        dataComponent: "ea-tab-nav",
+        tabs: EA_TABS.map((t) => ({
+          key: t.href,
+          label: t.label,
+          href: t.href,
+          active: active(t.href),
+        })),
+      }}
+    />
   );
 }

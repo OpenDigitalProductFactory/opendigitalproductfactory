@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SectionNav } from "@/components/shell/SectionNav";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 
 const TABS = [
@@ -12,6 +12,9 @@ const TABS = [
   { label: "Skills", href: "/platform/ai/skills" },
 ];
 
+// Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper
+// resolves active state from the pathname. Workforce uses the flat single-row tab style.
+
 export function WorkforceTabNav() {
   const pathname = usePathname();
   const active = (href: string) =>
@@ -20,21 +23,17 @@ export function WorkforceTabNav() {
       : pathname.startsWith(href);
 
   return (
-    <div className="flex gap-1 mb-6 border-b border-[var(--dpf-border)]">
-      {TABS.map((t) => (
-        <Link
-          key={t.href}
-          href={t.href}
-          className={[
-            "px-3 py-1.5 text-xs font-medium rounded-t transition-colors",
-            active(t.href)
-              ? "text-[var(--dpf-text)] border-b-2 border-[var(--dpf-accent)]"
-              : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
-          ].join(" ")}
-        >
-          {t.label}
-        </Link>
-      ))}
-    </div>
+    <SectionNav
+      config={{
+        variant: "flat",
+        dataComponent: "workforce-tab-nav",
+        tabs: TABS.map((t) => ({
+          key: t.href,
+          label: t.label,
+          href: t.href,
+          active: active(t.href),
+        })),
+      }}
+    />
   );
 }
