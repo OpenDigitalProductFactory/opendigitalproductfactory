@@ -31,8 +31,8 @@ const ACRONYMS = new Set([
 /** Per-agent overrides where deterministic derivation is wrong or too generic.
  *  Keyed by the stable agentId (AGT-*) and/or the slug handle so both seed paths hit it. */
 export const AGENT_IDENTITY_OVERRIDES: Record<string, { displayName?: string; kind?: AgentKind }> = {
-  "AGT-ORCH-000": { displayName: "COO" },
-  "coo": { displayName: "COO" },
+  "AGT-ORCH-000": { displayName: "COO", kind: "orchestrator" },
+  "coo": { displayName: "COO", kind: "orchestrator" },
   "AGT-WS-BUILD": { displayName: "Build Lead", kind: "orchestrator" },
   "build-specialist": { displayName: "Build Lead", kind: "orchestrator" },
   "AGT-901": { displayName: "Solution Architect" },

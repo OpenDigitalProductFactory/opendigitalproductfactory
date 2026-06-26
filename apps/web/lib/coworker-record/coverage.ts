@@ -88,3 +88,17 @@ export async function loadProfessionCoverage(
     emptyCorpus: pages.length === 0,
   };
 }
+
+/**
+ * Non-global jurisdictions with ZERO corpus pages while at least one OTHER
+ * non-global jurisdiction has coverage — a likely jurisdiction gap (partial
+ * coverage). Returns [] for universal / global-only families, where no
+ * jurisdiction-specific gap is implied. This surfaces the risk a volume-only
+ * coverage % hides (e.g. 100% corpus depth while the UK column is empty).
+ */
+export function jurisdictionGaps(coverage: ProfessionCoverage): string[] {
+  const nonGlobal = Object.entries(coverage.jurisdiction).filter(([j]) => j !== "global");
+  const anyCovered = nonGlobal.some(([, n]) => n > 0);
+  if (!anyCovered) return [];
+  return nonGlobal.filter(([, n]) => n === 0).map(([j]) => j);
+}
