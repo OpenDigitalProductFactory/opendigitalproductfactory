@@ -42,7 +42,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
 
   return (
     <header className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-      <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-2.5 lg:px-6">
+      <div className="flex w-full items-center justify-between gap-4 px-4 py-2.5 lg:px-6">
         <Link href="/workspace" className="flex min-w-0 items-center gap-3">
           {hasLogo && !logoFailed ? (
             <div className="h-14 flex items-center">

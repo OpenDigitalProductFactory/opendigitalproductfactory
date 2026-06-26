@@ -23,7 +23,7 @@ export default async function BuildLayout({
   return (
     <>
       <ShellPresentationMode
-        frameMaxWidth="1600px"
+        frameMaxWidth="none"
         contentMaxWidth="none"
         pagePadding="0px"
         bottomGap="16px"

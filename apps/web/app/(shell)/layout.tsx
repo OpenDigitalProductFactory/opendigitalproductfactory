@@ -195,10 +195,22 @@ export default async function ShellLayout({ children }: { children: React.ReactN
             </aside>
           )}
           <main className="min-w-0 flex-1">
+            {/* Full-width by default (operator directive 2026-06-26): the page frame
+                fills the viewport so wide surfaces — boards, grids, tables, canvases —
+                use all the available room instead of a centered 1600px column. A
+                surface that wants a narrower, centered measure (e.g. a reading view)
+                opts in via <ShellPresentationMode frameMaxWidth=… contentMaxWidth=… />,
+                which mx-auto then re-centers. */}
             <div
-              className="mx-auto w-full max-w-[1600px] transition-[padding-right] duration-200"
+              className="mx-auto w-full"
               style={{
-                maxWidth: "var(--shell-page-frame-max-width, 1600px)",
+                // NOTE: no CSS transition on padding-right. The reserve comes from the
+                // unregistered custom property --agent-panel-reserved-width; transitioning
+                // a property whose value derives from an unregistered var leaves it stuck
+                // at the fallback (0px) after the var updates, which intermittently let
+                // content slide under the docked panel. Resolving the var directly (no
+                // transition) makes the reserve reliable.
+                maxWidth: "var(--shell-page-frame-max-width, none)",
                 paddingRight: "var(--agent-panel-reserved-width, 0px)",
               }}
             >
@@ -206,13 +218,23 @@ export default async function ShellLayout({ children }: { children: React.ReactN
                 data-shell-content="true"
                 style={{
                   padding: "var(--shell-page-padding, clamp(1rem, 1vw + 0.75rem, 1.5rem))",
+                  // When the coworker panel is docked, the frame already reserves space
+                  // for it on the right (--agent-panel-reserved-width). The page's own
+                  // right gutter would otherwise STACK on top of that reserve and leave a
+                  // dead black band between wide content (grids, boards) and the panel.
+                  // Collapse the right padding once the reserve exceeds it, so content
+                  // extends up to one clean gap from the panel. Undocked (reserve 0) it
+                  // stays the normal page gutter — and the reserve itself remains the
+                  // safety margin, so content never slides under the panel.
+                  paddingRight:
+                    "max(0px, calc(var(--shell-page-padding, clamp(1rem, 1vw + 0.75rem, 1.5rem)) - var(--agent-panel-reserved-width, 0px)))",
                   minHeight:
                     "calc(100dvh - var(--shell-content-top, 16px) - var(--shell-page-bottom-gap, 16px))",
                 }}
               >
                 <div
                   className="mx-auto w-full"
-                  style={{ maxWidth: "var(--shell-page-content-max-width, 80rem)" }}
+                  style={{ maxWidth: "var(--shell-page-content-max-width, none)" }}
                 >
                   {shellNavSections.length > 0 && <ShellBreadcrumb />}
                   {children}
