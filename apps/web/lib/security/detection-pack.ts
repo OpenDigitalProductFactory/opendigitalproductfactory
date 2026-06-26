@@ -139,6 +139,57 @@ export const KERNEL_DETECTION_PACK: KernelDetectionRule[] = [
     },
   },
 
+  {
+    ruleKey: "dpf-kernel:windows-scheduled-task-created",
+    name: "Windows scheduled task created",
+    description:
+      "A scheduled task was registered (Event ID 4698) — a common execution-persistence mechanism.",
+    severity: "medium",
+    mitreTechniques: ["T1053.005"],
+    predicate: { sourceKind: "windows.security", equals: { path: "windowsEventId", value: 4698 } },
+  },
+  {
+    ruleKey: "dpf-kernel:windows-service-installed",
+    name: "Windows service installed",
+    description:
+      "A new Windows service was installed (Event ID 4697/7045) — a classic persistence and privilege mechanism.",
+    severity: "medium",
+    mitreTechniques: ["T1543.003"],
+    predicate: {
+      sourceKind: "windows.security",
+      anyOf: [
+        { equals: { path: "windowsEventId", value: 4697 } },
+        { equals: { path: "windowsEventId", value: 7045 } },
+      ],
+    },
+  },
+  {
+    ruleKey: "dpf-kernel:aws-iam-user-created",
+    name: "AWS IAM user created",
+    description:
+      "A new IAM user was created (CreateUser). Routine in provisioning flows; an account-persistence step when unexpected.",
+    severity: "medium",
+    mitreTechniques: ["T1136"],
+    predicate: { sourceKind: "aws.cloudtrail", equals: { path: "api.operation", value: "CreateUser" } },
+  },
+  {
+    ruleKey: "dpf-kernel:aws-iam-policy-attached",
+    name: "AWS IAM permissions attached",
+    description:
+      "An IAM permission policy was attached or put on a user/role (AttachUserPolicy / AttachRolePolicy / PutUserPolicy / PutRolePolicy) — a common privilege-escalation step.",
+    severity: "medium",
+    mitreTechniques: ["T1098"],
+    predicate: {
+      sourceKind: "aws.cloudtrail",
+      anyOf: [
+        { equals: { path: "api.operation", value: "AttachUserPolicy" } },
+        { equals: { path: "api.operation", value: "AttachRolePolicy" } },
+        { equals: { path: "api.operation", value: "PutUserPolicy" } },
+        { equals: { path: "api.operation", value: "PutRolePolicy" } },
+      ],
+    },
+  },
+
   // ── Upstream security products (CEF / ArcSight → OCSF Security Finding) ──────
   {
     ruleKey: "dpf-kernel:third-party-high-severity-finding",

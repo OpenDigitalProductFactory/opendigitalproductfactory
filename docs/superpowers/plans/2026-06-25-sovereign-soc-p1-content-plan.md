@@ -19,16 +19,22 @@ The 1.0.0 starter trio proved the mechanism; 1.1.0 expands toward a competitive
 out-of-the-box baseline. **Every new rule matches a field a reference normalizer
 actually emits** — no rule invents a source or field that does not exist (broader
 source coverage, e.g. EDR/identity, rides EP-EDGE-TOPOLOGY's collector track and
-this pack consumes those normalizers as they land). 7 rules added (pack 3 → 10):
+this pack consumes those normalizers as they land). 11 rules added (pack 3 → 14),
+spanning credential-access, defense-evasion, persistence, privilege-escalation,
+and execution tactics:
 
 | Rule | Real field matched | ATT&CK | Severity |
 |---|---|---|---|
 | Windows audit log cleared | `windows.security` · `normalized.windowsEventId == 1102` | T1070.001 | high |
 | Windows account created | `windowsEventId == 4720` | T1136.001 | medium |
 | Windows privileged-group change | `windowsEventId ∈ {4728,4732,4756}` (anyOf) | T1098 | medium |
+| Windows scheduled task created | `windowsEventId == 4698` | T1053.005 | medium |
+| Windows service installed | `windowsEventId ∈ {4697,7045}` | T1543.003 | medium |
 | AWS CloudTrail logging tampered | `aws.cloudtrail` · `normalized.api.operation ∈ {StopLogging,DeleteTrail,UpdateTrail}` | T1562.008 | high |
 | AWS MFA device removed | `api.operation ∈ {DeactivateMFADevice,DeleteVirtualMFADevice}` | T1556 | high |
 | AWS access key created | `api.operation == CreateAccessKey` | T1098 | medium |
+| AWS IAM user created | `api.operation == CreateUser` | T1136 | medium |
+| AWS IAM permissions attached | `api.operation ∈ {Attach/Put User/Role Policy}` | T1098 | medium |
 | Third-party high-severity finding | `cef` · `severityId ≥ 4` (upstream IDS/IPS/EDR relay) | — | high |
 
 - Version bumped `1.0.0 → 1.1.0`; `ensureKernelDetectionPack` stays create-if-missing
@@ -38,5 +44,6 @@ this pack consumes those normalizers as they land). 7 rules added (pack 3 → 10
   flow into the architecture graph automatically, no fixture churn.
 
 ## Verified
-web typecheck clean; detection-pack 19/19 + detection + sweep + EA security-posture
-+ reconcile-sysml-projections green (131 across the security/EA set).
+web typecheck clean; detection-pack + detection + sweep + EA security-posture +
+reconcile-sysml-projections all green (each new rule has fire + non-fire coverage;
+the EA part_usage parity count tracks `KERNEL_DETECTION_PACK.length` dynamically).

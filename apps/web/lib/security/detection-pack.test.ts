@@ -26,7 +26,7 @@ function evt(overrides: Partial<SecurityEventView>): SecurityEventView {
 
 describe("KERNEL_DETECTION_PACK", () => {
   it("has stable, namespaced rule keys and kernel scope", () => {
-    expect(KERNEL_DETECTION_PACK).toHaveLength(10);
+    expect(KERNEL_DETECTION_PACK).toHaveLength(14);
     const keys = RULES.map((v) => v.ruleKey);
     expect(new Set(keys).size).toBe(keys.length); // keys are unique
     for (const v of RULES) {
@@ -135,6 +135,32 @@ describe("KERNEL_DETECTION_PACK", () => {
       {},
     );
     expect(out.some((d) => /aws-(cloudtrail-tampering|mfa-weakened|access-key-created)/.test(d.detectionKey))).toBe(false);
+  });
+
+  it("fires execution/persistence rules on scheduled-task + service event IDs", () => {
+    const task = evaluateRulesForEvent(RULES, evt({ severityId: 1, normalized: { windowsEventId: 4698 } }), {});
+    expect(task.map((d) => d.detectionKey)).toContain("dpf-kernel:windows-scheduled-task-created:e1");
+    for (const id of [4697, 7045]) {
+      const svc = evaluateRulesForEvent(RULES, evt({ severityId: 1, normalized: { windowsEventId: id } }), {});
+      expect(svc.map((d) => d.detectionKey)).toContain("dpf-kernel:windows-service-installed:e1");
+    }
+  });
+
+  it("fires AWS identity rules on CreateUser + policy attachment", () => {
+    const user = evaluateRulesForEvent(
+      RULES,
+      evt({ sourceKind: "aws.cloudtrail", ocsfClassUid: 6003, severityId: 1, normalized: { api: { operation: "CreateUser" } } }),
+      {},
+    );
+    expect(user.map((d) => d.detectionKey)).toContain("dpf-kernel:aws-iam-user-created:e1");
+    for (const op of ["AttachUserPolicy", "AttachRolePolicy", "PutUserPolicy", "PutRolePolicy"]) {
+      const pol = evaluateRulesForEvent(
+        RULES,
+        evt({ sourceKind: "aws.cloudtrail", ocsfClassUid: 6003, severityId: 1, normalized: { api: { operation: op } } }),
+        {},
+      );
+      expect(pol.map((d) => d.detectionKey)).toContain("dpf-kernel:aws-iam-policy-attached:e1");
+    }
   });
 
   it("fires third-party-high-severity-finding only at severityId >= 4", () => {
