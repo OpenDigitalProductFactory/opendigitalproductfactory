@@ -2,9 +2,14 @@
 
 import { auth } from "@/lib/auth";
 import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID } from "@dpf/db";
-import { SCHEDULING_MAP } from "@/lib/operate/scheduled-jobs/scheduling-map";
-import { occupiedTicks, deconflictCron } from "@/lib/operate/scheduled-jobs/scheduling-allocator";
-import { randomUUID } from "crypto";
+import {
+  scheduleAgentTaskFor,
+  getScheduledAgentTasksFor,
+  cancelAgentTaskFor,
+  type ScheduleAgentTaskInput,
+  type ScheduleAgentTaskResult,
+  type ScheduledAgentTaskView,
+} from "@/lib/operate/scheduled-jobs/agent-task-core";
 import { runDataModelMirror } from "@/lib/ea/run-data-model-mirror";
 import { runArchitectureParitySteward } from "@/lib/ea/architecture-parity-steward";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
@@ -45,136 +50,26 @@ function getRequiredProceduralToolForScheduledTask(taskId: string): {
 
 // ─── Public actions ─────────────────────────────────────────────────────────
 
-export type ScheduleAgentTaskInput = {
-  agentId: string;
-  title: string;
-  prompt: string;
-  routeContext: string;
-  schedule: string; // cron expression
-  timezone?: string;
-};
+// ScheduleAgentTaskInput + result/view types live in agent-task-core.ts
+// (BI-1C44A93A) so the MCP tools share the same logic without the "use server"
+// boundary. These thin wrappers resolve identity from auth() and delegate.
 
-export async function scheduleAgentTask(
-  input: ScheduleAgentTaskInput,
-): Promise<{ success: true; taskId: string; note?: string } | { success: false; error: string }> {
+export async function scheduleAgentTask(input: ScheduleAgentTaskInput): Promise<ScheduleAgentTaskResult> {
   const session = await auth();
   if (!session?.user?.id) return { success: false, error: "Unauthorized" };
-
-  if (input.timezone && input.timezone !== "UTC") {
-    return {
-      success: false,
-      error: "Non-UTC timezones are not yet supported. All schedules run in UTC.",
-    };
-  }
-
-  const taskId = `agent-task-${randomUUID().slice(0, 8)}`;
-  const now = new Date();
-
-  // BI-SCHED-ALLOCATE: de-conflict at creation so a new task does not pile onto
-  // a tick already in use. Occupied ticks = the canonical scheduling map (code
-  // crons + seeded tasks) plus other live agent tasks. Interval cadences pass
-  // through untouched (those are governed by the CI contention guard).
-  const liveTasks = await prisma.scheduledAgentTask.findMany({
-    where: { isActive: true },
-    select: { schedule: true },
-  });
-  const occupied = occupiedTicks([
-    ...SCHEDULING_MAP.map((e) => e.cron),
-    ...liveTasks.map((t) => t.schedule),
-  ]);
-  const { cron: schedule, note } = deconflictCron(input.schedule, occupied);
-
-  const nextRunAt = computeNextCronRun(schedule, now);
-
-  await prisma.scheduledAgentTask.create({
-    data: {
-      taskId,
-      agentId: input.agentId,
-      title: input.title,
-      prompt: input.prompt,
-      routeContext: input.routeContext,
-      schedule,
-      timezone: input.timezone ?? "UTC",
-      ownerUserId: session.user.id,
-      nextRunAt,
-    },
-  });
-
-  // Also register as ScheduledJob so it appears in calendar projections
-  await prisma.scheduledJob.upsert({
-    where: { jobId: taskId },
-    create: {
-      jobId: taskId,
-      name: `Agent: ${input.title}`,
-      schedule,
-      nextRunAt,
-    },
-    update: {
-      name: `Agent: ${input.title}`,
-      schedule,
-      nextRunAt,
-    },
-  });
-
-  return note ? { success: true, taskId, note } : { success: true, taskId };
+  return scheduleAgentTaskFor(session.user.id, input);
 }
 
-export async function cancelAgentTask(
-  taskId: string,
-): Promise<{ success: boolean; error?: string }> {
+export async function cancelAgentTask(taskId: string): Promise<{ success: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user?.id) return { success: false, error: "Unauthorized" };
-
-  await prisma.scheduledAgentTask.update({
-    where: { taskId },
-    data: { isActive: false },
-  });
-
-  await prisma.scheduledJob.update({
-    where: { jobId: taskId },
-    data: { schedule: "disabled" },
-  }).catch(() => {});
-
-  return { success: true };
+  return cancelAgentTaskFor(session.user.id, taskId);
 }
 
-export async function getScheduledAgentTasks(): Promise<
-  Array<{
-    taskId: string;
-    agentId: string;
-    title: string;
-    prompt: string;
-    schedule: string;
-    isActive: boolean;
-    nextRunAt: string | null;
-    lastRunAt: string | null;
-    lastStatus: string | null;
-  }>
-> {
+export async function getScheduledAgentTasks(): Promise<ScheduledAgentTaskView[]> {
   const session = await auth();
   if (!session?.user?.id) return [];
-
-  const tasks = await prisma.scheduledAgentTask.findMany({
-    where: { ownerUserId: session.user.id },
-    orderBy: { createdAt: "desc" },
-    select: {
-      taskId: true,
-      agentId: true,
-      title: true,
-      prompt: true,
-      schedule: true,
-      isActive: true,
-      nextRunAt: true,
-      lastRunAt: true,
-      lastStatus: true,
-    },
-  });
-
-  return tasks.map((t) => ({
-    ...t,
-    nextRunAt: t.nextRunAt?.toISOString() ?? null,
-    lastRunAt: t.lastRunAt?.toISOString() ?? null,
-  }));
+  return getScheduledAgentTasksFor(session.user.id);
 }
 
 // ─── Execution (called by Inngest dispatcher) ───────────────────────────────
