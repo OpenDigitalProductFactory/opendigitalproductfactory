@@ -605,6 +605,12 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.title).toBe("Review workspace noise before retrying this build");
     expect(action.failureAxis).toBe("out-of-scope-noise");
     expect(action.resumeMode?.mode).toBe("rerun-verification");
+    // BI-FD796419 / Band 4 — the operator-facing message leads with plain
+    // language (what it means + what to do), not the "Failure axis:" jargon;
+    // the technical axis is kept only as a trailing engineer detail.
+    expect(action.message).not.toMatch(/^Failure axis/);
+    expect(action.message).toContain("Resume");
+    expect(action.message).toContain("out-of-scope-noise");
   });
 
   it("surfaces implementation recovery in review when review only contains failed execution evidence", () => {
