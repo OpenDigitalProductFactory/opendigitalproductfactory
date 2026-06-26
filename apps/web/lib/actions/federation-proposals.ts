@@ -2,9 +2,10 @@
 
 // EP-MSP-FEDERATION · B4 operator surface — decide on cross-org remediation
 // proposals. The customer's human approval/rejection of an MSP proposal. On
-// approve we record intent; the actual execution dispatches via the control
-// runner (EP-CTRL-5E21A4) when that substrate lands — the MSP never gains
-// standing execute rights, and nothing runs here.
+// approve we materialize the governed RemoteAction rows the proposal becomes
+// (EP-REMOTE-ACTION P1, on the CUSTOMER's side): read-only actions reach
+// `approved`, mutating ones reach `proposed`, and NOTHING dispatches — there is no
+// platform→Edge channel yet (P2). The MSP never gains standing execute rights.
 
 import { revalidatePath } from "next/cache";
 
@@ -13,6 +14,11 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { can } from "@/lib/permissions";
+import {
+  materializeRemoteActionsForProposal,
+  type RemoteActionDb,
+} from "@/lib/service-desk/remote-action-execution";
+import { type StoredProposalAction } from "@/lib/service-desk/remote-action-planning";
 
 const ADMIN_PATH = "/platform/federation-proposals";
 
@@ -54,25 +60,51 @@ export async function decideFederatedProposalAction(
   }
   const proposal = await prisma.federatedRemediationProposal.findUnique({
     where: { proposalId },
-    select: { proposalId: true, status: true },
+    select: { proposalId: true, status: true, actions: true, federationLinkId: true, edgeNodeId: true },
   });
   if (!proposal) return { ok: false, error: "not_found", message: "Proposal not found" };
   if (proposal.status !== "proposed") {
     return { ok: false, error: "invalid_transition", message: `proposal is already ${proposal.status}` };
   }
 
-  const status = decision === "approve" ? "approved" : "rejected";
+  if (decision === "reject") {
+    await prisma.federatedRemediationProposal.update({
+      where: { proposalId },
+      data: { status: "rejected", decidedAt: new Date(), decidedByPrincipalId: gate.principalId },
+    });
+    revalidatePath(ADMIN_PATH);
+    return { ok: true, proposalId, status: "rejected" };
+  }
+
+  // Approve: materialize the governed RemoteAction rows (the proposal→RemoteAction
+  // seam, EP-REMOTE-ACTION P1). The MSP that proposed is recorded as the requester,
+  // the link as origin; read-only actions land `approved`, mutating ones `proposed`.
+  // Conservative band for P1 — per-agreement bands (AuthorityBinding) widen it once
+  // the founder sets the §15.4 pilot bands. Nothing dispatches (no P2 channel).
+  const link = await prisma.federationLink.findUnique({
+    where: { linkId: proposal.federationLinkId },
+    select: { principalId: true },
+  });
+  const actions = Array.isArray(proposal.actions)
+    ? (proposal.actions as unknown as StoredProposalAction[])
+    : [];
+  const result = await materializeRemoteActionsForProposal(prisma as unknown as RemoteActionDb, {
+    proposalId: proposal.proposalId,
+    federationLinkId: proposal.federationLinkId,
+    edgeNodeId: proposal.edgeNodeId,
+    actions,
+    approverPrincipalId: gate.principalId,
+    requestedByPrincipalId: link?.principalId ?? `federated-peer:${proposal.federationLinkId}`,
+  });
   await prisma.federatedRemediationProposal.update({
     where: { proposalId },
     data: {
-      status,
+      status: "approved",
       decidedAt: new Date(),
       decidedByPrincipalId: gate.principalId,
-      // Execution dispatches on the customer's own control runner when
-      // EP-CTRL-5E21A4 lands; until then approval records intent only.
-      ...(decision === "approve" ? { executionEvidenceRef: "pending-control-runner" } : {}),
+      executionEvidenceRef: result.evidenceRef,
     },
   });
   revalidatePath(ADMIN_PATH);
-  return { ok: true, proposalId, status };
+  return { ok: true, proposalId, status: "approved" };
 }

@@ -10675,6 +10675,60 @@ model FederatedRemediationProposal {
   @@index([incidentKey])
 }
 
+// ─── EP-REMOTE-ACTION · the convergent governed remote-execution primitive ───
+// Spec: docs/superpowers/specs/2026-06-25-convergent-remote-action-execution-design.md.
+// ONE primitive, two consumers: federated remediation (EP-MSP-FEDERATION) + estate
+// patch-apply (EP-PATCH-MANAGEMENT, which specced this shape in §7.3). P1 = the
+// governed RECORD + the approved-proposal→RemoteAction seam. There is NO platform→
+// Edge dispatch channel yet (P2, gated on machine-bound trust + a threat model), so
+// a materialized action rests at status="queued" and nothing executes — the record
+// is the honest, auditable intent, not a side effect.
+model RemoteAction {
+  id                     String    @id @default(cuid())
+  actionKey              String    @unique
+  // The Edge Node that will execute this (resolved at dispatch, P2); nullable
+  // because a federated proposal names a host, not yet an enrolled Edge node.
+  edgeNodeId             String?
+  inventoryEntityId      String?
+  customerAccountId      String?
+  customerSiteId         String?
+  // inventory.collect | diagnostics.collect | patch.apply | service.restart | reboot | script.run
+  actionType             String
+  parameters             Json      @default("{}")
+  // read-only | low | medium | high | destructive (remediation-authority risk class).
+  riskClass              String    @default("read-only")
+
+  // Convergence provenance: which proposal produced this, and (for MSP-originated
+  // cross-org actions) which link it came across — the sovereignty guard reads
+  // originLinkId to forbid autonomous execution of an action the MSP merely proposed.
+  originProposalRef      String?
+  originLinkId           String?
+
+  requestedByPrincipalId String
+  // proposed | approved | rejected | cancelled
+  approvalState          String    @default("proposed")
+  approvedByPrincipalId  String?
+  changeRequestId        String?
+  deploymentWindowId     String?
+  patchPlanId            String?
+
+  // queued | dispatched | running | succeeded | failed | rolled-back | timed-out
+  status                 String    @default("queued")
+  result                 Json      @default("{}")
+  evidence               Json      @default("{}")
+  rollbackOf             String?
+  createdAt              DateTime  @default(now())
+  startedAt              DateTime?
+  completedAt            DateTime?
+  updatedAt              DateTime  @updatedAt
+
+  @@index([originProposalRef])
+  @@index([originLinkId])
+  @@index([approvalState])
+  @@index([status])
+  @@index([customerAccountId, customerSiteId])
+}
+
 // ─── Security telemetry (OCSF-normalized) ───────────────────────────────────
 // EP-SOVEREIGN-SOC P0 keystone — append-only OCSF-aligned security telemetry.
 // Spec: docs/superpowers/specs/2026-06-24-sovereign-soc-siem-design.md §6.1.
