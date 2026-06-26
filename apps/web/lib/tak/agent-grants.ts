@@ -335,6 +335,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Discovery / Monitoring
   summarize_estate_posture: ["registry_read"],
+  list_patch_posture: ["registry_read"], // read-only patch-posture summary (peer of summarize_estate_posture); was a default-deny orphan flagged by the routing audit
   review_estate_identity: ["registry_read"],
   validate_version_confidence: ["registry_read"],
   explain_blast_radius: ["registry_read"],
