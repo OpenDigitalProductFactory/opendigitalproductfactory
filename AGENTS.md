@@ -151,6 +151,8 @@ Every tool call writes to `ToolExecution` (`agentId`, `userId`, `toolName`, `par
 
 **Lean MCP surface (optional):** an external CLI can opt into a curated core tool set by pointing its MCP URL at `…/api/mcp/v1?tier=core` (in `.mcp.json` / Codex `config.toml`). `tools/list` then returns ~22 broadly-useful tools instead of the full granted surface (cutting the upfront token tax); the model can still call any granted tool by name, and `search_tool_marketplace` surfaces the rest. Default (no `?tier=`) is the full surface — unchanged.
 
+**Code graph first (mandatory for code work).** Before broad text search or any symbol-level blast-radius claim, consult the committed code graph the way Build Studio agents already do: call `get_code_graph_freshness`, then `search_code_graph` / `trace_code_surface` to locate symbols, routes, Prisma models, MCP tools, and prompt sources, and confirm exact code with `read_project_file`; call `find_related_tests` for changed source files. **Do not assert symbol-level blast radius unless `trace_code_surface` returns structural edges.** `get_code_graph_freshness` reports index staleness and a dirty workspace; when the graph is stale or a result is empty, fall back to grep + file reads. This discipline is wired into the Build Studio agent prompts (`apps/web/lib/integrate/build-agent-prompts.ts`) — it applies identically to direct Claude Code / Codex / Grok sessions, which otherwise never learn the graph exists.
+
 ## 9. External Tools
 
 → [kernel principle](docs/founder-kernel/wiki/principles/tool-evaluation-pipeline.md)
