@@ -184,12 +184,20 @@ export async function findExistingDecisionInteraction(input: {
 
 export async function persistDecisionInteraction(input: {
   db: DecisionInteractionClient;
-  build: { buildId: string };
+  /** Optional: the build a decision belongs to. Omit for non-build (e.g. org/WWWD) decisions. */
+  build?: { buildId: string } | null;
   evaluation: DecisionPerspectiveEvaluationResult;
   deliberationRunId?: string | null;
   taskRunId?: string | null;
   triggeredByUserId?: string | null;
   interactionId?: string;
+  /** Defaults to "/build" (the Build Studio gate) when omitted. */
+  routeContext?: string;
+  /** Build-phase transition fields; default to plan->build when omitted, pass null for non-build decisions. */
+  phaseFrom?: string | null;
+  phaseTo?: string | null;
+  /** Extra fields merged into outcomePayload (e.g. { orgProfileSelected }). */
+  outcomePayloadExtra?: Record<string, unknown>;
 }): Promise<{ interactionId: string; row: Record<string, unknown> }> {
   const interactionId = input.interactionId ?? createDecisionInteractionId();
   const row = await input.db.decisionInteraction.create({
@@ -198,13 +206,13 @@ export async function persistDecisionInteraction(input: {
       profileId: input.evaluation.selectedProfileId,
       profileVersionId: input.evaluation.profileVersionId,
       fallbackProfileId: input.evaluation.fallbackProfileId,
-      buildId: input.build.buildId,
+      buildId: input.build?.buildId ?? null,
       taskRunId: input.taskRunId ?? null,
       deliberationRunId: input.deliberationRunId ?? null,
       triggeredByUserId: input.triggeredByUserId ?? null,
-      routeContext: "/build",
-      phaseFrom: "plan",
-      phaseTo: "build",
+      routeContext: input.routeContext ?? "/build",
+      phaseFrom: input.phaseFrom === undefined ? "plan" : input.phaseFrom,
+      phaseTo: input.phaseTo === undefined ? "build" : input.phaseTo,
       domainClass: input.evaluation.domainClass,
       question: input.evaluation.question,
       options: input.evaluation.options,
@@ -229,6 +237,7 @@ export async function persistDecisionInteraction(input: {
         resolvedProfileChain: input.evaluation.resolvedProfileChain,
         materialCount: input.evaluation.materialCount,
         freshnessDistribution: input.evaluation.freshnessDistribution,
+        ...(input.outcomePayloadExtra ?? {}),
       },
     },
   }) as Record<string, unknown>;
