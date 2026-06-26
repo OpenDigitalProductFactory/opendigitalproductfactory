@@ -40,6 +40,7 @@
     "security:secrets": "node scripts/security/run-gitleaks-local.mjs --tree",
     "security:secrets:staged": "node scripts/security/run-gitleaks-local.mjs --staged",
     "docs:tak": "node docs/architecture/generate-tak-docx.mjs",
+    "pr:health": "node scripts/pr-health.mjs",
     "postinstall": "node scripts/set-hooks-path.mjs"
   },
   "engines": {
