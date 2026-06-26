@@ -10,6 +10,8 @@ import {
   phaseRequiresToolCall,
   detectUnsavedEvidence,
   enrichToolDescriptions,
+  buildUnsavedAdviceNote,
+  HARD_COMPLETION_CLAIM_PATTERN,
 } from "./agentic-loop";
 
 vi.mock("@dpf/db", () => ({
@@ -1585,6 +1587,128 @@ describe("runAgenticLoop", () => {
     // The original guard is unchanged for healthy providers.
     expect(result.content).not.toContain("deployed the feature");
     expect(result.content.toLowerCase()).toContain("wasn't recorded");
+  });
+
+  // ─── Conversational-route fabrication: keep the advice, don't nuke it ──────
+  // The fabrication guard exists to stop a BUILD agent from falsely claiming it
+  // shipped code. On an advisory chat (the marketing strategist is the one
+  // advise-mode route that still carries authoritative artifact tools) the same
+  // signal fires on genuinely useful advice that merely forgot to persist.
+  // Replacing it with build copy ("open the build details") is the bug the user
+  // reported. These cases lock in: keep the advice, use domain-appropriate
+  // copy, and correct only a hard, unbacked completion claim.
+  const marketingTools = {
+    tools: [
+      { name: "save_marketing_review", description: "Save a marketing recommendation", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: true, coworkerArtifact: true },
+    ],
+    toolsForProvider: [
+      { type: "function", function: { name: "save_marketing_review", description: "Save a marketing recommendation", parameters: {} } },
+    ],
+  };
+
+  it("keeps marketing advice (narration, no tool call) instead of showing build copy", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    // Every dispatch narrates intent without calling the persist tool.
+    mockRoute.mockResolvedValue(mockResult({
+      content: "Here's your owner-operator segment profile: trades owners on Facebook groups. Let me create the campaign brief for you now.",
+      downgraded: false,
+    }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/customer/marketing",
+      agentId: "marketing-specialist",
+      ...marketingTools,
+    });
+
+    // Advice is preserved; build copy is gone.
+    expect(result.content).toContain("owner-operator segment profile");
+    expect(result.content.toLowerCase()).not.toContain("wasn't recorded");
+    expect(result.content.toLowerCase()).not.toContain("build details");
+    // Plain narration (no hard completion claim) gets no correction note.
+    expect(result.content).not.toContain("haven't saved this to your marketing workspace");
+  });
+
+  it("keeps marketing advice but appends an honest note on a hard, unbacked completion claim", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockResolvedValue(mockResult({
+      content: "Done — I've saved your campaign brief and it's now in your approval queue.",
+      downgraded: false,
+    }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/customer/marketing",
+      agentId: "marketing-specialist",
+      ...marketingTools,
+    });
+
+    // The model's text is kept...
+    expect(result.content).toContain("campaign brief");
+    // ...with an honest correction so the user is not misled, and NO build copy.
+    expect(result.content).toContain("haven't saved this to your marketing workspace");
+    expect(result.content.toLowerCase()).not.toContain("build details");
+  });
+
+  it("nudges the marketing coworker to persist (domain copy, not build/code copy)", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockResolvedValue(mockResult({
+      content: "Let me create the campaign brief for you now.",
+      downgraded: false,
+    }));
+
+    await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/customer/marketing",
+      agentId: "marketing-specialist",
+      ...marketingTools,
+    });
+
+    // Second dispatch carries the recovery nudge as the last user message.
+    const secondCallMessages = mockRoute.mock.calls[1]?.[0] ?? [];
+    const lastUserMessage = [...secondCallMessages].reverse().find((m: any) => m.role === "user");
+    expect(lastUserMessage?.content).toContain("save_marketing_review");
+    expect(lastUserMessage?.content).not.toContain("Do NOT show code");
+  });
+});
+
+describe("buildUnsavedAdviceNote", () => {
+  it("uses marketing-specific copy on the marketing route", () => {
+    const note = buildUnsavedAdviceNote("/customer/marketing");
+    expect(note).toContain("marketing workspace");
+    expect(note.toLowerCase()).not.toContain("build details");
+  });
+
+  it("uses generic workspace copy off the marketing route and never mentions builds", () => {
+    const note = buildUnsavedAdviceNote("/platform/estate");
+    expect(note.toLowerCase()).not.toContain("build details");
+    expect(note.toLowerCase()).toContain("workspace");
+  });
+});
+
+describe("HARD_COMPLETION_CLAIM_PATTERN", () => {
+  it("matches first-person persistence/publish claims that would mislead", () => {
+    for (const claim of [
+      "I've saved your campaign brief.",
+      "Done — I saved that for you.",
+      "Your post is now live on LinkedIn.",
+      "I've added it to your approval queue.",
+      "The email has been sent.",
+      "It's now in your approval queue.",
+    ]) {
+      expect(HARD_COMPLETION_CLAIM_PATTERN.test(claim)).toBe(true);
+    }
+  });
+
+  it("does not match intent/narration or plain advice", () => {
+    for (const text of [
+      "Let me draft the campaign brief for you now.",
+      "Here's your owner-operator segment profile.",
+      "I'll create the campaign brief next.",
+      "I recommend a weekly LinkedIn cadence targeting trades owners.",
+    ]) {
+      expect(HARD_COMPLETION_CLAIM_PATTERN.test(text)).toBe(false);
+    }
   });
 });
 
