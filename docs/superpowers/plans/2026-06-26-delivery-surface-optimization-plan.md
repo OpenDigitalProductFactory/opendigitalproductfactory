@@ -92,6 +92,8 @@ Rollback:
 
 Backlog: `BI-79A5C00F`.
 
+**Status (2026-06-26): implemented** on `feat/anthropic-prompt-cache-breakpoint-bi-79a5c00f` (capsule WC-68ABAA4C). New `apps/web/lib/routing/anthropic-cache.ts` `buildAnthropicSystem()` splits the assembled system prompt on the boundary and attaches `cache_control:{type:"ephemeral"}` to the stable prefix in the Anthropic branch of `chat-adapter.ts`; the boundary constant was extracted to a dependency-free `apps/web/lib/tak/prompt-boundary.ts` (so the routing path/tests do not import the DB-coupled assembler). The 5-minute TTL (GA, no beta header) shipped; the 1-hour TTL is a tracked follow-up pending confirmation of the extended-cache beta header. Unit tests in `anthropic-cache.test.ts`; the live cache-read check (turn-2 `cache_read_input_tokens > 0`) remains as functional verification.
+
 Goal: make DPF exploit the stable/dynamic prompt split it already builds.
 
 Files to inspect or update:
