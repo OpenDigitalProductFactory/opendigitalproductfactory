@@ -32,8 +32,13 @@ export interface Deviation {
   kind: DeviationKind;
 }
 
+/** Which authority scope supplied the governing posture, or "none" (Balanced cold-start). */
+export type GoldenTriangleGovernedBy = "agent" | "organization" | "platform" | "none";
+
 export interface GoldenTriangleReceipt {
   preset: GoldenTrianglePreset;
+  /** The scope whose default governed this run (cascade: agent → org → platform → none). */
+  governedBy: GoldenTriangleGovernedBy;
   requested: {
     minimumTier?: QualityTier;
     effort?: string;
@@ -68,6 +73,9 @@ export function buildGoldenTriangleReceipt(
   preference: GoldenTrianglePreference,
   decoded: DecodedPolicy,
   actual: ActualRun,
+  /** The scope that governed this run (from DispatchPosture.source). Defaults to
+   *  "none": Balanced / no posture set at any scope (the cold-start case). */
+  governedBy: GoldenTriangleGovernedBy = "none",
 ): GoldenTriangleReceipt {
   const po = decoded.postureOverride;
   const ob = decoded.orchestrationBudget;
@@ -113,6 +121,7 @@ export function buildGoldenTriangleReceipt(
 
   return {
     preset: preference.preset,
+    governedBy,
     requested: {
       ...(po.minimumTier ? { minimumTier: po.minimumTier } : {}),
       ...(po.effort ? { effort: po.effort } : {}),

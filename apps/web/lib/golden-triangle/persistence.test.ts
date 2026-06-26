@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 
 import {
+  clearAgentGoldenTrianglePosture,
   getAgentGoldenTrianglePosture,
   getEffectiveGoldenTrianglePosture,
   getEffectivePostureForAgent,
@@ -96,6 +97,36 @@ describe("setGoldenTrianglePosture", () => {
   it("is fail-open: returns false when the db throws", async () => {
     const ok = await setGoldenTrianglePosture({ kind: "platform" }, ASSURED, throwingClient());
     expect(ok).toBe(false);
+  });
+});
+
+describe("clearAgentGoldenTrianglePosture", () => {
+  it("removes only the target coworker's entry, preserving the rest of the per-agent map", async () => {
+    const { client, getPolicy } = makeClient({
+      goldenTriangle: FRUGAL,
+      goldenTrianglePerAgent: { "agent-x": ASSURED, "agent-y": FRUGAL },
+    });
+    const ok = await clearAgentGoldenTrianglePosture("agent-x", client);
+    expect(ok).toBe(true);
+    const policy = getPolicy() as Record<string, Record<string, unknown>>;
+    expect(policy.goldenTrianglePerAgent).toEqual({ "agent-y": FRUGAL }); // x gone, y kept
+    expect(policy.goldenTriangle).toEqual(FRUGAL); // platform default untouched
+  });
+
+  it("is idempotent: clearing a coworker with no override still succeeds without writing nonsense", async () => {
+    const { client, getPolicy } = makeClient({ goldenTrianglePerAgent: { other: ASSURED } });
+    const ok = await clearAgentGoldenTrianglePosture("agent-x", client);
+    expect(ok).toBe(true);
+    expect((getPolicy() as Record<string, unknown>).goldenTrianglePerAgent).toEqual({ other: ASSURED });
+  });
+
+  it("rejects an unsafe agent key (prototype-pollution guard)", async () => {
+    const { client } = makeClient({ goldenTrianglePerAgent: {} });
+    expect(await clearAgentGoldenTrianglePosture("__proto__", client)).toBe(false);
+  });
+
+  it("is fail-open: returns false when the db throws", async () => {
+    expect(await clearAgentGoldenTrianglePosture("agent-x", throwingClient())).toBe(false);
   });
 });
 

@@ -6,6 +6,7 @@ import { listGoldenTriangleReceipts, recordGoldenTriangleReceipt, type ReceiptSt
 function receipt(tag: string): GoldenTriangleReceipt {
   return {
     preset: "assured",
+    governedBy: "platform",
     requested: { minimumTier: "frontier" },
     actual: { modelId: tag, tier: "frontier", costUsd: 0.1, latencyMs: 1000, fallbackOccurred: false, verificationPassed: null, accepted: null },
     deviations: [],

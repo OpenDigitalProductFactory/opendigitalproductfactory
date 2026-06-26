@@ -197,6 +197,43 @@ export async function setAgentGoldenTrianglePosture(
 }
 
 /**
+ * Remove a coworker's OWN posture so it falls back to inheriting org/platform.
+ * The "Reset to inherited" path on the record's Priority section. Idempotent:
+ * returns true when a row was updated (whether or not the key was present),
+ * false on a fail-open error. Preserves every other per-agent entry and the
+ * rest of the autonomyPolicy.
+ */
+export async function clearAgentGoldenTrianglePosture(
+  agentId: string,
+  db?: GoldenTrianglePersistenceClient,
+): Promise<boolean> {
+  if (!isSafeAgentKey(agentId)) return false;
+  const client = db ?? (prisma as unknown as GoldenTrianglePersistenceClient);
+  try {
+    const row = await client.decisionPerspectiveProfile.findFirst({
+      where: whereForScope({ kind: "platform" }),
+      select: { autonomyPolicy: true },
+    });
+    const policy = asRecord(row?.autonomyPolicy);
+    const currentMap = asRecord(policy[PER_AGENT_KEY]);
+    if (!(agentId in currentMap)) {
+      // Nothing to clear; treat as success so the UI reflects "inherited".
+      return true;
+    }
+    const nextMap: Record<string, unknown> = { ...currentMap };
+    delete nextMap[agentId];
+    const res = await client.decisionPerspectiveProfile.updateMany({
+      where: whereForScope({ kind: "platform" }),
+      data: { autonomyPolicy: { ...policy, [PER_AGENT_KEY]: nextMap } },
+    });
+    return res.count > 0;
+  } catch (err) {
+    console.warn("[golden-triangle] per-agent posture clear failed (fail-open):", err);
+    return false;
+  }
+}
+
+/**
  * Resolve the posture for a specific coworker, layering most-specific first:
  * agent (the coworker's own choice) → organization (WWWD) → platform (WWMD) →
  * null (caller falls back to Balanced). This is what dispatch consults so a

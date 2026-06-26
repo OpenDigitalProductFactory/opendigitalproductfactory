@@ -471,6 +471,28 @@ export function CapabilitiesPanel({
   );
 }
 
+// ─── Priority (Golden Triangle) ──────────────────────────────────────────────
+
+/** WS4 — the per-coworker Cost/Quality/Time priority with its inheritance chain.
+ *  The interactive control (presets/triangle, save/reset, read-only fallback) is
+ *  the client `CoworkerPriorityControl`, built page-side and passed in so this
+ *  stays a pure presentational panel. */
+export function PriorityPanel({ priorityControl }: { priorityControl: React.ReactNode }) {
+  return (
+    <div>
+      <Section title="Cost / Quality / Time priority">
+        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: -4, marginBottom: 12, maxWidth: 680, lineHeight: 1.5 }}>
+          The everyday priority for this coworker. By default it inherits the platform default set on the{" "}
+          {deepLink("/platform/ai/assignments", "Priority & Models")} surface; override it here only when this coworker
+          needs a different balance. The platform compiles it into the model, effort, verification, and review/debate —
+          shown in plain language — and it governs this coworker&apos;s live dispatch.
+        </p>
+        {priorityControl}
+      </Section>
+    </div>
+  );
+}
+
 // ─── Governance ──────────────────────────────────────────────────────────────
 
 export function GovernancePanel({ record }: { record: CoworkerRecord }) {

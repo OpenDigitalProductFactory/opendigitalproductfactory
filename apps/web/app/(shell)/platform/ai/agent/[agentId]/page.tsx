@@ -13,6 +13,8 @@ import { can } from "@/lib/permissions";
 import { AgentModelRoutingCard } from "@/components/platform/AgentModelRoutingCard";
 import { CapabilitiesEditor } from "@/components/platform/coworker-record/CapabilitiesEditor";
 import { RecordActionsMenu } from "@/components/platform/coworker-record/RecordActionsMenu";
+import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPriorityControl";
+import { getCoworkerPostureInheritance } from "@/lib/actions/golden-triangle";
 import { loadCoworkerRecord } from "@/lib/coworker-record/load-record";
 import { loadFamilyCorpusSignals } from "@/lib/coworker-record/corpus-signals";
 import { resolveInstallVariantContext } from "@/lib/decision-perspective/install-variant-context";
@@ -23,6 +25,7 @@ import {
   OverviewPanel,
   ProfessionPanel,
   CapabilitiesPanel,
+  PriorityPanel,
   GovernancePanel,
   PerformancePanel,
   DecisionsPanel,
@@ -54,9 +57,13 @@ export default async function AgentDetailPage({
   // for the Profession & Knowledge tab. Null when the coworker is unmapped.
   // The install's resolved archetype is shown so the operator sees which corpus
   // slice this coworker is served (the "noted at setup" surface).
-  const [corpusSignals, installVariant] = await Promise.all([
+  const [corpusSignals, installVariant, postureInheritance] = await Promise.all([
     profession.family ? loadFamilyCorpusSignals(profession.family.professionKey) : null,
     resolveInstallVariantContext(prisma),
+    // WS4: the effective Golden-Triangle posture + its inheritance provenance,
+    // keyed by the BUSINESS agentId (the per-agent posture map key). Session-gated
+    // + fail-open inside the action, so a read failure renders the Balanced cold-start.
+    getCoworkerPostureInheritance(agent.agentId),
   ]);
 
   // Model-routing card data (kept page-side: needs the live provider catalog).
@@ -176,15 +183,27 @@ export default async function AgentDetailPage({
     />
   );
 
+  // WS4: per-coworker priority control (client). Reads the effective posture +
+  // inheritance resolved above; canWrite gates the editable presets/triangle and
+  // the save/reset actions (read-only chip view otherwise).
+  const priorityControl = (
+    <CoworkerPriorityControl agentId={agent.agentId} inheritance={postureInheritance} canWrite={canWrite} />
+  );
+
   const coveragePct =
     profession.coverage && profession.coverage.checklist.length > 0
       ? Math.round((profession.coverage.pageCount / profession.coverage.checklist.length) * 100)
       : null;
 
+  // WS4: a one-word badge on the Priority tab so an override is visible without
+  // opening it ("set" = this coworker has its own override; otherwise inherited).
+  const priorityBadge = postureInheritance.hasOwnOverride ? "set" : null;
+
   const tabs: CoworkerTab[] = [
     { id: "overview", label: "Overview" },
     { id: "profession", label: "Profession & Knowledge", badge: coveragePct !== null ? `${coveragePct}%` : profession.family ? null : "unmapped" },
     { id: "capabilities", label: "Capabilities", badge: String(agent.toolGrants.length) },
+    { id: "priority", label: "Priority", badge: priorityBadge },
     { id: "governance", label: "Governance" },
     { id: "performance", label: "Performance" },
     { id: "decisions", label: "Decisions & Activity", badge: decisions.total > 0 ? String(decisions.total) : null },
@@ -238,6 +257,7 @@ export default async function AgentDetailPage({
         <OverviewPanel record={record} summary={summary} />
         <ProfessionPanel record={record} corpusSignals={corpusSignals} installArchetype={installVariant.archetype ?? null} />
         <CapabilitiesPanel record={record} routingCard={routingCard} capabilitiesEditor={capabilitiesEditor} />
+        <PriorityPanel priorityControl={priorityControl} />
         <GovernancePanel record={record} />
         <PerformancePanel record={record} />
         <DecisionsPanel record={record} />
