@@ -44,7 +44,7 @@ import { getBuildAssuranceFindings, getBuildBomSummary } from "@/lib/actions/ass
 import type { ActiveAssuranceFindingRow } from "@/lib/assurance/finding-read";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type { BuildFlowState } from "@/lib/build-flow-state";
-import type { FeatureBuildRow, BuildChangeNarrative } from "@/lib/feature-build-types";
+import type { FeatureBuildRow, BuildChangeNarrative, BuildPhase } from "@/lib/feature-build-types";
 import type { EpicRollupView } from "@/lib/build/epic-rollup";
 import type { BomSummary } from "@/lib/assurance/bom-read";
 import type { CodeGraphFreshness } from "@/lib/integrate/code-graph-access";
@@ -62,6 +62,7 @@ import {
   shouldOpenBuildStudioSidebarByDefault,
 } from "./build-studio-layout";
 import { AgentActivityStrip } from "./AgentActivityStrip";
+import { PhaseMiniRail, type PhaseRailPhase } from "./PhaseMiniRail";
 
 type Props = {
   builds: FeatureBuildRow[];
@@ -93,6 +94,22 @@ const MISSING_BOM_SUMMARY: BomSummary = {
     reason: "no-approved-scanner",
   },
 };
+
+/** Map the build's lifecycle phase onto the 5-dot overseer phase rail. */
+function toRailPhase(phase: BuildPhase): PhaseRailPhase {
+  switch (phase) {
+    case "ideate":
+    case "plan":
+    case "build":
+    case "review":
+    case "ship":
+      return phase;
+    case "complete":
+      return "ship";
+    default:
+      return "build";
+  }
+}
 
 export function BuildStudio({
   builds,
@@ -140,6 +157,21 @@ export function BuildStudio({
   // Assurance + code-intel cards collapse so the workflow graph stays the
   // primary surface (spec §1 + §9 #11). Operators can re-expand on demand.
   const [assuranceRowExpanded, setAssuranceRowExpanded] = useState(false);
+  // Overseer altitude flip (BI-90670010): the plain "Solution & Oversight" bands
+  // are the default first-viewport; the engineer-grade ProcessGraph + evidence
+  // demote behind this single toggle. Persisted so an engineer's choice sticks.
+  const BUILD_ENGINEER_VIEW_KEY = "dpf:build-studio-engineer-view";
+  const [engineerView, setEngineerView] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(BUILD_ENGINEER_VIEW_KEY) === "true";
+  });
+  const toggleEngineerView = useCallback(() => {
+    setEngineerView((prev) => {
+      const next = !prev;
+      try { window.localStorage.setItem(BUILD_ENGINEER_VIEW_KEY, String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     shouldOpenBuildStudioSidebarByDefault(
       typeof window === "undefined" ? undefined : window.innerWidth,
@@ -837,6 +869,28 @@ export function BuildStudio({
                   className={`${getBuildStudioGraphPanelClassName()} relative`}
                   data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
                 >
+                  {/* Overseer altitude flip (BI-90670010): the plain bands above
+                      are the default; the engineer-grade graph + evidence demote
+                      behind this toggle. The phase rail keeps liveness visible
+                      even when the graph is hidden; the Details drawer (below)
+                      stays as the bands' dive-in either way. */}
+                  <div className="flex items-center justify-between gap-3 border-b border-[var(--dpf-border)] px-4 py-2">
+                    <PhaseMiniRail currentPhase={toRailPhase(activeBuild.phase)} />
+                    <button
+                      type="button"
+                      onClick={toggleEngineerView}
+                      aria-pressed={engineerView}
+                      data-testid="build-studio-engineer-view-toggle"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-xs font-medium text-[var(--dpf-muted)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                        <path d="m16 18 6-6-6-6M8 6l-6 6 6 6" />
+                      </svg>
+                      {engineerView ? "Hide engineer view" : "Engineer view"}
+                    </button>
+                  </div>
+                  {engineerView && (
+                    <>
                   <AssuranceRow
                     expanded={assuranceRowExpanded}
                     onToggle={() => setAssuranceRowExpanded((p) => !p)}
@@ -879,6 +933,8 @@ export function BuildStudio({
                     >
                       <NodeInspectorBody info={selectedNodeClick} />
                     </NodeInspector>
+                  )}
+                    </>
                   )}
                   <DetailsDrawerPill
                     isOpen={drawerOpen}

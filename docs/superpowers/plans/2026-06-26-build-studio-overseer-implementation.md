@@ -18,9 +18,9 @@ Implements [`2026-06-22-build-studio-overseer-ux-design.md`](../specs/2026-06-22
 - Wired into `stepComplete` (`build-pipeline.ts`) — generated once at build completion, alongside `diffSummary`, in a try/catch that can never fail the pipeline step.
 - `getBuildChangeNarrativeAction` server action (mirrors `getBuildDecisionLedgerAction`); `BuildStudio` fetches it on a standalone effect (off the hot SSE path) and renders the band between Band 1 and Band 3, gated on a narrative existing.
 
-## Remaining — the IA reframe (keystone, BI-90670010)
+## IA reframe (keystone, BI-90670010) — implemented
 
-The bands currently render **additively above** the `ProcessGraph`. The spec's altitude flip (§3.1, Option B) is the last and most important piece: make the plain "Solution & Oversight" layer the **default first-viewport**, demote the `ProcessGraph` + engineer surfaces behind a single labeled **"Engineer view"** disclosure, and keep `PhaseMiniRail` always-visible for liveness. It restructures `BuildStudio.tsx`'s render and requires live UX verification before it lands (`structural-verification-is-not-functional`).
+The altitude flip (spec §3.1, Option B) landed: the plain "Solution & Oversight" bands are now the **default first-viewport** of the active-build pane, and the engineer-grade `ProcessGraph` + `AssuranceRow` + `AgentActivityStrip` + `NodeInspector` demote behind a single persisted **"Engineer view"** toggle (`engineerView`, localStorage-backed). A `PhaseMiniRail` stays always-visible for liveness even when the graph is hidden, and the `DetailsDrawer` remains the bands' dive-in either way (`toRailPhase` maps the build's lifecycle phase onto the 5-dot rail). This realizes "plain by default; dive into the engineer surfaces only when something looks off." Live UX verification is performed on the install after deploy (`structural-verification-is-not-functional`).
 
 ## Verification
 
