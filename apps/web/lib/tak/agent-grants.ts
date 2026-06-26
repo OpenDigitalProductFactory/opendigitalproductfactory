@@ -192,6 +192,11 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   cancel_scheduled_agent_task: ["work_capsule_write"],
   list_scheduled_agent_tasks: ["work_capsule_read"],
 
+  // Org/WWWD business-decision consultation — advisory (returns a recommendation,
+  // records a governance ledger row). Read-baseline grant: a coworker may consult
+  // its organization's stance without a write grant. Satisfies routing-audit INV-1.
+  evaluate_org_business_decision: ["work_capsule_read"],
+
   // Backlog triage and Build Studio promotion (spec 2026-04-21)
   // These were defined in PLATFORM_TOOLS but missing here, so every call was
   // denied by the default-deny rule below. That broke the entire backlog →

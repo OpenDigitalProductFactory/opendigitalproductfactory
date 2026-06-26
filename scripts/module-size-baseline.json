@@ -43,7 +43,7 @@
   "apps/web/lib/integrate/sandbox/build-branch.ts": 854,
   "apps/web/lib/marketing.ts": 1363,
   "apps/web/lib/mcp-tools-backlog.test.ts": 901,
-  "apps/web/lib/mcp-tools.ts": 16526,
+  "apps/web/lib/mcp-tools.ts": 16527,
   "apps/web/lib/navigation/portal-navigation-model.ts": 1004,
   "apps/web/lib/operate/coworker-regression-detector.ts": 935,
   "apps/web/lib/queue/functions/self-upgrade.test.ts": 1183,
