@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import {
   parseTriageDecision,
   autoApplyBuildSize,
+  authorEffortSize,
+  buildTriageDrainPrompt,
   runBacklogTriageDrain,
   AUTO_TRIAGE_CONFIDENCE_THRESHOLD,
   type TriageCandidate,
@@ -49,6 +51,83 @@ describe("autoApplyBuildSize (safety gate)", () => {
 
   it("rejects null decision", () => {
     expect(autoApplyBuildSize(null)).toBeNull();
+  });
+
+  // BI-TRIAGE-SIZE-OVERWRITE: a deliberate author size must survive the drain.
+  it("preserves a valid author-provided size instead of the LLM re-estimate", () => {
+    expect(
+      autoApplyBuildSize(
+        { outcome: "build", effortSize: "medium", confidence: 0.95 },
+        { itemId: "BI-1", title: "t", effortSize: "large" },
+      ),
+    ).toBe("large");
+  });
+
+  it("falls back to the LLM size when the item has no valid author size", () => {
+    expect(
+      autoApplyBuildSize(
+        { outcome: "build", effortSize: "small", confidence: 0.95 },
+        { itemId: "BI-2", title: "t", effortSize: null },
+      ),
+    ).toBe("small");
+    expect(
+      autoApplyBuildSize(
+        { outcome: "build", effortSize: "small", confidence: 0.95 },
+        { itemId: "BI-3", title: "t", effortSize: "huge" /* invalid */ },
+      ),
+    ).toBe("small");
+  });
+
+  it("does not let an author size bypass the build / confidence gate", () => {
+    // needs-human still defers even when the item carries a size.
+    expect(
+      autoApplyBuildSize(
+        { outcome: "needs-human", confidence: 0.99 },
+        { itemId: "BI-4", title: "t", effortSize: "large" },
+      ),
+    ).toBeNull();
+    // Low confidence still defers even when the item carries a size.
+    expect(
+      autoApplyBuildSize(
+        { outcome: "build", effortSize: "large", confidence: AUTO_TRIAGE_CONFIDENCE_THRESHOLD - 0.01 },
+        { itemId: "BI-5", title: "t", effortSize: "large" },
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("authorEffortSize", () => {
+  it("returns a valid author size and null otherwise", () => {
+    expect(authorEffortSize({ itemId: "BI-1", title: "t", effortSize: "xlarge" })).toBe("xlarge");
+    expect(authorEffortSize({ itemId: "BI-2", title: "t", effortSize: null })).toBeNull();
+    expect(authorEffortSize({ itemId: "BI-3", title: "t", effortSize: "huge" })).toBeNull();
+    expect(authorEffortSize({ itemId: "BI-4", title: "t" })).toBeNull();
+    expect(authorEffortSize(null)).toBeNull();
+  });
+});
+
+describe("buildTriageDrainPrompt", () => {
+  it("includes the author effortSize + proposedOutcome as non-binding priors when present", () => {
+    const prompt = buildTriageDrainPrompt({
+      itemId: "BI-P",
+      title: "Sized item",
+      effortSize: "large",
+      proposedOutcome: "build",
+    });
+    // The distinctive prior LINES are emitted (note: the static instruction also
+    // mentions the token "AUTHOR_EFFORT_SIZE", so match on the line prefix).
+    expect(prompt).toContain("AUTHOR_EFFORT_SIZE (prior");
+    expect(prompt).toMatch(/AUTHOR_EFFORT_SIZE \(prior[^\n]*: large/);
+    expect(prompt).toContain("AUTHOR_PROPOSED_OUTCOME (prior");
+    // The guidance to not re-estimate is present.
+    expect(prompt).toContain("do not re-estimate the size");
+  });
+
+  it("omits the prior lines when the item has no author size or outcome", () => {
+    const prompt = buildTriageDrainPrompt({ itemId: "BI-Q", title: "Unsized item" });
+    // No prior LINES are emitted (the instruction text may still reference the token).
+    expect(prompt).not.toContain("AUTHOR_EFFORT_SIZE (prior");
+    expect(prompt).not.toContain("AUTHOR_PROPOSED_OUTCOME (prior");
   });
 });
 
@@ -98,5 +177,44 @@ describe("runBacklogTriageDrain", () => {
     });
     expect(result).toEqual({ considered: 0, autoBuilt: 0, leftForOperator: 0 });
     expect(decide).not.toHaveBeenCalled();
+  });
+
+  // BI-TRIAGE-SIZE-OVERWRITE regression (a): a deliberate author size survives a
+  // confident build decision instead of being overwritten by the LLM's guess.
+  it("preserves an author-provided effortSize on auto-build (no blind overwrite)", async () => {
+    const applyBuild = vi.fn(async () => {});
+    // LLM confidently says BUILD but re-estimates the size to "medium"; the author said "large".
+    const decide = vi.fn(
+      async () => '{"outcome":"build","effortSize":"medium","confidence":0.95,"rationale":"r"}',
+    );
+
+    const result = await runBacklogTriageDrain({
+      getTriagingItems: async () => [{ itemId: "BI-SIZED", title: "Author-sized", effortSize: "large" }],
+      decide,
+      applyBuild,
+    });
+
+    expect(result).toEqual({ considered: 1, autoBuilt: 1, leftForOperator: 0 });
+    // The author's "large" is preserved — NOT the LLM's "medium".
+    expect(applyBuild).toHaveBeenCalledWith("BI-SIZED", "large", expect.any(String));
+  });
+
+  // BI-TRIAGE-SIZE-OVERWRITE regression (b): the autonomous-capture path still
+  // works — an item filed with no size gets the LLM-decided size.
+  it("uses the LLM-decided size for an item captured with no size", async () => {
+    const applyBuild = vi.fn(async () => {});
+    const decide = vi.fn(
+      async () => '{"outcome":"build","effortSize":"small","confidence":0.95,"rationale":"r"}',
+    );
+
+    const result = await runBacklogTriageDrain({
+      getTriagingItems: async () => [{ itemId: "BI-UNSIZED", title: "No author size" }],
+      decide,
+      applyBuild,
+    });
+
+    expect(result).toEqual({ considered: 1, autoBuilt: 1, leftForOperator: 0 });
+    // No author size → fall back to the LLM's size.
+    expect(applyBuild).toHaveBeenCalledWith("BI-UNSIZED", "small", expect.any(String));
   });
 });
