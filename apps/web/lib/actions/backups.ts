@@ -5,8 +5,7 @@ import path from "node:path";
 
 import { prisma } from "@dpf/db";
 
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { inngest } from "@/lib/queue/inngest-client";
 
 import {
@@ -22,20 +21,7 @@ const BACKUPS_ROOT = "/backups";
 const MAX_LOG_BYTES = 64 * 1024;
 
 async function requireBackupAdmin(): Promise<void> {
-  const session = await auth();
-  const user = session?.user;
-  // Permission reuse: managing platform-level backups requires the same
-  // authority as managing provider connections — superuser or
-  // platform-admin role.
-  if (
-    !user ||
-    !can(
-      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
-      "manage_provider_connections",
-    )
-  ) {
-    throw new Error("Unauthorized");
-  }
+  await requireCapability("manage_provider_connections");
 }
 
 /** Returns readiness for a single target (Postgres only — kept for Slice 2 restore compat). */

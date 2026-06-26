@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
 import { sendEmail, composeExpenseApprovalEmail } from "@/lib/email";
 import { getOrgIdentity } from "@/lib/org-identity";
@@ -19,12 +20,7 @@ async function getSessionUser() {
 }
 
 async function requireManageFinance(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_finance")) {
-    throw new Error("Unauthorized");
-  }
-  return user.id;
+  return (await requireCapability("manage_finance")).userId;
 }
 
 // ─── Claim ref generator ──────────────────────────────────────────────────────

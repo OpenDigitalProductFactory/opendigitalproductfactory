@@ -2,25 +2,17 @@
 
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
 async function requireManageBusinessModels(): Promise<void> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_business_models")) {
-    throw new Error("Unauthorized");
-  }
+  await requireCapability("manage_business_models");
 }
 
 async function requireViewPortfolio(): Promise<void> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_portfolio")) {
-    throw new Error("Unauthorized");
-  }
+  await requireCapability("view_portfolio");
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────

@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import {
   activateAiProviderContract,
   getAiProviderFinanceDetail,
@@ -18,11 +17,7 @@ import type {
 } from "@/lib/finance/ai-provider-finance-validation";
 
 async function requireManageFinance(): Promise<void> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_finance")) {
-    throw new Error("Unauthorized");
-  }
+  await requireCapability("manage_finance");
 }
 
 export async function seedAiProviderFinanceBridgeAction(input: SeedAiProviderFinanceBridgeInput) {

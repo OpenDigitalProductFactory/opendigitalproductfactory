@@ -1,7 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import {
@@ -48,18 +47,7 @@ import { revalidatePortalContextForBuild } from "@/lib/portal-context/invalidati
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
 async function requireBuildAccess(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (
-    !user ||
-    !can(
-      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
-      "view_platform"
-    )
-  ) {
-    throw new Error("Unauthorized");
-  }
-  return user.id!;
+  return (await requireCapability("view_platform")).userId;
 }
 
 function businessBriefJsonPayload(

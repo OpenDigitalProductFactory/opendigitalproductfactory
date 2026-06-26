@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { getDisplayPseudonym, resolveHiveToken } from "@/lib/integrate/identity-privacy";
 import { loadSource } from "@/lib/integrate/issue-bridge";
 import { buildRedactedFeedbackPayload, selectTransport } from "@/lib/integrate/feedback-transport";
@@ -36,12 +36,7 @@ async function requireAuthUserId(): Promise<string> {
 }
 
 async function requireManagePlatformUserId(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user?.id || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_platform")) {
-    throw new Error("Unauthorized");
-  }
-  return user.id;
+  return (await requireCapability("manage_platform")).userId;
 }
 
 async function enforceEscalationRateLimit(contributor: string): Promise<boolean> {

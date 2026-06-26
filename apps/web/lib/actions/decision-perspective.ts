@@ -2,8 +2,7 @@
 
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { prisma } from "@dpf/db";
 import type { DecisionGateCaptureDraft } from "@/lib/decision-perspective/capture-types";
 
@@ -31,18 +30,7 @@ function trimmed(value: string | null | undefined): string {
 }
 
 async function requireBuildCaptureUser(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (
-    !user
-    || !can(
-      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
-      "view_platform",
-    )
-  ) {
-    throw new Error("Unauthorized");
-  }
-  return user.id!;
+  return (await requireCapability("view_platform")).userId;
 }
 
 export async function captureDecisionInteraction(input: DecisionGateCaptureDraft & {
