@@ -288,7 +288,7 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
                 </button>
                 <button
                   onClick={() => handleDelete(item)}
-                  className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-red-400 hover:border-red-400/30 transition-colors"
+                  className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-error)] hover:border-[var(--dpf-error)]/30 transition-colors"
                   title="Delete"
                 >
                   Del
