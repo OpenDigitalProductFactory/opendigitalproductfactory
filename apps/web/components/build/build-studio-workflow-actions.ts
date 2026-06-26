@@ -384,10 +384,13 @@ function buildResumeAction(args: {
         : state.resumeMode.mode === "replan-and-dispatch"
           ? "Click Resume to re-plan and dispatch tasks"
           : "Click Resume to rerun verification";
+  // BI-FD796419 / Band 4 — lead with plain "what it means + what to do"; keep
+  // the technical failure axis + reason as a trailing engineer detail rather
+  // than the headline, so an overseer is not asked to parse "Failure axis:".
   const message =
     axis === "out-of-scope-noise"
-      ? "Failure axis: out-of-scope-noise. Verification failures appear to come from outside this build's source surface; review the scoped evidence before retrying."
-      : `Failure axis: ${axis}. ${state.resumeMode.reason} Resume from a healthy sandbox before review continues.`;
+      ? "The checks that failed look like they came from other work, not this build, so it is probably fine. Take a look, then click Resume to re-run on a clean workspace. (Details: failure axis out-of-scope-noise.)"
+      : `Some of the work did not pass its checks yet. Click Resume to re-run it on a clean workspace before the review continues. (Details: failure axis ${axis}. ${state.resumeMode.reason})`;
 
   return {
     kind: "resume-implementation",

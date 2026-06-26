@@ -409,7 +409,9 @@ describe("deriveBuildStudioWorkflowAction", () => {
 
     expect(action.kind).toBe("resume-implementation");
     expect(action.primaryLabel).toBe("Resume Implementation");
-    expect(action.message).toContain("healthy sandbox");
+    // BI-FD796419 / Band 4 — plain copy: "clean workspace" replaced the
+    // "healthy sandbox" jargon; the message still guides the operator to Resume.
+    expect(action.message).toContain("clean workspace");
   });
 
   it("does not force Resume Implementation on a review build whose scoped surface is clean despite out-of-scope test noise (BI-2F10D6D3 follow-up)", () => {
@@ -605,6 +607,12 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.title).toBe("Review workspace noise before retrying this build");
     expect(action.failureAxis).toBe("out-of-scope-noise");
     expect(action.resumeMode?.mode).toBe("rerun-verification");
+    // BI-FD796419 / Band 4 — the operator-facing message leads with plain
+    // language (what it means + what to do), not the "Failure axis:" jargon;
+    // the technical axis is kept only as a trailing engineer detail.
+    expect(action.message).not.toMatch(/^Failure axis/);
+    expect(action.message).toContain("Resume");
+    expect(action.message).toContain("out-of-scope-noise");
   });
 
   it("surfaces implementation recovery in review when review only contains failed execution evidence", () => {
