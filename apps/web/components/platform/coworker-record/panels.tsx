@@ -7,6 +7,7 @@
 import Link from "next/link";
 import type { CoworkerRecord } from "@/lib/coworker-record/load-record";
 import type { CorpusGapRow, CorpusUsageRollup } from "@/lib/coworker-record/corpus-signals";
+import { jurisdictionGaps } from "@/lib/coworker-record/coverage";
 import {
   PROFESSION_JURISDICTIONS,
   PROFESSION_COMPETENCY_LEVELS,
@@ -173,8 +174,11 @@ export function OverviewPanel({ record, summary }: { record: CoworkerRecord; sum
   const owningTeam = agent.ownerships[0]?.team.name ?? null;
   const coveragePct =
     profession.coverage && profession.coverage.checklist.length > 0
-      ? Math.round((profession.coverage.pageCount / profession.coverage.checklist.length) * 100)
+      ? Math.min(100, Math.round((profession.coverage.pageCount / profession.coverage.checklist.length) * 100))
       : null;
+  // Jurisdiction gaps surface a risk the volume % alone hides (e.g. 100% corpus
+  // depth while a whole jurisdiction has zero pages). EP-COWORKER-RT follow-up.
+  const jurGaps = profession.coverage ? jurisdictionGaps(profession.coverage) : [];
 
   return (
     <div>
@@ -191,9 +195,12 @@ export function OverviewPanel({ record, summary }: { record: CoworkerRecord; sum
             <Chip tone="error">unmapped role</Chip>
           )}
           {coveragePct !== null ? (
-            <Chip tone={coveragePct >= 80 ? "success" : coveragePct >= 40 ? "warning" : "error"}>
+            <Chip tone={jurGaps.length > 0 ? "warning" : coveragePct >= 80 ? "success" : coveragePct >= 40 ? "warning" : "error"}>
               corpus {coveragePct}% of checklist
             </Chip>
+          ) : null}
+          {jurGaps.length > 0 ? (
+            <Chip tone="error">jurisdiction gap: {jurGaps.map((j) => j.toUpperCase()).join(", ")}</Chip>
           ) : null}
           <Chip tone={decisions.deferRate > 0.25 ? "warning" : "muted"}>
             defer {Math.round(decisions.deferRate * 100)}% ({decisions.total} decisions/30d)
@@ -272,6 +279,13 @@ export function ProfessionPanel({
               <strong style={{ color: "var(--dpf-text)" }}>{installArchetype ?? "universal (none set)"}</strong>
             </div>
             <CoverageMatrix coverage={cov} />
+            {jurisdictionGaps(cov).length > 0 ? (
+              <div style={{ marginTop: 10 }}>
+                <Chip tone="error">
+                  jurisdiction gap: {jurisdictionGaps(cov).map((j) => j.toUpperCase()).join(", ")} uncovered while other jurisdictions have corpus
+                </Chip>
+              </div>
+            ) : null}
             <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 10 }}>
               Archetype variants:{" "}
               {Object.keys(cov.archetype).length > 0

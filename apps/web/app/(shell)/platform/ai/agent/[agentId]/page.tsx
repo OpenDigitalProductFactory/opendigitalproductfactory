@@ -192,7 +192,7 @@ export default async function AgentDetailPage({
 
   const coveragePct =
     profession.coverage && profession.coverage.checklist.length > 0
-      ? Math.round((profession.coverage.pageCount / profession.coverage.checklist.length) * 100)
+      ? Math.min(100, Math.round((profession.coverage.pageCount / profession.coverage.checklist.length) * 100))
       : null;
 
   // WS4: a one-word badge on the Priority tab so an override is visible without

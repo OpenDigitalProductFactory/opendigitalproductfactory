@@ -12,10 +12,15 @@ import { matchesFilters, kindOptions, EMPTY_FILTERS, type RosterFilters } from "
 import { computeWorkforceSummary } from "@/lib/coworker-record/workforce-summary";
 import { WorkforceSummaryPanel } from "./WorkforceSummaryPanel";
 
+// Tier is a span-of-control level, not a role — the role-type lives in each
+// coworker's `kind` chip (a tier-1 group can hold a specialist, e.g. an analyst
+// reporting at orchestration tier). Labels stay neutral so they never contradict
+// the kind chip (EP-COWORKER-RT follow-up: tier said "Orchestrators" over a COO
+// whose kind chip read "Specialist").
 const TIER_LABELS: Record<number, string> = {
-  1: "Tier 1 — Orchestrators",
-  2: "Tier 2 — Specialists",
-  3: "Tier 3 — Cross-cutting",
+  1: "Tier 1",
+  2: "Tier 2",
+  3: "Tier 3",
 };
 
 type Filters = RosterFilters;
