@@ -49,8 +49,11 @@ DB string columns with fixed valid values are canonical enums. Source of truth: 
 | `BacklogItem` | `type`     | `portfolio`, `product`                                                      |
 | `BacklogItem` | `workType` | `bug`, `feature`, `chore`, `doc`, `tool`, `skill`, `refactor`               |
 | `BacklogItem` | `source`   | `user-request`, `automated-detection`                                       |
+| `Agent`       | `kind`     | `orchestrator`, `specialist`, `advisor`, `engineer`, `analyst`, `coordinator` |
 
 Hyphens, not underscores. Adding a new value requires updating both `backlog.ts` and the MCP tool definition in the same commit, before any data uses it.
+
+`Agent.kind` is the coworker role-type facet (EP-COWORKER-RT); its canonical list is `AGENT_KINDS` in `packages/db/src/agent-identity.ts`, enforced by `packages/db/src/agent-identity.test.ts`. `Agent.displayName` is the one human-facing coworker label (free-form Title Case, derived by `resolveAgentIdentity` — not an enum).
 
 `BacklogItem.workType` is the closed *work-type* axis (the WHAT) and `BacklogItem.source` is the closed *intake-origin* axis (the HOW). Together they replace the legacy mixed-axis `source` enum (which had `feature-gap`, `bug`, `tool-gap`, `skill-gap`, `doc-gap`, `user-request`, `automated-detection` in one list). `FeatureBuild.kind` is derived from `workType` at promote time (`workType==="bug" ? "fix" : "feature"`). Spec: [`docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md`](docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md).
 
