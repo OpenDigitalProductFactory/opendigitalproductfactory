@@ -1,8 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
 import { isValidTier, type QualityTier } from "@/lib/routing/quality-tiers";
 
@@ -10,18 +9,7 @@ const VALID_BUDGET_CLASSES = ["minimize_cost", "balanced", "quality_first"] as c
 type BudgetClass = (typeof VALID_BUDGET_CLASSES)[number];
 
 async function requireManagePlatform(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (
-    !user ||
-    !can(
-      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
-      "manage_platform",
-    )
-  ) {
-    throw new Error("Unauthorized");
-  }
-  return user.id;
+  return (await requireCapability("manage_platform")).userId;
 }
 
 export async function saveAgentModelConfig(

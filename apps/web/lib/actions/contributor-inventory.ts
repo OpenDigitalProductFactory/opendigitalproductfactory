@@ -16,8 +16,7 @@
 
 import { prisma } from "@dpf/db";
 
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { inngest } from "@/lib/queue/inngest-client";
 
 const TRIGGER_EVENT = "ops/contributor-inventory-sync.run";
@@ -26,17 +25,7 @@ const TRIGGER_EVENT = "ops/contributor-inventory-sync.run";
 const REQUIRED_CAPABILITY = "manage_provider_connections" as const;
 
 async function requireContributorInventoryAdmin(): Promise<void> {
-  const session = await auth();
-  const user = session?.user;
-  if (
-    !user ||
-    !can(
-      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
-      REQUIRED_CAPABILITY,
-    )
-  ) {
-    throw new Error("Unauthorized");
-  }
+  await requireCapability(REQUIRED_CAPABILITY);
 }
 
 /**

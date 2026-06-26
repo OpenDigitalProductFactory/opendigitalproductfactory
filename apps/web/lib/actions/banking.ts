@@ -2,8 +2,7 @@
 
 import { nanoid } from "nanoid";
 import { prisma } from "@dpf/db";
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
 import { parseCSV } from "@/lib/csv-parser";
 import { findMatches, applyBankRules } from "@/lib/matching-engine";
@@ -12,12 +11,7 @@ import type { CreateBankAccountInput, CreateBankRuleInput } from "@/lib/banking-
 // ─── Auth guard ───────────────────────────────────────────────────────────────
 
 async function requireManageFinance(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_finance")) {
-    throw new Error("Unauthorized");
-  }
-  return user.id;
+  return (await requireCapability("manage_finance")).userId;
 }
 
 // ─── createBankAccount ────────────────────────────────────────────────────────

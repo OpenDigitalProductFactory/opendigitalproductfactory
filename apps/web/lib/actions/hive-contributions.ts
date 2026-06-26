@@ -6,18 +6,12 @@ import {
   type HiveContributionConfig,
   type HiveContributionTypeStatus,
 } from "@dpf/db";
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { getDisplayPseudonym } from "@/lib/integrate/identity-privacy";
 import { revalidatePath } from "next/cache";
 
 async function requireManagePlatform(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_platform")) {
-    throw new Error("Unauthorized");
-  }
-  return user.id!;
+  return (await requireCapability("manage_platform")).userId;
 }
 
 const HIVE_PATH = "/admin/hive";

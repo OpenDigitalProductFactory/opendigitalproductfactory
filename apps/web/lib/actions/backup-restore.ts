@@ -2,8 +2,7 @@
 
 import { prisma } from "@dpf/db";
 
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 
 import { buildRestorePreview } from "@/lib/operate/backups/restore-preview";
 import {
@@ -21,18 +20,7 @@ import { runNeo4jRestore } from "@/lib/operate/backups/neo4j-restore-runner";
 import { runQdrantRestore } from "@/lib/operate/backups/qdrant-restore-runner";
 
 async function requireBackupAdmin(): Promise<string | null> {
-  const session = await auth();
-  const user = session?.user;
-  if (
-    !user ||
-    !can(
-      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
-      "manage_provider_connections",
-    )
-  ) {
-    throw new Error("Unauthorized");
-  }
-  return user.id ?? null;
+  return (await requireCapability("manage_provider_connections")).userId;
 }
 
 export async function previewRestoreAction(

@@ -1,19 +1,11 @@
 "use server";
 
 import { prisma } from "@dpf/db";
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { runTraversalPattern as executeTraversal } from "@/lib/ea/traversal-executor";
 
 async function requireEaAccess(): Promise<void> {
-  const session = await auth();
-  const user = session?.user;
-  if (
-    !user ||
-    !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_ea_modeler")
-  ) {
-    throw new Error("Unauthorized");
-  }
+  await requireCapability("view_ea_modeler");
 }
 
 export type TraversalPatternInfo = {

@@ -3,19 +3,11 @@
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import { isCapabilityKey, type CapabilityActivationChoice } from "@dpf/storefront-templates";
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { setCapabilityChoice } from "@/lib/storefront/capability-activation";
 
 async function requireManageBusinessModels(): Promise<void> {
-  const session = await auth();
-  const user = session?.user;
-  if (
-    !user ||
-    !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_business_models")
-  ) {
-    throw new Error("Unauthorized");
-  }
+  await requireCapability("manage_business_models");
 }
 
 /**

@@ -3,18 +3,14 @@
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { inngest } from "@/lib/queue/inngest-client";
 import { computeNextRunAt, type ScheduleValue } from "@/lib/ai-provider-types";
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────────
 
 async function requireManageIntegrations(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections")) {
-    throw new Error("Unauthorized");
-  }
-  return user.id;
+  return (await requireCapability("manage_provider_connections")).userId;
 }
 
 // ─── Sync trigger ──────────────────────────────────────────────────────────────

@@ -1,8 +1,7 @@
 "use server";
 
 import { prisma, type Prisma } from "@dpf/db";
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
 import { getOllamaBaseUrl, getOllamaApiRoot } from "@/lib/inference/ollama-url";
 import { preflightLocalEndpoint, OPENCODE_MIN_CONTEXT_TOKENS, type LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
@@ -11,12 +10,7 @@ import { getLocalOnlyInference, setLocalOnlyInference } from "@/lib/inference/lo
 import { sanitizeForLog } from "@/lib/security/safe-log";
 
 async function requireManageProviders(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections")) {
-    throw new Error("Unauthorized");
-  }
-  return user.id;
+  return (await requireCapability("manage_provider_connections")).userId;
 }
 
 const VALID_ENGINES = new Set(["claude", "codex", "grok", "opencode", "agentic"]);

@@ -16,19 +16,14 @@
 //
 // See docs/superpowers/specs/2026-06-07-grok-device-code-oauth-design.md.
 
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import {
   grokDeviceLoginStart,
   grokDeviceLoginComplete,
 } from "@/lib/integrate/grok-device-login-core";
 
 async function requireManageProviders(): Promise<void> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections")) {
-    throw new Error("Unauthorized");
-  }
+  await requireCapability("manage_provider_connections");
 }
 
 export async function startGrokDeviceLogin(): Promise<

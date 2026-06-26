@@ -2,8 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { sendEmail, isEmailConfigured } from "@/lib/email";
 import {
   writeSmtpConfig,
@@ -22,17 +21,7 @@ export type { EmailConfigInput, EmailProviderSuggestion };
 // panels use (manage_provider_connections) — SMTP is an outbound-email provider
 // connection at the install level.
 async function requireManageEmailConfig(): Promise<void> {
-  const session = await auth();
-  const user = session?.user;
-  if (
-    !user ||
-    !can(
-      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
-      "manage_provider_connections",
-    )
-  ) {
-    throw new Error("Unauthorized");
-  }
+  await requireCapability("manage_provider_connections");
 }
 
 export async function saveEmailConfig(input: EmailConfigInput): Promise<{ ok: true }> {

@@ -3,7 +3,7 @@
 import * as crypto from "crypto";
 import { prisma, attributeBacklogPortfolio } from "@dpf/db";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import {
   validateBacklogInput,
   validateEpicInput,
@@ -18,17 +18,7 @@ import {
 } from "@/lib/backlog";
 
 async function requireManageBacklog(): Promise<void> {
-  const session = await auth();
-  const user = session?.user;
-  if (
-    !user ||
-    !can(
-      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
-      "manage_backlog"
-    )
-  ) {
-    throw new Error("Unauthorized");
-  }
+  await requireCapability("manage_backlog");
 }
 
 async function getSessionUserId(): Promise<string | null> {

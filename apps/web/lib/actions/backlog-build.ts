@@ -1,7 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
@@ -83,19 +82,7 @@ export async function startBacklogBuild(itemId: string): Promise<StartBacklogBui
 }
 
 async function requireBuildAccess(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (
-    !user ||
-    !can(
-      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
-      "view_platform",
-    )
-  ) {
-    throw new Error("Unauthorized");
-  }
-
-  return user.id!;
+  return (await requireCapability("view_platform")).userId;
 }
 
 function buildHref(buildId: string): string {

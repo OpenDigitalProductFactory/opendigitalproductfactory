@@ -3,8 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@dpf/db";
 
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import {
   IT4IT_VALUE_STREAM_SET,
   TRACE_RELATIONSHIP_SET,
@@ -13,11 +12,7 @@ import {
 } from "@/lib/business-capabilities/types";
 
 async function requireManageEaModel() {
-  const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_ea_model")) {
-    throw new Error("Unauthorized");
-  }
+  await requireCapability("manage_ea_model");
 }
 
 function readString(formData: FormData, key: string): string {

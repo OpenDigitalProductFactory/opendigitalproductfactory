@@ -1,7 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import * as crypto from "crypto";
@@ -14,18 +13,7 @@ import {
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
 async function requireOpsAccess(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (
-    !user ||
-    !can(
-      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
-      "view_operations"
-    )
-  ) {
-    throw new Error("Unauthorized");
-  }
-  return user.id!;
+  return (await requireCapability("view_operations")).userId;
 }
 
 // ─── RFC ID Generation ──────────────────────────────────────────────────────

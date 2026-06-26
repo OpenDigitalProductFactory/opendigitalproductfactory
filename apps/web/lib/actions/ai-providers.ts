@@ -3,7 +3,7 @@
 import { lazyFs, lazyPath, lazyFsPromises } from "@/lib/shared/lazy-node";
 import { prisma, type Prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import {
   computeNextRunAt,
   getTestUrl,
@@ -45,12 +45,7 @@ function getOpenAiLinkedActivationOptions(
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
 async function requireManageProviders(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections")) {
-    throw new Error("Unauthorized");
-  }
-  return user.id;
+  return (await requireCapability("manage_provider_connections")).userId;
 }
 
 async function requireSession(): Promise<void> {

@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import {
   listScheduledJobs,
   updateJobSchedule,
@@ -26,11 +27,7 @@ type Actor = { actor: string };
 
 /** Read access — same authority that gates the admin shell. */
 async function requireRead(): Promise<void> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_admin")) {
-    throw new Error("Unauthorized");
-  }
+  await requireCapability("view_admin");
 }
 
 /** Mutate access — platform-management authority (superuser / platform admin). */

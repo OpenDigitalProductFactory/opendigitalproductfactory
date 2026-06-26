@@ -1,8 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { getLatestBomSummaryForBuild, missingBomSummary } from "@/lib/assurance/bom-read";
 import type { BomSummary } from "@/lib/assurance/bom-read";
 import { queueBuildBomGeneration } from "@/lib/assurance/bom-trigger";
@@ -21,14 +20,7 @@ import {
 import type { AssuranceFindingStatus } from "@/lib/assurance/types";
 
 async function requirePlatformUser(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-
-  if (!user?.id || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_platform")) {
-    throw new Error("Unauthorized");
-  }
-
-  return user.id;
+  return (await requireCapability("view_platform")).userId;
 }
 
 export async function requestBuildBomGeneration(buildId: string): Promise<{ queued: true }> {
