@@ -864,13 +864,17 @@ services:
   # No profile gate — voice ships working on `docker compose up`.
   dpf-stt:
     # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest
-    # resolved on 2026-06-18 (the prior 3f109fa1… digest was deleted from the
+    # resolved on 2026-06-25 (the prior 008ef78e… digest was deleted from the
     # registry — Release Image Manifest Guard caught it again). The registry
     # owner re-pushes :latest periodically and prunes the previous index, so
     # this digest must be re-resolved every time the guard fails. Bump
     # deliberately; never reach for `:latest` in shipped compose because it
     # makes the install non-reproducible.
-    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:008ef78e8164be1a52d3c16a0a4702af4190bc355c057e481ceb35af739ab184}
+    # OPERATOR RECOVERY (immediate, per-install): if this digest has rotted and
+    # the sidecar won't start, set DPF_STT_IMAGE in .env to a reachable ref
+    # (e.g. hwdsl2/whisper-server:latest) then `docker compose up -d dpf-stt`,
+    # and open a PR re-resolving the digest here (this is that PR's pattern).
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:10af319a81e81d03535e94b364b0103e8132d205b46438b4f469da9746fa8462}
     restart: unless-stopped
     logging: *default-logging
     environment:
