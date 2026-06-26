@@ -409,7 +409,9 @@ describe("deriveBuildStudioWorkflowAction", () => {
 
     expect(action.kind).toBe("resume-implementation");
     expect(action.primaryLabel).toBe("Resume Implementation");
-    expect(action.message).toContain("healthy sandbox");
+    // BI-FD796419 / Band 4 — plain copy: "clean workspace" replaced the
+    // "healthy sandbox" jargon; the message still guides the operator to Resume.
+    expect(action.message).toContain("clean workspace");
   });
 
   it("does not force Resume Implementation on a review build whose scoped surface is clean despite out-of-scope test noise (BI-2F10D6D3 follow-up)", () => {
