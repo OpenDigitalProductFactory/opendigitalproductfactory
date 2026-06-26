@@ -69,6 +69,18 @@ const MAX_TEXT_MESSAGE_CHARS = 4_000;
 const COMPLETION_CLAIM_PATTERN =
   /\b(built|deployed|shipped|created|implemented|saved|configured|tested|fixed|completed|installed|launched|starting up|initializing|applying|generating)\b|tests?\s+pass|plan(?:ning)?\s+(?:is\s+done|ready)|building\s+now|start\s+implementation/i;
 
+// HARD completion claim: a first-person assertion that tool-backed work was
+// actually persisted, published, sent, or scheduled — the kind of claim that
+// MISLEADS a user if no tool ran ("I've saved your campaign brief", "it's now
+// live", "added it to your approval queue"). This is narrower than
+// COMPLETION_CLAIM_PATTERN (which also catches generic narration like
+// "generating" / "applying"). On a conversational coworker route we never
+// discard the model's advice over a fabrication signal, but when the reply
+// makes one of THESE claims without a backing tool call we append an honest
+// "not saved yet" note so the user is not misled. See buildUnsavedAdviceNote.
+export const HARD_COMPLETION_CLAIM_PATTERN =
+  /\bI(?:'ve| have| just)?\s*(?:have\s+)?(?:saved|created|published|posted|sent|scheduled|recorded|queued|logged|added|drafted and saved|placed)\b|\b(?:saved|published|posted|sent|scheduled|queued|added|recorded)\s+(?:it|that|your|the)\b|\b(?:is|are|has been|have been)\s+(?:now\s+)?(?:live|saved|published|sent|scheduled|posted|queued|recorded)\b|in\s+(?:your\s+)?approval\s+queue/i;
+
 /**
  * Build a plain-language, non-technical explanation when an agent turn fails
  * because routing could not complete a tool-using call (BI-23E0714C).
@@ -403,6 +415,7 @@ function buildFabricationRecoveryNudge(params: {
   response: string;
   tools: ToolDefinition[];
   executedTools: Array<{ name: string }>;
+  routeContext?: string | null;
 }): string {
   const availableToolNames = new Set(params.tools.map((tool) => tool.name));
   const looksLikePlanReady =
@@ -416,13 +429,57 @@ function buildFabricationRecoveryNudge(params: {
     return 'STOP. Do not say the plan is ready yet. First call saveBuildEvidence with field "buildPlan" and a valid value containing top-level "fileStructure" and "tasks" arrays. Then call reviewBuildPlan. Only after those tool calls succeed may you say Start Implementation is the next approval.';
   }
 
+  // Conversational coworker routes are advisory chats, not code-build sessions.
+  // The build copy ("Do NOT show code to the user") is meaningless there and the
+  // value is the advice itself. Nudge the model to PERSIST the concrete
+  // recommendation with its own artifact tool, while keeping the advice it
+  // already gave — do not tell it to suppress its answer.
+  if (!BUILD_ROUTE_PATTERN.test(params.routeContext ?? "")) {
+    const routeContext = params.routeContext ?? "";
+    if (routeContext.startsWith("/customer/marketing")) {
+      const persistTool = ["save_marketing_review", "create_marketing_campaign_brief", "create_marketing_asset_task"]
+        .find((toolName) => availableToolNames.has(toolName));
+      if (persistTool) {
+        return `You gave a concrete marketing recommendation but did not record it. Keep that recommendation, and now call ${persistTool} to persist it so it shows on the page. Do not restate the diagnosis — advance the work. Only after the tool result confirms the save may you tell the user it was saved.`;
+      }
+    }
+    const sideEffectTool = params.tools.find((tool) => tool.sideEffect)?.name;
+    if (sideEffectTool) {
+      return `You described an action or outcome but did not actually perform it. Keep your advice, but if you are recording or changing something, call ${sideEffectTool} now and only claim it is done after the tool result confirms it.`;
+    }
+    // No action tool to call — the reply is ordinary advice; ask the model to
+    // simply give its answer directly without claiming work it cannot perform.
+    return "Give your answer directly as advice. Do not claim you saved, created, sent, or scheduled anything — you have no tool to do so on this page.";
+  }
+
   return `STOP. You described code or claimed actions without using tools. Do NOT show code to the user. ${getPhaseSpecificNudge(params.executedTools)} Call a tool NOW.`;
+}
+
+/**
+ * Honest, conversational note appended to a coworker's advice when it made a
+ * hard completion claim ("I've saved that") that no tool actually backed. We
+ * keep the advice (it's the value) but correct the misleading claim WITHOUT the
+ * build-oriented copy ("open the build details") that is nonsensical on a chat
+ * route. Respects IDENTITY_BLOCK rule #5 — no tool names or internals exposed.
+ */
+export function buildUnsavedAdviceNote(routeContext?: string | null): string {
+  if ((routeContext ?? "").startsWith("/customer/marketing")) {
+    return (
+      "_Note: I haven't saved this to your marketing workspace yet — the recommendation "
+      + "above is ready to go. Reply “save it” and I'll record it so it shows on the page._"
+    );
+  }
+  return (
+    "_Note: I wasn't able to record that on your workspace just now — the details above are "
+    + "complete. Tell me to save it and I'll record it._"
+  );
 }
 
 function buildFabricationFailureMessage(params: {
   response: string;
   tools: ToolDefinition[];
   executedTools: Array<{ name: string }>;
+  routeContext?: string | null;
 }): string {
   // User-facing message: respects IDENTITY_BLOCK rule #5 — never expose tool
   // names, schema fields ("buildPlan"), or internal architecture terms like
@@ -440,6 +497,17 @@ function buildFabricationFailureMessage(params: {
       "I described the plan as ready before it was actually recorded, so the build "
       + "doesn't have a saved plan yet. Try the request again, or open the build "
       + "details to see what's saved so far."
+    );
+  }
+
+  // Conversational coworker routes have no "build details" panel — pointing a
+  // marketing user there is nonsensical. This path is only reached on a
+  // conversational route as a last resort (the main loop keeps the advice
+  // instead); keep the copy honest and route-appropriate.
+  if (!BUILD_ROUTE_PATTERN.test(params.routeContext ?? "")) {
+    return (
+      "I couldn't record that on your workspace just now. Nothing was left half-saved. "
+      + "Please try again in a moment, or tell me to save it and I'll record it."
     );
   }
 
@@ -1691,14 +1759,69 @@ export async function runAgenticLoop(params: {
           };
         }
 
+        // Conversational coworker routes (e.g. the marketing strategist): the
+        // fabrication guard exists to stop a BUILD agent from falsely claiming
+        // it shipped code. On an advisory chat the same signal mostly fires on a
+        // genuinely useful answer that ends with an intent to persist ("let me
+        // draft that") — and the marketing route is the one advise-mode route
+        // that still carries authoritative artifact tools, so it is exactly
+        // where this misfires. Discarding the advice and showing build copy
+        // ("open the build details") is the wrong cure: it is the failure the
+        // user reported. Retry ONCE with a domain nudge to coax the persist
+        // tool; if the model still won't call it, KEEP the advice rather than
+        // nuke it. Only when the reply makes a hard, unbacked completion claim
+        // ("I've saved that", "it's live") do we append an honest note so the
+        // user is not misled. detectFabrication stays pure; route handling lives
+        // here. BI-3E92B28B (EP-MARKETING-EXEC).
+        if (!isBuildRoute) {
+          if (fabricationRetries < 1) {
+            fabricationRetries++;
+            console.warn(
+              "[agentic-loop] fabrication signal on a conversational route — retrying once with a persist nudge before keeping the advice.",
+            );
+            messages = [
+              ...messages,
+              { role: "assistant" as const, content: result.content },
+              {
+                role: "user" as const,
+                content: buildFabricationRecoveryNudge({
+                  response: trimmed,
+                  tools,
+                  executedTools,
+                  routeContext,
+                }),
+              },
+            ];
+            continue;
+          }
+
+          const makesHardCompletionClaim = HARD_COMPLETION_CLAIM_PATTERN.test(trimmed);
+          console.warn(
+            `[agentic-loop] conversational fabrication retry exhausted — keeping the advice${makesHardCompletionClaim ? " with an unsaved-work note" : ""} rather than discarding it.`,
+          );
+          return {
+            content: makesHardCompletionClaim
+              ? `${trimmed}\n\n${buildUnsavedAdviceNote(routeContext)}`
+              : trimmed,
+            providerId: result.providerId,
+            modelId: result.modelId,
+            downgraded: result.downgraded,
+            downgradeMessage: result.downgradeMessage,
+            totalInputTokens,
+            totalOutputTokens,
+            executedTools,
+            proposal: null,
+          };
+        }
+
         // BI-PIR-cc091267 — a build-route fabrication signal (completion claim
         // with zero tool calls) is most often a TRANSIENT provider downgrade:
         // the preferred provider 529s, a weaker backup confabulates "done"
         // without emitting the required tool call. A single retry can't ride out
         // a blip that self-clears in ~30s, so give build routes a few attempts —
         // each re-dispatches and can re-route to the recovered preferred
-        // provider. Conversational routes keep a single retry (unchanged).
-        const maxFabricationRetries = isBuildRoute ? 3 : 1;
+        // provider.
+        const maxFabricationRetries = 3;
         if (fabricationRetries < maxFabricationRetries) {
           fabricationRetries++;
           console.warn(
@@ -1713,6 +1836,7 @@ export async function runAgenticLoop(params: {
                 response: trimmed,
                 tools,
                 executedTools,
+                routeContext,
               }),
             },
           ];
@@ -1729,6 +1853,7 @@ export async function runAgenticLoop(params: {
                 response: trimmed,
                 tools,
                 executedTools,
+                routeContext,
               }),
           providerId: result.providerId,
           modelId: result.modelId,
@@ -2218,10 +2343,19 @@ export async function runAgenticLoop(params: {
       : fallbackIsFabricated
       ? (downgraded
           ? exhaustedMessage
+          // Conversational routes: keep the advice rather than discard it for a
+          // build-recording failure that does not apply. Append an honest note
+          // only on a hard, unbacked completion claim. Build routes keep the
+          // existing fabrication copy.
+          : !BUILD_ROUTE_PATTERN.test(routeContext)
+          ? (HARD_COMPLETION_CLAIM_PATTERN.test(fallbackContent)
+              ? `${fallbackContent}\n\n${buildUnsavedAdviceNote(routeContext)}`
+              : fallbackContent)
           : buildFabricationFailureMessage({
               response: fallbackContent,
               tools,
               executedTools,
+              routeContext,
             }))
       : (lastResult?.content?.trim() ? lastResult.content : exhaustedMessage),
     providerId: lastResult?.providerId ?? "unknown",
