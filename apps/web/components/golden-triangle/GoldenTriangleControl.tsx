@@ -231,7 +231,13 @@ export function GoldenTriangleControl({
       )}
 
       <div className="mb-1.5">{balancePill}</div>
-      <div className="flex flex-wrap gap-1.5" aria-live="polite">
+      {/* Reserve ~2 rows of chip height in the compact dock so the control's total
+          height (and thus the triangle's position in the bottom-anchored composer
+          dock) stays put when the configured chips wrap from one row to two. */}
+      <div
+        className={["flex flex-wrap content-start gap-1.5", compact ? "min-h-[3.75rem]" : ""].join(" ")}
+        aria-live="polite"
+      >
         {chips.map((chip, i) => (
           <span
             key={`${chip.label}-${i}`}
