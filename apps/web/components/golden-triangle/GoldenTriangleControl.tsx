@@ -87,7 +87,7 @@ export function GoldenTriangleControl({
   const labelId = useId();
 
   const w = normalize(value);
-  const { plain, chips } = decodePostureForDisplay(value, taskClass, authorityScopeKind);
+  const { chips } = decodePostureForDisplay(value, taskClass, authorityScopeKind);
   const balance = balanceState(w.qualityWeight, w.costWeight, w.timeWeight);
   const point = weightsToPoint(w.qualityWeight, w.costWeight, w.timeWeight);
   const thumb = unitToVb(point.x, point.y);
@@ -138,8 +138,8 @@ export function GoldenTriangleControl({
 
   const triangle = (
     <div
-      className={["relative h-auto w-full", compact ? "max-w-[150px]" : "max-w-[220px]"].join(" ")}
-      style={{ aspectRatio: "1 / 1" }}
+      className={["relative mx-auto h-auto w-full", compact ? "max-w-[180px]" : "max-w-[240px]"].join(" ")}
+      style={{ aspectRatio: "1 / 1", overflow: "visible" }}
     >
       <GoldenTriangleGradient
         qualityWeight={w.qualityWeight}
@@ -152,6 +152,7 @@ export function GoldenTriangleControl({
         viewBox="0 0 100 100"
         className="absolute inset-0 h-full w-full touch-none select-none"
         role="img"
+        style={{ overflow: "visible" }}
       aria-label={`Cost, quality and time priority triangle. Quality ${pct(w.qualityWeight)} percent, cost ${pct(
         w.costWeight,
       )} percent, time ${pct(w.timeWeight)} percent. Balance: ${balance.label}. Drag the point or use the inputs to fine-tune.`}
@@ -167,8 +168,18 @@ export function GoldenTriangleControl({
         draggingRef.current = false;
       }}
     >
-      {/* No vertex labels — the gradient colour conveys the state (founder direction).
-          Axis identity stays accessible via the SVG aria-label + the numeric inputs. */}
+      {/* Corner labels — what pulling the point toward each vertex buys (founder
+          direction, 2026-06-26). The gradient still colour-codes balance; SR gets
+          the axes from role="img" + aria-label, so these stay purely visual. */}
+      <text x={50} y={7} textAnchor="middle" fontSize={6} fontWeight={500} fill="var(--dpf-text-secondary)">
+        Higher Reasoning
+      </text>
+      <text x={1} y={97} textAnchor="start" fontSize={6} fontWeight={500} fill="var(--dpf-text-secondary)">
+        Lower Cost
+      </text>
+      <text x={99} y={97} textAnchor="end" fontSize={6} fontWeight={500} fill="var(--dpf-text-secondary)">
+        Lower Time
+      </text>
       <polygon
         points={`${vQuality.x},${vQuality.y} ${vCost.x},${vCost.y} ${vTime.x},${vTime.y}`}
         fill="transparent"
@@ -220,10 +231,7 @@ export function GoldenTriangleControl({
       )}
 
       <div className="mb-1.5">{balancePill}</div>
-      <p className="mb-2 text-[14px] font-medium leading-snug text-[var(--dpf-text)]" aria-live="polite">
-        {plain}
-      </p>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-1.5" aria-live="polite">
         {chips.map((chip, i) => (
           <span
             key={`${chip.label}-${i}`}
@@ -294,8 +302,8 @@ export function GoldenTriangleControl({
         })}
       </div>
 
-      <div className={compact ? "grid gap-3" : "grid gap-4 sm:grid-cols-[200px_1fr]"}>
-        <div>{triangle}</div>
+      <div className={compact ? "grid gap-3" : "grid gap-4"}>
+        {triangle}
         {readout}
       </div>
     </div>

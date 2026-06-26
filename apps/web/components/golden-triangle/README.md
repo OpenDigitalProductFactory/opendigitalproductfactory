@@ -10,11 +10,11 @@
   3. **Numeric inputs (canonical accessible control):** three labelled percent inputs — a 2D drag surface is *not* a 1-D ARIA slider, so the numeric/preset layer is the accessible source of truth.
 - **`GoldenTrianglePriorityPanel`** — a stateful host (view-local state) for the platform-default settings surface.
 - **`CoworkerPriorityDock`** — the per-coworker control docked in-flow at the composer (collapsed by default to a colour-graded chip; expands to the full control). Replaced the old `CoworkerPriorityControl` header popover, which clipped off the panel edge.
-- **`posture-display.ts`** — pure helpers: triangle geometry (`weightsToPoint` / `pointToWeights`), preset metadata, `postureLabel()` (a meaningful label at every position — "Max Quality", "Quality-first", …), `describeConfigured()` / `plainSummary()` (derived from the **real Slice 1 compiler** so the UI never drifts), `TRIANGLE_AXIS_GUIDE` (the min/max explainer), and `balanceState()` for the colour cue.
+- **`posture-display.ts`** — pure helpers: triangle geometry (`weightsToPoint` / `pointToWeights`), preset metadata, `postureLabel()` (a meaningful label at every position — "Max Quality", "Quality-first", …), `describeConfigured()` (the configured-chip explanation, derived from the **real Slice 1 compiler** so the UI never drifts), `TRIANGLE_AXIS_GUIDE` (the min/max explainer), and `balanceState()` for the colour cue.
 
 ## Balance colouring
 
-The triangle shades by balance: **green** when the three axes are centred, through **yellow** to **red** as one or two axes get starved (the posture pushes toward an edge or vertex). There are no vertex labels — the gradient colour conveys the state (founder direction) — and a balance pill names it ("Well balanced" / "Starving Time"). It is an at-a-glance cue that you are trading something away.
+The triangle shades by balance: **green** when the three axes are centred, through **yellow** to **red** as one or two axes get starved (the posture pushes toward an edge or vertex). Each vertex is labelled with what pulling toward it buys — **Higher Reasoning** (top), **Lower Cost** (bottom-left), **Lower Time** (bottom-right) — while the gradient colour conveys balance, named by a balance pill ("Well balanced" / "Starving Time"). It is an at-a-glance cue that you are trading something away.
 
 ## Surfaces
 

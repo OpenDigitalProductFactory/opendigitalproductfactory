@@ -35,9 +35,16 @@ describe("GoldenTriangleControl", () => {
     expect(screen.getByText(/Frontier tier/)).toBeInTheDocument();
   });
 
-  it("shows a plain-language summary for the active posture", () => {
+  it("shows the configured-chip explanation for the active posture", () => {
     render(<Harness initial={preferenceFromPreset("frugal")} />);
-    expect(screen.getByText(/May take a little longer/)).toBeInTheDocument();
+    expect(screen.getByText(/Cost-first/)).toBeInTheDocument();
+  });
+
+  it("labels the three triangle corners with what each buys", () => {
+    render(<Harness initial={preferenceFromPreset("balanced")} />);
+    expect(screen.getByText("Higher Reasoning")).toBeInTheDocument();
+    expect(screen.getByText("Lower Cost")).toBeInTheDocument();
+    expect(screen.getByText("Lower Time")).toBeInTheDocument();
   });
 
   it("exposes three numeric weight inputs (canonical accessible control)", () => {
