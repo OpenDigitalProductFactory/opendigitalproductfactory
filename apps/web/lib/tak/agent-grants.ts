@@ -554,6 +554,30 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   screen_set_input:        ["coworker_screen_fill"],
 };
 
+/**
+ * The catalog of every grant KEY known to the authority registry, derived from
+ * the single source of truth (TOOL_TO_GRANTS values + GRANT_IMPLICATIONS keys
+ * and values + the read baseline) rather than hand-listed, so the per-coworker
+ * grant editor (the Capabilities tab select) can never drift from the grants
+ * the runtime actually understands. Sorted, de-duplicated.
+ *
+ * A grant key here is "real" iff at least one platform tool maps to it (or it is
+ * a baseline / implication endpoint). Granting any other string would persist an
+ * AgentToolGrant row that authorizes nothing — the editor uses this list to keep
+ * the operator on the rails of the closed grant vocabulary.
+ */
+export function knownGrantKeys(): string[] {
+  const keys = new Set<string>(COWORKER_READ_BASELINE_GRANTS);
+  for (const grants of Object.values(TOOL_TO_GRANTS)) {
+    for (const g of grants) keys.add(g);
+  }
+  for (const [coarse, implied] of Object.entries(GRANT_IMPLICATIONS)) {
+    keys.add(coarse);
+    for (const g of implied) keys.add(g);
+  }
+  return Array.from(keys).sort();
+}
+
 const grantCache = new Map<string, string[]>();
 
 type AgentEntry = {

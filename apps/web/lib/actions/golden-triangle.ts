@@ -14,11 +14,14 @@ import { can } from "@/lib/permissions";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 import { contributePostureDefault } from "@/lib/golden-triangle/hive";
 import {
+  clearAgentGoldenTrianglePosture,
+  getAgentGoldenTrianglePosture,
   getEffectiveGoldenTrianglePosture,
   getEffectivePostureForAgent,
   getGoldenTrianglePosture,
   setAgentGoldenTrianglePosture,
   setGoldenTrianglePosture,
+  type ResolvedPostureSource,
 } from "@/lib/golden-triangle/persistence";
 
 /**
@@ -47,10 +50,43 @@ export async function getCoworkerGoldenTrianglePosture(agentId: string): Promise
 }
 
 /**
+ * The effective posture for a coworker PLUS its inheritance provenance, so the
+ * record's Priority section can show the cascade chain ("Inherited from Platform
+ * default" vs "Overridden for this coworker") rather than a bare preset. Session-
+ * gated read. `hasOwnOverride` distinguishes a coworker-level override from an
+ * inherited org/platform default even when both resolve to the same preset.
+ * Returns `source: null` + Balanced-shaped null effective when nothing is set at
+ * any scope (the cold-start case the caller renders as "Platform default").
+ */
+export interface CoworkerPostureInheritance {
+  /** The posture that actually governs this coworker's dispatch (null = none set anywhere → Balanced). */
+  effective: GoldenTrianglePreference | null;
+  /** Which scope supplied `effective`. null when nothing is set at any scope. */
+  source: ResolvedPostureSource | null;
+  /** True when THIS coworker carries its own per-agent override (source === "agent"). */
+  hasOwnOverride: boolean;
+}
+
+export async function getCoworkerPostureInheritance(agentId: string): Promise<CoworkerPostureInheritance> {
+  const session = await auth();
+  if (!session?.user) return { effective: null, source: null, hasOwnOverride: false };
+  // Single-org install → resolve org implicitly inside the resolver via null;
+  // the per-agent override (if any) layers above org/platform.
+  const resolved = await getEffectivePostureForAgent(agentId, null);
+  const own = await getAgentGoldenTrianglePosture(agentId);
+  return {
+    effective: resolved?.preference ?? null,
+    source: resolved?.source ?? null,
+    hasOwnOverride: own !== null,
+  };
+}
+
+/**
  * Save a coworker's OWN (per-agent) posture. This is what makes the priority real
  * per coworker: the saved posture layers above org/platform and tunes that
  * coworker's dispatch. `view_platform`-gated (a per-agent setting is shared, not
- * per-user); a non-admin caller gets "Couldn't save" client-side.
+ * per-user); a non-admin caller gets "Couldn't save" client-side. Revalidates the
+ * record route so the inheritance banner reflects the new override immediately.
  */
 export async function saveCoworkerGoldenTrianglePosture(
   agentId: string,
@@ -58,7 +94,26 @@ export async function saveCoworkerGoldenTrianglePosture(
 ): Promise<{ ok: boolean }> {
   await requirePlatformAdmin();
   const ok = await setAgentGoldenTrianglePosture(agentId, preference);
+  if (ok) revalidateCoworkerRecord(agentId);
   return { ok };
+}
+
+/**
+ * Clear a coworker's OWN posture so it falls back to inheriting the org/platform
+ * default — the "Reset to inherited" control on the record's Priority section.
+ * `view_platform`-gated like the save; revalidates the record route.
+ */
+export async function resetCoworkerGoldenTrianglePosture(agentId: string): Promise<{ ok: boolean }> {
+  await requirePlatformAdmin();
+  const ok = await clearAgentGoldenTrianglePosture(agentId);
+  if (ok) revalidateCoworkerRecord(agentId);
+  return { ok };
+}
+
+/** The record route resolves by agentId OR slugId; revalidate both reachable spellings. */
+function revalidateCoworkerRecord(agentId: string): void {
+  revalidatePath(`/platform/ai/agent/${agentId}`);
+  revalidatePath("/platform/ai");
 }
 
 async function requirePlatformAdmin() {

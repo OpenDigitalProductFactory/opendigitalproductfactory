@@ -8,7 +8,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { RosterRow, RosterFacets } from "@/lib/coworker-record/roster";
-import { matchesFilters, EMPTY_FILTERS, type RosterFilters } from "@/lib/coworker-record/roster-filter";
+import { matchesFilters, kindOptions, EMPTY_FILTERS, type RosterFilters } from "@/lib/coworker-record/roster-filter";
+import { computeWorkforceSummary } from "@/lib/coworker-record/workforce-summary";
+import { WorkforceSummaryPanel } from "./WorkforceSummaryPanel";
 
 const TIER_LABELS: Record<number, string> = {
   1: "Tier 1 — Orchestrators",
@@ -23,6 +25,13 @@ const EMPTY = EMPTY_FILTERS;
 export function RosterView({ rows, facets }: { rows: RosterRow[]; facets: RosterFacets }) {
   const [filters, setFilters] = useState<Filters>(EMPTY);
   const [groupBy, setGroupBy] = useState<"tier" | "family">("tier");
+
+  // Kind facet option set is derived from the rows present (design item 1) so a
+  // fresh install never shows a role-type it has no coworker for.
+  const kindOpts = useMemo(() => kindOptions(rows), [rows]);
+  // WS5 workforce summary — computed once from the full roster (not the filtered
+  // view): the at-a-glance "whole workforce" panel is a fixed denominator.
+  const summary = useMemo(() => computeWorkforceSummary(rows), [rows]);
 
   const filtered = useMemo(() => rows.filter((r) => matchesFilters(r, filters)), [rows, filters]);
 
@@ -42,6 +51,9 @@ export function RosterView({ rows, facets }: { rows: RosterRow[]; facets: Roster
 
   return (
     <div>
+      {/* WS5 — workforce summary (at-a-glance, computed from the full roster). */}
+      <WorkforceSummaryPanel summary={summary} />
+
       {/* Filter rail */}
       <div
         style={{
@@ -56,7 +68,28 @@ export function RosterView({ rows, facets }: { rows: RosterRow[]; facets: Roster
           marginBottom: 14,
         }}
       >
+        {/* Directory search (design §5) — name / slug / family substring. */}
+        <label style={{ display: "inline-flex", flexDirection: "column", gap: 2, flex: "1 1 220px", minWidth: 200 }}>
+          <span style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--dpf-muted)" }}>Search</span>
+          <input
+            type="search"
+            value={filters.query}
+            onChange={(e) => set({ query: e.target.value })}
+            placeholder="name, slug, or family…"
+            aria-label="Search coworkers by name, slug, or family"
+            style={{
+              fontSize: 11,
+              padding: "5px 8px",
+              borderRadius: 5,
+              border: "1px solid var(--dpf-border)",
+              background: "var(--dpf-bg)",
+              color: "var(--dpf-text)",
+              width: "100%",
+            }}
+          />
+        </label>
         <Select label="Family" value={filters.family} onChange={(v) => set({ family: v })} options={facets.families.map((f) => ({ value: f.key, label: f.label }))} />
+        <Select label="Kind" value={filters.kind} onChange={(v) => set({ kind: v })} options={kindOpts.map((k) => ({ value: k, label: k.charAt(0).toUpperCase() + k.slice(1) }))} />
         <Select label="Value stream" value={filters.valueStream} onChange={(v) => set({ valueStream: v })} options={facets.valueStreams.map((v) => ({ value: v, label: v }))} />
         <Select label="Competency" value={filters.competency} onChange={(v) => set({ competency: v })} options={facets.competencies.map((v) => ({ value: v, label: v }))} />
         <Select label="Jurisdiction" value={filters.jurisdiction} onChange={(v) => set({ jurisdiction: v })} options={facets.jurisdictions.map((v) => ({ value: v, label: v }))} />
@@ -118,7 +151,8 @@ function RosterRowCard({ row }: { row: RosterRow }) {
         flexWrap: "wrap",
       }}
     >
-      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--dpf-text)", minWidth: 180 }}>{row.name}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--dpf-text)", minWidth: 180 }}>{row.displayName}</span>
+      <Badge tone="muted">{row.kind.charAt(0).toUpperCase() + row.kind.slice(1)}</Badge>
       {row.familyLabel ? (
         <Badge tone="accent">{row.familyLabel}</Badge>
       ) : (

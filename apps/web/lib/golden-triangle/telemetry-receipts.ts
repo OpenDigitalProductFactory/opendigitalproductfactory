@@ -14,7 +14,7 @@ import type { DecodedPolicy, GoldenTrianglePreference } from "@/lib/golden-trian
 
 import { compileGoldenTrianglePolicy } from "./compile";
 import { getEffectiveGoldenTrianglePosture, type GoldenTrianglePersistenceClient } from "./persistence";
-import { buildGoldenTriangleReceipt, type ActualRun } from "./receipt";
+import { buildGoldenTriangleReceipt, type ActualRun, type GoldenTriangleGovernedBy } from "./receipt";
 import type { StoredReceipt } from "./receipt-store";
 
 /** The subset of an AdapterRunTelemetry row we read to reconstruct a receipt. */
@@ -52,17 +52,20 @@ function actualFromRow(row: TelemetryRunRow): ActualRun {
   };
 }
 
-/** Pure: turn one telemetry row + the active posture into a display receipt. */
+/** Pure: turn one telemetry row + the active posture into a display receipt.
+ *  `governedBy` records which scope's default applied (agent → org → platform);
+ *  defaults to "none" so existing callers are unchanged. */
 export function receiptFromTelemetry(
   row: TelemetryRunRow,
   preference: GoldenTrianglePreference,
   decoded: DecodedPolicy,
+  governedBy: GoldenTriangleGovernedBy = "none",
 ): StoredReceipt {
   return {
     interactionId: row.id,
     routeContext: null,
     at: row.startedAt instanceof Date ? row.startedAt.toISOString() : String(row.startedAt),
-    receipt: buildGoldenTriangleReceipt(preference, decoded, actualFromRow(row)),
+    receipt: buildGoldenTriangleReceipt(preference, decoded, actualFromRow(row), governedBy),
   };
 }
 
@@ -91,7 +94,7 @@ export async function listRecentPostureReceipts(
       take: cap,
       select: { id: true, modelId: true, estimatedCostUsd: true, durationMs: true, userAccepted: true, startedAt: true },
     });
-    return rows.map((row) => receiptFromTelemetry(row, resolved.preference, decoded));
+    return rows.map((row) => receiptFromTelemetry(row, resolved.preference, decoded, resolved.source));
   } catch {
     return [];
   }

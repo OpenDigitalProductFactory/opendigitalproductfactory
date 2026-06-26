@@ -5,6 +5,7 @@ import { join } from "path";
 import { prisma } from "./client.js";
 import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
+import { resolveAgentIdentity } from "./agent-identity.js";
 import { loadFingerprintCatalogIntoDb, defaultCatalogPath } from "./discovery-fingerprint-catalog-loader.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
 import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
@@ -121,6 +122,8 @@ async function seedRoles(): Promise<void> {
 interface RegistryAgent {
   agent_id: string;
   agent_name: string;
+  displayName?: string;
+  kind?: string;
   tier?: string;
   value_stream?: string;
   capability_domain?: string;
@@ -173,8 +176,18 @@ async function seedAgents(): Promise<void> {
     const portfolioSlug = parseAgentPortfolioSlug(a.human_supervisor_id ?? "");
     const portfolioId = portfolioSlug ? (portfolioIdBySlug.get(portfolioSlug) ?? null) : null;
 
+    const identity = resolveAgentIdentity({
+      agentId: a.agent_id,
+      name: a.agent_name,
+      tier: a.tier,
+      displayName: a.displayName,
+      kind: a.kind,
+    });
+
     const unifiedFields = {
       name: a.agent_name,
+      displayName: identity.displayName,
+      kind: identity.kind,
       tier: parseAgentTier(a.agent_id),
       type: parseAgentType(a.agent_id),
       description: a.capability_domain ?? null,
@@ -1062,12 +1075,15 @@ async function seedCoworkerAgents(): Promise<void> {
   let grantCount = 0;
   for (const cw of COWORKER_AGENT_SEEDS) {
     const { agentId, slugId, ...rest } = cw;
+    const identity = resolveAgentIdentity({ agentId, name: rest.name, slugId, displayName: rest.name });
     const agent = await prisma.agent.upsert({
       where: { agentId },
-      create: { agentId, slugId, ...rest, lifecycleStage: "production" },
+      create: { agentId, slugId, displayName: identity.displayName, kind: identity.kind, ...rest, lifecycleStage: "production" },
       update: {
         slugId,
         name: rest.name,
+        displayName: identity.displayName,
+        kind: identity.kind,
         description: rest.description,
         valueStream: rest.valueStream,
         sensitivity: rest.sensitivity,

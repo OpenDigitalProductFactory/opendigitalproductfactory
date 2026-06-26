@@ -129,7 +129,46 @@ const tdStyle: React.CSSProperties = { padding: "6px 8px", color: "var(--dpf-tex
 
 // ─── Overview ────────────────────────────────────────────────────────────────
 
-export function OverviewPanel({ record }: { record: CoworkerRecord }) {
+/** WS2 Overview summary: model tier · priority · #skills · #tools · autonomy · health.
+ *  Computed page-side (the loader does not carry model-config/catalog data) and
+ *  passed in so this stays a pure presentational panel. */
+export type CoworkerSummary = {
+  modelTier: string;
+  /** Effective priority / budget class label (e.g. "Balanced"). */
+  priority: string;
+  skillCount: number;
+  toolCount: number;
+  /** agent.hitlTierDefault (0=human-only,1=approve,2=review,3=autonomous). */
+  hitlTier: number;
+  providerHealthy: boolean;
+};
+
+const HITL_LABELS: Record<number, string> = {
+  0: "human-only",
+  1: "approve",
+  2: "review",
+  3: "autonomous",
+};
+
+function SummaryChipRow({ summary }: { summary: CoworkerSummary }) {
+  const hitlLabel = HITL_LABELS[summary.hitlTier] ?? `tier ${summary.hitlTier}`;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+      <Chip tone="accent">model: {summary.modelTier}</Chip>
+      <Chip tone="accent">priority: {summary.priority}</Chip>
+      <Chip tone="muted">{summary.skillCount} skill{summary.skillCount === 1 ? "" : "s"}</Chip>
+      <Chip tone="muted">{summary.toolCount} tool grant{summary.toolCount === 1 ? "" : "s"}</Chip>
+      <Chip tone={summary.hitlTier === 3 ? "warning" : summary.hitlTier === 0 ? "muted" : "accent"}>
+        autonomy: {hitlLabel}
+      </Chip>
+      <Chip tone={summary.providerHealthy ? "success" : "error"}>
+        {summary.providerHealthy ? "provider healthy" : "provider degraded"}
+      </Chip>
+    </div>
+  );
+}
+
+export function OverviewPanel({ record, summary }: { record: CoworkerRecord; summary: CoworkerSummary }) {
   const { agent, profession, decisions, voice } = record;
   const owningTeam = agent.ownerships[0]?.team.name ?? null;
   const coveragePct =
@@ -139,6 +178,8 @@ export function OverviewPanel({ record }: { record: CoworkerRecord }) {
 
   return (
     <div>
+      <SummaryChipRow summary={summary} />
+
       <Section title="Fitness at a glance">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <Chip tone={profession.profile ? "success" : "warning"}>
@@ -363,14 +404,32 @@ function CoverageMatrix({ coverage }: { coverage: NonNullable<CoworkerRecord["pr
 export function CapabilitiesPanel({
   record,
   routingCard,
+  capabilitiesEditor,
 }: {
   record: CoworkerRecord;
   routingCard: React.ReactNode;
+  /** WS2 editable grants/skills control (client). Built page-side with the
+   *  catalog + held-grant data the loader does not carry; renders read-only
+   *  chips (no add/remove controls) when the viewer lacks manage_platform. */
+  capabilitiesEditor: React.ReactNode;
 }) {
   const { agent, voice, profession } = record;
   return (
     <div>
-      <Section title="Skills" count={agent.skills.length}>
+      {/* WS2: in-place grant/skill editing. Catalog skills (SkillAssignment) +
+          tool grants (AgentToolGrant) are managed here; the global
+          /platform/ai/skills stays the catalog. */}
+      <Section
+        title="Assigned skills & tool grants"
+        action={deepLink("/platform/ai/skills", "Skills catalog")}
+      >
+        {capabilitiesEditor}
+      </Section>
+
+      {/* Persona skills are free-form role declarations (AgentSkillAssignment,
+          keyed by label) — distinct from the catalog skills above. Read-only:
+          they are authored with the persona, not granted per-coworker. */}
+      <Section title="Persona skills" count={agent.skills.length}>
         {agent.skills.length > 0 ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 8 }}>
             {agent.skills.map((skill) => (
@@ -387,19 +446,7 @@ export function CapabilitiesPanel({
             ))}
           </div>
         ) : (
-          <EmptyState text="No skills assigned" />
-        )}
-      </Section>
-
-      <Section title="Tool grants (least privilege)" count={agent.toolGrants.length} action={deepLink("/platform/ai", "Authority")}>
-        {agent.toolGrants.length > 0 ? (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {agent.toolGrants.map((grant) => (
-              <Chip key={grant.id} tone="warning">{grant.grantKey}</Chip>
-            ))}
-          </div>
-        ) : (
-          <EmptyState text="No tool grants assigned" />
+          <EmptyState text="No persona skills declared" />
         )}
       </Section>
 
@@ -419,6 +466,28 @@ export function CapabilitiesPanel({
         ) : (
           <EmptyState text="No voice profile configured for this coworker's perspective." />
         )}
+      </Section>
+    </div>
+  );
+}
+
+// ─── Priority (Golden Triangle) ──────────────────────────────────────────────
+
+/** WS4 — the per-coworker Cost/Quality/Time priority with its inheritance chain.
+ *  The interactive control (presets/triangle, save/reset, read-only fallback) is
+ *  the client `CoworkerPriorityControl`, built page-side and passed in so this
+ *  stays a pure presentational panel. */
+export function PriorityPanel({ priorityControl }: { priorityControl: React.ReactNode }) {
+  return (
+    <div>
+      <Section title="Cost / Quality / Time priority">
+        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: -4, marginBottom: 12, maxWidth: 680, lineHeight: 1.5 }}>
+          The everyday priority for this coworker. By default it inherits the platform default set on the{" "}
+          {deepLink("/platform/ai/assignments", "Priority & Models")} surface; override it here only when this coworker
+          needs a different balance. The platform compiles it into the model, effort, verification, and review/debate —
+          shown in plain language — and it governs this coworker&apos;s live dispatch.
+        </p>
+        {priorityControl}
       </Section>
     </div>
   );

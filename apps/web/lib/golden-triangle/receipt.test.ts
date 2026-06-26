@@ -69,4 +69,16 @@ describe("buildGoldenTriangleReceipt", () => {
     expect(r.actual.costUsd).toBeNull();
     expect(r.summary).toMatch(/cost n\/a/);
   });
+
+  it("records which scope governed the run; defaults to none", () => {
+    const noScope = buildGoldenTriangleReceipt(ASSURED, decode(ASSURED), { modelId: "claude-opus-4-7-20250514" });
+    expect(noScope.governedBy).toBe("none");
+    const agentScope = buildGoldenTriangleReceipt(
+      ASSURED,
+      decode(ASSURED),
+      { modelId: "claude-opus-4-7-20250514" },
+      "agent",
+    );
+    expect(agentScope.governedBy).toBe("agent");
+  });
 });

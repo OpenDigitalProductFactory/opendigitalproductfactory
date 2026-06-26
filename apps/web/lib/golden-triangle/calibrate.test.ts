@@ -14,6 +14,7 @@ type ActualOver = Partial<GoldenTriangleReceipt["actual"]>;
 function r(matched = true, actual: ActualOver = {}): GoldenTriangleReceipt {
   return {
     preset: "assured",
+    governedBy: "platform",
     requested: { minimumTier: "frontier" },
     actual: {
       modelId: "claude-opus",

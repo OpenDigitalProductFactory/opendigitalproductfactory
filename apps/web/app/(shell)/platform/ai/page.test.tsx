@@ -21,6 +21,8 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     agentId: "hr-specialist",
     slugId: "hr-specialist",
     name: "HR Specialist",
+    displayName: "HR Specialist",
+    kind: "specialist",
     tier: 2,
     valueStream: "operate",
     lifecycleStage: "production",

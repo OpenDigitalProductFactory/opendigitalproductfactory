@@ -11,18 +11,31 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { AgentModelRoutingCard } from "@/components/platform/AgentModelRoutingCard";
+import { CapabilitiesEditor } from "@/components/platform/coworker-record/CapabilitiesEditor";
+import { RecordActionsMenu } from "@/components/platform/coworker-record/RecordActionsMenu";
+import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPriorityControl";
+import { getCoworkerPostureInheritance } from "@/lib/actions/golden-triangle";
 import { loadCoworkerRecord } from "@/lib/coworker-record/load-record";
 import { loadFamilyCorpusSignals } from "@/lib/coworker-record/corpus-signals";
 import { resolveInstallVariantContext } from "@/lib/decision-perspective/install-variant-context";
+import { knownGrantKeys } from "@/lib/tak/agent-grants";
+import { assignTierFromModelId, TIER_LABELS as QUALITY_TIER_LABELS } from "@/lib/routing/quality-tiers";
 import { CoworkerRecordTabs, type CoworkerTab } from "@/components/platform/coworker-record/CoworkerRecordTabs";
 import {
   OverviewPanel,
   ProfessionPanel,
   CapabilitiesPanel,
+  PriorityPanel,
   GovernancePanel,
   PerformancePanel,
   DecisionsPanel,
 } from "@/components/platform/coworker-record/panels";
+
+const BUDGET_CLASS_LABELS: Record<string, string> = {
+  quality_first: "Quality first",
+  balanced: "Balanced",
+  minimize_cost: "Cost first",
+};
 
 const TIER_LABELS: Record<number, string> = {
   1: "Orchestrator",
@@ -44,36 +57,60 @@ export default async function AgentDetailPage({
   // for the Profession & Knowledge tab. Null when the coworker is unmapped.
   // The install's resolved archetype is shown so the operator sees which corpus
   // slice this coworker is served (the "noted at setup" surface).
-  const [corpusSignals, installVariant] = await Promise.all([
+  const [corpusSignals, installVariant, postureInheritance] = await Promise.all([
     profession.family ? loadFamilyCorpusSignals(profession.family.professionKey) : null,
     resolveInstallVariantContext(prisma),
+    // WS4: the effective Golden-Triangle posture + its inheritance provenance,
+    // keyed by the BUSINESS agentId (the per-agent posture map key). Session-gated
+    // + fail-open inside the action, so a read failure renders the Balanced cold-start.
+    getCoworkerPostureInheritance(agent.agentId),
   ]);
 
   // Model-routing card data (kept page-side: needs the live provider catalog).
-  const [session, modelConfig, lastModelRows, activeProviders] = await Promise.all([
-    auth(),
-    prisma.agentModelConfig.findUnique({ where: { agentId: agent.agentId } }).catch(() => null),
-    prisma.$queryRaw<Array<{ agentId: string; providerId: string }>>`
-      SELECT DISTINCT ON ("agentId") "agentId", "providerId"
-      FROM "AgentMessage"
-      WHERE "role" = 'assistant' AND "agentId" = ${agent.agentId} AND "providerId" IS NOT NULL
-      ORDER BY "agentId", "createdAt" DESC
-      LIMIT 1
-    `.catch(() => [] as Array<{ agentId: string; providerId: string }>),
-    prisma.modelProvider.findMany({
-      where: { status: { in: ["active", "degraded"] } },
-      orderBy: { name: "asc" },
-      select: {
-        providerId: true,
-        name: true,
-        modelProfiles: {
-          where: { modelStatus: "active" },
-          select: { modelId: true, friendlyName: true, supportsToolUse: true },
-          orderBy: { friendlyName: "asc" },
+  // WS2 adds: catalog skills already assigned to this coworker (SkillAssignment,
+  // keyed by the BUSINESS agentId) and the full active SkillDefinition catalog
+  // for the add-select. Tool grants come from the loaded record (agent.toolGrants).
+  const [session, modelConfig, lastModelRows, activeProviders, assignedSkillRows, catalogSkillRows, allProviderStatuses] =
+    await Promise.all([
+      auth(),
+      prisma.agentModelConfig.findUnique({ where: { agentId: agent.agentId } }).catch(() => null),
+      prisma.$queryRaw<Array<{ agentId: string; providerId: string }>>`
+        SELECT DISTINCT ON ("agentId") "agentId", "providerId"
+        FROM "AgentMessage"
+        WHERE "role" = 'assistant' AND "agentId" = ${agent.agentId} AND "providerId" IS NOT NULL
+        ORDER BY "agentId", "createdAt" DESC
+        LIMIT 1
+      `.catch(() => [] as Array<{ agentId: string; providerId: string }>),
+      prisma.modelProvider.findMany({
+        where: { status: { in: ["active", "degraded"] } },
+        orderBy: { name: "asc" },
+        select: {
+          providerId: true,
+          name: true,
+          modelProfiles: {
+            where: { modelStatus: "active" },
+            select: { modelId: true, friendlyName: true, supportsToolUse: true },
+            orderBy: { friendlyName: "asc" },
+          },
         },
-      },
-    }).catch(() => []),
-  ]);
+      }).catch(() => []),
+      prisma.skillAssignment
+        .findMany({
+          where: { agentId: agent.agentId, enabled: true },
+          orderBy: { priority: "desc" },
+          select: { skill: { select: { skillId: true, name: true, capability: true } } },
+        })
+        .catch(() => [] as Array<{ skill: { skillId: string; name: string; capability: string | null } }>),
+      prisma.skillDefinition
+        .findMany({
+          where: { status: "active" },
+          orderBy: { name: "asc" },
+          select: { skillId: true, name: true, category: true, riskBand: true },
+        })
+        .catch(() => [] as Array<{ skillId: string; name: string; category: string; riskBand: string }>),
+      // Provider statuses for the summary health chip (mirrors roster.ts logic).
+      prisma.modelProvider.findMany({ select: { providerId: true, status: true } }).catch(() => []),
+    ]);
 
   const canWrite = !!session?.user && can(
     { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
@@ -86,6 +123,43 @@ export default async function AgentDetailPage({
   const lastModelLabel = lastModelRow
     ? `${lastModelRow.providerId} (${providerNames[lastModelRow.providerId] ?? lastModelRow.providerId})`
     : null;
+
+  // ── WS2 derived summary (model tier · priority · #skills · #tools · autonomy · health) ──
+  const assignedSkills = assignedSkillRows.map((r) => r.skill);
+  // Model tier: prefer the pinned model's tier, else the configured minimum tier.
+  const modelTier = modelConfig?.pinnedModelId
+    ? QUALITY_TIER_LABELS[assignTierFromModelId(modelConfig.pinnedModelId)]
+    : QUALITY_TIER_LABELS[
+        (modelConfig?.minimumTier as keyof typeof QUALITY_TIER_LABELS) ?? "adequate"
+      ] ?? "Adequate";
+  const priorityLabel = BUDGET_CLASS_LABELS[modelConfig?.budgetClass ?? "balanced"] ?? "Balanced";
+  // Provider health: a pinned provider must be active; unpinned coworkers are
+  // healthy by default (the router picks an active provider) — same rule as roster.ts.
+  const providerStatusById = new Map(allProviderStatuses.map((p) => [p.providerId, p.status]));
+  const pinnedProvider = modelConfig?.pinnedProviderId ?? null;
+  const providerHealthy = !pinnedProvider || providerStatusById.get(pinnedProvider) === "active";
+
+  const summary = {
+    modelTier,
+    priority: priorityLabel,
+    skillCount: assignedSkills.length,
+    toolCount: agent.toolGrants.length,
+    hitlTier: agent.hitlTierDefault,
+    providerHealthy,
+  };
+
+  const capabilitiesEditor = (
+    <CapabilitiesEditor
+      agentCuid={agent.id}
+      agentBusinessId={agent.agentId}
+      slugId={agent.slugId}
+      heldGrants={agent.toolGrants.map((g) => g.grantKey)}
+      allGrantKeys={knownGrantKeys()}
+      assignedSkills={assignedSkills}
+      catalogSkills={catalogSkillRows}
+      canWrite={canWrite}
+    />
+  );
 
   const routingCard = (
     <AgentModelRoutingCard
@@ -109,15 +183,27 @@ export default async function AgentDetailPage({
     />
   );
 
+  // WS4: per-coworker priority control (client). Reads the effective posture +
+  // inheritance resolved above; canWrite gates the editable presets/triangle and
+  // the save/reset actions (read-only chip view otherwise).
+  const priorityControl = (
+    <CoworkerPriorityControl agentId={agent.agentId} inheritance={postureInheritance} canWrite={canWrite} />
+  );
+
   const coveragePct =
     profession.coverage && profession.coverage.checklist.length > 0
       ? Math.round((profession.coverage.pageCount / profession.coverage.checklist.length) * 100)
       : null;
 
+  // WS4: a one-word badge on the Priority tab so an override is visible without
+  // opening it ("set" = this coworker has its own override; otherwise inherited).
+  const priorityBadge = postureInheritance.hasOwnOverride ? "set" : null;
+
   const tabs: CoworkerTab[] = [
     { id: "overview", label: "Overview" },
     { id: "profession", label: "Profession & Knowledge", badge: coveragePct !== null ? `${coveragePct}%` : profession.family ? null : "unmapped" },
     { id: "capabilities", label: "Capabilities", badge: String(agent.toolGrants.length) },
+    { id: "priority", label: "Priority", badge: priorityBadge },
     { id: "governance", label: "Governance" },
     { id: "performance", label: "Performance" },
     { id: "decisions", label: "Decisions & Activity", badge: decisions.total > 0 ? String(decisions.total) : null },
@@ -131,16 +217,30 @@ export default async function AgentDetailPage({
           AI Workforce
         </Link>
         <span style={{ fontSize: 11, color: "var(--dpf-muted)", margin: "0 6px" }}>/</span>
-        <span style={{ fontSize: 11, color: "var(--dpf-text)" }}>{agent.name}</span>
+        <span style={{ fontSize: 11, color: "var(--dpf-text)" }}>{agent.displayName}</span>
       </div>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>{agent.name}</h1>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>{agent.displayName}</h1>
+        <HeaderChip tone="muted">{agent.kind.charAt(0).toUpperCase() + agent.kind.slice(1)}</HeaderChip>
         <HeaderChip tone="accent">{TIER_LABELS[agent.tier] ?? `Tier ${agent.tier}`}</HeaderChip>
         {profession.family && <HeaderChip tone="accent">{profession.family.label}</HeaderChip>}
         {agent.valueStream && <HeaderChip tone="success">{agent.valueStream}</HeaderChip>}
         <HeaderChip tone="muted">{agent.lifecycleStage}</HeaderChip>
+        {/* WS2 Related Actions ("…") — the data-model edges as navigation. Pure
+            read-only links; per-coworker editing lives in the tabs. */}
+        <RecordActionsMenu
+          actions={[
+            { label: "Edit persona prompt", href: "/platform/ai/prompts" },
+            { label: "Skills catalog", href: "/platform/ai/skills" },
+            { label: "Model & priority grid", href: "/platform/ai/assignments" },
+            { label: "Authority & tool grants", href: "/platform/ai" },
+            ...(profession.profileId
+              ? [{ label: "Decision review inbox", href: `/platform/ai/founder-review?profile=${profession.profileId}` }]
+              : []),
+          ]}
+        />
       </div>
 
       {agent.description && (
@@ -154,9 +254,10 @@ export default async function AgentDetailPage({
       </div>
 
       <CoworkerRecordTabs tabs={tabs}>
-        <OverviewPanel record={record} />
+        <OverviewPanel record={record} summary={summary} />
         <ProfessionPanel record={record} corpusSignals={corpusSignals} installArchetype={installVariant.archetype ?? null} />
-        <CapabilitiesPanel record={record} routingCard={routingCard} />
+        <CapabilitiesPanel record={record} routingCard={routingCard} capabilitiesEditor={capabilitiesEditor} />
+        <PriorityPanel priorityControl={priorityControl} />
         <GovernancePanel record={record} />
         <PerformancePanel record={record} />
         <DecisionsPanel record={record} />

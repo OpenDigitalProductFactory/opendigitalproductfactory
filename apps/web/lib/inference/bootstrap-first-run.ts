@@ -22,6 +22,8 @@ export async function seedOnboardingAgent(): Promise<void> {
     create: {
       agentId: "onboarding-coo",
       name: "Onboarding COO",
+      displayName: "Onboarding COO",
+      kind: "orchestrator",
       tier: 1,
       type: "onboarding",
       description: "Guides new platform owners through initial setup.",

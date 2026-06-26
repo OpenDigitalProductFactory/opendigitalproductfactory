@@ -1962,6 +1962,8 @@ model Agent {
   agentId     String   @unique
   slugId      String?  @unique // backward-compat alias ("coo", "build-specialist")
   name        String
+  displayName String   // EP-COWORKER-RT: canonical human-facing label (see packages/db/src/agent-identity.ts)
+  kind        String   // role-type facet: orchestrator|specialist|advisor|engineer|analyst|coordinator
   tier        Int
   type        String
   description String?

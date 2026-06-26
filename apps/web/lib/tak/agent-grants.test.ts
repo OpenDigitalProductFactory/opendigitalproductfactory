@@ -5,6 +5,7 @@ import {
   isToolAllowedByGrants,
   getAgentToolGrants,
   getToolGrantMapping,
+  knownGrantKeys,
   COWORKER_READ_BASELINE_GRANTS,
 } from "./agent-grants";
 
@@ -821,5 +822,35 @@ describe("COWORKER_READ_BASELINE_GRANTS — page visibility + docs/source/code-g
     expect(isToolAllowedByGrants("doc_search", merged)).toBe(true);
     // But its own backlog-write authority is preserved, not lost.
     expect(isToolAllowedByGrants("create_backlog_item", merged)).toBe(true);
+  });
+});
+
+describe("knownGrantKeys — closed grant vocabulary for the per-coworker editor", () => {
+  const keys = knownGrantKeys();
+
+  it("is non-empty, sorted, and de-duplicated", () => {
+    expect(keys.length).toBeGreaterThan(20);
+    expect([...keys].sort()).toEqual(keys);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("includes the read baseline and representative tool/implication grants", () => {
+    for (const g of COWORKER_READ_BASELINE_GRANTS) expect(keys).toContain(g);
+    // A grant that only appears as a TOOL_TO_GRANTS value.
+    expect(keys).toContain("sandbox_execute");
+    // Both endpoints of an implication (coarse key + the finer implied grant).
+    expect(keys).toContain("backlog_write");
+    expect(keys).toContain("build_evidence");
+  });
+
+  it("only contains grants the runtime actually understands (every key authorizes ≥1 tool, is a baseline, or is an implication endpoint)", () => {
+    const mapping = getToolGrantMapping();
+    const authorizing = new Set<string>(COWORKER_READ_BASELINE_GRANTS);
+    for (const grants of Object.values(mapping)) for (const g of grants) authorizing.add(g);
+    for (const [coarse, implied] of Object.entries(GRANT_IMPLICATIONS)) {
+      authorizing.add(coarse);
+      for (const g of implied) authorizing.add(g);
+    }
+    for (const k of keys) expect(authorizing.has(k)).toBe(true);
   });
 });
