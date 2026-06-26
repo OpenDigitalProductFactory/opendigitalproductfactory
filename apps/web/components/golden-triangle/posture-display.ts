@@ -87,14 +87,7 @@ export function preferenceFromPreset(preset: Exclude<GoldenTrianglePreset, "cust
   return { preset, qualityWeight, costWeight, timeWeight };
 }
 
-// ── Plain-language summary ──────────────────────────────────────────────────
-const PLAIN: Record<Exclude<GoldenTrianglePreset, "custom">, string> = {
-  fast: "Quickest result. Less checking.",
-  balanced: "A sensible balance — platform defaults.",
-  assured: "Strongest model, deeper review. Higher cost and time.",
-  frugal: "Spends the least. May take a little longer.",
-};
-
+// ── Posture label (dominant axis → a short, meaningful name) ─────────────────
 function dominantAxis(p: GoldenTrianglePreference): { axis: "quality" | "cost" | "time"; weight: number } {
   const s = Math.max(0, p.qualityWeight) + Math.max(0, p.costWeight) + Math.max(0, p.timeWeight) || 1;
   const q = Math.max(0, p.qualityWeight) / s;
@@ -118,20 +111,6 @@ function dominantAxis(p: GoldenTrianglePreference): { axis: "quality" | "cost" |
 // multi-perspective debate (the compiler emits it at qualityWeight >= 0.85, the
 // same QUALITY_DEBATE_FLOOR) — above the single review the Assured preset buys.
 const QUALITY_DEBATE_FLOOR = 0.85;
-
-export function plainSummary(pref: GoldenTrianglePreference): string {
-  if (pref.preset !== "custom") return PLAIN[pref.preset];
-  const { axis, weight } = dominantAxis(pref);
-  if (weight < 0.4) return PLAIN.balanced;
-  if (axis === "quality") {
-    if (weight >= QUALITY_DEBATE_FLOOR) {
-      return "Maxed for quality: strongest model, max effort, deep review, and a multi-perspective debate. Highest cost and time.";
-    }
-    return weight >= 0.55 ? PLAIN.assured : "Leaning toward getting it right.";
-  }
-  if (axis === "cost") return weight >= 0.55 ? PLAIN.frugal : "Leaning toward saving money.";
-  return weight >= 0.55 ? PLAIN.fast : "Leaning toward speed.";
-}
 
 /**
  * A short, meaningful label for ANY posture — the preset name for a preset, or a
@@ -188,14 +167,13 @@ export function describeConfigured(decoded: DecodedPolicy): ConfigChip[] {
   if (ob.retryBudget !== undefined) {
     chips.push({ icon: "refresh", label: `${ob.retryBudget} ${ob.retryBudget === 1 ? "retry" : "retries"}` });
   }
-  if (po.maxLatencyMs !== undefined) chips.push({ icon: "clock", label: `${Math.round(po.maxLatencyMs / 1000)}s target` });
+  if (po.maxLatencyMs !== undefined) chips.push({ icon: "clock", label: `Under ${Math.round(po.maxLatencyMs / 1000)}s` });
   if (chips.length === 0) chips.push({ icon: "adjustments-horizontal", label: "Platform defaults" });
   return chips;
 }
 
 export interface PostureView {
   decoded: DecodedPolicy;
-  plain: string;
   chips: ConfigChip[];
 }
 
@@ -210,7 +188,7 @@ export function decodePostureForDisplay(
     taskClass,
     authorityScope: { kind: authorityScopeKind },
   });
-  return { decoded, plain: plainSummary(pref), chips: describeConfigured(decoded) };
+  return { decoded, chips: describeConfigured(decoded) };
 }
 
 // ── Balance / starvation colouring ──────────────────────────────────────────

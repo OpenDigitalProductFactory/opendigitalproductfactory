@@ -7,7 +7,6 @@ import {
   balanceState,
   decodePostureForDisplay,
   describeConfigured,
-  plainSummary,
   pointToWeights,
   postureLabel,
   preferenceFromPreset,
@@ -80,30 +79,10 @@ describe("describeConfigured (driven by the real compiler)", () => {
   });
 });
 
-describe("plainSummary", () => {
-  it("uses the preset line for named presets", () => {
-    expect(plainSummary(preferenceFromPreset("fast"))).toMatch(/Quickest/);
-    expect(plainSummary(preferenceFromPreset("frugal"))).toMatch(/least/i);
-  });
-
-  it("describes a moderate custom lean", () => {
-    expect(plainSummary({ preset: "custom", qualityWeight: 0.45, costWeight: 0.3, timeWeight: 0.25 })).toMatch(/right/i);
-  });
-
-  it("maxing Quality describes a debate (the top of the rigor ladder)", () => {
-    expect(plainSummary({ preset: "custom", qualityWeight: 0.9, costWeight: 0.05, timeWeight: 0.05 })).toMatch(/debate/i);
-  });
-
-  it("falls back to balanced for an unfocused custom posture", () => {
-    expect(plainSummary({ preset: "custom", qualityWeight: 0.34, costWeight: 0.33, timeWeight: 0.33 })).toMatch(/balance/i);
-  });
-});
-
 describe("decodePostureForDisplay", () => {
-  it("returns decoded policy + plain + chips together", () => {
+  it("returns decoded policy + chips together", () => {
     const view = decodePostureForDisplay(preferenceFromPreset("frugal"));
     expect(view.decoded.postureOverride.budgetClass).toBe("minimize_cost");
-    expect(view.plain).toMatch(/least/i);
     expect(view.chips.length).toBeGreaterThan(0);
   });
 });
