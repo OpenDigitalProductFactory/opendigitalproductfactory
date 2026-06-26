@@ -31,6 +31,7 @@ Each of these is the operating manual for one part of the platform. The pages ar
 | [Platform](platform/) | AI operations, Edge Nodes, identity & access, authority & audit, tools & integrations. |
 | [Portfolios](portfolios/) | Portfolio management, health metrics, investment tracking. |
 | [Products](products/) | Product inventory, lifecycle stages, business-model roles. |
+| [Security Operations](security/) | The built-in AI SOC — sources, detections, cases, governed response, compliance, and MSP federation. |
 | [Storefront](storefront/) | Public-facing storefront — setup, catalog, inbox, fulfilment, business and operations settings. |
 | [Wiki](wiki/) | Governed platform knowledge, founder-kernel pages, principles, and citations. |
 | [Workspace](workspace/) | The personal workspace, managed documents, and cross-domain activity. |
