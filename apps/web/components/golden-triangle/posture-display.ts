@@ -113,14 +113,49 @@ function dominantAxis(p: GoldenTrianglePreference): { axis: "quality" | "cost" |
   return { axis, weight };
 }
 
+// The work scales continuously with the triangle: maxing an axis is that
+// dimension's FULL setting. For Quality, the top of the rigor ladder is a
+// multi-perspective debate (the compiler emits it at qualityWeight >= 0.85, the
+// same QUALITY_DEBATE_FLOOR) — above the single review the Assured preset buys.
+const QUALITY_DEBATE_FLOOR = 0.85;
+
 export function plainSummary(pref: GoldenTrianglePreference): string {
   if (pref.preset !== "custom") return PLAIN[pref.preset];
   const { axis, weight } = dominantAxis(pref);
   if (weight < 0.4) return PLAIN.balanced;
-  if (axis === "quality") return weight >= 0.55 ? PLAIN.assured : "Leaning toward getting it right.";
+  if (axis === "quality") {
+    if (weight >= QUALITY_DEBATE_FLOOR) {
+      return "Maxed for quality: strongest model, max effort, deep review, and a multi-perspective debate. Highest cost and time.";
+    }
+    return weight >= 0.55 ? PLAIN.assured : "Leaning toward getting it right.";
+  }
   if (axis === "cost") return weight >= 0.55 ? PLAIN.frugal : "Leaning toward saving money.";
   return weight >= 0.55 ? PLAIN.fast : "Leaning toward speed.";
 }
+
+/**
+ * A short, meaningful label for ANY posture — the preset name for a preset, or a
+ * dimension + intensity descriptor for a custom one. So an extreme reads as e.g.
+ * "Max Quality" (never a bare "Custom"), conveying that a corner is that
+ * dimension's full setting.
+ */
+export function postureLabel(pref: GoldenTrianglePreference): string {
+  if (pref.preset !== "custom") return PRESET_META[pref.preset].label;
+  const { axis, weight } = dominantAxis(pref);
+  if (weight < 0.4) return "Balanced";
+  const dim = axis === "quality" ? "Quality" : axis === "cost" ? "Cost" : "Speed";
+  if (weight >= QUALITY_DEBATE_FLOOR) return `Max ${dim}`;
+  if (weight >= 0.55) return `${dim}-first`;
+  return `${dim}-leaning`;
+}
+
+/**
+ * Plain explanation of what min/maxing each axis does — shown beneath the control
+ * so an operator knows what pulling toward a corner buys. The work + resources
+ * scale continuously with the triangle; a corner is that dimension at full.
+ */
+export const TRIANGLE_AXIS_GUIDE =
+  "Each corner is that dimension at full strength: Quality → strongest model, deepest review, up to a debate · Cost → cheapest capable model, least checking · Time → fastest, least deliberation. The middle blends them — the model, effort, and review all scale with the dot.";
 
 // ── Configured-chips (driven by the real compiler output) ────────────────────
 export interface ConfigChip {

@@ -14,9 +14,11 @@ import { GoldenTriangleGradient } from "./GoldenTriangleGradient";
 import {
   PRESET_META,
   PRESET_ORDER,
+  TRIANGLE_AXIS_GUIDE,
   balanceState,
   decodePostureForDisplay,
   pointToWeights,
+  postureLabel,
   preferenceFromPreset,
   weightsToPoint,
 } from "./posture-display";
@@ -92,7 +94,9 @@ export function GoldenTriangleControl({
   const vQuality = unitToVb(0.5, 0);
   const vCost = unitToVb(0, 1);
   const vTime = unitToVb(1, 1);
-  const activeLabel = value.preset === "custom" ? "Custom" : PRESET_META[value.preset].label;
+  // A meaningful label at every position — an extreme reads as e.g. "Max Quality"
+  // (the corner = that dimension's full setting), never a bare "Custom".
+  const activeLabel = postureLabel(value);
 
   const balanceColor = `var(${balance.token})`;
   const triStroke = `color-mix(in srgb, ${balanceColor} 45%, var(--dpf-border-strong))`;
@@ -229,6 +233,7 @@ export function GoldenTriangleControl({
           </span>
         ))}
       </div>
+      <p className="mt-2 text-[10px] leading-snug text-[var(--dpf-text-secondary)]">{TRIANGLE_AXIS_GUIDE}</p>
     </div>
   );
 

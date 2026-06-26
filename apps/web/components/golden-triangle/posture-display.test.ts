@@ -9,9 +9,28 @@ import {
   describeConfigured,
   plainSummary,
   pointToWeights,
+  postureLabel,
   preferenceFromPreset,
   weightsToPoint,
 } from "./posture-display";
+
+describe("postureLabel — every position reads meaningfully (never bare 'Custom')", () => {
+  it("uses the preset name for a preset", () => {
+    expect(postureLabel(preferenceFromPreset("assured"))).toBe("Assured");
+    expect(postureLabel(preferenceFromPreset("frugal"))).toBe("Frugal");
+  });
+  it("labels the maxed corner as 'Max <dimension>'", () => {
+    expect(postureLabel({ preset: "custom", qualityWeight: 1, costWeight: 0, timeWeight: 0 })).toBe("Max Quality");
+    expect(postureLabel({ preset: "custom", qualityWeight: 0, costWeight: 1, timeWeight: 0 })).toBe("Max Cost");
+    expect(postureLabel({ preset: "custom", qualityWeight: 0, costWeight: 0, timeWeight: 1 })).toBe("Max Speed");
+  });
+  it("labels a strong-but-not-max lean as '<dimension>-first'", () => {
+    expect(postureLabel({ preset: "custom", qualityWeight: 0.7, costWeight: 0.2, timeWeight: 0.1 })).toBe("Quality-first");
+  });
+  it("labels a near-centroid custom posture 'Balanced'", () => {
+    expect(postureLabel({ preset: "custom", qualityWeight: 0.34, costWeight: 0.33, timeWeight: 0.33 })).toBe("Balanced");
+  });
+});
 
 describe("posture-display geometry", () => {
   it("weights -> point -> weights round-trips for every preset", () => {
@@ -69,6 +88,10 @@ describe("plainSummary", () => {
 
   it("describes a moderate custom lean", () => {
     expect(plainSummary({ preset: "custom", qualityWeight: 0.45, costWeight: 0.3, timeWeight: 0.25 })).toMatch(/right/i);
+  });
+
+  it("maxing Quality describes a debate (the top of the rigor ladder)", () => {
+    expect(plainSummary({ preset: "custom", qualityWeight: 0.9, costWeight: 0.05, timeWeight: 0.05 })).toMatch(/debate/i);
   });
 
   it("falls back to balanced for an unfocused custom posture", () => {
