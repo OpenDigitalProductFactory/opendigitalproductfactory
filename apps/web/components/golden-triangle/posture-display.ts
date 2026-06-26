@@ -87,6 +87,35 @@ export function preferenceFromPreset(preset: Exclude<GoldenTrianglePreset, "cust
   return { preset, qualityWeight, costWeight, timeWeight };
 }
 
+/**
+ * Snap dragged/typed weights to a preset when the posture lands clearly on that
+ * preset's region — so the CORNERS of the triangle resolve to the SAME preset
+ * (label + description) as the one-click button, instead of reading as "Custom".
+ * A clearly dominant axis (>= the snap floor) snaps to that axis's preset; a
+ * near-centroid posture snaps to Balanced; everything in between stays a custom
+ * fine-tune. Pure + deterministic. Returns null when nothing should snap.
+ */
+const SNAP_DOMINANT = 0.6; // a dominant axis at/above this owns its corner-ward region
+const SNAP_BALANCED_MAX = 0.42; // no axis above this …
+const SNAP_BALANCED_MIN = 0.24; // … and none below this → the centroid (Balanced)
+
+export function snapToPreset(w: Weights): Exclude<GoldenTrianglePreset, "custom"> | null {
+  const q = Math.max(0, w.qualityWeight);
+  const c = Math.max(0, w.costWeight);
+  const t = Math.max(0, w.timeWeight);
+  const s = q + c + t || 1;
+  const nq = q / s;
+  const nc = c / s;
+  const nt = t / s;
+  if (nq >= SNAP_DOMINANT && nq >= nc && nq >= nt) return "assured";
+  if (nc >= SNAP_DOMINANT && nc >= nq && nc >= nt) return "frugal";
+  if (nt >= SNAP_DOMINANT && nt >= nq && nt >= nc) return "fast";
+  const max = Math.max(nq, nc, nt);
+  const min = Math.min(nq, nc, nt);
+  if (max <= SNAP_BALANCED_MAX && min >= SNAP_BALANCED_MIN) return "balanced";
+  return null;
+}
+
 // ── Plain-language summary ──────────────────────────────────────────────────
 const PLAIN: Record<Exclude<GoldenTrianglePreset, "custom">, string> = {
   fast: "Quickest result. Less checking.",

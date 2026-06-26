@@ -18,6 +18,7 @@ import {
   decodePostureForDisplay,
   pointToWeights,
   preferenceFromPreset,
+  snapToPreset,
   weightsToPoint,
 } from "./posture-display";
 
@@ -45,8 +46,10 @@ function normalize(p: GoldenTrianglePreference): Record<AxisKey, number> {
   return { qualityWeight: q / s, costWeight: c / s, timeWeight: t / s };
 }
 
-/** Set one axis to `val`, rebalancing the other two by their current ratio. */
-function rebalance(p: GoldenTrianglePreference, axis: AxisKey, val: number): GoldenTrianglePreference {
+/** Set one axis to `val`, rebalancing the other two by their current ratio.
+ *  Returns raw weights; the caller runs them through `emit` so a posture that
+ *  lands on a preset's region snaps to that preset. */
+function rebalance(p: GoldenTrianglePreference, axis: AxisKey, val: number): Record<AxisKey, number> {
   const w = normalize(p);
   const v = Math.min(1, Math.max(0, val));
   const others = (["qualityWeight", "costWeight", "timeWeight"] as AxisKey[]).filter((k) => k !== axis);
@@ -59,7 +62,7 @@ function rebalance(p: GoldenTrianglePreference, axis: AxisKey, val: number): Gol
   } else {
     others.forEach((k) => (out[k] = (w[k] / otherSum) * rem));
   }
-  return { preset: "custom", ...out };
+  return out;
 }
 
 function unitToVb(ux: number, uy: number) {
@@ -97,6 +100,14 @@ export function GoldenTriangleControl({
   const balanceColor = `var(${balance.token})`;
   const triStroke = `color-mix(in srgb, ${balanceColor} 45%, var(--dpf-border-strong))`;
 
+  // Snap-aware commit: a posture that lands clearly on a preset's region becomes
+  // that preset (so dragging the dot into a corner reads like clicking the preset
+  // button — same label + description), otherwise it stays a custom fine-tune.
+  function emit(next: Record<AxisKey, number>) {
+    const preset = snapToPreset(next);
+    onChange(preset ? preferenceFromPreset(preset) : { preset: "custom", ...next });
+  }
+
   function setFromEvent(clientX: number, clientY: number) {
     const svg = svgRef.current;
     if (!svg) return;
@@ -106,15 +117,15 @@ export function GoldenTriangleControl({
     const vy = ((clientY - rect.top) / rect.height) * 100;
     const ux = (vx - INSET) / SPAN;
     const uy = (vy - INSET) / SPAN;
-    onChange({ preset: "custom", ...pointToWeights(ux, uy) });
+    emit(pointToWeights(ux, uy));
   }
 
   function onThumbKeyDown(e: ReactKeyboardEvent) {
     let handled = true;
-    if (e.key === "ArrowLeft") onChange(rebalance(value, "costWeight", w.costWeight + STEP));
-    else if (e.key === "ArrowRight") onChange(rebalance(value, "timeWeight", w.timeWeight + STEP));
-    else if (e.key === "ArrowUp") onChange(rebalance(value, "qualityWeight", w.qualityWeight + STEP));
-    else if (e.key === "ArrowDown") onChange(rebalance(value, "qualityWeight", w.qualityWeight - STEP));
+    if (e.key === "ArrowLeft") emit(rebalance(value, "costWeight", w.costWeight + STEP));
+    else if (e.key === "ArrowRight") emit(rebalance(value, "timeWeight", w.timeWeight + STEP));
+    else if (e.key === "ArrowUp") emit(rebalance(value, "qualityWeight", w.qualityWeight + STEP));
+    else if (e.key === "ArrowDown") emit(rebalance(value, "qualityWeight", w.qualityWeight - STEP));
     else if (e.key === "Home") onChange(preferenceFromPreset("balanced"));
     else handled = false;
     if (handled) e.preventDefault();
@@ -205,7 +216,7 @@ export function GoldenTriangleControl({
                 onChange={(e) => {
                   const raw = Number(e.target.value);
                   if (!Number.isFinite(raw)) return;
-                  onChange(rebalance(value, key, raw / 100));
+                  emit(rebalance(value, key, raw / 100));
                 }}
                 className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-[13px] text-[var(--dpf-text)]"
                 aria-label={`${label} priority percent`}

@@ -10,8 +10,42 @@ import {
   plainSummary,
   pointToWeights,
   preferenceFromPreset,
+  snapToPreset,
   weightsToPoint,
 } from "./posture-display";
+
+describe("snapToPreset — corners resolve to their preset, not Custom", () => {
+  it("snaps each extreme corner to that corner's preset", () => {
+    expect(snapToPreset({ qualityWeight: 1, costWeight: 0, timeWeight: 0 })).toBe("assured");
+    expect(snapToPreset({ qualityWeight: 0, costWeight: 1, timeWeight: 0 })).toBe("frugal");
+    expect(snapToPreset({ qualityWeight: 0, costWeight: 0, timeWeight: 1 })).toBe("fast");
+  });
+
+  it("snaps each preset's own weights back to itself (consistent with the buttons)", () => {
+    for (const preset of ["fast", "balanced", "assured", "frugal"] as const) {
+      const [q, c, t] = PRESET_WEIGHTS[preset];
+      expect(snapToPreset({ qualityWeight: q, costWeight: c, timeWeight: t })).toBe(preset);
+    }
+  });
+
+  it("snaps a near-centroid posture to Balanced", () => {
+    expect(snapToPreset({ qualityWeight: 0.34, costWeight: 0.33, timeWeight: 0.33 })).toBe("balanced");
+    expect(snapToPreset({ qualityWeight: 0.36, costWeight: 0.32, timeWeight: 0.32 })).toBe("balanced");
+  });
+
+  it("leaves a genuine in-between (a mild lean) as a custom fine-tune (null)", () => {
+    expect(snapToPreset({ qualityWeight: 0.5, costWeight: 0.3, timeWeight: 0.2 })).toBeNull();
+    expect(snapToPreset({ qualityWeight: 0.45, costWeight: 0.45, timeWeight: 0.1 })).toBeNull();
+  });
+
+  it("a corner reached by dragging (point→weights) snaps to the preset", () => {
+    // The Quality vertex is the unit point (0.5, 0); dragging the dot there should
+    // read as Assured — the same as clicking the Assured button.
+    expect(snapToPreset(pointToWeights(0.5, 0))).toBe("assured");
+    expect(snapToPreset(pointToWeights(0, 1))).toBe("frugal"); // Cost vertex
+    expect(snapToPreset(pointToWeights(1, 1))).toBe("fast"); // Time vertex
+  });
+});
 
 describe("posture-display geometry", () => {
   it("weights -> point -> weights round-trips for every preset", () => {
