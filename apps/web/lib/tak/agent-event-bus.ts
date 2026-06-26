@@ -5,6 +5,9 @@
 import type { TaskState } from "@/lib/tak/task-states";
 
 export type AgentEvent =
+  // Attention Surface (EP-ATTENTION-SURFACE, BI-094A124F): a new pending-human
+  // item appeared. Broadcast system-wide so the "Needs you" inbox refreshes live.
+  | { type: "attention:created"; source: string; itemKey: string; userId: string; title: string; deepLink: string; riskClass?: string }
   | { type: "task:status"; taskId: string; contextId: string | null; state: TaskState; sourceEvent?: string; message?: string; progress?: { stage?: string; percent?: number } }
   | { type: "task:artifact"; taskId: string; contextId: string | null; artifactId: string; name: string; artifactType: string; sourceEvent?: string; message?: string }
   | { type: "tool:start"; tool: string; iteration: number }
