@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   deriveGroupingKey,
+  detectionFamily,
+  detectionRowToGroupingInput,
   groupDetectionsIntoCases,
   maxSeverity,
   type DetectionForGrouping,
+  type DetectionRowForGrouping,
 } from "./case-grouping";
 
 const T0 = new Date("2026-06-25T12:00:00.000Z");
@@ -75,5 +78,56 @@ describe("groupDetectionsIntoCases", () => {
     expect(forward.title).toBe("b");
     expect(reverse.title).toBe("b");
     expect(forward.detectionKeys.sort()).toEqual(reverse.detectionKeys.sort());
+  });
+});
+
+describe("detectionFamily / detectionRowToGroupingInput (the sweep bridge)", () => {
+  function row(overrides: Partial<DetectionRowForGrouping>): DetectionRowForGrouping {
+    return {
+      detectionKey: "dpf-kernel:windows-audit-log-cleared:e1",
+      scopeKey: "organization:internal",
+      customerAccountId: null,
+      customerSiteId: null,
+      severity: "high",
+      firstSeenAt: T0,
+      lastSeenAt: T0,
+      enrichment: {
+        ruleKey: "dpf-kernel:windows-audit-log-cleared",
+        ruleName: "Windows audit log cleared",
+        mitreTechniques: ["T1070.001"],
+        entityKey: "HOST-1",
+      },
+      ...overrides,
+    };
+  }
+
+  it("families by primary ATT&CK technique, else rule key", () => {
+    expect(detectionFamily({ mitreTechniques: ["T1110"], ruleKey: "r" })).toBe("attack:T1110");
+    expect(detectionFamily({ ruleKey: "dpf-kernel:x" })).toBe("rule:dpf-kernel:x");
+    expect(detectionFamily({})).toBe("uncategorized");
+  });
+
+  it("maps a detection row to a grouping input with entity + family in the key", () => {
+    const g = detectionRowToGroupingInput(row({}));
+    expect(g.groupingKey).toBe("organization:internal|HOST-1|attack:T1070.001");
+    expect(g.title).toBe("Windows audit log cleared — HOST-1");
+    expect(g.severity).toBe("high");
+    expect(g.detectionKey).toBe("dpf-kernel:windows-audit-log-cleared:e1");
+  });
+
+  it("falls back to entity 'unknown' (group by scope+family) when entity is absent", () => {
+    const g = detectionRowToGroupingInput(row({ enrichment: { ruleKey: "r", mitreTechniques: ["T1098"] } }));
+    expect(g.groupingKey).toBe("organization:internal|unknown|attack:T1098");
+    expect(g.title).toBe("r"); // no entity qualifier
+  });
+
+  it("two same-host same-technique detections collapse to one case via the bridge", () => {
+    const inputs = [
+      detectionRowToGroupingInput(row({ detectionKey: "k:e1" })),
+      detectionRowToGroupingInput(row({ detectionKey: "k:e2" })),
+    ];
+    const cases = groupDetectionsIntoCases(inputs);
+    expect(cases).toHaveLength(1);
+    expect(cases[0]!.detectionKeys).toEqual(["k:e1", "k:e2"]);
   });
 });
