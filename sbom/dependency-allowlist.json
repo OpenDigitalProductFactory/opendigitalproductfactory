@@ -963,16 +963,6 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
-    "react-force-graph-2d": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "apps/web"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
     "react-markdown": {
       "added": "2026-06-21",
       "workspaces": [
