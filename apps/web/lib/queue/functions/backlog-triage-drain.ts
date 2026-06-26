@@ -48,7 +48,18 @@ export const backlogTriageDrain = inngest.createFunction(
             where: { status: "triaging" },
             orderBy: { createdAt: "asc" },
             take: MAX_PER_RUN,
-            select: { itemId: true, title: true, body: true, type: true, workType: true },
+            select: {
+              itemId: true,
+              title: true,
+              body: true,
+              type: true,
+              workType: true,
+              // Author intent: load the existing size + proposed outcome so the
+              // drain preserves a deliberate effortSize instead of overwriting it
+              // with a blind re-estimate (BI-TRIAGE-SIZE-OVERWRITE).
+              effortSize: true,
+              proposedOutcome: true,
+            },
           }),
 
         decide: async (item) => {

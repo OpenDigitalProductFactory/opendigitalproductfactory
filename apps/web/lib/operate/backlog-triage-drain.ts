@@ -18,6 +18,12 @@
 //     decisions, and parse failures are LEFT in the triaging queue for a human
 //     (or the Scrum Master on request) to decide. An autonomous job must never
 //     silently bury work.
+//   - Author intent is preserved (BI-TRIAGE-SIZE-OVERWRITE): when an item
+//     already carries a deliberate, valid effortSize, the drain keeps THAT size
+//     on auto-build and never overwrites it with the LLM's blind re-estimate
+//     (which regresses to "medium"). The LLM only sizes items captured with no
+//     size — the autonomous-capture path this drain was originally built for.
+//     The LLM still makes the build-vs-needs-human call in both cases.
 //
 // The Inngest wrapper (apps/web/lib/queue/functions/backlog-triage-drain.ts)
 // supplies prisma + the LLM caller; this module stays pure and unit-testable.
@@ -31,6 +37,14 @@ export type TriageCandidate = {
   body?: string | null;
   type?: string | null;
   workType?: string | null;
+  /**
+   * Author-provided effort size, if any. Preserved by the drain — a valid value
+   * here is used verbatim on auto-build and is never overwritten by the LLM's
+   * re-estimate (BI-TRIAGE-SIZE-OVERWRITE).
+   */
+  effortSize?: string | null;
+  /** Author's advisory proposed outcome; passed to the LLM as a non-binding prior. */
+  proposedOutcome?: string | null;
 };
 
 export type TriageDecision = {
@@ -56,12 +70,25 @@ export const TRIAGE_DRAIN_SYSTEM_PROMPT =
 /** Build the per-item decision prompt. */
 export function buildTriageDrainPrompt(item: TriageCandidate): string {
   const body = (item.body ?? "").toString().slice(0, 1200);
+
+  // Author-provided priors (non-binding). They inform the build-vs-needs-human
+  // judgment; the author's effortSize is preserved by the platform, so the model
+  // does not need to re-estimate size when one is shown.
+  const priors: string[] = [];
+  if (typeof item.effortSize === "string" && item.effortSize.trim()) {
+    priors.push(`AUTHOR_EFFORT_SIZE (prior, non-binding, preserved by the platform): ${item.effortSize.trim()}`);
+  }
+  if (typeof item.proposedOutcome === "string" && item.proposedOutcome.trim()) {
+    priors.push(`AUTHOR_PROPOSED_OUTCOME (prior, non-binding): ${item.proposedOutcome.trim()}`);
+  }
+  const priorBlock = priors.length ? `${priors.join("\n")}\n` : "";
+
   return `Decide how to triage this backlog item.
 
 ITEM: ${item.itemId}
 TITLE: ${item.title}
 TYPE: ${item.type ?? "unknown"} / ${item.workType ?? "unspecified"}
-${body ? `DETAIL:\n${body}\n` : ""}
+${priorBlock}${body ? `DETAIL:\n${body}\n` : ""}
 Return ONLY this JSON (no prose, no fences):
 {
   "outcome": "build" | "needs-human",
@@ -70,7 +97,7 @@ Return ONLY this JSON (no prose, no fences):
   "rationale": "<one concise sentence>"
 }
 
-Choose "build" ONLY when the item is clearly real, scoped engineering/product work and you can size it confidently. For ANY noise, duplicate, stale/optional item, vague request, or uncertainty, choose "needs-human" (a human will decide defer/discard/duplicate). effortSize is required when outcome is "build".`;
+Choose "build" ONLY when the item is clearly real, scoped engineering/product work and you can size it confidently. For ANY noise, duplicate, stale/optional item, vague request, or uncertainty, choose "needs-human" (a human will decide defer/discard/duplicate). effortSize is required when outcome is "build" — but when an AUTHOR_EFFORT_SIZE prior is shown, treat it as the author's deliberate estimate (the platform keeps it; do not re-estimate the size) and focus your judgment on build vs needs-human.`;
 }
 
 /** Parse the model's JSON decision; tolerant of markdown fences. Returns null on failure. */
@@ -96,16 +123,39 @@ export function parseTriageDecision(content: string): TriageDecision | null {
   };
 }
 
+/** The author's pre-existing effortSize when it is a valid size; otherwise null. */
+export function authorEffortSize(item?: TriageCandidate | null): string | null {
+  const size = item?.effortSize;
+  return typeof size === "string" && VALID_EFFORT_SIZES.has(size) ? size : null;
+}
+
 /**
  * The auto-apply gate. Returns the effortSize to apply when the decision is a
- * confident, well-formed BUILD; otherwise null (leave for a human).
+ * confident BUILD; otherwise null (leave for a human).
+ *
+ * Author intent is preserved (BI-TRIAGE-SIZE-OVERWRITE): when the item already
+ * carries a valid author-provided effortSize, THAT size is returned and the
+ * LLM's blind re-estimate is ignored — the drain must never overwrite a
+ * deliberate author size. The LLM-decided size is only a fallback for items
+ * captured with no size (the autonomous-capture path), which still require a
+ * size to enter the build pool. The author size never bypasses the build /
+ * confidence gate: a needs-human or low-confidence decision still defers.
  */
-export function autoApplyBuildSize(decision: TriageDecision | null): string | null {
+export function autoApplyBuildSize(
+  decision: TriageDecision | null,
+  item?: TriageCandidate | null,
+): string | null {
   if (!decision) return null;
   if (decision.outcome !== "build") return null;
-  if (typeof decision.effortSize !== "string" || !VALID_EFFORT_SIZES.has(decision.effortSize)) return null;
   if ((decision.confidence ?? 0) < AUTO_TRIAGE_CONFIDENCE_THRESHOLD) return null;
-  return decision.effortSize;
+  // Preserve a valid author-provided size; never clobber it with a re-estimate.
+  const authored = authorEffortSize(item);
+  if (authored) return authored;
+  // Autonomous-capture fallback: items filed with no size get the LLM's size.
+  if (typeof decision.effortSize === "string" && VALID_EFFORT_SIZES.has(decision.effortSize)) {
+    return decision.effortSize;
+  }
+  return null;
 }
 
 export type TriageDrainDeps = {
@@ -136,7 +186,7 @@ export async function runBacklogTriageDrain(deps: TriageDrainDeps): Promise<Tria
     } catch {
       decision = null;
     }
-    const size = autoApplyBuildSize(decision);
+    const size = autoApplyBuildSize(decision, item);
     if (size) {
       try {
         await deps.applyBuild(
