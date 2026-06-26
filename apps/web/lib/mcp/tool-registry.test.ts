@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { DELIBERATION_TOOLS } from "@/lib/mcp-tools-deliberation";
@@ -11,6 +15,9 @@ import { workCapsulesPack } from "./packs/work-capsules-pack";
 import { workbooksPack } from "./packs/workbooks-pack";
 import { feedbackPack } from "./packs/feedback-pack";
 import { composeToolPacks } from "./tool-registry";
+// The inline-case ratchet's extractor lives in the CI guard (scripts/), kept as
+// the single source of truth so this test and the guard can never disagree.
+import { extractInlineCaseNames } from "../../../../scripts/check-mcp-tool-pack.mjs";
 
 // BI-ARCH-TOOLPACKS parity guard: the first extracted pack must stay
 // behaviourally identical to the inline registration it replaced.
@@ -171,5 +178,44 @@ describe("composeToolPacks", () => {
     expect(() => composeToolPacks([deliberationSiemPack, deliberationSiemPack])).toThrow(
       /Duplicate tool/,
     );
+  });
+});
+
+// BI-OPT-RATCHETS: inline executeTool `case` arms in mcp-tools.ts are a frozen
+// set that may only SHRINK. New MCP tools must land in a pack, not the switch.
+// The CI guard (scripts/check-mcp-tool-pack.mjs) enforces this against
+// scripts/mcp-tool-pack-baseline.json; this test asserts the same invariant in
+// the unit suite so it fails fast in the same run as the pack tests above.
+describe("executeTool inline-case ratchet", () => {
+  // tool-registry.test.ts -> mcp -> lib -> web -> apps -> <repo root>.
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+  const mcpToolsSource = readFileSync(join(repoRoot, "apps/web/lib/mcp-tools.ts"), "utf8");
+  const baseline: string[] = JSON.parse(
+    readFileSync(join(repoRoot, "scripts/mcp-tool-pack-baseline.json"), "utf8"),
+  );
+  const inlineCases = extractInlineCaseNames(mcpToolsSource);
+
+  it("locates the switch body and extracts a plausible number of inline cases", () => {
+    // Guards against a refactor that silently breaks the extractor (e.g. the
+    // switch is renamed) and makes the ratchet vacuously pass.
+    expect(inlineCases.length).toBeGreaterThan(100);
+    expect(new Set(inlineCases).size).toBe(inlineCases.length); // no duplicate arms
+  });
+
+  it("adds no inline case beyond the frozen baseline (new tools go in a pack)", () => {
+    const baselineSet = new Set(baseline);
+    const added = inlineCases.filter((name) => !baselineSet.has(name));
+    expect(added, `new inline executeTool cases — register these in a pack instead: ${added.join(", ")}`).toEqual(
+      [],
+    );
+  });
+
+  it("keeps the baseline in sync — no stale entries once a tool is extracted", () => {
+    const currentSet = new Set(inlineCases);
+    const removed = baseline.filter((name) => !currentSet.has(name));
+    expect(
+      removed,
+      `baseline lists tools no longer inline — run \`node scripts/check-mcp-tool-pack.mjs --update\`: ${removed.join(", ")}`,
+    ).toEqual([]);
   });
 });

@@ -97,3 +97,24 @@ The remaining tools have **inline handler bodies with real logic** (not thin del
 clusters are `backlog` + `build-evidence`, `sandbox`, then `wiki/knowledge`: extract each
 handler body into a domain module first, then pack it the same parity-first way, keeping the
 existing MCP-route, grant-filter, and `mcp-governed-execute` tests green.
+
+## Enforcement — the inline-case ratchet (BI-OPT-RATCHETS)
+
+Migration discipline only holds if nothing can quietly add a **new** inline `case` while the
+extraction is in flight. [`scripts/check-mcp-tool-pack.mjs`](../../scripts/check-mcp-tool-pack.mjs)
+is that ratchet: it extracts the set of tool names dispatched by the top-level `case` arms of
+`executeTool`'s `switch (toolName)` and compares it against the frozen
+[`scripts/mcp-tool-pack-baseline.json`](../../scripts/mcp-tool-pack-baseline.json). The set may
+only **shrink** — a new inline case fails CI (`MCP Tool Pack Guard` in `ci.yml`), so a new MCP
+tool must register in a pack, not the switch. Extracting a tool removes its case; re-run
+`node scripts/check-mcp-tool-pack.mjs --update` in the same PR to retighten the baseline. The
+extractor is exported and reused by `tool-registry.test.ts` (the unit suite asserts the same
+no-new-case invariant), so the guard and the test can never disagree. The baseline froze at the
+231 inline cases that remained after the five packs above.
+
+This composes with a companion **module-size ratchet** from the same BI
+([`scripts/check-module-size.mjs`](../../scripts/check-module-size.mjs) + `Module Size Guard`):
+new files are held to an 800-LOC ceiling (1000 hard cap) and the already-large files are frozen
+in [`scripts/module-size-baseline.json`](../../scripts/module-size-baseline.json) and may only
+shrink. No size guard existed before, which is how this very module grew past 15k LOC unnoticed —
+the two ratchets together keep the consolidation gains from being silently undone.
