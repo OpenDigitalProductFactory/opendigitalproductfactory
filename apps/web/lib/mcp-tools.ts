@@ -20,8 +20,6 @@ import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
 import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
-import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
-import { escalateReportUpstream } from "@/lib/actions/feedback-escalation";
 import {
   MARKETING_CHANNELS,
   MARKETING_REVIEW_CADENCE,
@@ -43,6 +41,7 @@ import { deliberationSiemPack } from "@/lib/mcp/packs/deliberation-siem-pack";
 import { runtimeCoordinationPack } from "@/lib/mcp/packs/runtime-coordination-pack";
 import { workCapsulesPack } from "@/lib/mcp/packs/work-capsules-pack";
 import { workbooksPack } from "@/lib/mcp/packs/workbooks-pack";
+import { feedbackPack } from "@/lib/mcp/packs/feedback-pack";
 import { composeToolPacks } from "@/lib/mcp/tool-registry";
 import {
   createLicenseReadinessIssue,
@@ -432,7 +431,7 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 
 // Scoped tool packs compose into the registry; mcp-tools.ts is the thin layer
 // over them (definitions spread into PLATFORM_TOOLS below; dispatch in executeTool).
-const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack]);
+const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack]);
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,
@@ -1044,36 +1043,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
-  },
-  {
-    name: "report_quality_issue",
-    description: "Report a bug, suggestion, or question about the platform. Available to ALL employees regardless of role — anyone can report a problem.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        type: { type: "string", enum: ["runtime_error", "user_report", "feedback"], description: "Issue type" },
-        title: { type: "string", description: "Short summary" },
-        description: { type: "string", description: "Detailed description" },
-        severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
-      },
-      required: ["type", "title"],
-    },
-    requiredCapability: null,
-    sideEffect: true,
-  },
-  {
-    name: "escalate_feedback_upstream",
-    description:
-      "Send a previously-captured platform issue report to the upstream project team as a GitHub issue, if this install has opted in to upstream feedback. Use after a user asks to share their report/feedback with the platform maintainers. Submitted under the install's anonymous handle with machine names redacted; respects opt-in consent, fork_only, and the contributions pause. Idempotent per report.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        reportId: { type: "string", description: "The PlatformIssueReport id (e.g. PIR-AB12C) to escalate." },
-      },
-      required: ["reportId"],
-    },
-    requiredCapability: null,
-    sideEffect: true,
   },
   {
     name: "list_customer_accounts",
@@ -1843,22 +1812,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
     buildPhases: ["ideate"],
-  },
-  {
-    name: "register_tech_debt",
-    description: "Log a technical shortcut as a refactoring backlog item.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        title: { type: "string" },
-        description: { type: "string" },
-        severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
-      },
-      required: ["title", "description"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: true,
   },
   // ─── Build Notes Tool ───────────────────────────────────────────────────
   {
@@ -7008,44 +6961,6 @@ export async function executeTool(
       };
     }
 
-    case "report_quality_issue": {
-      const { reportId } = await createPlatformIssueReport({
-        type: String(params["type"] ?? "user_report"),
-        title: String(params["title"] ?? "Untitled"),
-        source: "ai_assisted",
-        ...(typeof params["description"] === "string"
-          ? { description: params["description"] }
-          : {}),
-        severity: String(params["severity"] ?? "medium"),
-        reportedById: userId,
-        ...(typeof context?.routeContext === "string"
-          ? { routeContext: context.routeContext }
-          : {}),
-      });
-      return { success: true, entityId: reportId, message: `Filed report ${reportId}` };
-    }
-
-    case "escalate_feedback_upstream": {
-      const reportId = String(params["reportId"] ?? "").trim();
-      if (!reportId) {
-        return { success: false, error: "reportId is required", message: "reportId is required" };
-      }
-      const result = await escalateReportUpstream({ reportId });
-      if (result.ok) {
-        return {
-          success: true,
-          ...(result.status === "filed" || result.status === "already-filed"
-            ? { entityId: String(result.issueNumber ?? reportId) }
-            : {}),
-          message:
-            result.status === "already-filed"
-              ? `Report ${reportId} was already sent to the project team${result.url ? ` (${result.url})` : ""}.`
-              : `Sent ${reportId} to the project team${result.url ? ` (${result.url})` : ""}.`,
-        };
-      }
-      return { success: false, error: result.reason, message: result.reason };
-    }
-
     case "search_public_web": {
       const query = String(params["query"] ?? "").trim();
       let results: Awaited<ReturnType<typeof searchPublicWeb>>;
@@ -7581,16 +7496,6 @@ export async function executeTool(
         message: `Reusability: ${userScope} — ${domainEntities.length} parameterizable concept(s), contribution readiness: ${contributionReadiness}.${primitiveHint}`,
         data: analysis as unknown as Record<string, unknown>,
       };
-    }
-
-    case "register_tech_debt": {
-      const { createTechDebtItem } = await import("@/lib/decomposition");
-      const item = createTechDebtItem({ title: String(params["title"] ?? ""), description: String(params["description"] ?? ""), severity: String(params["severity"] ?? "medium") });
-      const refactorEpic = await prisma.epic.findUnique({ where: { epicId: "EP-REFACTOR-001" } });
-      await prisma.backlogItem.create({
-        data: { itemId: item.itemId, title: item.title, type: item.type, status: item.status, body: item.body, priority: item.priority, submittedById: userId, agentId: context?.agentId ?? null, ...(refactorEpic ? { epicId: refactorEpic.id } : {}) },
-      });
-      return { success: true, entityId: item.itemId, message: `Tech debt logged: ${item.itemId}` };
     }
 
     case "save_build_notes": {

@@ -15,14 +15,15 @@
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 
 /**
- * A tool handler, with the context shape common to every dispatch site
- * (`routeContext` + `threadId`). Handlers may accept additional optional context
- * fields; this is the structural minimum the registry passes through.
+ * A tool handler, with the context fields the dispatch site (executeTool) passes
+ * through from its `ToolExecutionContext` — `routeContext`, `threadId`, and the
+ * acting coworker's `agentId`. The registry forwards the full runtime context;
+ * this is the structural subset packs may rely on. Handlers may ignore any of it.
  */
 export type ToolPackHandler = (
   params: Record<string, unknown>,
   userId: string,
-  context?: { routeContext?: string; threadId?: string },
+  context?: { routeContext?: string; threadId?: string; agentId?: string },
 ) => Promise<ToolResult>;
 
 export type ToolPack = {
