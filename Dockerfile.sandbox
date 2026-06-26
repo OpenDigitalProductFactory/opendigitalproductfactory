@@ -51,9 +51,19 @@ RUN curl -fsSL https://x.ai/cli/install.sh | GROK_BIN_DIR=/usr/local/bin bash \
 # perms trap that bit grok). curl/libstdc++/libgcc are already installed above.
 # Verified live on node:24-alpine: v1.17.4 baseline-musl runs as both users.
 ARG OPENCODE_VERSION=1.17.4
+# Select the arch-matched musl tarball. buildx sets TARGETARCH per matrix leg;
+# amd64 keeps the `baseline` (no-AVX2) variant for broad x86 hardware, arm64
+# uses the plain musl build — upstream ships no arm64 `baseline` (arm64 has no
+# equivalent microarch tier). Hardcoding x64 here broke the linux/arm64 image.
+ARG TARGETARCH
 RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) OPENCODE_ASSET="opencode-linux-x64-baseline-musl.tar.gz" ;; \
+      arm64) OPENCODE_ASSET="opencode-linux-arm64-musl.tar.gz" ;; \
+      *) echo "unsupported TARGETARCH for opencode: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
     curl -fsSL -o /tmp/opencode.tar.gz \
-      "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64-baseline-musl.tar.gz"; \
+      "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/${OPENCODE_ASSET}"; \
     tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin; \
     rm /tmp/opencode.tar.gz; \
     chmod 755 /usr/local/bin/opencode; \

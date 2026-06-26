@@ -8,6 +8,12 @@
     // either module style, so this only changes what tsc emits to dist/.
     "module": "CommonJS",
     "moduleResolution": "Node",
+    // TS5107: 'Node' (node10) module resolution is deprecated and now errors
+    // under the current TypeScript. We keep CommonJS + Node resolution on
+    // purpose (see the module note above — it preserves the extensionless
+    // runtime imports), so silence the deprecation rather than migrate. Drop
+    // this when the service moves to node16/nodenext resolution before TS 7.0.
+    "ignoreDeprecations": "6.0",
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
