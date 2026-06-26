@@ -177,6 +177,30 @@ export function deriveRoutingEligibility(input: RoutingEligibilityInput): Routin
 }
 
 /**
+ * The concrete next step an operator should take to make a non-routable provider
+ * routable — the "do this" complement to RoutingEligibility.reason. Returns null
+ * when no operator action applies: already routable, self-recovering (rate
+ * limited), or not a routing target. Pure + total over the states so it is
+ * unit-testable and can render from data already on the admin page.
+ */
+export function recommendedActionFor(eligibility: RoutingEligibility): string | null {
+  switch (eligibility.state) {
+    case "unconfigured":
+      return "Set this provider up to make it available to routing.";
+    case "disabled":
+      return "Enable this provider to allow routing to use it.";
+    case "needs_credentials":
+      return "Connect (or reconnect) this provider's credentials.";
+    case "no_models":
+      return "Run a model sync to discover this provider's models.";
+    case "routable":
+    case "rate_limited":
+    case "not_routable":
+      return null;
+  }
+}
+
+/**
  * Which CLI subscription pool (if any) gates a provider's live availability,
  * grounded in the canonical adapter predicates in `provider-utils.ts`:
  *   - anthropic-sub → claude-cli  (Claude OAuth subscription, routes via `claude -p`)

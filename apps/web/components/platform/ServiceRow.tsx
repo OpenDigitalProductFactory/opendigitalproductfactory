@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { ProviderWithCredential, ProviderModelSummary } from "@/lib/ai-provider-types";
-import type { RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
+import { recommendedActionFor, type RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
 import { buildProviderCostView } from "@/lib/inference/ai-provider-cost-view";
 import { DataSourceBadge } from "@/components/ui/DataSourceBadge";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
@@ -140,6 +140,12 @@ export function ServiceRow({ pw, modelSummary, eligibility }: Props) {
   // The status dot mirrors the eligibility badge intent so a quick scan down the
   // left edge of the list reads the same yes/no as the badge text.
   const statusColor = intentStyle(resolveIntent("routingEligibility", eligibility.state)).fg;
+  // The concrete next step for a blocked provider, surfaced in the eligibility
+  // tooltip so the operator sees what to do, not just the status (null = no action).
+  const recommendedAction = recommendedActionFor(eligibility);
+  const eligibilityTitle = recommendedAction
+    ? `${eligibility.reason} — Recommended: ${recommendedAction}`
+    : eligibility.reason;
   const typeLabel   = provider.endpointType === "service" ? "MCP" : "LLM";
   const costView = buildProviderCostView({ provider, financeProfile: null, internalUsage: null });
 
@@ -169,7 +175,7 @@ export function ServiceRow({ pw, modelSummary, eligibility }: Props) {
       >
         {/* Status dot — colored by routing eligibility */}
         <span
-          title={eligibility.reason}
+          title={eligibilityTitle}
           style={{
             width: 7,
             height: 7,
@@ -196,7 +202,7 @@ export function ServiceRow({ pw, modelSummary, eligibility }: Props) {
         </span>
 
         {/* Routing eligibility — the single "can routing use this now?" answer */}
-        <span title={eligibility.reason} style={{ flexShrink: 0, display: "inline-flex" }}>
+        <span title={eligibilityTitle} style={{ flexShrink: 0, display: "inline-flex" }}>
           <StatusBadge
             domain="routingEligibility"
             status={eligibility.state}
