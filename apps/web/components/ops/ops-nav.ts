@@ -20,6 +20,7 @@ export const OPS_NAV_GROUPS: ReadonlyArray<{
       { label: "Changes", href: "/ops/changes" },
       { label: "Promotions", href: "/ops/promotions" },
       { label: "Self-upgrade", href: "/ops/self-upgrade" },
+      { label: "Patches", href: "/ops/patches" },
       { label: "Dev Loop", href: "/ops/dev-loop" },
     ],
   },

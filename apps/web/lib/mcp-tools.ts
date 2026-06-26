@@ -3941,6 +3941,21 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "list_patch_posture",
+    description:
+      "Summarize estate patch posture: open patch findings (vulnerabilities, available updates, end-of-life) across discovered software, ranked by severity and active exploitation (CISA KEV).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        severity: { type: "string", description: "Filter to one severity: critical|high|medium|low|info (optional)" },
+        status: { type: "string", description: "open (default) or all to include resolved (optional)" },
+      },
+      required: [],
+    },
+    requiredCapability: "view_inventory",
+    sideEffect: false,
+  },
+  {
     name: "review_estate_identity",
     description: "Explain what an estate item most likely is, who made it, how confident the identity evidence is, and what still needs review.",
     inputSchema: {
@@ -14150,6 +14165,30 @@ export async function executeTool(
         proposedBy: userId,
       });
       return { success: true, entityId: evalId, message: `Tool evaluation created: ${evalId}. The evaluation pipeline will review this tool for security, architecture fit, compliance, and integration.` };
+    }
+
+    case "list_patch_posture": {
+      const { prisma } = await import("@dpf/db");
+      const { getPatchPosture } = await import("@/lib/patch/patch-posture");
+      const status = params["status"] === "all" ? "all" : "open";
+      const posture = await getPatchPosture(
+        prisma as unknown as Parameters<typeof getPatchPosture>[0],
+        { status, limit: 200 },
+      );
+      const severity = typeof params["severity"] === "string" ? params["severity"] : undefined;
+      const findings = severity
+        ? posture.findings.filter((finding) => finding.policySeverity === severity)
+        : posture.findings;
+      const totals = posture.totals;
+      return {
+        success: true,
+        message: `Estate patch posture: ${totals.findings} open finding(s) across ${totals.hosts} host(s) — ${totals.bySeverity.critical ?? 0} critical, ${totals.bySeverity.high ?? 0} high, ${totals.kev} actively exploited (KEV).`,
+        data: {
+          totals,
+          capped: posture.capped,
+          findings: findings.slice(0, 50),
+        },
+      };
     }
 
     case "summarize_estate_posture": {

@@ -1,7 +1,7 @@
 # Estate Patch Management — P0 implementation plan
 
 - **Date:** 2026-06-25
-- **Status:** Read-only posture pipeline complete (feed → projector → binding → daily sweep wired); posture UX next
+- **Status:** Read-only posture COMPLETE — feed → projector → binding → daily sweep → `/ops/patches` surface. (MCP tool + Attention-Surface routing are optional follow-ups.)
 - **Spec:** `docs/superpowers/specs/2026-06-24-estate-patch-management-design.md`
 - **Epic:** `EP-PATCH-MANAGEMENT`
 - **Backlog:** BI-CAA0043C (version-intel feed), BI-489A8BB4 (assessment projector), BI-676A7960 (identity convergence), BI-020EE402 (posture UX)
@@ -40,8 +40,10 @@ Adapter interfaces + implementations that produce `assessPatchState` inputs, eac
 ### Slice 4 — Identity convergence (BI-676A7960) — gated
 Map the `DiscoveryFingerprint*` subsystem first; decide whether the software-identity spine extends it or lands a focused `CatalogIdentity` + `SoftwarePatchProfile`. Then the reviewable migration for `softwareIdentityId` (rename→`legacy…` + add `catalogIdentityId`, or drop-with-evidence) per the lifecycle-evidence spec §7.4. Runs through Prisma in the sandbox/canonical install, never blind. Until then, slice 3 keys findings on `DiscoveredSoftwareEvidence`/`InventoryEntity` directly.
 
-### Slice 5 — Posture read model + MCP tool + UX (BI-020EE402)
-`list_patch_posture` MCP tool (capped/paginated/provenance-free) and the `/ops/patches` surface composed from report-kit (`StatusBadge`/`DataTable`/`StatCard`), with the "needs you" items routing to the Attention Surface. Carries the UX-Fit attestation.
+### Slice 5 — Posture surface (BI-020EE402)
+- **Read model — LANDED:** `apps/web/lib/patch/patch-posture.ts` (`getPatchPosture`) projects the `patch:*` findings into totals (by severity/kind, KEV count, host count) + a severity/KEV-sorted, capped finding list; db injected for unit testing.
+- **`/ops/patches` surface — LANDED:** `apps/web/app/(shell)/ops/patches/page.tsx` — summary tiles (open findings, critical/high, KEV, affected hosts) + a filterable finding list using report-kit `StatusBadge` (severity colors via `statusColors`); added the **Patches** tab to the Ops nav; route manifest regenerated. Progressive disclosure (derived counts + three plain filters); UX-Fit attested in the commit.
+- **Remaining (optional follow-ups):** a `list_patch_posture` MCP tool (coworker/agent access) and routing critical/KEV items to the Attention Surface "needs you" inbox.
 
 ## Verification
 
