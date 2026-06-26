@@ -55,7 +55,12 @@ export type EdgeNodeScope =
   | "edge:events"
   | "edge:rotate"
   | "edge:adapters"
-  | "discovery:submit";
+  | "discovery:submit"
+  // EP-REMOTE-ACTION P2: the pull dispatch channel. claim = pull the queued
+  // RemoteActions this node may run; report = post results/evidence back. Both
+  // require trustState=trusted (refinement below). Threat model §5 R2.
+  | "edge:actions:claim"
+  | "edge:actions:report";
 
 /**
  * Resolve a Bearer Authorization header to an EdgeNode auth handle.
@@ -133,7 +138,9 @@ export async function resolveEdgeNodeAuth(
     (requiredScope === "discovery:submit" ||
       requiredScope === "edge:metrics" ||
       requiredScope === "edge:events" ||
-      requiredScope === "edge:adapters") &&
+      requiredScope === "edge:adapters" ||
+      requiredScope === "edge:actions:claim" ||
+      requiredScope === "edge:actions:report") &&
     node.trustState !== "trusted"
   ) {
     return {
