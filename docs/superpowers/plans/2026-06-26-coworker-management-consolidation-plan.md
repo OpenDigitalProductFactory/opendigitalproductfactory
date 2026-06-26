@@ -9,7 +9,7 @@ This plan is sequenced so each phase is independently shippable and each closes 
 
 ---
 
-## Phase 1 — Identity & Naming Standard (foundation, low blast radius)
+## Phase 1 — Identity & Naming Standard (foundation, low blast radius) — `BI-83BA1AE2`
 
 *Closes §5 rows: "name shown" (1 displayName, 0 casing variants) and "orphan/hardcoded references" (→0).*
 
@@ -21,7 +21,7 @@ This plan is sequenced so each phase is independently shippable and each closes 
 
 *Verification:* unit tests on the lint + slug/displayName normalizers; live click-through showing one consistent name per coworker across surfaces.
 
-## Phase 2 — Editable coworker record
+## Phase 2 — Editable coworker record — `BI-37065CA2`
 
 *Closes §5 rows: edit prompt / edit skills/tools "on-record, ≤2 clicks".*
 
@@ -31,7 +31,7 @@ This plan is sequenced so each phase is independently shippable and each closes 
 
 *Verification:* RTL tests (jsdom) on the editable tabs; live grant/revoke + prompt-edit happy path on the canonical install.
 
-## Phase 3 — Golden-Triangle central default + per-coworker override (and wire it)
+## Phase 3 — Golden-Triangle central default + per-coworker override (and wire it) — `BI-289A063E`
 
 *Closes §5 rows: edit priority on-record; set Cost/Quality/Time for whole workforce from 1 surface.*
 
@@ -41,7 +41,7 @@ This plan is sequenced so each phase is independently shippable and each closes 
 
 *Verification:* unit tests proving cold-start byte-identical when no posture set; live test that a central change alters a coworker's dispatched budgetClass.
 
-## Phase 4 — Surface consolidation + workforce summary
+## Phase 4 — Surface consolidation + workforce summary — `BI-78054AC6`
 
 *Closes §5 rows: find ≤2 clicks; full detail on 1 surface.*
 
