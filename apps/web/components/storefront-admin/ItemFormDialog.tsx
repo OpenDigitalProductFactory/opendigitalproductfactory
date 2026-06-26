@@ -484,7 +484,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
   return (
     <label className="block">
       <span className="text-xs text-[var(--dpf-muted)] mb-1 block">
-        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+        {label}{required && <span className="text-[var(--dpf-error)] ml-0.5">*</span>}
       </span>
       {children}
     </label>
