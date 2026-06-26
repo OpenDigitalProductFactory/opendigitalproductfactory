@@ -23,10 +23,16 @@
 //     exists; the provider must be declared).
 
 import type { AssignedTask, SpecialistRole } from "./task-dependency-graph";
+import {
+  buildSpecialistInstructions,
+  buildSpecialistTaskPrompt,
+  ensureSandboxNodeUser,
+  runSandboxAgentCli,
+  writeSandboxFile,
+} from "./sandbox/agent-cli-runtime";
 import { getOllamaBaseUrl } from "@/lib/inference/ollama-url";
 import { getServedContextTokens } from "@/lib/inference/dmr-runtime-config";
 import { NON_CHAT_MODEL_RE, isEmbeddingModelId } from "@/lib/inference/local-model-policy";
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
@@ -262,73 +268,26 @@ export function buildOpencodeConfig(sandboxBaseUrl: string, model: string): stri
   });
 }
 
-/**
- * Ensure /workspace is writable by the node user and git is configured.
- * Mirrors the prep done for the other CLI dispatchers.
- */
-async function ensureSandboxNodeUser(containerId: string): Promise<void> {
-  const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
-  await execAsync(
-    `docker exec ${containerId} sh -c "chown -R node:node /workspace && su -s /bin/sh node -c 'git config --global user.email sandbox@dpf.local && git config --global user.name DPF-Sandbox' 2>/dev/null || true"`,
-    { timeout: 15_000 },
-  );
-}
-
 export function buildOpencodeInstructions(
   role: SpecialistRole,
   buildContext: string,
   priorResults?: string,
 ): string {
-  const roleInstructions: Record<SpecialistRole, string> = {
-    "data-architect": `You are a data architect working on a Prisma schema.
-Key files:
-- Schema: packages/db/prisma/schema.prisma
-- Validate with: pnpm --filter @dpf/db exec prisma validate
-- After changes: pnpm --filter @dpf/db exec prisma migrate dev --name <descriptive_name>
-- Then: pnpm --filter @dpf/db exec prisma generate
-- Enums use LOWERCASE values. Multi-word statuses use hyphens: "in-progress" not "in_progress".
-- Every foreign key field (xxxId) needs @@index.
-- Relations need inverse on BOTH sides.`,
-    "software-engineer": `You are a software engineer building Next.js server actions and API routes.
-Key patterns:
-- Server actions: apps/web/lib/actions/<feature>.ts — "use server" directive, prisma queries
-- API routes: apps/web/app/api/<feature>/route.ts — GET/POST/PATCH/DELETE handlers
-- Always read an existing similar file first to match patterns.
-- Typecheck with: pnpm exec tsc --noEmit`,
-    "frontend-engineer": `You are a frontend engineer building Next.js pages and React components.
-Key patterns:
-- Pages: apps/web/app/(shell)/<feature>/page.tsx — server components with prisma queries
-- Components: apps/web/components/<feature>/ — client components with "use client"
-- Use Tailwind CSS. Match existing design patterns.
-- Read an existing page first to understand the layout structure.
-- Typecheck with: pnpm exec tsc --noEmit`,
-    "qa-engineer": `You are a QA engineer verifying the build.
-- Run tests: pnpm exec vitest run --reporter=verbose
-- Run typecheck: pnpm exec tsc --noEmit
-- Check for runtime errors in the build output
-- Report specific failures with file paths and line numbers`,
-  };
-
-  const parts = [
-    roleInstructions[role] || "You are a helpful AI coding agent working inside a DPF monorepo.",
-    "",
-    "PROJECT CONTEXT:",
-    buildContext.slice(0, 3000),
-  ];
-  if (priorResults) {
-    parts.push("", "RESULTS FROM PRIOR TASKS:", priorResults.slice(0, 2000));
-  }
-  // DPF BUILD DISCIPLINE — per AGENTS.md §7 Subagent Dispatch (parity with other CLIs)
-  parts.push(
-    "",
-    "DPF BUILD DISCIPLINE (MANDATORY):",
-    "- GROUND DOMAIN FACTS IN THE CODEBASE — NEVER INVENT a platform convention: an identifier/prefix format, taxonomy, enum value, naming pattern, or API shape. When a task (or the design) references 'platform conventions', 'the knowledge base', or 'the canonical taxonomy' for a fact you don't have, FIND the real one before writing code — grep the repo for actual usage (existing identifiers, enums, similar utilities) and match it EXACTLY. Example: before classifying/parsing IDs, grep for real ones (e.g. `grep -rohE \"\\b(BI|EP|FB|WC)-[0-9A-F]+\" apps packages | sort -u | head`) instead of assuming a format. A plausible-but-wrong convention is a defect; if you genuinely cannot find the fact, say so in your output rather than guessing.",
-    "- For ANY TypeScript work: run `pnpm --filter web typecheck` (or `pnpm exec tsc --noEmit`) and fix errors before finishing.",
-    "- For final-task-in-epic or any UI change: ALSO run `cd apps/web && npx next build` and fix errors.",
-    "- UI work MUST follow Theme-Aware Styling: ONLY use CSS custom properties (`text-[var(--dpf-text)]`, `bg-[var(--dpf-surface-1)]`, etc.). NEVER hardcode colors, tailwind gray-*, or raw hex.",
-    "- Always operate from monorepo root /workspace. Use exact paths from the FILES section.",
-  );
-  return parts.join("\n");
+  return buildSpecialistInstructions({
+    role,
+    buildContext,
+    priorResults,
+    fallbackInstruction: "You are a helpful AI coding agent working inside a DPF monorepo.",
+    // DPF BUILD DISCIPLINE — per AGENTS.md §7 Subagent Dispatch (parity with other CLIs)
+    extraDisciplineLines: [
+      "DPF BUILD DISCIPLINE (MANDATORY):",
+      "- GROUND DOMAIN FACTS IN THE CODEBASE — NEVER INVENT a platform convention: an identifier/prefix format, taxonomy, enum value, naming pattern, or API shape. When a task (or the design) references 'platform conventions', 'the knowledge base', or 'the canonical taxonomy' for a fact you don't have, FIND the real one before writing code — grep the repo for actual usage (existing identifiers, enums, similar utilities) and match it EXACTLY. Example: before classifying/parsing IDs, grep for real ones (e.g. `grep -rohE \"\\b(BI|EP|FB|WC)-[0-9A-F]+\" apps packages | sort -u | head`) instead of assuming a format. A plausible-but-wrong convention is a defect; if you genuinely cannot find the fact, say so in your output rather than guessing.",
+      "- For ANY TypeScript work: run `pnpm --filter web typecheck` (or `pnpm exec tsc --noEmit`) and fix errors before finishing.",
+      "- For final-task-in-epic or any UI change: ALSO run `cd apps/web && npx next build` and fix errors.",
+      "- UI work MUST follow Theme-Aware Styling: ONLY use CSS custom properties (`text-[var(--dpf-text)]`, `bg-[var(--dpf-surface-1)]`, etc.). NEVER hardcode colors, tailwind gray-*, or raw hex.",
+      "- Always operate from monorepo root /workspace. Use exact paths from the FILES section.",
+    ],
+  });
 }
 
 /**
@@ -396,43 +355,25 @@ export async function dispatchOpencodeTask(params: {
   }
 
   const instructions = buildOpencodeInstructions(role, buildContext, priorResults);
-  const taskFiles = task.files.map((f) => `- ${f.path} (${f.action}): ${f.purpose}`).join("\n");
-  const taskPrompt = [
-    instructions,
-    "",
-    `CRITICAL: This is a pnpm monorepo. The Next.js app is at apps/web/. All file paths MUST use the full monorepo-relative path (e.g. apps/web/lib/... not lib/...). The FILES section below has the authoritative paths — use those exactly. Working directory is ${workdir} (the monorepo root).`,
-    "",
-    `TASK: ${task.title}`,
-    "",
-    task.task.implement || "",
-    "",
-    taskFiles ? `FILES (use these exact paths):\n${taskFiles}` : "",
-    "",
-    task.task.testFirst ? `TEST FIRST: ${task.task.testFirst}` : "",
-    task.task.verify ? `VERIFY: ${task.task.verify}` : "",
-  ].filter(Boolean).join("\n");
+  const taskPrompt = buildSpecialistTaskPrompt({ task, instructions, workdir });
 
   try {
-    const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
-    const spawnCb = lazyChildProcess().spawn;
-
     // Write the opencode provider config for the node user (global path, applies
-    // regardless of cwd), then the prompt, then the runner script. All 0600.
+    // regardless of cwd), then the prompt, then the runner script. All 0600, all
+    // written as the `node` user — the runner script is executed as `node`
+    // (docker exec --user node) and `cat`s the prompt file; writing them as root
+    // with chmod 600 would make them unreadable to node ("Permission denied").
     const config = buildOpencodeConfig(sandboxBaseUrl, model);
-    const configB64 = Buffer.from(config).toString("base64");
-    await execAsync(
-      `docker exec --user node ${containerId} sh -c "mkdir -p ~/.config/opencode && echo '${configB64}' | base64 -d > ~/.config/opencode/opencode.json && chmod 600 ~/.config/opencode/opencode.json"`,
-      { timeout: 5_000 },
-    );
+    await writeSandboxFile({
+      containerId,
+      path: "~/.config/opencode/opencode.json",
+      content: config,
+      mode: "600",
+      asNodeUser: true,
+      mkdirParents: "~/.config/opencode",
+    });
 
-    const promptB64 = Buffer.from(taskPrompt).toString("base64");
-    // Write as the `node` user — the runner script below is executed as `node`
-    // (docker exec --user node), and it `cat`s this prompt file. Writing it as
-    // root with chmod 600 makes it unreadable to node ("Permission denied").
-    await execAsync(
-      `docker exec --user node ${containerId} sh -c "echo '${promptB64}' | base64 -d > ${promptFile} && chmod 600 ${promptFile}"`,
-      { timeout: 5_000 },
-    );
+    await writeSandboxFile({ containerId, path: promptFile, content: taskPrompt, mode: "600", asNodeUser: true });
 
     const script = [
       "#!/bin/sh",
@@ -447,14 +388,7 @@ export async function dispatchOpencodeTask(params: {
       `opencode run --dir ${workdir} -m local/${model} --format json --dangerously-skip-permissions "$PROMPT"`,
       "cleanup",
     ].join("\n");
-    const scriptB64 = Buffer.from(script).toString("base64");
-    // Write as the `node` user for the same reason — the script is executed via
-    // `docker exec --user node ... ${runnerScript}`; written as root with chmod
-    // 700 it is unreadable/unexecutable to node ("Permission denied").
-    await execAsync(
-      `docker exec --user node ${containerId} sh -c "echo '${scriptB64}' | base64 -d > ${runnerScript} && chmod 700 ${runnerScript}"`,
-      { timeout: 5_000 },
-    );
+    await writeSandboxFile({ containerId, path: runnerScript, content: script, mode: "700", asNodeUser: true });
 
     // task.title and the model id originate from operator-authored BIs and the
     // build config, so they're CWE-117 sources. sanitizeForLog (CodeQL-registered)
@@ -465,48 +399,22 @@ export async function dispatchOpencodeTask(params: {
       ),
     );
 
-    const { stdout, durationMs: elapsed } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
-      const proc = spawnCb("docker", ["exec", "--user", "node", containerId, runnerScript]);
-      let stdout = "";
-      let stderrBuf = "";
-      let timedOut = false;
-      const timer = setTimeout(() => {
-        timedOut = true;
-        proc.kill("SIGTERM");
-      }, timeoutMs);
-
-      proc.stdout.on("data", (data: Buffer) => {
-        const chunk = data.toString();
-        stdout += chunk;
+    // Shared spawn loop. Opencode is the one surface that streams progress from
+    // STDOUT (its `--format json` event stream) rather than stderr — wire that
+    // through onStdoutChunk; the stderr buffer is captured by the loop and
+    // attached to any rejection for the catch block below.
+    const { stdout, durationMs: elapsed } = await runSandboxAgentCli({
+      containerId,
+      runnerScript,
+      timeoutMs,
+      asNodeUser: true,
+      onStdoutChunk: (chunk) => {
         // --format json streams events; surface tool/file actions as progress.
         for (const line of chunk.split("\n")) {
           const msg = summarizeOpencodeEvent(line);
           if (msg) params.onProgress?.(msg);
         }
-      });
-      proc.stderr.on("data", (data: Buffer) => {
-        stderrBuf += data.toString();
-      });
-      proc.on("close", (code: number | null) => {
-        clearTimeout(timer);
-        const d = Date.now() - startMs;
-        if (timedOut) {
-          reject(Object.assign(new Error(`Timed out after ${timeoutMs / 1000}s`), { stdout, killed: true }));
-        } else if (code === 0 || stdout.trim()) {
-          resolve({ stdout, durationMs: d });
-        } else {
-          console.error(
-            sanitizeForLog(
-              `[opencode-dispatch] Task "${task.title}" stderr: ${stderrBuf.slice(0, 500)}`,
-            ),
-          );
-          reject(Object.assign(new Error(`Exit code ${code}`), { stdout, code, stderr: stderrBuf }));
-        }
-      });
-      proc.on("error", (err: Error) => {
-        clearTimeout(timer);
-        reject(err);
-      });
+      },
     });
 
     const content = extractOpencodeResult(stdout);

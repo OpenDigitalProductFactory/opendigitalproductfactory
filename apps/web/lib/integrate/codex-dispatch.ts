@@ -10,13 +10,16 @@
 // environment. No manual API key configuration needed.
 
 import type { AssignedTask } from "./task-dependency-graph";
-import type { SpecialistRole } from "./task-dependency-graph";
+import {
+  SANDBOX_CONTAINER,
+  buildSpecialistInstructions,
+  buildSpecialistTaskPrompt,
+  runSandboxAgentCli,
+  writeSandboxFile,
+} from "./sandbox/agent-cli-runtime";
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
-
-const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
 // Timeout per task. Data-architect tasks (schema design) need more time because
 // Codex reads the full schema, plans multi-model changes, validates, and iterates.
@@ -80,69 +83,14 @@ async function injectCodexAuth(providerId: string): Promise<void> {
     last_refresh: new Date().toISOString(),
   });
 
-  const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
-
-  // Write auth.json to ~/.codex/ in the sandbox container
-  const authB64 = Buffer.from(authJson).toString("base64");
-  await execAsync(
-    `docker exec ${SANDBOX_CONTAINER} sh -c "mkdir -p /root/.codex && echo '${authB64}' | base64 -d > /root/.codex/auth.json"`,
-    { timeout: 5_000 },
-  );
-}
-
-/**
- * Build context instructions for Codex based on the specialist role.
- */
-function buildCodexInstructions(
-  role: SpecialistRole,
-  buildContext: string,
-  priorResults?: string,
-): string {
-  const roleInstructions: Record<SpecialistRole, string> = {
-    "data-architect": `You are a data architect working on a Prisma schema.
-Key files:
-- Schema: packages/db/prisma/schema.prisma
-- Validate with: pnpm --filter @dpf/db exec prisma validate
-- After changes: pnpm --filter @dpf/db exec prisma migrate dev --name <descriptive_name>
-- Then: pnpm --filter @dpf/db exec prisma generate
-- Enums use LOWERCASE values. Multi-word statuses use hyphens: "in-progress" not "in_progress".
-- Every foreign key field (xxxId) needs @@index.
-- Relations need inverse on BOTH sides.`,
-
-    "software-engineer": `You are a software engineer building Next.js server actions and API routes.
-Key patterns:
-- Server actions: apps/web/lib/actions/<feature>.ts — "use server" directive, prisma queries
-- API routes: apps/web/app/api/<feature>/route.ts — GET/POST/PATCH/DELETE handlers
-- Always read an existing similar file first to match patterns.
-- Typecheck with: pnpm exec tsc --noEmit`,
-
-    "frontend-engineer": `You are a frontend engineer building Next.js pages and React components.
-Key patterns:
-- Pages: apps/web/app/(shell)/<feature>/page.tsx — server components with prisma queries
-- Components: apps/web/components/<feature>/ — client components with "use client"
-- Use Tailwind CSS. Match existing design patterns.
-- Read an existing page first to understand the layout structure.
-- Typecheck with: pnpm exec tsc --noEmit`,
-
-    "qa-engineer": `You are a QA engineer verifying the build.
-- Run tests: pnpm exec vitest run --reporter=verbose
-- Run typecheck: pnpm exec tsc --noEmit
-- Check for runtime errors in the build output
-- Report specific failures with file paths and line numbers`,
-  };
-
-  const parts = [
-    roleInstructions[role],
-    "",
-    "PROJECT CONTEXT:",
-    buildContext.slice(0, 3000),
-  ];
-
-  if (priorResults) {
-    parts.push("", "RESULTS FROM PRIOR TASKS:", priorResults.slice(0, 2000));
-  }
-
-  return parts.join("\n");
+  // Write auth.json to ~/.codex/ in the sandbox container (root — codex runs as
+  // root). No chmod (mode omitted): matches the original default-perms write.
+  await writeSandboxFile({
+    containerId: SANDBOX_CONTAINER,
+    path: "/root/.codex/auth.json",
+    content: authJson,
+    mkdirParents: "/root/.codex",
+  });
 }
 
 /**
@@ -199,103 +147,46 @@ export async function dispatchCodexTask(params: {
     };
   }
 
-  const instructions = buildCodexInstructions(role, buildContext, priorResults);
-
-  const taskFiles = task.files
-    .map(f => `- ${f.path} (${f.action}): ${f.purpose}`)
-    .join("\n");
-
-  const taskPrompt = [
-    instructions,
-    "",
-    "CRITICAL: This is a pnpm monorepo. The Next.js app is at apps/web/. All file paths MUST use the full monorepo-relative path (e.g. apps/web/lib/... not lib/..., apps/web/app/... not app/...). The FILES section below has the authoritative paths — use those exactly. Working directory is /workspace (the monorepo root).",
-    "",
-    `TASK: ${task.title}`,
-    "",
-    task.task.implement || "",
-    "",
-    taskFiles ? `FILES (use these exact paths):\n${taskFiles}` : "",
-    "",
-    task.task.testFirst ? `TEST FIRST: ${task.task.testFirst}` : "",
-    task.task.verify ? `VERIFY: ${task.task.verify}` : "",
-  ].filter(Boolean).join("\n");
+  const instructions = buildSpecialistInstructions({ role, buildContext, priorResults });
+  const taskPrompt = buildSpecialistTaskPrompt({ task, instructions });
 
   const startMs = Date.now();
 
   try {
-    const cp = lazyChildProcess();
-    const execAsync = lazyUtil().promisify(cp.exec);
-    const spawnCb = cp.spawn;
-
-    // Write prompt to temp file in sandbox (avoids all shell escaping issues)
-    const promptB64 = Buffer.from(taskPrompt).toString("base64");
-    await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${promptB64}' | base64 -d > /tmp/codex-prompt.txt"`,
-      { timeout: 5_000 },
-    );
+    // Write prompt to temp file in sandbox (avoids all shell escaping issues).
+    // No chmod (codex runs as root and reads its own file) — matches the original.
+    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: "/tmp/codex-prompt.txt", content: taskPrompt });
 
     const modelFlag = model ? `-m ${model}` : "";
     const timeoutMs = role === "data-architect" ? CODEX_SCHEMA_TASK_TIMEOUT_MS : CODEX_TASK_TIMEOUT_MS;
     console.log(`[codex-dispatch] Starting task "${task.title}" with ${model || "ChatGPT default"} in ${SANDBOX_CONTAINER} (timeout: ${timeoutMs / 1000}s)`);
 
-    // Use spawn instead of exec to stream stderr for progress updates.
-    // stdout = final agent message. stderr = real-time progress (file ops, commands).
-    const { stdout, stderr, durationMs, exitCode } = await new Promise<{
-      stdout: string;
-      stderr: string;
-      durationMs: number;
-      exitCode: number | null;
-    }>((resolve, reject) => {
-      const proc = spawnCb("docker", [
+    // Shared spawn loop. Codex runs as ROOT via an inline `sh -c` (not a runner
+    // script) and resolves on close regardless of exit code — the caller branches
+    // on exitCode below. stdout = final agent message; stderr = progress.
+    const { stdout, stderr, durationMs, exitCode } = await runSandboxAgentCli({
+      containerId: SANDBOX_CONTAINER,
+      execArgs: [
         "exec", SANDBOX_CONTAINER, "sh", "-c",
         `cd ${workdir} && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/codex-prompt.txt`,
-      ]);
-
-      let stdout = "";
-      let stderr = "";
-      let timedOut = false;
-      const timer = setTimeout(() => {
-        timedOut = true;
-        proc.kill("SIGTERM");
-      }, timeoutMs);
-
-      proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
-
-      proc.stderr.on("data", (data: Buffer) => {
-        const text = data.toString();
-        stderr += text;
-        const lines = text.split("\n").filter(Boolean);
-        for (const line of lines) {
-          const trimmed = line.trim();
-          // Parse Codex CLI progress from stderr
-          if (trimmed.startsWith("Reading file:")) {
-            params.onProgress?.(`Reading ${trimmed.replace("Reading file: ", "")}`);
-          } else if (trimmed.startsWith("Editing file:")) {
-            params.onProgress?.(`Editing ${trimmed.replace("Editing file: ", "")}`);
-          } else if (trimmed.startsWith("Writing file:") || trimmed.startsWith("Creating file:")) {
-            params.onProgress?.(`Creating ${trimmed.replace(/^(Writing|Creating) file: /, "")}`);
-          } else if (trimmed.startsWith("Running command:") || trimmed.startsWith("Running:")) {
-            params.onProgress?.(`Running: ${trimmed.replace(/^Running( command)?: /, "").slice(0, 80)}`);
-          } else if (trimmed.startsWith("Applying patch")) {
-            params.onProgress?.("Applying changes...");
-          }
+      ],
+      timeoutMs,
+      resolveOnlyOnZeroExit: true,
+      onStderrLine: (line) => {
+        const trimmed = line.trim();
+        // Parse Codex CLI progress from stderr
+        if (trimmed.startsWith("Reading file:")) {
+          params.onProgress?.(`Reading ${trimmed.replace("Reading file: ", "")}`);
+        } else if (trimmed.startsWith("Editing file:")) {
+          params.onProgress?.(`Editing ${trimmed.replace("Editing file: ", "")}`);
+        } else if (trimmed.startsWith("Writing file:") || trimmed.startsWith("Creating file:")) {
+          params.onProgress?.(`Creating ${trimmed.replace(/^(Writing|Creating) file: /, "")}`);
+        } else if (trimmed.startsWith("Running command:") || trimmed.startsWith("Running:")) {
+          params.onProgress?.(`Running: ${trimmed.replace(/^Running( command)?: /, "").slice(0, 80)}`);
+        } else if (trimmed.startsWith("Applying patch")) {
+          params.onProgress?.("Applying changes...");
         }
-      });
-
-      proc.on("close", (code: number | null) => {
-        clearTimeout(timer);
-        const elapsed = Date.now() - startMs;
-        if (timedOut) {
-          reject(Object.assign(new Error(`Timed out after ${timeoutMs / 1000}s`), { stdout, stderr, killed: true }));
-        } else {
-          resolve({ stdout, stderr, durationMs: elapsed, exitCode: code });
-        }
-      });
-
-      proc.on("error", (err: Error) => {
-        clearTimeout(timer);
-        reject(err);
-      });
+      },
     });
 
     const content = stdout.trim();

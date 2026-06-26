@@ -12,12 +12,16 @@
 // Credential store providerId: "claude-code" (both modes read from the same entry).
 
 import type { AssignedTask } from "./task-dependency-graph";
-import type { SpecialistRole } from "./task-dependency-graph";
+import {
+  SANDBOX_CONTAINER,
+  buildSpecialistInstructions,
+  buildSpecialistTaskPrompt,
+  ensureSandboxNodeUser,
+  runSandboxAgentCli,
+  writeSandboxFile,
+} from "./sandbox/agent-cli-runtime";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
-
-const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
 // Timeout per task. Data-architect tasks need more time for schema design.
 const CLAUDE_TASK_TIMEOUT_MS = 900_000;        // 15 minutes default
@@ -77,62 +81,6 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
 }
 
 /**
- * Build context instructions for Claude Code based on the specialist role.
- * Same role instructions as codex-dispatch.ts.
- */
-function buildClaudeInstructions(
-  role: SpecialistRole,
-  buildContext: string,
-  priorResults?: string,
-): string {
-  const roleInstructions: Record<SpecialistRole, string> = {
-    "data-architect": `You are a data architect working on a Prisma schema.
-Key files:
-- Schema: packages/db/prisma/schema.prisma
-- Validate with: pnpm --filter @dpf/db exec prisma validate
-- After changes: pnpm --filter @dpf/db exec prisma migrate dev --name <descriptive_name>
-- Then: pnpm --filter @dpf/db exec prisma generate
-- Enums use LOWERCASE values. Multi-word statuses use hyphens: "in-progress" not "in_progress".
-- Every foreign key field (xxxId) needs @@index.
-- Relations need inverse on BOTH sides.`,
-
-    "software-engineer": `You are a software engineer building Next.js server actions and API routes.
-Key patterns:
-- Server actions: apps/web/lib/actions/<feature>.ts — "use server" directive, prisma queries
-- API routes: apps/web/app/api/<feature>/route.ts — GET/POST/PATCH/DELETE handlers
-- Always read an existing similar file first to match patterns.
-- Typecheck with: pnpm exec tsc --noEmit`,
-
-    "frontend-engineer": `You are a frontend engineer building Next.js pages and React components.
-Key patterns:
-- Pages: apps/web/app/(shell)/<feature>/page.tsx — server components with prisma queries
-- Components: apps/web/components/<feature>/ — client components with "use client"
-- Use Tailwind CSS. Match existing design patterns.
-- Read an existing page first to understand the layout structure.
-- Typecheck with: pnpm exec tsc --noEmit`,
-
-    "qa-engineer": `You are a QA engineer verifying the build.
-- Run tests: pnpm exec vitest run --reporter=verbose
-- Run typecheck: pnpm exec tsc --noEmit
-- Check for runtime errors in the build output
-- Report specific failures with file paths and line numbers`,
-  };
-
-  const parts = [
-    roleInstructions[role],
-    "",
-    "PROJECT CONTEXT:",
-    buildContext.slice(0, 3000),
-  ];
-
-  if (priorResults) {
-    parts.push("", "RESULTS FROM PRIOR TASKS:", priorResults.slice(0, 2000));
-  }
-
-  return parts.join("\n");
-}
-
-/**
  * Dispatch a single build task to Claude Code CLI inside the sandbox container.
  *
  * Auth modes (set CLAUDE_CODE_AUTH_MODE env var):
@@ -177,26 +125,8 @@ export async function dispatchClaudeTask(params: {
     };
   }
 
-  const instructions = buildClaudeInstructions(role, buildContext, priorResults);
-
-  const taskFiles = task.files
-    .map(f => `- ${f.path} (${f.action}): ${f.purpose}`)
-    .join("\n");
-
-  const taskPrompt = [
-    instructions,
-    "",
-    "CRITICAL: This is a pnpm monorepo. The Next.js app is at apps/web/. All file paths MUST use the full monorepo-relative path (e.g. apps/web/lib/... not lib/..., apps/web/app/... not app/...). The FILES section below has the authoritative paths — use those exactly. Working directory is /workspace (the monorepo root).",
-    "",
-    `TASK: ${task.title}`,
-    "",
-    task.task.implement || "",
-    "",
-    taskFiles ? `FILES (use these exact paths):\n${taskFiles}` : "",
-    "",
-    task.task.testFirst ? `TEST FIRST: ${task.task.testFirst}` : "",
-    task.task.verify ? `VERIFY: ${task.task.verify}` : "",
-  ].filter(Boolean).join("\n");
+  const instructions = buildSpecialistInstructions({ role, buildContext, priorResults });
+  const taskPrompt = buildSpecialistTaskPrompt({ task, instructions });
 
   const startMs = Date.now();
   // Use task-specific temp files to avoid collisions during parallel execution.
@@ -205,38 +135,23 @@ export async function dispatchClaudeTask(params: {
   const tokenFile = `/tmp/claude-token-${taskSlug}.txt`;
 
   try {
-    const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
+    // Ensure /workspace is writable by the node user (uid 1000). Files may be
+    // root-owned from bootstrap or prior Codex runs. Claude Code CLI must run as
+    // non-root (--dangerously-skip-permissions refuses root).
+    await ensureSandboxNodeUser(SANDBOX_CONTAINER);
 
-    // Ensure /workspace is writable by the node user (uid 1000).
-    // Files may be root-owned from bootstrap or prior Codex runs.
-    // Also set git config for node user (Claude Code may run git commands).
-    await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "chown -R node:node /workspace && su -s /bin/sh node -c 'git config --global user.email sandbox@dpf.local && git config --global user.name DPF-Sandbox' 2>/dev/null"`,
-      { timeout: 15_000 },
-    );
+    // Write prompt to a task-specific temp file in the sandbox (avoids shell
+    // escaping AND prevents parallel tasks from overwriting each other's
+    // prompts). 644 so the non-root node user can read it.
+    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: promptFile, content: taskPrompt, mode: "644" });
 
-    // Write prompt to task-specific temp file in sandbox (avoids shell escaping
-    // AND prevents parallel tasks from overwriting each other's prompts).
-    // chmod 644 so the non-root node user can read it.
-    const promptB64 = Buffer.from(taskPrompt).toString("base64");
-    await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${promptB64}' | base64 -d > ${promptFile} && chmod 644 ${promptFile}"`,
-      { timeout: 5_000 },
-    );
-
-    // Inject auth credentials into the sandbox container.
-    // Claude Code CLI must run as non-root (--dangerously-skip-permissions refuses root).
-    // Write a runner script to the sandbox to avoid shell quoting issues
-    // with $(cat ...) in Alpine's busybox ash.
+    // Inject auth credentials into the sandbox container, then assemble the
+    // runner script (avoids shell quoting issues with $(cat ...) in busybox ash).
     let authExportLine: string;
     let useBareflag: boolean;
     if (auth.mode === "oauth") {
-      // OAuth (Max Plan): write raw token to task-specific temp file
-      const tokenB64 = Buffer.from(auth.tokenJson).toString("base64");
-      await execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > ${tokenFile} && chmod 644 ${tokenFile}"`,
-        { timeout: 5_000 },
-      );
+      // OAuth (Max Plan): write raw token to task-specific temp file (644).
+      await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: auth.tokenJson, mode: "644" });
       authExportLine = `export CLAUDE_CODE_OAUTH_TOKEN=$(cat ${tokenFile})`;
       useBareflag = false;  // --bare disables OAuth
     } else {
@@ -250,7 +165,6 @@ export async function dispatchClaudeTask(params: {
     const sessionFlag = sessionId ? `--session-id ${sessionId} ` : "";
     const timeoutMs = role === "data-architect" ? CLAUDE_SCHEMA_TASK_TIMEOUT_MS : CLAUDE_TASK_TIMEOUT_MS;
 
-    // Write a runner script to avoid all shell quoting issues
     const runnerScript = `/tmp/claude-run-${taskSlug}.sh`;
     const script = [
       "#!/bin/sh",
@@ -258,69 +172,30 @@ export async function dispatchClaudeTask(params: {
       authExportLine,
       `exec claude ${bareFlag}${sessionFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < ${promptFile}`,
     ].join("\n");
-    const scriptB64 = Buffer.from(script).toString("base64");
-    await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${scriptB64}' | base64 -d > ${runnerScript} && chmod 755 ${runnerScript}"`,
-      { timeout: 5_000 },
-    );
+    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
 
     console.log(`[claude-dispatch] Starting task "${task.title}" with ${model} [${modeLabel}]${sessionId ? ` [session: ${sessionId}]` : ""} in ${SANDBOX_CONTAINER} (timeout: ${timeoutMs / 1000}s)`);
 
-    // Use spawn to stream stderr for progress updates.
-    const { spawn: spawnCb } = lazyChildProcess();
-
-    const { stdout, durationMs: elapsed } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
-      const proc = spawnCb("docker", [
-        "exec", "--user", "node", SANDBOX_CONTAINER, runnerScript,
-      ]);
-
-      let stdout = "";
-      let timedOut = false;
-      const timer = setTimeout(() => {
-        timedOut = true;
-        proc.kill("SIGTERM");
-      }, timeoutMs);
-
-      proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
-
-      let stderrBuf = "";
-      proc.stderr.on("data", (data: Buffer) => {
-        const chunk = data.toString();
-        stderrBuf += chunk;
-        const lines = chunk.split("\n").filter(Boolean);
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith("Reading file:")) {
-            params.onProgress?.(`Reading ${trimmed.replace("Reading file: ", "")}`);
-          } else if (trimmed.startsWith("Writing file:") || trimmed.startsWith("Creating file:")) {
-            params.onProgress?.(`Creating ${trimmed.replace(/^(Writing|Creating) file: /, "")}`);
-          } else if (trimmed.startsWith("Editing file:")) {
-            params.onProgress?.(`Editing ${trimmed.replace("Editing file: ", "")}`);
-          } else if (trimmed.startsWith("Running bash command:") || trimmed.startsWith("Running command:")) {
-            params.onProgress?.(`Running: ${trimmed.replace(/^Running( bash)? command: /, "").slice(0, 80)}`);
-          } else if (trimmed === "Thinking...") {
-            params.onProgress?.("Thinking...");
-          }
+    // Shared spawn-docker-exec loop (runs as node; streams stderr for progress).
+    const { stdout, durationMs: elapsed } = await runSandboxAgentCli({
+      containerId: SANDBOX_CONTAINER,
+      runnerScript,
+      timeoutMs,
+      asNodeUser: true,
+      onStderrLine: (line) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("Reading file:")) {
+          params.onProgress?.(`Reading ${trimmed.replace("Reading file: ", "")}`);
+        } else if (trimmed.startsWith("Writing file:") || trimmed.startsWith("Creating file:")) {
+          params.onProgress?.(`Creating ${trimmed.replace(/^(Writing|Creating) file: /, "")}`);
+        } else if (trimmed.startsWith("Editing file:")) {
+          params.onProgress?.(`Editing ${trimmed.replace("Editing file: ", "")}`);
+        } else if (trimmed.startsWith("Running bash command:") || trimmed.startsWith("Running command:")) {
+          params.onProgress?.(`Running: ${trimmed.replace(/^Running( bash)? command: /, "").slice(0, 80)}`);
+        } else if (trimmed === "Thinking...") {
+          params.onProgress?.("Thinking...");
         }
-      });
-
-      proc.on("close", (code: number | null) => {
-        clearTimeout(timer);
-        const d = Date.now() - startMs;
-        if (timedOut) {
-          reject(Object.assign(new Error(`Timed out after ${timeoutMs / 1000}s`), { stdout, killed: true }));
-        } else if (code === 0 || stdout.trim()) {
-          resolve({ stdout, durationMs: d });
-        } else {
-          console.error(`[claude-dispatch] Task "${task.title}" stderr: ${stderrBuf.slice(0, 500)}`);
-          reject(Object.assign(new Error(`Exit code ${code}`), { stdout, code, stderr: stderrBuf }));
-        }
-      });
-
-      proc.on("error", (err: Error) => {
-        clearTimeout(timer);
-        reject(err);
-      });
+      },
     });
 
     // Parse JSON output — Claude Code --output-format json returns

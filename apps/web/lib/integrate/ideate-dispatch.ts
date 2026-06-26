@@ -12,9 +12,12 @@
 // 4. Portal parses the result and saves it via saveBuildEvidence
 
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
-
-const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
+import {
+  SANDBOX_CONTAINER,
+  runSandboxAgentCli,
+  sandboxExec,
+  writeSandboxFile,
+} from "./sandbox/agent-cli-runtime";
 const IDEATE_TIMEOUT_MS = 600_000; // 10 minutes — complex features need time for codebase research
 
 export type IdeateResult = {
@@ -54,15 +57,12 @@ async function ensureCodexAuth(providerId: string): Promise<void> {
     last_refresh: new Date().toISOString(),
   });
 
-  const { exec: execCb } = lazyChildProcess();
-  const { promisify } = lazyUtil();
-  const execAsync = promisify(execCb);
-
-  const authB64 = Buffer.from(authJson).toString("base64");
-  await execAsync(
-    `docker exec ${SANDBOX_CONTAINER} sh -c "mkdir -p /root/.codex && echo '${authB64}' | base64 -d > /root/.codex/auth.json"`,
-    { timeout: 5_000 },
-  );
+  await writeSandboxFile({
+    containerId: SANDBOX_CONTAINER,
+    path: "/root/.codex/auth.json",
+    content: authJson,
+    mkdirParents: "/root/.codex",
+  });
 }
 
 /**
@@ -79,17 +79,14 @@ async function ensureGrokAuth(providerId: string): Promise<void> {
     throw new Error(`No xAI API key for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
   }
 
-  const { exec: execCb } = lazyChildProcess();
-  const { promisify } = lazyUtil();
-  const execAsync = promisify(execCb);
-
   // Write the key to a temp file and export it in the runner script.
   // This avoids exposing it in process lists.
-  const keyB64 = Buffer.from(apiKey).toString("base64");
-  await execAsync(
-    `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${keyB64}' | base64 -d > /tmp/grok-key-${providerId}.txt && chmod 600 /tmp/grok-key-${providerId}.txt"`,
-    { timeout: 5_000 },
-  );
+  await writeSandboxFile({
+    containerId: SANDBOX_CONTAINER,
+    path: `/tmp/grok-key-${providerId}.txt`,
+    content: apiKey,
+    mode: "600",
+  });
 }
 
 type ClaudeAuth =
@@ -132,29 +129,17 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
 async function ensureClaudeAuth(providerId: string): Promise<{ authEnvFragment: string; bareFlag: string }> {
   const auth = await resolveClaudeAuth(providerId);
 
-  const { exec: execCb } = lazyChildProcess();
-  const { promisify } = lazyUtil();
-  const execAsync = promisify(execCb);
-
   if (auth.mode === "oauth") {
     // OAuth: write token to temp file, read at exec time via $(cat ...)
     // CLAUDE_CODE_OAUTH_TOKEN takes the raw access token string
-    const tokenB64 = Buffer.from(auth.token).toString("base64");
-    await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > /tmp/claude-oauth-token.txt && chmod 644 /tmp/claude-oauth-token.txt"`,
-      { timeout: 5_000 },
-    );
+    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: "/tmp/claude-oauth-token.txt", content: auth.token, mode: "644" });
     return {
       authEnvFragment: "CLAUDE_CODE_OAUTH_TOKEN=\\$(cat /tmp/claude-oauth-token.txt)",
       bareFlag: "",  // --bare disables OAuth
     };
   } else {
     // API key: write to temp file
-    const keyB64 = Buffer.from(auth.apiKey).toString("base64");
-    await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${keyB64}' | base64 -d > /tmp/claude-api-key.txt && chmod 644 /tmp/claude-api-key.txt"`,
-      { timeout: 5_000 },
-    );
+    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: "/tmp/claude-api-key.txt", content: auth.apiKey, mode: "644" });
     return {
       authEnvFragment: "ANTHROPIC_API_KEY=\\$(cat /tmp/claude-api-key.txt)",
       bareFlag: "--bare ",
@@ -511,25 +496,20 @@ export async function dispatchIdeateResearch(params: {
   const startMs = Date.now();
 
   try {
-    const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
-
     // Write prompt to temp file
-    const promptB64 = Buffer.from(prompt).toString("base64");
-    await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${promptB64}' | base64 -d > /tmp/ideate-prompt.txt"`,
-      { timeout: 5_000 },
-    );
+    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: "/tmp/ideate-prompt.txt", content: prompt });
 
     const engineLabel =
       dispatchEngine === "claude" ? "Claude Code" : dispatchEngine === "grok" ? "Grok" : "Codex";
     console.log(`[ideate-dispatch] Starting research for "${params.featureTitle}" with ${engineLabel} (${model || "default model"})`);
 
-    // Build the CLI command based on the dispatch engine.
-    // Claude and Grok (main dispatch + ideate) run as --user node after chown/gitconfig prep.
-    // Codex uses its own auth.json injection (root in some paths for legacy reasons).
-    // Write a shell script to the sandbox to avoid all quoting issues with
-    // nested $() in docker exec sh -c.
-    let fullCommand: string;
+    // Build the CLI command based on the dispatch engine, written to a shared
+    // sandbox runner script (avoids quoting issues with nested $() in docker exec
+    // sh -c). `runAsNode` mirrors the main dispatchers: claude + grok run as the
+    // node user (after their auth temp files are written); codex runs as root via
+    // its auth.json injection.
+    const runnerScript = "/tmp/ideate-run.sh";
+    let runAsNode: boolean;
     if (dispatchEngine === "claude") {
       const modelFlag = model ? `--model ${model}` : "";
       // Write a runner script that handles auth env var expansion inside the sandbox.
@@ -540,35 +520,29 @@ export async function dispatchIdeateResearch(params: {
         `export ${claudeAuthEnv.replace(/\\\$/g, "$")}`,
         `claude ${claudeBareFlag}-p - --dangerously-skip-permissions --output-format json ${modelFlag} < /tmp/ideate-prompt.txt | tee /tmp/ideate-output.json`,
       ].join("\n");
-      const scriptB64 = Buffer.from(script).toString("base64");
-      await execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${scriptB64}' | base64 -d > /tmp/ideate-run.sh && chmod 755 /tmp/ideate-run.sh"`,
-        { timeout: 5_000 },
-      );
-      fullCommand = `docker exec --user node ${SANDBOX_CONTAINER} /tmp/ideate-run.sh`;
+      await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
+      runAsNode = true;
     } else if (dispatchEngine === "grok") {
       // Grok (xAI) specific path for Ideate research dispatch (distinct from the full
       // specialist task dispatch in grok-dispatch.ts used by Build Studio orchestrator).
       //
       // Unique aspects (parity maintained with main dispatch):
       // - Auth: Simple XAI_API_KEY env var (no auth.json or OAuth refresh like Claude/Codex).
-      // - Invocation: `grok` binary with -p + --dangerously-skip-permissions.
+      // - Invocation: the SAME headless form grok-dispatch.ts proved against grok
+      //   0.2.32 — `--prompt-file <file> --always-approve`. The old
+      //   `-p - --no-auto-update < file` form passed "-" as the literal prompt and
+      //   ignored the file (and `--no-auto-update` is not a valid flag), so this
+      //   ideate path never actually ran — a latent failure now fixed. (BI-OPT-DISPATCH)
       // - Strengths: Real-time knowledge for research-oriented Ideate flows.
-      // - The primary Build Studio / AI Coworker specialist execution now uses the
-      //   dedicated robust grok-dispatch.ts (runner script, node user, progress, audit).
       const modelFlag = model ? `--model ${model}` : "";
       const script = [
         "#!/bin/sh",
         `cd /workspace`,
         `export XAI_API_KEY=$(cat /tmp/grok-key-${providerId}.txt 2>/dev/null || echo '')`,
-        `exec grok ${modelFlag} -p - --always-approve --no-auto-update < /tmp/ideate-prompt.txt 2>/dev/null`,
+        `grok ${modelFlag} --prompt-file /tmp/ideate-prompt.txt --always-approve`,
       ].join("\n");
-      const scriptB64 = Buffer.from(script).toString("base64");
-      await execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${scriptB64}' | base64 -d > /tmp/ideate-run.sh && chmod 755 /tmp/ideate-run.sh"`,
-        { timeout: 5_000 },
-      );
-      fullCommand = `docker exec --user node ${SANDBOX_CONTAINER} /tmp/ideate-run.sh`;
+      await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
+      runAsNode = true;
     } else {
       const modelFlag = model ? `-m ${model}` : "";
       const script = [
@@ -576,34 +550,20 @@ export async function dispatchIdeateResearch(params: {
         `cd /workspace`,
         `exec codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`,
       ].join("\n");
-      const scriptB64 = Buffer.from(script).toString("base64");
-      await execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${scriptB64}' | base64 -d > /tmp/ideate-run.sh && chmod 755 /tmp/ideate-run.sh"`,
-        { timeout: 5_000 },
-      );
-      fullCommand = `docker exec ${SANDBOX_CONTAINER} /tmp/ideate-run.sh`;
+      await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
+      runAsNode = false;
     }
 
-    // Use spawn (not execAsync) so we can stream stderr progress in real-time,
-    // matching the pattern in claude-dispatch.ts.
-    const { spawn: spawnCb } = lazyChildProcess();
-
-    const cmdParts = fullCommand.split(" ");
-    const { stdout: spawnStdout, durationMs: elapsed } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
-      const proc = spawnCb(cmdParts[0], cmdParts.slice(1));
-      let stdout = "";
-      let timedOut = false;
-      const timer = setTimeout(() => {
-        timedOut = true;
-        proc.kill("SIGTERM");
-      }, IDEATE_TIMEOUT_MS);
-
-      proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
-      proc.stderr.on("data", (data: Buffer) => {
-        const lines = data.toString().split("\n").filter(Boolean);
-        for (const line of lines) {
+    // Shared spawn-docker-exec loop (streams stderr for progress, matching the
+    // main dispatchers). Resolves on close when exit==0 OR stdout is non-empty.
+    const { stdout: spawnStdout, durationMs: elapsed } = await runSandboxAgentCli({
+      containerId: SANDBOX_CONTAINER,
+      runnerScript,
+      timeoutMs: IDEATE_TIMEOUT_MS,
+      asNodeUser: runAsNode,
+      onStderrLine: (line) => {
           const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith("Compiling")) continue;
+          if (!trimmed || trimmed.startsWith("Compiling")) return;
 
           if (dispatchEngine === "claude") {
             // Claude-specific progress patterns
@@ -631,39 +591,7 @@ export async function dispatchIdeateResearch(params: {
             // Codex / default
             console.log(`[ideate-dispatch] progress: ${trimmed.slice(0, 120)}`);
           }
-        }
-      });
-
-      proc.on("close", (code: number | null) => {
-        clearTimeout(timer);
-        const d = Date.now() - startMs;
-        if (timedOut) {
-          reject(Object.assign(new Error(`Timed out after ${IDEATE_TIMEOUT_MS / 1000}s`), { stdout, killed: true }));
-        } else if (code === 0 || stdout.trim()) {
-          resolve({ stdout, durationMs: d });
-        } else {
-          console.error(`[ideate-dispatch] Exit code ${code}, stdout empty, recovering from file...`);
-          // Try to recover output from tee'd file
-          const { execSync } = require("child_process");
-          try {
-            const recovered = execSync(
-              `docker exec ${SANDBOX_CONTAINER} cat /tmp/ideate-output.json 2>/dev/null`,
-              { timeout: 5_000 },
-            ).toString().trim();
-            if (recovered) {
-              console.log(`[ideate-dispatch] Recovered ${recovered.length} chars from file`);
-              resolve({ stdout: recovered, durationMs: d });
-              return;
-            }
-          } catch { /* no file */ }
-          reject(Object.assign(new Error(`Exit code ${code}`), { stdout, code }));
-        }
-      });
-
-      proc.on("error", (err: Error) => {
-        clearTimeout(timer);
-        reject(err);
-      });
+      },
     });
 
     const durationMs = elapsed;
@@ -733,6 +661,35 @@ export async function dispatchIdeateResearch(params: {
       if (designDoc) {
         return { designDoc, rawOutput: execErr.stdout.trim(), success: true, durationMs };
       }
+    }
+
+    // Recovery: when the process exited non-zero with EMPTY stdout (e.g. Claude
+    // killed mid-run), recover the tee'd output from /tmp/ideate-output.json —
+    // the claude runner script tees its stdout there. Preserves the original
+    // close-handler recovery now that the shared runner rejects this case.
+    if (!execErr.stdout?.trim()) {
+      try {
+        const recovered = (await sandboxExec()(
+          `docker exec ${SANDBOX_CONTAINER} cat /tmp/ideate-output.json 2>/dev/null`,
+          { timeout: 5_000 },
+        )).stdout.trim();
+        if (recovered) {
+          console.log(`[ideate-dispatch] Recovered ${recovered.length} chars from file`);
+          let recoveredOut = recovered;
+          if (dispatchEngine === "claude" && recoveredOut.startsWith("{")) {
+            try {
+              const parsed = JSON.parse(recoveredOut);
+              if (parsed.result) {
+                recoveredOut = typeof parsed.result === "string" ? parsed.result : JSON.stringify(parsed.result);
+              }
+            } catch { /* use as-is */ }
+          }
+          const designDoc = parseDesignDoc(recoveredOut);
+          if (designDoc) {
+            return { designDoc, rawOutput: recoveredOut, success: true, durationMs };
+          }
+        }
+      } catch { /* no file */ }
     }
 
     return {
