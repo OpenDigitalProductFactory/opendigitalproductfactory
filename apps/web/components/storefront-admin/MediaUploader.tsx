@@ -131,12 +131,12 @@ export function MediaUploader({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-        <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>{label}</span>
-        {hint && <span style={{ fontSize: 11, color: "var(--dpf-muted)" }}>· {hint}</span>}
+        <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{label}</span>
+        {hint && <span className="text-[var(--dpf-muted)]" style={{ fontSize: 11 }}>· {hint}</span>}
       </div>
 
       {loading ? (
-        <div style={{ fontSize: 12, color: "var(--dpf-muted)" }}>Loading…</div>
+        <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>Loading…</div>
       ) : (
         <div
           style={{
@@ -148,8 +148,8 @@ export function MediaUploader({
           {items.map((item, index) => (
             <div
               key={item.attachmentId}
+              className="border border-[var(--dpf-border)]"
               style={{
-                border: "1px solid var(--dpf-border)",
                 borderRadius: 8,
                 padding: 6,
                 display: "flex",
@@ -160,13 +160,12 @@ export function MediaUploader({
             >
               {index === 0 && (
                 <span
+                  className="bg-[var(--dpf-accent)] text-white"
                   style={{
                     position: "absolute",
                     top: 8,
                     left: 8,
                     fontSize: 10,
-                    background: "var(--dpf-accent, #2563eb)",
-                    color: "#fff",
                     borderRadius: 4,
                     padding: "1px 5px",
                   }}
@@ -192,22 +191,20 @@ export function MediaUploader({
                   )
                 }
                 onBlur={(e) => void saveAlt(item, e.target.value)}
+                className="border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)]"
                 style={{
                   fontSize: 11,
                   padding: "2px 4px",
-                  border: "1px solid var(--dpf-border)",
                   borderRadius: 4,
-                  background: "var(--dpf-bg, transparent)",
-                  color: "var(--dpf-text)",
                 }}
               />
               <div style={{ display: "flex", gap: 4, justifyContent: "space-between" }}>
                 <button type="button" onClick={() => void move(index, -1)} disabled={index === 0}
-                  style={btnStyle} aria-label="Move left">←</button>
+                  className={btnClass} style={btnStyle} aria-label="Move left">←</button>
                 <button type="button" onClick={() => void move(index, 1)} disabled={index === items.length - 1}
-                  style={btnStyle} aria-label="Move right">→</button>
+                  className={btnClass} style={btnStyle} aria-label="Move right">→</button>
                 <button type="button" onClick={() => void remove(item.attachmentId)}
-                  style={{ ...btnStyle, color: "var(--dpf-danger, #dc2626)" }} aria-label="Remove">✕</button>
+                  className="border border-[var(--dpf-border)] bg-transparent text-[var(--dpf-error)]" style={btnStyle} aria-label="Remove">✕</button>
               </div>
             </div>
           ))}
@@ -227,13 +224,11 @@ export function MediaUploader({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading || items.length >= maxImages}
+          className="border border-dashed border-[var(--dpf-border)] bg-transparent text-[var(--dpf-text)]"
           style={{
             fontSize: 12,
             padding: "6px 12px",
-            border: "1px dashed var(--dpf-border)",
             borderRadius: 6,
-            background: "transparent",
-            color: "var(--dpf-text)",
             cursor: uploading ? "default" : "pointer",
           }}
         >
@@ -241,7 +236,7 @@ export function MediaUploader({
         </button>
       </div>
 
-      {error && <div style={{ fontSize: 12, color: "var(--dpf-danger, #dc2626)" }}>{error}</div>}
+      {error && <div className="text-[var(--dpf-error)]" style={{ fontSize: 12 }}>{error}</div>}
     </div>
   );
 }
@@ -249,9 +244,8 @@ export function MediaUploader({
 const btnStyle: React.CSSProperties = {
   fontSize: 12,
   padding: "2px 6px",
-  border: "1px solid var(--dpf-border)",
   borderRadius: 4,
-  background: "transparent",
-  color: "var(--dpf-text)",
   cursor: "pointer",
 };
+
+const btnClass = "border border-[var(--dpf-border)] bg-transparent text-[var(--dpf-text)]";

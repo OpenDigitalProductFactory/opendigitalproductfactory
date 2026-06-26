@@ -65,21 +65,19 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
 
   if (done) {
     return (
-      <div style={{ color: "var(--dpf-text)" }}>
+      <div className="text-[var(--dpf-text)]">
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Finances configured</h2>
-        <p style={{ fontSize: 14, color: "var(--dpf-muted)", marginBottom: 16, lineHeight: 1.6 }}>
+        <p className="text-[var(--dpf-muted)]" style={{ fontSize: 14, marginBottom: 16, lineHeight: 1.6 }}>
           Your finances are set up! Based on your business type, we&#39;ve configured payment terms,
           tax settings, and expense categories. You can customise these anytime in Finance Settings.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <a
             href="/finance/settings"
+            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]"
             style={{
               padding: "8px 16px",
               borderRadius: 6,
-              border: "1px solid var(--dpf-border)",
-              background: "var(--dpf-surface-1)",
-              color: "var(--dpf-text)",
               fontSize: 13,
               textDecoration: "none",
             }}
@@ -88,12 +86,11 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
           </a>
           <button
             onClick={onComplete}
+            className="bg-[var(--dpf-accent)] text-white"
             style={{
               padding: "8px 20px",
               borderRadius: 6,
               border: "none",
-              background: "var(--dpf-accent)",
-              color: "#fff",
               cursor: "pointer",
               fontSize: 13,
               fontWeight: 600,
@@ -109,32 +106,29 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
   // ─── Setup form ───────────────────────────────────────────────────────────
 
   return (
-    <div style={{ maxWidth: 480, color: "var(--dpf-text)" }}>
+    <div className="text-[var(--dpf-text)]" style={{ maxWidth: 480 }}>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Financial setup</h2>
 
       {/* Question 1: Business type confirmation (read-only) */}
       <div
+        className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-muted)]"
         style={{
           padding: "12px 16px",
           borderRadius: 8,
-          background: "var(--dpf-surface-2)",
-          border: "1px solid var(--dpf-border)",
           marginBottom: 16,
           fontSize: 13,
-          color: "var(--dpf-muted)",
         }}
       >
-        <span style={{ fontWeight: 600, color: "var(--dpf-text)" }}>Your business type: </span>
+        <span className="text-[var(--dpf-text)]" style={{ fontWeight: 600 }}>Your business type: </span>
         {archetypeName}. We&#39;ll configure your finances to match.
       </div>
 
       {billingProfile && (
         <div
+          className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]"
           style={{
             padding: "12px 16px",
             borderRadius: 8,
-            background: "var(--dpf-surface-1)",
-            border: "1px solid var(--dpf-border)",
             marginBottom: 16,
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
@@ -142,20 +136,20 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
           }}
         >
           <div>
-            <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 2 }}>Payment</div>
-            <div style={{ fontSize: 13, color: "var(--dpf-text)", fontWeight: 700 }}>
+            <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11, marginBottom: 2 }}>Payment</div>
+            <div className="text-[var(--dpf-text)]" style={{ fontSize: 13, fontWeight: 700 }}>
               {formatToken(billingProfile.primaryPaymentPattern)}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 2 }}>Recurring</div>
-            <div style={{ fontSize: 13, color: "var(--dpf-text)", fontWeight: 700 }}>
+            <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11, marginBottom: 2 }}>Recurring</div>
+            <div className="text-[var(--dpf-text)]" style={{ fontSize: 13, fontWeight: 700 }}>
               {formatToken(billingProfile.recurringBillingApplicability)}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 2 }}>Invoices</div>
-            <div style={{ fontSize: 13, color: "var(--dpf-text)", fontWeight: 700 }}>
+            <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11, marginBottom: 2 }}>Invoices</div>
+            <div className="text-[var(--dpf-text)]" style={{ fontSize: 13, fontWeight: 700 }}>
               {formatToken(billingProfile.invoiceExecutionMode)}
             </div>
           </div>
@@ -169,12 +163,10 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={() => setVatRegistered(true)}
+              className={`border ${vatRegistered ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent)] text-white" : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]"}`}
               style={{
                 padding: "8px 20px",
                 borderRadius: 6,
-                border: `1px solid ${vatRegistered ? "var(--dpf-accent)" : "var(--dpf-border)"}`,
-                background: vatRegistered ? "var(--dpf-accent)" : "var(--dpf-surface-1)",
-                color: vatRegistered ? "#fff" : "var(--dpf-text)",
                 cursor: "pointer",
                 fontSize: 13,
                 fontWeight: vatRegistered ? 600 : 400,
@@ -184,12 +176,10 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
             </button>
             <button
               onClick={() => setVatRegistered(false)}
+              className={`border ${!vatRegistered ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent)] text-white" : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]"}`}
               style={{
                 padding: "8px 20px",
                 borderRadius: 6,
-                border: `1px solid ${!vatRegistered ? "var(--dpf-accent)" : "var(--dpf-border)"}`,
-                background: !vatRegistered ? "var(--dpf-accent)" : "var(--dpf-surface-1)",
-                color: !vatRegistered ? "#fff" : "var(--dpf-text)",
                 cursor: "pointer",
                 fontSize: 13,
                 fontWeight: !vatRegistered ? 600 : 400,
@@ -206,19 +196,17 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
           <select
             value={baseCurrency}
             onChange={(e) => setBaseCurrency(e.target.value)}
+            className="border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-1)]"
             style={{
               padding: "8px 12px",
               borderRadius: 6,
-              border: "1px solid var(--dpf-border)",
               fontSize: 14,
-              color: "var(--dpf-text)",
-              background: "var(--dpf-surface-1)",
               minWidth: 160,
             }}
           >
             {/* Ensure the suggested currency appears even if not in the standard list */}
             {suggestedCurrency && !["GBP","USD","EUR","CAD","AUD","NZD","CHF","SEK","NOK","DKK","JPY","SGD","HKD","ZAR","AED","INR","BRL","MXN","PLN","CZK"].includes(suggestedCurrency) && (
-              <option value={suggestedCurrency} style={{ background: "var(--dpf-surface-2)", color: "var(--dpf-text)" }}>{suggestedCurrency}</option>
+              <option value={suggestedCurrency} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">{suggestedCurrency}</option>
             )}
             {[
               ["GBP", "British Pound"],
@@ -245,33 +233,32 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
               <option
                 key={code}
                 value={code}
-                style={{ background: "var(--dpf-surface-2)", color: "var(--dpf-text)" }}
+                className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
               >
                 {code} - {label}
               </option>
             ))}
           </select>
           {suggestedCurrency && (
-            <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4 }}>
+            <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11, marginTop: 4 }}>
               Pre-selected based on your website location — change if needed
             </div>
           )}
         </label>
 
         {error && (
-          <p style={{ color: "var(--dpf-error)", fontSize: 13, margin: 0 }}>{error}</p>
+          <p className="text-[var(--dpf-error)]" style={{ fontSize: 13, margin: 0 }}>{error}</p>
         )}
 
         <div style={{ display: "flex", gap: 8 }}>
           <button
             onClick={handleSetup}
             disabled={submitting}
+            className="bg-[var(--dpf-accent)] text-white"
             style={{
               padding: "8px 20px",
               borderRadius: 6,
               border: "none",
-              background: "var(--dpf-accent)",
-              color: "#fff",
               cursor: submitting ? "wait" : "pointer",
               fontSize: 13,
               fontWeight: 600,

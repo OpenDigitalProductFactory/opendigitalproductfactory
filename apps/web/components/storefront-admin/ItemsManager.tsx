@@ -186,8 +186,7 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
         </h2>
         <button
           onClick={openCreate}
-          className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
-          style={{ background: "var(--dpf-accent)", color: "#fff" }}
+          className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors bg-[var(--dpf-accent)] text-white"
         >
           {vocabulary.addButtonLabel}
         </button>
@@ -275,8 +274,7 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   onClick={() => toggleActive(item.id, !item.isActive)}
-                  className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)] transition-colors"
-                  style={{ color: item.isActive ? "var(--dpf-success)" : "var(--dpf-muted)" }}
+                  className={`text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)] transition-colors ${item.isActive ? "text-[var(--dpf-success)]" : "text-[var(--dpf-muted)]"}`}
                   title={item.isActive ? "Deactivate" : "Activate"}
                 >
                   {item.isActive ? "On" : "Off"}

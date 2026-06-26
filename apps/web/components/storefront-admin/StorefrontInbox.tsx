@@ -23,10 +23,10 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_STYLES: Record<string, { background: string; color: string }> = {
-  pending: { background: "rgba(245,158,11,0.15)", color: "var(--dpf-warning, #f59e0b)" },
-  confirmed: { background: "color-mix(in srgb, var(--dpf-success) 15%, transparent)", color: "var(--dpf-success, #22c55e)" },
-  completed: { background: "rgba(79,70,229,0.15)", color: "var(--dpf-accent, #4f46e5)" },
-  cancelled: { background: "color-mix(in srgb, var(--dpf-error) 15%, transparent)", color: "var(--dpf-error, #ef4444)" },
+  pending: { background: "rgba(245,158,11,0.15)", color: "var(--dpf-warning)" },
+  confirmed: { background: "color-mix(in srgb, var(--dpf-success) 15%, transparent)", color: "var(--dpf-success)" },
+  completed: { background: "rgba(79,70,229,0.15)", color: "var(--dpf-accent)" },
+  cancelled: { background: "color-mix(in srgb, var(--dpf-error) 15%, transparent)", color: "var(--dpf-error)" },
   "needs-reschedule": { background: "rgba(249,115,22,0.15)", color: "#f97316" },
 };
 
@@ -113,30 +113,27 @@ export function StorefrontInbox({
     <div>
       {defaultDigitalProduct ? (
         <div
+          className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
           style={{
             marginBottom: 16,
             padding: "12px 14px",
             borderRadius: 8,
-            border: "1px solid var(--dpf-border)",
-            background: "var(--dpf-surface-2)",
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--dpf-text)" }}>
+          <div className="text-[var(--dpf-text)]" style={{ fontSize: 12, fontWeight: 700 }}>
             Requests from your storefront
           </div>
-          <div style={{ marginTop: 4, fontSize: 12, color: "var(--dpf-muted)" }}>
+          <div className="text-[var(--dpf-muted)]" style={{ marginTop: 4, fontSize: 12 }}>
             Use <strong>Send to backlog</strong> to track a customer request as work you can follow up on.
           </div>
         </div>
       ) : (
         <div
+          className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]"
           style={{
             marginBottom: 16,
             padding: "12px 14px",
             borderRadius: 8,
-            border: "1px solid var(--dpf-border)",
-            background: "var(--dpf-surface-2)",
-            color: "var(--dpf-muted)",
             fontSize: 12,
           }}
         >
@@ -149,12 +146,12 @@ export function StorefrontInbox({
           <button
             key={t}
             onClick={() => { setTypeFilter(t); setProviderFilter("all"); }}
+            className={`border border-[var(--dpf-border)] ${typeFilter === t ? "bg-[var(--dpf-accent)] text-white" : ""}`}
             style={{
               padding: "4px 10px",
               borderRadius: 4,
-              border: "1px solid var(--dpf-border)",
-              background: typeFilter === t ? "var(--dpf-accent, #4f46e5)" : "none",
-              color: typeFilter === t ? "#fff" : "inherit",
+              background: typeFilter === t ? undefined : "none",
+              color: typeFilter === t ? undefined : "inherit",
               cursor: "pointer",
               fontSize: 12,
             }}
@@ -166,11 +163,10 @@ export function StorefrontInbox({
           <select
             value={providerFilter}
             onChange={(e) => setProviderFilter(e.target.value)}
+            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
             style={{
               padding: "4px 10px",
               borderRadius: 4,
-              border: "1px solid var(--dpf-border)",
-              background: "var(--dpf-surface-2)",
               color: "inherit",
               fontSize: 12,
               cursor: "pointer",
@@ -184,22 +180,22 @@ export function StorefrontInbox({
         )}
       </div>
 
-      {filtered.length === 0 && <p style={{ color: "var(--dpf-muted)", fontSize: 13 }}>No entries yet.</p>}
+      {filtered.length === 0 && <p className="text-[var(--dpf-muted)]" style={{ fontSize: 13 }}>No entries yet.</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {filtered.map((e) => (
-          <div key={e.id} style={{ padding: "12px 16px", border: "1px solid var(--dpf-border)", borderRadius: 8 }}>
+          <div key={e.id} className="border border-[var(--dpf-border)]" style={{ padding: "12px 16px", borderRadius: 8 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "baseline", marginBottom: 4, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: "var(--dpf-surface-2)" }}>
+              <span className="bg-[var(--dpf-surface-2)]" style={{ fontSize: 11, fontWeight: 700, padding: "1px 6px", borderRadius: 3 }}>
                 {TYPE_LABELS[e.type] ?? e.type}
               </span>
               {e.type === "inquiry" && (
                 <span
+                  className="text-[var(--dpf-accent)]"
                   style={{
                     fontSize: 11,
                     padding: "1px 7px",
                     borderRadius: 10,
                     background: "color-mix(in srgb, var(--dpf-accent) 14%, transparent)",
-                    color: "var(--dpf-accent)",
                   }}
                 >
                   New lead
@@ -208,27 +204,26 @@ export function StorefrontInbox({
               <span style={{ fontSize: 12, fontFamily: "monospace" }}>{e.ref}</span>
               {e.type === "booking" && e.status && <StatusBadge status={e.status} />}
               {e.type === "booking" && e.providerName && (
-                <span style={{ fontSize: 11, padding: "1px 7px", borderRadius: 10, background: "rgba(79,70,229,0.12)", color: "var(--dpf-accent, #4f46e5)" }}>
+                <span className="text-[var(--dpf-accent)]" style={{ fontSize: 11, padding: "1px 7px", borderRadius: 10, background: "rgba(79,70,229,0.12)" }}>
                   {e.providerName}
                 </span>
               )}
-              <span style={{ fontSize: 11, color: "var(--dpf-muted)", marginLeft: "auto" }}>
+              <span className="text-[var(--dpf-muted)]" style={{ fontSize: 11, marginLeft: "auto" }}>
                 {new Date(e.createdAt).toLocaleDateString("en-GB")}
               </span>
             </div>
             <div style={{ fontSize: 13 }}>{e.name ?? "Anonymous"} · {e.email}</div>
-            {e.detail && <div style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 2 }}>{e.detail}</div>}
+            {e.detail && <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, marginTop: 2 }}>{e.detail}</div>}
             {e.type === "inquiry" && (
               <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
                 <button
                   onClick={() => sendInquiryToProductBacklog(e.id)}
                   disabled={!defaultDigitalProduct || pendingInquiryId === e.id}
+                  className="border border-[var(--dpf-accent)] text-[var(--dpf-accent)]"
                   style={{
                     padding: "3px 10px",
                     borderRadius: 4,
-                    border: "1px solid var(--dpf-accent)",
                     background: "none",
-                    color: "var(--dpf-accent)",
                     cursor: !defaultDigitalProduct || pendingInquiryId === e.id ? "not-allowed" : "pointer",
                     fontSize: 12,
                     opacity: !defaultDigitalProduct || pendingInquiryId === e.id ? 0.6 : 1,
@@ -237,17 +232,17 @@ export function StorefrontInbox({
                   {pendingInquiryId === e.id ? "Sending..." : "Send to backlog"}
                 </button>
                 {e.backlogItemId && (
-                  <span style={{ fontSize: 12, color: "var(--dpf-success, #22c55e)" }}>
+                  <span className="text-[var(--dpf-success)]" style={{ fontSize: 12 }}>
                     Backlog item {e.backlogItemId}
                   </span>
                 )}
                 {!e.backlogItemId && productBacklogState[e.id] && (
                   <span
+                    className={productBacklogState[e.id].startsWith("BI-")
+                      ? "text-[var(--dpf-success)]"
+                      : "text-[var(--dpf-error)]"}
                     style={{
                       fontSize: 12,
-                      color: productBacklogState[e.id].startsWith("BI-")
-                        ? "var(--dpf-success, #22c55e)"
-                        : "var(--dpf-error, #ef4444)",
                     }}
                   >
                     {productBacklogState[e.id].startsWith("BI-")
@@ -262,7 +257,8 @@ export function StorefrontInbox({
                 {e.status === "pending" && (
                   <button
                     onClick={() => confirmBooking(e.id)}
-                    style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid var(--dpf-success, #22c55e)", background: "none", color: "var(--dpf-success, #22c55e)", cursor: "pointer", fontSize: 12 }}
+                    className="border border-[var(--dpf-success)] text-[var(--dpf-success)]"
+                    style={{ padding: "3px 10px", borderRadius: 4, background: "none", cursor: "pointer", fontSize: 12 }}
                   >
                     Confirm
                   </button>
@@ -270,7 +266,8 @@ export function StorefrontInbox({
                 {e.status !== "cancelled" && e.status !== "completed" && (
                   <button
                     onClick={() => cancelBooking(e.id)}
-                    style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid var(--dpf-error, #ef4444)", background: "none", color: "var(--dpf-error, #ef4444)", cursor: "pointer", fontSize: 12 }}
+                    className="border border-[var(--dpf-error)] text-[var(--dpf-error)]"
+                    style={{ padding: "3px 10px", borderRadius: 4, background: "none", cursor: "pointer", fontSize: 12 }}
                   >
                     Cancel
                   </button>

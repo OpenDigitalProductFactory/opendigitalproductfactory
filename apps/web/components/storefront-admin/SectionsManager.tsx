@@ -38,15 +38,15 @@ export function SectionsManager({ storefrontId, sections: initial }: { storefron
       <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Sections</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {sections.map((s, idx) => (
-          <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6 }}>
+          <div key={s.id} className="border border-[var(--dpf-border)]" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 6 }}>
             <div style={{ flex: 1 }}>
               <span style={{ fontWeight: 600, fontSize: 13 }}>{s.title ?? s.type}</span>
-              <span style={{ fontSize: 11, color: "var(--dpf-muted)", marginLeft: 6 }}>{s.type}</span>
+              <span className="text-[var(--dpf-muted)]" style={{ fontSize: 11, marginLeft: 6 }}>{s.type}</span>
             </div>
-            <button onClick={() => moveSection(s.id, "up")} disabled={idx === 0} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer" }}>↑</button>
-            <button onClick={() => moveSection(s.id, "down")} disabled={idx === sections.length - 1} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer" }}>↓</button>
+            <button onClick={() => moveSection(s.id, "up")} disabled={idx === 0} className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]" style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, cursor: "pointer" }}>↑</button>
+            <button onClick={() => moveSection(s.id, "down")} disabled={idx === sections.length - 1} className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]" style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, cursor: "pointer" }}>↓</button>
             <button onClick={() => toggleVisibility(s.id, !s.isVisible)}
-              style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer" }}>
+              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]" style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, cursor: "pointer" }}>
               {s.isVisible ? "Hide" : "Show"}
             </button>
           </div>

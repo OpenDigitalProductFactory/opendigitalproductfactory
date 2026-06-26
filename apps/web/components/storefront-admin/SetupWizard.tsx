@@ -223,14 +223,13 @@ export function SetupWizard({
 
   if (step === 1) {
     return (
-      <div style={{ color: "var(--dpf-text)" }}>
+      <div className="text-[var(--dpf-text)]">
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Choose your portal template</h2>
 
         {suggestedArchetypeId && suggestedArchetypeName && (
-          <div style={{
+          <div className="border border-[var(--dpf-accent)]" style={{
             padding: "10px 14px",
             borderRadius: 8,
-            border: "1px solid var(--dpf-accent)",
             background: "color-mix(in srgb, var(--dpf-accent) 10%, transparent)",
             marginBottom: 16,
             fontSize: 13,
@@ -241,9 +240,9 @@ export function SetupWizard({
             <span style={{ fontWeight: 600 }}>Suggested:</span>
             <span>{suggestedArchetypeName}</span>
             {archetypeConfidence === "high" && (
-              <span style={{ fontSize: 11, color: "var(--dpf-muted)" }}>(high confidence)</span>
+              <span className="text-[var(--dpf-muted)]" style={{ fontSize: 11 }}>(high confidence)</span>
             )}
-            <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--dpf-muted)" }}>
+            <span className="text-[var(--dpf-muted)]" style={{ marginLeft: "auto", fontSize: 12 }}>
               Detected from your branding URL — scroll down to find it highlighted
             </span>
           </div>
@@ -254,14 +253,15 @@ export function SetupWizard({
           placeholder="Search archetypes..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ width: "100%", maxWidth: 360, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, marginBottom: 16, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }}
+          className="border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-1)]"
+          style={{ width: "100%", maxWidth: 360, padding: "8px 12px", borderRadius: 6, fontSize: 14, marginBottom: 16 }}
         />
         {categories.map((cat) => {
           const items = filtered.filter((a) => a.category === cat);
           if (!items.length) return null;
           return (
             <div key={cat} style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--dpf-muted)", marginBottom: 8 }}>
+              <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
                 {cat.replace(/-/g, " ")}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
@@ -269,19 +269,18 @@ export function SetupWizard({
                   const isSuggested = a.archetypeId === suggestedArchetypeId;
                   return (
                     <button key={a.archetypeId} onClick={() => { setSelected(a); setStep(2); }}
+                      className={`text-[var(--dpf-text)] ${isSuggested ? "border-2 border-[var(--dpf-accent)]" : "border border-[var(--dpf-border)]"}`}
                       style={{
                         padding: "12px 16px",
                         textAlign: "left",
                         borderRadius: 8,
-                        border: isSuggested ? "2px solid var(--dpf-accent)" : "1px solid var(--dpf-border)",
                         background: isSuggested ? "color-mix(in srgb, var(--dpf-accent) 8%, var(--dpf-surface-1))" : "var(--dpf-surface-1)",
                         cursor: "pointer",
                         fontSize: 13,
-                        color: "var(--dpf-text)",
                       }}>
                       <div style={{ fontWeight: 600 }}>{a.name}</div>
                       {isSuggested && (
-                        <div style={{ fontSize: 11, color: "var(--dpf-accent)", marginTop: 2 }}>Suggested for you</div>
+                        <div className="text-[var(--dpf-accent)]" style={{ fontSize: 11, marginTop: 2 }}>Suggested for you</div>
                       )}
                     </button>
                   );
@@ -294,19 +293,19 @@ export function SetupWizard({
         {/* Custom archetypes section */}
         {custom.length > 0 && (
           <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--dpf-muted)", marginBottom: 8 }}>
+            <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
               Custom business types
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
               {custom.map((a) => (
                 <button key={a.archetypeId} onClick={() => { setSelected(a); setStep(2); }}
+                  className="border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]"
                   style={{
                     padding: "12px 16px", textAlign: "left", borderRadius: 8,
-                    border: "1px dashed var(--dpf-border)", background: "var(--dpf-surface-1)",
-                    cursor: "pointer", fontSize: 13, color: "var(--dpf-text)",
+                    cursor: "pointer", fontSize: 13,
                   }}>
                   <div style={{ fontWeight: 600 }}>{a.name}</div>
-                  <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>Custom</div>
+                  <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11, marginTop: 2 }}>Custom</div>
                 </button>
               ))}
             </div>
@@ -317,15 +316,15 @@ export function SetupWizard({
         <div style={{ marginTop: 8 }}>
           <button
             onClick={() => setStep("custom")}
+            className="border border-dashed border-[var(--dpf-accent)] text-[var(--dpf-text)]"
             style={{
               width: "100%", padding: "16px 20px", textAlign: "left", borderRadius: 8,
-              border: "1px dashed var(--dpf-accent)", cursor: "pointer", fontSize: 13,
-              color: "var(--dpf-text)",
+              cursor: "pointer", fontSize: 13,
               background: "color-mix(in srgb, var(--dpf-accent) 5%, var(--dpf-surface-1))",
             }}
           >
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Can't find your business?</div>
-            <div style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
+            <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>
               Define a custom operating model. Your template can also be contributed back to help others, including software-platform and customer-zero installs.
             </div>
           </button>
@@ -338,9 +337,9 @@ export function SetupWizard({
 
   if (step === "custom") {
     return (
-      <div style={{ maxWidth: 520, color: "var(--dpf-text)" }}>
+      <div className="text-[var(--dpf-text)]" style={{ maxWidth: 520 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Define your operating model</h2>
-        <p style={{ fontSize: 13, color: "var(--dpf-muted)", marginBottom: 16 }}>
+        <p className="text-[var(--dpf-muted)]" style={{ fontSize: 13, marginBottom: 16 }}>
           Tell us about your business or platform and we'll create a template that matches how you operate and what you sell.
         </p>
 
@@ -349,20 +348,20 @@ export function SetupWizard({
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Business type name *</div>
             <input type="text" value={customName} onChange={(e) => setCustomName(e.target.value)}
               placeholder="e.g. Brewery Taproom, Dog Daycare, Co-working Space"
-              required style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
+              required className="border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-1)]" style={{ width: "100%", padding: "8px 12px", borderRadius: 6, fontSize: 14 }} />
           </label>
 
           <label style={{ fontSize: 13 }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>What does this business do?</div>
             <textarea value={customDescription} onChange={(e) => setCustomDescription(e.target.value)}
               placeholder="Brief description of the business..."
-              rows={2} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)", resize: "none" }} />
+              rows={2} className="border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-1)]" style={{ width: "100%", padding: "8px 12px", borderRadius: 6, fontSize: 14, resize: "none" }} />
           </label>
 
           <label style={{ fontSize: 13 }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Closest category</div>
             <select value={customCategory} onChange={(e) => setCustomCategory(e.target.value)}
-              style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }}>
+              className="border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-1)]" style={{ width: "100%", padding: "8px 12px", borderRadius: 6, fontSize: 14 }}>
               {INDUSTRY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </label>
@@ -372,14 +371,13 @@ export function SetupWizard({
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
               {CTA_OPTIONS.map((o) => (
                 <button key={o.value} type="button" onClick={() => setCustomCtaType(o.value)}
+                  className={`text-[var(--dpf-text)] ${customCtaType === o.value ? "border-2 border-[var(--dpf-accent)]" : "border border-[var(--dpf-border)]"}`}
                   style={{
                     padding: "8px 12px", textAlign: "left", borderRadius: 6, cursor: "pointer", fontSize: 12,
-                    border: customCtaType === o.value ? "2px solid var(--dpf-accent)" : "1px solid var(--dpf-border)",
                     background: customCtaType === o.value ? "color-mix(in srgb, var(--dpf-accent) 8%, var(--dpf-surface-1))" : "var(--dpf-surface-1)",
-                    color: "var(--dpf-text)",
                   }}>
                   <div style={{ fontWeight: 600 }}>{o.label}</div>
-                  <div style={{ fontSize: 11, color: "var(--dpf-muted)" }}>{o.description}</div>
+                  <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11 }}>{o.description}</div>
                 </button>
               ))}
             </div>
@@ -389,7 +387,7 @@ export function SetupWizard({
             <div style={{ fontWeight: 600, marginBottom: 4 }}>What do you offer? * (one per line)</div>
             <textarea value={customOfferings} onChange={(e) => setCustomOfferings(e.target.value)}
               placeholder={"Hot Desk\nMeeting Room\nPrivate Office\nVirtual Office"}
-              rows={5} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, fontFamily: "monospace", color: "var(--dpf-text)", background: "var(--dpf-surface-1)", resize: "vertical" }} />
+              rows={5} className="border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-1)]" style={{ width: "100%", padding: "8px 12px", borderRadius: 6, fontSize: 14, fontFamily: "monospace", resize: "vertical" }} />
           </label>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -397,22 +395,22 @@ export function SetupWizard({
               <div style={{ fontWeight: 600, marginBottom: 4 }}>Portal name</div>
               <input type="text" value={customPortalLabel} onChange={(e) => setCustomPortalLabel(e.target.value)}
                 placeholder="e.g. Member Portal"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
+                className="border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-1)]" style={{ width: "100%", padding: "8px 12px", borderRadius: 6, fontSize: 14 }} />
             </label>
             <label style={{ fontSize: 13 }}>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>Your customers are...</div>
               <input type="text" value={customStakeholderLabel} onChange={(e) => setCustomStakeholderLabel(e.target.value)}
                 placeholder="e.g. Members, Clients"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
+                className="border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-1)]" style={{ width: "100%", padding: "8px 12px", borderRadius: 6, fontSize: 14 }} />
             </label>
           </div>
 
-          {error && <p style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</p>}
+          {error && <p className="text-[var(--dpf-error)]" style={{ fontSize: 13 }}>{error}</p>}
 
           <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-            <button onClick={() => setStep(1)} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer", fontSize: 13 }}>Back</button>
+            <button onClick={() => setStep(1)} className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]" style={{ padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}>Back</button>
             <button onClick={handleCreateCustom} disabled={customCreating || !customName.trim() || !customOfferings.trim()}
-              style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: "var(--dpf-accent)", color: "#fff", cursor: customCreating ? "wait" : "pointer", fontSize: 13, fontWeight: 600, opacity: customCreating ? 0.7 : 1 }}>
+              className="bg-[var(--dpf-accent)] text-white" style={{ padding: "8px 20px", borderRadius: 6, border: "none", cursor: customCreating ? "wait" : "pointer", fontSize: 13, fontWeight: 600, opacity: customCreating ? 0.7 : 1 }}>
               {customCreating ? "Creating..." : "Create template & preview"}
             </button>
           </div>
@@ -427,9 +425,9 @@ export function SetupWizard({
     const items = Array.isArray(selected?.itemTemplates) ? selected!.itemTemplates as Array<{ name: string }> : [];
     const sections = Array.isArray(selected?.sectionTemplates) ? selected!.sectionTemplates as Array<{ title: string; type: string }> : [];
     return (
-      <div style={{ color: "var(--dpf-text)" }}>
+      <div className="text-[var(--dpf-text)]">
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Preview: {selected?.name}</h2>
-        <p style={{ fontSize: 13, color: "var(--dpf-muted)", marginBottom: 16 }}>
+        <p className="text-[var(--dpf-muted)]" style={{ fontSize: 13, marginBottom: 16 }}>
           These sections and items will be created. You can edit them later.
           {selected?.isBuiltIn === false && " This is a custom template."}
         </p>
@@ -445,7 +443,8 @@ export function SetupWizard({
               {questions.map((q) => (
                 <label
                   key={q.capabilityKey}
-                  style={{ display: "flex", gap: 10, alignItems: "flex-start", border: "1px solid var(--dpf-border)", borderRadius: 8, background: "var(--dpf-surface-1)", padding: 12, cursor: "pointer" }}
+                  className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+                  style={{ display: "flex", gap: 10, alignItems: "flex-start", borderRadius: 8, padding: 12, cursor: "pointer" }}
                 >
                   <input
                     type="checkbox"
@@ -456,9 +455,9 @@ export function SetupWizard({
                     style={{ marginTop: 2 }}
                   />
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--dpf-text)" }}>{q.question}</span>
+                    <span className="text-[var(--dpf-text)]" style={{ display: "block", fontSize: 13, fontWeight: 600 }}>{q.question}</span>
                     {q.helpText && (
-                      <span style={{ display: "block", fontSize: 12, color: "var(--dpf-muted)", marginTop: 2 }}>{q.helpText}</span>
+                      <span className="text-[var(--dpf-muted)]" style={{ display: "block", fontSize: 12, marginTop: 2 }}>{q.helpText}</span>
                     )}
                   </span>
                 </label>
@@ -469,11 +468,11 @@ export function SetupWizard({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Sections</div>
-            {sections.map((s, i) => <div key={i} style={{ fontSize: 13, padding: "4px 0", borderBottom: "1px solid var(--dpf-border)" }}>{s.title}</div>)}
+            {sections.map((s, i) => <div key={i} className="border-b border-[var(--dpf-border)]" style={{ fontSize: 13, padding: "4px 0" }}>{s.title}</div>)}
           </div>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Items / Services</div>
-            {items.map((item, i) => <div key={i} style={{ fontSize: 13, padding: "4px 0", borderBottom: "1px solid var(--dpf-border)" }}>{item.name}</div>)}
+            {items.map((item, i) => <div key={i} className="border-b border-[var(--dpf-border)]" style={{ fontSize: 13, padding: "4px 0" }}>{item.name}</div>)}
           </div>
         </div>
         {/* Portal-specific fields: slug, tagline, hero */}
@@ -481,27 +480,27 @@ export function SetupWizard({
           <label style={{ fontSize: 13 }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>URL slug *</div>
             <input type="text" value={orgSlug} onChange={(e) => setOrgSlug(e.target.value)}
-              required style={{ width: "100%", maxWidth: 360, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, fontFamily: "monospace", color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
-            <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4 }}>
+              required className="border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-1)]" style={{ width: "100%", maxWidth: 360, padding: "8px 12px", borderRadius: 6, fontSize: 14, fontFamily: "monospace" }} />
+            <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11, marginTop: 4 }}>
               Your {displayPortalLabel.toLowerCase()} will be at /s/{orgSlug || "your-slug"}
             </div>
           </label>
           <label style={{ fontSize: 13 }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Tagline</div>
             <input type="text" value={tagline} onChange={(e) => setTagline(e.target.value)}
-              style={{ width: "100%", maxWidth: 360, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
+              className="border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-1)]" style={{ width: "100%", maxWidth: 360, padding: "8px 12px", borderRadius: 6, fontSize: 14 }} />
           </label>
           <label style={{ fontSize: 13 }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Hero image URL</div>
             <input type="url" value={heroImageUrl} onChange={(e) => setHeroImageUrl(e.target.value)}
-              style={{ width: "100%", maxWidth: 360, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--dpf-border)", fontSize: 14, color: "var(--dpf-text)", background: "var(--dpf-surface-1)" }} />
+              className="border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-1)]" style={{ width: "100%", maxWidth: 360, padding: "8px 12px", borderRadius: 6, fontSize: 14 }} />
           </label>
         </div>
-        {error && <p style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</p>}
+        {error && <p className="text-[var(--dpf-error)]" style={{ fontSize: 13 }}>{error}</p>}
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setStep(1)} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-1)", color: "var(--dpf-text)", cursor: "pointer", fontSize: 13 }}>Back</button>
+          <button onClick={() => setStep(1)} className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]" style={{ padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}>Back</button>
           <button onClick={handleComplete} disabled={submitting || !orgSlug}
-            style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: "var(--dpf-accent)", color: "white", cursor: submitting ? "wait" : "pointer", fontSize: 13, fontWeight: 600, opacity: submitting || !orgSlug ? 0.7 : 1 }}>
+            className="bg-[var(--dpf-accent)] text-white" style={{ padding: "8px 20px", borderRadius: 6, border: "none", cursor: submitting ? "wait" : "pointer", fontSize: 13, fontWeight: 600, opacity: submitting || !orgSlug ? 0.7 : 1 }}>
             {submitting ? "Creating..." : `Create ${displayPortalLabel}`}
           </button>
         </div>

@@ -173,18 +173,19 @@ export function ItemFormDialog({
 
   return (
     <div
+      className="bg-black/50"
       style={{
         position: "fixed", inset: 0, zIndex: 100,
         display: "flex", alignItems: "center", justifyContent: "center",
-        background: "rgba(0,0,0,0.5)",
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
+        className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]"
         style={{
-          background: "var(--dpf-surface-1)", borderRadius: 12,
+          borderRadius: 12,
           padding: 24, width: "100%", maxWidth: 520, maxHeight: "85vh",
-          overflowY: "auto", border: "1px solid var(--dpf-border)",
+          overflowY: "auto",
         }}
       >
         <h2 className="text-base font-semibold text-[var(--dpf-text)] mb-4">
@@ -468,8 +469,7 @@ export function ItemFormDialog({
             <button
               type="submit"
               disabled={saving || !form.name.trim()}
-              className="px-4 py-1.5 text-sm rounded-md font-medium transition-colors disabled:opacity-50"
-              style={{ background: "var(--dpf-accent)", color: "#fff" }}
+              className="px-4 py-1.5 text-sm rounded-md font-medium transition-colors disabled:opacity-50 bg-[var(--dpf-accent)] text-white"
             >
               {saving ? "Saving..." : isEditing ? "Save changes" : "Create"}
             </button>
