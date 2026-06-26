@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   claimActionsForNode,
   recordActionResult,
+  timeoutStaleClaims,
   type ClaimableActionRow,
   type DispatchOrchestratorDb,
 } from "./dispatch-orchestrator";
@@ -129,5 +130,32 @@ describe("recordActionResult", () => {
   it("not-found is reported", async () => {
     const { db } = resultDb(null);
     expect(await recordActionResult(db, { actionKey: "nope", edgeNodeRowId: "node_1", outcome: "succeeded" })).toEqual({ ok: false, reason: "action-not-found" });
+  });
+});
+
+describe("timeoutStaleClaims", () => {
+  function timeoutDb(count: number) {
+    const updateMany = vi.fn().mockResolvedValue({ count });
+    return {
+      db: { remoteAction: { updateMany, findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() } } as unknown as DispatchOrchestratorDb,
+      updateMany,
+    };
+  }
+
+  it("times out claimed/running actions past the window", async () => {
+    const { db, updateMany } = timeoutDb(2);
+    const res = await timeoutStaleClaims(db, { now: NOW, timeoutMs: 600_000 });
+    expect(res).toEqual({ timedOut: 2 });
+    const arg = updateMany.mock.calls[0]![0] as { where: { status: unknown; startedAt: { lt: Date } }; data: Record<string, unknown> };
+    expect(arg.where.status).toEqual({ in: ["claimed", "running"] });
+    expect(arg.where.startedAt.lt).toEqual(new Date(NOW.getTime() - 600_000));
+    expect(arg.data).toEqual({ status: "timed-out", completedAt: NOW });
+  });
+
+  it("defaults to the 10-minute window", async () => {
+    const { db, updateMany } = timeoutDb(0);
+    await timeoutStaleClaims(db, { now: NOW });
+    const arg = updateMany.mock.calls[0]![0] as { where: { startedAt: { lt: Date } } };
+    expect(arg.where.startedAt.lt).toEqual(new Date(NOW.getTime() - 10 * 60 * 1000));
   });
 });

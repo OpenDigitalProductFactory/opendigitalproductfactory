@@ -16,6 +16,7 @@
 import {
   canTransitionDispatch,
   claimableActionsForNode,
+  DEFAULT_CLAIM_TIMEOUT_MS,
   type ClaimingNodeView,
   type DispatchableActionView,
   type RemoteActionDispatchState,
@@ -163,4 +164,25 @@ export async function recordActionResult(
     },
   });
   return { ok: true, status: to };
+}
+
+/**
+ * Time out claimed/running actions that never reached a terminal report within
+ * the window — a node that claims then dies (crash, network partition) must not
+ * wedge the action in `claimed` forever. Sweeps all scopes; safe to run on a
+ * cron. Read-only only by construction (P2), so a timed-out collect is simply
+ * lost telemetry, not a half-applied mutation.
+ */
+export async function timeoutStaleClaims(
+  db: DispatchOrchestratorDb,
+  opts: { now?: Date; timeoutMs?: number } = {},
+): Promise<{ timedOut: number }> {
+  const now = opts.now ?? new Date();
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_CLAIM_TIMEOUT_MS;
+  const cutoff = new Date(now.getTime() - timeoutMs);
+  const res = await db.remoteAction.updateMany({
+    where: { status: { in: ["claimed", "running"] }, startedAt: { lt: cutoff } },
+    data: { status: "timed-out", completedAt: now },
+  });
+  return { timedOut: res.count };
 }

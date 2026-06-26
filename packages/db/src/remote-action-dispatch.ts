@@ -66,6 +66,13 @@ export function canTransitionDispatch(
   return ALLOWED_DISPATCH_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
+/**
+ * How long a claimed/running action may sit without a terminal report before it
+ * is timed out (so a node that claims-then-dies cannot wedge the queue). A
+ * read-only diagnostics collect should finish in seconds; 10 min is generous.
+ */
+export const DEFAULT_CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
+
 // ── Claim eligibility ─────────────────────────────────────────────────────────
 
 export interface DispatchableActionView {

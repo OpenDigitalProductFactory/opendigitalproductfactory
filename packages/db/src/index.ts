@@ -196,6 +196,7 @@ export {
   isClaimableByNode,
   isReadonlyDispatchActionType,
   nodeScopeMatchesAction,
+  DEFAULT_CLAIM_TIMEOUT_MS,
   READONLY_DISPATCH_ACTION_TYPES,
   REMOTE_ACTION_DISPATCH_STATES,
   type ClaimDecision,
