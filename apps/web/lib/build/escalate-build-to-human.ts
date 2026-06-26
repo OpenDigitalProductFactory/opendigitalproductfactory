@@ -33,6 +33,7 @@
 
 import { prisma } from "@dpf/db";
 import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
+import { notifyAttentionLive, resolveOperatorRecipient } from "@/lib/attention/notify-live";
 
 /** Self-fix-feasibility class — why an autonomous producer could not self-repair. */
 export const SELF_FIX_CLASS = {
@@ -180,6 +181,23 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
     reportId = r.reportId;
   } catch (err) {
     await safeLog(`Escalation report not filed (continuing to free WIP): ${String(err)}`.slice(0, 300));
+  }
+
+  // Attention spine (BI-094A124F): proactively tell the operator a new escalation
+  // needs them. The "Needs you" inbox already shows it (re-homed off /ops); this
+  // adds the bell + live refresh. Best-effort by contract — never blocks WIP free-up.
+  if (reportId) {
+    const recipient = await resolveOperatorRecipient();
+    if (recipient) {
+      await notifyAttentionLive({
+        source: "escalation",
+        itemKey: reportId,
+        userId: recipient,
+        title,
+        deepLink: `/build?buildId=${encodeURIComponent(buildId)}`,
+        riskClass: "high-risk",
+      });
+    }
   }
 
   // 2. FREE WIP — mark the build abandoned (mirrors the inert-build reaper). The
