@@ -21,7 +21,7 @@
   "apps/web/lib/actions/agent-coworker.ts": 2512,
   "apps/web/lib/actions/agent-task-scheduler.test.ts": 892,
   "apps/web/lib/actions/ai-providers.ts": 993,
-  "apps/web/lib/actions/build-governed.test.ts": 1051,
+  "apps/web/lib/actions/build-governed.test.ts": 1114,
   "apps/web/lib/actions/build.ts": 1794,
   "apps/web/lib/actions/compliance.ts": 988,
   "apps/web/lib/actions/crm.ts": 1338,
