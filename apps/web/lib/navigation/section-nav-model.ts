@@ -17,6 +17,22 @@ export type SectionNavLink = {
   active: boolean;
 };
 
+/**
+ * A single flat tab. Most flat navs link to a route (`href`); a few switch a
+ * query-param view in place (`onSelect`) instead of navigating. Exactly one of
+ * the two is supplied per tab — the renderer emits a `<Link>` for `href` and a
+ * `<button>` for `onSelect`. The caller still owns active-state resolution.
+ */
+export type SectionNavTab = {
+  key: string;
+  label: string;
+  active: boolean;
+  /** Route target — rendered as a `<Link>`. */
+  href?: string;
+  /** In-place selection (e.g. a `?view=` switch) — rendered as a `<button>`. */
+  onSelect?: () => void;
+};
+
 /** A top-level family plus the sub-items shown when it is active. */
 export type SectionNavFamily = {
   key: string;
@@ -60,4 +76,30 @@ export type GroupedSectionNavConfig = {
   groups: SectionNavGroup[];
 };
 
-export type SectionNavConfig = FamiliesSectionNavConfig | GroupedSectionNavConfig;
+/**
+ * Flat-style section nav: a single row of sibling tabs with no sub-item panel.
+ * This is the shape the single-row `*TabNav` clones each carried (EA / Audit /
+ * Workforce / Identity / Customer = underline links, Employee = underline buttons
+ * that switch a `?view=` param, Marketing = pills, Storefront admin = emphasis).
+ *   - tone "underline": `rounded-t` tabs, active = `border-b-2 border-accent`.
+ *   - tone "pill":      `rounded-full` bordered pills, active = surface-2 fill.
+ *   - tone "emphasis":  heavier storefront strip — larger 13px tabs, semibold +
+ *                       accent-coloured active label, transparent-border inactive
+ *                       (constant tab height), gap-0. Storefront admin only.
+ */
+export type FlatSectionNavConfig = {
+  variant: "flat";
+  /** Tab chrome. Defaults to "underline". */
+  tone?: "underline" | "pill" | "emphasis";
+  /** Render the root as a semantic `<nav>` instead of a `<div>` (Marketing/Storefront). */
+  as?: "div" | "nav";
+  /** Allow tabs to wrap onto multiple rows on narrow screens (Customer/Marketing). */
+  wrap?: boolean;
+  dataComponent?: string;
+  tabs: SectionNavTab[];
+};
+
+export type SectionNavConfig =
+  | FamiliesSectionNavConfig
+  | GroupedSectionNavConfig
+  | FlatSectionNavConfig;

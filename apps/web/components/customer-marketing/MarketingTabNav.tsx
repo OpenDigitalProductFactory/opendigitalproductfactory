@@ -1,8 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SectionNav } from "@/components/shell/SectionNav";
 import { MARKETING_TABS } from "./marketing-nav";
+
+// Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper
+// resolves active state from the pathname. Marketing uses the flat "pill" tone in a
+// semantic <nav> element.
 
 export function MarketingTabNav() {
   const pathname = usePathname();
@@ -15,21 +19,19 @@ export function MarketingTabNav() {
   }
 
   return (
-    <nav className="mb-6 flex flex-wrap gap-2 border-b border-[var(--dpf-border)] pb-3">
-      {MARKETING_TABS.map((tab) => (
-        <Link
-          key={tab.href}
-          href={tab.href}
-          className={[
-            "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-            isActive(tab.href)
-              ? "border-[var(--dpf-accent)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
-              : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
-          ].join(" ")}
-        >
-          {tab.label}
-        </Link>
-      ))}
-    </nav>
+    <SectionNav
+      config={{
+        variant: "flat",
+        tone: "pill",
+        as: "nav",
+        dataComponent: "marketing-tab-nav",
+        tabs: MARKETING_TABS.map((tab) => ({
+          key: tab.href,
+          label: tab.label,
+          href: tab.href,
+          active: isActive(tab.href),
+        })),
+      }}
+    />
   );
 }

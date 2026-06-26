@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SectionNav } from "@/components/shell/SectionNav";
 
 export type CustomerTabNavItem = {
   label: string;
@@ -11,6 +11,10 @@ export type CustomerTabNavItem = {
 type Props = {
   tabs: CustomerTabNavItem[];
 };
+
+// Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper
+// resolves active state from the pathname. Customer uses the flat single-row tab style
+// and wraps on narrow screens (it can carry many CRM + Marketing tabs).
 
 export function CustomerTabNav({ tabs }: Props) {
   const pathname = usePathname();
@@ -23,21 +27,18 @@ export function CustomerTabNav({ tabs }: Props) {
   if (tabs.length === 0) return null;
 
   return (
-    <div className="mb-6 flex flex-wrap gap-x-1 gap-y-2 border-b border-[var(--dpf-border)]">
-      {tabs.map((t) => (
-        <Link
-          key={t.href}
-          href={t.href}
-          className={[
-            "px-3 py-1.5 text-xs font-medium rounded-t transition-colors",
-            isActive(t.href)
-              ? "text-[var(--dpf-text)] border-b-2 border-[var(--dpf-accent)]"
-              : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
-          ].join(" ")}
-        >
-          {t.label}
-        </Link>
-      ))}
-    </div>
+    <SectionNav
+      config={{
+        variant: "flat",
+        wrap: true,
+        dataComponent: "customer-tab-nav",
+        tabs: tabs.map((t) => ({
+          key: t.href,
+          label: t.label,
+          href: t.href,
+          active: isActive(t.href),
+        })),
+      }}
+    />
   );
 }
