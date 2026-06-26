@@ -12,6 +12,7 @@
 
 import { createHash } from "crypto";
 import { prisma } from "@dpf/db";
+import { slugify } from "@/lib/shared/slugify";
 import { upsertRawSource } from "@dpf/db/wiki-store";
 import type { Prisma, PrismaClient } from "@dpf/db";
 import { z } from "zod";
@@ -395,11 +396,7 @@ function canonicalSlugForUrl(rawUrl: string): string {
       .replace(/:\d+/, "")
       .split(/[?#]/)[0];
   }
-  return canonical
-    .toLowerCase()
-    .replace(/\.git$/i, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return slugify(canonical.replace(/\.git$/i, ""));
 }
 
 // ─── Gap detection ──────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import { detectSessionClass } from "@/lib/kernel/session-class";
 import { kernelGateDecisionsTotal } from "@/lib/operate/metrics";
 import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
+import { slugify } from "@/lib/shared/slugify";
 import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
 import { BACKLOG_SOURCE_VALUES, BACKLOG_STATUS_VALUES, BACKLOG_WORK_TYPE_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
 import {
@@ -15541,7 +15542,7 @@ export async function executeTool(
       }
 
       // Generate archetypeId
-      const slug = businessName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const slug = slugify(businessName);
       const archetypeId = `custom-${slug}`;
 
       // Check for duplicate

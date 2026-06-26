@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { slugify } from "@/lib/shared/slugify";
 import { setupQuestionsFor } from "@/lib/storefront/setup-questions";
 import { ArchetypeActivationSummary } from "./ArchetypeActivationSummary";
 import { FinancialSetupStep } from "./FinancialSetupStep";
@@ -86,7 +87,7 @@ export function SetupWizard({
 
   // Derive slug from name
   function derivedSlug(name: string) {
-    return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    return slugify(name);
   }
 
   const builtIn = archetypes.filter((a) => a.isBuiltIn !== false);

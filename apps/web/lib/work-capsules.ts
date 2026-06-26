@@ -1,3 +1,5 @@
+import { slugify } from "@/lib/shared/slugify";
+
 export const WORK_CAPSULE_STATUSES = [
   "draft",
   "ready",
@@ -167,10 +169,7 @@ export function buildCapsuleSlug(title: string, capsuleIdFallback?: string): str
     .replace(/-+$/g, "");
   if (slug.length > 0) return slug;
   if (!capsuleIdFallback) return "capsule";
-  return capsuleIdFallback
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "capsule";
+  return slugify(capsuleIdFallback) || "capsule";
 }
 
 export function buildCapsuleBranchName(args: {

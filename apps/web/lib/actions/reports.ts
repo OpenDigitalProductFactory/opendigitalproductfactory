@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { toCsv } from "@/lib/shared/csv";
 
 // Bill statuses that represent a committed cost not yet paid. Surfaced on the
 // P&L as a clearly-labelled "draft / pending" figure so a draft bill is never
@@ -169,7 +170,7 @@ export async function getOutstandingInvoicesReport() {
 }
 
 export function exportReportToCsv(headers: string[], rows: string[][]): string {
-  const escape = (val: string) => val.includes(",") || val.includes('"') ? `"${val.replace(/"/g, '""')}"` : val;
-  const lines = [headers.map(escape).join(","), ...rows.map(row => row.map(escape).join(","))];
-  return lines.join("\n");
+  // RFC-4180 serialization centralized in lib/shared/csv (quotes fields with
+  // CR/LF too — the prior hand-rolled escape missed those — and joins with CRLF).
+  return toCsv(rows, headers);
 }

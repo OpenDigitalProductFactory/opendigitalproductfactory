@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { isIndustrySlug } from "@/lib/storefront/industries";
+import { slugify } from "@/lib/shared/slugify";
 
 type CreateCustomArchetypeBody = {
   name: string;
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Generate a unique archetypeId
-  const slug = body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const slug = slugify(body.name);
   const archetypeId = `custom-${slug}`;
 
   // Check for duplicate

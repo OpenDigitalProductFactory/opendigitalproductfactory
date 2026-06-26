@@ -8,17 +8,18 @@
 import type { ColumnDefinition } from "@/lib/workbooks/types";
 import type { GridRowData } from "./cell-editors";
 import { cellSearchText } from "./grid-filter";
+import { escapeCsvField, toCsv } from "@/lib/shared/csv";
 
-/** Quote a field if it contains a comma, quote, or newline; double interior quotes. */
-export function escapeCsvField(value: string): string {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
+// Field escaping + RFC-4180 serialization centralized in lib/shared/csv; this
+// module keeps the grid-specific column/cell projection (cellSearchText) so
+// exported values match what the user sees.
+export { escapeCsvField };
 
 /** Build a CSV document (header row + one row per record) for the given columns. */
 export function rowsToCsv(columns: ColumnDefinition[], rows: GridRowData[]): string {
-  const header = columns.map((c) => escapeCsvField(c.name)).join(",");
+  const header = columns.map((c) => c.name);
   const body = rows.map((row) =>
-    columns.map((c) => escapeCsvField(cellSearchText(row[c.columnId] ?? null))).join(","),
+    columns.map((c) => cellSearchText(row[c.columnId] ?? null)),
   );
-  return [header, ...body].join("\r\n");
+  return toCsv(body, header);
 }

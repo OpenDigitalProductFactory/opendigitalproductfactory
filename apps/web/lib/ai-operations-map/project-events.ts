@@ -1,4 +1,5 @@
 import type { AuditClass } from "@/lib/audit-classes";
+import { slugify } from "@/lib/shared/slugify";
 import type { TaskState } from "@/lib/tak/task-states";
 import { SOFTWARE_PLATFORM_MAP_TEMPLATE } from "./templates";
 import type {
@@ -487,5 +488,5 @@ function resolveFallbackStationId(template: OperationsMapTemplate): string {
 }
 
 function normalizeStationText(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  return slugify(value);
 }

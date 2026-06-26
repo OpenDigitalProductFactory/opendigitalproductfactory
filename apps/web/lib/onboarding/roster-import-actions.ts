@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { slugify } from "@/lib/shared/slugify";
 import type { ProposedEmployee } from "./roster-import";
 
 /** Structural client — satisfied by the real PrismaClient and by test fakes. */
@@ -20,12 +21,7 @@ export type RosterImportResult = {
 /** Business id for the new employee. The model's @id (cuid) is the real PK;
  *  this is a human-facing unique handle, so name-slug + a short stamp suffices. */
 function makeEmployeeId(displayName: string, index: number): string {
-  const slug =
-    displayName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 24) || "employee";
+  const slug = slugify(displayName).slice(0, 24) || "employee";
   return `emp-${slug}-${Date.now().toString(36)}${index.toString(36)}`;
 }
 

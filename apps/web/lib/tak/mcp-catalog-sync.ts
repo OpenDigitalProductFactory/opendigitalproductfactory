@@ -3,6 +3,7 @@
 
 import { prisma } from "@dpf/db";
 import { agentEventBus } from "@/lib/agent-event-bus";
+import { slugify } from "@/lib/shared/slugify";
 import {
   deriveArchetypeIds,
   type GlamaServerEntry,
@@ -61,10 +62,7 @@ async function enrichBatch(
 }
 
 function toSlug(id: string): string {
-  return id
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+  return slugify(id);
 }
 
 export async function runMcpCatalogSync(syncId: string): Promise<void> {
