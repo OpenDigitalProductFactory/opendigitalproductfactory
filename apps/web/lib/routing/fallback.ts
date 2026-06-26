@@ -17,6 +17,7 @@ import {
   type EndpointUnavailableReason,
 } from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
+import { invalidateRoutingLoaderCache } from "./loader";
 import { recordRouteOutcome } from "./route-outcome";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 import {
@@ -144,6 +145,11 @@ async function markModelDegraded(
         err,
       ),
     );
+  // The manifest loader derives EndpointManifest.status from modelStatus, so this
+  // degrade changes what loadEndpointManifests would return — drop the request-
+  // scoped loader cache so the next routing iteration sees the degraded status
+  // rather than a stale "active" manifest.
+  invalidateRoutingLoaderCache();
 }
 
 /**
@@ -455,6 +461,11 @@ export async function callWithFallbackChain(
           cooldown.ms,
           e.message,
         );
+        // Bust the request-scoped loader cache on this cooldown mutation too, so
+        // the candidate-pool health change is reflected immediately. (The skip
+        // itself is enforced by routeEndpointV2 reading the live circuit state per
+        // iteration, not by the manifests — this keeps the cached inputs honest.)
+        invalidateRoutingLoaderCache();
 
         // EP-INF-006: Record error outcome (fire-and-forget)
         recordRouteOutcome({
