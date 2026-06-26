@@ -185,6 +185,13 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   release_nonprod_environment_lease: ["work_capsule_write"],
   renew_nonprod_environment_lease: ["work_capsule_write"],
 
+  // Scheduled agent tasks — recurring coordination-plane work. Reuse the
+  // coordination read/write grants (scheduling is coordination work) so MCP and
+  // portal share one rule set; satisfies the routing-audit INV-1 mapping.
+  create_scheduled_agent_task: ["work_capsule_write"],
+  cancel_scheduled_agent_task: ["work_capsule_write"],
+  list_scheduled_agent_tasks: ["work_capsule_read"],
+
   // Backlog triage and Build Studio promotion (spec 2026-04-21)
   // These were defined in PLATFORM_TOOLS but missing here, so every call was
   // denied by the default-deny rule below. That broke the entire backlog →
