@@ -47,7 +47,10 @@ export type RemoteActionDispatchState = (typeof REMOTE_ACTION_DISPATCH_STATES)[n
 
 const ALLOWED_DISPATCH_TRANSITIONS: Record<RemoteActionDispatchState, readonly RemoteActionDispatchState[]> = {
   queued: ["claimed", "timed-out"],
-  claimed: ["running", "timed-out", "failed"],
+  // A node may report the outcome straight from `claimed` (claim → run → report)
+  // — `running` is an optional heartbeat, not a required step for a quick
+  // read-only collect.
+  claimed: ["running", "succeeded", "failed", "timed-out"],
   running: ["succeeded", "failed", "timed-out"],
   succeeded: [],
   failed: [],

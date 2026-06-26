@@ -83,6 +83,11 @@ export const RESERVED_CAPABILITIES = [
   "a2a.gateway",
   "policy.enforcement",
   "tunnel.private-link",
+  // EP-REMOTE-ACTION P2: governed remote-action execution. Default OFF — NOT in
+  // PHASE_0_CAPABILITIES, so enrollment never auto-accepts it; an operator enables
+  // it per-node, action-type allow-listed, before any read-only diagnostics
+  // dispatch. Threat model §5 R3 (docs/.../2026-06-25-remote-action-edge-dispatch-threat-model.md).
+  "action.execute",
 ] as const;
 export type ReservedCapability = (typeof RESERVED_CAPABILITIES)[number];
 
