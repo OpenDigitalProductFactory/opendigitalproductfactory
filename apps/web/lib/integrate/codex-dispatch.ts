@@ -15,7 +15,6 @@ import {
   buildSpecialistInstructions,
   buildSpecialistTaskPrompt,
   runSandboxAgentCli,
-  sandboxExec,
   writeSandboxFile,
 } from "./sandbox/agent-cli-runtime";
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
