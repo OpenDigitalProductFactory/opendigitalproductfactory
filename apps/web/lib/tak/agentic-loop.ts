@@ -1169,8 +1169,25 @@ export async function runAgenticLoop(params: {
   // Null DB value = use system default { toolUse: true }.
   // {} DB value = passive agent, no floor.
   const rawMinCaps = agentModelConfig?.minimumCapabilities as AgentMinimumCapabilities | null | undefined;
-  const minimumCapabilities: AgentMinimumCapabilities =
+  const baseMinimumCapabilities: AgentMinimumCapabilities =
     rawMinCaps !== null && rawMinCaps !== undefined ? rawMinCaps : DEFAULT_MINIMUM_CAPABILITIES;
+  // When the turn carries an image (a pasted/attached screenshot becomes an
+  // `image_url` content block on the user message), require a vision-capable
+  // endpoint so routing never lands the image on a text-only model. Mirrors the
+  // visual-cognitive-load precedent's `minimumCapabilities: { imageInput: true }`
+  // floor — selects any vision endpoint (local DMR first), no provider pin. When
+  // none is configured the floor fails and routeAndCall surfaces a graceful
+  // degraded reply rather than silently dropping the image.
+  const turnCarriesImage = chatHistory.some(
+    (m) =>
+      Array.isArray(m.content) &&
+      m.content.some(
+        (b) => b != null && typeof b === "object" && "type" in b && ((b as { type?: unknown }).type === "image_url" || (b as { type?: unknown }).type === "image"),
+      ),
+  );
+  const minimumCapabilities: AgentMinimumCapabilities = turnCarriesImage
+    ? { ...baseMinimumCapabilities, imageInput: true }
+    : baseMinimumCapabilities;
   const agentMinimumContextTokens: number =
     agentModelConfig?.minimumContextTokens ?? DEFAULT_MINIMUM_CONTEXT_TOKENS;
 

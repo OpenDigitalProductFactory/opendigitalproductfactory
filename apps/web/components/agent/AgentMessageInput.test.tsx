@@ -55,6 +55,20 @@ vi.mock("./AgentFileUpload", () => ({
   AgentFileUpload: () => null,
 }));
 
+// Stub the upload helper so paste/drag tests don't hit the network.
+const uploadMock = vi.hoisted(() => ({
+  uploadAgentAttachment: vi.fn(async () => ({
+    ok: true as const,
+    result: { attachmentId: "att-1", fileName: "shot.png", parsedContent: null },
+  })),
+}));
+vi.mock("./uploadAgentAttachment", () => ({
+  uploadAgentAttachment: uploadMock.uploadAgentAttachment,
+  isAcceptedUploadFile: () => true,
+  UPLOAD_ACCEPT_ATTR: ".png",
+  ACCEPTED_UPLOAD_EXTENSIONS: ["png"],
+}));
+
 const defaultProps = {
   onSend: vi.fn(),
   disabled: false,
@@ -73,6 +87,7 @@ beforeEach(() => {
   hoisted.state.stop.mockClear();
   hoisted.state.reset.mockClear();
   hoisted.state.transcriptCallback = null;
+  uploadMock.uploadAgentAttachment.mockClear();
 });
 
 afterEach(() => cleanup());
@@ -111,6 +126,41 @@ describe("AgentMessageInput — voice playback affordance", () => {
     const speaker = screen.getByRole("button", { name: /voice playback unavailable/i });
     expect(speaker).toBeTruthy();
     expect((speaker as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("AgentMessageInput — paste / drag-drop attachment", () => {
+  it("uploads a pasted image file and notifies the parent", async () => {
+    const onFileUploaded = vi.fn();
+    render(<AgentMessageInput {...defaultProps} onFileUploaded={onFileUploaded} />);
+    const textarea = screen.getByRole("textbox");
+    const file = new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" });
+    await act(async () => {
+      fireEvent.paste(textarea, { clipboardData: { files: [file], items: [], types: ["Files"] } });
+    });
+    expect(uploadMock.uploadAgentAttachment).toHaveBeenCalledWith(file, "thread-1");
+    expect(onFileUploaded).toHaveBeenCalledWith({ attachmentId: "att-1", fileName: "shot.png", parsedContent: null });
+  });
+
+  it("ignores a plain-text paste (no files) so normal text paste still works", async () => {
+    render(<AgentMessageInput {...defaultProps} />);
+    const textarea = screen.getByRole("textbox");
+    await act(async () => {
+      fireEvent.paste(textarea, { clipboardData: { files: [], items: [], types: ["text/plain"] } });
+    });
+    expect(uploadMock.uploadAgentAttachment).not.toHaveBeenCalled();
+  });
+
+  it("uploads a dropped file and notifies the parent", async () => {
+    const onFileUploaded = vi.fn();
+    render(<AgentMessageInput {...defaultProps} onFileUploaded={onFileUploaded} />);
+    const textarea = screen.getByRole("textbox");
+    const file = new File([new Uint8Array([1, 2, 3])], "diagram.png", { type: "image/png" });
+    await act(async () => {
+      fireEvent.drop(textarea, { dataTransfer: { files: [file], items: [], types: ["Files"] } });
+    });
+    expect(uploadMock.uploadAgentAttachment).toHaveBeenCalledWith(file, "thread-1");
+    expect(onFileUploaded).toHaveBeenCalledTimes(1);
   });
 });
 

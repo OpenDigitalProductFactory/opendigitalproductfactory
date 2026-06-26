@@ -211,7 +211,7 @@ When on `/build`, the Feature Brief panel shows an "Attachments" section listing
 ## 7. Not in Scope
 
 - **S3/blob storage** — local filesystem for now, cloud storage is a future enhancement
-- **Image uploads** — screenshots/diagrams deferred (would need OCR or vision model)
+- ~~**Image uploads** — screenshots/diagrams deferred (would need OCR or vision model)~~ — **DELIVERED (BI-88960D63, 2026-06-26).** Vision now exists platform-wide (`ContentBlock` `image_url`, router `imageInput` capability floor, local DMR vision via Docker Model Runner). Images upload through the same pipeline (image extensions + magic-byte validation), skip text parsing, and are injected as a downscaled `image_url` vision block on the user message (`readAttachmentImageAsDataUrl` in `lib/shared/file-upload.ts`); `runAgenticLoop` raises the `imageInput` floor so the turn routes to a vision-capable endpoint, degrading gracefully when none is configured. Composer now also supports **paste** and **drag-and-drop** (the §4 drop zone is now real).
 - **Email (.eml/.msg)** — can be added later with same pattern
 - **Version tracking on attachments** — replace is fine for now, no diff history
 - **Full-text search across attachments** — deferred to EP-DEDUP-001

@@ -29,6 +29,7 @@ exports[`shared barrel export > exports all public symbols 1`] = `
   "parseICal",
   "parsePdf",
   "parseXlsx",
+  "readAttachmentImageAsDataUrl",
   "resolveBmrAuthority",
   "resolveProductProposalTarget",
   "safeRenderValue",
