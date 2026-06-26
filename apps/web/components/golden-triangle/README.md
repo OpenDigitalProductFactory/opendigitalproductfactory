@@ -1,6 +1,6 @@
 # Golden Triangle — posture control (UI)
 
-`EP-GOLDEN-TRIANGLE` · Slice 2 (`BI-D48EB34C`). The canonical, reusable control for setting a Cost / Quality / Time posture. Design: [`docs/design/golden-triangle-design.md`](../../../../docs/design/golden-triangle-design.md) §6.
+`EP-GOLDEN-TRIANGLE` · Slice 2 (`BI-D48EB34C`). The canonical, reusable control for setting a Cost / Quality / Time posture. Design: [`docs/design/golden-triangle-design.md`](../../../../docs/design/golden-triangle-design.md) §6. **What each vector position actually configures** (exact parameters + features on/off, incl. the debate rung): [`docs/design/golden-triangle-vector-reference.md`](../../../../docs/design/golden-triangle-vector-reference.md).
 
 ## Components
 
@@ -8,13 +8,13 @@
   1. **Presets (primary, one click):** Fast / Balanced / Assured / Frugal, each with a plain-language effect line.
   2. **Triangle (opt-in fine-tune):** a draggable point inside a Cost / Quality / Time triangle (pointer + keyboard on the thumb).
   3. **Numeric inputs (canonical accessible control):** three labelled percent inputs — a 2D drag surface is *not* a 1-D ARIA slider, so the numeric/preset layer is the accessible source of truth.
-- **`GoldenTrianglePriorityPanel`** — a stateful host (view-local state) for a settings/preview surface.
-- **`CoworkerPriorityControl`** — a small, self-contained posture chip for the AI coworker dialog header: a balance-coloured dot + active preset that opens the compact control in a popover.
-- **`posture-display.ts`** — pure helpers: triangle geometry (`weightsToPoint` / `pointToWeights`), preset metadata, `describeConfigured()` / `plainSummary()` (derived from the **real Slice 1 compiler** so the UI never drifts), and `balanceState()` for the colour cue.
+- **`GoldenTrianglePriorityPanel`** — a stateful host (view-local state) for the platform-default settings surface.
+- **`CoworkerPriorityDock`** — the per-coworker control docked in-flow at the composer (collapsed by default to a colour-graded chip; expands to the full control). Replaced the old `CoworkerPriorityControl` header popover, which clipped off the panel edge.
+- **`posture-display.ts`** — pure helpers: triangle geometry (`weightsToPoint` / `pointToWeights`), preset metadata, `postureLabel()` (a meaningful label at every position — "Max Quality", "Quality-first", …), `describeConfigured()` / `plainSummary()` (derived from the **real Slice 1 compiler** so the UI never drifts), `TRIANGLE_AXIS_GUIDE` (the min/max explainer), and `balanceState()` for the colour cue.
 
 ## Balance colouring
 
-The triangle shades by balance: **green** when the three axes are centred, through **yellow** to **red** as one or two axes get starved (the posture pushes toward an edge or vertex). A starved axis's vertex label turns red, and a balance pill names the state ("Well balanced" / "Starving Time"). It is an at-a-glance cue that you are trading something away.
+The triangle shades by balance: **green** when the three axes are centred, through **yellow** to **red** as one or two axes get starved (the posture pushes toward an edge or vertex). There are no vertex labels — the gradient colour conveys the state (founder direction) — and a balance pill names it ("Well balanced" / "Starving Time"). It is an at-a-glance cue that you are trading something away.
 
 ## Surfaces
 

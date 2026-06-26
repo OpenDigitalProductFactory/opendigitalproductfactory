@@ -442,14 +442,20 @@ Non-functional requirements for the compiler:
 
 ### Representative Compile Table
 
+> **Canonical, current mapping:** the exact per-vector parameters + features (incl.
+> the **debate** rung the table below pre-dates) live in
+> [golden-triangle-vector-reference.md](golden-triangle-vector-reference.md), mirrored
+> from `compile.ts`. The rows below are the original illustrative intent.
+
 | User posture | Decoded intent | Compiler behavior |
 | --- | --- | --- |
-| Assured | "Get this right." | `quality_first`, high `effort`/reasoning, stronger tier floor, more context, multi-branch deliberation, deep verification, generous retry, explicit receipt. Cost and time may rise. |
-| Fast | "I need this now." | Lower latency target, minimal/low `effort` when safe, single pass, shallow verification, tight retries, fastest eligible endpoint. May reduce assurance. |
-| Frugal | "Spend carefully." | `minimize_cost`, smallest capable model, low `effort`, tighter token/context and loop/duration budget, single deliberation branch, avoid frontier unless policy requires it. May increase time. |
-| Balanced | "Use the sensible default." | Pass-through: existing task-requirement and agent defaults, modest review/verification (no deltas — see Cold-start). |
-| Custom: cost 0.6 / quality 0.3 / time 0.1 | "Mostly cheap, some care." | `minimize_cost`, low `effort`, shallow verification, single deliberation branch, retry ≤ 1, mid tier-floor. |
-| Custom: cost 0.2 / quality 0.6 / time 0.2 | "Mostly right, watch spend." | `quality_first`, high `effort`, deep verification, 2-branch deliberation, retry ≤ 2, strong tier-floor — but capped token/context budget. |
+| Assured | "Get this right." | `quality_first`, high `effort`/reasoning, frontier tier floor, deep verification, a **review** deliberation, retry 3. Cost and time may rise. |
+| Max Quality (custom: quality ≥ 0.85) | "Get this as right as possible." | As Assured but **max effort** and a multi-perspective **debate** (the top of the rigor ladder) instead of a single review. |
+| Fast | "I need this now." | Lower latency target (30s), low `effort` when safe, single pass, no verification, tight retries (1), fastest eligible endpoint. May reduce assurance. |
+| Frugal | "Spend carefully." | `minimize_cost`, adequate (smallest capable) tier, low `effort`, shallow verification, no deliberation, retry 1, avoid frontier unless policy requires it. May increase time. |
+| Balanced | "Use the sensible default." | Pass-through: existing task-requirement and agent defaults, no deltas (see Cold-start). |
+| Custom: cost 0.6 / quality 0.3 / time 0.1 | "Mostly cheap, some care." | `minimize_cost`, low `effort`, shallow verification, no deliberation, retry 1, adequate tier-floor. |
+| Custom: cost 0.2 / quality 0.6 / time 0.2 | "Mostly right, watch spend." | `quality_first`, high `effort`, deep verification, a **review** deliberation, retry 3, frontier tier-floor. |
 
 ### Coupling Rules
 
