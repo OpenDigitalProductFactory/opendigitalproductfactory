@@ -249,13 +249,13 @@ export type MarketingWorkspaceSnapshot = {
   workProducts: {
     campaignBriefs: Array<MarketingCampaignBriefArtifact & {
       briefId: string;
-      campaignId: string | null;
+      campaignId?: string | null;
       status: string;
       createdAt: Date;
     }>;
     assetTasks: Array<MarketingAssetTaskArtifact & {
       taskId: string;
-      campaignId: string | null;
+      campaignId?: string | null;
       status: string;
       createdAt: Date;
     }>;

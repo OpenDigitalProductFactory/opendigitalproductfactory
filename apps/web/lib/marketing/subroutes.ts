@@ -179,8 +179,8 @@ function draftStatusLabel(taskId: string, snapshot: MarketingWorkspaceSnapshot):
 // back to the legacy heuristic (channel overlap or brief-title substring), so
 // pre-campaign rows keep rendering as before.
 export function taskMatchesBrief(
-  task: MarketingWorkspaceSnapshot["workProducts"]["assetTasks"][number],
-  brief: MarketingWorkspaceSnapshot["workProducts"]["campaignBriefs"][number],
+  task: { campaignId?: string | null; channel?: string | null; title: string; brief?: string | null },
+  brief: { campaignId?: string | null; channels: readonly string[]; title: string },
 ): boolean {
   if (task.campaignId && brief.campaignId) {
     return task.campaignId === brief.campaignId;
