@@ -236,6 +236,8 @@ Rollback:
 
 Backlog: `BI-3047C122`.
 
+**Status (2026-06-26): bootstrap helper shipped** — `scripts/lib/bootstrap-worktree-deps.mjs` provides the idempotent, fail-safe managed dependency bootstrap (shared pnpm store, `--frozen-lockfile`, never mutates the root clone, never junctions). `classifyReadiness()` marks `compile-ready` only after deps resolve AND a cheap gate passes; any failure -> `source-only`. Pure logic unit-tested (`node --test scripts/lib/bootstrap-worktree-deps.test.mjs`, 2/2). Follow-up slice: invoke it from `seed-worktree-mcp` / a `dpf worktree --bootstrap` CLI (NOT the blocking WorktreeCreate hook), wire the real cheap gate, and update `.dpf-worktree-readiness.json`.
+
 Goal: reduce manual setup friction without coupling worktrees unsafely to the root clone.
 
 Files to inspect or update:
