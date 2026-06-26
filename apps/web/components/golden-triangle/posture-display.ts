@@ -191,9 +191,9 @@ export function decodePostureForDisplay(
   return { decoded, chips: describeConfigured(decoded) };
 }
 
-// ── Balance / starvation colouring ──────────────────────────────────────────
+// ── Balance / trade-off colouring ────────────────────────────────────────────
 // Green when the three axes are in balance (centre), shading through yellow to
-// red as one or two axes get starved (the posture pushes toward an edge/vertex).
+// red as the posture trades one or two axes away (pushes toward an edge/vertex).
 export type BalanceLevel = "balanced" | "leaning" | "starved";
 
 export interface BalanceState {
@@ -206,6 +206,15 @@ export interface BalanceState {
 }
 
 const STARVE_FLOOR = 0.12;
+
+// What deprioritizing an axis actually costs you, in plain terms — the inverse of
+// the corner labels (Lower Cost / Lower Time / Higher Reasoning). Drives the balance
+// pill so it reads e.g. "Higher Cost & More Time" — the plain trade-off, not jargon.
+const AXIS_TRADE_OFF: Record<"Quality" | "Cost" | "Time", string> = {
+  Quality: "Lower Reasoning",
+  Cost: "Higher Cost",
+  Time: "More Time",
+};
 
 export function balanceState(qualityWeight: number, costWeight: number, timeWeight: number): BalanceState {
   const q = Math.max(0, qualityWeight);
@@ -221,7 +230,7 @@ export function balanceState(qualityWeight: number, costWeight: number, timeWeig
   if (nc < STARVE_FLOOR) starved.push("Cost");
   if (nt < STARVE_FLOOR) starved.push("Time");
 
-  // 1 = perfectly balanced (1/3 each); 0 = an axis fully starved (a vertex/edge).
+  // 1 = perfectly balanced (1/3 each); 0 = an axis fully deprioritized (a vertex/edge).
   const score = Math.min(nq, nc, nt) * 3;
   let level: BalanceLevel;
   let token: BalanceState["token"];
@@ -237,7 +246,11 @@ export function balanceState(qualityWeight: number, costWeight: number, timeWeig
   }
 
   const label =
-    level === "balanced" ? "Well balanced" : starved.length > 0 ? `Starving ${starved.join(" & ")}` : "Leaning";
+    level === "balanced"
+      ? "Well balanced"
+      : starved.length > 0
+        ? starved.map((a) => AXIS_TRADE_OFF[a]).join(" & ")
+        : "Leaning";
 
   return { level, token, label, starved };
 }

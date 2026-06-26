@@ -3,8 +3,8 @@
 // control. Presets are the primary, one-click path; the triangle is an opt-in
 // fine-tune; three numeric inputs are the canonical accessible control (a 2D
 // drag surface is not a 1-D ARIA slider). The triangle is colour-coded by
-// balance — green when centred, shading to yellow then red as one or two axes
-// get starved — and every posture shows, in plain language, what it configures
+// balance — green when centred, shading to yellow then red as the posture trades
+// one or two axes away — and every posture shows, in plain language, what it configures
 // (driven by the real Slice 1 compiler so the UI never drifts).
 import { useId, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 

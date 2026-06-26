@@ -1,7 +1,7 @@
 "use client";
 // EP-GOLDEN-TRIANGLE — the colour-graded triangle fill. A canvas Gouraud-shades
 // the triangle from each vertex's health colour (red→yellow→green per axis
-// weight): a dominant corner reads green, the starved corners red, dead-centre
+// weight): a dominant corner reads green, the low-weight corners red, dead-centre
 // pure yellow, an edge yellow-near / red-far. Decorative (aria-hidden) — the SVG
 // thumb + the numeric inputs carry the accessible control. Geometry matches the
 // SVG triangle (INSET 12 / SPAN 76 of a 100-unit box): Quality top-centre, Cost
