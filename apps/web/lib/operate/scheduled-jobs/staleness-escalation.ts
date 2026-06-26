@@ -17,6 +17,15 @@ export type JobStalenessState = {
   lastOkAt: string | null;
   /** Consecutive error runs since the last success. */
   consecutiveErrors: number;
+  /**
+   * Consecutive DEFERRED runs since the last actual run (BI-9BF17415) — a
+   * scheduled tick that was skipped before executing (e.g. blocked by the
+   * quiescence drain gate) instead of running to ok/error. Reset to 0 on any
+   * actual run. A climbing value is a make-silent-failures-observable signal
+   * that the job is being starved of execution windows — a code→AI "ascent"
+   * candidate whose fixed gating may need judgment (consumed by BI-A028AA14).
+   */
+  deferCount: number;
 };
 
 export type StalenessThresholds = {
@@ -33,7 +42,7 @@ export type StalenessDecision = {
   reason: string | null;
 };
 
-const EMPTY_STATE: JobStalenessState = { lastOkAt: null, consecutiveErrors: 0 };
+const EMPTY_STATE: JobStalenessState = { lastOkAt: null, consecutiveErrors: 0, deferCount: 0 };
 
 /** Read the staleness sub-state out of a ScheduledJob.metadata JSON blob. */
 export function readStalenessState(metadata: unknown): JobStalenessState {
@@ -44,6 +53,7 @@ export function readStalenessState(metadata: unknown): JobStalenessState {
   return {
     lastOkAt: typeof r.lastOkAt === "string" ? r.lastOkAt : null,
     consecutiveErrors: typeof r.consecutiveErrors === "number" && r.consecutiveErrors >= 0 ? r.consecutiveErrors : 0,
+    deferCount: typeof r.deferCount === "number" && r.deferCount >= 0 ? r.deferCount : 0,
   };
 }
 
@@ -68,7 +78,7 @@ export function evaluateJobStaleness(
   thresholds: StalenessThresholds,
 ): StalenessDecision {
   if (status === "ok") {
-    return { nextState: { lastOkAt: now.toISOString(), consecutiveErrors: 0 }, escalate: false, reason: null };
+    return { nextState: { lastOkAt: now.toISOString(), consecutiveErrors: 0, deferCount: 0 }, escalate: false, reason: null };
   }
 
   const consecutiveErrors = (prev.consecutiveErrors ?? 0) + 1;
@@ -90,7 +100,19 @@ export function evaluateJobStaleness(
     reason = parts.join("; ");
   }
 
-  return { nextState: { lastOkAt, consecutiveErrors }, escalate, reason };
+  return { nextState: { lastOkAt, consecutiveErrors, deferCount: 0 }, escalate, reason };
+}
+
+/**
+ * Pure: record that a scheduled run was DEFERRED (skipped before executing —
+ * e.g. blocked by the quiescence drain gate) instead of running. Increments the
+ * consecutive-defer counter and preserves the staleness counters; an actual run
+ * (`evaluateJobStaleness` on ok|error) resets deferCount to 0. The rate/
+ * threshold read is the consumer's job (BI-A028AA14); this only emits the
+ * queryable counter, so a deferral is never mistaken for an error or a success.
+ */
+export function recordJobDefer(prev: JobStalenessState): JobStalenessState {
+  return { ...prev, deferCount: (prev.deferCount ?? 0) + 1 };
 }
 
 /**

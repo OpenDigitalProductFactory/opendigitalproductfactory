@@ -54,6 +54,32 @@ async function recordCodeGraphJob(status: "ok" | "error", error?: string): Promi
   }
 }
 
+// BI-9BF17415 (make-silent-failures-observable): a scheduled tick deferred by
+// the quiescence drain gate is a silent no-op today. Bump a queryable
+// consecutive-defer counter on the job's metadata so a job being starved of
+// execution windows becomes an observable signal (consumed by the code→AI
+// ascent scan, BI-A028AA14) instead of vanishing. Mirrors recordCodeGraphJob.
+async function recordCodeGraphDefer(): Promise<void> {
+  const { prisma } = await import("@dpf/db");
+  const { CODE_GRAPH_JOB_ID } = await import("@/lib/integrate/code-graph-refresh");
+  const { readStalenessState, recordJobDefer, mergeStalenessState } = await import(
+    "@/lib/operate/scheduled-jobs/staleness-escalation"
+  );
+
+  const job = await prisma.scheduledJob.findUnique({ where: { jobId: CODE_GRAPH_JOB_ID } });
+  if (!job) return;
+
+  await prisma.scheduledJob.update({
+    where: { jobId: CODE_GRAPH_JOB_ID },
+    data: {
+      metadata: mergeStalenessState(
+        job.metadata,
+        recordJobDefer(readStalenessState(job.metadata)),
+      ) as import("@dpf/db").Prisma.InputJsonValue,
+    },
+  });
+}
+
 export const codeGraphReconcileScheduled = inngest.createFunction(
   {
     id: "ops/code-graph-reconcile-scheduled",
@@ -63,7 +89,14 @@ export const codeGraphReconcileScheduled = inngest.createFunction(
   },
   async ({ step }) => {
     const gate = await gateAtEntry(step);
-    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+    if (!gate.proceed) {
+      // BI-9BF17415: record the deferral as a counter before bailing, so a job
+      // repeatedly starved by the drain gate surfaces instead of silently skipping.
+      await step.run("record-defer", async () => {
+        await recordCodeGraphDefer();
+      });
+      return { skipped: true, reason: gate.reason };
+    }
 
     // Per-job kill switch (BI-5A42E572). Honour an operator's disable from the
     // Scheduled Jobs admin surface in addition to the global gate. Defaults to
