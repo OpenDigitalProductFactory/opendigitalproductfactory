@@ -1045,6 +1045,8 @@ model BacklogItem {
   businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityBacklogLinks")
 
   @@index([portfolioId])
+  @@index([status])
+  @@index([status, updatedAt])
 }
 
 // Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
