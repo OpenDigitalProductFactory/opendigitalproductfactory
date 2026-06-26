@@ -65,7 +65,8 @@ async function publishFunctionalFailureEvidence(evidence: FunctionalFailureEvide
 
 async function readMcpConfig(): Promise<{ url: string; authorization: string } | null> {
   const explicitUrl = process.env.DPF_MCP_URL;
-  const explicitToken = process.env.DPF_MCP_TOKEN;
+  // Active standard is DPF_MCP_BEARER_TOKEN; keep DPF_MCP_TOKEN as back-compat (BI-14E9F7CE).
+  const explicitToken = process.env.DPF_MCP_BEARER_TOKEN ?? process.env.DPF_MCP_TOKEN;
   if (explicitUrl && explicitToken) {
     return {
       url: explicitUrl,
