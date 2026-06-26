@@ -167,6 +167,44 @@ export type TriageDrainDeps = {
   applyBuild: (itemId: string, effortSize: string, rationale: string) => Promise<void>;
 };
 
+/** Outcome of triaging a single item — the unit the scheduled drain accounts by. */
+export type TriageItemOutcome = "auto-built" | "left-for-operator";
+
+/**
+ * Triage one item: get a decision and auto-apply only a confident BUILD outcome.
+ * Anything else (or any failure) leaves the item for a human. Never throws — a
+ * bad decide() or applyBuild() resolves to "left-for-operator".
+ *
+ * Pulled out of runBacklogTriageDrain so the Inngest wrapper can run each item
+ * in its own step: one item = one HTTP round-trip, so a single slow LLM call
+ * can't hold the whole batch open past Inngest's response-header timeout — the
+ * failure mode that spun this function into duplicate-span / run-not-found
+ * retry storms (BI-C8164664 context).
+ */
+export async function triageOneItem(
+  item: TriageCandidate,
+  deps: Pick<TriageDrainDeps, "decide" | "applyBuild">,
+): Promise<TriageItemOutcome> {
+  let decision: TriageDecision | null = null;
+  try {
+    decision = parseTriageDecision(await deps.decide(item));
+  } catch {
+    decision = null;
+  }
+  const size = autoApplyBuildSize(decision, item);
+  if (!size) return "left-for-operator";
+  try {
+    await deps.applyBuild(
+      item.itemId,
+      size,
+      `Auto-triaged by scheduled drain: ${(decision?.rationale ?? "confident build").slice(0, 400)}`,
+    );
+    return "auto-built";
+  } catch {
+    return "left-for-operator";
+  }
+}
+
 /**
  * Drain the triaging queue: for each item, get a decision and auto-apply only
  * confident BUILD outcomes. Everything else is left for a human. Never throws
@@ -180,27 +218,8 @@ export async function runBacklogTriageDrain(deps: TriageDrainDeps): Promise<Tria
   let leftForOperator = 0;
 
   for (const item of items) {
-    let decision: TriageDecision | null = null;
-    try {
-      decision = parseTriageDecision(await deps.decide(item));
-    } catch {
-      decision = null;
-    }
-    const size = autoApplyBuildSize(decision, item);
-    if (size) {
-      try {
-        await deps.applyBuild(
-          item.itemId,
-          size,
-          `Auto-triaged by scheduled drain: ${(decision?.rationale ?? "confident build").slice(0, 400)}`,
-        );
-        autoBuilt++;
-      } catch {
-        leftForOperator++;
-      }
-    } else {
-      leftForOperator++;
-    }
+    if ((await triageOneItem(item, deps)) === "auto-built") autoBuilt++;
+    else leftForOperator++;
   }
 
   return { considered: items.length, autoBuilt, leftForOperator };
