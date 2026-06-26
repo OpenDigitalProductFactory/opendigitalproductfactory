@@ -39,8 +39,10 @@ export class BuildWipCapError extends Error {
   constructor(active: number, cap: number) {
     super(
       `You already have ${active} build${active === 1 ? "" : "s"} in progress ` +
-        `(the limit is ${cap}). Finish or abandon one before starting a new build — ` +
-        `Build Studio keeps work-in-progress low so things actually get completed.`,
+        `(the limit is ${cap}). Build Studio shares one sandbox. Finish or abandon one ` +
+        `before starting another — or run it as an external Claude Code / Codex / Grok ` +
+        `build, which is first-class and NOT gated by the Build Studio sandbox (AGENTS.md §17). ` +
+        `External work still registers its capsule, so it stays visible in the unified WIP.`,
     );
     this.name = "BuildWipCapError";
     this.active = active;
