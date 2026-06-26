@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   cliAdapterTypeForProvider,
   deriveRoutingEligibility,
+  recommendedActionFor,
   type RoutingEligibilityInput,
 } from "./provider-routing-eligibility";
 
@@ -17,6 +18,18 @@ function base(overrides: Partial<RoutingEligibilityInput> = {}): RoutingEligibil
     ...overrides,
   };
 }
+
+describe("recommendedActionFor", () => {
+  it("returns a concrete action for each blocking state and null when none applies", () => {
+    expect(recommendedActionFor(deriveRoutingEligibility(base()))).toBeNull(); // routable
+    expect(recommendedActionFor(deriveRoutingEligibility(base({ status: "unconfigured" })))).toMatch(/Set this provider up/);
+    expect(recommendedActionFor(deriveRoutingEligibility(base({ status: "inactive" })))).toMatch(/Enable/);
+    expect(recommendedActionFor(deriveRoutingEligibility(base({ authMethod: "api_key", hasCredential: false })))).toMatch(/credentials/);
+    expect(recommendedActionFor(deriveRoutingEligibility(base({ discoveredModelCount: 0 })))).toMatch(/model sync/);
+    expect(recommendedActionFor(deriveRoutingEligibility(base({ cliPoolExhausted: true })))).toBeNull(); // rate_limited self-recovers
+    expect(recommendedActionFor(deriveRoutingEligibility(base({ endpointType: "service" })))).toBeNull(); // not_routable
+  });
+});
 
 describe("deriveRoutingEligibility", () => {
   it("local active provider with models is routable (no credentials needed)", () => {
