@@ -20,12 +20,15 @@ describe("CoworkerPriorityDock", () => {
     savePosture.mockResolvedValue({ ok: true });
   });
 
-  it("shows the triangle in view by default (no popover, nothing to open)", async () => {
+  it("is collapsed by default — the resting state is the chip, triangle hidden until opened", async () => {
     getPosture.mockResolvedValueOnce(null);
     render(<CoworkerPriorityDock agentId="agent-1" />);
     await waitFor(() => expect(getPosture).toHaveBeenCalledWith("agent-1"));
-    // The control's presets render without any click — it's docked open.
-    expect(screen.getByRole("radio", { name: /Assured/ })).toBeTruthy();
+    // Resting state: the Priority chip shows; the control (presets) does NOT.
+    const header = screen.getByRole("button", { name: /Priority/ });
+    expect(header).toBeTruthy();
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("radio", { name: /Assured/ })).toBeNull();
   });
 
   it("loads this coworker's own posture into the docked header", async () => {
@@ -34,21 +37,22 @@ describe("CoworkerPriorityDock", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /Priority.*Frugal/ })).toBeTruthy());
   });
 
-  it("collapses and re-expands in place", async () => {
+  it("expands on open and re-collapses in place", async () => {
     getPosture.mockResolvedValueOnce(null);
     render(<CoworkerPriorityDock agentId="agent-1" />);
     await waitFor(() => expect(getPosture).toHaveBeenCalled());
+    expect(screen.queryByRole("radio", { name: /Assured/ })).toBeNull(); // collapsed by default
+    fireEvent.click(screen.getByRole("button", { name: /Priority/ })); // open
     expect(screen.getByRole("radio", { name: /Assured/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Priority/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Priority/ })); // close
     expect(screen.queryByRole("radio", { name: /Assured/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Priority/ }));
-    expect(screen.getByRole("radio", { name: /Assured/ })).toBeTruthy();
   });
 
   it("saves the coworker's posture (debounced) after a change", async () => {
     getPosture.mockResolvedValueOnce(null);
     render(<CoworkerPriorityDock agentId="agent-1" />);
     await waitFor(() => expect(getPosture).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: /Priority/ })); // open the dock first
     fireEvent.click(screen.getByRole("radio", { name: /Assured/ }));
     await waitFor(() => expect(savePosture).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(savePosture.mock.calls[0][0]).toBe("agent-1");
