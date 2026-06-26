@@ -33,7 +33,12 @@ export function PortalContextOverlayDrawer({
       // is no gutter to offset around, while staying below the z-[80] banner
       // overlay tier.
       style={{ right: "var(--agent-panel-reserved-width, 0px)" }}
-      className="fixed inset-y-0 z-[60] flex w-full max-w-xl flex-col border-l border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] shadow-xl transition-[right] duration-200"
+      // No CSS transition on `right`: it derives from the unregistered custom property
+      // --agent-panel-reserved-width, and transitioning a value that comes from an
+      // unregistered var leaves it stuck at the 0px fallback after the var updates —
+      // which would dock this drawer to the viewport edge ON TOP of the coworker panel
+      // instead of beside it. Resolving the var directly keeps the side-by-side layout.
+      className="fixed inset-y-0 z-[60] flex w-full max-w-xl flex-col border-l border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] shadow-xl"
     >
       <div className="flex items-center justify-between gap-3 border-b border-[var(--dpf-border)] px-4 py-3">
         <div className="min-w-0">
