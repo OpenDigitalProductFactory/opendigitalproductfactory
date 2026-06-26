@@ -3,7 +3,7 @@
 - **BI:** BI-93FE150F — "Ascent (code→AI): skill-curator learned signal classification instead of hand-coded sourceType rules"
 - **Epic:** EP-FULL-OBS
 - **Date:** 2026-06-26
-- **Status:** design pass complete; deterministic floor shipped with this doc; learned ascent deferred (conditional — see §5)
+- **Status:** design pass complete; deterministic floor + record-only wiring (§5 v1) shipped; v2 governed action and v3 learned ascent deferred (conditional — see §5)
 
 ## 0. TL;DR
 

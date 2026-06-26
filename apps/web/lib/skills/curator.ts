@@ -24,6 +24,7 @@ import {
   isSkillLifecycleState,
   type SkillLifecycleState,
 } from "./lifecycle";
+import { assessSkillQuality, type SkillQualityAssessment } from "./quality";
 
 export const CURATOR_REPORT_KIND = "curator-report";
 
@@ -35,6 +36,13 @@ export type CuratorFinding = {
   toState: SkillLifecycleState;
   reason: string;
   changed: boolean;
+  /**
+   * Operational quality-health read for the skill's invocations in the window,
+   * recorded alongside the lifecycle verdict (BI-93FE150F v1, record-only). The
+   * lifecycle axis answers "is it used?"; this answers "do those uses succeed?".
+   * Optional because reports written before this signal existed omit it.
+   */
+  quality?: SkillQualityAssessment;
 };
 
 export type CuratorReport = {
@@ -128,12 +136,18 @@ export async function runSkillCurator(
     const next = isCuratorImmutable(current) ? current : result.next;
     totals[next] = (totals[next] ?? 0) + 1;
     const changed = next !== current;
+    // Record-only quality-health read from failure telemetry the curator
+    // already holds (usage30d.failed) — surfaced in the finding/report but
+    // never acted on in v1. See the design pass:
+    // docs/superpowers/plans/2026-06-26-curator-quality-health-ascent-design.md
+    const quality = assessSkillQuality(usage30d);
     findings.push({
       skillId: s.skillId,
       fromState: current,
       toState: next,
       reason: result.reason,
       changed,
+      quality,
     });
 
     if (changed) {

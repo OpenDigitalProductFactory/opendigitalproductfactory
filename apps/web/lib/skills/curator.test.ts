@@ -230,3 +230,52 @@ describe("runSkillCurator — empty population", () => {
     expect(state.artifactsCreated).toHaveLength(1);
   });
 });
+
+describe("runSkillCurator — quality-health signal (BI-93FE150F v1, record-only)", () => {
+  it("records a regressing verdict for an in-use skill whose invocations mostly fail", async () => {
+    addSkill({ skillId: "flaky-skill", skillMdContent: "body" });
+    // 10 invocations, 5 failures → 50% → regressing, while lifecycle still
+    // reads "active" (it is being used). This is exactly the blind spot the
+    // lifecycle classifier cannot see — it never looks at failures.
+    for (let i = 0; i < 10; i++) {
+      state.usageEvents.push({ skillId: "flaky-skill", phase: "invoked", createdAt: new Date("2026-05-01") });
+    }
+    for (let i = 0; i < 5; i++) {
+      state.usageEvents.push({ skillId: "flaky-skill", phase: "failed", createdAt: new Date("2026-05-02") });
+    }
+
+    const report = await runSkillCurator({ invokedByUserId: "usr_owner" });
+
+    const finding = report.findings.find((f) => f.skillId === "flaky-skill");
+    expect(finding?.toState).toBe("active"); // lifecycle: in use
+    expect(finding?.quality?.verdict).toBe("regressing"); // quality: failing
+    expect(finding?.quality?.failureRate).toBe(0.5);
+
+    // record-only: an active skill still emits no ImprovementSignal in v1.
+    expect(
+      state.signalsTouched.find((s) => (s.sourceId as string)?.startsWith("flaky-skill:")),
+    ).toBeUndefined();
+
+    // The verdict is persisted into the curator-report artifact, not just the
+    // returned object.
+    const parts = state.artifactsCreated[0]?.parts as Array<{
+      data: { findings: Array<{ skillId: string; quality?: { verdict?: string } }> };
+    }>;
+    const persisted = parts[0]?.data.findings.find((f) => f.skillId === "flaky-skill");
+    expect(persisted?.quality?.verdict).toBe("regressing");
+  });
+
+  it("records insufficient-data rather than a regression on a tiny sample", async () => {
+    addSkill({ skillId: "rare-skill", skillMdContent: "body" });
+    // 2 invocations, both failed: 100% but below the trust threshold — the
+    // curator must not cry regression on noise.
+    state.usageEvents.push({ skillId: "rare-skill", phase: "invoked", createdAt: new Date("2026-05-01") });
+    state.usageEvents.push({ skillId: "rare-skill", phase: "invoked", createdAt: new Date("2026-05-01") });
+    state.usageEvents.push({ skillId: "rare-skill", phase: "failed", createdAt: new Date("2026-05-02") });
+    state.usageEvents.push({ skillId: "rare-skill", phase: "failed", createdAt: new Date("2026-05-02") });
+
+    const report = await runSkillCurator({ invokedByUserId: "usr_owner" });
+    const finding = report.findings.find((f) => f.skillId === "rare-skill");
+    expect(finding?.quality?.verdict).toBe("insufficient-data");
+  });
+});
