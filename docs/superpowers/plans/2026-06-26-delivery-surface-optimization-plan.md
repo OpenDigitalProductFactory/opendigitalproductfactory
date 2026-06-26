@@ -319,3 +319,4 @@ For docs-only changes:
 - WWMD/kernel decision consolidation should be handled under its own epic or BI after live backlog confirmation.
 - Outbound webhooks should wait for a concrete consuming workflow.
 - Gemini CLI, OpenCode, and Aider should remain benchmark comparators unless the tool evaluation pipeline approves broader DPF support.
+- Autonomous cross-surface deliberation (BI-A245FE00, EP-BUILD-65837F): the activation POLICY foundation shipped — `apps/web/lib/deliberation/external-review-activation.ts` decides, per external-surface artifact, whether to fire an independent-surface deliberation and with what golden-triangle `strategyProfile` (risk-driven, raised by the deliverable-sensitivity floor). Follow-up slice: wire it into the capsule/evidence-recording path + `start_deliberation` dispatch (select an independent surface via `pickIndependentSurface`, enforce the budget). Founder-raised 2026-06-26; demonstrated value in this study's own review cycle.
