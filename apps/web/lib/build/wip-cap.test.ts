@@ -41,4 +41,15 @@ describe("assertWipCapacity", () => {
       expect(err.message).toContain("Finish or abandon one");
     }
   });
+
+  it("guides toward a first-class external build when the BS sandbox is full (BI-937128F6)", () => {
+    try {
+      assertWipCapacity(5, 3);
+      throw new Error("should have thrown");
+    } catch (e) {
+      const err = e as BuildWipCapError;
+      expect(err.message).toMatch(/external .*build/i);
+      expect(err.message).toContain("§17");
+    }
+  });
 });
