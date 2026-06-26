@@ -2,7 +2,7 @@
 
 **Status:** Living record — the external coding clients change weekly; this is the dated, owned source of truth for what each does and what DPF depends on / should adopt.
 **Owner:** Enterprise Architect persona / `dpf-platform:dpf-architecture-review`.
-**Refresh cadence:** Monthly (see "Refresh ritual"). **Last full refresh:** 2026-06-20.
+**Refresh cadence:** Monthly (see "Refresh ritual"). **Last full refresh:** 2026-06-20. **Last verified:** 2026-06-26 (delivery-surface sweep — see "2026-06-26 refresh" below).
 **Standard it serves:** `docs/architecture/context-engineering-standards.md`.
 
 ## Why this exists
@@ -29,6 +29,22 @@ Adoption status legend: ✅ adopted · ◐ partial/planned · ⬜ not adopted ·
 | **Context window (base)** | ~200K | ~200K+ | 1M | 2M (CLI) | provider-dependent | local served ~24,576 (binding). ➖ |
 
 *Sources for the row data are catalogued in the design spec appendix (`2026-06-20-context-engineering-tool-efficiency-design.md`).*
+
+## 2026-06-26 refresh (delivery-surface sweep)
+
+Verified 2026-06-26 against the delivery-surface optimization study (`docs/superpowers/specs/2026-06-26-delivery-surface-optimization-study-design.md`). Deltas since the 2026-06-20 full refresh:
+
+- **Prompt-cache emission (Anthropic):** ⬜→◐ **shipped** — DPF now emits `cache_control:{type:"ephemeral"}` on the stable system prefix for the Anthropic `/messages` path (BI-79A5C00F, PR #2447 merged; `apps/web/lib/routing/anthropic-cache.ts`). 5-minute TTL; **1-hour TTL still a follow-up** (needs the extended-cache beta header). OpenAI/xAI caching remains automatic; cloud hit-rate observability still ⬜.
+- **Prompt-cache TTL:** ⚠️ Anthropic default remains **5 minutes** (reverted from 1h ~2026-03) — re-confirm each refresh; it changes the break-even for long sessions.
+- **Deterministic guards (hooks):** Codex hooks are now **officially documented** (plugin-bundled + managed-trust); DPF has structural hook wiring for Claude/Codex/Grok (`packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs`). **Functional proof on Codex/Grok still pending** (BI-14E9F7CE), including the Grok `GROK_PLUGIN_ROOT` vs `CLAUDE_PLUGIN_ROOT` portability seam.
+- **Lean tool surface:** external CLI **`?tier=core`** discovery is documented in AGENTS.md §8 (opt-in, ~22 tools).
+- **Code-graph for external sessions:** ⬜→◐ a **code-graph-first standing rule** added to AGENTS.md §8 for direct Claude/Codex/Grok sessions (BI-0FD9E685).
+- **Unified WIP across surfaces:** capsule-plane foundation shipped (BI-937128F6; `apps/web/lib/build/unified-wip.ts`) + §17 doctrine — the unit of WIP is the WorkCapsule, not the Build Studio build.
+- **Cross-surface review:** golden-triangle activation policy for independent deliberation on external artifacts (BI-A245FE00; `apps/web/lib/deliberation/external-review-activation.ts`).
+- **MCP token var:** active standard is **`DPF_MCP_BEARER_TOKEN`** (stale `DPF_MCP_TOKEN` survives only in the gitignored local `.mcp.json`).
+- **Grok Build (xAI):** GA CLI launched 2026-05-25; reads `.claude/` directly (CLAUDE.md, marketplaces, skills, MCP) but exposes `GROK_PLUGIN_ROOT` (the hook seam above).
+
+**Refresh ritual — operationalization (BI-4B8EABF8 follow-up).** The monthly ritual below is documented; wiring it as an actual `scheduledAgentTask` on the existing `agent-task-scheduler.ts` / `agent-task-dispatch.ts` substrate (read official docs → diff this tracker → file a BI per material drift → record sources + verification age) is the remaining code slice. No new cron — reuse the cognitive-load-migration scan substrate.
 
 ## What this currently tells us (the open adoption gaps)
 
