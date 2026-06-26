@@ -2,10 +2,12 @@
 // EP-GOLDEN-TRIANGLE — the per-coworker priority docked at the composer. Unlike
 // the old header chip (a popover that clipped off the panel edge), this lives
 // IN-FLOW just above the message input, so the triangle stays in view where you
-// type and nothing overflows the window. Collapsible (default open) to reclaim
-// space; the collapsed header still shows the colour-graded glyph + preset. Loads
-// and saves THIS coworker's own posture (debounced), so each coworker remembers
-// its priority and that posture tunes its runs.
+// type and nothing overflows the window. Collapsible and COLLAPSED BY DEFAULT —
+// the resting state is just the colour-graded glyph + preset chip in the header;
+// it expands to the full triangle only when the operator opens it, and returns to
+// collapsed on the next load/refresh (the everyday state is the compact chip, not
+// the open control). Loads and saves THIS coworker's own posture (debounced), so
+// each coworker remembers its priority and that posture tunes its runs.
 import { useEffect, useRef, useState } from "react";
 
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
@@ -18,7 +20,10 @@ import { PRESET_META, preferenceFromPreset } from "./posture-display";
 
 export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
   const [pref, setPref] = useState<GoldenTrianglePreference>(preferenceFromPreset("balanced"));
-  const [collapsed, setCollapsed] = useState(false);
+  // Collapsed by default: the resting state is the compact colour-graded chip in
+  // the header, not the open triangle. Re-initializes collapsed on every load so a
+  // refresh never leaves the control hanging open (founder report 2026-06-26).
+  const [collapsed, setCollapsed] = useState(true);
   const savedRef = useRef<string>(JSON.stringify(preferenceFromPreset("balanced")));
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
