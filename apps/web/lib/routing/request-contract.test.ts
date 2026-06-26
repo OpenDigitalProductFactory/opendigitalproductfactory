@@ -97,6 +97,28 @@ describe("inferContract – modality detection", () => {
     expect(contract.modality.input).toContain("image");
   });
 
+  it("detects image modality from an OpenAI-style image_url block (pasted screenshot)", async () => {
+    const msgs = [
+      multimodalMsg("user", [
+        { type: "text", text: "What is in this screenshot?" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AAAB" } },
+      ]),
+    ];
+    const contract = await inferContract("creative", msgs);
+    expect(contract.modality.input).toContain("image");
+  });
+
+  it("detects audio modality from an input_audio block", async () => {
+    const msgs = [
+      multimodalMsg("user", [
+        { type: "text", text: "Transcribe this" },
+        { type: "input_audio", input_audio: { data: "AAAA", format: "wav" } },
+      ]),
+    ];
+    const contract = await inferContract("creative", msgs);
+    expect(contract.modality.input).toContain("audio");
+  });
+
   it("detects file modality from multimodal message content", async () => {
     const msgs = [
       multimodalMsg("user", [

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { uploadAgentAttachment, UPLOAD_ACCEPT_ATTR } from "./uploadAgentAttachment";
 
 type Props = {
   threadId: string | null;
@@ -19,20 +20,11 @@ export function AgentFileUpload({ threadId, disabled, onUploaded, variant = "ico
     if (!threadId) return;
     setUploading(true);
     setError(null);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("threadId", threadId);
-    try {
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) setError(data.error ?? "Upload failed");
-      else onUploaded(data);
-    } catch {
-      setError("Upload failed");
-    } finally {
-      setUploading(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
+    const outcome = await uploadAgentAttachment(file, threadId);
+    if (outcome.ok) onUploaded(outcome.result);
+    else setError(outcome.error);
+    setUploading(false);
+    if (inputRef.current) inputRef.current.value = "";
   }
 
   return (
@@ -40,7 +32,7 @@ export function AgentFileUpload({ threadId, disabled, onUploaded, variant = "ico
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,.xlsx,.pdf,.doc,.docx,.txt,.json,.md,.xml,.yaml,.yml,.tsv,.log,.ppt,.pptx,.rtf"
+        accept={UPLOAD_ACCEPT_ATTR}
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) handleFile(f);
@@ -53,7 +45,7 @@ export function AgentFileUpload({ threadId, disabled, onUploaded, variant = "ico
           role="menuitem"
           onClick={() => inputRef.current?.click()}
           disabled={disabled || uploading || !threadId}
-          title={uploading ? "Uploading..." : "Attach a file"}
+          title={uploading ? "Uploading..." : "Attach a file or image — or paste / drop one into the message box"}
           style={{
             display: "flex",
             alignItems: "center",

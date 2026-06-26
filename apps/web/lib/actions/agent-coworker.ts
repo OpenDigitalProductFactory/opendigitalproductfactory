@@ -514,11 +514,15 @@ export async function sendMessage(input: {
   const threadAttachments = await prisma.agentAttachment.findMany({
     where: { threadId: input.threadId },
     orderBy: { createdAt: "asc" },
-    select: { fileName: true, parsedContent: true },
+    select: { fileName: true, parsedContent: true, mimeType: true },
   });
   let attachmentContext: string | null = null;
-  if (threadAttachments.length > 0) {
-    const summaries = threadAttachments.map((att) => {
+  // Images are injected as vision content blocks (below), not as text — exclude
+  // them from the textual file-context summary so they don't surface as
+  // "uploaded but content not available".
+  const docAttachments = threadAttachments.filter((att) => !att.mimeType?.startsWith("image/"));
+  if (docAttachments.length > 0) {
+    const summaries = docAttachments.map((att) => {
       const parsed = att.parsedContent as Record<string, unknown> | null;
       if (!parsed) return `- ${att.fileName} (uploaded but content not available)`;
       const summary = parsed.summary ?? "";
@@ -541,6 +545,25 @@ export async function sendMessage(input: {
       "",
       ...summaries,
     ].join("\n");
+  }
+
+  // If the message's attachment is an image, build a vision content block from
+  // it (downscaled base64 data URL). Documents stay on the text path above;
+  // images ride as an `image_url` block on the user message so vision models can
+  // actually see them. runAgenticLoop raises the imageInput capability floor when
+  // the turn carries an image, so routing picks a vision-capable endpoint (local
+  // DMR first) and degrades gracefully if none is configured.
+  let imageContentBlock: { type: "image_url"; image_url: { url: string } } | null = null;
+  if (input.attachmentId) {
+    const imageAtt = await prisma.agentAttachment.findUnique({
+      where: { id: input.attachmentId },
+      select: { mimeType: true, storageKey: true },
+    });
+    if (imageAtt?.mimeType?.startsWith("image/")) {
+      const { readAttachmentImageAsDataUrl } = await import("@/lib/shared/file-upload");
+      const dataUrl = await readAttachmentImageAsDataUrl(imageAtt.storageKey, imageAtt.mimeType);
+      if (dataUrl) imageContentBlock = { type: "image_url", image_url: { url: dataUrl } };
+    }
   }
 
   // Check unified coworker feature flag
@@ -613,15 +636,15 @@ export async function sendMessage(input: {
   // Enrich the last user message with file content so the LLM sees it inline,
   // not just in the system prompt. LLMs pay more attention to message content
   // than system prompt context.
-  if (attachmentContext && chatHistory.length > 0) {
+  if ((attachmentContext || imageContentBlock) && chatHistory.length > 0) {
     const lastIdx = chatHistory.length - 1;
     const last = chatHistory[lastIdx]!;
     if (last.role === "user") {
       const lastText = typeof last.content === "string" ? last.content : JSON.stringify(last.content);
-      chatHistory[lastIdx] = {
-        role: "user",
-        content: `${lastText}\n\n${attachmentContext}`,
-      };
+      const enrichedText = attachmentContext ? `${lastText}\n\n${attachmentContext}` : lastText;
+      chatHistory[lastIdx] = imageContentBlock
+        ? { role: "user", content: [{ type: "text", text: enrichedText }, imageContentBlock] }
+        : { role: "user", content: enrichedText };
     }
   }
 

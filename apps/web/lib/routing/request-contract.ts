@@ -97,8 +97,19 @@ const DEFAULT_REASONING_DEPTH: Record<string, RequestContract["reasoningDepth"]>
 };
 
 // ── Input modality types we scan for in multimodal content arrays ────────
-
-const MULTIMODAL_INPUT_TYPES = new Set<string>(["image", "audio", "file", "video"]);
+// Maps a content-block `type` to the input modality it implies. Covers BOTH
+// conventions in use: Anthropic-style blocks (`image`/`audio`) and the
+// OpenAI/wire-form blocks the ChatMessage ContentBlock actually carries
+// (`image_url`/`input_audio`). Without the latter a pasted screenshot would not
+// raise the image modality and could route to a text-only endpoint.
+const BLOCK_TYPE_TO_MODALITY: Record<string, "image" | "audio" | "file" | "video"> = {
+  image: "image",
+  image_url: "image",
+  audio: "audio",
+  input_audio: "audio",
+  file: "file",
+  video: "video",
+};
 
 // ── Contract inference ──────────────────────────────────────────────────────
 
@@ -157,13 +168,9 @@ export async function inferContract(
   for (const msg of messages) {
     if (Array.isArray(msg.content)) {
       for (const part of msg.content) {
-        if (
-          part &&
-          typeof part === "object" &&
-          "type" in part &&
-          MULTIMODAL_INPUT_TYPES.has(part.type as string)
-        ) {
-          inputModalities.add(part.type as "image" | "audio" | "file" | "video");
+        if (part && typeof part === "object" && "type" in part) {
+          const modality = BLOCK_TYPE_TO_MODALITY[(part as { type: string }).type];
+          if (modality) inputModalities.add(modality);
         }
       }
     }

@@ -8,6 +8,7 @@ import {
   type QuestionPacketExpectedArtifact,
 } from "@/lib/tak/question-packet";
 import { AgentFileUpload } from "./AgentFileUpload";
+import { uploadAgentAttachment, isAcceptedUploadFile } from "./uploadAgentAttachment";
 import { CoworkerPostureControl } from "./CoworkerPostureControl";
 import { MicButton } from "./MicButton";
 import { useVoiceCapture } from "./hooks/useVoiceCapture";
@@ -96,6 +97,11 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
   const [expectedArtifact, setExpectedArtifact] = useState<ExpectedArtifactValue>(EMPTY_EXPECTED_ARTIFACT);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [pendingEntry, setPendingEntry] = useState<PendingEntry | null>(null);
+  // Composer attachment capture (paste / drag-drop). Uploads route through the
+  // same /api/upload path as the "+ Add → Attach file" picker.
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [attaching, setAttaching] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const popoverContainerRef = useRef<HTMLDivElement>(null);
@@ -127,6 +133,60 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
     onTranscript: insertTranscriptAtCursor,
     context: "coworker_panel",
   });
+
+  // ── Attachment capture: paste + drag-drop ────────────────────────────────
+  // Upload a pasted/dropped file through the shared helper, then hand the result
+  // to the parent (identical pending-attachment flow as the picker). One file
+  // per message — the first accepted file wins.
+  const canAttach = !!threadId && !disabled && !busy;
+  const uploadFiles = useCallback(
+    async (files: FileList | File[]) => {
+      if (!threadId) return;
+      const list = Array.from(files);
+      const file = list.find(isAcceptedUploadFile) ?? list[0];
+      if (!file) return;
+      setUploadError(null);
+      setAttaching(true);
+      const outcome = await uploadAgentAttachment(file, threadId);
+      setAttaching(false);
+      if (outcome.ok) onFileUploaded(outcome.result);
+      else setUploadError(outcome.error);
+    },
+    [threadId, onFileUploaded],
+  );
+
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    if (!canAttach) return;
+    const files = e.clipboardData?.files;
+    if (!files || files.length === 0) return; // plain-text paste → default behavior
+    if (Array.from(files).some(isAcceptedUploadFile)) {
+      e.preventDefault();
+      void uploadFiles(files);
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    if (!canAttach) return;
+    if (e.dataTransfer?.types?.includes("Files")) {
+      e.preventDefault();
+      setDragActive(true);
+    }
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    // Continuous dragOver re-sets this, so clearing on a child-enter only
+    // produces a brief, invisible flicker.
+    if (e.currentTarget === e.target) setDragActive(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    if (!canAttach) return;
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+    e.preventDefault();
+    setDragActive(false);
+    void uploadFiles(files);
+  }
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -689,18 +749,60 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
         </div>
       )}
 
-      {/* One integrated composer: textarea on top, control lip beneath. */}
+      {uploadError && (
+        <div
+          role="alert"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "6px 8px",
+            marginBottom: 6,
+            borderRadius: 8,
+            background: "rgba(211, 51, 51, 0.08)",
+            border: "1px solid rgba(211, 51, 51, 0.25)",
+            fontSize: 11,
+            color: "var(--dpf-text)",
+          }}
+        >
+          <span style={{ flex: 1, color: "var(--dpf-muted)" }}>{uploadError}</span>
+          <button
+            type="button"
+            onClick={() => setUploadError(null)}
+            style={{ background: "none", border: "none", color: "var(--dpf-accent)", cursor: "pointer", fontSize: 11, padding: 0 }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* One integrated composer: textarea on top, control lip beneath.
+          Also the paste / drag-drop target for file + image attachments. */}
       <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         style={{
-          border: `1px solid ${overLimit ? "var(--dpf-error)" : "var(--dpf-border)"}`,
+          border: `1px solid ${dragActive ? "var(--dpf-accent)" : overLimit ? "var(--dpf-error)" : "var(--dpf-border)"}`,
           borderRadius: 14,
-          background: "color-mix(in srgb, var(--dpf-bg) 55%, transparent)",
+          background: dragActive
+            ? "color-mix(in srgb, var(--dpf-accent) 12%, transparent)"
+            : "color-mix(in srgb, var(--dpf-bg) 55%, transparent)",
           padding: "8px 10px",
           display: "flex",
           flexDirection: "column",
           gap: 4,
+          transition: "border-color 0.15s, background 0.15s",
         }}
       >
+        {dragActive && (
+          <div style={{ fontSize: 11, color: "var(--dpf-accent)", padding: "2px 0", textAlign: "center" }}>
+            Drop to attach
+          </div>
+        )}
+        {attaching && (
+          <div style={{ fontSize: 11, color: "var(--dpf-muted)", padding: "2px 0" }}>Attaching…</div>
+        )}
         {renderChipTray()}
         {renderPendingEntryRow()}
         <textarea
@@ -708,6 +810,7 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           disabled={disabled}
           placeholder={disabled ? "Sending..." : busy ? "Agent is working... type your next message" : "Ask your co-worker..."}
           rows={1}
