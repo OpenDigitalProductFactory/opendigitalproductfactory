@@ -1,8 +1,14 @@
 // apps/web/lib/coworker-record/roster-filter.test.ts
-// EP-AI-WORKFORCE-001 (HRIS surface) — roster filter predicate guards.
+// EP-AI-WORKFORCE-001 / EP-COWORKER-RT (HRIS surface) — roster filter predicate guards.
 
 import { describe, it, expect } from "vitest";
-import { matchesFilters, isCoverageGap, EMPTY_FILTERS } from "./roster-filter";
+import {
+  matchesFilters,
+  matchesQuery,
+  isCoverageGap,
+  kindOptions,
+  EMPTY_FILTERS,
+} from "./roster-filter";
 import type { RosterRow } from "./roster";
 
 function row(over: Partial<RosterRow> = {}): RosterRow {
@@ -10,11 +16,13 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     agentId: "AGT-1",
     slugId: "finance-agent",
     name: "Finance",
+    displayName: "Finance",
+    kind: "specialist",
     tier: 2,
     valueStream: "operate",
     lifecycleStage: "production",
     familyKey: "finance",
-    familyLabel: "Finance",
+    familyLabel: "Finance & Accounting",
     coveragePct: 90,
     jurisdictions: ["us", "global"],
     competencies: ["practitioner"],
@@ -37,6 +45,29 @@ describe("isCoverageGap", () => {
   });
 });
 
+describe("matchesQuery", () => {
+  it("matches everything for an empty or whitespace query", () => {
+    expect(matchesQuery(row(), "")).toBe(true);
+    expect(matchesQuery(row(), "   ")).toBe(true);
+  });
+
+  it("matches case-insensitively on displayName", () => {
+    expect(matchesQuery(row({ displayName: "Build Lead" }), "build")).toBe(true);
+    expect(matchesQuery(row({ displayName: "Build Lead" }), "LEAD")).toBe(true);
+    expect(matchesQuery(row({ displayName: "Build Lead" }), "marketing")).toBe(false);
+  });
+
+  it("matches on slugId and family label", () => {
+    expect(matchesQuery(row({ slugId: "build-lead", displayName: "Build Lead" }), "build-lead")).toBe(true);
+    expect(matchesQuery(row({ familyLabel: "Finance & Accounting" }), "accounting")).toBe(true);
+  });
+
+  it("does not crash on null slug / family", () => {
+    expect(matchesQuery(row({ slugId: null, familyLabel: null }), "finance")).toBe(true); // matches name/displayName
+    expect(matchesQuery(row({ slugId: null, familyLabel: null }), "zzz")).toBe(false);
+  });
+});
+
 describe("matchesFilters", () => {
   it("passes everything with empty filters", () => {
     expect(matchesFilters(row(), EMPTY_FILTERS)).toBe(true);
@@ -51,8 +82,48 @@ describe("matchesFilters", () => {
     expect(matchesFilters(row(), { ...EMPTY_FILTERS, lifecycle: "retirement" })).toBe(false);
   });
 
+  it("filters by kind", () => {
+    expect(matchesFilters(row({ kind: "orchestrator" }), { ...EMPTY_FILTERS, kind: "orchestrator" })).toBe(true);
+    expect(matchesFilters(row({ kind: "specialist" }), { ...EMPTY_FILTERS, kind: "orchestrator" })).toBe(false);
+  });
+
+  it("filters by the free-text query alongside other facets", () => {
+    expect(
+      matchesFilters(row({ displayName: "Build Lead", kind: "orchestrator" }), {
+        ...EMPTY_FILTERS,
+        query: "build",
+        kind: "orchestrator",
+      }),
+    ).toBe(true);
+    // query miss excludes even when the facet matches (query hits no field:
+    // displayName/slug/name/family all lack "zzz")
+    expect(
+      matchesFilters(row({ displayName: "Build Lead", name: "Build Lead", slugId: "build-lead", familyLabel: "Software Engineering", kind: "orchestrator" }), {
+        ...EMPTY_FILTERS,
+        query: "zzz",
+        kind: "orchestrator",
+      }),
+    ).toBe(false);
+  });
+
   it("coverageGap filter excludes healthy rows and keeps gaps", () => {
     expect(matchesFilters(row({ coveragePct: 95 }), { ...EMPTY_FILTERS, coverageGap: true })).toBe(false);
     expect(matchesFilters(row({ unmapped: true }), { ...EMPTY_FILTERS, coverageGap: true })).toBe(true);
+  });
+});
+
+describe("kindOptions", () => {
+  it("returns the sorted distinct kinds present in the rows", () => {
+    const rows = [
+      row({ kind: "specialist" }),
+      row({ kind: "orchestrator" }),
+      row({ kind: "specialist" }),
+      row({ kind: "advisor" }),
+    ];
+    expect(kindOptions(rows)).toEqual(["advisor", "orchestrator", "specialist"]);
+  });
+
+  it("returns an empty array for no rows", () => {
+    expect(kindOptions([])).toEqual([]);
   });
 });
