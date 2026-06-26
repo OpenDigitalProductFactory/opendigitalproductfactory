@@ -49,6 +49,7 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
       {!published && (
         <div
           role="status"
+          className="border border-[var(--dpf-accent)]"
           style={{
             display: "flex",
             alignItems: "center",
@@ -57,27 +58,25 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
             marginBottom: 24,
             padding: "14px 16px",
             borderRadius: 8,
-            border: "1px solid var(--dpf-accent)",
             background: "color-mix(in srgb, var(--dpf-accent) 12%, transparent)",
           }}
         >
           <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--dpf-text)" }}>
+            <div className="text-[var(--dpf-text)]" style={{ fontSize: 14, fontWeight: 700 }}>
               Your storefront is ready — publish it now
             </div>
-            <div style={{ marginTop: 2, fontSize: 13, color: "var(--dpf-muted)" }}>
+            <div className="text-[var(--dpf-muted)]" style={{ marginTop: 2, fontSize: 13 }}>
               It is not live yet, so the public link returns a 404. Publish it so customers can find you.
             </div>
           </div>
           <button
             onClick={togglePublish}
             disabled={toggling}
+            className="bg-[var(--dpf-accent)] text-white"
             style={{
               padding: "8px 18px",
               borderRadius: 6,
               border: "none",
-              background: "var(--dpf-accent)",
-              color: "white",
               cursor: toggling ? "wait" : "pointer",
               fontSize: 14,
               fontWeight: 600,
@@ -92,14 +91,16 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 15, fontWeight: 600 }}>{config.orgName}</div>
-          {config.tagline && <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>{config.tagline}</div>}
+          {config.tagline && <div className="text-[var(--dpf-muted)]" style={{ fontSize: 13 }}>{config.tagline}</div>}
         </div>
         <a href={`/s/${config.orgSlug}`} target="_blank" rel="noopener noreferrer"
-          style={{ fontSize: 13, color: "var(--dpf-accent)", textDecoration: "none" }}>
+          className="text-[var(--dpf-accent)]"
+          style={{ fontSize: 13, textDecoration: "none" }}>
           View Live ↗
         </a>
         <button onClick={togglePublish} disabled={toggling}
-          style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: published ? "var(--dpf-error)" : "var(--dpf-accent)", color: "white", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+          className={published ? "bg-[var(--dpf-error)] text-white" : "bg-[var(--dpf-accent)] text-white"}
+          style={{ padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
           {toggling ? "..." : published ? "Unpublish" : "Publish"}
         </button>
       </div>
@@ -110,10 +111,10 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
         {ctaTiles.map((t) => <StatTile key={t.label} label={t.label} value={t.value} />)}
       </div>
 
-      <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>
-        Status: <strong style={{ color: published ? "var(--dpf-success)" : "var(--dpf-muted)" }}>{published ? "Published" : "Unpublished"}</strong>
+      <div className="text-[var(--dpf-muted)]" style={{ fontSize: 13 }}>
+        Status: <strong className={published ? "text-[var(--dpf-success)]" : "text-[var(--dpf-muted)]"}>{published ? "Published" : "Unpublished"}</strong>
         {" · "} Archetype: {config.archetypeId}
-        {" · "} <a href="/storefront/settings" style={{ color: "var(--dpf-accent)" }}>Edit settings</a>
+        {" · "} <a href="/storefront/settings" className="text-[var(--dpf-accent)]">Edit settings</a>
       </div>
     </div>
   );
@@ -121,9 +122,9 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
 
 function StatTile({ label, value }: { label: string; value: number }) {
   return (
-    <div style={{ border: "1px solid var(--dpf-border)", borderRadius: 8, padding: "12px 16px" }}>
+    <div className="border border-[var(--dpf-border)]" style={{ borderRadius: 8, padding: "12px 16px" }}>
       <div style={{ fontSize: 24, fontWeight: 700 }}>{value}</div>
-      <div style={{ fontSize: 12, color: "var(--dpf-muted)" }}>{label}</div>
+      <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{label}</div>
     </div>
   );
 }

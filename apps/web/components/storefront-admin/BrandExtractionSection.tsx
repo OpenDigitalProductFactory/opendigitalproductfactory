@@ -290,16 +290,17 @@ export function BrandExtractionSection({
 }
 
 function StatusStrip({ tone, children }: { tone: "info" | "success" | "error"; children: React.ReactNode }) {
-  const color = tone === "error" ? "#ef4444" : tone === "success" ? "#10b981" : "#3b82f6";
+  const toneClass =
+    tone === "error"
+      ? "text-[var(--dpf-error)] bg-[var(--dpf-state-error)]"
+      : tone === "success"
+        ? "text-[var(--dpf-success)] bg-[var(--dpf-state-success)]"
+        : "text-[var(--dpf-info)] bg-[var(--dpf-state-info)]";
   return (
     <div
+      className={`rounded-md text-[13px] font-medium ${toneClass}`}
       style={{
         padding: "10px 14px",
-        borderRadius: 6,
-        background: `${color}15`,
-        color,
-        fontSize: 13,
-        fontWeight: 500,
       }}
     >
       {children}

@@ -39,17 +39,17 @@ function Swatch({ color, label }: { color: string; label: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
       <div
+        className="border border-[var(--dpf-border)]"
         style={{
           width: 32,
           height: 32,
           borderRadius: 6,
           background: color,
-          border: "1px solid var(--dpf-border)",
         }}
       />
       <div>
-        <div style={{ fontWeight: 600, color: "var(--dpf-text)" }}>{label}</div>
-        <div style={{ fontFamily: "monospace", color: "var(--dpf-muted)" }}>{color}</div>
+        <div className="text-[var(--dpf-text)]" style={{ fontWeight: 600 }}>{label}</div>
+        <div className="text-[var(--dpf-muted)]" style={{ fontFamily: "monospace" }}>{color}</div>
       </div>
     </div>
   );
@@ -60,29 +60,28 @@ export function BrandPreview({ system, onApply, applying = false, applyError = n
 
   return (
     <div
+      className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
       style={{
         display: "flex",
         flexDirection: "column",
         gap: 20,
         padding: 20,
         borderRadius: 8,
-        border: "1px solid var(--dpf-border)",
-        background: "var(--dpf-surface-1)",
       }}
     >
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: "var(--dpf-text)" }}>
+          <h2 className="text-[var(--dpf-text)]" style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
             Extracted design system
           </h2>
           <ConfidenceBadge value={confidence} />
         </div>
-        <p style={{ fontSize: 12, color: "var(--dpf-muted)", margin: "4px 0 0 0" }}>
+        <p className="text-[var(--dpf-muted)]" style={{ fontSize: 12, margin: "4px 0 0 0" }}>
           Extracted <LocalTime value={system.extractedAt} /> from {system.sources.length}{" "}
           source{system.sources.length === 1 ? "" : "s"}.
         </p>
         {system.gaps.length > 0 && (
-          <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 8 }}>
+          <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11, marginTop: 8 }}>
             Gaps synthesized by AI: {system.gaps.slice(0, 3).join(", ")}
             {system.gaps.length > 3 ? ` (+${system.gaps.length - 3} more)` : ""}
           </div>
@@ -90,16 +89,16 @@ export function BrandPreview({ system, onApply, applying = false, applyError = n
       </div>
 
       <section>
-        <h3 style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--dpf-muted)", margin: "0 0 12px 0" }}>
+        <h3 className="text-[var(--dpf-muted)]" style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 12px 0" }}>
           Identity
         </h3>
-        <div style={{ fontSize: 14, color: "var(--dpf-text)" }}>
+        <div className="text-[var(--dpf-text)]" style={{ fontSize: 14 }}>
           <div><strong>{system.identity.name || "(no name extracted)"}</strong></div>
           {system.identity.tagline && (
-            <div style={{ color: "var(--dpf-muted)", fontStyle: "italic" }}>{system.identity.tagline}</div>
+            <div className="text-[var(--dpf-muted)]" style={{ fontStyle: "italic" }}>{system.identity.tagline}</div>
           )}
           {system.identity.description && (
-            <div style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 8, maxWidth: 600 }}>
+            <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, marginTop: 8, maxWidth: 600 }}>
               {system.identity.description.slice(0, 240)}
               {system.identity.description.length > 240 ? "…" : ""}
             </div>
@@ -108,7 +107,7 @@ export function BrandPreview({ system, onApply, applying = false, applyError = n
       </section>
 
       <section>
-        <h3 style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--dpf-muted)", margin: "0 0 12px 0" }}>
+        <h3 className="text-[var(--dpf-muted)]" style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 12px 0" }}>
           Palette
         </h3>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 }}>
@@ -125,16 +124,16 @@ export function BrandPreview({ system, onApply, applying = false, applyError = n
       </section>
 
       <section>
-        <h3 style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--dpf-muted)", margin: "0 0 12px 0" }}>
+        <h3 className="text-[var(--dpf-muted)]" style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 12px 0" }}>
           Typography
         </h3>
-        <div style={{ fontSize: 12, color: "var(--dpf-muted)", marginBottom: 12 }}>
-          Sans: <strong style={{ color: "var(--dpf-text)" }}>{system.typography.families.sans}</strong>
+        <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, marginBottom: 12 }}>
+          Sans: <strong className="text-[var(--dpf-text)]">{system.typography.families.sans}</strong>
           {system.typography.families.display && (
-            <>  •  Display: <strong style={{ color: "var(--dpf-text)" }}>{system.typography.families.display}</strong></>
+            <>  •  Display: <strong className="text-[var(--dpf-text)]">{system.typography.families.display}</strong></>
           )}
           {system.typography.families.mono && (
-            <>  •  Mono: <strong style={{ color: "var(--dpf-text)" }}>{system.typography.families.mono}</strong></>
+            <>  •  Mono: <strong className="text-[var(--dpf-text)]">{system.typography.families.mono}</strong></>
           )}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -143,15 +142,15 @@ export function BrandPreview({ system, onApply, applying = false, applyError = n
             return (
               <div
                 key={k}
+                className="text-[var(--dpf-text)]"
                 style={{
                   fontSize: entry.size,
                   lineHeight: entry.lineHeight,
                   fontWeight: entry.weight,
                   fontFamily: system.typography.families.sans,
-                  color: "var(--dpf-text)",
                 }}
               >
-                <span style={{ fontSize: 11, color: "var(--dpf-muted)", fontFamily: "monospace", marginRight: 12 }}>{k}</span>
+                <span className="text-[var(--dpf-muted)]" style={{ fontSize: 11, fontFamily: "monospace", marginRight: 12 }}>{k}</span>
                 The quick brown fox
               </div>
             );
@@ -161,20 +160,18 @@ export function BrandPreview({ system, onApply, applying = false, applyError = n
 
       {system.components.inventory.length > 0 && (
         <section>
-          <h3 style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--dpf-muted)", margin: "0 0 12px 0" }}>
+          <h3 className="text-[var(--dpf-muted)]" style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 12px 0" }}>
             Components ({system.components.library})
           </h3>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {system.components.inventory.map((c) => (
               <span
                 key={c.name}
+                className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] border border-[var(--dpf-border)]"
                 style={{
                   fontSize: 11,
                   padding: "3px 8px",
                   borderRadius: 4,
-                  background: "var(--dpf-surface-2)",
-                  color: "var(--dpf-text)",
-                  border: "1px solid var(--dpf-border)",
                 }}
               >
                 {c.name}
@@ -185,17 +182,16 @@ export function BrandPreview({ system, onApply, applying = false, applyError = n
       )}
 
       {onApply && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, borderTop: "1px solid var(--dpf-border)", paddingTop: 16 }}>
+        <div className="border-t border-[var(--dpf-border)]" style={{ display: "flex", alignItems: "center", gap: 12, paddingTop: 16 }}>
           <button
             type="button"
             onClick={onApply}
             disabled={applying}
+            className="bg-[var(--dpf-accent)] text-white"
             style={{
               padding: "8px 20px",
               borderRadius: 6,
               border: "none",
-              background: "var(--dpf-accent)",
-              color: "#fff",
               cursor: applying ? "wait" : "pointer",
               fontSize: 13,
               fontWeight: 600,
@@ -205,10 +201,10 @@ export function BrandPreview({ system, onApply, applying = false, applyError = n
             {applying ? "Applying..." : "Approve & apply"}
           </button>
           {applyError && (
-            <span style={{ fontSize: 12, color: "var(--dpf-error, #ef4444)" }}>{applyError}</span>
+            <span className="text-[var(--dpf-error)]" style={{ fontSize: 12 }}>{applyError}</span>
           )}
           {!applyError && appliedAt && (
-            <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
+            <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>
               Applied <LocalTime value={appliedAt} mode="time" />
             </span>
           )}

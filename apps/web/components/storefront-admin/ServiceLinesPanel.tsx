@@ -48,8 +48,8 @@ export function ServiceLinesPanel({ storefrontId, view, availableArchetypes }: P
 
   return (
     <div
+      className="border border-[var(--dpf-border)]"
       style={{
-        border: "1px solid var(--dpf-border)",
         borderRadius: 10,
         overflow: "hidden",
         marginTop: 24,
@@ -57,20 +57,19 @@ export function ServiceLinesPanel({ storefrontId, view, availableArchetypes }: P
     >
       {/* Header */}
       <div
+        className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           padding: "14px 20px",
-          borderBottom: "1px solid var(--dpf-border)",
-          background: "var(--dpf-surface-1)",
         }}
       >
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--dpf-text)" }}>
+          <div className="text-[var(--dpf-text)]" style={{ fontSize: 14, fontWeight: 700 }}>
             Active service lines
           </div>
-          <div style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 2 }}>
+          <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, marginTop: 2 }}>
             Add secondary lines to serve customers across multiple business models.
           </div>
         </div>
@@ -98,14 +97,14 @@ export function ServiceLinesPanel({ storefrontId, view, availableArchetypes }: P
       {/* Compatibility reasons */}
       {view.compatibilitySummary.reasons.length > 0 && (
         <div
+          className="border-t border-[var(--dpf-border)]"
           style={{
             padding: "10px 20px",
-            borderTop: "1px solid var(--dpf-border)",
             background: "color-mix(in srgb, var(--dpf-warning) 8%, transparent)",
           }}
         >
           {view.compatibilitySummary.reasons.map((reason, i) => (
-            <div key={i} style={{ fontSize: 12, color: "var(--dpf-text)", marginBottom: i < view.compatibilitySummary.reasons.length - 1 ? 4 : 0 }}>
+            <div key={i} className="text-[var(--dpf-text)]" style={{ fontSize: 12, marginBottom: i < view.compatibilitySummary.reasons.length - 1 ? 4 : 0 }}>
               {reason}
             </div>
           ))}
@@ -115,29 +114,26 @@ export function ServiceLinesPanel({ storefrontId, view, availableArchetypes }: P
       {/* Add service line row */}
       {availableArchetypes.length > 0 && (
         <div
+          className="border-t border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
           style={{
             padding: "12px 20px",
-            borderTop: "1px solid var(--dpf-border)",
             display: "flex",
             alignItems: "center",
             gap: 8,
             flexWrap: "wrap",
-            background: "var(--dpf-surface-1)",
           }}
         >
           <select
             value={selectedSlug}
             onChange={(e) => setSelectedSlug(e.target.value)}
             disabled={isPending}
+            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]"
             style={{
               flex: 1,
               minWidth: 180,
               padding: "7px 10px",
-              border: "1px solid var(--dpf-border)",
               borderRadius: 6,
               fontSize: 13,
-              background: "var(--dpf-surface-1)",
-              color: "var(--dpf-text)",
             }}
           >
             {availableArchetypes.map((a) => (
@@ -149,12 +145,11 @@ export function ServiceLinesPanel({ storefrontId, view, availableArchetypes }: P
           <button
             onClick={handleAdd}
             disabled={isPending || !selectedSlug}
+            className="bg-[var(--dpf-accent)] text-white"
             style={{
               padding: "7px 16px",
               borderRadius: 6,
               border: "none",
-              background: "var(--dpf-accent)",
-              color: "white",
               fontSize: 13,
               fontWeight: 600,
               cursor: isPending || !selectedSlug ? "not-allowed" : "pointer",
@@ -165,7 +160,7 @@ export function ServiceLinesPanel({ storefrontId, view, availableArchetypes }: P
             {isPending ? "Adding…" : "Add service line"}
           </button>
           {error && (
-            <div style={{ width: "100%", fontSize: 12, color: "var(--dpf-error)", marginTop: 4 }}>
+            <div className="text-[var(--dpf-error)]" style={{ width: "100%", fontSize: 12, marginTop: 4 }}>
               {error}
             </div>
           )}
@@ -174,12 +169,10 @@ export function ServiceLinesPanel({ storefrontId, view, availableArchetypes }: P
 
       {availableArchetypes.length === 0 && view.secondaries.length >= 2 && (
         <div
+          className="border-t border-[var(--dpf-border)] text-[var(--dpf-muted)] bg-[var(--dpf-surface-1)]"
           style={{
             padding: "10px 20px",
-            borderTop: "1px solid var(--dpf-border)",
             fontSize: 12,
-            color: "var(--dpf-muted)",
-            background: "var(--dpf-surface-1)",
           }}
         >
           Maximum of 2 secondary service lines reached.
@@ -203,16 +196,17 @@ function ServiceLineRow({
 
   return (
     <div
+      className="border-b border-[var(--dpf-border)]"
       style={{
         display: "flex",
         alignItems: "center",
         gap: 12,
         padding: "12px 20px",
-        borderBottom: "1px solid var(--dpf-border)",
       }}
     >
       {/* Role pill */}
       <div
+        className={isSecondary ? "text-[var(--dpf-accent)]" : "text-[var(--dpf-success)]"}
         style={{
           fontSize: 10,
           fontWeight: 700,
@@ -223,7 +217,6 @@ function ServiceLineRow({
           background: isSecondary
             ? "color-mix(in srgb, var(--dpf-accent) 15%, transparent)"
             : "color-mix(in srgb, var(--dpf-success) 15%, transparent)",
-          color: isSecondary ? "var(--dpf-accent)" : "var(--dpf-success)",
           whiteSpace: "nowrap",
           flexShrink: 0,
         }}
@@ -234,10 +227,10 @@ function ServiceLineRow({
       {/* Name + category */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
+          className="text-[var(--dpf-text)]"
           style={{
             fontSize: 14,
             fontWeight: 600,
-            color: "var(--dpf-text)",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -246,9 +239,9 @@ function ServiceLineRow({
           {line.operatorLabel}
         </div>
         <div
+          className="text-[var(--dpf-muted)]"
           style={{
             fontSize: 12,
-            color: "var(--dpf-muted)",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -260,7 +253,7 @@ function ServiceLineRow({
 
       {/* Modules count */}
       {line.contributedModules.length > 0 && (
-        <div style={{ fontSize: 12, color: "var(--dpf-muted)", whiteSpace: "nowrap", flexShrink: 0 }}>
+        <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, whiteSpace: "nowrap", flexShrink: 0 }}>
           {line.contributedModules.length} module{line.contributedModules.length !== 1 ? "s" : ""}
         </div>
       )}
@@ -276,12 +269,10 @@ function ServiceLineRow({
           onClick={onRemove}
           disabled={isPending}
           aria-label={`Remove ${line.operatorLabel}`}
+          className="border border-[var(--dpf-error)] bg-transparent text-[var(--dpf-error)]"
           style={{
             padding: "4px 10px",
             borderRadius: 5,
-            border: "1px solid var(--dpf-error)",
-            background: "transparent",
-            color: "var(--dpf-error)",
             fontSize: 12,
             fontWeight: 600,
             cursor: isPending ? "not-allowed" : "pointer",

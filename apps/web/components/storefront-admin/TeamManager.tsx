@@ -47,14 +47,16 @@ type BookableItem = {
 
 function StatusBadge({ active }: { active: boolean }) {
   return (
-    <span style={{
-      fontSize: 11,
-      fontWeight: 600,
-      padding: "2px 7px",
-      borderRadius: 10,
-      background: active ? "color-mix(in srgb, var(--dpf-success) 15%, transparent)" : "rgba(148,163,184,0.15)",
-      color: active ? "var(--dpf-success, #22c55e)" : "var(--dpf-muted)",
-    }}>
+    <span
+      className={active ? "text-[var(--dpf-success)]" : "text-[var(--dpf-muted)]"}
+      style={{
+        fontSize: 11,
+        fontWeight: 600,
+        padding: "2px 7px",
+        borderRadius: 10,
+        background: active ? "color-mix(in srgb, var(--dpf-success) 15%, transparent)" : "rgba(148,163,184,0.15)",
+      }}
+    >
       {active ? "Active" : "Inactive"}
     </span>
   );
@@ -214,40 +216,45 @@ export function TeamManager({
         <div style={{ fontSize: 15, fontWeight: 600 }}>{teamLabel} ({providers.length})</div>
         <button
           onClick={() => setShowAddForm((v) => !v)}
-          style={{ padding: "6px 14px", borderRadius: 5, border: "1px solid var(--dpf-border)", background: showAddForm ? "var(--dpf-accent)" : "none", color: showAddForm ? "#fff" : "inherit", cursor: "pointer", fontSize: 13 }}
+          className={`border border-[var(--dpf-border)] ${showAddForm ? "text-white" : ""}`}
+          style={{ padding: "6px 14px", borderRadius: 5, background: showAddForm ? "var(--dpf-accent)" : "none", cursor: "pointer", fontSize: 13 }}
         >
           {showAddForm ? "Cancel" : "+ Add Provider"}
         </button>
       </div>
 
       {showAddForm && (
-        <div style={{ padding: 16, border: "1px solid var(--dpf-border)", borderRadius: 8, marginBottom: 16, background: "var(--dpf-surface-1)" }}>
+        <div className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]" style={{ padding: 16, borderRadius: 8, marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>New Provider</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <input
               placeholder="Full name *"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              style={{ padding: "8px 10px", border: "1px solid var(--dpf-border)", borderRadius: 5, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
+              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+              style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
             />
             <EmailInput
               placeholder="Email"
               value={newEmail}
               onValueChange={setNewEmail}
-              style={{ padding: "8px 10px", border: "1px solid var(--dpf-border)", borderRadius: 5, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
+              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+              style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
             />
             <PhoneInput
               placeholder="Phone"
               value={newPhone}
               onValueChange={setNewPhone}
-              style={{ padding: "8px 10px", border: "1px solid var(--dpf-border)", borderRadius: 5, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
+              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+              style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
             />
-            {addError && <div style={{ fontSize: 12, color: "var(--dpf-error, #ef4444)" }}>{addError}</div>}
+            {addError && <div className="text-[var(--dpf-error)]" style={{ fontSize: 12 }}>{addError}</div>}
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 onClick={addProvider}
                 disabled={adding || !newName.trim()}
-                style={{ padding: "7px 16px", borderRadius: 5, border: "none", background: "var(--dpf-accent)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+                className="bg-[var(--dpf-accent)] text-white"
+                style={{ padding: "7px 16px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
               >
                 {adding ? "Adding…" : "Add Provider"}
               </button>
@@ -257,7 +264,7 @@ export function TeamManager({
       )}
 
       {providers.length === 0 && !showAddForm && (
-        <p style={{ color: "var(--dpf-muted)", fontSize: 13 }}>No providers yet. Add a provider to start managing availability.</p>
+        <p className="text-[var(--dpf-muted)]" style={{ fontSize: 13 }}>No providers yet. Add a provider to start managing availability.</p>
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -265,44 +272,48 @@ export function TeamManager({
           const expanded = expandedId === p.id;
           const edit = getEdit(p);
           return (
-            <div key={p.id} style={{ border: "1px solid var(--dpf-border)", borderRadius: 8, overflow: "hidden" }}>
+            <div key={p.id} className="border border-[var(--dpf-border)]" style={{ borderRadius: 8, overflow: "hidden" }}>
               {/* Card header */}
               <div
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", cursor: "pointer", background: expanded ? "var(--dpf-surface-1)" : "transparent" }}
+                className={expanded ? "bg-[var(--dpf-surface-1)]" : "bg-transparent"}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", cursor: "pointer" }}
                 onClick={() => setExpandedId(expanded ? null : p.id)}
               >
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{p.name}</div>
-                  {p.email && <div style={{ fontSize: 12, color: "var(--dpf-muted)" }}>{p.email}</div>}
+                  {p.email && <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{p.email}</div>}
                 </div>
                 <StatusBadge active={p.isActive} />
-                <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>{p.services.length} service{p.services.length !== 1 ? "s" : ""}</span>
-                <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>{expanded ? "▲" : "▼"}</span>
+                <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{p.services.length} service{p.services.length !== 1 ? "s" : ""}</span>
+                <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{expanded ? "▲" : "▼"}</span>
               </div>
 
               {expanded && (
-                <div style={{ padding: "0 16px 16px", borderTop: "1px solid var(--dpf-border)" }}>
+                <div className="border-t border-[var(--dpf-border)]" style={{ padding: "0 16px 16px" }}>
                   {/* Edit fields */}
                   <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Details</div>
+                    <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Details</div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <input
                         placeholder="Name *"
                         value={edit.name}
                         onChange={(e) => patchEdit(p.id, { name: e.target.value })}
-                        style={{ flex: 1, minWidth: 140, padding: "6px 10px", border: "1px solid var(--dpf-border)", borderRadius: 5, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13 }}
+                        className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                        style={{ flex: 1, minWidth: 140, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
                       />
                       <EmailInput
                         placeholder="Email"
                         value={edit.email}
                         onValueChange={(v) => patchEdit(p.id, { email: v })}
-                        style={{ flex: 1, minWidth: 140, padding: "6px 10px", border: "1px solid var(--dpf-border)", borderRadius: 5, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13 }}
+                        className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                        style={{ flex: 1, minWidth: 140, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
                       />
                       <PhoneInput
                         placeholder="Phone"
                         value={edit.phone}
                         onValueChange={(v) => patchEdit(p.id, { phone: v })}
-                        style={{ flex: 1, minWidth: 120, padding: "6px 10px", border: "1px solid var(--dpf-border)", borderRadius: 5, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13 }}
+                        className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                        style={{ flex: 1, minWidth: 120, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
                       />
                     </div>
                     <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
@@ -311,7 +322,7 @@ export function TeamManager({
                           type="checkbox"
                           checked={edit.isActive}
                           onChange={(e) => patchEdit(p.id, { isActive: e.target.checked })}
-                          style={{ accentColor: "var(--dpf-accent)" }}
+                          className="accent-[var(--dpf-accent)]"
                         />
                         Active
                       </label>
@@ -321,7 +332,8 @@ export function TeamManager({
                           type="number"
                           value={edit.priority}
                           onChange={(e) => patchEdit(p.id, { priority: parseInt(e.target.value) || 0 })}
-                          style={{ width: 60, padding: "4px 6px", border: "1px solid var(--dpf-border)", borderRadius: 4, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13 }}
+                          className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                          style={{ width: 60, padding: "4px 6px", borderRadius: 4, color: "inherit", fontSize: 13 }}
                         />
                       </label>
                       <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
@@ -330,7 +342,8 @@ export function TeamManager({
                           type="number"
                           value={edit.weight}
                           onChange={(e) => patchEdit(p.id, { weight: parseInt(e.target.value) || 0 })}
-                          style={{ width: 60, padding: "4px 6px", border: "1px solid var(--dpf-border)", borderRadius: 4, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13 }}
+                          className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                          style={{ width: 60, padding: "4px 6px", borderRadius: 4, color: "inherit", fontSize: 13 }}
                         />
                       </label>
                     </div>
@@ -338,18 +351,19 @@ export function TeamManager({
                       <button
                         onClick={() => saveProvider(p)}
                         disabled={edit.saving}
-                        style={{ padding: "6px 14px", borderRadius: 5, border: "none", background: "var(--dpf-accent)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+                        className="bg-[var(--dpf-accent)] text-white"
+                        style={{ padding: "6px 14px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
                       >
                         {edit.saving ? "Saving…" : "Save Details"}
                       </button>
-                      {edit.error && <span style={{ fontSize: 12, color: "var(--dpf-error, #ef4444)" }}>{edit.error}</span>}
+                      {edit.error && <span className="text-[var(--dpf-error)]" style={{ fontSize: 12 }}>{edit.error}</span>}
                     </div>
                   </div>
 
                   {/* Service assignment */}
                   {bookableItems.length > 0 && (
                     <div style={{ marginTop: 16 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                      <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
                         Services
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -361,7 +375,7 @@ export function TeamManager({
                                 type="checkbox"
                                 checked={assigned}
                                 onChange={() => toggleService(p, item.id, assigned)}
-                                style={{ accentColor: "var(--dpf-accent)" }}
+                                className="accent-[var(--dpf-accent)]"
                               />
                               {item.name}
                             </label>
@@ -375,10 +389,11 @@ export function TeamManager({
                   <ScheduleEditor providerId={p.id} availability={p.availability} />
 
                   {/* Delete */}
-                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--dpf-border)" }}>
+                  <div className="border-t border-[var(--dpf-border)]" style={{ marginTop: 16, paddingTop: 12 }}>
                     <button
                       onClick={() => deleteProvider(p)}
-                      style={{ padding: "6px 14px", borderRadius: 5, border: "1px solid var(--dpf-error, #ef4444)", background: "none", color: "var(--dpf-error, #ef4444)", cursor: "pointer", fontSize: 13 }}
+                      className="border border-[var(--dpf-error)] text-[var(--dpf-error)]"
+                      style={{ padding: "6px 14px", borderRadius: 5, background: "none", cursor: "pointer", fontSize: 13 }}
                     >
                       Delete Provider
                     </button>

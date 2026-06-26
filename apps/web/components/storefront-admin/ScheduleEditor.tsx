@@ -139,7 +139,7 @@ export function ScheduleEditor({
 
   return (
     <div style={{ marginTop: 12 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+      <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
         Weekly Schedule
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -152,27 +152,27 @@ export function ScheduleEditor({
                 type="checkbox"
                 checked={d.enabled}
                 onChange={(e) => setDay(i, { enabled: e.target.checked })}
-                style={{ accentColor: "var(--dpf-accent)" }}
+                className="accent-[var(--dpf-accent)]"
               />
-              <span style={{ width: 80, color: d.enabled ? "inherit" : "var(--dpf-muted)" }}>{name}</span>
+              <span className={d.enabled ? undefined : "text-[var(--dpf-muted)]"} style={{ width: 80 }}>{name}</span>
               {d.enabled ? (
                 <>
                   <input
                     type="time"
                     value={d.startTime}
                     onChange={(e) => setDay(i, { startTime: e.target.value })}
-                    style={{ padding: "2px 6px", border: "1px solid var(--dpf-border)", borderRadius: 4, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 12 }}
+                    className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "2px 6px", borderRadius: 4, color: "inherit", fontSize: 12 }}
                   />
-                  <span style={{ color: "var(--dpf-muted)" }}>–</span>
+                  <span className="text-[var(--dpf-muted)]">–</span>
                   <input
                     type="time"
                     value={d.endTime}
                     onChange={(e) => setDay(i, { endTime: e.target.value })}
-                    style={{ padding: "2px 6px", border: "1px solid var(--dpf-border)", borderRadius: 4, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 12 }}
+                    className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "2px 6px", borderRadius: 4, color: "inherit", fontSize: 12 }}
                   />
                 </>
               ) : (
-                <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>Closed</span>
+                <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>Closed</span>
               )}
             </div>
           );
@@ -181,21 +181,22 @@ export function ScheduleEditor({
 
       {/* Exceptions */}
       <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
           Exceptions
         </div>
         {exceptions.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
             {exceptions.map((ex) => (
-              <div key={ex.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, padding: "4px 8px", background: "var(--dpf-surface-2)", borderRadius: 4 }}>
+              <div key={ex.id} className="bg-[var(--dpf-surface-2)]" style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, padding: "4px 8px", borderRadius: 4 }}>
                 <span style={{ fontFamily: "monospace" }}>{ex.date}</span>
-                <span style={{ color: ex.isBlocked ? "var(--dpf-error, #ef4444)" : "var(--dpf-accent)" }}>
+                <span className={ex.isBlocked ? "text-[var(--dpf-error)]" : "text-[var(--dpf-accent)]"}>
                   {ex.isBlocked ? "Blocked" : `${ex.startTime}–${ex.endTime}`}
                 </span>
-                {ex.reason && <span style={{ color: "var(--dpf-muted)" }}>{ex.reason}</span>}
+                {ex.reason && <span className="text-[var(--dpf-muted)]">{ex.reason}</span>}
                 <button
                   onClick={() => removeException(ex.id)}
-                  style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--dpf-muted)", cursor: "pointer", fontSize: 12 }}
+                  className="text-[var(--dpf-muted)]"
+                  style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontSize: 12 }}
                 >
                   Remove
                 </button>
@@ -209,12 +210,12 @@ export function ScheduleEditor({
             type="date"
             value={exceptionDraft.date}
             onChange={(e) => setExceptionDraft((p) => ({ ...p, date: e.target.value }))}
-            style={{ padding: "4px 8px", border: "1px solid var(--dpf-border)", borderRadius: 4, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 12 }}
+            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "4px 8px", borderRadius: 4, color: "inherit", fontSize: 12 }}
           />
           <select
             value={exceptionDraft.isBlocked ? "blocked" : "custom"}
             onChange={(e) => setExceptionDraft((p) => ({ ...p, isBlocked: e.target.value === "blocked" }))}
-            style={{ padding: "4px 8px", border: "1px solid var(--dpf-border)", borderRadius: 4, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 12 }}
+            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "4px 8px", borderRadius: 4, color: "inherit", fontSize: 12 }}
           >
             <option value="blocked">Block day</option>
             <option value="custom">Custom hours</option>
@@ -225,14 +226,14 @@ export function ScheduleEditor({
                 type="time"
                 value={exceptionDraft.startTime}
                 onChange={(e) => setExceptionDraft((p) => ({ ...p, startTime: e.target.value }))}
-                style={{ padding: "2px 6px", border: "1px solid var(--dpf-border)", borderRadius: 4, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 12 }}
+                className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "2px 6px", borderRadius: 4, color: "inherit", fontSize: 12 }}
               />
-              <span style={{ color: "var(--dpf-muted)", fontSize: 12 }}>–</span>
+              <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>–</span>
               <input
                 type="time"
                 value={exceptionDraft.endTime}
                 onChange={(e) => setExceptionDraft((p) => ({ ...p, endTime: e.target.value }))}
-                style={{ padding: "2px 6px", border: "1px solid var(--dpf-border)", borderRadius: 4, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 12 }}
+                className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "2px 6px", borderRadius: 4, color: "inherit", fontSize: 12 }}
               />
             </>
           )}
@@ -241,12 +242,12 @@ export function ScheduleEditor({
             placeholder="Reason (optional)"
             value={exceptionDraft.reason}
             onChange={(e) => setExceptionDraft((p) => ({ ...p, reason: e.target.value }))}
-            style={{ padding: "4px 8px", border: "1px solid var(--dpf-border)", borderRadius: 4, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 12, width: 160 }}
+            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "4px 8px", borderRadius: 4, color: "inherit", fontSize: 12, width: 160 }}
           />
           <button
             onClick={addException}
             disabled={!exceptionDraft.date}
-            style={{ padding: "4px 10px", borderRadius: 4, border: "1px solid var(--dpf-border)", background: "var(--dpf-surface-2)", color: "inherit", cursor: "pointer", fontSize: 12 }}
+            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "4px 10px", borderRadius: 4, color: "inherit", cursor: "pointer", fontSize: 12 }}
           >
             Add
           </button>
@@ -257,12 +258,12 @@ export function ScheduleEditor({
         <button
           onClick={save}
           disabled={saving}
-          style={{ padding: "6px 14px", borderRadius: 5, border: "none", background: "var(--dpf-accent, #4f46e5)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+          className="bg-[var(--dpf-accent)] text-white" style={{ padding: "6px 14px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
         >
           {saving ? "Saving…" : "Save Schedule"}
         </button>
-        {saved && <span style={{ fontSize: 12, color: "var(--dpf-success, #22c55e)" }}>Saved</span>}
-        {error && <span style={{ fontSize: 12, color: "var(--dpf-error, #ef4444)" }}>{error}</span>}
+        {saved && <span className="text-[var(--dpf-success)]" style={{ fontSize: 12 }}>Saved</span>}
+        {error && <span className="text-[var(--dpf-error)]" style={{ fontSize: 12 }}>{error}</span>}
       </div>
     </div>
   );

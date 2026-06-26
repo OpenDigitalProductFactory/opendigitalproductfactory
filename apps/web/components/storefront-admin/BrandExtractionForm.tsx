@@ -26,52 +26,49 @@ export function BrandExtractionForm({ allowCodebaseSource, onExtract, onSkip, bu
 
   return (
     <div
+      className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
       style={{
         display: "flex",
         flexDirection: "column",
         gap: 16,
         padding: 20,
         borderRadius: 8,
-        border: "1px solid var(--dpf-border)",
-        background: "var(--dpf-surface-1)",
       }}
     >
       <div>
-        <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: "var(--dpf-text)" }}>
+        <h2 className="text-[var(--dpf-text)]" style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
           Build your design system
         </h2>
-        <p style={{ fontSize: 13, color: "var(--dpf-muted)", margin: "4px 0 0 0" }}>
+        <p className="text-[var(--dpf-muted)]" style={{ fontSize: 13, margin: "4px 0 0 0" }}>
           I'll extract your brand once and reuse it everywhere — storefront, admin, product UI.
           Give me any combination of sources.
         </p>
       </div>
 
       <label style={{ fontSize: 13 }}>
-        <div style={{ fontWeight: 600, marginBottom: 4, color: "var(--dpf-text)" }}>Website URL</div>
+        <div className="text-[var(--dpf-text)]" style={{ fontWeight: 600, marginBottom: 4 }}>Website URL</div>
         <input
           type="url"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://yourbrand.com"
           disabled={busy}
+          className="border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-2)]"
           style={{
             width: "100%",
             maxWidth: 420,
             padding: "8px 12px",
             borderRadius: 6,
-            border: "1px solid var(--dpf-border)",
             fontSize: 14,
-            color: "var(--dpf-text)",
-            background: "var(--dpf-surface-2)",
           }}
         />
-        <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4 }}>
+        <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11, marginTop: 4 }}>
           I'll pull colors, typography, logos, and voice from whatever's on the page.
         </div>
       </label>
 
       {allowCodebaseSource && (
-        <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, color: "var(--dpf-text)" }}>
+        <label className="text-[var(--dpf-text)]" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
           <input
             type="checkbox"
             checked={includeCodebase}
@@ -89,12 +86,11 @@ export function BrandExtractionForm({ allowCodebaseSource, onExtract, onSkip, bu
           type="button"
           onClick={() => onExtract({ url: url.trim() || undefined, includeCodebase: allowCodebaseSource && includeCodebase })}
           disabled={disabled}
+          className={disabled ? "bg-[var(--dpf-border)] text-[var(--dpf-muted)]" : "bg-[var(--dpf-accent)] text-white"}
           style={{
             padding: "8px 20px",
             borderRadius: 6,
             border: "none",
-            background: disabled ? "var(--dpf-border)" : "var(--dpf-accent)",
-            color: disabled ? "var(--dpf-muted)" : "#fff",
             cursor: disabled ? "not-allowed" : "pointer",
             fontSize: 13,
             fontWeight: 600,
@@ -108,12 +104,11 @@ export function BrandExtractionForm({ allowCodebaseSource, onExtract, onSkip, bu
             type="button"
             onClick={onSkip}
             disabled={busy}
+            className="bg-transparent text-[var(--dpf-muted)]"
             style={{
               padding: "8px 16px",
               borderRadius: 6,
               border: "none",
-              background: "transparent",
-              color: "var(--dpf-muted)",
               cursor: busy ? "not-allowed" : "pointer",
               fontSize: 13,
               textDecoration: "underline",

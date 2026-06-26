@@ -36,11 +36,10 @@ const STATUSES = ["available", "reserved", "out", "returned", "maintenance", "re
 const inputStyle: React.CSSProperties = {
   fontSize: 13,
   padding: "6px 8px",
-  border: "1px solid var(--dpf-border)",
   borderRadius: 6,
-  background: "var(--dpf-bg, transparent)",
-  color: "var(--dpf-text)",
 };
+
+const inputClass = "border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)]";
 
 export function UnitsManager({
   classes,
@@ -113,7 +112,7 @@ export function UnitsManager({
 
   if (classes.length === 0) {
     return (
-      <div style={{ fontSize: 13, color: "var(--dpf-muted)", maxWidth: 640 }}>
+      <div className="text-[var(--dpf-muted)]" style={{ fontSize: 13, maxWidth: 640 }}>
         No rental classes yet. Add a rental item (CTA type “rental”) under Items first, then come
         back here to stock individual units with their photos.
       </div>
@@ -123,8 +122,8 @@ export function UnitsManager({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 900 }}>
       <div>
-        <h1 style={{ fontSize: 20, fontWeight: 600, color: "var(--dpf-text)" }}>Units &amp; fleet</h1>
-        <p style={{ fontSize: 13, color: "var(--dpf-muted)" }}>
+        <h1 className="text-[var(--dpf-text)]" style={{ fontSize: 20, fontWeight: 600 }}>Units &amp; fleet</h1>
+        <p className="text-[var(--dpf-muted)]" style={{ fontSize: 13 }}>
           Stock individual units under each rental class and give each one photos — condition
           baseline and listing imagery for renters.
         </p>
@@ -132,8 +131,8 @@ export function UnitsManager({
 
       {/* Create */}
       <div
+        className="border border-[var(--dpf-border)]"
         style={{
-          border: "1px solid var(--dpf-border)",
           borderRadius: 8,
           padding: 16,
           display: "flex",
@@ -143,8 +142,8 @@ export function UnitsManager({
         }}
       >
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>Rental class</span>
-          <select style={inputStyle} value={classId} onChange={(e) => setClassId(e.target.value)}>
+          <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>Rental class</span>
+          <select className={inputClass} style={inputStyle} value={classId} onChange={(e) => setClassId(e.target.value)}>
             {classes.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -153,24 +152,24 @@ export function UnitsManager({
           </select>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>Label *</span>
-          <input style={inputStyle} value={label} placeholder="e.g. Excavator #2"
+          <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>Label *</span>
+          <input className={inputClass} style={inputStyle} value={label} placeholder="e.g. Excavator #2"
             onChange={(e) => setLabel(e.target.value)} />
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>Serial / plate</span>
-          <input style={inputStyle} value={unitRef} placeholder="optional"
+          <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>Serial / plate</span>
+          <input className={inputClass} style={inputStyle} value={unitRef} placeholder="optional"
             onChange={(e) => setUnitRef(e.target.value)} />
         </label>
         <button type="button" onClick={() => void createUnit()} disabled={busy}
+          className="bg-[var(--dpf-accent)] text-white"
           style={{
             fontSize: 13, padding: "8px 14px", borderRadius: 6, border: "none",
-            background: "var(--dpf-accent, #2563eb)", color: "#fff",
             cursor: busy ? "default" : "pointer",
           }}>
           {busy ? "Adding…" : "Add unit"}
         </button>
-        {error && <div style={{ fontSize: 12, color: "var(--dpf-danger, #dc2626)", width: "100%" }}>{error}</div>}
+        {error && <div className="text-[var(--dpf-error)]" style={{ fontSize: 12, width: "100%" }}>{error}</div>}
       </div>
 
       {/* Grouped list */}
@@ -179,26 +178,27 @@ export function UnitsManager({
         if (list.length === 0) return null;
         return (
           <div key={c.id} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--dpf-text)" }}>{c.name}</h2>
+            <h2 className="text-[var(--dpf-text)]" style={{ fontSize: 15, fontWeight: 600 }}>{c.name}</h2>
             {list.map((unit) => (
               <div key={unit.id}
-                style={{ border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 16,
+                className="border border-[var(--dpf-border)]"
+                style={{ borderRadius: 8, padding: 16,
                   display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                  <input style={{ ...inputStyle, width: 200, fontWeight: 600 }} value={unit.label}
+                  <input className={inputClass} style={{ ...inputStyle, width: 200, fontWeight: 600 }} value={unit.label}
                     onChange={(e) => updateUnit(unit.id, { label: e.target.value })} />
-                  <input style={{ ...inputStyle, width: 140 }} value={unit.unitRef ?? ""}
+                  <input className={inputClass} style={{ ...inputStyle, width: 140 }} value={unit.unitRef ?? ""}
                     placeholder="serial / plate"
                     onChange={(e) => updateUnit(unit.id, { unitRef: e.target.value })} />
-                  <select style={{ ...inputStyle, width: 140 }} value={unit.status}
+                  <select className={inputClass} style={{ ...inputStyle, width: 140 }} value={unit.status}
                     onChange={(e) => updateUnit(unit.id, { status: e.target.value })}>
                     {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
-                  <span style={{ fontSize: 11, color: "var(--dpf-muted)" }}>{unit.unitId}</span>
+                  <span className="text-[var(--dpf-muted)]" style={{ fontSize: 11 }}>{unit.unitId}</span>
                   <button type="button" onClick={() => void deleteUnit(unit.id)}
+                    className="border border-[var(--dpf-border)] bg-transparent text-[var(--dpf-error)]"
                     style={{ marginLeft: "auto", fontSize: 12, padding: "4px 10px",
-                      border: "1px solid var(--dpf-border)", borderRadius: 6, background: "transparent",
-                      color: "var(--dpf-danger, #dc2626)", cursor: "pointer" }}>
+                      borderRadius: 6, cursor: "pointer" }}>
                     Delete
                   </button>
                 </div>

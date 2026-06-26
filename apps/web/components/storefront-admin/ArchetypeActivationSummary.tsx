@@ -78,11 +78,9 @@ export function ArchetypeActivationSummary({
   return (
     <section
       aria-label="Archetype activation"
+      className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]"
       style={{
-        border: "1px solid var(--dpf-border)",
         borderRadius: 8,
-        background: "var(--dpf-surface-1)",
-        color: "var(--dpf-text)",
         padding: 12,
         marginBottom: 16,
       }}
@@ -100,21 +98,21 @@ export function ArchetypeActivationSummary({
             <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
               <Layers3 size={16} aria-hidden="true" />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 11, color: "var(--dpf-muted)" }}>Required</div>
+                <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11 }}>Required</div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>{requiredCount}</div>
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
               <ShieldCheck size={16} aria-hidden="true" />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 11, color: "var(--dpf-muted)" }}>Recommended</div>
+                <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11 }}>Recommended</div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>{recommendedCount}</div>
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
               <CreditCard size={16} aria-hidden="true" />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 11, color: "var(--dpf-muted)" }}>Payment</div>
+                <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11 }}>Payment</div>
                 <div style={{ fontSize: 13, fontWeight: 700, overflowWrap: "anywhere" }}>
                   {formatToken(profile.billingProfile.primaryPaymentPattern)}
                 </div>
@@ -123,7 +121,7 @@ export function ArchetypeActivationSummary({
             <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
               <Network size={16} aria-hidden="true" />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 11, color: "var(--dpf-muted)" }}>Isolation</div>
+                <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11 }}>Isolation</div>
                 <div style={{ fontSize: 13, fontWeight: 700, overflowWrap: "anywhere" }}>
                   {formatToken(isolation)}
                 </div>
@@ -137,15 +135,13 @@ export function ArchetypeActivationSummary({
               return (
                 <span
                   key={capability.capabilityKey}
+                  className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
                     minHeight: 26,
                     padding: "4px 8px",
                     borderRadius: 6,
-                    border: "1px solid var(--dpf-border)",
-                    background: "var(--dpf-surface-2)",
-                    color: "var(--dpf-text)",
                     fontSize: 12,
                     fontWeight: capability.applicability === "required" ? 700 : 500,
                   }}
@@ -160,21 +156,22 @@ export function ArchetypeActivationSummary({
 
       {workspaceHomeActivation && (
         <div
+          className={profile ? "border-t border-[var(--dpf-border)]" : undefined}
           style={{
             marginTop: profile ? 12 : 0,
             paddingTop: profile ? 12 : 0,
-            borderTop: profile ? "1px solid var(--dpf-border)" : undefined,
           }}
         >
           <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
             <LayoutDashboard size={16} aria-hidden="true" />
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: "var(--dpf-muted)" }}>Worker Home</div>
+              <div className="text-[var(--dpf-muted)]" style={{ fontSize: 11 }}>Worker Home</div>
               <div style={{ fontSize: 14, fontWeight: 700, overflowWrap: "anywhere" }}>
                 {workspaceHomeActivation.label}
               </div>
             </div>
             <span
+              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
               style={{
                 marginLeft: "auto",
                 display: "inline-flex",
@@ -182,9 +179,6 @@ export function ArchetypeActivationSummary({
                 minHeight: 24,
                 padding: "3px 8px",
                 borderRadius: 6,
-                border: "1px solid var(--dpf-border)",
-                background: "var(--dpf-surface-2)",
-                color: "var(--dpf-text)",
                 fontSize: 12,
                 fontWeight: 700,
               }}
@@ -194,10 +188,10 @@ export function ArchetypeActivationSummary({
           </div>
           {workspaceHomeActivation.primaryOperatingQuestion && (
             <p
+              className="text-[var(--dpf-muted)]"
               style={{
                 marginTop: 8,
                 fontSize: 12,
-                color: "var(--dpf-muted)",
                 fontStyle: "italic",
               }}
             >
@@ -209,15 +203,13 @@ export function ArchetypeActivationSummary({
               workspaceHomeActivation.primitiveWidgets.map((primitive) => (
                 <span
                   key={primitive}
+                  className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
                     minHeight: 26,
                     padding: "4px 8px",
                     borderRadius: 6,
-                    border: "1px solid var(--dpf-border)",
-                    background: "var(--dpf-surface-2)",
-                    color: "var(--dpf-text)",
                     fontSize: 12,
                     fontWeight: 500,
                   }}
@@ -226,7 +218,7 @@ export function ArchetypeActivationSummary({
                 </span>
               ))
             ) : (
-              <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
+              <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>
                 Standard workspace fallback
               </span>
             )}
