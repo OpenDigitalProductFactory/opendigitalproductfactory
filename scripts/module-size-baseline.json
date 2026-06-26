@@ -8,7 +8,7 @@
   "apps/web/components/ea/EaCanvas.tsx": 1047,
   "apps/web/components/inventory/TopologyGraph.tsx": 1031,
   "apps/web/components/ops/SelfUpgradeClient.test.tsx": 951,
-  "apps/web/components/ops/SelfUpgradeClient.tsx": 1217,
+  "apps/web/components/ops/SelfUpgradeClient.tsx": 1221,
   "apps/web/components/platform/AiOperationsMap.tsx": 2792,
   "apps/web/components/platform/BuildStudioConfigForm.tsx": 823,
   "apps/web/components/platform/EffectivePermissionsPanel.tsx": 851,
