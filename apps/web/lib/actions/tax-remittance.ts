@@ -1,12 +1,29 @@
 "use server";
 
-import { createHash } from "crypto";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { encryptSecret } from "@/lib/govern/credential-crypto";
 import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
-import { nanoid } from "nanoid";
+import {
+  MANAGED_TAX_ISSUE_TYPES,
+  addDays,
+  addMonths,
+  appendNote,
+  credentialPublicId,
+  decimalValue,
+  issueKey,
+  issuePublicId,
+  nullableString,
+  periodPublicId,
+  registrationPublicId,
+  remittanceRunPublicId,
+  roundCurrency,
+  stableTaxEntityId,
+  taxExecutionTaskId,
+  taxMonitorTaskId,
+  taxableBaseFromLine,
+} from "@/lib/finance/tax-remittance-core";
 import {
   addTaxFilingArtifactSchema,
   createTaxRegistrationSchema,
@@ -67,17 +84,6 @@ type ManagedTaxIssueDraft = {
   periodId?: string | null;
 };
 
-const MANAGED_TAX_ISSUE_TYPES = new Set([
-  "tax_setup_mode_unknown",
-  "tax_home_jurisdiction_missing",
-  "tax_footprint_missing",
-  "tax_registration_research_needed",
-  "tax_registration_number_missing",
-  "tax_registration_live_verification_needed",
-  "tax_external_handoff_missing",
-  "tax_dpf_filing_not_available",
-]);
-
 async function requireManageFinance() {
   const session = await auth();
   const user = session?.user;
@@ -120,68 +126,6 @@ async function getOrCreateTaxProfile(organizationId: string) {
   });
 }
 
-function nullableString(value?: string | null) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-}
-
-function appendNote(existing: string | null, incoming?: string | null) {
-  const next = nullableString(incoming);
-  if (!next) return existing;
-  const current = nullableString(existing);
-  if (!current) return next;
-  if (current.includes(next)) return current;
-  return `${current}\n${next}`;
-}
-
-function registrationPublicId() {
-  return `TAX-REG-${nanoid(8).toUpperCase()}`;
-}
-
-function issuePublicId() {
-  return `TAX-ISS-${nanoid(8).toUpperCase()}`;
-}
-
-function periodPublicId() {
-  return `TAX-PER-${nanoid(8).toUpperCase()}`;
-}
-
-function taxMonitorTaskId() {
-  return `tax-monitor-${nanoid(8).toLowerCase()}`;
-}
-
-function credentialPublicId() {
-  return `TAX-CRED-${nanoid(8).toUpperCase()}`;
-}
-
-function remittanceRunPublicId() {
-  return `TAX-RUN-${nanoid(8).toUpperCase()}`;
-}
-
-function taxExecutionTaskId() {
-  return `tax-run-${nanoid(8).toLowerCase()}`;
-}
-
-function stableTaxEntityId(prefix: string, ...parts: Array<string | number | Date | null | undefined>) {
-  const digest = createHash("sha1")
-    .update(
-      parts
-        .map((part) => {
-          if (part instanceof Date) return part.toISOString();
-          return part == null ? "" : String(part);
-        })
-        .join("|"),
-    )
-    .digest("hex")
-    .slice(0, 12)
-    .toUpperCase();
-  return `${prefix}-${digest}`;
-}
-
-function issueKey(issueType: string, registrationId?: string | null, periodId?: string | null) {
-  return [issueType, registrationId ?? "profile", periodId ?? "none"].join(":");
-}
-
 function revalidateTaxRoutes() {
   revalidatePath("/finance");
   revalidatePath("/finance/settings");
@@ -202,34 +146,6 @@ async function createTaxNotification(userId: string, title: string, body: string
   });
 }
 
-function decimalValue(value: unknown) {
-  if (typeof value === "number") return value;
-  if (typeof value === "string") return Number(value) || 0;
-  if (value && typeof value === "object" && "toNumber" in value && typeof value.toNumber === "function") {
-    return value.toNumber();
-  }
-  if (value && typeof value === "object" && "toString" in value && typeof value.toString === "function") {
-    return Number(value.toString()) || 0;
-  }
-  return 0;
-}
-
-function roundCurrency(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setUTCDate(next.getUTCDate() + days);
-  return next;
-}
-
-function addMonths(date: Date, months: number) {
-  const next = new Date(date);
-  next.setUTCMonth(next.getUTCMonth() + months);
-  return next;
-}
-
 type LiabilityDraft = {
   snapshotId?: string;
   entryId: string;
@@ -247,10 +163,6 @@ type LiabilityDraft = {
   evidence?: Record<string, unknown>;
   notes?: string | null;
 };
-
-function taxableBaseFromLine(lineTotal: unknown, taxAmount: number) {
-  return roundCurrency(Math.max(decimalValue(lineTotal) - taxAmount, 0));
-}
 
 function buildInvoiceLiabilityDrafts(
   registration: TaxRegistrationRecord,
