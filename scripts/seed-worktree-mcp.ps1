@@ -180,6 +180,23 @@ foreach ($pair in $pairs) {
     Write-Ok "Wrote $($pair.Dst)"
 }
 
+# BI-3047C122 (Wave 2): optional managed dependency bootstrap. Born compile-ready
+# instead of source-only when requested (no junction dance). OFF by default so it
+# never slows routine creation; enable with $env:DPF_WORKTREE_BOOTSTRAP = "1".
+# Fail-safe: a failed bootstrap leaves the worktree source-only, never breaks creation.
+if ($env:DPF_WORKTREE_BOOTSTRAP -eq "1") {
+    $bootstrapHelper = Join-Path $Target "scripts/lib/bootstrap-worktree-deps.mjs"
+    if ((Test-Path $bootstrapHelper) -and (Get-Command node -ErrorAction SilentlyContinue)) {
+        Write-Step "Bootstrapping worktree dependencies (managed; DPF_WORKTREE_BOOTSTRAP=1)"
+        try {
+            & node $bootstrapHelper $Target *> $null
+            Write-Ok "Dependency bootstrap attempted (fail-safe; readiness recorded below)"
+        } catch {
+            Write-Host "  [WARN] Dependency bootstrap failed; worktree stays source-only." -ForegroundColor Yellow
+        }
+    }
+}
+
 Write-Step "Classifying worktree verification readiness"
 $pnpmOnPath = $null -ne (Get-Command pnpm -ErrorAction SilentlyContinue)
 $corepackOnPath = $null -ne (Get-Command corepack -ErrorAction SilentlyContinue)

@@ -159,6 +159,23 @@ EOF
 copy_one "$main_abs/.mcp.json"        "$target_abs/.mcp.json"
 copy_one "$main_abs/.vscode/mcp.json" "$target_abs/.vscode/mcp.json"
 
+# BI-3047C122 (Wave 2): optional managed dependency bootstrap. Born compile-ready
+# instead of source-only when requested — kills the "junction a sibling's
+# node_modules" dance. OFF by default (a multi-minute install must not slow every
+# creation); enable per session with DPF_WORKTREE_BOOTSTRAP=1. Fail-safe: a failed
+# bootstrap leaves the worktree source-only and NEVER breaks creation.
+if [ "${DPF_WORKTREE_BOOTSTRAP:-0}" = "1" ]; then
+    bootstrap_helper="$target_abs/scripts/lib/bootstrap-worktree-deps.mjs"
+    if [ -f "$bootstrap_helper" ] && command -v node >/dev/null 2>&1; then
+        step "Bootstrapping worktree dependencies (managed; DPF_WORKTREE_BOOTSTRAP=1)"
+        if node "$bootstrap_helper" "$target_abs" >/dev/null 2>&1; then
+            ok "Dependency bootstrap attempted (fail-safe; readiness recorded below)"
+        else
+            warn "Dependency bootstrap failed; worktree stays source-only."
+        fi
+    fi
+fi
+
 step "Classifying worktree verification readiness"
 pnpm_on_path=false
 corepack_on_path=false
