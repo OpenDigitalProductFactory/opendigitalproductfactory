@@ -149,45 +149,53 @@ export async function runObservation(
     select: { id: true, taskRunId: true },
   });
 
-  await resolved.submitAssessment({
-    agentId: input.agentId,
-    trigger: input.spec.trigger,
-    routeContext: input.routeContext,
-    verdict: input.spec.verdict,
-    confidence: input.spec.confidence,
-    missionSummary: input.sourceTitle,
-    capabilitySummary: input.capabilitySummary ?? null,
-    rawPayload: {
-      ...(input.rawPayload ?? {}),
+  try {
+    await resolved.submitAssessment({
+      agentId: input.agentId,
+      trigger: input.spec.trigger,
+      routeContext: input.routeContext,
+      verdict: input.spec.verdict,
+      confidence: input.spec.confidence,
+      missionSummary: input.sourceTitle,
+      capabilitySummary: input.capabilitySummary ?? null,
+      rawPayload: {
+        ...(input.rawPayload ?? {}),
+        sourceType: input.spec.sourceType,
+        sourceId: input.spec.sourceId,
+        observationTaskRunId: observationRun.taskRunId,
+        reflectionTaskRunId: observationRun.taskRunId,
+      },
+      needs: [...input.spec.needs],
+    });
+
+    await resolved.touchSignal({
       sourceType: input.spec.sourceType,
       sourceId: input.spec.sourceId,
-      observationTaskRunId: observationRun.taskRunId,
-      reflectionTaskRunId: observationRun.taskRunId,
-    },
-    needs: [...input.spec.needs],
-  });
+      title: input.sourceTitle,
+      description: input.sourceDescription ?? null,
+      evidence: {
+        ...(input.signalEvidence ?? {}),
+        parentTaskRunId: input.parentTaskRunId,
+        observationTaskRunId: observationRun.taskRunId,
+        reflectionTaskRunId: observationRun.taskRunId,
+      },
+      routeContext: input.routeContext,
+      agentId: input.agentId,
+      threadId: input.threadId,
+      suspectedRootCause: input.spec.suspectedRootCause ?? null,
+    });
 
-  await resolved.touchSignal({
-    sourceType: input.spec.sourceType,
-    sourceId: input.spec.sourceId,
-    title: input.sourceTitle,
-    description: input.sourceDescription ?? null,
-    evidence: {
-      ...(input.signalEvidence ?? {}),
-      parentTaskRunId: input.parentTaskRunId,
-      observationTaskRunId: observationRun.taskRunId,
-      reflectionTaskRunId: observationRun.taskRunId,
-    },
-    routeContext: input.routeContext,
-    agentId: input.agentId,
-    threadId: input.threadId,
-    suspectedRootCause: input.spec.suspectedRootCause ?? null,
-  });
-
-  await resolved.db.taskRun.update({
-    where: { id: observationRun.id },
-    data: { status: "completed", completedAt: resolved.now() },
-  });
+    await resolved.db.taskRun.update({
+      where: { id: observationRun.id },
+      data: { status: "completed", completedAt: resolved.now() },
+    });
+  } catch (err) {
+    await resolved.db.taskRun.update({
+      where: { id: observationRun.id },
+      data: { status: "failed", completedAt: resolved.now() },
+    });
+    throw err;
+  }
 
   return { processed: 1 };
 }

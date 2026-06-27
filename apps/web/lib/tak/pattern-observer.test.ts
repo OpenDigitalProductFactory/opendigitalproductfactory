@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyPatternSignals } from "./pattern-observer";
+import { classifyPatternSignals, runObservation } from "./pattern-observer";
 
 function failedTool(input: {
   id?: string;
@@ -72,6 +72,10 @@ const FORBIDDEN_ACTIVATION_KEYS = [
 ];
 
 describe("classifyPatternSignals", () => {
+  it("re-exports the pattern observer core from the conventional module path", () => {
+    expect(typeof runObservation).toBe("function");
+  });
+
   it("classifies repeated grant denial as a grant need", () => {
     const out = classifyPatternSignals(grantDeniedFixture());
 

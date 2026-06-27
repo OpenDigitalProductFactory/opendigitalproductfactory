@@ -434,3 +434,5 @@ export function classifyPatternSignals(input: PatternObserverInput): PatternObse
   classifyEnvelopes(input, out);
   return out;
 }
+
+export * from "./pattern-observer/index";

@@ -186,4 +186,25 @@ describe("pattern observer core", () => {
       description: "The coworker repeated the same tool call.",
     });
   });
+
+  it("marks the observation TaskRun failed and rethrows when a side effect throws", async () => {
+    const failedAt = new Date("2026-06-27T21:00:00Z");
+    taskRunFindUnique.mockResolvedValue({
+      source: "coworker",
+      title: "Ordinary run",
+      a2aMetadata: null,
+    });
+    submitAssessment.mockRejectedValueOnce(new Error("assessment failed"));
+
+    await expect(runObservation(baseInput, { now: () => failedAt })).rejects.toThrow(
+      "assessment failed",
+    );
+
+    expect(taskRunUpdate).toHaveBeenCalledTimes(1);
+    expect(taskRunUpdate.mock.calls[0]?.[0]).toMatchObject({
+      where: { id: "created-id" },
+      data: { status: "failed", completedAt: failedAt },
+    });
+    expect(createOrTouchSignal).not.toHaveBeenCalled();
+  });
 });
