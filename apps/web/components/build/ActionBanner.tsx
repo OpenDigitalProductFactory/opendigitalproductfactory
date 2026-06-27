@@ -19,6 +19,7 @@
 
 "use client";
 
+import { StatusBadge, type Intent } from "@/components/ui/report-kit";
 import { ACTION_BANNER_HEIGHT_CLASS, BUILD_STUDIO_TEST_IDS } from "./build-studio-layout";
 
 export type ActionBannerState = "ready" | "running" | "blocked" | "review_failed" | "complete";
@@ -31,6 +32,10 @@ export type ActionBannerPrimaryAction = {
 
 export type ActionBannerProps = {
   state: ActionBannerState;
+  operatorStatus?: {
+    label: string;
+    intent: Intent;
+  };
   /** One sentence describing the current state. This IS the heading — no separate title. */
   sentence: string;
   /** Optional primary action. Right-aligned, min-width 120px. */
@@ -76,7 +81,7 @@ function shouldShowDetail(state: ActionBannerState, detail: string | undefined):
   return state === "blocked" || state === "review_failed";
 }
 
-export function ActionBanner({ state, sentence, primaryAction, detail }: ActionBannerProps) {
+export function ActionBanner({ state, operatorStatus, sentence, primaryAction, detail }: ActionBannerProps) {
   const showDetail = shouldShowDetail(state, detail);
   return (
     <div
@@ -99,9 +104,20 @@ export function ActionBanner({ state, sentence, primaryAction, detail }: ActionB
       ].join(" ")}
     >
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* The sentence IS the heading — render as a single line that describes the state. */}
-        <span className="min-w-0 truncate font-medium" data-testid="action-banner-sentence">
-          {sentence}
+        <span className="flex min-w-0 items-center gap-2">
+          {operatorStatus && (
+            <StatusBadge
+              intent={operatorStatus.intent}
+              label={operatorStatus.label}
+              variant="soft"
+              uppercase={false}
+              className="shrink-0"
+            />
+          )}
+          {/* The sentence IS the heading — render as a single line that describes the state. */}
+          <span className="min-w-0 truncate font-medium" data-testid="action-banner-sentence">
+            {sentence}
+          </span>
         </span>
         {showDetail && (
           <span

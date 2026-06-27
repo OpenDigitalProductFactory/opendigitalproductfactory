@@ -5,7 +5,7 @@
 // runtime state (concurrency cap + running + queued counts).
 //
 // Per the spec §1 (Fleet Rail) and the queue surface amendment (PR #898):
-//   - Header: "Builds: {running}/{cap} · {queuedCount} queued", role=status,
+//   - Header: "WIP slots: {running} of {cap} in use · {queuedCount} queued", role=status,
 //     aria-live="polite" so cap/queue-position changes are announced.
 //   - Default sort: running → blocked → queued (by position) → idle.
 //   - Each row uses BuildListItem density="fleet".
@@ -23,7 +23,8 @@ import {
   getFleetRailHeaderClassName,
 } from "./build-studio-layout";
 import { BuildListItem } from "./BuildListItem";
-import type { BuildQueueState } from "./QueueStateBadge";
+import { formatFleetHeader as formatFleetHeaderLabel } from "./fleet-derivation";
+import { QueueStateBadge, type BuildQueueState } from "./QueueStateBadge";
 
 /** Each visible entry: the FeatureBuildRow plus per-row queue/attention state. */
 export type FleetRailEntry = {
@@ -80,7 +81,7 @@ export function sortFleetEntries(entries: readonly FleetRailEntry[]): FleetRailE
 
 /** Formats the header label. Pinned as a helper so tests can assert it. */
 export function formatFleetHeader(runningCount: number, cap: number, queuedCount: number): string {
-  return `Builds: ${runningCount}/${cap} · ${queuedCount} queued`;
+  return formatFleetHeaderLabel(runningCount, cap, queuedCount);
 }
 
 export function FleetRail({
@@ -117,8 +118,18 @@ export function FleetRail({
           "focus-visible:outline-[var(--dpf-accent)]",
         ].join(" ")}
       >
-        <span data-testid="fleet-header-label">
+        <span data-testid="fleet-header-label" className="inline-flex min-w-0 items-center gap-1">
           {formatFleetHeader(runningCount, cap, queuedCount)}
+          {queuedCount > 0 && (
+            <QueueStateBadge
+              state={{
+                kind: "queued",
+                position: queuedCount,
+                reason: "capacity",
+                ahead: Math.max(0, queuedCount - 1),
+              }}
+            />
+          )}
         </span>
         <span aria-hidden="true" className="text-[var(--dpf-muted)]">
           ›

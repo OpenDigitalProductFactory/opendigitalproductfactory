@@ -28,6 +28,25 @@ type BuildStudioWorkflowActionMetadata = {
   resumeMode?: ResumeImplementationModeDetail;
 };
 
+export type BuildOperatorStatusKind = "waiting-on-you" | "working" | "blocked-technical";
+
+export type BuildOperatorStatus = {
+  kind: BuildOperatorStatusKind;
+  label: "Waiting on you" | "Working" | "Blocked (technical)";
+  intent: "accent" | "info" | "danger";
+};
+
+export type BuildStudioOperatorGuidance = {
+  status: BuildOperatorStatus;
+  nextLabel: string | null;
+  nextSentence: string;
+  useCoworkerForNext: boolean;
+  guidedRecovery: boolean;
+  recoveryHint: string | null;
+};
+
+type OperatorGuidanceBuildContext = Pick<FeatureBuildRow, "phase" | "buildExecState">;
+
 export type BuildStudioWorkflowAction =
   | ({
     kind: "approve-start";
@@ -328,6 +347,105 @@ function explicitFailureAxisOrNull(value: unknown): BuildFailureAxis | null {
   ) ? failureAxis : null;
 }
 
+function statusForAction(
+  action: BuildStudioWorkflowAction,
+  build?: OperatorGuidanceBuildContext,
+): BuildOperatorStatus {
+  if (
+    action.kind === "retry-build"
+    || action.kind === "reset-build"
+    || action.kind === "resume-implementation"
+  ) {
+    return {
+      kind: "blocked-technical",
+      label: "Blocked (technical)",
+      intent: "danger",
+    };
+  }
+
+  const exec = build?.buildExecState as { step?: string | null; error?: string | null } | null | undefined;
+  if (
+    build?.phase === "build"
+    && exec?.step
+    && exec.step !== "failed"
+    && exec.step !== "complete"
+    && !exec.error
+  ) {
+    return {
+      kind: "working",
+      label: "Working",
+      intent: "info",
+    };
+  }
+
+  if (action.kind === "review-only") {
+    return {
+      kind: "working",
+      label: "Working",
+      intent: "info",
+    };
+  }
+
+  return {
+    kind: "waiting-on-you",
+    label: "Waiting on you",
+    intent: "accent",
+  };
+}
+
+function nextSentenceForAction(action: BuildStudioWorkflowAction): string {
+  if (action.disabledReason) {
+    return "Next: clear the missing evidence with the coworker, then come back to this button.";
+  }
+
+  switch (action.kind) {
+    case "approve-start":
+      return "Next: record approval so Build Studio can keep going.";
+    case "advance-phase":
+      if (action.targetPhase === "plan") return "Next: move the reviewed design into planning.";
+      if (action.targetPhase === "build") return "Next: start implementation from Build Studio.";
+      if (action.targetPhase === "review") return "Next: run verification review from Build Studio.";
+      if (action.targetPhase === "ship") return "Next: continue to release decisions.";
+      return "Next: move this build to the next stage.";
+    case "run-review-verification":
+      return "Next: run UX verification from Build Studio.";
+    case "record-acceptance":
+      return "Next: record acceptance so release decisions can unlock.";
+    case "retry-build":
+      return "Next: retry the sandbox launch.";
+    case "reset-build":
+      return "Next: reset the build pipeline and start it again.";
+    case "resume-implementation":
+      return "Next: try to fix the failed work from Build Studio.";
+    case "decompose-now":
+      return "Next: split this build into smaller builds.";
+    case "amend-parent-design":
+      return "Next: amend the parent design before this child continues.";
+    case "rerun-plan-review":
+      return "Next: try to fix the plan review in place.";
+    case "review-only":
+      return "Next: watch this stage, or ask the coworker what needs attention.";
+  }
+}
+
+export function deriveBuildStudioOperatorGuidance(
+  action: BuildStudioWorkflowAction,
+  build?: OperatorGuidanceBuildContext,
+): BuildStudioOperatorGuidance {
+  const useCoworkerForNext = action.disabledReason != null || action.primaryLabel == null;
+  const guidedRecovery = action.kind === "rerun-plan-review" || action.kind === "resume-implementation";
+  return {
+    status: statusForAction(action, build),
+    nextLabel: useCoworkerForNext ? action.coworkerLabel : action.primaryLabel,
+    nextSentence: nextSentenceForAction(action),
+    useCoworkerForNext,
+    guidedRecovery,
+    recoveryHint: guidedRecovery
+      ? "Choose Try to fix when the failure looks stale or already addressed. Choose Something looks off when the plan or checks need a human-readable revision first."
+      : null,
+  };
+}
+
 function deriveResumeMode(args: {
   build: FeatureBuildRow;
   taskResults: NormalizedTaskResults;
@@ -375,28 +493,27 @@ function buildResumeAction(args: {
   const blockedCount = state.nonCleanTasks.length;
   const axis = state.failureAxis ?? "unknown";
   const title =
-    state.operatorAction
-      ? state.operatorAction
-      : axis === "out-of-scope-noise"
+    axis === "out-of-scope-noise"
       ? "Review workspace noise before retrying this build"
       : blockedCount > 0
-        ? `Click Resume to re-execute ${blockedCount} blocked task${blockedCount === 1 ? "" : "s"}`
+        ? blockedCount === 1
+          ? "1 task needs another pass"
+          : `${blockedCount} tasks need another pass`
         : state.resumeMode.mode === "replan-and-dispatch"
-          ? "Click Resume to re-plan and dispatch tasks"
-          : "Click Resume to rerun verification";
-  // BI-FD796419 / Band 4 — lead with plain "what it means + what to do"; keep
-  // the technical failure axis + reason as a trailing engineer detail rather
-  // than the headline, so an overseer is not asked to parse "Failure axis:".
+          ? "Implementation needs a fresh plan"
+          : "Verification needs another pass";
+  // BI-FD796419 / Band 4 — lead with plain "what it means + what to do";
+  // technical recovery metadata stays on structured fields for engineer view.
   const message =
     axis === "out-of-scope-noise"
-      ? "The checks that failed look like they came from other work, not this build, so it is probably fine. Take a look, then click Resume to re-run on a clean workspace. (Details: failure axis out-of-scope-noise.)"
-      : `Some of the work did not pass its checks yet. Click Resume to re-run it on a clean workspace before the review continues. (Details: failure axis ${axis}. ${state.resumeMode.reason})`;
+      ? "The failed checks look like they came from other work, not this build. Next: click Try to fix to rerun recovery from Build Studio."
+      : "Some work did not pass its checks yet. Next: click Try to fix to rerun the failed work from Build Studio.";
 
   return {
     kind: "resume-implementation",
     title,
     message,
-    primaryLabel: "Resume Implementation",
+    primaryLabel: "Try to fix",
     targetPhase: null,
     disabledReason: null,
     coworkerLabel: args.coworkerLabel,
@@ -547,15 +664,15 @@ export function deriveBuildStudioWorkflowAction({
     if (isPlanReviewFailed(build.planReview)) {
       return {
         kind: "rerun-plan-review",
-        title: "Plan Review Failed",
+        title: "Plan review needs a fix",
         message:
-          "The implementation plan did not pass review. Re-run the plan review to refresh the result with the current reviewer logic, or revise the plan with the coworker first. If the blocking issues are resolved (or no longer apply), the re-run passes and Start Implementation unlocks automatically.",
-        primaryLabel: "Re-run Plan Review",
+          "The plan review did not pass. Next: click Try to fix to rerun the guided recovery in Build Studio, or choose Something looks off if the plan needs edits first.",
+        primaryLabel: "Try to fix",
         targetPhase: null,
         disabledReason: null,
-        coworkerLabel: "Revise the plan",
+        coworkerLabel: "Something looks off",
         coworkerPrompt:
-          "The Build Studio plan review failed. Summarize the blocking issues, revise the implementation plan to address them, save the plan with saveBuildEvidence field buildPlan, then re-run reviewBuildPlan and tell me when Start Implementation is unlocked.",
+          "The Build Studio plan review failed. Explain the blocking issues in plain language, update the saved implementation plan to address them, run the plan review again, and report whether implementation is unlocked.",
       };
     }
 
@@ -628,7 +745,7 @@ export function deriveBuildStudioWorkflowAction({
         state: concernState,
         coworkerLabel: "Review failures with coworker",
         coworkerPrompt:
-          "The current build still has flagged execution or verification concerns. Explain what failed, then rerun the non-clean implementation work on a healthy sandbox and tell me when verification is genuinely ready.",
+          "The current build still has execution or verification concerns. Explain what failed in plain language, rerun the non-clean implementation work through the existing recovery path, and report when verification is genuinely ready.",
       });
     }
 
@@ -671,7 +788,7 @@ export function deriveBuildStudioWorkflowAction({
         state: concernState,
         coworkerLabel: "Recover with coworker",
         coworkerPrompt:
-          "The current review state reflects implementation failures, not a clean verification pass. Recover the build from the live product path: rerun the non-clean implementation work on a healthy sandbox, then tell me the next approval when verification is truly ready.",
+          "The current review state reflects implementation failures, not a clean verification pass. Recover the build through the existing Build Studio recovery path, then tell me the next approval when verification is truly ready.",
       });
     }
   }
@@ -815,7 +932,7 @@ export function deriveWorkflowStageGuidance({
     return {
       title: workflowAction.title,
       nextApproval:
-        "Resume implementation from Build Studio so the coworker can rerun the flagged work and return to review with clean evidence.",
+        "Try to fix from Build Studio so the coworker can rerun the flagged work and return to review with clean evidence.",
       workflowAction,
     };
   }

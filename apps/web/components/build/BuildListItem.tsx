@@ -110,10 +110,9 @@ export function BuildListItem({
           {build.title}
         </div>
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-[var(--dpf-muted)]">
-          <span className="font-mono">{build.buildId}</span>
           {build.originator && (
             <span className="inline-flex max-w-full min-w-0 items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-1.5 py-0.5 font-medium text-[var(--dpf-text)]">
-              {build.originator.itemId}
+              Backlog-linked
             </span>
           )}
           <span className="capitalize">{build.phase}</span>
@@ -171,7 +170,6 @@ function FleetDensityRow({
   needsAttention,
 }: FleetRowProps) {
   const railPhase = toPhaseRailPhase(build.phase);
-  const biCostTooltip = build.originator?.itemId ?? "";
   return (
     <div
       data-testid={BUILD_STUDIO_TEST_IDS.buildListItem}
@@ -206,12 +204,6 @@ function FleetDensityRow({
         onClick={onSelect}
         className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
       >
-        <span
-          className="shrink-0 font-mono text-[11px] text-[var(--dpf-text)]"
-          title={biCostTooltip || undefined}
-        >
-          {build.buildId}
-        </span>
         <PhaseMiniRail currentPhase={railPhase} />
         {build.phase === "build" && (
           <FleetDensityBar taskResults={build.taskResults} buildPlan={build.buildPlan} />

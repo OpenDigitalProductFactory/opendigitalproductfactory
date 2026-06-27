@@ -464,6 +464,15 @@ describe("BuildStudio active-build header layout", () => {
             summary: "Ready to implement.",
             issues: [],
           },
+          happyPathState: normalizeHappyPathState({
+            intake: {
+              status: "ready",
+              taxonomyNodeId: "capability-build-studio",
+              backlogItemId: "BI-5B839D74",
+              epicId: "EP-BUILD-STUDIO-UX",
+              constrainedGoal: "Fix Build Studio header/content overlap in workflow view.",
+            },
+          }),
         })]}
         portfolios={[]}
         governedBacklogEnabled
@@ -478,9 +487,8 @@ describe("BuildStudio active-build header layout", () => {
     // banner's primary action label.
     expect(html).toContain('data-testid="build-studio-action-banner"');
     expect(html).toContain("Start Implementation");
-    // Detail line surfaces the intake-incomplete reason (banner shows detail
-    // only when state ∈ {blocked, review_failed}, which intake-missing maps to).
-    expect(html).toContain('data-testid="action-banner-detail"');
+    // Ready intake keeps the banner focused on one next action.
+    expect(html).not.toContain('data-testid="action-banner-detail"');
   });
 
   it("mounts the footer OpenSandboxButton — single shared sandbox link", () => {

@@ -261,7 +261,7 @@ export function getDetailsDrawerPillClassName(): string {
 }
 
 /**
- * Fleet rail header — shows `Builds: {running}/{cap} · {queuedCount} queued`.
+ * Fleet rail header — shows `WIP slots: {running} of {cap} in use · {queuedCount} queued`.
  * Uses `role="status"` + `aria-live="polite"` (set on the element itself, not here).
  */
 export function getFleetRailHeaderClassName(): string {
