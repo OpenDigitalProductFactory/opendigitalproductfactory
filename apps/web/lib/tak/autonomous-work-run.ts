@@ -305,6 +305,31 @@ export async function executeAutonomousAgenticLoop(input: {
     }
   })();
 
+  // Governed adaptive playbooks foundation: observe repeated work patterns
+  // after the run and emit evidence-backed capability needs. This is
+  // observability/proposal only; it must never mutate prompts, skills, grants,
+  // model routes, or Work Case state.
+  void (async () => {
+    try {
+      const { observeWorkPatternsAfterRun } = await import(
+        "@/lib/tak/pattern-observer-service"
+      );
+      await observeWorkPatternsAfterRun({
+        taskRunId: input.taskRunId ?? null,
+        userId: input.userId,
+        agentId: input.agentId,
+        threadId: input.threadId,
+        routeContext: input.routeContext,
+        since: startedAt,
+      });
+    } catch (err) {
+      console.warn(
+        "[pattern-observer] post-run hook failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  })();
+
   return result;
 }
 
