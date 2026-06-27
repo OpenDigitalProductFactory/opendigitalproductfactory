@@ -406,6 +406,7 @@ Not allowed under this budget:
 - Replacing the coworker runtime.
 - Adding a parallel audit/event ledger.
 - Adding a parallel Work Case, Work Packet, receipt, handoff, or case-state model.
+- Making a second edit to the Work Case governed-execution receipt seam — the `mcp-governed-execute.ts` `context.workCase` / `work-case-governed-action` receipt derivation is owned by Work Case Wave 1 (`BI-D633F7AF`). Case-bound playbook proposals consume that seam; they do not re-implement it.
 - Adding a parallel architecture-, process-, or method-modeling mechanism instead of using the existing SysML v2 / ArchiMate EA substrate and IT4IT value streams.
 - Expanding model routing beyond the existing model-tier routing epic.
 - Creating prompt-only shortcuts that cannot be audited.
