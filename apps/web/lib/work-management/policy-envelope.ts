@@ -1,0 +1,162 @@
+import type { EnvelopeStatus } from "../coworker/envelope-state-machine";
+import { getWorkCaseAction } from "./action-registry";
+import type {
+  WorkCaseActionVerb,
+  WorkCaseEnforcementMode,
+  WorkCaseRef,
+  WorkCaseState,
+} from "./case-types";
+import {
+  getWorkCaseSourceEntry,
+  type WorkCaseReceiptKind,
+} from "./source-registry";
+
+export type WorkCaseAutonomyMode = "autonomous" | "supervised" | "observed";
+
+export interface WorkCasePolicyEnvelope {
+  autonomyMode: WorkCaseAutonomyMode;
+  receiptPolicy?: {
+    required: boolean;
+    kind: WorkCaseReceiptKind;
+  };
+  sensitivityCeiling?: "low" | "medium" | "high" | "critical";
+}
+
+export interface WorkCaseStopCondition {
+  stopId: string;
+  tripped: boolean;
+  reason?: string;
+}
+
+export interface WorkCasePolicyInput {
+  caseRef: WorkCaseRef;
+  sourceKey?: string | null;
+  action: WorkCaseActionVerb | string;
+  currentState: Pick<{ state: WorkCaseState; terminal: boolean }, "state" | "terminal">;
+  envelope: WorkCasePolicyEnvelope;
+  coworkerEnvelope?: {
+    envelopeId: string;
+    status: EnvelopeStatus;
+  } | null;
+  decisionInteractionId?: string | null;
+  stopConditions?: readonly WorkCaseStopCondition[];
+  observedEvent?: boolean;
+}
+
+export type WorkCasePolicyDenialReason =
+  | "unknown_source"
+  | "unknown_action"
+  | "unsupported_transition"
+  | "terminal_case_sealed"
+  | "missing_receipt_policy"
+  | "stop_condition_tripped"
+  | "missing_decision_interaction"
+  | "missing_coworker_envelope"
+  | "coworker_envelope_not_approved";
+
+export type WorkCasePolicyDecision =
+  | {
+      ok: true;
+      enforcementMode: WorkCaseEnforcementMode;
+      requiredReceiptKind: WorkCaseReceiptKind;
+    }
+  | {
+      ok: false;
+      reason: WorkCasePolicyDenialReason;
+      message: string;
+    };
+
+function deny(
+  reason: WorkCasePolicyDenialReason,
+  message: string,
+): WorkCasePolicyDecision {
+  return { ok: false, reason, message };
+}
+
+function requiresApprovedCoworkerEnvelope(input: WorkCasePolicyInput): boolean {
+  const action = getWorkCaseAction(input.action);
+  if (!action) return false;
+  if (action.requiresCoworkerEnvelope === "always") return true;
+  return (
+    action.requiresCoworkerEnvelope === "when-supervised" &&
+    input.envelope.autonomyMode === "supervised"
+  );
+}
+
+export function evaluateWorkCasePolicy(
+  input: WorkCasePolicyInput,
+): WorkCasePolicyDecision {
+  const sourceKey = input.sourceKey ?? input.caseRef.sourceType;
+  const source = getWorkCaseSourceEntry(sourceKey);
+  if (!source) {
+    return deny("unknown_source", `Work Case source '${sourceKey}' is not registered.`);
+  }
+
+  const action = getWorkCaseAction(input.action);
+  if (!action) {
+    return deny("unknown_action", `Work Case action '${input.action}' is not registered.`);
+  }
+
+  if (!source.supportedTransitions.includes(action.action)) {
+    return deny(
+      "unsupported_transition",
+      `${source.sourceKey} does not support Work Case action '${action.action}'.`,
+    );
+  }
+
+  if (action.consequential && input.currentState.terminal) {
+    return deny(
+      "terminal_case_sealed",
+      `Work Case ${input.caseRef.caseId} is terminal and cannot accept consequential action '${action.action}'.`,
+    );
+  }
+
+  const trippedStop = input.stopConditions?.find((condition) => condition.tripped);
+  if (trippedStop) {
+    return deny(
+      "stop_condition_tripped",
+      trippedStop.reason ?? `Stop condition '${trippedStop.stopId}' is tripped.`,
+    );
+  }
+
+  if (action.requiresDecisionInteraction && !input.decisionInteractionId?.trim()) {
+    return deny(
+      "missing_decision_interaction",
+      `Work Case action '${action.action}' requires a DecisionInteraction reference.`,
+    );
+  }
+
+  if (requiresApprovedCoworkerEnvelope(input)) {
+    if (!input.coworkerEnvelope) {
+      return deny(
+        "missing_coworker_envelope",
+        `Work Case action '${action.action}' requires an approved CoworkerActionEnvelope.`,
+      );
+    }
+    if (input.coworkerEnvelope.status !== "approved") {
+      return deny(
+        "coworker_envelope_not_approved",
+        `CoworkerActionEnvelope ${input.coworkerEnvelope.envelopeId} is '${input.coworkerEnvelope.status}', not approved.`,
+      );
+    }
+  }
+
+  if ((action.requiresReceipt || source.receiptPolicy.receiptRequiredForConsequentialTransition) && !input.envelope.receiptPolicy) {
+    return deny(
+      "missing_receipt_policy",
+      `Work Case action '${action.action}' requires a receipt policy.`,
+    );
+  }
+
+  const enforcementMode: WorkCaseEnforcementMode =
+    input.observedEvent || input.envelope.autonomyMode === "observed"
+      ? "observed-event"
+      : "governed-action";
+
+  return {
+    ok: true,
+    enforcementMode,
+    requiredReceiptKind:
+      input.envelope.receiptPolicy?.kind ?? source.receiptPolicy.defaultReceiptKind,
+  };
+}
