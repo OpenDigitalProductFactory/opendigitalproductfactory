@@ -1,9 +1,11 @@
 // EP-CWQ-001: Canonical string enums (CLAUDE.md compliance — hyphens, not underscores)
 
+import { WORK_CASE_WORK_ITEM_SOURCE_TYPES } from "@/lib/work-management/source-registry";
+
 export const QUEUE_TYPES = ["team", "personal", "triage", "escalation"] as const;
 export type QueueType = (typeof QUEUE_TYPES)[number];
 
-export const WORK_ITEM_SOURCE_TYPES = ["task-node", "backlog-item", "approval", "manual-task", "scheduled"] as const;
+export const WORK_ITEM_SOURCE_TYPES = WORK_CASE_WORK_ITEM_SOURCE_TYPES;
 export type WorkItemSourceType = (typeof WORK_ITEM_SOURCE_TYPES)[number];
 
 export const WORK_ITEM_URGENCIES = ["routine", "priority", "urgent", "emergency"] as const;

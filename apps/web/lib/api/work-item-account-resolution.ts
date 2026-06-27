@@ -9,12 +9,16 @@
  *
  * Each branch is a single Prisma `findUnique`; misses return null so the
  * caller keeps working with the free-text fallback. The set of recognized
- * sourceTypes is closed to the ones whose models actually carry an account
- * link today — adding a new source means adding a branch here AND a route
- * test, not just one or the other.
+ * sourceTypes now comes from the Work Case source registry; this file owns only
+ * the database lookup adapters.
  */
 import { prisma } from "@dpf/db";
 import type { WorkItemAccount } from "@dpf/types";
+import {
+  WORK_CASE_ACCOUNT_RESOLVER_SOURCE_KEYS,
+  type WorkCaseAccountResolverKey,
+  getWorkCaseAccountResolverKey,
+} from "@/lib/work-management/source-registry";
 
 type AccountRow = {
   id: string;
@@ -72,18 +76,12 @@ async function fromActivity(sourceId: string): Promise<WorkItemAccount | null> {
   return toAccount(row?.account);
 }
 
-/**
- * The set of WorkItem `sourceType` values this resolver understands. Closed
- * by design — an unknown source returns null and the tech enters the account
- * manually, rather than failing.
- */
-const RESOLVERS: Record<
-  string,
+const RESOLVERS_BY_KEY: Record<
+  WorkCaseAccountResolverKey,
   (sourceId: string) => Promise<WorkItemAccount | null>
 > = {
   engagement: fromEngagement,
   opportunity: fromOpportunity,
-  "storefront-booking": fromBooking,
   booking: fromBooking,
   activity: fromActivity,
 };
@@ -103,10 +101,12 @@ export async function resolveWorkItemAccount(
   const type = input.sourceType?.trim();
   const id = input.sourceId?.trim();
   if (!type || !id) return null;
-  const resolver = RESOLVERS[type];
+  const resolverKey = getWorkCaseAccountResolverKey(type);
+  if (!resolverKey) return null;
+  const resolver = RESOLVERS_BY_KEY[resolverKey];
   if (!resolver) return null;
   return resolver(id);
 }
 
 /** Test-only export of the closed source-type registry. */
-export const __RESOLVER_KEYS_FOR_TESTS = Object.keys(RESOLVERS);
+export const __RESOLVER_KEYS_FOR_TESTS = [...WORK_CASE_ACCOUNT_RESOLVER_SOURCE_KEYS];

@@ -15,8 +15,9 @@ Wave 0 ships three things:
 - A canonical Work Case / WorkItem source registry that replaces split source knowledge.
 - Typed, explainable Work Case status projection helpers over existing substrate.
 - The initial `apps/web/lib/work-management/*` read-model skeleton with pure tests.
+- A slice-local EA/SysML grounding manifest with stable `REQ`/`ACT`/`PART`/`VC` IDs and code allocations, so the implementation can be registered/refreshed in the EA substrate without inventing a parallel architecture model.
 
-No UI, Prisma migration, external A2A interface, or receipt-enforcement guard belongs in this BI.
+No UI, Prisma migration, external A2A interface, governed write-path enforcement, receipt-enforcement guard, or EA database mutation belongs in this BI.
 
 ## Substrate Grounding
 
@@ -36,6 +37,10 @@ The plan is grounded in:
   Existing `WorkItem`, `WorkCapsule`, `DecisionInteraction`, `RuntimeVerification`, `ExternalEvidenceRecord`, `Principal`, `AuthorityBinding`, and `DelegationChain` models.
 - `apps/web/lib/golden-triangle/receipt.ts`
   Existing receipt concept to be preserved for Wave 1 receipt-envelope work.
+- `packages/db/prisma/schema.prisma`
+  Existing EA/SysML substrate: `EaElement`, `EaRelationship`, `EaView`, `EaConformanceIssue`, notation registry, `CoworkerActionEnvelope`, `ToolExecutionReceipt`, `AgentGovernanceProfile`, and `DelegationGrant`.
+- `docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md`, `docs/Reference/sysml-v2.md`, and `docs/architecture/ai-agent-meta-model.md`
+  Existing modeling conventions for SysML `requirement`, `action`, `part_definition`, `interface_definition`, and `verification_case` projections over DPF runtime substrate.
 
 The code graph was available, but the compound planning query did not return hits. Local grep provided the authoritative file-level grounding for this slice.
 
@@ -176,11 +181,38 @@ Verification:
 - Pure read-model tests build summaries/details from fixtures without a database.
 - Typecheck catches drift between Prisma payload assumptions and exported view-model types.
 
-## Phase 6 - Documentation And Evidence
+## Phase 6 - Add EA/SysML Grounding Manifest
+
+Deliverable:
+
+- Create `apps/web/lib/work-management/architecture-grounding.ts`.
+- Define stable descriptors for Wave 0's current-state and target-state architecture commitments:
+  - `REQ-WC-4` A2A lifecycle alignment, allocated to `status-projection.ts`.
+  - `REQ-WC-5` decision routing as a deferred invariant, allocated to the future governed write path.
+  - `ACT-WC-derive-summary`, `ACT-WC-project-status`, and source-registry registration actions.
+  - `PART-WC-case-projection` and `PART-WC-source-registry`.
+  - `VC-WC-1` through `VC-WC-5`, with Wave 0 providing current-state evidence for the source registry, lifecycle/A2A projection, and read-model skeleton while marking governed-write, receipt-coverage, sponsor, and decision-routing guards as planned.
+- Include `sysml_allocates` relationships to the realizing source files and `itValueStream` anchors for company work (`operate`/`consume`) and platform-development work (`integrate`/`deploy`/`release`).
+- Expose the manifest as pure TypeScript so later EA seed/refresh tooling can upsert `EaElement`/`EaRelationship` rows and detect `EaConformanceIssue` drift.
+
+Likely files:
+
+- `apps/web/lib/work-management/architecture-grounding.ts`
+- `apps/web/lib/work-management/architecture-grounding.test.ts`
+- `apps/web/lib/work-management/index.ts`
+
+Verification:
+
+- Tests prove every Wave 0 work-management source file has at least one allocation.
+- Tests prove each `REQ` has a matching `VC`.
+- Tests prove the manifest uses existing EA relationship vocabulary (`sysml_allocates`) and does not require new modeling tables.
+
+## Phase 7 - Documentation And Evidence
 
 Deliverable:
 
 - Update the Work Case spec if implementation finds a substrate mismatch.
+- Keep the Wave 0 plan aligned with reviewed spec changes, especially the SysML/EA grounding section and the sibling governed-adaptive-playbooks dependency.
 - Record BI evidence with test commands and results.
 - Leave later-wave BIs unstarted until Wave 0 is green.
 
@@ -201,6 +233,8 @@ Verification:
   Mitigation: no governed write-path wrappers or receipt guards in this BI.
 - Type imports pull Prisma payloads into inappropriate shared modules.
   Mitigation: keep view-model types narrow and use existing API-layer patterns.
+- EA grounding becomes a second architecture source of truth.
+  Mitigation: keep Wave 0 to a code-local manifest with stable IDs and allocations; the EA graph remains the model of record once seed/refresh tooling upserts it.
 
 ## Rollback
 
@@ -209,6 +243,7 @@ Rollback should be straightforward:
 - Revert the `apps/web/lib/work-management/*` module.
 - Restore direct resolver lookup in `work-item-account-resolution.ts` if Phase 3 landed.
 - Keep characterization tests if they document existing behavior and still pass.
+- Remove the Wave 0 EA grounding manifest without touching persisted EA rows, because this BI does not mutate the EA database.
 
 No migration rollback is needed because Wave 0 does not change the database schema.
 
@@ -217,5 +252,6 @@ No migration rollback is needed because Wave 0 does not change the database sche
 - `BI-40EE7AFD` has a passing registry, status projection, and read-model test suite.
 - Existing account-resolution behavior is preserved.
 - Existing WorkCapsule enum/parity tests pass.
+- Wave 0 exposes test-covered EA/SysML grounding IDs and allocations for later EA substrate refresh.
 - The production web build passes.
 - The implementation records evidence on the BI and links back to the Work Case spec.

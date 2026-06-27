@@ -7,6 +7,7 @@ Related capsule: WC-0A3909A2
 Epic: EP-2984B02B - Work Case / Company Work Management
 Wave 0 BI: BI-40EE7AFD - Work Case source registry, status projection, and read-model skeleton
 Wave 0 plan: docs/superpowers/plans/2026-06-27-work-case-wave-0.md
+Sibling spec: docs/superpowers/specs/2026-06-27-governed-adaptive-playbooks-design.md (the method-improvement pillar that binds to this object)
 
 ## Summary
 
@@ -35,6 +36,7 @@ Two principles, drawn from how Google, Palantir, Microsoft, Salesforce, and Serv
 - Do not move platform-development PR/build tracking out of the unified WorkCapsule substrate.
 - Do not define every customer-industry workflow. This spec defines the architecture that domain vocabularies and workflows plug into.
 - Do not implement schema or UI changes in this spec-only slice.
+- Do not build a new architecture-description, diagramming, or process-modeling mechanism. DPF already has a SysML v2 / ArchiMate EA substrate and an IT4IT value-stream model; this design grounds in and communicates through that substrate (see Architecture Grounding) rather than inventing a parallel one.
 
 ## Research & Benchmarking
 
@@ -210,6 +212,39 @@ Receipt fields should include:
 - Input digests, output digests, evidence refs, and redaction class.
 - Stop condition, handoff reason, or completion summary when relevant.
 - Timestamp and source system.
+
+## Architecture Grounding (SysML v2 / EA Substrate)
+
+This design is expressed in DPF's existing architecture substrate so it can be reasoned about, traced to code, and communicated across the platform the same way every other DPF capability is — not as prose or ad-hoc diagrams that drift from reality. DPF already has the modeling capability; this section binds Work Case into it rather than reinventing it.
+
+The substrate (verified): `EaElement`, `EaRelationship`, `EaView`, and the notation registry in `packages/db/prisma/schema.prisma` (notations `archimate4` and `sysml2`), the SysML architecture-note template at [ai-cockpit SysML note](../../architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md), the [SysML v2 reference](../../Reference/sysml-v2.md), the [AI agent meta-model](../../architecture/ai-agent-meta-model.md), and the EA modeling foundation at [phase EA modeling foundation](2026-03-12-phase-ea-modeling-foundation-design.md). Diagrams in this spec are communication aids; the EA graph is the model of record.
+
+### Concept-To-Element Mapping
+
+Each Work Case concept is represented with an existing element type and allocated to the record/code that realizes it (`sysml_allocates`), with stable `infraCiKey` IDs:
+
+- **Work Case lifecycle** → `state` elements + transition edges (state machine `SM-WC-LIFECYCLE`), allocated to `apps/web/lib/work-management/status-projection.ts`. The A2A mapping and terminal-sealing rule are guards/annotations on the transitions.
+- **Governed Actions / handoff grammar** → `action` elements (`ACT-WC-claim`, `ACT-WC-delegate`, …), allocated to the existing governed mutators. The proposed-before-commit runtime primitive already exists as `CoworkerActionEnvelope` (status proposed → resolved, with `manifestActionId`, `argsJson`, `rationale`) — Work Case staging reuses it rather than inventing a staging table.
+- **Policy envelope** → `constraint` elements (`CON-WC-authority`, `CON-WC-stop`, `CON-WC-sensitivity`), realized by `AuthorityBinding`, `AgentGovernanceProfile`, and `DelegationGrant`. These are the runtime-enforced guardrails, not prompt text.
+- **Acting principal + sponsor + authority mode** → `part_definition` (`PART-WC-actor`) with an `interface_definition` port for the capability descriptor (`IF-WC-agentcard`), governed by `AgentGovernanceProfile`. The authority chain is queryable via `run_traversal_pattern` with `governance_audit` and `ai_oversight`.
+- **Receipts** → `verification_case` elements (`VC-WC-*`) plus the `ReceiptEnvelope`, which must subsume both `GoldenTriangleReceipt` and the existing `ToolExecutionReceipt` rather than parallel them.
+
+### Requirements And Verification
+
+Seed the design's load-bearing invariants as SysML `requirement` elements so they are traceable and conformance-checked, each closed by a verification case:
+
+- `REQ-WC-1` Governed write path: consequential transitions mutate only through governed Actions → `VC-WC-1` receipt-coverage guard test.
+- `REQ-WC-2` Receipt coverage and sealing: every consequential transition emits a receipt; terminal cases are immutable → `VC-WC-2`.
+- `REQ-WC-3` Accountable identity: an agent actor without a sponsor cannot transition a case → `VC-WC-3`.
+- `REQ-WC-4` A2A alignment: case states and handoff verbs map to the A2A lifecycle including `auth-required` → `VC-WC-4`.
+- `REQ-WC-5` Decision routing: consequential decisions route through `DecisionInteraction` → `VC-WC-5`.
+
+### How It Is Communicated And Kept Honest
+
+- Derive current-state Work Case architecture from the source registry, code graph, and schema via the Design-Implementation Parity Engine; hand-author only target-state elements and explicitly tracked gaps. Surface divergence as `EaConformanceIssue`, never silent overwrite.
+- Anchor Work Case elements to IT4IT value streams via `itValueStream` (company work is primarily `operate`/`consume`; platform-development cases are `integrate`/`deploy`/`release`).
+- Communicate across the platform with the existing tools: `query_ontology_graph` (discovery), `describe_ea_view` (a Work Case viewpoint), `run_traversal_pattern` (`blast_radius` before a change, `architecture_traceability` for intent→code, `governance_audit`/`ai_oversight` for authority), and `export_archimate` for interchange.
+- Each implementation slice registers/refreshes its `REQ`/`ACT`/`PART`/`VC` elements and their allocations, so the EA graph stays the single, current explanation of what Work Case is and where it lives.
 
 ## Decision Scope Rules
 
@@ -477,7 +512,7 @@ Implement a `ReceiptEnvelope` normalizer over existing records first:
 - `ExternalEvidenceRecord`.
 - `DecisionInteraction`.
 - `BacklogItemActivity`.
-- `GoldenTriangleReceipt` (`apps/web/lib/golden-triangle/receipt.ts`) — the envelope must subsume this existing receipt type, not parallel it.
+- `GoldenTriangleReceipt` (`apps/web/lib/golden-triangle/receipt.ts`) and `ToolExecutionReceipt` — the envelope must subsume both existing receipt types, not parallel them.
 - Build Studio activity records.
 - Tool execution records where relevant.
 
@@ -619,6 +654,15 @@ Work Case did not start as a design; it surfaced as the synthesis several in-fli
 
 Work Case is where these meet. That is why it reads as a "next big step": it was being approached incrementally and is only now visible as one thing.
 
+### Two Pillars Of One Idea
+
+The pervasive idea is larger than the Work Case object alone. It has two interlocking pillars, each with its own spec, that together form a governed, evidence-bearing, self-improving work fabric:
+
+- **Pillar 1 — Work Case (the object): where company work lives.** Case identity, policy envelope, governed Action write path, receipts, sponsors, authority mode, A2A-aligned lifecycle. This spec and `EP-2984B02B`.
+- **Pillar 2 — Governed Adaptive Playbooks (the method): how agents improve the way that work is done.** Agents propose evidence-backed improvements to their own working methods (Work Patterns); TAK observes, shadows, and promotes only approved, versioned changes. See [Governed Adaptive Playbooks design](2026-06-27-governed-adaptive-playbooks-design.md).
+
+The two are deliberately separate but bind tightly: a playbook that touches company work attaches to a Work Case `caseType`/transition, proposes a candidate **governed Action** (never a free-form write), carries sponsor/authority-mode context, and references `ReceiptEnvelope` and `DecisionInteraction` evidence. The hard dependency runs one direction: **case-bound playbook proposals that change consequential state must wait for this spec's Wave 1 governed write path and receipt-coverage guard.** Agent-level method observation (Pillar 2's own Slices 1–2) can proceed in parallel because it only reads evidence and emits reviewable proposals. This is the same enforcement-before-autonomy discipline that orders the slices below — applied across the two pillars.
+
 ### Three Tracks
 
 The program runs as three concurrent tracks. Each has a near-term spine (the slices) and a long tail of focused refinement.
@@ -626,7 +670,7 @@ The program runs as three concurrent tracks. Each has a near-term spine (the sli
 **Track R — Substrate refactor and consolidation** (pay down the "one concept, N implementations" debt this idea exposes):
 
 - R1 Source registry unification (`queue-types.ts` + `work-item-account-resolution.ts` → one registry).
-- R2 Receipt consolidation (`ReceiptEnvelope` subsumes `GoldenTriangleReceipt`; one receipt model, OTel-aligned).
+- R2 Receipt consolidation (`ReceiptEnvelope` subsumes `GoldenTriangleReceipt` and `ToolExecutionReceipt`; one receipt model, OTel-aligned, surfaced as SysML `verification_case` evidence).
 - R3 Identity generalization (`Principal` gains sponsor + authority mode; participant model generalized beyond `DelegationChain`).
 - R4 Governed-Action surface audit (inventory consequential mutators; ensure they are the sole write path; wrap with envelope + receipt emission — composes with the existing ACTION-WRAPPER effort).
 - R5 Status projection helpers (one explainable projection from source enums; no enum merging).
@@ -689,6 +733,7 @@ Future implementation PRs must include:
 - A receipt-coverage assertion: consequential transitions cannot complete without an emitted receipt, and are blocked when the policy envelope (authority mode, sponsor, stop conditions, sensitivity ceiling) fails at runtime.
 - Evidence that `ReceiptEnvelope` subsumes `GoldenTriangleReceipt` rather than duplicating it.
 - Confirmation that case states and handoff verbs map to the A2A lifecycle (including `auth-required`) and that terminal cases are sealed.
+- EA grounding: the slice's `REQ`/`ACT`/`PART`/`VC` elements are registered/refreshed in the EA substrate with `sysml_allocates` edges to the realizing code, `architecture_traceability` resolves intent→code, and no unresolved `EaConformanceIssue` remains for the touched elements.
 - If a migration is added, migration apply evidence.
 
 ## UX Fit Review
