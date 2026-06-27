@@ -314,7 +314,7 @@ export async function executeAutonomousAgenticLoop(input: {
       const { observeWorkPatternsAfterRun } = await import(
         "@/lib/tak/pattern-observer-service"
       );
-      await observeWorkPatternsAfterRun({
+      const foundationResult = await observeWorkPatternsAfterRun({
         taskRunId: input.taskRunId ?? null,
         userId: input.userId,
         agentId: input.agentId,
@@ -322,6 +322,20 @@ export async function executeAutonomousAgenticLoop(input: {
         routeContext: input.routeContext,
         since: startedAt,
       });
+      if (
+        foundationResult.skippedReason !== "reflection-loop-guard" &&
+        foundationResult.skippedReason !== "missing-task-run"
+      ) {
+        const { observeCoworkerPatterns } = await import(
+          "@/lib/tak/pattern-observer/observer"
+        );
+        await observeCoworkerPatterns({
+          agentId: input.agentId,
+          routeContext: input.routeContext,
+          since: startedAt,
+          toolSurface: input.toolsForProvider ?? input.tools,
+        });
+      }
     } catch (err) {
       console.warn(
         "[pattern-observer] post-run hook failed:",
