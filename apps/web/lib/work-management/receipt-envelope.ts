@@ -1,0 +1,327 @@
+import type { GoldenTriangleReceipt } from "@/lib/golden-triangle/receipt";
+
+import type {
+  WorkCaseActionVerb,
+  WorkCaseActorRef,
+  WorkCaseEnforcementMode,
+  WorkCaseRef,
+  WorkCaseSourceRef,
+} from "./case-types";
+
+export type ReceiptEnvelopeStatus = "valid" | "invalid" | "observed" | "failed";
+
+export interface ReceiptEnvelope {
+  receiptId: string;
+  caseRef?: WorkCaseRef;
+  receiptKind: string;
+  enforcementMode: WorkCaseEnforcementMode;
+  sourceRef: WorkCaseSourceRef;
+  actionType?: WorkCaseActionVerb | string;
+  status: ReceiptEnvelopeStatus;
+  summary: string;
+  occurredAt: string;
+  actorRef?: WorkCaseActorRef;
+  inputDigest?: string;
+  outputDigest?: unknown;
+  policyRefs: readonly string[];
+  trace?: {
+    traceId?: string;
+    spanId?: string;
+    parentSpanId?: string;
+  };
+  rawRef: {
+    table: string;
+    id: string;
+  };
+}
+
+type DateLike = Date | string;
+
+export interface GoldenTriangleReceiptEnvelopeOptions {
+  interactionId: string;
+  occurredAt: DateLike;
+  caseRef?: WorkCaseRef;
+}
+
+export interface ToolExecutionReceiptRow {
+  id: string;
+  toolExecutionId: string;
+  receiptKind: string;
+  receiptStatus: string;
+  executionStatus: string;
+  inputFingerprint: string;
+  outputDigest: unknown;
+  createdAt: DateLike;
+}
+
+export interface ToolExecutionReceiptEnvelopeOptions {
+  caseRef?: WorkCaseRef;
+  actionType?: WorkCaseActionVerb | string;
+  policyRefs?: readonly string[];
+}
+
+export interface WorkCapsuleActivityRow {
+  id: string;
+  workCapsuleId: string;
+  kind: string;
+  summary: string;
+  payload?: unknown;
+  recordedAt: DateLike;
+}
+
+export interface WorkItemMessageRow {
+  id: string;
+  messageId: string;
+  workItemId: string;
+  senderType: string;
+  senderUserId?: string | null;
+  senderAgentId?: string | null;
+  messageType: string;
+  body: string;
+  structuredPayload?: unknown;
+  createdAt: DateLike;
+}
+
+export interface RuntimeVerificationRow {
+  id: string;
+  verificationId: string;
+  kind: string;
+  status: string;
+  result?: unknown;
+  createdAt: DateLike;
+}
+
+export interface ExternalEvidenceRecordRow {
+  id: string;
+  routeContext: string;
+  operationType: string;
+  target: string;
+  provider: string;
+  resultSummary: string;
+  details?: unknown;
+  createdAt: DateLike;
+}
+
+export interface DecisionInteractionRow {
+  id: string;
+  interactionId: string;
+  domainClass: string;
+  question: string;
+  outcomeType: string;
+  outcomePayload?: unknown;
+  createdAt: DateLike;
+}
+
+export interface BacklogItemActivityRow {
+  id: string;
+  backlogItemId: string;
+  kind: string;
+  summary: string;
+  payload?: unknown;
+  recordedAt: DateLike;
+}
+
+function iso(value: DateLike): string {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function receiptStatusFromTool(row: ToolExecutionReceiptRow): ReceiptEnvelopeStatus {
+  if (row.receiptStatus !== "valid") return "invalid";
+  if (/fail|error|denied|rejected/i.test(row.executionStatus)) return "failed";
+  return "valid";
+}
+
+function enforcementModeFromReceiptKind(receiptKind: string): WorkCaseEnforcementMode {
+  return /governed/i.test(receiptKind) ? "governed-action" : "observed-event";
+}
+
+function observedEnvelope(input: {
+  receiptId: string;
+  sourceRef: WorkCaseSourceRef;
+  rawRef: ReceiptEnvelope["rawRef"];
+  summary: string;
+  occurredAt: DateLike;
+  outputDigest?: unknown;
+  actorRef?: WorkCaseActorRef;
+}): ReceiptEnvelope {
+  return {
+    receiptId: input.receiptId,
+    receiptKind: "observed-event",
+    enforcementMode: "observed-event",
+    sourceRef: input.sourceRef,
+    status: "observed",
+    summary: input.summary,
+    occurredAt: iso(input.occurredAt),
+    actorRef: input.actorRef,
+    outputDigest: input.outputDigest,
+    policyRefs: [],
+    rawRef: input.rawRef,
+  };
+}
+
+export function fromGoldenTriangleReceipt(
+  receipt: GoldenTriangleReceipt,
+  options: GoldenTriangleReceiptEnvelopeOptions,
+): ReceiptEnvelope {
+  return {
+    receiptId: `golden-triangle:${options.interactionId}`,
+    caseRef: options.caseRef,
+    receiptKind: "golden-triangle",
+    enforcementMode: "governed-action",
+    sourceRef: {
+      kind: "decision-interaction",
+      id: options.interactionId,
+    },
+    status: receipt.matchedRequest ? "valid" : "invalid",
+    summary: receipt.summary,
+    occurredAt: iso(options.occurredAt),
+    inputDigest: JSON.stringify(receipt.requested),
+    outputDigest: {
+      requested: receipt.requested,
+      actual: receipt.actual,
+      deviations: receipt.deviations,
+      matchedRequest: receipt.matchedRequest,
+    },
+    policyRefs: [
+      `golden-triangle:${receipt.preset}`,
+      `governed-by:${receipt.governedBy}`,
+    ],
+    rawRef: {
+      table: "DecisionInteraction",
+      id: options.interactionId,
+    },
+  };
+}
+
+export function fromToolExecutionReceipt(
+  row: ToolExecutionReceiptRow,
+  options: ToolExecutionReceiptEnvelopeOptions = {},
+): ReceiptEnvelope {
+  return {
+    receiptId: row.id,
+    caseRef: options.caseRef,
+    receiptKind: row.receiptKind,
+    enforcementMode: enforcementModeFromReceiptKind(row.receiptKind),
+    sourceRef: {
+      kind: "source",
+      id: row.toolExecutionId,
+      sourceType: "tool-execution",
+    },
+    actionType: options.actionType,
+    status: receiptStatusFromTool(row),
+    summary: `${row.receiptKind} ${row.receiptStatus} for ${row.toolExecutionId}`,
+    occurredAt: iso(row.createdAt),
+    inputDigest: row.inputFingerprint,
+    outputDigest: row.outputDigest,
+    policyRefs: options.policyRefs ?? [],
+    rawRef: {
+      table: "ToolExecutionReceipt",
+      id: row.id,
+    },
+  };
+}
+
+export function fromWorkCapsuleActivity(row: WorkCapsuleActivityRow): ReceiptEnvelope {
+  return observedEnvelope({
+    receiptId: `work-capsule-activity:${row.id}`,
+    sourceRef: {
+      kind: "work-capsule",
+      id: row.workCapsuleId,
+      status: row.kind,
+    },
+    rawRef: { table: "WorkCapsuleActivity", id: row.id },
+    summary: row.summary,
+    occurredAt: row.recordedAt,
+    outputDigest: row.payload,
+  });
+}
+
+export function fromWorkItemMessage(row: WorkItemMessageRow): ReceiptEnvelope {
+  const actorRef: WorkCaseActorRef = {
+    actorKind: row.senderType === "agent" ? "agent" : row.senderType === "user" ? "person" : "system",
+    actorId: row.senderAgentId ?? row.senderUserId ?? undefined,
+  };
+  return observedEnvelope({
+    receiptId: `work-item-message:${row.messageId}`,
+    sourceRef: {
+      kind: "work-item",
+      id: row.workItemId,
+      status: row.messageType,
+    },
+    rawRef: { table: "WorkItemMessage", id: row.id },
+    summary: row.body,
+    occurredAt: row.createdAt,
+    actorRef,
+    outputDigest: row.structuredPayload,
+  });
+}
+
+export function fromRuntimeVerification(row: RuntimeVerificationRow): ReceiptEnvelope {
+  return observedEnvelope({
+    receiptId: `runtime-verification:${row.verificationId}`,
+    sourceRef: {
+      kind: "runtime-verification",
+      id: row.verificationId,
+      status: row.status,
+    },
+    rawRef: { table: "RuntimeVerification", id: row.id },
+    summary: `${row.kind} ${row.status}`,
+    occurredAt: row.createdAt,
+    outputDigest: row.result,
+  });
+}
+
+export function fromExternalEvidenceRecord(row: ExternalEvidenceRecordRow): ReceiptEnvelope {
+  return observedEnvelope({
+    receiptId: `external-evidence:${row.id}`,
+    sourceRef: {
+      kind: "evidence",
+      id: row.id,
+      status: row.operationType,
+      sourceType: "external-evidence",
+    },
+    rawRef: { table: "ExternalEvidenceRecord", id: row.id },
+    summary: row.resultSummary,
+    occurredAt: row.createdAt,
+    outputDigest: {
+      routeContext: row.routeContext,
+      target: row.target,
+      provider: row.provider,
+      details: row.details,
+    },
+  });
+}
+
+export function fromDecisionInteraction(row: DecisionInteractionRow): ReceiptEnvelope {
+  return observedEnvelope({
+    receiptId: `decision-interaction:${row.interactionId}`,
+    sourceRef: {
+      kind: "decision-interaction",
+      id: row.interactionId,
+      status: row.outcomeType,
+    },
+    rawRef: { table: "DecisionInteraction", id: row.id },
+    summary: row.question,
+    occurredAt: row.createdAt,
+    outputDigest: {
+      domainClass: row.domainClass,
+      outcomePayload: row.outcomePayload,
+    },
+  });
+}
+
+export function fromBacklogItemActivity(row: BacklogItemActivityRow): ReceiptEnvelope {
+  return observedEnvelope({
+    receiptId: `backlog-item-activity:${row.id}`,
+    sourceRef: {
+      kind: "source",
+      id: row.backlogItemId,
+      status: row.kind,
+      sourceType: "backlog-item",
+    },
+    rawRef: { table: "BacklogItemActivity", id: row.id },
+    summary: row.summary,
+    occurredAt: row.recordedAt,
+    outputDigest: row.payload,
+  });
+}
