@@ -1,3 +1,8 @@
+import {
+  WORK_CASE_ACTION_VERBS,
+  type WorkCaseActionVerb,
+} from "./case-types";
+
 export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
   "task-node",
   "backlog-item",
@@ -22,16 +27,7 @@ export type WorkCaseAccountResolverKey =
   | "booking"
   | "activity";
 
-export type WorkCaseSupportedTransition =
-  | "claim"
-  | "delegate"
-  | "pause"
-  | "resume"
-  | "ask"
-  | "approve"
-  | "verify"
-  | "close"
-  | "cancel";
+export type WorkCaseSupportedTransition = WorkCaseActionVerb;
 
 export interface WorkCaseReceiptPolicy {
   defaultReceiptKind: WorkCaseReceiptKind;
@@ -51,14 +47,26 @@ export interface WorkCaseSourceRegistryEntry {
   receiptPolicy: WorkCaseReceiptPolicy;
 }
 
-const STANDARD_TRANSITIONS = [
+const STANDARD_TRANSITIONS =
+  WORK_CASE_ACTION_VERBS satisfies readonly WorkCaseSupportedTransition[];
+
+const APPROVAL_TRANSITIONS = [
+  "needs-input",
+  "respond",
+  "propose",
+  "escalate",
+  "complete",
+  "cancel",
+] as const satisfies readonly WorkCaseSupportedTransition[];
+
+const SCHEDULED_TRANSITIONS = [
   "claim",
-  "delegate",
   "pause",
+  "needs-input",
   "resume",
-  "ask",
   "verify",
-  "close",
+  "complete",
+  "cancel",
 ] as const satisfies readonly WorkCaseSupportedTransition[];
 
 const GOVERNED_RECEIPT_POLICY = {
@@ -105,7 +113,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     accountResolverKey: null,
     titleProjection: "Use the approval question.",
     summaryProjection: "Use the requested action, options, and evidence bundle.",
-    supportedTransitions: ["ask", "approve", "close", "cancel"],
+    supportedTransitions: APPROVAL_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
   },
   {
@@ -129,7 +137,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     accountResolverKey: null,
     titleProjection: "Use the schedule title and next run window.",
     summaryProjection: "Use schedule cadence, owner, and due window.",
-    supportedTransitions: ["claim", "pause", "resume", "verify", "close", "cancel"],
+    supportedTransitions: SCHEDULED_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
   },
   {

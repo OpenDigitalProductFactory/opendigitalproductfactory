@@ -1,3 +1,4 @@
+export * from "./action-registry";
 export * from "./architecture-grounding";
 export * from "./case-read-model";
 export * from "./case-types";
