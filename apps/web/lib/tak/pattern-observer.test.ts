@@ -62,6 +62,15 @@ function grantDeniedFixture(priorNeedFingerprints = new Set<string>()) {
   };
 }
 
+const FORBIDDEN_ACTIVATION_KEYS = [
+  "activationCommand",
+  "promptMutation",
+  "skillMutation",
+  "grantMutation",
+  "modelRouteMutation",
+  "workCaseStateMutation",
+];
+
 describe("classifyPatternSignals", () => {
   it("classifies repeated grant denial as a grant need", () => {
     const out = classifyPatternSignals(grantDeniedFixture());
@@ -78,6 +87,7 @@ describe("classifyPatternSignals", () => {
       status: "observed",
       source: "observer",
       scope: "route",
+      decisionScope: "platform-wwmd",
       candidate: { kind: "grant" },
     });
     expect(out.patterns[0]?.metadata.evidence?.[0]).toEqual({
@@ -169,6 +179,62 @@ describe("classifyPatternSignals", () => {
       scope: "activity",
       decisionScope: "profession-wsid",
     });
+  });
+
+  it("carries case-bound metadata from approved envelope repetitions without enabling activation", () => {
+    const out = classifyPatternSignals({
+      agentId: "AGT-OPS",
+      routeContext: "/ops",
+      since: new Date("2026-06-27T00:00:00Z"),
+      toolExecutions: [],
+      turnMetrics: [],
+      taskRuns: [],
+      envelopes: [
+        {
+          proposedActionKey: "approve-change-window",
+          approved: true,
+          workCaseRef: "case-1",
+          caseType: "change",
+          transitionKey: "approve",
+        },
+        {
+          proposedActionKey: "approve-change-window",
+          approved: true,
+          workCaseRef: "case-2",
+          caseType: "change",
+          transitionKey: "approve",
+        },
+      ],
+      priorNeedFingerprints: new Set(),
+    });
+
+    expect(out.patterns[0]?.metadata).toMatchObject({
+      scope: "case-transition",
+      decisionScope: "company-wwwd",
+      workCaseBinding: {
+        caseType: "change",
+        transitionKey: "approve",
+      },
+    });
+    expect(out.needs[0]?.readinessJson).toMatchObject({
+      readyForReview: true,
+      readyForCaseActivation: false,
+      activationProposed: false,
+      blockers: expect.arrayContaining([
+        "missing-governed-action-key",
+        "missing-receipt-policy",
+        "pattern-status-not-approved-or-active",
+      ]),
+    });
+  });
+
+  it("never emits direct prompt, skill, grant, route, command, or Work Case mutation payloads", () => {
+    const out = classifyPatternSignals(grantDeniedFixture());
+    const serialized = JSON.stringify(out);
+
+    for (const key of FORBIDDEN_ACTIVATION_KEYS) {
+      expect(serialized).not.toContain(key);
+    }
   });
 
   it("does not emit duplicate needs already seen in the window", () => {

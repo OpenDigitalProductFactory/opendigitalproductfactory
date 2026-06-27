@@ -4,8 +4,10 @@ import type {
 } from "@/lib/coworker-self-assessment/types";
 import { LOCAL_TOOL_SELECTION_CLIFF } from "./context-economy-metrics";
 import {
+  evaluatePatternReadiness,
   normalizePatternText,
   patternDecisionScope,
+  type WorkCasePatternBinding,
   type WorkPatternEvidenceRef,
   type WorkPatternMetadata,
   type WorkPatternScope,
@@ -50,6 +52,13 @@ export type PatternObserverEnvelope = {
   status?: string | null;
   decision?: string | null;
   taskRunId?: string | null;
+  workCaseRef?: string | null;
+  caseType?: string | null;
+  transitionKey?: string | null;
+  governedActionKey?: string | null;
+  authorityMode?: WorkCasePatternBinding["authorityMode"] | null;
+  sponsorPrincipalId?: string | null;
+  receiptPolicy?: WorkCasePatternBinding["receiptPolicy"] | null;
   createdAt?: Date;
 };
 
@@ -93,6 +102,7 @@ type CandidateSpec = {
   blocks: string;
   evidenceJson: Record<string, unknown>;
   evidence: WorkPatternEvidenceRef[];
+  workCaseBinding?: WorkCasePatternBinding;
   readinessJson?: Record<string, unknown>;
 };
 
@@ -153,8 +163,10 @@ function pushCandidate(
       fingerprint,
       evaluationMethod: "deterministic-pattern-observer",
     },
+    workCaseBinding: spec.workCaseBinding,
     observedAt: input.since.toISOString(),
   };
+  const readiness = evaluatePatternReadiness(metadata);
 
   const need: ClassifiedPatternNeed = {
     kind: spec.kind,
@@ -169,9 +181,9 @@ function pushCandidate(
       decisionScope,
     },
     readinessJson: {
-      readyForReview: true,
-      activationProposed: false,
       ...(spec.readinessJson ?? {}),
+      ...readiness,
+      activationProposed: false,
     },
   };
 
@@ -194,6 +206,13 @@ function evidenceFromExecution(execution: PatternObserverToolExecution): WorkPat
   return {
     taskRunId: execution.taskRunId ?? undefined,
     toolExecutionId: execution.id,
+  };
+}
+
+function evidenceFromMetric(metric: PatternObserverTurnMetric): WorkPatternEvidenceRef {
+  return {
+    threadId: metric.threadId ?? undefined,
+    agentMessageId: metric.agentMessageId ?? undefined,
   };
 }
 
@@ -287,7 +306,7 @@ function classifyTurnMetrics(input: PatternObserverInput, out: PatternObserverOu
           maxToolDefinitionTokens,
           localToolSelectionCliff: LOCAL_TOOL_SELECTION_CLIFF,
         },
-        evidence: [],
+        evidence: overloads.slice(0, 3).map(evidenceFromMetric),
       },
       out,
     );
@@ -321,7 +340,7 @@ function classifyTurnMetrics(input: PatternObserverInput, out: PatternObserverOu
           minToolSelectionAccuracy,
           threshold: LOW_TOOL_ACCURACY_THRESHOLD,
         },
-        evidence: [],
+        evidence: lowAccuracy.slice(0, 3).map(evidenceFromMetric),
       },
       out,
     );
@@ -335,6 +354,39 @@ function isApprovedEnvelope(envelope: PatternObserverEnvelope): boolean {
   return status === "approved" || decision === "approved";
 }
 
+function workCaseBindingFromEnvelopes(envelopes: PatternObserverEnvelope[]): WorkCasePatternBinding | undefined {
+  const envelope = envelopes.find((item) =>
+    Boolean(
+      item.workCaseRef ||
+        item.caseType ||
+        item.transitionKey ||
+        item.governedActionKey ||
+        item.authorityMode ||
+        item.sponsorPrincipalId ||
+        item.receiptPolicy,
+    ),
+  );
+  if (!envelope) {
+    return undefined;
+  }
+
+  return {
+    caseType: envelope.caseType ?? undefined,
+    transitionKey: envelope.transitionKey ?? undefined,
+    governedActionKey: envelope.governedActionKey ?? undefined,
+    authorityMode: envelope.authorityMode ?? undefined,
+    sponsorPrincipalId: envelope.sponsorPrincipalId ?? undefined,
+    receiptPolicy: envelope.receiptPolicy ?? undefined,
+  };
+}
+
+function envelopeScope(binding: WorkCasePatternBinding | undefined): WorkPatternScope {
+  if (!binding) {
+    return "activity";
+  }
+  return binding.transitionKey ? "case-transition" : "case-type";
+}
+
 function classifyEnvelopes(input: PatternObserverInput, out: PatternObserverOutput): void {
   const approved = input.envelopes.filter(
     (envelope) => isApprovedEnvelope(envelope) && Boolean(envelope.proposedActionKey),
@@ -343,13 +395,14 @@ function classifyEnvelopes(input: PatternObserverInput, out: PatternObserverOutp
 
   for (const [actionKey, envelopes] of grouped) {
     if (!actionKey || envelopes.length < 2) continue;
+    const workCaseBinding = workCaseBindingFromEnvelopes(envelopes);
     pushCandidate(
       input,
       {
         signal: "repeated-approved-envelope",
         kind: "convention",
         severity: "minor",
-        scope: "activity",
+        scope: envelopeScope(workCaseBinding),
         need: `Review repeated approved action ${actionKey} for proceduralization`,
         blocks:
           "The same approved action keeps recurring and may deserve a governed procedure, not an automatic mutation.",
@@ -362,10 +415,11 @@ function classifyEnvelopes(input: PatternObserverInput, out: PatternObserverOutp
         evidence: envelopes.slice(0, 3).map((envelope) => ({
           taskRunId: envelope.taskRunId ?? undefined,
           receiptId: envelope.id,
+          workCaseRef: envelope.workCaseRef ?? undefined,
         })),
+        workCaseBinding,
         readinessJson: {
           activationProposed: false,
-          readyForCaseActivation: false,
         },
       },
       out,

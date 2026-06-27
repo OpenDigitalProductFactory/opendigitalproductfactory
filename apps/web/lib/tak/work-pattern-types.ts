@@ -42,6 +42,8 @@ export type WorkPatternDecisionScope = (typeof WORK_PATTERN_DECISION_SCOPES)[num
 export type WorkPatternEvidenceRef = {
   taskRunId?: string;
   toolExecutionId?: string;
+  threadId?: string;
+  agentMessageId?: string;
   improvementSignalId?: string;
   capabilityNeedId?: string;
   backlogItemId?: string;
@@ -80,6 +82,12 @@ export type WorkPatternMetadata = {
   observedAt?: string;
 };
 
+export type WorkPatternReadiness = {
+  readyForReview: boolean;
+  readyForCaseActivation: boolean;
+  blockers: string[];
+};
+
 const AUTHORITY_MODES = [
   "autonomous",
   "on-behalf-of",
@@ -115,6 +123,8 @@ function parseEvidenceRef(value: unknown): WorkPatternEvidenceRef | null {
   const evidence: WorkPatternEvidenceRef = {
     taskRunId: parseOptionalString(value.taskRunId),
     toolExecutionId: parseOptionalString(value.toolExecutionId),
+    threadId: parseOptionalString(value.threadId),
+    agentMessageId: parseOptionalString(value.agentMessageId),
     improvementSignalId: parseOptionalString(value.improvementSignalId),
     capabilityNeedId: parseOptionalString(value.capabilityNeedId),
     backlogItemId: parseOptionalString(value.backlogItemId),
@@ -187,6 +197,67 @@ export function patternDecisionScope(scope: WorkPatternScope): WorkPatternDecisi
     return "profession-wsid";
   }
   return "platform-wwmd";
+}
+
+function hasEvidenceRef(metadata: WorkPatternMetadata): boolean {
+  return Boolean(metadata.evidence?.length);
+}
+
+function hasCaseSourceReference(metadata: WorkPatternMetadata): boolean {
+  return Boolean(
+    metadata.evidence?.some((ref) =>
+      Boolean(ref.workCaseRef || ref.receiptId || ref.decisionInteractionId),
+    ),
+  );
+}
+
+function isCaseBoundPattern(metadata: WorkPatternMetadata): boolean {
+  return (
+    metadata.scope === "case-type" ||
+    metadata.scope === "case-transition" ||
+    metadata.workCaseBinding !== undefined
+  );
+}
+
+export function evaluatePatternReadiness(metadata: WorkPatternMetadata): WorkPatternReadiness {
+  const blockers: string[] = [];
+  const hasDecisionScope = isOneOf(metadata.decisionScope, WORK_PATTERN_DECISION_SCOPES);
+  const hasEvidence = hasEvidenceRef(metadata);
+  const caseBound = isCaseBoundPattern(metadata);
+  const approvedForActivation = metadata.status === "approved" || metadata.status === "active";
+
+  if (!hasEvidence) {
+    blockers.push("missing-evidence");
+  }
+  if (!hasDecisionScope) {
+    blockers.push("missing-decision-scope");
+  }
+  if (caseBound && !metadata.workCaseBinding?.governedActionKey) {
+    blockers.push("missing-governed-action-key");
+  }
+  if (caseBound && !metadata.workCaseBinding?.receiptPolicy) {
+    blockers.push("missing-receipt-policy");
+  }
+  if (caseBound && !hasCaseSourceReference(metadata)) {
+    blockers.push("missing-case-source-reference");
+  }
+  if (!approvedForActivation) {
+    blockers.push("pattern-status-not-approved-or-active");
+  }
+
+  const readyForReview = hasEvidence && hasDecisionScope;
+  const caseActivationBlockers = new Set([
+    "missing-evidence",
+    "missing-decision-scope",
+    "missing-governed-action-key",
+    "missing-receipt-policy",
+    "missing-case-source-reference",
+    "pattern-status-not-approved-or-active",
+  ]);
+  const readyForCaseActivation =
+    caseBound && blockers.every((blocker) => !caseActivationBlockers.has(blocker));
+
+  return { readyForReview, readyForCaseActivation, blockers };
 }
 
 export function parseWorkPatternMetadata(value: unknown): WorkPatternMetadata | null {

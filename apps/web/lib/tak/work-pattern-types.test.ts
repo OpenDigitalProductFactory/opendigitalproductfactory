@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  evaluatePatternReadiness,
   mergeWorkPatternMetadata,
   normalizePatternText,
   parseWorkPatternMetadata,
@@ -112,5 +113,87 @@ describe("work pattern metadata helpers", () => {
         normalizedNeed: "Needs Better Search",
       }),
     ).toBe("agent a|/storefront|tool|needs better search");
+  });
+
+  it("requires evidence and decision scope before a pattern is ready for review", () => {
+    expect(
+      evaluatePatternReadiness({
+        patternKey: "missing-evidence",
+        status: "observed",
+        scope: "route",
+        version: 1,
+        source: "observer",
+        decisionScope: "platform-wwmd",
+      }),
+    ).toEqual({
+      readyForReview: false,
+      readyForCaseActivation: false,
+      blockers: ["missing-evidence", "pattern-status-not-approved-or-active"],
+    });
+
+    expect(
+      evaluatePatternReadiness({
+        patternKey: "ready-for-review",
+        status: "observed",
+        scope: "route",
+        version: 1,
+        source: "observer",
+        decisionScope: "platform-wwmd",
+        evidence: [{ taskRunId: "run-1" }],
+      }),
+    ).toEqual({
+      readyForReview: true,
+      readyForCaseActivation: false,
+      blockers: ["pattern-status-not-approved-or-active"],
+    });
+  });
+
+  it("blocks case activation until governed action, receipt policy, source evidence, and approved status exist", () => {
+    expect(
+      evaluatePatternReadiness({
+        patternKey: "case-transition",
+        status: "observed",
+        scope: "case-transition",
+        version: 1,
+        source: "observer",
+        decisionScope: "company-wwwd",
+        workCaseBinding: {
+          caseType: "change",
+          transitionKey: "approve",
+        },
+      }),
+    ).toEqual({
+      readyForReview: false,
+      readyForCaseActivation: false,
+      blockers: [
+        "missing-evidence",
+        "missing-governed-action-key",
+        "missing-receipt-policy",
+        "missing-case-source-reference",
+        "pattern-status-not-approved-or-active",
+      ],
+    });
+
+    expect(
+      evaluatePatternReadiness({
+        patternKey: "case-transition",
+        status: "approved",
+        scope: "case-transition",
+        version: 1,
+        source: "human-review",
+        decisionScope: "company-wwwd",
+        evidence: [{ workCaseRef: "case-1", receiptId: "receipt-1" }],
+        workCaseBinding: {
+          caseType: "change",
+          transitionKey: "approve",
+          governedActionKey: "work-case.approve",
+          receiptPolicy: "governed-action",
+        },
+      }),
+    ).toEqual({
+      readyForReview: true,
+      readyForCaseActivation: true,
+      blockers: [],
+    });
   });
 });

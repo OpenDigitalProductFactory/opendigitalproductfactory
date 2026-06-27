@@ -201,10 +201,10 @@ This prevents duplicate surfaces: Work Case is where company work lives; adaptiv
 
 Playbooks describe and improve *methods of work*, which is exactly what DPF's existing SysML v2 / ArchiMate EA substrate already models. This effort grounds in and communicates through that substrate (`EaElement`/`EaRelationship`/`EaView`, notations `archimate4`/`sysml2`, per the [ai-cockpit SysML note](../../architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md), [SysML v2 reference](../../Reference/sysml-v2.md), and [AI agent meta-model](../../architecture/ai-agent-meta-model.md)) rather than inventing a separate way to describe methods, processes, or agent authority. It must not add a parallel architecture/process-modeling mechanism — that is already on the "not allowed under this budget" list in §8.
 
-Concept-to-element mapping (with stable `infraCiKey` IDs, allocated to code via `sysml_allocates`):
+Concept-to-element mapping (with stable SysML keys, allocated to code via the seeded SysML2 `allocates` relationship):
 
 - **Work Pattern** → a SysML `action`/activity definition (`ACT-GAP-<patternKey>`) that allocates to the skills, prompts, tool packs, data prefetch, model routes, or procedural code it influences after approval. This makes "what a playbook changes" a traceable allocation, and lets `run_traversal_pattern blast_radius` show the impact of a candidate before activation.
-- **Promotion ladder** (observed → candidate → … → proceduralized) → a `state` machine (`SM-GAP-PROMOTION`) on the pattern, allocated to the promotion logic. No candidate changes runtime behavior until it reaches `active`.
+- **Promotion ladder** (observed → candidate → … → proceduralized) → in the foundation slice, a SysML `part_definition` containing `state` elements for `observed`, `candidate`, `approved`, `active`, and `retired`; no candidate changes runtime behavior until it reaches `active`.
 - **Pattern Candidate** → a proposed change carried as a `CoworkerActionEnvelope` (proposed → resolved) plus a `DecisionInteraction` at the approval gate (per §9), never a free-form mutation. Case-bound candidates additionally bind to the Work Case governed Action and `ReceiptEnvelope`.
 - **Evidence contract** → `verification_case` elements (`VC-GAP-*`) that cite the `TaskRun`/`ToolExecution`/receipt evidence proving a pattern's effect.
 - **Agent + governed authority** → the agent `part_definition` and `AgentGovernanceProfile` already in the substrate; the playbook proposes method changes within that authority, with the chain auditable via `run_traversal_pattern ai_oversight`.
@@ -436,6 +436,8 @@ Hard constraints:
 6. **Shadow evaluation:** integrate with Decision-Shadow Ledger, Work Case staged transitions where relevant, and trust graduation.
 7. **Model lane:** evaluate Ornith as a provider/model candidate through opencode and ModelProfile scoring.
 8. **Proceduralization:** turn repeated approved playbooks into code and invariant guards.
+
+Foundation implementation note: the first slice keeps playbooks as proposal metadata on existing substrates. `TaskRun.a2aMetadata.workPattern`, `TaskRun.repeatedPatternKey`, `CoworkerCapabilityNeed.readinessJson`, `CoworkerTurnMetric` context/tool telemetry, and the EA parity domain `workPatternArchitecture` carry the foundation without adding a WorkPattern table. `readinessJson` records `readyForReview`, `readyForCaseActivation`, and blockers; case-bound activation remains false unless source evidence, `governedActionKey`, `receiptPolicy`, and an approved/active pattern status are all present. The observer never emits activation commands or prompt, skill, grant, model-route, or Work Case mutation payloads.
 
 ## 11. Test and Verification Strategy
 
