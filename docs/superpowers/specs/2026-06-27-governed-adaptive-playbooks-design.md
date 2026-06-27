@@ -100,7 +100,7 @@ DPF already has most of the runtime substrate:
 
 - `TaskRun` has `a2aMetadata` and `repeatedPatternKey`, which can stamp work-pattern identity without a new table in Slice 1.
 - `ToolExecution` already links agent, user, thread, route, task run, skill, cost, tokens, and result.
-- `ExecutionPlan` is a durable per-loop plan artifact that survives compaction.
+- `TaskRun.progressPayload` and `a2aMetadata` already persist per-loop plan/progress state that survives compaction. There is no separate `ExecutionPlan` Prisma model today, so durable plan state should ride on `TaskRun` metadata until query pressure justifies promoting it to a model.
 - `CoworkerSelfAssessment`, `CoworkerCapabilityNeed`, and `ImprovementSignal` already form a reviewable need-to-backlog path.
 - The parallel Work Case architecture defines the company-facing work object, policy envelope, handoff grammar, governed Action write path, and `ReceiptEnvelope`. Adaptive playbooks must attach to that object for company/business work instead of creating another work manager.
 - The AI Agent Meta-Model already says an agent is governed identity plus model routing, tools, prompts, skills, authority, lifecycle, and audit.
@@ -176,9 +176,9 @@ Candidate examples:
 
 ### 5.3 Capability Need Categories
 
-Existing kinds are `tool`, `skill`, `grant`, `model`, `memory`, `data`, `ui_surface`, `boundary`, `prompt`, `convention`, `code`, and `other`.
+Existing kinds are `tool`, `skill`, `grant`, `model`, `memory`, `data`, `ui_surface`, `boundary`, `prompt`, `convention`, `code`, and `other`. These are a closed string set defined in `apps/web/lib/coworker-self-assessment/types.ts`, not a Prisma enum, so refinement is a TypeScript-level change with no migration.
 
-For systemic playbooks, use the existing kinds first. Later, consider splitting `boundary` into closed subtypes in evidence JSON rather than expanding the enum prematurely. The key improvement is not more enum values; it is better triggers and evidence.
+For systemic playbooks, use the existing kinds first. Later, consider splitting `boundary` into closed subtypes in evidence JSON rather than widening the set prematurely. The key improvement is not more kind values; it is better triggers and evidence.
 
 ### 5.4 Relationship To Work Case
 
@@ -196,6 +196,20 @@ When a playbook applies to company/business work, it must bind to the Work Case 
 - Agent capability advertisement should converge with the Work Case `AgentCard`-equivalent descriptor: the playbook describes method; the capability card describes what the actor can accept and under what security/authority conditions.
 
 This prevents duplicate surfaces: Work Case is where company work lives; adaptive playbooks are how agents improve the method for doing that work.
+
+### 5.5 Architecture Grounding (SysML v2 / EA Substrate)
+
+Playbooks describe and improve *methods of work*, which is exactly what DPF's existing SysML v2 / ArchiMate EA substrate already models. This effort grounds in and communicates through that substrate (`EaElement`/`EaRelationship`/`EaView`, notations `archimate4`/`sysml2`, per the [ai-cockpit SysML note](../../architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md), [SysML v2 reference](../../Reference/sysml-v2.md), and [AI agent meta-model](../../architecture/ai-agent-meta-model.md)) rather than inventing a separate way to describe methods, processes, or agent authority. It must not add a parallel architecture/process-modeling mechanism — that is already on the "not allowed under this budget" list in §8.
+
+Concept-to-element mapping (with stable `infraCiKey` IDs, allocated to code via `sysml_allocates`):
+
+- **Work Pattern** → a SysML `action`/activity definition (`ACT-GAP-<patternKey>`) that allocates to the skills, prompts, tool packs, data prefetch, model routes, or procedural code it influences after approval. This makes "what a playbook changes" a traceable allocation, and lets `run_traversal_pattern blast_radius` show the impact of a candidate before activation.
+- **Promotion ladder** (observed → candidate → … → proceduralized) → a `state` machine (`SM-GAP-PROMOTION`) on the pattern, allocated to the promotion logic. No candidate changes runtime behavior until it reaches `active`.
+- **Pattern Candidate** → a proposed change carried as a `CoworkerActionEnvelope` (proposed → resolved) plus a `DecisionInteraction` at the approval gate (per §9), never a free-form mutation. Case-bound candidates additionally bind to the Work Case governed Action and `ReceiptEnvelope`.
+- **Evidence contract** → `verification_case` elements (`VC-GAP-*`) that cite the `TaskRun`/`ToolExecution`/receipt evidence proving a pattern's effect.
+- **Agent + governed authority** → the agent `part_definition` and `AgentGovernanceProfile` already in the substrate; the playbook proposes method changes within that authority, with the chain auditable via `run_traversal_pattern ai_oversight`.
+
+Keep it honest the same way Work Case does: derive current-state pattern/method elements from code and runtime evidence via the Design-Implementation Parity Engine, hand-author only target-state, surface drift as `EaConformanceIssue`, and anchor to IT4IT value streams. Communicate proposals through the existing EA tools (`query_ontology_graph`, `describe_ea_view`, `run_traversal_pattern`, `export_archimate`) so an operator sees a proposed method change grounded in the platform model, not just as a row in a review queue.
 
 ## 6. Systemic Proposal Loop
 
@@ -219,8 +233,7 @@ Add pattern-observer triggers for:
 
 - repeated tool failure or repeated identical arguments,
 - tool denied by grant or missing capability,
-- context pressure in `strained` or `overload` zone,
-- tool-surface overload beyond the local 15-tool cliff,
+- tool-surface pressure in the `caution` or `overload` zone (`ToolSurfaceZone` in `apps/web/lib/tak/context-economy-metrics.ts`), including overload beyond the local 15-tool selection cliff (`LOCAL_TOOL_SELECTION_CLIFF`),
 - model-tier mismatch or fallback,
 - repeated phase-review failure,
 - repeated human correction in the same route/activity,
@@ -237,6 +250,8 @@ Each agent should also have a periodic profile review after either:
 
 - N completed TaskRuns, or
 - seven days since the last profile review, whichever comes first.
+
+The periodic review runs as a proactive job. Its `TaskRun` ownership must resolve to `userId` = the install superuser and `executor` = the reviewing Agent — never a synthetic "system" actor — so the review's own evidence, costs, and any emitted needs are attributable under the same accountability rules as all other agent work.
 
 The review inspects recent `TaskRun`, `ToolExecution`, `CoworkerCapabilityNeed`, `ImprovementSignal`, token/context metrics, and review results. It must output:
 
@@ -383,6 +398,7 @@ Allowed refactoring:
 - Reuse existing `CoworkerSelfAssessment`, `CoworkerCapabilityNeed`, `ImprovementSignal`, `TaskRun`, and `ToolExecution` before adding tables.
 - Align evidence contracts with context-economy metrics and model-routing evidence.
 - Reuse Work Case `ReceiptEnvelope` and governed Action concepts for case-bound proposals; do not introduce a playbook-specific receipt or action ledger.
+- Register Work Pattern/promotion/evidence as elements in the existing EA/SysML substrate (`ACT-GAP-*`, `SM-GAP-PROMOTION`, `VC-GAP-*`) with allocations to code, reusing the parity engine and conformance tooling.
 
 Not allowed under this budget:
 
@@ -390,6 +406,7 @@ Not allowed under this budget:
 - Replacing the coworker runtime.
 - Adding a parallel audit/event ledger.
 - Adding a parallel Work Case, Work Packet, receipt, handoff, or case-state model.
+- Adding a parallel architecture-, process-, or method-modeling mechanism instead of using the existing SysML v2 / ArchiMate EA substrate and IT4IT value streams.
 - Expanding model routing beyond the existing model-tier routing epic.
 - Creating prompt-only shortcuts that cannot be audited.
 
@@ -398,6 +415,7 @@ Not allowed under this budget:
 Hard constraints:
 
 - Models may propose playbook changes; they may not activate them.
+- Every promotion-ladder approval gate is recorded as a `DecisionInteraction`, so playbook promotion shares the one governed decision ledger with Work Case Actions and WWMD/WWWD/WSID rather than inventing a separate approval log. The decision scope (platform / company / job-activity) follows the playbook's scope: a build-phase or skill playbook is a platform (WWMD) decision; a case-type playbook for company work is a company (WWWD) decision.
 - Tool grants, HITL tiers, prompt templates, skills, and model routes remain governed platform resources.
 - Every proposal must include evidence and a suggested evaluation method.
 - Case-bound proposals must include Work Case source references, sponsor/authority-mode context, and expected `ReceiptEnvelope` coverage before they can affect state.
@@ -410,7 +428,7 @@ Hard constraints:
 
 ## 10. Implementation Plan Summary
 
-1. **Spec and backlog alignment:** this document, then link it to the relevant epic/backlog items or create a focused item under the best existing epic.
+1. **Spec and backlog alignment:** this document, then link it to the relevant epic/backlog items or create a focused item under the best existing epic. Foundation plan: [`docs/superpowers/plans/2026-06-27-governed-adaptive-playbooks-foundation.md`](../plans/2026-06-27-governed-adaptive-playbooks-foundation.md).
 2. **Work Case alignment:** keep agent-level observers independent, but sequence case-bound proposals behind Work Case Wave 0 source/status projection and Work Case Wave 1 governed Action/receipt coverage.
 3. **Observer foundation:** extract pattern observation and emit richer needs through existing assessment/backlog flow.
 4. **Metadata stamping:** add typed work-pattern metadata on TaskRuns and pattern grouping read models, with optional Work Case references when available.
@@ -461,6 +479,7 @@ Model evaluation:
 4. **Should capability need kinds expand?** Recommendation: not initially. Use existing kinds plus structured evidence JSON.
 5. **Should Ornith be a Build Studio default candidate?** Recommendation: no. Evaluate first, then route by ModelProfile evidence and model-tier policy.
 6. **Should case-bound playbook proposals wait for Work Case enforcement?** Recommendation: yes for any consequential transition. Agent-level observation can ship earlier, but case state, handoff, authority, or external side-effect changes must wait for governed Actions and receipt coverage.
+7. **Should a Pattern Candidate's promotion itself be tracked as a (meta) Work Case?** The promotion ladder (observed → … → proceduralized) is governed work with its own evidence, decisions, and accountable approver — i.e. exactly what Work Case models. Recommendation: keep promotion as `TaskRun` metadata plus `CoworkerSelfAssessment`/`CoworkerCapabilityNeed` for Slices 1–2 (no premature object), but treat "promotion-as-Work-Case" as the convergence endpoint once Work Case enforcement and the attention surface exist, so playbook review gets uniform receipts and "needs you" attention instead of a bespoke review queue. Revisit at Slice 4.
 
 ## 13. Success Criteria
 
