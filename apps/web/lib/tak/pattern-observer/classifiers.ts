@@ -9,7 +9,6 @@ const DEFAULT_GRANT_DENIAL_THRESHOLD = 3;
 const DEFAULT_REPEATED_SUCCESS_THRESHOLD = 3;
 const MIN_SUCCESSFUL_WORKFLOW_ACCURACY = 0.9;
 const MIN_HIGH_CEREMONY_SCORE = 0.75;
-const CAUTION_WINDOW_SHARE_THRESHOLD = 0.15;
 const NEAR_LOCAL_CLIFF_DISTANCE = 1;
 
 const GRANT_DENIAL_PATTERNS = [
@@ -94,8 +93,7 @@ export function classifyToolSurfaceOverload(
 
   const cautionIsActionable =
     assessment.zone === "caution" &&
-    (isNearLocalCliff(assessment.toolCount) ||
-      (assessment.windowShare !== null && assessment.windowShare >= CAUTION_WINDOW_SHARE_THRESHOLD));
+    (isNearLocalCliff(assessment.toolCount) || assessment.windowShare !== null);
 
   if (!cautionIsActionable) return null;
 

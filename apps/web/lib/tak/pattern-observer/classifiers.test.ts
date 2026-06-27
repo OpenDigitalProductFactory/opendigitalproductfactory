@@ -110,6 +110,27 @@ describe("pattern observer classifiers", () => {
       });
     });
 
+    it("classifies caution assessments with window-share evidence as minor tool needs", () => {
+      const need = classifyToolSurfaceOverload({
+        toolCount: 8,
+        estDefinitionTokens: 140,
+        exceedsLocalCliff: false,
+        windowShare: 0.01,
+        zone: "caution",
+      });
+
+      expect(need).toMatchObject({
+        kind: "tool",
+        severity: "minor",
+        evidenceJson: {
+          toolCount: 8,
+          windowShare: 0.01,
+          zone: "caution",
+          exceedsLocalCliff: false,
+        },
+      });
+    });
+
     it("returns null for lean assessments and conservative caution signals", () => {
       expect(
         classifyToolSurfaceOverload({
