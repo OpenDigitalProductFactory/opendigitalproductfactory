@@ -26,6 +26,7 @@ import { reconcileIntegrations } from "./reconcile-integration-bridge";
 import { reconcileScheduledJobs } from "./reconcile-scheduled-jobs";
 import { reconcileIt4itCoverage } from "./reconcile-it4it-coverage";
 import { reconcileSecurityPosture } from "./reconcile-security-posture";
+import { reconcileWorkPatternArchitecture } from "./reconcile-work-pattern-architecture";
 import type { SysmlSeedResult } from "./sysml-model-seed";
 
 export interface SysmlProjectionsResult {
@@ -51,6 +52,9 @@ export interface SysmlProjectionsResult {
   // Security Operations (SOC) surface — normalization / detection / cases /
   // response / roster, tracing to the security data model (EP-SOVEREIGN-SOC).
   securityPosture: SysmlSeedResult;
+  // Governed Adaptive Playbooks — observed work patterns, proposal guardrails,
+  // promotion ladder, and no-self-activation verification cases.
+  workPatternArchitecture: SysmlSeedResult;
 }
 
 const SKIPPED: SysmlSeedResult = { status: "skipped", created: 0, updated: 0, removed: 0 };
@@ -92,8 +96,13 @@ export async function reconcileSysmlProjections(
   // SOC posture isolated like every other domain (EP-SOVEREIGN-SOC, composed with
   // the PR-2385 fail-isolation): a security-extractor error can't blind the engine.
   const securityPosture = await runDomain("securityPosture", () => reconcileSecurityPosture({ db: opts.db }), SKIPPED);
+  const workPatternArchitecture = await runDomain(
+    "workPatternArchitecture",
+    () => reconcileWorkPatternArchitecture({ db: opts.db }),
+    SKIPPED,
+  );
   return {
     mcpAuthority, coworkerAuthority, valueStreams, routes, navigation, codeStructure, processModels, skillToolchain,
-    operationalGraph, networkTopology, integrations, scheduledJobs, it4itCoverage, securityPosture,
+    operationalGraph, networkTopology, integrations, scheduledJobs, it4itCoverage, securityPosture, workPatternArchitecture,
   };
 }

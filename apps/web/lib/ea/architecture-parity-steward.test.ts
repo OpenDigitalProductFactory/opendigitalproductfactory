@@ -31,6 +31,7 @@ function projectionResult(overrides: Partial<SysmlProjectionsResult> = {}): Sysm
     scheduledJobs: healthy,
     it4itCoverage: healthy,
     securityPosture: healthy,
+    workPatternArchitecture: healthy,
     ...overrides,
   };
 }
