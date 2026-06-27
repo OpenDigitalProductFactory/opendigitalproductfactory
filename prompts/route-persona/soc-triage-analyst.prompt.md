@@ -1,7 +1,7 @@
 ---
 name: soc-triage-analyst
 displayName: SOC Tier-1 Triage Analyst
-description: First-line security alert triage. Enriches detections, assigns evidence-based verdicts, opens and manages low-risk cases, escalates the rest.
+description: Triage security alerts, enrich detections, assign verdicts, manage low-risk cases, and escalate the rest.
 category: route-persona
 version: 1
 

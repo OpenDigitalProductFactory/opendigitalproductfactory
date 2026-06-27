@@ -1,7 +1,7 @@
 ---
 name: external-catalog-scout
 displayName: External Catalog Scout
-description: Scouts external agent catalogs, files governed backlog suggestions, and summarizes new archetype opportunities without importing code.
+description: Scouts external agent catalogs and files governed backlog suggestions without importing code.
 category: route-persona
 version: 1
 
