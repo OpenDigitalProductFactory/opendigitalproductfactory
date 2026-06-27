@@ -40,7 +40,9 @@ export function planMcpReadinessProbe(
  * - HTTP 200 but shape unrecognized -> ok=false reason=unexpected_shape.
  * - HTTP 401/403 with `insufficient_token_scope` in body -> scope_insufficient.
  * - HTTP 401/403 otherwise -> no_token.
- * - HTTP 5xx or 0 (no response) -> endpoint_unreachable.
+ * - HTTP 0 (no response) -> portal-unavailable.
+ * - HTTP 5xx/404 from a reachable portal route -> mcp-unavailable, unless the
+ *   body clearly says the portal is quiescing/rebooting.
  */
 export function interpretMcpReadinessResponse(
   httpStatus: number,
@@ -48,11 +50,19 @@ export function interpretMcpReadinessResponse(
   observedAt: string,
 ): McpReadinessProbeResult {
   if (httpStatus === 0) {
-    return { ok: false, reason: "endpoint_unreachable", httpStatus: null };
+    return { ok: false, reason: "portal-unavailable", httpStatus: null };
   }
 
   if (httpStatus >= 500) {
-    return { ok: false, reason: "endpoint_unreachable", httpStatus };
+    return {
+      ok: false,
+      reason: looksLikePortalUnavailable(body) ? "portal-unavailable" : "mcp-unavailable",
+      httpStatus,
+    };
+  }
+
+  if (httpStatus === 404) {
+    return { ok: false, reason: "mcp-unavailable", httpStatus };
   }
 
   if (httpStatus === 401 || httpStatus === 403) {
@@ -168,6 +178,30 @@ function looksLikeInsufficientScope(body: unknown): boolean {
     return true;
   }
   return false;
+}
+
+function looksLikePortalUnavailable(body: unknown): boolean {
+  const text = stringifyBody(body).toLowerCase();
+  return [
+    "portal_quiescing",
+    "portal quiescing",
+    "portal-rebooting",
+    "portal rebooting",
+    "portal is rebooting",
+    "portal unavailable",
+    "quiescing",
+    "rebooting",
+  ].some((marker) => text.includes(marker));
+}
+
+function stringifyBody(body: unknown): string {
+  if (body == null) return "";
+  if (typeof body === "string") return body;
+  try {
+    return JSON.stringify(body);
+  } catch {
+    return String(body);
+  }
 }
 
 function extractToolsArray(body: unknown): unknown[] | null {

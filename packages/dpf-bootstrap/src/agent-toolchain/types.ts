@@ -27,6 +27,8 @@ export type McpReadinessProbeResult =
       ok: false;
       reason:
         | "no_token"
+        | "portal-unavailable"
+        | "mcp-unavailable"
         | "endpoint_unreachable"
         | "scope_insufficient"
         | "unexpected_shape";
@@ -43,7 +45,12 @@ export type SmokeTestResult =
   | { result: "failed"; transcript: string; reason: string }
   | {
       result: "skipped";
-      reason: "claude_not_on_path" | "codex_not_on_path" | "grok_not_on_path" | "no_token";
+      reason:
+        | "claude_not_on_path"
+        | "codex_not_on_path"
+        | "grok_not_on_path"
+        | "no_cli_on_path"
+        | "no_token";
     };
 
 /**
@@ -56,6 +63,8 @@ export type ReadinessState =
   | "missing_cli"
   | "missing_token"
   | "needs_refresh"
+  | "portal-unavailable"
+  | "mcp-unavailable"
   | "failed_smoke";
 
 /**

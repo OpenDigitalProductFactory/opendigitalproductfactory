@@ -175,8 +175,24 @@ if ($GrokPresent)          { $nodeArgs += "--grok-cli-present" }
 if ($HasToken)             { $nodeArgs += "--has-token" }
 if ($ReconcileStaleEntries.IsPresent) { $nodeArgs += "--reconcile-stale-entries" }
 
-$planJson = & pnpm @nodeArgs 2>$null
-if ($LASTEXITCODE -ne 0 -or -not $planJson) {
+$planJson = $null
+$computePlanFailed = $false
+$computePlanExitCode = 0
+$previousErrorActionPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = "Continue"
+    $planJson = & pnpm @nodeArgs 2>$null
+    $computePlanExitCode = $LASTEXITCODE
+    if ($computePlanExitCode -ne 0 -or -not $planJson) {
+        $computePlanFailed = $true
+    }
+} catch {
+    $computePlanFailed = $true
+} finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+}
+
+if ($computePlanFailed) {
     Write-Warn2 "compute-plan failed; using standalone skill-pack updater fallback."
     $fallback = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1"
     if (Test-Path -LiteralPath $fallback) {
@@ -187,7 +203,7 @@ if ($LASTEXITCODE -ne 0 -or -not $planJson) {
     exit 1
 }
 
-$plan = $planJson | ConvertFrom-Json
+$plan = ($planJson -join "`n") | ConvertFrom-Json
 Write-Info "Plan preview: $($plan.preview.readinessState)"
 
 # --- Apply plan ---------------------------------------------------------------
@@ -352,16 +368,25 @@ if (-not $DryRun.IsPresent) {
         if ($HasToken) {
             $probeArgs += @("--token", $env:DPF_MCP_BEARER_TOKEN)
         }
+        $probeJson = $null
+        $probeExitCode = 0
+        $previousErrorActionPreference = $ErrorActionPreference
         try {
+            $ErrorActionPreference = "Continue"
             $probeJson = & pnpm @probeArgs 2>$null
-            if ($LASTEXITCODE -eq 0 -and $probeJson) {
-                $probeResult = $probeJson | ConvertFrom-Json
-                # ConvertFrom-Json returns PSCustomObject - re-serialize as
-                # nested hashtables so Set-DpfStateValue round-trips cleanly.
-                $mcpReadiness = $probeResult.mcpReadiness | ConvertTo-Json -Depth 6 -Compress | ConvertFrom-Json -AsHashtable
-                $smokeResult  = $probeResult.smokeTest    | ConvertTo-Json -Depth 6 -Compress | ConvertFrom-Json -AsHashtable
+            $probeExitCode = $LASTEXITCODE
+        } catch {
+            $probeExitCode = 1
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        try {
+            if ($probeExitCode -eq 0 -and $probeJson) {
+                $probeResult = ($probeJson -join "`n") | ConvertFrom-Json
+                $mcpReadiness = $probeResult.mcpReadiness
+                $smokeResult  = $probeResult.smokeTest
             } else {
-                Write-Warn2 "run-probes exited $LASTEXITCODE; recording probes as skipped."
+                Write-Warn2 "run-probes exited $probeExitCode; recording probes as skipped."
             }
         } catch {
             Write-Warn2 "run-probes invocation failed: $_"
@@ -375,14 +400,14 @@ if (-not $DryRun.IsPresent) {
 # probe-runner failure). Skipping is honest and surfaces in the state.
 if ($null -eq $mcpReadiness) {
     $mcpReadiness = if ($HasToken) {
-        @{ ok = $false; reason = "endpoint_unreachable"; httpStatus = $null }
+        @{ ok = $false; reason = "mcp-unavailable"; httpStatus = $null }
     } else {
         @{ ok = $false; reason = "no_token"; httpStatus = $null }
     }
 }
 if ($null -eq $smokeResult) {
-    $smokeResult = if (-not ($ClaudePresent -or $CodexPresent)) {
-        @{ result = "skipped"; reason = "claude_not_on_path" }
+    $smokeResult = if (-not ($ClaudePresent -or $CodexPresent -or $GrokPresent)) {
+        @{ result = "skipped"; reason = "no_cli_on_path" }
     } else {
         @{ result = "skipped"; reason = "no_token" }
     }
@@ -410,6 +435,10 @@ if (-not $claudeWired -and -not $codexWired -and -not $grokWired) {
 } elseif (-not $mcpReadiness.ok) {
     if ($mcpReadiness.reason -in @("no_token", "scope_insufficient")) {
         $state.readinessState = "missing_token"
+    } elseif ($mcpReadiness.reason -eq "portal-unavailable") {
+        $state.readinessState = "portal-unavailable"
+    } elseif ($mcpReadiness.reason -eq "mcp-unavailable") {
+        $state.readinessState = "mcp-unavailable"
     } elseif ($mcpReadiness.reason -in @("endpoint_unreachable", "unexpected_shape")) {
         $state.readinessState = "needs_refresh"
     } else {
@@ -435,6 +464,8 @@ $copyTable = @{
     "missing_cli"    = @{ message = "Install the selected agent client to enable contributor sessions.";                 primaryAction = "Open setup guide" }
     "missing_token"  = @{ message = "DPF MCP needs a development token before agents can use governed tools.";           primaryAction = "Issue development token" }
     "needs_refresh"  = @{ message = "A token exists, but the running client has not picked it up yet.";                  primaryAction = "Refresh client binding" }
+    "portal-unavailable" = @{ message = "The portal is rebooting; I can still repair local agent tooling and will sync evidence when it comes back."; primaryAction = "Continue local repair" }
+    "mcp-unavailable"    = @{ message = "DPF coordination is unavailable; I can still repair local agent tooling and will sync evidence when it returns."; primaryAction = "Continue local repair" }
     "failed_smoke"   = @{ message = "The agent is installed but did not apply a DPF kernel principle.";                  primaryAction = "View evidence" }
 }
 $copy = $copyTable[$state.readinessState]

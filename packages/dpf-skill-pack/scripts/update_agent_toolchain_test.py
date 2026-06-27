@@ -81,6 +81,33 @@ class UpdateAgentToolchainTest(unittest.TestCase):
             self.assertTrue(data["plugins"]["dpf-platform"]["enabled"])
             self.assertEqual(data["mcp_servers"]["dpf"]["url"], "https://mcp.example.test/api/mcp/v1")
 
+    def test_repairs_missing_managed_plugin_without_token_or_portal(self) -> None:
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(
+                os.environ,
+                {"DPF_AGENT_TOOLCHAIN_HOME": tmp},
+                clear=True,
+            ):
+                code = updater.main([
+                    "--skill-pack-path",
+                    str(skill_pack),
+                    "--skip-claude-cli-install",
+                ])
+
+            self.assertEqual(code, 0)
+            home = Path(tmp)
+            managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
+            self.assertTrue((managed / ".codex-plugin" / "plugin.json").exists())
+            self.assertTrue((managed / "skills" / "dpf-worktree-per-session" / "SKILL.md").exists())
+
+            codex_config = tomllib.loads((home / ".codex" / "config.toml").read_text())
+            self.assertTrue(codex_config["plugins"]["dpf-platform"]["enabled"])
+            self.assertEqual(
+                codex_config["mcp_servers"]["dpf"]["bearer_token_env_var"],
+                "DPF_MCP_BEARER_TOKEN",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

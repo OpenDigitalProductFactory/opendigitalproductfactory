@@ -151,7 +151,14 @@
                 "ok": { "const": false },
                 "reason": {
                   "type": "string",
-                  "enum": ["no_token", "endpoint_unreachable", "scope_insufficient", "unexpected_shape"]
+                  "enum": [
+                    "no_token",
+                    "portal-unavailable",
+                    "mcp-unavailable",
+                    "endpoint_unreachable",
+                    "scope_insufficient",
+                    "unexpected_shape"
+                  ]
                 },
                 "httpStatus": { "type": ["integer", "null"] }
               },
@@ -188,7 +195,7 @@
                 "result": { "const": "skipped" },
                 "reason": {
                   "type": "string",
-                  "enum": ["claude_not_on_path", "codex_not_on_path", "no_token"]
+                  "enum": ["claude_not_on_path", "codex_not_on_path", "grok_not_on_path", "no_cli_on_path", "no_token"]
                 }
               },
               "additionalProperties": false
@@ -197,7 +204,16 @@
         },
         "readinessState": {
           "type": "string",
-          "enum": ["ready", "partial", "missing_cli", "missing_token", "needs_refresh", "failed_smoke"]
+          "enum": [
+            "ready",
+            "partial",
+            "missing_cli",
+            "missing_token",
+            "needs_refresh",
+            "portal-unavailable",
+            "mcp-unavailable",
+            "failed_smoke"
+          ]
         }
       },
       "additionalProperties": false

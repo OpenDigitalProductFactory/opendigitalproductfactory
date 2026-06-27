@@ -44,7 +44,17 @@ export function planGrokConfig(
   configPath: string,
   mcpEndpoint: string,
 ): GrokConfigPlan {
-  const existing = existingText ? (parse(existingText) as any) : {};
+  void repoRoot;
+  const normalizedText = existingText.replace(/^\uFEFF/, "");
+  let existing: any = {};
+  try {
+    existing = normalizedText ? (parse(normalizedText) as any) : {};
+  } catch (err) {
+    return {
+      writes: [],
+      rationale: `TOML parse error; refusing to write. (${(err as Error).message})`,
+    };
+  }
   const existingDpf = existing.mcp_servers?.[DPF_MCP_KEY];
   const desiredDpf = desiredMcpServerBlock(mcpEndpoint);
 

@@ -32,6 +32,7 @@ export function materializeAgentToolchainState(
   const readinessState = computeReadinessState({
     claudeCodeWired: inputs.claudeCodeWired,
     codexWired: inputs.codexWired,
+    grokWired: inputs.grokWired ?? false,
     mcpReadiness: inputs.mcpReadiness,
     smokeTest: inputs.smokeTest,
   });

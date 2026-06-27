@@ -91,7 +91,7 @@ describe("runMcpReadinessProbe", () => {
     expect(result).toEqual({ ok: false, reason: "no_token", httpStatus: 401 });
   });
 
-  it("interprets 5xx as endpoint_unreachable", async () => {
+  it("interprets 5xx as mcp-unavailable when the portal answered without a reboot marker", async () => {
     const result = await runMcpReadinessProbe({
       endpoint: ENDPOINT,
       token: "dpfmcp_synthetic",
@@ -100,12 +100,12 @@ describe("runMcpReadinessProbe", () => {
     });
     expect(result).toEqual({
       ok: false,
-      reason: "endpoint_unreachable",
+      reason: "mcp-unavailable",
       httpStatus: 503,
     });
   });
 
-  it("maps fetch errors to endpoint_unreachable", async () => {
+  it("maps fetch errors to portal-unavailable", async () => {
     const result = await runMcpReadinessProbe({
       endpoint: ENDPOINT,
       token: "dpfmcp_synthetic",
@@ -118,7 +118,7 @@ describe("runMcpReadinessProbe", () => {
     });
     expect(result).toEqual({
       ok: false,
-      reason: "endpoint_unreachable",
+      reason: "portal-unavailable",
       httpStatus: null,
     });
   });
