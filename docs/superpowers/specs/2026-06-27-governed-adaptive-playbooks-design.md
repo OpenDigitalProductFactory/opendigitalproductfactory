@@ -6,8 +6,8 @@
 - **Primary audience:** DPF platform architecture, AI workforce, TAK runtime, Build Studio
 - **Operator prompt:** Review the Ornith video transcript and product/model, then identify how to incorporate the main ideas into DPF without using the raw "scaffold" analogy.
 - **Source transcript:** Operator-provided local transcript at `C:/Users/Mark Bodman/OneDrive/Desktop/ornithOverview.txt` (not committed).
-- **Related DPF epics from live backlog:** `EP-8AF1C996` Progressive Autonomy & Trust Graduation, `EP-MODEL-TIER-ROUTING`, `EP-COWORKER-INTERACTIVITY`, `EP-AI-OPSMAP`, `EP-UNIFIED-TRACKING`.
-- **Composes with:** `docs/architecture/trusted-ai-kernel.md`, `docs/architecture/ai-agent-meta-model.md`, `docs/architecture/local-llm-build-engine.md`, `docs/architecture/context-engineering-standards.md`, `docs/superpowers/specs/2026-05-11-autonomous-coworker-runtime-design.md`, `docs/superpowers/specs/2026-06-22-build-studio-model-tier-routing-design.md`.
+- **Related DPF epics from live backlog:** `EP-8AF1C996` Progressive Autonomy & Trust Graduation, `EP-2984B02B` Work Case / Company Work Management, `EP-MODEL-TIER-ROUTING`, `EP-COWORKER-INTERACTIVITY`, `EP-AI-OPSMAP`, `EP-ATTENTION-SURFACE`, `EP-UNIFIED-TRACKING`.
+- **Composes with:** `docs/architecture/trusted-ai-kernel.md`, `docs/architecture/ai-agent-meta-model.md`, `docs/architecture/local-llm-build-engine.md`, `docs/architecture/context-engineering-standards.md`, `docs/superpowers/specs/2026-05-11-autonomous-coworker-runtime-design.md`, `docs/superpowers/specs/2026-06-22-build-studio-model-tier-routing-design.md`, and the parallel Work Case design at `docs/superpowers/specs/2026-06-27-work-management-architecture-design.md` plus `docs/superpowers/plans/2026-06-27-work-case-wave-0.md`.
 
 ## 1. Executive Decision
 
@@ -102,6 +102,7 @@ DPF already has most of the runtime substrate:
 - `ToolExecution` already links agent, user, thread, route, task run, skill, cost, tokens, and result.
 - `ExecutionPlan` is a durable per-loop plan artifact that survives compaction.
 - `CoworkerSelfAssessment`, `CoworkerCapabilityNeed`, and `ImprovementSignal` already form a reviewable need-to-backlog path.
+- The parallel Work Case architecture defines the company-facing work object, policy envelope, handoff grammar, governed Action write path, and `ReceiptEnvelope`. Adaptive playbooks must attach to that object for company/business work instead of creating another work manager.
 - The AI Agent Meta-Model already says an agent is governed identity plus model routing, tools, prompts, skills, authority, lifecycle, and audit.
 - TAK already says model capability does not create trustworthy agency.
 - Context engineering metrics already measure tool-surface and context pressure.
@@ -121,7 +122,15 @@ Conceptual shape:
 type WorkPattern = {
   patternKey: string;
   ownerAgentId: string;
-  scope: "agent" | "route" | "skill" | "build-phase" | "activity" | "risk-class";
+  scope:
+    | "agent"
+    | "route"
+    | "skill"
+    | "build-phase"
+    | "activity"
+    | "risk-class"
+    | "case-type"
+    | "case-transition";
   version: number;
   status: "observed" | "candidate" | "approved" | "active" | "retired";
   objectiveShape: string;
@@ -132,11 +141,22 @@ type WorkPattern = {
   retryPolicy: unknown;
   escalationPolicy: unknown;
   riskProfile: unknown;
+  workCaseBinding?: {
+    caseType?: string;
+    transitionKey?: string;
+    governedActionKey?: string;
+    authorityMode?: "autonomous" | "on-behalf-of" | "authenticated-inbound";
+    sponsorPrincipalId?: string;
+    receiptPolicy?: "governed-action" | "observed-event";
+  };
   sourceEvidence: Array<{
     taskRunId?: string;
     toolExecutionId?: string;
     improvementSignalId?: string;
     backlogItemId?: string;
+    workCaseRef?: string;
+    receiptId?: string;
+    decisionInteractionId?: string;
   }>;
 };
 ```
@@ -160,19 +180,36 @@ Existing kinds are `tool`, `skill`, `grant`, `model`, `memory`, `data`, `ui_surf
 
 For systemic playbooks, use the existing kinds first. Later, consider splitting `boundary` into closed subtypes in evidence JSON rather than expanding the enum prematurely. The key improvement is not more enum values; it is better triggers and evidence.
 
+### 5.4 Relationship To Work Case
+
+The Work Case effort and this playbook effort are adjacent but not interchangeable:
+
+- **Work Case / Work Packet** is the durable company-facing coordination object for business work. It owns case identity, policy envelope, handoff grammar, source projection, governed Actions, receipts, sponsors, authority mode, and A2A-aligned lifecycle vocabulary.
+- **Governed Adaptive Playbook / Work Pattern** is the reusable method by which an agent handles a task class, route, case type, or transition. It can propose changes to skills, prompts, tool surfaces, data prefetch, model routes, or procedural code.
+
+When a playbook applies to company/business work, it must bind to the Work Case substrate:
+
+- A case-bound playbook references `caseType`, transition key, policy envelope, sponsor/authority mode, and expected receipt.
+- A proposal to change a case state is not a free-form update; it becomes a candidate governed Action or staged-before-commit transition in the Work Case grammar.
+- The playbook's evidence must include Work Case source references, `ReceiptEnvelope` references where available, and related `DecisionInteraction` records.
+- A playbook can suggest how to assemble a compact Work Packet for a delegate, but the packet remains a Work Case artifact, not a separate playbook-owned object.
+- Agent capability advertisement should converge with the Work Case `AgentCard`-equivalent descriptor: the playbook describes method; the capability card describes what the actor can accept and under what security/authority conditions.
+
+This prevents duplicate surfaces: Work Case is where company work lives; adaptive playbooks are how agents improve the method for doing that work.
+
 ## 6. Systemic Proposal Loop
 
 The loop should run both event-triggered and periodic reviews.
 
 ```mermaid
 flowchart LR
-  A["TaskRun executes under TAK"] --> B["Evidence: ToolExecution, AgentMessage, TaskArtifact, review result, context metrics"]
+  A["TaskRun or Work Case action executes under TAK"] --> B["Evidence: ToolExecution, AgentMessage, TaskArtifact, review result, context metrics, ReceiptEnvelope"]
   B --> C["Pattern Observer"]
   C --> D["Coworker Self-Assessment"]
   D --> E["Capability Need or Pattern Candidate"]
   E --> F["Human/reviewer gate"]
-  F --> G["Shadow trial or backlog item"]
-  G --> H["Approved skill, prompt, tool, policy, UI, or code change"]
+  F --> G["Shadow trial, backlog item, or staged Work Case transition"]
+  G --> H["Approved skill, prompt, tool, policy, UI, governed Action, or code change"]
   H --> I["Trust-state and evidence ledger update"]
 ```
 
@@ -191,6 +228,7 @@ Add pattern-observer triggers for:
 - repeated approval of the same action envelope,
 - unresolved missing data field,
 - recurring UI handoff to another page,
+- recurring Work Case transition friction, including `input-required`, `auth-required`, sponsor/accountability gaps, missing receipt coverage, or policy-envelope failures,
 - build/review/ship gate failures with the same suspected root cause.
 
 ### 6.2 Periodic Agent Reviews
@@ -218,9 +256,10 @@ No candidate changes runtime behavior immediately.
 2. **Proposed:** create `CoworkerSelfAssessment` plus `CoworkerCapabilityNeed` or a pattern-candidate evidence record.
 3. **Filed:** project accepted needs into backlog through the existing intake path.
 4. **Shadowed:** where relevant, run the candidate as a suggestion only and compare with current behavior.
-5. **Approved:** human/reviewer gate accepts the skill, prompt, grant, model-route, UI, policy, or code change.
-6. **Activated:** versioned change becomes active for a scoped agent/activity/risk class.
-7. **Proceduralized:** repeated high-confidence behavior moves from prompt/skill to code and invariant guard.
+5. **Case-staged:** if the candidate affects company work, express it as a staged Work Case proposal or governed Action candidate. It must carry sponsor/authority-mode context and expected receipt coverage before it can affect a case.
+6. **Approved:** human/reviewer gate accepts the skill, prompt, grant, model-route, UI, policy, governed Action, or code change.
+7. **Activated:** versioned change becomes active for a scoped agent/activity/risk/case class.
+8. **Proceduralized:** repeated high-confidence behavior moves from prompt/skill to code and invariant guard.
 
 This composes directly with `EP-8AF1C996`: trust is earned per coworker x activity x risk, and regulatory/compliance ceilings still cap autonomy independent of success rates.
 
@@ -257,11 +296,13 @@ Work:
 - Use `TaskRun.repeatedPatternKey` for queryability.
 - Add a read model that groups runs by pattern key, agent, route, outcome, and risk.
 - Store candidate diffs in evidence JSON on the need or improvement signal first.
+- When Work Case Wave 0 is available, include optional case references from the Work Case source registry/status projection rather than inventing playbook-owned case classification.
 
 Acceptance:
 
 - Operators can see repeated patterns by agent and route.
 - Candidate evidence links back to TaskRuns and ToolExecutions.
+- Case-bound candidates link to Work Case source references and receipt/decision evidence when present.
 - No new table is introduced until UI/query pressure justifies it.
 
 ### Slice 3: Shadow and Trust Integration
@@ -288,13 +329,14 @@ Goal: make the capability feel useful, calm, and operational.
 Recommended placement:
 
 - Add a **Needs and Playbooks** tab to the AI Workforce agent detail.
-- Add a summarized lane to AI Operations Map for active playbook proposals and blocked needs.
-- Keep backlog as the work record; this UI is the evidence/review surface.
+- Add a summarized lane to AI Operations Map for active agent-level playbook proposals and blocked needs.
+- For company/business work, surface case-bound proposals inside the Work Case detail or Workspace attention lens once that substrate exists. Do not create a separate case-work dashboard here.
+- Keep backlog as the product work record and Work Case as the company work record; this UI is an evidence/review surface, not a third state manager.
 
 Layout:
 
 - Left rail: agents and routes with counts for open needs, candidate playbooks, shadow trials, accepted changes.
-- Center pane: selected playbook timeline, evidence list, and before/after diff.
+- Center pane: selected playbook timeline, evidence list, before/after diff, and Work Case/receipt links when case-bound.
 - Right inspector: action buttons for "run shadow trial", "file backlog item", "approve as skill update", "approve as code candidate", "defer", "mark duplicate", "retire".
 
 Design rules:
@@ -305,6 +347,8 @@ Design rules:
 - Use icons for actions and text only where commands need clarity.
 - Never show "scaffold" in the UI. Use "playbook", "working method", "pattern", and "proposal".
 - Show risk/autonomy ceiling beside every approval affordance.
+- Do not expose `WorkCapsule`, `DecisionInteraction`, or `ReceiptEnvelope` as primary product terms outside admin/audit context; show them as evidence drill-downs.
+- Do not ship case-bound playbook controls before the Work Case governed write path and receipt-coverage guard are available. Agent-level review can ship earlier, but case state changes must wait for enforcement.
 
 ### Slice 5: Ornith Model Evaluation Lane
 
@@ -334,15 +378,18 @@ Allowed refactoring:
 - Extract shared pattern-observer primitives from `reflection-triggers.ts` instead of growing a second reflection subsystem.
 - Centralize capability-need fingerprinting and dedupe so runtime reflections, periodic reviews, and manual assessments converge.
 - Define typed helpers for `TaskRun.a2aMetadata.workPattern` and `repeatedPatternKey`.
+- Align case-bound pattern metadata with the Work Case source registry, status projection, and receipt envelope once `EP-2984B02B` Wave 0/1 lands.
 - Separate UI projection from persistence; do not make the Operations Map own playbook state.
 - Reuse existing `CoworkerSelfAssessment`, `CoworkerCapabilityNeed`, `ImprovementSignal`, `TaskRun`, and `ToolExecution` before adding tables.
 - Align evidence contracts with context-economy metrics and model-routing evidence.
+- Reuse Work Case `ReceiptEnvelope` and governed Action concepts for case-bound proposals; do not introduce a playbook-specific receipt or action ledger.
 
 Not allowed under this budget:
 
 - Rewriting AI Workforce navigation.
 - Replacing the coworker runtime.
 - Adding a parallel audit/event ledger.
+- Adding a parallel Work Case, Work Packet, receipt, handoff, or case-state model.
 - Expanding model routing beyond the existing model-tier routing epic.
 - Creating prompt-only shortcuts that cannot be audited.
 
@@ -353,20 +400,24 @@ Hard constraints:
 - Models may propose playbook changes; they may not activate them.
 - Tool grants, HITL tiers, prompt templates, skills, and model routes remain governed platform resources.
 - Every proposal must include evidence and a suggested evaluation method.
+- Case-bound proposals must include Work Case source references, sponsor/authority-mode context, and expected `ReceiptEnvelope` coverage before they can affect state.
+- Consequential case transitions must execute only through Work Case governed Actions. A playbook may propose an Action candidate; it may not write directly to the backing `WorkItem`, `WorkCapsule`, source record, or case projection.
 - A rejected candidate must remain visible enough to prevent the same proposal from resurfacing endlessly.
 - Regulatory/compliance autonomy ceilings override trust graduation.
+- Work Case terminal-state sealing applies to case-bound playbooks: follow-on work creates a linked case/context rather than reopening a closed case in place.
 - Context/tool-surface improvements must honor `docs/architecture/context-engineering-standards.md`.
 - Durable learnings route to the shared commons per AGENTS.md; local-only learning is a staging state, not the destination.
 
 ## 10. Implementation Plan Summary
 
 1. **Spec and backlog alignment:** this document, then link it to the relevant epic/backlog items or create a focused item under the best existing epic.
-2. **Observer foundation:** extract pattern observation and emit richer needs through existing assessment/backlog flow.
-3. **Metadata stamping:** add typed work-pattern metadata on TaskRuns and pattern grouping read models.
-4. **Review UI:** add the Needs and Playbooks operator surface.
-5. **Shadow evaluation:** integrate with Decision-Shadow Ledger and trust graduation.
-6. **Model lane:** evaluate Ornith as a provider/model candidate through opencode and ModelProfile scoring.
-7. **Proceduralization:** turn repeated approved playbooks into code and invariant guards.
+2. **Work Case alignment:** keep agent-level observers independent, but sequence case-bound proposals behind Work Case Wave 0 source/status projection and Work Case Wave 1 governed Action/receipt coverage.
+3. **Observer foundation:** extract pattern observation and emit richer needs through existing assessment/backlog flow.
+4. **Metadata stamping:** add typed work-pattern metadata on TaskRuns and pattern grouping read models, with optional Work Case references when available.
+5. **Review UI:** add the Needs and Playbooks operator surface for agent-level proposals; case-bound proposal controls land in Work Case/Workspace after enforcement.
+6. **Shadow evaluation:** integrate with Decision-Shadow Ledger, Work Case staged transitions where relevant, and trust graduation.
+7. **Model lane:** evaluate Ornith as a provider/model candidate through opencode and ModelProfile scoring.
+8. **Proceduralization:** turn repeated approved playbooks into code and invariant guards.
 
 ## 11. Test and Verification Strategy
 
@@ -384,12 +435,15 @@ Integration tests:
 - ToolExecution and TaskRun evidence link to submitted needs.
 - Submitted needs still project into backlog.
 - Candidate proposals do not mutate SkillDefinition, prompts, grants, or routing.
+- Case-bound candidates do not mutate WorkItem, WorkCapsule, source records, or case state outside the Work Case governed Action path.
+- Case-bound candidate evidence references ReceiptEnvelope/DecisionInteraction records when present and distinguishes governed-Action evidence from observed-event evidence.
 - Shadow comparison records evidence without changing live behavior.
 
 UX verification:
 
 - AI Workforce agent detail shows open needs and candidate playbooks.
 - AI Operations Map summarizes active proposals without hiding existing failures.
+- Work Case/Workspace surfaces, when implemented, show case-bound playbook proposals as evidence/actions on the case rather than a separate dashboard.
 - Long playbook names, evidence lists, and action labels fit on mobile and desktop.
 - Approval actions show HITL/risk ceiling context.
 
@@ -406,12 +460,15 @@ Model evaluation:
 3. **When should a WorkPattern table be added?** Recommendation: after Slice 2 proves query shapes; use TaskRun metadata first.
 4. **Should capability need kinds expand?** Recommendation: not initially. Use existing kinds plus structured evidence JSON.
 5. **Should Ornith be a Build Studio default candidate?** Recommendation: no. Evaluate first, then route by ModelProfile evidence and model-tier policy.
+6. **Should case-bound playbook proposals wait for Work Case enforcement?** Recommendation: yes for any consequential transition. Agent-level observation can ship earlier, but case state, handoff, authority, or external side-effect changes must wait for governed Actions and receipt coverage.
 
 ## 13. Success Criteria
 
 - Every major coworker can produce evidence-backed needs from both failures and successful repetition.
 - Operators can review an agent's proposed needs and playbook changes without reading raw logs.
+- Case-bound proposals appear on Work Case/Workspace evidence surfaces and produce or reference receipts; they do not create a parallel work surface.
 - Approved playbook changes are versioned, scoped, and auditable.
+- Consequential case changes flow through governed Actions with sponsor/authority-mode and receipt evidence.
 - Rejected proposals do not churn forever.
 - Repeated successful prompt/skill behavior can graduate to code with invariant guards.
 - Model candidates such as Ornith are evaluated through DPF evidence before routing changes.
