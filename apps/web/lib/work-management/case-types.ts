@@ -23,6 +23,40 @@ export type WorkCaseA2aStatus =
   | "failed"
   | "rejected";
 
+export const WORK_CASE_ACTION_VERBS = [
+  "claim",
+  "pause",
+  "needs-input",
+  "needs-auth",
+  "respond",
+  "resume",
+  "propose",
+  "delegate",
+  "handoff",
+  "escalate",
+  "verify",
+  "complete",
+  "cancel",
+] as const;
+
+export type WorkCaseActionVerb = (typeof WORK_CASE_ACTION_VERBS)[number];
+
+export type WorkCaseEnforcementMode = "governed-action" | "observed-event";
+
+export interface WorkCaseRef {
+  caseId: string;
+  sourceType: string;
+  sourceId: string;
+}
+
+export type WorkCaseActorKind = "person" | "agent" | "system" | "external";
+
+export interface WorkCaseActorRef {
+  actorKind: WorkCaseActorKind;
+  actorId?: string;
+  displayName?: string;
+}
+
 export type WorkCaseBlockingActorKind =
   | "person"
   | "system"

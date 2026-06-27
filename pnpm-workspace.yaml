@@ -101,7 +101,10 @@ allowBuilds:
   esbuild: true
   msw: true
   prisma: true
+  protobufjs: false
+  puppeteer: false
   sharp: true
+  unrs-resolver: false
 # Restore peerDependencies that @testing-library/jest-dom dropped in 6.x but still
 # imports from at runtime (src/vitest.js imports `vitest`). Without this, vitest
 # 4.1.6+ loses the `toBeInTheDocument` type augmentation across every test site.

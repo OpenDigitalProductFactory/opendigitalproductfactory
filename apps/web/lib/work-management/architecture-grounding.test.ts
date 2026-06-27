@@ -4,10 +4,16 @@ import {
   WORK_CASE_ARCHITECTURE_ALLOCATIONS,
   WORK_CASE_ARCHITECTURE_ELEMENTS,
   getWorkCaseRequirementVerificationPairs,
+  type WorkCaseArchitectureElement,
 } from "./architecture-grounding";
+import { WORK_CASE_ACTION_VERBS } from "./case-types";
+
+const elementById = new Map<string, WorkCaseArchitectureElement>(
+  WORK_CASE_ARCHITECTURE_ELEMENTS.map((element) => [element.elementId, element]),
+);
 
 describe("Work Case architecture grounding manifest", () => {
-  it("allocates every Wave 0 work-management source file into the EA/SysML graph", () => {
+  it("allocates every Wave 0 and Wave 1 work-management source file into the EA/SysML graph", () => {
     const allocatedFiles = new Set(
       WORK_CASE_ARCHITECTURE_ALLOCATIONS.map((allocation) => allocation.targetRef),
     );
@@ -19,6 +25,12 @@ describe("Work Case architecture grounding manifest", () => {
         "apps/web/lib/work-management/status-projection.ts",
         "apps/web/lib/work-management/case-read-model.ts",
         "apps/web/lib/work-management/architecture-grounding.ts",
+        "apps/web/lib/work-management/action-registry.ts",
+        "apps/web/lib/work-management/policy-envelope.ts",
+        "apps/web/lib/work-management/receipt-envelope.ts",
+        "apps/web/lib/work-management/receipt-coverage.ts",
+        "apps/web/lib/work-management/case-telemetry.ts",
+        "apps/web/lib/work-management/work-case-governance-hook.ts",
       ]),
     );
   });
@@ -42,6 +54,31 @@ describe("Work Case architecture grounding manifest", () => {
 
     expect(pairs.map((pair) => pair.requirementId).sort()).toEqual(requirementIds);
     expect(pairs.every((pair) => pair.verificationCaseId.startsWith("VC-WC-"))).toBe(true);
+  });
+
+  it("grounds Wave 1 requirements in implemented or partially implemented verification cases", () => {
+    for (const requirementId of ["REQ-WC-1", "REQ-WC-2"]) {
+      const requirement = elementById.get(requirementId);
+      expect(requirement?.implementationStatus).toMatch(/^(implemented|partially-implemented)$/);
+
+      const verificationCase = elementById.get(requirement?.verificationCaseId ?? "");
+      expect(verificationCase?.elementType).toBe("verification_case");
+      expect(verificationCase?.implementationStatus).toMatch(
+        /^(implemented|partially-implemented)$/,
+      );
+    }
+  });
+
+  it("declares EA Action elements for the Work Case handoff grammar", () => {
+    const actionIds = WORK_CASE_ARCHITECTURE_ELEMENTS
+      .filter((element) => element.elementType === "action")
+      .map((element) => element.elementId);
+
+    expect(actionIds).toEqual(
+      expect.arrayContaining(
+        WORK_CASE_ACTION_VERBS.map((action) => `ACT-WC-${action}`),
+      ),
+    );
   });
 
   it("anchors the Wave 0 slice to IT4IT streams already supported by the EA substrate", () => {

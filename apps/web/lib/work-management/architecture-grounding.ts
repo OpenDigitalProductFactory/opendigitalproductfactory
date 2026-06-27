@@ -1,3 +1,5 @@
+import { WORK_CASE_ACTION_REGISTRY } from "./action-registry";
+
 export type WorkCaseArchitectureElementType =
   | "requirement"
   | "action"
@@ -30,13 +32,23 @@ export interface WorkCaseArchitectureAllocation {
   targetRef: string;
 }
 
+const WORK_CASE_ACTION_ARCHITECTURE_ELEMENTS =
+  WORK_CASE_ACTION_REGISTRY.map((action) => ({
+    elementId: `ACT-WC-${action.action}`,
+    elementType: "action",
+    name: action.displayLabel,
+    description: `Governed Work Case handoff action '${action.action}' backed by the action registry.`,
+    implementationStatus: "implemented",
+    itValueStreams: ["operate", "consume", "integrate", "deploy", "release"],
+  })) satisfies readonly WorkCaseArchitectureElement[];
+
 export const WORK_CASE_ARCHITECTURE_ELEMENTS = [
   {
     elementId: "REQ-WC-1",
     elementType: "requirement",
     name: "Governed write path",
     description: "Consequential Work Case transitions mutate only through governed Actions.",
-    implementationStatus: "planned",
+    implementationStatus: "partially-implemented",
     itValueStreams: ["operate", "consume", "integrate", "deploy", "release"],
     verificationCaseId: "VC-WC-1",
   },
@@ -45,7 +57,7 @@ export const WORK_CASE_ARCHITECTURE_ELEMENTS = [
     elementType: "requirement",
     name: "Receipt coverage and sealing",
     description: "Every consequential transition emits a receipt and terminal cases are sealed.",
-    implementationStatus: "planned",
+    implementationStatus: "partially-implemented",
     itValueStreams: ["operate", "consume", "integrate", "deploy", "release"],
     verificationCaseId: "VC-WC-2",
   },
@@ -108,6 +120,7 @@ export const WORK_CASE_ARCHITECTURE_ELEMENTS = [
     implementationStatus: "implemented",
     itValueStreams: ["operate", "consume", "integrate"],
   },
+  ...WORK_CASE_ACTION_ARCHITECTURE_ELEMENTS,
   {
     elementId: "PART-WC-source-registry",
     elementType: "part_definition",
@@ -125,6 +138,38 @@ export const WORK_CASE_ARCHITECTURE_ELEMENTS = [
     itValueStreams: ["operate", "consume", "integrate", "deploy", "release"],
   },
   {
+    elementId: "PART-WC-action-registry",
+    elementType: "part_definition",
+    name: "Work Case action registry",
+    description: "Canonical handoff grammar and consequential-action metadata for governed transitions.",
+    implementationStatus: "implemented",
+    itValueStreams: ["operate", "consume", "integrate", "deploy", "release"],
+  },
+  {
+    elementId: "PART-WC-policy-envelope",
+    elementType: "part_definition",
+    name: "Work Case policy envelope",
+    description: "Pure policy evaluator for source support, terminal sealing, decisions, staging, and receipts.",
+    implementationStatus: "implemented",
+    itValueStreams: ["operate", "consume", "integrate", "deploy", "release"],
+  },
+  {
+    elementId: "PART-WC-receipt-envelope",
+    elementType: "part_definition",
+    name: "Work Case receipt envelope",
+    description: "Projection envelope that normalizes governed receipts and observed substrate events.",
+    implementationStatus: "implemented",
+    itValueStreams: ["operate", "consume", "integrate", "deploy", "release"],
+  },
+  {
+    elementId: "PART-WC-case-telemetry",
+    elementType: "part_definition",
+    name: "Work Case telemetry projection",
+    description: "OTel-compatible event projection for receipt-backed Work Case actions.",
+    implementationStatus: "implemented",
+    itValueStreams: ["operate", "consume", "integrate", "deploy", "release"],
+  },
+  {
     elementId: "IF-WC-agentcard",
     elementType: "interface_definition",
     name: "AgentCard-compatible capability descriptor",
@@ -136,16 +181,16 @@ export const WORK_CASE_ARCHITECTURE_ELEMENTS = [
     elementId: "VC-WC-1",
     elementType: "verification_case",
     name: "Governed write path receipt guard",
-    description: "Future guard proving consequential transitions cannot bypass governed Actions.",
-    implementationStatus: "planned",
+    description: "Tests proving optional Work Case context is policy-checked and can emit governed receipts.",
+    implementationStatus: "partially-implemented",
     itValueStreams: ["operate", "consume", "integrate", "deploy", "release"],
   },
   {
     elementId: "VC-WC-2",
     elementType: "verification_case",
     name: "Receipt coverage and sealing verification",
-    description: "Future guard proving receipts are emitted and terminal cases are sealed.",
-    implementationStatus: "planned",
+    description: "Pure guard tests proving consequential actions require governed receipts and terminal cases are sealed.",
+    implementationStatus: "implemented",
     itValueStreams: ["operate", "consume", "integrate", "deploy", "release"],
   },
   {
@@ -198,6 +243,42 @@ export const WORK_CASE_ARCHITECTURE_ALLOCATIONS = [
     relationshipType: "sysml_allocates",
     targetKind: "source_file",
     targetRef: "apps/web/lib/work-management/case-read-model.ts",
+  },
+  {
+    sourceElementId: "PART-WC-action-registry",
+    relationshipType: "sysml_allocates",
+    targetKind: "source_file",
+    targetRef: "apps/web/lib/work-management/action-registry.ts",
+  },
+  {
+    sourceElementId: "PART-WC-policy-envelope",
+    relationshipType: "sysml_allocates",
+    targetKind: "source_file",
+    targetRef: "apps/web/lib/work-management/policy-envelope.ts",
+  },
+  {
+    sourceElementId: "PART-WC-receipt-envelope",
+    relationshipType: "sysml_allocates",
+    targetKind: "source_file",
+    targetRef: "apps/web/lib/work-management/receipt-envelope.ts",
+  },
+  {
+    sourceElementId: "VC-WC-2",
+    relationshipType: "sysml_allocates",
+    targetKind: "source_file",
+    targetRef: "apps/web/lib/work-management/receipt-coverage.ts",
+  },
+  {
+    sourceElementId: "PART-WC-case-telemetry",
+    relationshipType: "sysml_allocates",
+    targetKind: "source_file",
+    targetRef: "apps/web/lib/work-management/case-telemetry.ts",
+  },
+  {
+    sourceElementId: "VC-WC-1",
+    relationshipType: "sysml_allocates",
+    targetKind: "source_file",
+    targetRef: "apps/web/lib/work-management/work-case-governance-hook.ts",
   },
   {
     sourceElementId: "REQ-WC-4",

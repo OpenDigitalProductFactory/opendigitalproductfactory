@@ -18,6 +18,8 @@ import {
 } from "./mcp-tools";
 import { coerceMcpToolArgs } from "./mcp-arg-coercion";
 import { deriveAuditClassForTool, deriveCapabilityId } from "./tool-audit-helpers";
+import { getWorkCaseAction } from "./work-management/action-registry";
+import type { WorkCaseExecutionContext } from "./work-management/work-case-governance-hook";
 
 export type GovernedExecuteSource =
   | "rest"
@@ -61,6 +63,12 @@ export type GovernedExecuteContext = {
    * gate, so honouring it here never escalates beyond what the operator may see.
    */
   coworkerReadBaseline?: boolean;
+  /**
+   * Optional Work Case context for consequential actions flowing through the
+   * governed execution seam. Existing callers omit this and retain their
+   * current audit/receipt behavior.
+   */
+  workCase?: WorkCaseExecutionContext;
 };
 
 export type GovernedExecuteArgs = {
@@ -85,7 +93,7 @@ export type GovernedExecuteResult = ToolResult & {
   };
 };
 
-type ToolLifecycleEvent = {
+export type ToolLifecycleEvent = {
   toolName: string;
   rawParams: Record<string, unknown>;
   userId: string;
@@ -94,12 +102,12 @@ type ToolLifecycleEvent = {
   source: GovernedExecuteSource;
 };
 
-type ToolLifecyclePostEvent = ToolLifecycleEvent & {
+export type ToolLifecyclePostEvent = ToolLifecycleEvent & {
   result: ToolResult;
   durationMs: number;
 };
 
-type ToolLifecycleDecision =
+export type ToolLifecycleDecision =
   | { decision: "allow"; reason?: string }
   | { decision: "deny"; reason: string };
 
@@ -256,7 +264,17 @@ async function writeAudit(data: {
   }
 }
 
-function deriveReceiptKind(toolName: string): string | null {
+function deriveReceiptKind(
+  toolName: string,
+  context?: GovernedExecuteContext,
+): string | null {
+  if (context?.workCase) {
+    const action = getWorkCaseAction(context.workCase.action);
+    if (action?.consequential) {
+      return "work-case-governed-action";
+    }
+  }
+
   switch (toolName) {
     case "run_sandbox_tests":
       return "sandbox-test-run";
@@ -286,18 +304,19 @@ void createHash;
 
 async function writeReceipt(data: {
   auditRowId: string;
-  buildId: string;
+  buildId: string | null;
   rawParams: Record<string, unknown>;
   result: ToolResult;
   toolName: string;
+  context?: GovernedExecuteContext;
 }): Promise<void> {
-  const receiptKind = deriveReceiptKind(data.toolName);
+  const receiptKind = deriveReceiptKind(data.toolName, data.context);
   if (!receiptKind) {
     return;
   }
 
   const row = {
-    buildId: data.buildId,
+    buildId: data.buildId ?? null,
     executionStatus: data.result.success ? "succeeded" : "failed",
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     inputFingerprint: digestPayload({
@@ -531,13 +550,15 @@ export async function governedExecuteTool(
     && typeof (result.data as Record<string, unknown>).buildId === "string"
       ? String((result.data as Record<string, unknown>).buildId)
       : null;
-  if (auditRow?.id && resultBuildId) {
+  const shouldWriteReceipt = Boolean(resultBuildId || args.context?.workCase);
+  if (auditRow?.id && shouldWriteReceipt) {
     await writeReceipt({
       auditRowId: auditRow.id,
       buildId: resultBuildId,
       rawParams: args.rawParams,
       result,
       toolName: args.toolName,
+      context: args.context,
     });
   }
 
