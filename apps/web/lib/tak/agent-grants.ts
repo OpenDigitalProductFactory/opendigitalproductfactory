@@ -120,6 +120,16 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   "mcp-browser-use__browse_close": ["browser_read"],
   "mcp-browser-use__browse_run_tests": ["browser_read"],
   "mcp-browser-use__browse_act": ["browser_drive"],
+  // Raw browser-use RPC names are used by first-party helpers and by the local
+  // sidecar binding before namespace decoration. Keep them on the same scope as
+  // their namespaced forms so a broader PLATFORM_TOOLS/audit extraction cannot
+  // strand them in default-deny with a different authority story.
+  browse_open: ["browser_read"],
+  browse_extract: ["browser_read"],
+  browse_screenshot: ["browser_read"],
+  browse_close: ["browser_read"],
+  browse_run_tests: ["browser_read"],
+  browse_act: ["browser_drive"],
   // The coworker-facing orchestrator entry point (drives a full bounded task).
   drive_browser_task: ["browser_drive"],
 
