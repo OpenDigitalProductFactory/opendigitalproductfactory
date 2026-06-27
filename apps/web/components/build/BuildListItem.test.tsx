@@ -292,7 +292,7 @@ describe("BuildListItem fleet density", () => {
     expect(html).not.toContain('aria-current="true"');
   });
 
-  it("shows the BI-* originator code as a hover tooltip on the FB code", () => {
+  it("hides FB-* and BI-* codes by default at fleet density", () => {
     const html = renderToStaticMarkup(
       <BuildListItem
         build={makeBuild()}
@@ -305,8 +305,9 @@ describe("BuildListItem fleet density", () => {
         onDelete={vi.fn()}
       />,
     );
-    // The originator itemId becomes the title attribute on the FB code span.
-    expect(html).toMatch(/title="BI-5B839D74"/);
+    expect(html).not.toContain("FB-9B19098C");
+    expect(html).not.toContain("BI-5B839D74");
+    expect(html).not.toMatch(/title="BI-/);
   });
 
   it("delete button is icon-only and hidden by default at fleet density", () => {

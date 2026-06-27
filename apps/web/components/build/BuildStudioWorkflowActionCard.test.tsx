@@ -14,9 +14,10 @@ import {
   type FeatureBuildRow,
 } from "@/lib/feature-build-types";
 
-const { mockAdvanceBuildPhase, mockCaptureDecisionInteraction, mockResumeBuildImplementation } = vi.hoisted(() => ({
+const { mockAdvanceBuildPhase, mockCaptureDecisionInteraction, mockRerunPlanReview, mockResumeBuildImplementation } = vi.hoisted(() => ({
   mockAdvanceBuildPhase: vi.fn(),
   mockCaptureDecisionInteraction: vi.fn(),
+  mockRerunPlanReview: vi.fn(),
   mockResumeBuildImplementation: vi.fn(),
 }));
 
@@ -30,6 +31,7 @@ vi.mock("@/lib/actions/build", () => ({
   advanceBuildPhase: mockAdvanceBuildPhase,
   approveBuildStart: vi.fn(),
   recordBuildAcceptance: vi.fn(),
+  rerunPlanReview: mockRerunPlanReview,
   resumeBuildImplementation: mockResumeBuildImplementation,
   resetBuildExecution: vi.fn(),
   retryBuildExecution: vi.fn(),
@@ -43,6 +45,7 @@ vi.mock("@/lib/actions/decision-perspective", () => ({
 beforeEach(() => {
   mockAdvanceBuildPhase.mockReset();
   mockCaptureDecisionInteraction.mockReset();
+  mockRerunPlanReview.mockReset();
   mockResumeBuildImplementation.mockReset();
   mockCaptureDecisionInteraction.mockResolvedValue({ status: "captured", captureType: "escalation" });
   mockResumeBuildImplementation.mockResolvedValue({
@@ -50,6 +53,10 @@ beforeEach(() => {
     resetTasks: 3,
     dispatchQueued: true,
     message: "Reset 3 tasks to BLOCKED; queued implementation resume.",
+  });
+  mockRerunPlanReview.mockResolvedValue({
+    success: true,
+    message: "Plan review passed; implementation is unlocked.",
   });
 });
 
@@ -220,9 +227,9 @@ describe("BuildStudioWorkflowActionCard resume visibility", () => {
     const onCompleted = vi.fn();
     const action: BuildStudioWorkflowAction = {
       kind: "resume-implementation",
-      title: "Click Resume to re-execute 3 blocked tasks",
-      message: "Failure axis: usage-limit. Resume will reset blocked tasks and queue the existing implementation path.",
-      primaryLabel: "Resume Implementation",
+      title: "3 tasks need another pass",
+      message: "Some work did not pass its checks yet. Next: click Try to fix to rerun the failed work from Build Studio.",
+      primaryLabel: "Try to fix",
       targetPhase: null,
       disabledReason: null,
       coworkerLabel: "Review failures with coworker",
@@ -252,15 +259,52 @@ describe("BuildStudioWorkflowActionCard resume visibility", () => {
     );
 
     expect(screen.getByText("Reset blocked tasks")).toBeInTheDocument();
+    expect(screen.getByText("Blocked (technical)")).toBeInTheDocument();
+    expect(screen.getByTestId("build-next-action")).toHaveTextContent("Next: try to fix the failed work from Build Studio.");
+    expect(screen.getByTestId("build-guided-recovery")).toHaveTextContent("Something looks off");
     expect(screen.getByText("DB")).toBeInTheDocument();
     expect(screen.getByText("3 blocked tasks will be reset before the existing resume path is queued.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Resume Implementation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Try to fix" }));
 
     await waitFor(() => {
       expect(screen.getByText("Reset 3 tasks to BLOCKED; queued implementation resume.")).toBeInTheDocument();
     });
     expect(mockResumeBuildImplementation).toHaveBeenCalledWith("FB-9B19098C");
+    expect(onCompleted).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders plan-review failure as guided in-place recovery", async () => {
+    const onCompleted = vi.fn();
+    const action: BuildStudioWorkflowAction = {
+      kind: "rerun-plan-review",
+      title: "Plan review needs a fix",
+      message: "The plan review did not pass. Next: click Try to fix to rerun the guided recovery in Build Studio.",
+      primaryLabel: "Try to fix",
+      targetPhase: null,
+      disabledReason: null,
+      coworkerLabel: "Something looks off",
+      coworkerPrompt: "Explain the blocking issues in plain language.",
+    };
+
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild({ phase: "plan", decisionInteraction: null })}
+        action={action}
+        onCompleted={onCompleted}
+      />,
+    );
+
+    expect(screen.getByText("Waiting on you")).toBeInTheDocument();
+    expect(screen.getByTestId("build-next-action")).toHaveTextContent("Next: try to fix the plan review in place.");
+    expect(screen.getByTestId("build-guided-recovery")).toHaveTextContent("Try to fix");
+    expect(screen.getByRole("button", { name: "Something looks off" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try to fix" }));
+
+    await waitFor(() => {
+      expect(mockRerunPlanReview).toHaveBeenCalledWith("FB-9B19098C");
+    });
     expect(onCompleted).toHaveBeenCalledTimes(1);
   });
 });
@@ -404,9 +448,10 @@ describe("BuildStudioWorkflowActionCard compact rendering", () => {
     // ActionBanner emits a region with the canonical aria-label.
     const banner = screen.getByRole("region", { name: "Current build action" });
     expect(banner).toBeInTheDocument();
-    // The sentence is from action.message — no separate "Build Status" or
-    // "Operational status" label duplicates the heading.
-    expect(banner).toHaveTextContent(action.message);
+    // The compact sentence is the derived one-line Next action, paired with a
+    // single operator status.
+    expect(banner).toHaveTextContent("Waiting on you");
+    expect(banner).toHaveTextContent("Next: start implementation from Build Studio.");
     expect(screen.queryByText("Build Status")).not.toBeInTheDocument();
     expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
   });
@@ -444,6 +489,8 @@ describe("BuildStudioWorkflowActionCard compact rendering", () => {
     );
     const banner = screen.getByRole("region", { name: "Current build action" });
     expect(banner).toHaveAttribute("data-state", "blocked");
+    expect(banner).toHaveTextContent("Waiting on you");
+    expect(banner).toHaveTextContent("Next: clear the missing evidence with the coworker");
     expect(banner).toHaveTextContent("Plan review failed. Refine the plan first.");
   });
 

@@ -26,7 +26,14 @@ import { CodeIntelligenceStatusCard } from "./CodeIntelligenceStatusCard";
 import { BuildAssuranceGateCard } from "./BuildAssuranceGateCard";
 import { BuildListItem } from "./BuildListItem";
 import { EpicRollupListItem } from "./EpicRollupListItem";
-import { deriveFleetCounts, deriveNeedsAttention, deriveQueueState } from "./fleet-derivation";
+import {
+  DEFAULT_BUILD_STUDIO_WIP_SLOT_CAP,
+  deriveFleetCounts,
+  deriveNeedsAttention,
+  deriveQueueState,
+  formatFleetHeader,
+} from "./fleet-derivation";
+import { QueueStateBadge } from "./QueueStateBadge";
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
@@ -780,9 +787,8 @@ export function BuildStudio({
                         className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]"
                         data-testid="build-studio-canonical-doc-trigger"
                       >
-                        {activeBuild.originator.itemId}
+                        {activeBuild.originator.title}
                       </button>
-                      <span>{activeBuild.originator.title}</span>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)]">
                       <span>Status: {activeBuild.originator.status}</span>
@@ -961,12 +967,6 @@ export function BuildStudio({
               <div className="text-center max-w-md px-8">
                 <div className="text-5xl mb-4 opacity-20">&#128736;</div>
                 <h2 className="text-lg font-bold text-[var(--dpf-text)] mb-3">Product Development Studio</h2>
-                {branchBadge && (
-                  <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-xs font-mono text-[var(--dpf-muted)] mb-4" title={branchBadge.title}>
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z" /></svg>
-                    {branchBadge.value}
-                  </div>
-                )}
                 <p className="text-sm text-[var(--dpf-muted)] leading-relaxed mb-6">
                   Build features without writing code. Describe what you want, and your AI Coworker will design, build, and deploy it.
                 </p>
@@ -1447,8 +1447,8 @@ function FleetRailZone({
 
   // Split entries into active (needs attention) vs completed (historical). The
   // fleet rail surfaces what needs attention; completed work is one click away
-  // via the "{N} completed" toggle below. Matches the "Builds: {N} running"
-  // header semantic — the list should only show inflight work by default.
+  // via the "{N} completed" toggle below. Matches the WIP-slots header
+  // semantic: the list should only show inflight work by default.
   const activeEntries = sorted.filter((e) => e.build.phase !== "complete");
   const completedEntries = sorted.filter((e) => e.build.phase === "complete");
   const activeEpicRollups = epicRollups.filter((rollup) => rollup.status !== "complete");
@@ -1457,6 +1457,7 @@ function FleetRailZone({
   const [showCompleted, setShowCompleted] = useState(false);
 
   const counts = deriveFleetCounts(entries.map((e) => e.queueState));
+  const wipSlotCap = Math.max(DEFAULT_BUILD_STUDIO_WIP_SLOT_CAP, counts.runningCount);
 
   useEffect(() => {
     if (!activeBuildId) return;
@@ -1505,17 +1506,26 @@ function FleetRailZone({
         onClick={onOpenQueueDrawer}
         role="status"
         aria-live="polite"
-        aria-label="Open build details drawer — BS queue section"
+        aria-label={`Open build details drawer - queue section. ${formatFleetHeader(counts.runningCount, wipSlotCap, counts.queuedCount)}`}
         data-testid="build-studio-fleet-header"
         className="flex w-full shrink-0 cursor-pointer items-center justify-between border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--dpf-text)] transition-colors hover:bg-[var(--dpf-surface-3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
       >
-        <span data-testid="fleet-header-label">
-          Builds: {counts.runningCount} running
+        <span data-testid="fleet-header-label" className="inline-flex min-w-0 items-center gap-1">
+          <span className="truncate">
+            {formatFleetHeader(counts.runningCount, wipSlotCap, counts.queuedCount)}
+          </span>
+          {counts.queuedCount > 0 && (
+            <QueueStateBadge
+              state={{
+                kind: "queued",
+                position: counts.queuedCount,
+                reason: "capacity",
+                ahead: Math.max(0, counts.queuedCount - 1),
+              }}
+            />
+          )}
           {counts.blockedCount > 0 && (
             <> · <span className="text-[var(--dpf-warning)]">{counts.blockedCount} blocked</span></>
-          )}
-          {counts.queuedCount > 0 && (
-            <> · {counts.queuedCount} queued</>
           )}
         </span>
         <span aria-hidden="true" className="text-[var(--dpf-muted)]">›</span>

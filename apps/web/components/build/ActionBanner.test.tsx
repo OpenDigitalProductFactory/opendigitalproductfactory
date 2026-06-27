@@ -40,6 +40,19 @@ describe("ActionBanner", () => {
     expect(matches).toHaveLength(1);
   });
 
+  it("renders the operator status through report-kit StatusBadge", () => {
+    const html = renderToStaticMarkup(
+      <ActionBanner
+        state="ready"
+        operatorStatus={{ label: "Waiting on you", intent: "accent" }}
+        sentence="Next: start implementation from Build Studio."
+      />,
+    );
+    expect(html).toContain("Waiting on you");
+    expect(html).toContain('data-intent="accent"');
+    expect(html).toContain("Next: start implementation from Build Studio.");
+  });
+
   it("does NOT render a 'Build Status' or 'Operational status' label", () => {
     const html = renderToStaticMarkup(
       <ActionBanner state="ready" sentence="Plan review passed." />,

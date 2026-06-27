@@ -10,6 +10,8 @@
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { BuildQueueState } from "./QueueStateBadge";
 
+export const DEFAULT_BUILD_STUDIO_WIP_SLOT_CAP = 3;
+
 /**
  * Derive a BuildQueueState from the FeatureBuildRow's phase + execution state.
  *
@@ -125,4 +127,12 @@ export function deriveFleetCounts(states: readonly BuildQueueState[]): {
     else if (s.kind === "blocked") blocked++;
   }
   return { runningCount: running, queuedCount: queued, blockedCount: blocked };
+}
+
+export function formatFleetHeader(
+  runningCount: number,
+  cap: number = DEFAULT_BUILD_STUDIO_WIP_SLOT_CAP,
+  queuedCount: number = 0,
+): string {
+  return `WIP slots: ${runningCount} of ${cap} in use · ${queuedCount} queued`;
 }

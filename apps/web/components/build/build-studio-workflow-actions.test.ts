@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  deriveBuildStudioOperatorGuidance,
   deriveBuildStudioWorkflowAction,
   deriveWorkflowStageGuidance,
 } from "./build-studio-workflow-actions";
@@ -325,10 +326,63 @@ describe("deriveBuildStudioWorkflowAction", () => {
     });
 
     expect(action.kind).toBe("rerun-plan-review");
-    expect(action.primaryLabel).toBe("Re-run Plan Review");
+    expect(action.primaryLabel).toBe("Try to fix");
+    expect(action.coworkerLabel).toBe("Something looks off");
     expect(action.targetPhase).toBeNull();
     expect(action.disabledReason).toBeNull();
-    expect(action.message).toContain("did not pass review");
+    expect(action.message).toContain("Next: click Try to fix");
+    expect(action.coworkerPrompt).not.toContain("saveBuildEvidence");
+    expect(action.coworkerPrompt).not.toContain("reviewBuildPlan");
+  });
+
+  it("derives a single operator status and next action for plan-review recovery", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        buildPlan: {
+          fileStructure: [{ path: "apps/web/lib/integrate/ollama-url.ts", action: "modify", purpose: "Add a clarifying comment." }],
+          tasks: [{ title: "Add comment", testFirst: "n/a for a comment", implement: "Add the comment", verify: "Read the file" }],
+        },
+        planReview: {
+          decision: "fail",
+          summary: "Missing test-first steps.",
+          issues: [{ severity: "critical", description: "Task lacks a test-first step." }],
+          iteration: { round: 1 },
+        },
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    const guidance = deriveBuildStudioOperatorGuidance(action);
+    expect(guidance.status.label).toBe("Waiting on you");
+    expect(guidance.nextLabel).toBe("Try to fix");
+    expect(guidance.nextSentence).toBe("Next: try to fix the plan review in place.");
+    expect(guidance.guidedRecovery).toBe(true);
+  });
+
+  it("labels an active build execution as Working even before the next gate unlocks", () => {
+    const build = makeBuild({
+      phase: "build",
+      draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+      buildPlan: {
+        fileStructure: [{ path: "apps/web/components/build/BuildStudio.tsx", action: "modify", purpose: "Surface workflow actions." }],
+        tasks: [{ title: "Add workflow actions", testFirst: "Add failing tests.", implement: "Render the actions.", verify: "Run the build checks." }],
+      },
+      planReview: { decision: "pass", summary: "Ready.", issues: [] },
+      buildExecState: {
+        step: "deps_installed",
+        retryCount: 0,
+        startedAt: "2026-04-25T13:10:00Z",
+      },
+    });
+    const action = deriveBuildStudioWorkflowAction({
+      build,
+      governedBacklogEnabled: true,
+    });
+
+    const guidance = deriveBuildStudioOperatorGuidance(action, build);
+    expect(guidance.status.label).toBe("Working");
+    expect(guidance.nextSentence).toContain("Next:");
   });
 
   it("does not offer re-run-plan-review when the plan review has not run yet", () => {
@@ -408,10 +462,11 @@ describe("deriveBuildStudioWorkflowAction", () => {
     });
 
     expect(action.kind).toBe("resume-implementation");
-    expect(action.primaryLabel).toBe("Resume Implementation");
-    // BI-FD796419 / Band 4 — plain copy: "clean workspace" replaced the
-    // "healthy sandbox" jargon; the message still guides the operator to Resume.
-    expect(action.message).toContain("clean workspace");
+    expect(action.primaryLabel).toBe("Try to fix");
+    // BI-FD796419 / Band 4 — plain copy guides the operator to the in-place
+    // recovery action without surfacing sandbox/runtime jargon.
+    expect(action.message).toContain("Next: click Try to fix");
+    expect(action.message).not.toContain("healthy sandbox");
   });
 
   it("does not force Resume Implementation on a review build whose scoped surface is clean despite out-of-scope test noise (BI-2F10D6D3 follow-up)", () => {
@@ -427,7 +482,7 @@ describe("deriveBuildStudioWorkflowAction", () => {
     });
 
     expect(action.kind).not.toBe("resume-implementation");
-    expect(action.primaryLabel).not.toBe("Resume Implementation");
+    expect(action.primaryLabel).not.toBe("Try to fix");
     expect(action.kind).toBe("advance-phase");
     expect(action.primaryLabel).toBe("Continue to Release");
     expect(action.targetPhase).toBe("ship");
@@ -445,7 +500,7 @@ describe("deriveBuildStudioWorkflowAction", () => {
     });
 
     expect(action.kind).toBe("resume-implementation");
-    expect(action.primaryLabel).toBe("Resume Implementation");
+    expect(action.primaryLabel).toBe("Try to fix");
   });
 
   it("names the resume action and failure axis for blocked usage-limit tasks", () => {
@@ -468,9 +523,10 @@ describe("deriveBuildStudioWorkflowAction", () => {
     });
 
     expect(action.kind).toBe("resume-implementation");
-    expect(action.title).toBe("Click Resume to re-execute 3 blocked tasks");
+    expect(action.title).toBe("3 tasks need another pass");
     expect(action.failureAxis).toBe("usage-limit");
-    expect(action.message).toContain("usage-limit");
+    expect(action.message).toContain("Next: click Try to fix");
+    expect(action.message).not.toContain("usage-limit");
     expect(action.resumeMode?.mode).toBe("reset-blocked");
   });
 
@@ -572,9 +628,10 @@ describe("deriveBuildStudioWorkflowAction", () => {
     });
 
     expect(action.kind).toBe("resume-implementation");
-    expect(action.title).toBe("Click Resume to re-execute 2 blocked tasks");
+    expect(action.title).toBe("2 tasks need another pass");
     expect(action.failureAxis).toBe("usage-limit");
-    expect(action.message).toContain("usage-limit");
+    expect(action.message).toContain("Next: click Try to fix");
+    expect(action.message).not.toContain("usage-limit");
   });
 
   it("separates out-of-scope verification noise from implementation recovery", () => {
@@ -609,10 +666,10 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.resumeMode?.mode).toBe("rerun-verification");
     // BI-FD796419 / Band 4 — the operator-facing message leads with plain
     // language (what it means + what to do), not the "Failure axis:" jargon;
-    // the technical axis is kept only as a trailing engineer detail.
+    // the technical axis is kept only on structured fields for engineer view.
     expect(action.message).not.toMatch(/^Failure axis/);
-    expect(action.message).toContain("Resume");
-    expect(action.message).toContain("out-of-scope-noise");
+    expect(action.message).toContain("Next: click Try to fix");
+    expect(action.message).not.toContain("out-of-scope-noise");
   });
 
   it("surfaces implementation recovery in review when review only contains failed execution evidence", () => {
@@ -640,7 +697,7 @@ describe("deriveBuildStudioWorkflowAction", () => {
     });
 
     expect(action.kind).toBe("resume-implementation");
-    expect(action.primaryLabel).toBe("Resume Implementation");
+    expect(action.primaryLabel).toBe("Try to fix");
     expect(action.coworkerLabel).toBe("Recover with coworker");
   });
 
@@ -789,8 +846,8 @@ describe("deriveWorkflowStageGuidance", () => {
       governedBacklogEnabled: true,
     });
 
-    expect(guidance.title).toBe("Click Resume to re-execute 1 blocked task");
-    expect(guidance.nextApproval).toContain("Resume implementation");
+    expect(guidance.title).toBe("1 task needs another pass");
+    expect(guidance.nextApproval).toContain("Try to fix");
   });
 
   it("exposes specific recovery heading details in stage guidance", () => {
@@ -812,9 +869,10 @@ describe("deriveWorkflowStageGuidance", () => {
       governedBacklogEnabled: true,
     });
 
-    expect(guidance.title).toBe("Click Resume to re-execute 3 blocked tasks");
+    expect(guidance.title).toBe("3 tasks need another pass");
     expect(guidance.workflowAction.failureAxis).toBe("usage-limit");
-    expect(guidance.workflowAction.message).toContain("usage-limit");
+    expect(guidance.workflowAction.message).toContain("Next: click Try to fix");
+    expect(guidance.workflowAction.message).not.toContain("usage-limit");
   });
 
   it("shows release guidance on the review node when review evidence is complete", () => {
@@ -958,7 +1016,7 @@ describe("deriveWorkflowStageGuidance", () => {
     expect(guidance.workflowAction.failureAxis).toBe("usage-limit");
     expect(guidance.workflowAction.failureAxis).toBe(topCardAction.failureAxis);
     expect(guidance.title).toBe(topCardAction.title);
-    expect(guidance.title).toBe("Click Resume to re-execute 2 blocked tasks");
+    expect(guidance.title).toBe("2 tasks need another pass");
   });
 
   // FB-78E967D4 — Reset Build affordance for contradictory pipeline state.

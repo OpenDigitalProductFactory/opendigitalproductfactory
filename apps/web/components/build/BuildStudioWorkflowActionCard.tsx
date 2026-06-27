@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { StatusBadge } from "@/components/ui/report-kit";
 import {
   advanceBuildPhase,
   approveBuildStart,
@@ -19,7 +20,10 @@ import type { DecisionGateCaptureDraft } from "@/lib/decision-perspective/captur
 import { ActionBanner, type ActionBannerState } from "./ActionBanner";
 import { DecisionPerspectiveGatePanel } from "./DecisionPerspectiveGatePanel";
 import { TruthSourceBadge } from "./TruthSourceBadge";
-import type { BuildStudioWorkflowAction } from "./build-studio-workflow-actions";
+import {
+  deriveBuildStudioOperatorGuidance,
+  type BuildStudioWorkflowAction,
+} from "./build-studio-workflow-actions";
 
 type Props = {
   build: FeatureBuildRow;
@@ -66,6 +70,7 @@ export function BuildStudioWorkflowActionCard({
   const [lastOutcome, setLastOutcome] = useState<ResumeBuildImplementationOutcome | null>(null);
 
   const primaryEnabled = action.kind !== "review-only" && action.disabledReason == null;
+  const operatorGuidance = useMemo(() => deriveBuildStudioOperatorGuidance(action, build), [action, build]);
   const decisionInteraction =
     action.kind === "advance-phase" && action.targetPhase === "build"
       ? build.decisionInteraction ?? null
@@ -254,18 +259,19 @@ export function BuildStudioWorkflowActionCard({
   const compactBannerEligible = compact && !decisionInteraction;
   if (compactBannerEligible) {
     const bannerState = deriveActionBannerState(build, action);
-    const bannerPrimaryAction = primaryLabel
+    const bannerPrimaryAction = operatorGuidance.nextLabel
       ? {
-        label: primaryLabel,
-        onClick: handlePrimaryAction,
-        disabled: !primaryEnabled || pending,
+        label: operatorGuidance.useCoworkerForNext ? operatorGuidance.nextLabel : (primaryLabel ?? operatorGuidance.nextLabel),
+        onClick: operatorGuidance.useCoworkerForNext ? handleCoworkerAction : handlePrimaryAction,
+        disabled: operatorGuidance.useCoworkerForNext ? false : (!primaryEnabled || pending),
       }
       : undefined;
     return (
       <div data-testid="build-studio-workflow-action-card">
         <ActionBanner
           state={bannerState}
-          sentence={action.message}
+          operatorStatus={operatorGuidance.status}
+          sentence={operatorGuidance.nextSentence}
           primaryAction={bannerPrimaryAction}
           detail={action.disabledReason ?? undefined}
         />
@@ -295,11 +301,30 @@ export function BuildStudioWorkflowActionCard({
             <p className="text-[11px] font-semibold uppercase text-[var(--dpf-muted)]">
               Build Status
             </p>
-            <h4 className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">
-              {action.title}
-            </h4>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h4 className="m-0 text-sm font-semibold text-[var(--dpf-text)]">
+                {action.title}
+              </h4>
+              <span
+                data-testid="build-operator-status"
+                className="inline-flex"
+              >
+                <StatusBadge
+                  intent={operatorGuidance.status.intent}
+                  label={operatorGuidance.status.label}
+                  variant="soft"
+                  uppercase={false}
+                />
+              </span>
+            </div>
             <p className="mt-1 text-xs leading-relaxed text-[var(--dpf-muted)]">
               {action.message}
+            </p>
+            <p
+              className="mt-1 text-xs font-medium leading-relaxed text-[var(--dpf-text)]"
+              data-testid="build-next-action"
+            >
+              {operatorGuidance.nextSentence}
             </p>
           </div>
           <span className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] font-semibold uppercase text-[var(--dpf-text)]">
@@ -350,6 +375,15 @@ export function BuildStudioWorkflowActionCard({
           voiceOutput={voiceOutput}
         />
 
+        {operatorGuidance.guidedRecovery && operatorGuidance.recoveryHint && (
+          <div
+            data-testid="build-guided-recovery"
+            className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs leading-relaxed text-[var(--dpf-muted)]"
+          >
+            {operatorGuidance.recoveryHint}
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-2">
           {primaryLabel && (
             <span
@@ -383,7 +417,7 @@ export function BuildStudioWorkflowActionCard({
             onClick={handleCoworkerAction}
             className="inline-flex items-center rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs font-semibold text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)]"
           >
-            {action.coworkerLabel}
+            {operatorGuidance.guidedRecovery ? "Something looks off" : action.coworkerLabel}
           </button>
         </div>
       </div>
