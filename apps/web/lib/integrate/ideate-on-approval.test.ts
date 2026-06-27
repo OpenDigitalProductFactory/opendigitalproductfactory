@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
-    featureBuild: { findUnique: vi.fn(), findMany: vi.fn() },
+    featureBuild: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
     backlogItem: { findUnique: vi.fn() },
     buildActivity: { create: vi.fn() },
   },
@@ -38,6 +38,7 @@ vi.mock("@/lib/build/escalate-build-to-human", () => ({
 import {
   dispatchIdeateForApprovedBuild,
   buildNeedsIdeateDispatch,
+  getIdeateResearchRequest,
   dispatchApprovedIdeateBuilds,
   dispatchDesignReviewFixLoop,
 } from "./ideate-on-approval";
@@ -326,6 +327,25 @@ describe("buildNeedsIdeateDispatch (BI-3E0EE3BA)", () => {
   });
 });
 
+describe("getIdeateResearchRequest", () => {
+  it("reads an explicit start_ideate_research request and its context", () => {
+    expect(getIdeateResearchRequest({
+      ideateResearchRequested: true,
+      userContext: "Focus on appointment capacity.",
+      reusabilityScope: "one-off",
+    })).toEqual({
+      requested: true,
+      userContext: "Focus on appointment capacity.",
+      reusabilityScope: "one-off",
+    });
+  });
+
+  it("ignores missing or false request flags", () => {
+    expect(getIdeateResearchRequest(null)).toEqual({ requested: false });
+    expect(getIdeateResearchRequest({ ideateResearchRequested: false })).toEqual({ requested: false });
+  });
+});
+
 describe("dispatchApprovedIdeateBuilds (BI-3E0EE3BA recovery)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -334,10 +354,10 @@ describe("dispatchApprovedIdeateBuilds (BI-3E0EE3BA recovery)", () => {
 
   it("fires dispatch only for approved drafts still missing a designDoc, bounded by limit", async () => {
     mockPrisma.featureBuild.findMany.mockResolvedValue([
-      { buildId: "FB-A", designDoc: null },                         // needs
-      { buildId: "FB-B", designDoc: { problemStatement: "done" } }, // already has → not counted
-      { buildId: "FB-C", designDoc: { problemStatement: "" } },     // needs
-      { buildId: "FB-D", designDoc: null },                         // needs
+      { buildId: "FB-A", designDoc: null, buildExecState: null },                         // needs
+      { buildId: "FB-B", designDoc: { problemStatement: "done" }, buildExecState: null }, // already has → not counted
+      { buildId: "FB-C", designDoc: { problemStatement: "" }, buildExecState: null },     // needs
+      { buildId: "FB-D", designDoc: null, buildExecState: null },                         // needs
     ]);
     // Inner dispatch returns fast (skipped-no-bi, no LLM) — we're asserting the
     // recovery's selection + iteration, not the dispatch internals.
@@ -359,6 +379,59 @@ describe("dispatchApprovedIdeateBuilds (BI-3E0EE3BA recovery)", () => {
           phase: "ideate",
           draftApprovedAt: { not: null },
           abandonedAt: null,
+        }),
+      }),
+    );
+  });
+
+  it("consumes an explicit ideate re-request even when a designDoc already exists", async () => {
+    mockPrisma.featureBuild.findMany.mockResolvedValue([
+      {
+        buildId: "FB-R",
+        designDoc: { problemStatement: "Existing design." },
+        buildExecState: {
+          ideateResearchRequested: true,
+          userContext: "Re-check capacity conflicts.",
+          reusabilityScope: "template",
+        },
+      },
+    ]);
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({
+        originatingBacklogItemId: "cmpcuid-r",
+        designDoc: { problemStatement: "Existing design." },
+        title: "Fallback Title",
+        description: "Fallback description.",
+      })
+      .mockResolvedValueOnce({ designDoc: { problemStatement: "Revised design." } });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({
+      title: "BI Title",
+      body: "Original BI body.",
+      effortSize: "medium",
+    });
+    mockDispatchIdeateResearch.mockResolvedValue({
+      success: true,
+      designDoc: { problemStatement: "Revised design.", proposedApproach: "x".repeat(60) },
+      rawOutput: "",
+      durationMs: 99,
+    });
+    mockExecuteTool.mockResolvedValue({ success: true });
+    mockPrisma.featureBuild.update.mockResolvedValue({});
+
+    const res = await dispatchApprovedIdeateBuilds({ userId: "u-1" });
+
+    expect(res).toEqual({ candidates: 1, dispatched: 1, skipped: 0 });
+    expect(mockDispatchIdeateResearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reusabilityScope: "template",
+        userContext: expect.stringContaining("Re-check capacity conflicts."),
+      }),
+    );
+    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { buildId: "FB-R" },
+        data: expect.objectContaining({
+          buildExecState: expect.objectContaining({ ideateResearchRequested: false }),
         }),
       }),
     );

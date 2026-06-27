@@ -242,7 +242,12 @@ async function readPlanReview(buildId: string): Promise<{ decision: string; issu
 async function runPlanReview(buildId: string, userId: string, log: (s: string) => Promise<void>): Promise<void> {
   try {
     const { executeTool } = await import("@/lib/mcp-tools");
-    const reviewResult = await executeTool("reviewBuildPlan", { buildId }, userId, { featureBuildId: buildId });
+    const reviewResult = await executeTool(
+      "reviewBuildPlan",
+      { buildId },
+      userId,
+      { featureBuildId: buildId, suppressPlanReviewAutoRepair: true },
+    );
     const reviewSummary = typeof reviewResult.message === "string" ? reviewResult.message.slice(0, 200) : "review complete";
     await log(`Auto-reviewBuildPlan: ${reviewSummary}`);
   } catch (reviewErr) {

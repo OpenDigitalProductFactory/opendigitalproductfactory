@@ -51,6 +51,7 @@ import {
   saveLicensingInvestigationFinding,
 } from "@/lib/actions/licensing-compliance";
 import type { ReviewBranchInput } from "@/lib/integrate/build-reviewers";
+import { triggerDesignReviewAutoRepair, triggerPlanReviewAutoRepair } from "@/lib/integrate/pre-build-review-auto-repair";
 import {
   getIntegrationBenchmarkMetadata,
   matchesIntegrationBenchmarkFilters,
@@ -93,6 +94,7 @@ type ToolExecutionContext = {
   agentId?: string;
   threadId?: string;
   taskRunId?: string;
+  suppressDesignReviewAutoRepair?: boolean; suppressPlanReviewAutoRepair?: boolean;
   /**
    * Build the user is currently messaging from. Plumbed by agentic-loop.ts
    * from runAgenticLoop's `featureBuildId` param so phase-scoped tools can
@@ -8166,6 +8168,7 @@ export async function executeTool(
         if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
         logBuildActivity(buildId, "reviewDesignDoc", `Fix review: ${review.decision}. ${review.summary}`);
         if (review.decision === "fail") {
+          triggerDesignReviewAutoRepair(buildId, userId, context);
           return { success: true, message: `Fix review FAILED. ${review.issues[0]?.description ?? review.summary}`, data: { review, blocked: true, action: "revise_and_resubmit" } };
         }
         let fixPhaseGateBlocker: string | null = null;
@@ -8343,6 +8346,7 @@ export async function executeTool(
 
       // Failed review → structured recovery instructions, no auto-advance
       if (review.decision === "fail") {
+        triggerDesignReviewAutoRepair(buildId, userId, context);
         const criticalIssues = review.issues.filter((i: { severity: string }) => i.severity === "critical");
         const issueList = criticalIssues.length > 0
           ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
@@ -8653,6 +8657,7 @@ export async function executeTool(
           agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
         }
         logBuildActivity(buildId, "reviewBuildPlan", `Plan review: fail. ${review.summary}`);
+        triggerPlanReviewAutoRepair(buildId, userId, context);
         return {
           success: true,
           message: `Plan review FAILED. Blocking issues: ${normalizedPlan.unresolvedModifyPaths.join(", ")} no longer exist in the repo. Revise the implementation plan to target the current files, then re-run reviewBuildPlan.`,
@@ -8827,6 +8832,7 @@ export async function executeTool(
           planReviewIsGating = true; // fail safe: keep the stricter loop on any gate-read error
         }
         if (planReviewIsGating) {
+          triggerPlanReviewAutoRepair(buildId, userId, context);
           const criticalIssues = review.issues.filter((i: { severity: string }) => i.severity === "critical");
           const issueList = criticalIssues.length > 0
             ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
@@ -8849,14 +8855,6 @@ export async function executeTool(
       }
 
       // Passed review → auto-advance if gate is satisfied.
-      // NOTE: Cannot call advanceBuildPhase (server action) here because auth()
-      // has no HTTP request context inside the agentic loop. Direct DB update instead.
-      //
-      // Same pattern as reviewDesignDoc's auto-advance: checkPhaseGate also
-      // evaluates evidence.happyPathState, which must be passed from
-      // build.plan or the intake check fails silently. Reading the plan and
-      // pulling happyPathState out so the gate sees the real anchors —
-      // see the fix in reviewDesignDoc for the backstory.
       try {
         const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
         const { deriveFeatureBuildDependencyGate, FEATURE_BUILD_DEPENDENCY_GATE_SELECT } = await import("@/lib/build/feature-build-dependencies");

@@ -1826,7 +1826,7 @@ export async function sendMessage(input: {
             const { executeTool } = await import("@/lib/mcp-tools");
             await executeTool(
               "saveBuildEvidence",
-              { field: "scoutFindings", value: scoutResult.result },
+              { buildId: resolvedBuildId, field: "scoutFindings", value: scoutResult.result },
               user.id!,
               { routeContext: input.routeContext }
             );
@@ -1873,18 +1873,14 @@ export async function sendMessage(input: {
           // Build context for the research
           const buildCtx = await getFeatureBuildForContext(resolvedBuildId, user.id!);
           // Use the active provider — Claude, Codex, or Grok depending on config
-          const ideateProviderId =
-            config.provider === "claude"
-              ? config.claudeProviderId
-              : config.provider === "grok"
-                ? config.grokProviderId
-                : config.codexProviderId;
-          const ideateModel =
-            config.provider === "claude"
-              ? config.claudeModel
-              : config.provider === "grok"
-                ? config.grokModel
-                : config.codexModel;
+          const ideateProviderId = config.provider === "claude" ? config.claudeProviderId
+            : config.provider === "grok" ? config.grokProviderId
+            : config.provider === "opencode" ? config.opencodeProviderId
+            : config.codexProviderId;
+          const ideateModel = config.provider === "claude" ? config.claudeModel
+            : config.provider === "grok" ? config.grokModel
+            : config.provider === "opencode" ? config.opencodeModel
+            : config.codexModel;
 
           const ideateResult = await dispatchIdeateResearch({
             featureTitle: buildForResearch?.title ?? "Untitled Feature",
@@ -1915,7 +1911,7 @@ export async function sendMessage(input: {
             const { executeTool } = await import("@/lib/mcp-tools");
             const saveResult = await executeTool(
               "saveBuildEvidence",
-              { field: "designDoc", value: ideateResult.designDoc },
+              { buildId: resolvedBuildId, field: "designDoc", value: ideateResult.designDoc },
               user.id!,
               { routeContext: input.routeContext },
             );
@@ -1933,7 +1929,7 @@ export async function sendMessage(input: {
                 // Run the design doc review
                 console.log(`[coworker] Running reviewDesignDoc...`);
                 agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
-                const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
+                const reviewResult = await executeTool("reviewDesignDoc", { buildId: resolvedBuildId }, user.id!, { routeContext: input.routeContext });
                 console.log(`[coworker] reviewDesignDoc result: success=${reviewResult.success}, msg=${JSON.stringify(reviewResult.message?.slice(0, 100))}`);
                 agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
 
@@ -1959,7 +1955,7 @@ export async function sendMessage(input: {
                 const patchedDoc = { ...rawDoc, existingCodeAudit: fallbackAudit };
                 const retryResult = await executeTool(
                   "saveBuildEvidence",
-                  { field: "designDoc", value: patchedDoc },
+                  { buildId: resolvedBuildId, field: "designDoc", value: patchedDoc },
                   user.id!,
                   { routeContext: input.routeContext },
                 );
@@ -1971,7 +1967,7 @@ export async function sendMessage(input: {
                     responseContent = "The codebase research ran but didn't produce a complete design. The research engine may have had trouble accessing the codebase. Please try starting the feature again — if the problem persists, check that the sandbox is running.";
                   } else {
                     agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
-                    const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
+                    const reviewResult = await executeTool("reviewDesignDoc", { buildId: resolvedBuildId }, user.id!, { routeContext: input.routeContext });
                     agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
                     const reviewDecision = (reviewResult.data as { review?: { decision?: string }; blocked?: boolean } | undefined);
                     const reviewPassed = reviewDecision?.review?.decision === "pass" && !reviewDecision?.blocked;
