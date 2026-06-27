@@ -82,7 +82,16 @@ describe("install-state.schema.json agentToolchain block", () => {
 
   it("schema readinessState enum covers every value the materializer can emit", () => {
     const declared: string[] = schema.properties.agentToolchain.properties.readinessState.enum;
-    const expected = ["ready", "partial", "missing_cli", "missing_token", "needs_refresh", "failed_smoke"];
+    const expected = [
+      "ready",
+      "partial",
+      "missing_cli",
+      "missing_token",
+      "needs_refresh",
+      "failed_smoke",
+      "portal-unavailable",
+      "mcp-unavailable",
+    ];
     expect(declared.sort()).toEqual(expected.sort());
   });
 

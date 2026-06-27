@@ -188,6 +188,17 @@ describe("planCodexConfig", () => {
     expect(plan.preservedUserIntent).toBe(false);
   });
 
+  it("accepts a UTF-8 BOM at the start of a Windows-written config", () => {
+    const plan = planCodexConfig(`\uFEFF${operatorRedacted}`, REPO, CONFIG_PATH);
+
+    expect(plan.writes).toHaveLength(1);
+    expect(plan.rationale).not.toMatch(/TOML parse error/);
+    const parsed = parse(plan.writes[0].content) as {
+      plugins: Record<string, { enabled?: boolean }>;
+    };
+    expect(parsed.plugins["dpf-platform"].enabled).toBe(true);
+  });
+
   it("handles empty existing config (fresh contributor)", () => {
     const plan = planCodexConfig("", REPO, CONFIG_PATH);
 

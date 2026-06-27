@@ -84,9 +84,11 @@ export async function runMcpReadinessProbe(args: {
 
     return interpretMcpReadinessResponse(response.status, body, observedAt);
   } catch (err) {
-    // AbortError or network failure both map to endpoint_unreachable.
+    // AbortError or network failure means the portal endpoint itself is not
+    // currently reachable. A reachable portal with a broken MCP route is
+    // classified later from the HTTP response.
     void err;
-    return { ok: false, reason: "endpoint_unreachable", httpStatus: null };
+    return { ok: false, reason: "portal-unavailable", httpStatus: null };
   } finally {
     clearTimeout(timeout);
   }

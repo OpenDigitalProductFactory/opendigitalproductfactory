@@ -62,12 +62,34 @@ describe("interpretMcpReadinessResponse", () => {
 
   it("returns endpoint_unreachable for 5xx", () => {
     const result = interpretMcpReadinessResponse(503, {}, OBSERVED);
-    expect(result).toEqual({ ok: false, reason: "endpoint_unreachable", httpStatus: 503 });
+    expect(result).toEqual({ ok: false, reason: "mcp-unavailable", httpStatus: 503 });
   });
 
-  it("returns endpoint_unreachable for status=0 (no response)", () => {
+  it("returns portal-unavailable for status=0 (no response)", () => {
     const result = interpretMcpReadinessResponse(0, null, OBSERVED);
-    expect(result).toEqual({ ok: false, reason: "endpoint_unreachable", httpStatus: null });
+    expect(result).toEqual({ ok: false, reason: "portal-unavailable", httpStatus: null });
+  });
+
+  it("classifies a rebooting/quiescing portal response separately from MCP route failures", () => {
+    const result = interpretMcpReadinessResponse(
+      503,
+      {
+        error: {
+          message: "portal_quiescing: the portal is rebooting",
+        },
+      },
+      OBSERVED,
+    );
+    expect(result).toEqual({ ok: false, reason: "portal-unavailable", httpStatus: 503 });
+  });
+
+  it("classifies a reachable portal with an unavailable MCP route as mcp-unavailable", () => {
+    const result = interpretMcpReadinessResponse(
+      404,
+      { error: { message: "No route matches /api/mcp/v1" } },
+      OBSERVED,
+    );
+    expect(result).toEqual({ ok: false, reason: "mcp-unavailable", httpStatus: 404 });
   });
 
   it("returns unexpected_shape for 200 with no tools array", () => {

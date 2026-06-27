@@ -79,6 +79,16 @@ export {
 } from "./probes";
 
 export {
+  createLocalEvidenceEnvelope,
+  parseEvidenceQueue,
+  planEvidenceQueueWrite,
+  reconcileEvidenceQueue,
+  type EvidenceQueueReconcileResult,
+  type EvidenceQueueSendResult,
+  type LocalEvidenceEnvelope,
+} from "./evidence-queue";
+
+export {
   normalizeRepoPath,
   repoPathsMatch,
 } from "./path-normalize";

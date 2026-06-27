@@ -55,11 +55,12 @@ export type UpstreamVersionDrift = {
  */
 export function detectSuperpowersDrift(codexTomlText: string): UpstreamVersionDrift {
   const pinned = PINNED_UPSTREAM_VERSIONS.superpowers;
+  const normalizedTomlText = codexTomlText.replace(/^\uFEFF/, "");
   let observed: string | null = null;
   let present = false;
 
   try {
-    const parsed = (codexTomlText.length > 0 ? parse(codexTomlText) : {}) as Record<string, unknown>;
+    const parsed = (normalizedTomlText.length > 0 ? parse(normalizedTomlText) : {}) as Record<string, unknown>;
     const plugins = (parsed["plugins"] as Record<string, unknown> | undefined) ?? {};
     // Try the canonical OpenAI-curated id first, then fall back to other
     // marketplace suffixes (a user might be on a beta channel).

@@ -32,6 +32,14 @@ describe("readinessCopy", () => {
       message: "The agent is installed but did not apply a DPF kernel principle.",
       primaryAction: "View evidence",
     });
+    expect(readinessCopy("portal-unavailable")).toEqual({
+      message: "The portal is rebooting; I can still repair local agent tooling and will sync evidence when it comes back.",
+      primaryAction: "Continue local repair",
+    });
+    expect(readinessCopy("mcp-unavailable")).toEqual({
+      message: "DPF coordination is unavailable; I can still repair local agent tooling and will sync evidence when it returns.",
+      primaryAction: "Continue local repair",
+    });
   });
 
   it("contains no substrate names in any banner copy (UX contract)", () => {
@@ -52,6 +60,8 @@ describe("readinessCopy", () => {
       "missing_token",
       "needs_refresh",
       "failed_smoke",
+      "portal-unavailable",
+      "mcp-unavailable",
     ];
     for (const state of states) {
       const copy = readinessCopy(state);
@@ -93,14 +103,24 @@ describe("computeReadinessState", () => {
     ).toBe("missing_token");
   });
 
-  it("returns needs_refresh when MCP endpoint unreachable", () => {
+  it("returns portal-unavailable when the portal cannot be reached or is rebooting", () => {
     expect(
       computeReadinessState({
         claudeCodeWired: true,
         codexWired: true,
-        mcpReadiness: { ok: false, reason: "endpoint_unreachable", httpStatus: null },
+        mcpReadiness: { ok: false, reason: "portal-unavailable", httpStatus: null },
       }),
-    ).toBe("needs_refresh");
+    ).toBe("portal-unavailable");
+  });
+
+  it("returns mcp-unavailable when the portal is reachable but MCP is unavailable", () => {
+    expect(
+      computeReadinessState({
+        claudeCodeWired: true,
+        codexWired: true,
+        mcpReadiness: { ok: false, reason: "mcp-unavailable", httpStatus: 404 },
+      }),
+    ).toBe("mcp-unavailable");
   });
 
   it("returns failed_smoke when the smoke test failed but everything else is fine", () => {

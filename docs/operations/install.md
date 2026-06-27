@@ -10,7 +10,7 @@ That sentence is the whole contract for non-technical contributors. Everything b
 
 ## Agent toolchain readiness
 
-After the install completes, `install-dpf` prints a single readiness banner. There are six possible states. The wording shown to the contributor matches this table exactly — drift between the table and the installer copy is a CI lint enforced by `readiness-state.test.ts` in the `@dpf/bootstrap` package.
+After the install completes, `install-dpf` prints a single readiness banner. There are eight possible states. The wording shown to the contributor matches this table exactly — drift between the table and the installer copy is a CI lint enforced by `readiness-state.test.ts` in the `@dpf/bootstrap` package.
 
 | State | Banner message | Primary action |
 |---|---|---|
@@ -19,6 +19,8 @@ After the install completes, `install-dpf` prints a single readiness banner. The
 | `missing_cli` | Install the selected agent client to enable contributor sessions. | Open setup guide |
 | `missing_token` | DPF MCP needs a development token before agents can use governed tools. | Issue development token |
 | `needs_refresh` | A token exists, but the running client has not picked it up yet. | Refresh client binding |
+| `portal-unavailable` | The portal is rebooting; I can still repair local agent tooling and will sync evidence when it comes back. | Continue local repair |
+| `mcp-unavailable` | DPF coordination is unavailable; I can still repair local agent tooling and will sync evidence when it returns. | Continue local repair |
 | `failed_smoke` | The agent is installed but did not apply a DPF kernel principle. | View evidence |
 
 ### Why each state appears
@@ -28,6 +30,8 @@ After the install completes, `install-dpf` prints a single readiness banner. The
 - **`missing_cli`** — neither Claude Code nor Codex CLI was detected. The contributor needs to install one before any agent work is possible. The installer does NOT print a command for the contributor to type — install the CLI from its official documentation, then re-run the installer.
 - **`missing_token`** — the DPF MCP server requires a bearer token before governed tools (backlog, build studio, deliberations) become available. Issue one from **Admin > Platform Development > MCP** in the portal.
 - **`needs_refresh`** — a token exists in the contributor's environment, but the running client hasn't picked it up yet. Restart Claude Code / Codex in this worktree. If the issue persists after restart, the endpoint is unreachable or returning an unexpected shape — collect a `dpf-doctor` bundle.
+- **`portal-unavailable`** — a token exists, but the portal endpoint cannot be reached or is clearly rebooting/quiescing. The bootstrap still performs local-only repairs such as plugin convergence, MCP client config writes, and memory seeding, then records a local state that can be reconciled after the portal returns.
+- **`mcp-unavailable`** — the portal is reachable enough to answer, but the MCP route is missing, unavailable, or returning a server-side failure that is not a portal reboot signal. The bootstrap still performs the same local repairs and keeps the contributor unblocked for source-local work.
 - **`failed_smoke`** — the installed CLI responded to the kernel smoke prompt but did not include any of the expected refusal signatures. This is usually a CLI version that hasn't loaded the kernel memory yet. See the smoke-test transcript under `~/.dpf/install-state.json` → `agentToolchain.smokeTest.transcript`.
 
 ### Idempotence guarantee

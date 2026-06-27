@@ -135,9 +135,10 @@ export function planCodexConfig(
   configPath: string,
   mcpEndpoint?: string,
 ): CodexConfigPlan {
+  const normalizedTomlText = existingTomlText.replace(/^\uFEFF/, "");
   let parsed: Record<string, unknown>;
   try {
-    parsed = (existingTomlText.length > 0 ? parse(existingTomlText) : {}) as Record<string, unknown>;
+    parsed = (normalizedTomlText.length > 0 ? parse(normalizedTomlText) : {}) as Record<string, unknown>;
   } catch (err) {
     return {
       writes: [],

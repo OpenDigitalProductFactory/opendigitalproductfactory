@@ -63,6 +63,14 @@ enabled = true
     expect(drift.status).toBe("match");
   });
 
+  it("accepts a UTF-8 BOM at the start of a Windows-written config", () => {
+    const drift = detectSuperpowersDrift(`\uFEFF
+[plugins."superpowers@openai-curated"]
+enabled = true
+`);
+    expect(drift.status).toBe("match");
+  });
+
   it("treats unparseable TOML as missing (defensive)", () => {
     const drift = detectSuperpowersDrift("[unterminated\nkey = ");
     expect(drift.status).toBe("missing");

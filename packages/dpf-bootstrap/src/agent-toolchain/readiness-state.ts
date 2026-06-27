@@ -39,6 +39,14 @@ const COPY: Record<ReadinessState, ReadinessCopy> = {
     message: "The agent is installed but did not apply a DPF kernel principle.",
     primaryAction: "View evidence",
   },
+  "portal-unavailable": {
+    message: "The portal is rebooting; I can still repair local agent tooling and will sync evidence when it comes back.",
+    primaryAction: "Continue local repair",
+  },
+  "mcp-unavailable": {
+    message: "DPF coordination is unavailable; I can still repair local agent tooling and will sync evidence when it returns.",
+    primaryAction: "Continue local repair",
+  },
 };
 
 export function readinessCopy(state: ReadinessState): ReadinessCopy {
@@ -65,6 +73,12 @@ export function computeReadinessState(
   if (mcp && !mcp.ok) {
     if (mcp.reason === "no_token" || mcp.reason === "scope_insufficient") {
       return "missing_token";
+    }
+    if (mcp.reason === "portal-unavailable") {
+      return "portal-unavailable";
+    }
+    if (mcp.reason === "mcp-unavailable") {
+      return "mcp-unavailable";
     }
     if (mcp.reason === "endpoint_unreachable" || mcp.reason === "unexpected_shape") {
       return "needs_refresh";
