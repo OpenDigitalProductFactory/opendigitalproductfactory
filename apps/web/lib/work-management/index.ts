@@ -1,5 +1,6 @@
 export * from "./action-registry";
 export * from "./architecture-grounding";
+export * from "./case-telemetry";
 export * from "./case-read-model";
 export * from "./case-types";
 export * from "./policy-envelope";
