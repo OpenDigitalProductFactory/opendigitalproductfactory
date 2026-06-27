@@ -8,7 +8,7 @@ version: 1
 agent_id: AGT-R2D-PB
 reports_to: HR-200
 delegates_to: []
-value_stream: Request to Deploy
+value_stream: integrate
 hitl_tier: 3
 status: active
 

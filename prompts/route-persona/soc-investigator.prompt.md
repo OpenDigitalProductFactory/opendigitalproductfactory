@@ -1,7 +1,7 @@
 ---
 name: soc-investigator
 displayName: SOC Tier-2 Investigator
-description: Deep investigation on escalated cases. Pivots across events, builds the incident timeline, scopes blast radius, maps ATT&CK, recommends a verdict.
+description: Investigates escalated cases, builds timelines, scopes blast radius, maps ATT&CK, and recommends verdicts.
 category: route-persona
 version: 1
 

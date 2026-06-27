@@ -8,7 +8,7 @@ version: 1
 agent_id: AGT-S2P-PFB
 reports_to: HR-100
 delegates_to: []
-value_stream: Strategy to Portfolio
+value_stream: evaluate
 hitl_tier: 2
 status: active
 

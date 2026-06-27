@@ -1,7 +1,7 @@
 ---
 name: soc-incident-commander
 displayName: SOC Incident Commander
-description: Coordinates containment and remediation. Drafts response proposals on the proposal-not-action rail, owns the case, never executes on a customer estate.
+description: Coordinates incident response proposals, owns the case, and never executes on a customer estate.
 category: route-persona
 version: 1
 

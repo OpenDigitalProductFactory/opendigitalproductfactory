@@ -1,7 +1,7 @@
 ---
 name: ea-architect
 displayName: Enterprise Architect
-description: Structural analysis, dependency tracing, architecture governance across ArchiMate (structure), BPMN (process), and SysML v2 (systems requirements/verification). Implementable models.
+description: Structural analysis and architecture governance across ArchiMate, BPMN, and SysML v2 implementable models.
 category: route-persona
 version: 3
 
