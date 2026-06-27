@@ -4,16 +4,26 @@ import { useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Network, Users } from "lucide-react";
 
-import type { AttentionSignal, PortalContextEnvelope } from "@/lib/portal-context";
+import type {
+  AttentionSignal,
+  FeatureBuildAnchor,
+  PortalContextEnvelope,
+  WorkCapsuleAnchor,
+} from "@/lib/portal-context";
 import { PortalContextOverlayDrawer } from "./PortalContextOverlayDrawer";
 
-export function PortalContextStrip({ envelope }: { envelope: PortalContextEnvelope | null }) {
+type PortalContextStripProps = {
+  envelope: PortalContextEnvelope | null;
+  showInternalIds?: boolean;
+};
+
+export function PortalContextStrip({ envelope, showInternalIds = true }: PortalContextStripProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   if (!envelope) return null;
 
   const primarySignal = envelope.attention[0] ?? null;
-  const buildLabel = envelope.work.featureBuild?.buildId ?? "No active build";
-  const capsuleLabel = envelope.work.capsule?.capsuleId ?? "No capsule";
+  const buildLabel = formatBuildLabel(envelope.work.featureBuild ?? null, showInternalIds);
+  const capsuleLabel = formatCapsuleLabel(envelope.work.capsule ?? null, showInternalIds);
   // D11 (2026-05-23): suppress the AttentionChip rendering when it would
   // duplicate the "No active build" text already shown in the buildLabel
   // chip to its left. The chip's job is to carry build identity; when
@@ -37,10 +47,18 @@ export function PortalContextStrip({ envelope }: { envelope: PortalContextEnvelo
           <span className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs font-medium text-[var(--dpf-text)]">
             {envelope.route.domain}
           </span>
-          <span className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs text-[var(--dpf-muted)]">
+          <span
+            className="inline-block max-w-[18rem] truncate rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs text-[var(--dpf-muted)]"
+            title={formatBuildTitle(envelope.work.featureBuild ?? null, showInternalIds)}
+            data-testid="portal-context-build-label"
+          >
             {buildLabel}
           </span>
-          <span className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs text-[var(--dpf-muted)]">
+          <span
+            className="inline-block max-w-[18rem] truncate rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs text-[var(--dpf-muted)]"
+            title={formatCapsuleTitle(envelope.work.capsule ?? null, showInternalIds)}
+            data-testid="portal-context-capsule-label"
+          >
             {capsuleLabel}
           </span>
           {primarySignal && showAttentionChip && <AttentionChip signal={primarySignal} />}
@@ -73,6 +91,30 @@ export function PortalContextStrip({ envelope }: { envelope: PortalContextEnvelo
       />
     </div>
   );
+}
+
+function formatBuildLabel(build: FeatureBuildAnchor | null, showInternalIds: boolean): string {
+  if (!build) return "No active build";
+  if (showInternalIds) return build.buildId;
+  return build.title || "Active build";
+}
+
+function formatCapsuleLabel(capsule: WorkCapsuleAnchor | null, showInternalIds: boolean): string {
+  if (!capsule) return "No capsule";
+  if (showInternalIds) return capsule.capsuleId;
+  return capsule.title || "Work capsule";
+}
+
+function formatBuildTitle(build: FeatureBuildAnchor | null, showInternalIds: boolean): string | undefined {
+  if (!build) return undefined;
+  if (showInternalIds) return `${build.title || "Active build"} (${build.buildId})`;
+  return build.title || "Active build";
+}
+
+function formatCapsuleTitle(capsule: WorkCapsuleAnchor | null, showInternalIds: boolean): string | undefined {
+  if (!capsule) return undefined;
+  if (showInternalIds) return `${capsule.title || "Work capsule"} (${capsule.capsuleId})`;
+  return capsule.title || "Work capsule";
 }
 
 function AttentionChip({ signal }: { signal: AttentionSignal }) {

@@ -68,6 +68,7 @@ describe("EpicRollupListItem", () => {
     expect(html).toContain("1 of 3 done");
     expect(html).toContain("2 backlog items");
     expect(html).toContain("Updated May 25");
+    expect(html).not.toContain("EP-TRUCK-STOCK");
     expect(html).not.toContain("Low-stock surfacing");
   });
 

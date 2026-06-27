@@ -66,9 +66,6 @@ export function EpicRollupListItem({
           className="flex min-w-0 flex-1 flex-col gap-0.5 text-left focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
         >
           <span className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0 font-mono text-[11px] text-[var(--dpf-text)]">
-              {rollup.epicId}
-            </span>
             <span className="min-w-0 truncate text-[11px] font-semibold text-[var(--dpf-text)]">
               {rollup.title}
             </span>

@@ -314,7 +314,9 @@ describe("BuildStudio NodeInspector lifecycle", () => {
     graphState.onNodeClick!(mockClickInfo());
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
   });
 
   it("Ask-coworker button dispatches open-agent-panel with the right prefill", async () => {

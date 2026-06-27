@@ -9,10 +9,8 @@
 //
 // Per the design spec §1 (Footer) and §6 (component contract):
 //   - Renders <a target="_blank" rel="noopener noreferrer"> — rel is non-optional.
-//   - Label: "Open live preview · driving: {code | 'idle'}". The component
-//     name (OpenSandboxButton) and the underlying URL still point at the
-//     "sandbox" compose service — only the user-facing string flipped
-//     per the 2026-05-24 portal topology consolidation spec §8.1.
+//   - Default label: "Open live preview · current build" / "idle". Engineering
+//     surfaces may opt into the semantic FB-* code for diagnostics.
 //   - Disabled visual + aria-disabled when sandboxUrl is empty.
 //   - Deterministic driver via sandbox-driver helper (R1 from peer review).
 //
@@ -31,10 +29,19 @@ export type OpenSandboxButtonProps = {
   drivingBuildCode: string | null;
   /** Sandbox preview URL. Empty/null disables the button. */
   sandboxUrl: string;
+  /** Show the raw FB-* code in the label. Defaults to true for compatibility;
+   *  Build Studio's non-technical default passes false. */
+  showDrivingBuildCode?: boolean;
 };
 
-export function OpenSandboxButton({ drivingBuildCode, sandboxUrl }: OpenSandboxButtonProps) {
-  const label = formatSandboxLabel(drivingBuildCode);
+export function OpenSandboxButton({
+  drivingBuildCode,
+  sandboxUrl,
+  showDrivingBuildCode = true,
+}: OpenSandboxButtonProps) {
+  const label = showDrivingBuildCode
+    ? formatSandboxLabel(drivingBuildCode)
+    : formatOperatorSandboxLabel(drivingBuildCode);
   const isDisabled = !sandboxUrl || sandboxUrl.trim().length === 0;
 
   if (isDisabled) {
@@ -65,4 +72,8 @@ export function OpenSandboxButton({ drivingBuildCode, sandboxUrl }: OpenSandboxB
       {label}
     </a>
   );
+}
+
+function formatOperatorSandboxLabel(drivingBuildCode: string | null): string {
+  return drivingBuildCode ? "Open live preview · current build" : "Open live preview · idle";
 }
