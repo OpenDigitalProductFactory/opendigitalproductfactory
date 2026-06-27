@@ -55,10 +55,20 @@ export async function dispatchIdeateForApprovedBuild(params: {
    *  context so the regenerated designDoc addresses them. Setting this also
    *  bypasses the idempotency guard (we WANT to overwrite the rejected doc). */
   priorReviewFeedback?: string;
+  /** Explicit operator/coworker re-request context from start_ideate_research. */
+  requestedUserContext?: string;
+  requestedReusabilityScope?: string;
   /** Bypass the designDoc idempotency guard (a fix-loop regeneration). */
   forceRegenerate?: boolean;
 }): Promise<DispatchOutcome> {
-  const { buildId, userId, priorReviewFeedback, forceRegenerate = false } = params;
+  const {
+    buildId,
+    userId,
+    priorReviewFeedback,
+    requestedUserContext,
+    requestedReusabilityScope,
+    forceRegenerate = false,
+  } = params;
 
   const logActivity = async (summary: string): Promise<void> => {
     await prisma.buildActivity.create({
@@ -100,7 +110,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
     // designDoc shape is BuildDesignDoc | null; we treat presence of a
     // non-empty problemStatement as "real evidence already saved".
     const existingDesignDoc = build.designDoc as { problemStatement?: string } | null;
-    const skipIdempotent = !forceRegenerate && !priorReviewFeedback;
+    const skipIdempotent = !forceRegenerate && !priorReviewFeedback && !requestedUserContext;
     if (skipIdempotent && existingDesignDoc && typeof existingDesignDoc.problemStatement === "string" && existingDesignDoc.problemStatement.trim().length > 0) {
       const outcome: DispatchOutcome = {
         kind: "skipped-already-has-design",
@@ -175,9 +185,11 @@ export async function dispatchIdeateForApprovedBuild(params: {
     const featureDescription = bi.body || build.description || "";
     // BI body is the operator-authored context; on a fix-loop regeneration we
     // append the reviewer's prior issues so the revised design addresses them.
-    const userContext = priorReviewFeedback
-      ? `${bi.body || ""}\n\n${priorReviewFeedback}`
-      : (bi.body || "");
+    const userContext = [
+      bi.body || "",
+      priorReviewFeedback ?? "",
+      requestedUserContext ? `Operator requested another ideate pass:\n${requestedUserContext}` : "",
+    ].filter((part) => part.trim().length > 0).join("\n\n");
 
     const startedAt = Date.now();
     await logActivity(`Dispatching ideate research via ${config.provider} (provider=${providerId}, model=${model || "default"})`);
@@ -197,7 +209,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
     const ideateResult = await dispatchIdeateResearch({
       featureTitle,
       featureDescription,
-      reusabilityScope: "parameterizable",
+      reusabilityScope: requestedReusabilityScope || "parameterizable",
       userContext,
       // businessContext: see select comment above — field does not exist on
       // FeatureBuild. Passing undefined preserves the dispatch signature.
@@ -332,6 +344,37 @@ export function buildNeedsIdeateDispatch(designDoc: unknown): boolean {
   );
 }
 
+export function getIdeateResearchRequest(buildExecState: unknown): {
+  requested: boolean;
+  userContext?: string;
+  reusabilityScope?: string;
+} {
+  if (!buildExecState || typeof buildExecState !== "object" || Array.isArray(buildExecState)) {
+    return { requested: false };
+  }
+  const state = buildExecState as Record<string, unknown>;
+  if (state.ideateResearchRequested !== true) return { requested: false };
+  return {
+    requested: true,
+    userContext: typeof state.userContext === "string" ? state.userContext : undefined,
+    reusabilityScope: typeof state.reusabilityScope === "string" ? state.reusabilityScope : undefined,
+  };
+}
+
+async function clearIdeateResearchRequest(buildId: string, buildExecState: unknown): Promise<void> {
+  const state =
+    buildExecState && typeof buildExecState === "object" && !Array.isArray(buildExecState)
+      ? { ...(buildExecState as Record<string, unknown>) }
+      : {};
+  state.ideateResearchRequested = false;
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: { buildExecState: state as unknown as import("@dpf/db").Prisma.InputJsonValue },
+  }).catch((err) => {
+    console.warn("[ideate-on-approval] Failed to clear ideateResearchRequested:", { buildId }, err);
+  });
+}
+
 /**
  * BI-3E0EE3BA — recover/auto-drive Ideate for backlog-promoted drafts that were
  * auto-approved (draftApprovedAt set by the governed tee-up) but never had their
@@ -360,19 +403,29 @@ export async function dispatchApprovedIdeateBuilds(params: {
       parentEpicId: null,
       originatingBacklogItemId: { not: null },
     },
-    select: { buildId: true, designDoc: true },
+    select: { buildId: true, designDoc: true, buildExecState: true },
     orderBy: { draftApprovedAt: "asc" },
     take: 50,
   });
   const pending = approved
-    .filter((b) => buildNeedsIdeateDispatch(b.designDoc))
+    .filter((b) => buildNeedsIdeateDispatch(b.designDoc) || getIdeateResearchRequest(b.buildExecState).requested)
     .slice(0, limit);
 
   let dispatched = 0;
   let skipped = 0;
   for (const b of pending) {
+    const request = getIdeateResearchRequest(b.buildExecState);
     // dispatchIdeateForApprovedBuild never throws and is idempotent.
-    const outcome = await dispatchIdeateForApprovedBuild({ buildId: b.buildId, userId });
+    const outcome = await dispatchIdeateForApprovedBuild({
+      buildId: b.buildId,
+      userId,
+      forceRegenerate: request.requested,
+      requestedUserContext: request.userContext,
+      requestedReusabilityScope: request.reusabilityScope,
+    });
+    if (request.requested) {
+      await clearIdeateResearchRequest(b.buildId, b.buildExecState);
+    }
     if (outcome.kind === "dispatched-success") dispatched += 1;
     else skipped += 1;
   }
@@ -462,7 +515,12 @@ export async function dispatchDesignReviewFixLoop(params: {
         await log(`Design regeneration round ${round} produced no designDoc (${regen.kind}) — stopping.`);
         break;
       }
-      await executeTool("reviewDesignDoc", { buildId }, userId, { featureBuildId: buildId });
+      await executeTool(
+        "reviewDesignDoc",
+        { buildId },
+        userId,
+        { featureBuildId: buildId, suppressDesignReviewAutoRepair: true },
+      );
       const fresh = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designReview: true } });
       review = fresh?.designReview as DesignReviewVerdict;
     }
