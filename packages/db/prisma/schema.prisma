@@ -11192,20 +11192,27 @@ model ResearchProposal {
 }
 
 model CoworkerTurnMetric {
-  id              String   @id @default(cuid())
-  threadId        String
-  agentMessageId  String
-  agentId         String?
-  routeContext    String?
-  taskType        String?
-  providerId      String?
-  modelId         String?
-  dispatches      Int      @default(0)
-  nudges          Int      @default(0)
-  toolsAttached   Boolean  @default(false)
-  executedTools   Int      @default(0)
-  totalMs         Int?
-  createdAt       DateTime @default(now())
+  id                           String   @id @default(cuid())
+  threadId                     String
+  agentMessageId               String
+  agentId                      String?
+  routeContext                 String?
+  taskType                     String?
+  providerId                   String?
+  modelId                      String?
+  dispatches                   Int      @default(0)
+  nudges                       Int      @default(0)
+  toolsAttached                Boolean  @default(false)
+  executedTools                Int      @default(0)
+  totalMs                      Int?
+  ctxPeakTokens                Int?
+  ctxWindowTokens              Int?
+  toolSurfaceCount             Int?
+  toolDefinitionTokens         Int?
+  toolSurfaceExceedsLocalCliff Boolean  @default(false)
+  toolSurfaceWindowShare       Float?
+  toolSelectionAccuracy        Float?
+  createdAt                    DateTime @default(now())
 
   @@unique([threadId, agentMessageId])
   @@index([createdAt])

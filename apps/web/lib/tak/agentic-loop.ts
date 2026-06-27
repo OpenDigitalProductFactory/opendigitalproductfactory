@@ -1294,6 +1294,7 @@ export async function runAgenticLoop(params: {
     // definition-token cost banded against the local selection cliff, plus this
     // turn's tool-selection accuracy. Observability-only — never changes what is
     // sent; makes a ballooning surface or a repeatedly-failing tool loud.
+    const ctxPressure = classifyContextPressure(ctxPeakTokens, resolvedMaxContextTokens);
     const surface = assessToolSurface({ tools: toolsForProvider, windowTokens: resolvedMaxContextTokens });
     const turnToolAccuracy = computeToolSelectionAccuracy(
       executedTools.map((t) => ({ toolName: t.name, success: t.result.success })),
@@ -1305,7 +1306,7 @@ export async function runAgenticLoop(params: {
         `dispatches=${inferenceCallCount} nudges=${continuationNudges} ` +
         `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} ` +
         `totalMs=${Date.now() - startTime} ` +
-        `ctxPeakTokens=${ctxPeakTokens} ctxZone=${classifyContextPressure(ctxPeakTokens, resolvedMaxContextTokens).zone} ` +
+        `ctxPeakTokens=${ctxPeakTokens} ctxZone=${ctxPressure.zone} ` +
         `toolSurface=${surface.toolCount} estToolTokens=${surface.estDefinitionTokens} surfaceZone=${surface.zone} ` +
         `toolAccuracy=${turnToolAccuracy.total === 0 ? "na" : turnToolAccuracy.accuracy.toFixed(2)}`,
       ),
@@ -1325,6 +1326,13 @@ export async function runAgenticLoop(params: {
       toolsAttached: toolsAttachedForTurn,
       executedTools: executedTools.length,
       totalMs: Date.now() - startTime,
+      ctxPeakTokens: ctxPressure.estimatedTokens,
+      ctxWindowTokens: resolvedMaxContextTokens,
+      toolSurfaceCount: surface.toolCount,
+      toolDefinitionTokens: surface.estDefinitionTokens,
+      toolSurfaceExceedsLocalCliff: surface.exceedsLocalCliff,
+      toolSurfaceWindowShare: surface.windowShare,
+      toolSelectionAccuracy: turnToolAccuracy.total === 0 ? null : turnToolAccuracy.accuracy,
     });
   };
 

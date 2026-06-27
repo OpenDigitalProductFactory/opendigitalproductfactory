@@ -89,6 +89,45 @@ describe("recordCoworkerTurnMetric", () => {
     });
   });
 
+  it("persists numeric context and tool-surface telemetry", async () => {
+    const { upsert, getDelegate } = makeDelegate();
+
+    await recordCoworkerTurnMetric(
+      {
+        threadId: "thr-ctx",
+        agentMessageId: "msg-ctx",
+        ctxPeakTokens: 82000,
+        ctxWindowTokens: 128000,
+        toolSurfaceCount: 18,
+        toolDefinitionTokens: 9500,
+        toolSurfaceExceedsLocalCliff: true,
+        toolSurfaceWindowShare: 0.074,
+        toolSelectionAccuracy: 0.5,
+      },
+      { getDelegate },
+    );
+
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.create).toMatchObject({
+      ctxPeakTokens: 82000,
+      ctxWindowTokens: 128000,
+      toolSurfaceCount: 18,
+      toolDefinitionTokens: 9500,
+      toolSurfaceExceedsLocalCliff: true,
+      toolSurfaceWindowShare: 0.074,
+      toolSelectionAccuracy: 0.5,
+    });
+    expect(arg.update).toMatchObject({
+      ctxPeakTokens: 82000,
+      ctxWindowTokens: 128000,
+      toolSurfaceCount: 18,
+      toolDefinitionTokens: 9500,
+      toolSurfaceExceedsLocalCliff: true,
+      toolSurfaceWindowShare: 0.074,
+      toolSelectionAccuracy: 0.5,
+    });
+  });
+
   it("does not write when threadId is missing", async () => {
     const { upsert, getDelegate } = makeDelegate();
     await recordCoworkerTurnMetric(
