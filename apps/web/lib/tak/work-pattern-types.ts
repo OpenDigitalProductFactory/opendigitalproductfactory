@@ -325,7 +325,10 @@ export function mergeWorkPatternMetadata(
 }
 
 export function normalizePatternText(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.]+$/g, "");
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, " ");
+  let end = normalized.length;
+  while (end > 0 && normalized.charCodeAt(end - 1) === 46) end -= 1;
+  return end === normalized.length ? normalized : normalized.slice(0, end);
 }
 
 export function workPatternFingerprint(input: {

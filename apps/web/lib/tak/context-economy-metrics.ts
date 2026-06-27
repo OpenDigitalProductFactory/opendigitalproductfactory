@@ -100,6 +100,23 @@ export type ToolSelectionAccuracy = {
   perTool: Record<string, { total: number; succeeded: number; accuracy: number }>;
 };
 
+export function contextEconomyTurnMetricFields(
+  ctxPeakTokens: number,
+  ctxWindowTokens: number | null,
+  surface: ToolSurfaceAssessment,
+  accuracy: ToolSelectionAccuracy,
+) {
+  return {
+    ctxPeakTokens,
+    ctxWindowTokens,
+    toolSurfaceCount: surface.toolCount,
+    toolDefinitionTokens: surface.estDefinitionTokens,
+    toolSurfaceExceedsLocalCliff: surface.exceedsLocalCliff,
+    toolSurfaceWindowShare: surface.windowShare,
+    toolSelectionAccuracy: accuracy.total === 0 ? null : accuracy.accuracy,
+  };
+}
+
 /**
  * Tool-selection / tool-call accuracy over a set of executed tool calls: the
  * fraction that succeeded, overall and per tool. Used per-turn (over the turn's

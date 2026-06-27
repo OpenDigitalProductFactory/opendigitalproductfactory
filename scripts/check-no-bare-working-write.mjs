@@ -31,6 +31,15 @@ const ALLOWLIST = new Set([
   // time (not a transition from submitted/etc). The downstream agentic loop
   // emits its own heartbeats at iteration boundaries (Phase D1).
   "apps/web/lib/tak/reflection-triggers.ts",
+  // Creates bounded, proactive pattern-observer TaskRuns already in "working"
+  // state at birth; they complete/fail in the same observer transaction scope.
+  "apps/web/lib/tak/pattern-observer/core.ts",
+  // Creates periodic pattern-review TaskRuns in "working" at birth and closes
+  // them after the synchronous observer pass; this is not a queued transition.
+  "apps/web/lib/tak/pattern-observer/periodic-review.ts",
+  // Creates scheduled work-pattern profile review TaskRuns in "working" at
+  // birth and completes them at the end of the scheduled review.
+  "apps/web/lib/tak/work-pattern-profile-review.ts",
   // Creates the Build Studio work-capsule TaskRun envelope in "working" at
   // birth. Build pipeline (Phase D3) heartbeats from the step loop.
   "apps/web/lib/work-capsules/build-studio-attachment.ts",

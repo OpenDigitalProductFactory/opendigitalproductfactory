@@ -107,9 +107,8 @@ type CandidateSpec = {
 };
 
 const GRANT_DENIAL_PATTERNS = [
-  "forbidden_grant",
   "forbidden grant",
-  "insufficient_token_scope",
+  "insufficient token scope",
 ];
 const LOW_TOOL_ACCURACY_THRESHOLD = 0.7;
 
@@ -128,7 +127,7 @@ function executionErrorText(execution: PatternObserverToolExecution): string {
 }
 
 function hasGrantDenial(text: string): boolean {
-  const normalized = normalizePatternText(text).replace(/_/g, "_");
+  const normalized = normalizePatternText(text).replaceAll("_", " ");
   return GRANT_DENIAL_PATTERNS.some((pattern) => normalized.includes(pattern));
 }
 

@@ -105,6 +105,7 @@ describe("work pattern metadata helpers", () => {
 
   it("normalizes repeated need text into stable fingerprints", () => {
     expect(normalizePatternText("  Needs   better SEARCH. ")).toBe("needs better search");
+    expect(normalizePatternText("Needs better SEARCH...")).toBe("needs better search");
     expect(
       workPatternFingerprint({
         agentId: "Agent A",

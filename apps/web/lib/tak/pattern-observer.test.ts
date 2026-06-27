@@ -100,6 +100,32 @@ describe("classifyPatternSignals", () => {
     });
   });
 
+  it("normalizes underscore-delimited grant denial text", () => {
+    const out = classifyPatternSignals({
+      agentId: "AGT-OPS",
+      routeContext: "/ops",
+      since: new Date("2026-06-27T00:00:00Z"),
+      toolExecutions: [
+        failedTool({
+          id: "scope-1",
+          toolName: "record_execution_evidence",
+          summary: "insufficient_token_scope: write required",
+        }),
+        failedTool({
+          id: "scope-2",
+          toolName: "record_execution_evidence",
+          summary: "insufficient_token_scope: write required",
+        }),
+      ],
+      turnMetrics: [],
+      taskRuns: [],
+      envelopes: [],
+      priorNeedFingerprints: new Set(),
+    });
+
+    expect(out.needs[0]?.kind).toBe("grant");
+  });
+
   it("classifies tool-surface overload as a tool need", () => {
     const out = classifyPatternSignals({
       agentId: "AGT-BUILD",

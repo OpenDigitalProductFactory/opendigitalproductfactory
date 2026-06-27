@@ -51,6 +51,7 @@ const SKIP_DIRS = new Set([
 // module-size ratchet.
 const EXCLUDE_RE = [
   /\.d\.ts$/,
+  /^packages\/db\/generated\//,
   /^packages\/db\/src\/seed.*\.ts$/,
   /^packages\/db\/src\/.*-corpus\.ts$/,
   /^packages\/db\/scripts\/seed-.*\.ts$/,
