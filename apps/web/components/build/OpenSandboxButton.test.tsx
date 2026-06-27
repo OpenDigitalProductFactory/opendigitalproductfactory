@@ -37,6 +37,20 @@ describe("OpenSandboxButton", () => {
     expect(html).toContain("driving: idle");
   });
 
+  it("can hide the raw driving build code from the visible operator label", () => {
+    const html = renderToStaticMarkup(
+      <OpenSandboxButton
+        drivingBuildCode="FB-B33E84B5"
+        sandboxUrl="http://localhost:5555"
+        showDrivingBuildCode={false}
+      />,
+    );
+
+    expect(html).toContain("Open live preview · current build");
+    expect(html).toContain('data-driving="FB-B33E84B5"');
+    expect(html).not.toContain("driving: FB-B33E84B5");
+  });
+
   it("emits data-driving for snapshot diffing", () => {
     const html = renderToStaticMarkup(
       <OpenSandboxButton drivingBuildCode="FB-CCC" sandboxUrl="http://localhost:5555" />,

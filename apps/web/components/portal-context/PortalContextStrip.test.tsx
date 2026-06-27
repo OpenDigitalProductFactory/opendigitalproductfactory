@@ -87,6 +87,51 @@ describe("PortalContextStrip", () => {
     expect(html).not.toMatch(/bg-\[var\(--dpf-error\)\][^"]*text-\[var\(--dpf-error\)\]/);
     expect(html).toContain("Missing evidence");
   });
+
+  it("hides raw build and capsule IDs in operator-facing mode", () => {
+    const base = makeEnvelope();
+    const html = renderToStaticMarkup(
+      <PortalContextStrip
+        envelope={{
+          ...base,
+          work: {
+            ...base.work,
+            capsule: {
+              capsuleId: "WC-12345678",
+              title: "Operator handoff",
+              status: "working",
+              executorKind: "build-studio",
+              executorRef: null,
+              leaseHolderPrincipalId: null,
+              leaseExpiresAt: null,
+              isLeaseExpired: false,
+              isStale: false,
+              scopeClaims: [],
+              scopeClaimPrincipalIds: [],
+              branchName: "feat/internal-branch",
+              href: "/build/work/WC-12345678",
+            },
+            featureBuild: {
+              buildId: "FB-87654321",
+              title: "Backlog launched build",
+              phase: "review",
+              status: "active",
+              evidenceComplete: false,
+              href: "/build?buildId=FB-87654321",
+              updatedAt: "2026-06-27T02:00:00.000Z",
+            },
+          },
+        }}
+        showInternalIds={false}
+      />,
+    );
+
+    expect(html).toContain("Backlog launched build");
+    expect(html).toContain("Operator handoff");
+    expect(html).not.toContain("FB-87654321");
+    expect(html).not.toContain("WC-12345678");
+    expect(html).not.toContain("feat/internal-branch");
+  });
 });
 
 function makeEnvelope(overrides: Partial<PortalContextEnvelope> = {}): PortalContextEnvelope {

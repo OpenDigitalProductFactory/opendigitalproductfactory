@@ -706,7 +706,10 @@ export function BuildStudio({
 
         {/* Right: Preview or Brief */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--dpf-surface-1)]">
-          <PortalContextStrip envelope={portalContext ?? null} />
+          <PortalContextStrip
+            envelope={portalContext ?? null}
+            showInternalIds={engineerView || headerDetailsExpanded}
+          />
           {activeBuild ? (
             <>
               <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--dpf-border)] px-4 py-3">
@@ -994,7 +997,10 @@ export function BuildStudio({
       {/* Footer — single shared OpenSandboxButton (sandbox is shared across
           all in-flight builds; surfacing one link labeled with the current
           driver replaces the dishonest per-build Preview tab). */}
-      <BuildStudioFooter builds={supervisedBuildRows} />
+      <BuildStudioFooter
+        builds={supervisedBuildRows}
+        showDrivingBuildCode={engineerView || headerDetailsExpanded}
+      />
     </div>
   );
 }
@@ -1309,7 +1315,13 @@ function NodeInspectorBody({ info }: { info: ProcessGraphNodeClickInfo }) {
   return <p className="text-[var(--dpf-muted)]">Workflow node selected.</p>;
 }
 
-function BuildStudioFooter({ builds }: { builds: FeatureBuildRow[] }) {
+function BuildStudioFooter({
+  builds,
+  showDrivingBuildCode,
+}: {
+  builds: FeatureBuildRow[];
+  showDrivingBuildCode: boolean;
+}) {
   const candidates: SandboxDriverCandidate[] = builds.map((b) => ({
     buildCode: b.buildId,
     sandboxPort: b.sandboxPort,
@@ -1336,6 +1348,7 @@ function BuildStudioFooter({ builds }: { builds: FeatureBuildRow[] }) {
       <OpenSandboxButton
         drivingBuildCode={driving?.buildCode ?? null}
         sandboxUrl={sandboxUrl}
+        showDrivingBuildCode={showDrivingBuildCode}
       />
     </div>
   );

@@ -422,7 +422,8 @@ describe("BuildStudio active-build header layout", () => {
 
     expect(html).toContain("Portal context");
     expect(html).toContain("Build Studio");
-    expect(html).toContain("WC-123");
+    expect(html).toContain("Portal overlay");
+    expect(html).not.toContain("WC-123");
   });
 
   it("renders a studio approval control for backlog-linked builds that are missing start approval", () => {
@@ -511,6 +512,8 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toContain('data-testid="build-studio-footer"');
     expect(html).toContain('data-testid="build-studio-open-sandbox"');
     expect(html).toContain('data-driving="FB-9B19098C"');
+    expect(html).toContain("Open live preview · current build");
+    expect(html).not.toContain("driving: FB-9B19098C");
     expect(html).toContain('href="http://localhost:5555"');
     expect(html).toMatch(/rel="noopener noreferrer"/);
   });
