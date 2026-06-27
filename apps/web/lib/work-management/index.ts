@@ -3,6 +3,7 @@ export * from "./architecture-grounding";
 export * from "./case-read-model";
 export * from "./case-types";
 export * from "./policy-envelope";
+export * from "./receipt-coverage";
 export * from "./receipt-envelope";
 export * from "./source-registry";
 export * from "./status-projection";
