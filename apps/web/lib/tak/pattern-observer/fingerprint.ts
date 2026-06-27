@@ -15,6 +15,14 @@ export type EvidenceFingerprintInput = {
   evidence?: unknown;
 };
 
+export type JsonEvidence =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonEvidence[]
+  | { [key: string]: JsonEvidence };
+
 export function capabilityNeedKey(agentId: string, kind: string, need: string): string {
   return capabilityNeedOriginId(agentId, kind, need);
 }
@@ -23,17 +31,41 @@ export function improvementSignalKey(sourceType: string, sourceId: string): Impr
   return { sourceType, sourceId };
 }
 
-function stableJson(value: unknown): string {
+function compareKeys(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function isPlainObject(value: object): value is Record<string, unknown> {
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function stableJson(value: unknown, path = "evidence"): string {
   if (Array.isArray(value)) {
-    return `[${value.map(stableJson).sort().join(",")}]`;
+    return `[${value.map((entry, index) => stableJson(entry, `${path}[${index}]`)).join(",")}]`;
   }
 
   if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .filter(([, entry]) => entry !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
+    if (!isPlainObject(value)) {
+      throw new TypeError(`Evidence fingerprint only supports JSON-compatible objects at ${path}`);
+    }
+
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => compareKeys(left, right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry, `${path}.${key}`)}`)
       .join(",")}}`;
+  }
+
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    throw new TypeError(`Evidence fingerprint only supports finite numbers at ${path}`);
+  }
+
+  if (value === undefined || typeof value === "function" || typeof value === "symbol") {
+    throw new TypeError(`Evidence fingerprint only supports JSON-compatible values at ${path}`);
+  }
+
+  if (typeof value === "bigint") {
+    throw new TypeError(`Evidence fingerprint only supports JSON-compatible values at ${path}`);
   }
 
   return JSON.stringify(value) ?? "null";

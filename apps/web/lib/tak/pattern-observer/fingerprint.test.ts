@@ -26,7 +26,7 @@ describe("pattern observer fingerprint helpers", () => {
     });
   });
 
-  it("keeps equivalent evidence payloads on the same fingerprint", () => {
+  it("keeps object-key-equivalent evidence payloads on the same fingerprint", () => {
     const first = evidenceFingerprint({
       agentId: "agent-1",
       routeContext: "/build-studio",
@@ -49,13 +49,26 @@ describe("pattern observer fingerprint helpers", () => {
       evidence: {
         source: { type: "platform_issue_report", id: "PIR-123" },
         observations: [
-          { message: "manual retry", count: 1 },
           { count: 2, message: "missing step" },
+          { message: "manual retry", count: 1 },
         ],
       },
     });
 
     expect(second).toBe(first);
+  });
+
+  it("keeps ordered evidence arrays distinct", () => {
+    const base = {
+      agentId: "agent-1",
+      routeContext: "/build-studio",
+      kind: "tool",
+      need: "needs a governed playbook",
+    };
+
+    expect(evidenceFingerprint({ ...base, evidence: ["start", "fail"] })).not.toBe(
+      evidenceFingerprint({ ...base, evidence: ["fail", "start"] }),
+    );
   });
 
   it("changes when the normalized need changes", () => {
@@ -69,5 +82,16 @@ describe("pattern observer fingerprint helpers", () => {
     expect(evidenceFingerprint({ ...base, need: "needs a governed playbook" })).not.toBe(
       evidenceFingerprint({ ...base, need: "needs a governed runbook" }),
     );
+  });
+
+  it("rejects non-json evidence values instead of collapsing them", () => {
+    expect(() =>
+      evidenceFingerprint({
+        agentId: "agent-1",
+        kind: "tool",
+        need: "needs a governed playbook",
+        evidence: { observedAt: new Date("2026-06-27T00:00:00.000Z") },
+      }),
+    ).toThrow(/JSON-compatible/);
   });
 });
