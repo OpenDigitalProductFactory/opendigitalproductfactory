@@ -8,3 +8,4 @@ export * from "./receipt-coverage";
 export * from "./receipt-envelope";
 export * from "./source-registry";
 export * from "./status-projection";
+export * from "./work-case-governance-hook";

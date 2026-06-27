@@ -511,3 +511,113 @@ describe("governedExecuteTool — coworker read-baseline at execution time", () 
     expect(executeMock).not.toHaveBeenCalled();
   });
 });
+
+describe("governedExecuteTool — Work Case receipt context", () => {
+  const WORK_CASE_CONTEXT = {
+    caseRef: {
+      caseId: "backlog-item:BI-1",
+      sourceType: "backlog-item",
+      sourceId: "BI-1",
+    },
+    sourceKey: "backlog-item",
+    action: "complete",
+    currentState: {
+      state: "active",
+      terminal: false,
+    },
+    envelope: {
+      autonomyMode: "autonomous",
+      receiptPolicy: {
+        required: true,
+        kind: "governed-action",
+      },
+    },
+  } as const;
+
+  it("does not mint a Work Case receipt when context.workCase is absent", async () => {
+    await governedExecuteTool({
+      toolName: "query_backlog",
+      rawParams: {},
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      source: "rest",
+    });
+
+    expect(receiptRows).toHaveLength(0);
+  });
+
+  it("mints a governed Work Case receipt for successful consequential actions", async () => {
+    _setGovernanceForTests({
+      resolveAgentGrants: async () => ["backlog_write"],
+      isAllowedByGrants: () => true,
+      executeTool: executeMock,
+      toolExecutionCreate: async (data: AuditRow) => {
+        auditRows.push(data);
+        return { id: "tool-exec-work-case-1" };
+      },
+      toolExecutionReceiptCreate: captureAudit(receiptRows),
+    });
+
+    await governedExecuteTool({
+      toolName: "update_backlog_item_status",
+      rawParams: { itemId: "BI-1", status: "done" },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      context: {
+        workCase: WORK_CASE_CONTEXT,
+      },
+      source: "external-jsonrpc",
+    });
+
+    expect(receiptRows).toHaveLength(1);
+    expect(receiptRows[0]).toEqual(
+      expect.objectContaining({
+        buildId: null,
+        executionStatus: "succeeded",
+        receiptKind: "work-case-governed-action",
+        receiptStatus: "valid",
+        toolExecutionId: "tool-exec-work-case-1",
+      }),
+    );
+  });
+
+  it("mints an invalid governed Work Case receipt for failed consequential actions", async () => {
+    _setGovernanceForTests({
+      resolveAgentGrants: async () => ["backlog_write"],
+      isAllowedByGrants: () => true,
+      executeTool: vi.fn(
+        async (): Promise<ToolResult> => ({
+          success: false,
+          error: "failed",
+          message: "could not update",
+        }),
+      ) as ReturnType<typeof vi.fn> & ExecuteFn,
+      toolExecutionCreate: async (data: AuditRow) => {
+        auditRows.push(data);
+        return { id: "tool-exec-work-case-2" };
+      },
+      toolExecutionReceiptCreate: captureAudit(receiptRows),
+    });
+
+    await governedExecuteTool({
+      toolName: "update_backlog_item_status",
+      rawParams: { itemId: "BI-1", status: "done" },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      context: {
+        workCase: WORK_CASE_CONTEXT,
+      },
+      source: "external-jsonrpc",
+    });
+
+    expect(receiptRows).toHaveLength(1);
+    expect(receiptRows[0]).toEqual(
+      expect.objectContaining({
+        executionStatus: "failed",
+        receiptKind: "work-case-governed-action",
+        receiptStatus: "invalid",
+        toolExecutionId: "tool-exec-work-case-2",
+      }),
+    );
+  });
+});
