@@ -139,7 +139,7 @@ jobs:
         with:
           node-version: 24
       - name: Test pr-health verdict logic
-        run: node --test scripts/pr-health.test.mjs
+        run: node --test scripts/pr-health.test.mjs scripts/check-ci-build-cache.test.mjs
 
   mobile-jest-pin-guard:
     name: Mobile Jest Pin Guard
@@ -663,17 +663,18 @@ jobs:
 
       # Restore Turbopack's filesystem cache (written under .next/cache when
       # DPF_TURBOPACK_BUILD_CACHE=1 enables experimental.turbopackFileSystemCacheForBuild).
-      # Key rolls on any web source change; restore-keys warm-start from the
-      # most recent build for the same deps. NOTE: hashFiles does NOT support
-      # brace globs ({ts,tsx}), so each extension is a separate arg.
+      # Key rolls on any web source change. Keep this exact-key only: broad
+      # restore-keys can hydrate stale multi-GB Turbopack caches on PRs, making
+      # the production build slower than a clean compile and vulnerable to
+      # hosted-runner cancellation before TypeScript completes. Exact-key hits
+      # still accelerate reruns of the same commit. NOTE: hashFiles does NOT
+      # support brace globs ({ts,tsx}), so each extension is a separate arg.
       - name: Cache Turbopack build cache
         if: needs.changes.outputs.heavy == 'true'
         uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/apps/web/.next/cache
           key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx', 'apps/web/**/*.js', 'apps/web/**/*.jsx') }}
-          restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
       - name: Build web (Next.js production)
         if: needs.changes.outputs.heavy == 'true'
