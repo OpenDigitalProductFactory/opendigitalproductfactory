@@ -20,6 +20,7 @@ vi.mock("@dpf/db", () => ({
     delegationChain: { findMany: vi.fn() },
     phaseHandoff: { findMany: vi.fn() },
     deliberationRun: { findMany: vi.fn() },
+    agentActionProposal: { findMany: vi.fn() },
   },
 }));
 
@@ -29,6 +30,13 @@ vi.mock("next/link", () => ({
       {children}
     </a>
   ),
+}));
+
+vi.mock("@/lib/inference/phase-model-resolution", () => ({
+  resolveModelSelectionByPhase: vi.fn().mockResolvedValue({
+    generatedAt: "2026-06-28T20:00:00.000Z",
+    phases: [],
+  }),
 }));
 
 import { prisma } from "@dpf/db";
@@ -119,11 +127,13 @@ describe("AI operations map page", () => {
     ] as never);
     vi.mocked(prisma.modelProfile.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.phaseHandoff.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.deliberationRun.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
 
     const { default: OperationsMapPage } = await import("./page");
     const element = await OperationsMapPage();
