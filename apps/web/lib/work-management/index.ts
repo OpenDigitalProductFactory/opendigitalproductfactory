@@ -11,4 +11,5 @@ export * from "./source-registry";
 export * from "./staged-transition";
 export * from "./status-projection";
 export * from "./stop-conditions";
+export * from "./workspace-case-loader";
 export * from "./work-case-governance-hook";

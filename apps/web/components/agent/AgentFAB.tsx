@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Bot } from "lucide-react";
 
 type Props = {
   onClick: () => void;
@@ -91,33 +92,20 @@ export function AgentFAB({ onClick }: Props) {
     <button
       type="button"
       data-agent-fab="true"
+      className="fixed right-3 z-50 hidden h-10 w-10 select-none items-center justify-center gap-1.5 rounded-full p-0 text-xs font-medium text-[var(--dpf-text)] transition-opacity sm:right-4 sm:flex sm:h-auto sm:w-auto sm:rounded-[20px] sm:px-4 sm:py-2"
       onMouseDown={handleMouseDown}
       onClick={handleClick}
       aria-label="Open AI Coworker"
       title="Open AI Coworker"
       style={{
-        position: "fixed",
-        right: 16,
         top: `${yPercent}%`,
         transform: "translateY(-50%)",
-        padding: "8px 16px",
-        borderRadius: 20,
         background: "color-mix(in srgb, var(--dpf-accent) 50%, transparent)",
         backdropFilter: "blur(8px)",
         WebkitBackdropFilter: "blur(8px)",
         border: "1px solid color-mix(in srgb, var(--dpf-accent) 25%, transparent)",
         cursor: "grab",
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
         boxShadow: "0 4px 16px color-mix(in srgb, var(--dpf-bg) 30%, transparent)",
-        zIndex: 50,
-        transition: "opacity 0.15s",
-        color: "var(--dpf-text)",
-        fontSize: 12,
-        fontWeight: 500,
-        whiteSpace: "nowrap",
-        userSelect: "none",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.opacity = "0.9";
@@ -126,11 +114,12 @@ export function AgentFAB({ onClick }: Props) {
         e.currentTarget.style.opacity = "1";
       }}
     >
+      <Bot className="size-4" aria-hidden="true" />
       <span
-        className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--dpf-success)]"
+        className="hidden h-1.5 w-1.5 rounded-full bg-[var(--dpf-success)] sm:inline-block"
         style={{ boxShadow: "0 0 6px color-mix(in srgb, var(--dpf-success) 50%, transparent)" }}
       />
-      AI Coworker
+      <span className="hidden whitespace-nowrap sm:inline">AI Coworker</span>
     </button>
   );
 }

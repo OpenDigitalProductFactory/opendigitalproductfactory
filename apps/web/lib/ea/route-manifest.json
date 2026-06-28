@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 522,
+  "routeCount": 523,
   "routes": [
     {
       "routePath": "/",
@@ -6090,6 +6090,19 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/workspace/calendar/page.tsx"
+    },
+    {
+      "routePath": "/workspace/cases/[caseKey]",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "cases",
+        "[caseKey]"
+      ],
+      "dynamicParams": [
+        "caseKey"
+      ],
+      "file": "apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx"
     },
     {
       "routePath": "/workspace/documents",

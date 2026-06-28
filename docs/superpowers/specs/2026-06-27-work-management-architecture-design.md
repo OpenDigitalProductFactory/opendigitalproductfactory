@@ -1,7 +1,7 @@
 # Company-Level Work Management Architecture
 
 Date: 2026-06-27
-Status: Accepted design; Wave 2 implementation in progress
+Status: Accepted design; Wave 3 implementation in progress
 Owner: DPF architecture
 Related capsule: WC-0A3909A2
 Epic: EP-2984B02B - Work Case / Company Work Management
@@ -11,6 +11,8 @@ Wave 1 BI: BI-D633F7AF - Work Case governed Actions, receipt envelope, and cover
 Wave 1 plan: docs/superpowers/plans/2026-06-27-work-case-wave-1-enforcement.md
 Wave 2 BI: BI-WC-WAVE2 - Work Case accountability, staged transitions, and stop conditions
 Wave 2 plan: docs/superpowers/plans/2026-06-28-work-case-wave-2-accountability.md
+Wave 3 BI: BI-WC-WAVE3 - Workspace attention lens and Work Case detail surfaces
+Wave 3 plan: docs/superpowers/plans/2026-06-28-work-case-wave-3-operator-surfaces.md
 Sibling spec: docs/superpowers/specs/2026-06-27-governed-adaptive-playbooks-design.md (the method-improvement pillar that binds to this object)
 
 ## Summary
@@ -97,7 +99,7 @@ The current schema and code already contain most of the required primitives:
 Two refactoring signals are important:
 
 - `apps/web/lib/queue/queue-types.ts` defines work item source types, while `apps/web/lib/api/work-item-account-resolution.ts` has a separate source resolver registry. This should converge into one source registry before broad Work Case implementation.
-- `apps/web/app/(shell)/workspace/my-queue/page.tsx` currently hand-rolls status colors and layout with hardcoded Tailwind colors instead of `report-kit` and `--dpf-*` theme tokens. The attention surface should be refactored before becoming the canonical company-work UI.
+- `apps/web/app/(shell)/workspace/my-queue/page.tsx` previously hand-rolled status colors and layout with hardcoded Tailwind colors instead of `report-kit` and `--dpf-*` theme tokens. Wave 3 refactors it into the canonical Workspace Work Case lens backed by `workspace-case-loader.ts`.
 
 ## Architecture Decision
 
@@ -622,6 +624,8 @@ Deliverables:
 - Case-like row projection with current actor, accountable principal, sponsor, next action, and reason for attention.
 - Responsive desktop/mobile QA.
 
+Wave 3 implementation note: `workspace-case-loader.ts` projects existing `WorkItem` rows into a Workspace Work Case lens without adding a parallel table. `/workspace/my-queue` now renders `WorkCaseAttentionLens` with report-kit stats/status badges, DPF theme tokens, and stable detail links.
+
 ### Slice 6: Case Detail
 
 Deliverables:
@@ -630,6 +634,8 @@ Deliverables:
 - Digest-first timeline.
 - Participants, policy envelope, decisions, capsules, and receipts.
 - Permissioned audit drill-down.
+
+Wave 3 implementation note: `/workspace/cases/[caseKey]` renders `WorkCaseDetailView`, leading with evidence timeline entries from existing WorkItem evidence/messages before exposing source references. The route is registered as a Workspace detail destination, not a global navigation entry.
 
 ### Slice 7: Capability Advertisement And Autonomy Maturation
 
@@ -719,8 +725,8 @@ The tracks sequence into waves. Each wave is more focused than the last because 
 
 - Wave 0 — Foundations: R1, R5, P1 (+ tests). The projection skeleton. Implemented under `BI-40EE7AFD`.
 - Wave 1 — Enforcement spine: R2, R4, P2, P3, P4, P7. The governed write path is the keystone; everything trustworthy depends on it. Implemented under `BI-D633F7AF`.
-- Wave 2 — Accountability invariants: R3, P5, P6, S3. Sponsor/authority-mode persisted; staging and stop conditions enforced. In implementation under `BI-WC-WAVE2`.
-- Wave 3 — Operator surfaces: R6, R7, S1, S2. UI on a substrate that is already safe.
+- Wave 2 — Accountability invariants: R3, P5, P6, S3. Sponsor/authority-mode persisted; staging and stop conditions enforced. Implemented under `BI-WC-WAVE2`.
+- Wave 3 — Operator surfaces: R6, R7, S1, S2. UI on a substrate that is already safe. In implementation under `BI-WC-WAVE3`.
 - Wave 4 — Ecosystem and autonomy: S4, S5, S6. Capability advertisement, graduated autonomy, federation.
 - Wave 5 — Adoption: S7, S8, S9. First domains and external views.
 - Wave 6+ — The long tail: each new source type, domain workflow, coworker capability, and autonomy graduation is a small, well-scoped BI against a now-stable architecture. This is where the idea stops being a build and becomes a calibration loop — the increasingly focused refinement that continues indefinitely.
@@ -812,4 +818,4 @@ Mitigations:
 
 ## Next Step
 
-Complete Wave 2 verification and PR under `BI-WC-WAVE2`, then start Wave 3 operator surfaces: the Workspace attention refactor and Case Detail slice. Do not start Wave 3 until the Wave 2 migration, accountability policy tests, staged-transition tests, stop-condition tests, existing Wave 0/1 tests, typecheck, and production build are green.
+Complete Wave 3 verification and PR under `BI-WC-WAVE3`, then start Wave 4 ecosystem/autonomy: AgentCard-compatible capability advertisement, actor routing, graduated autonomy, federation/control-tower governance. Do not start Wave 4 until the Workspace Work Case lens, Case Detail route, focused UI tests, desktop/mobile UX verification, typecheck, and production build are green.
