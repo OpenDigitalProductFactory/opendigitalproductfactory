@@ -51,7 +51,10 @@ vi.mock("next/cache", () => ({
   revalidatePath: mockRevalidatePath,
 }));
 
-import { recordWorkPatternReview } from "./work-pattern-review";
+import {
+  recordWorkPatternReview,
+  resolveWorkPatternCaseProposal,
+} from "./work-pattern-review";
 
 function shadowTrials(count = 20) {
   return Array.from({ length: count }, (_, index) => ({
@@ -154,6 +157,102 @@ function form(action: string) {
   data.set("action", action);
   data.set("note", "Approve only for sandbox lease filing.");
   return data;
+}
+
+function resolutionForm(action: string) {
+  const data = new FormData();
+  data.set("needId", "NEED-1");
+  data.set("agentId", "build-specialist");
+  data.set("action", action);
+  data.set("note", "Resolve the Work Case proposal without live mutation.");
+  return data;
+}
+
+function stagedCaseNeedRow(overrides: Record<string, unknown> = {}) {
+  return caseBoundNeedRow({
+    readinessJson: {
+      readyForReview: true,
+      readyForCaseActivation: true,
+      blockers: [],
+      activationProposed: true,
+      workPatternReview: {
+        action: "approve",
+        status: "approved-candidate",
+        needId: "NEED-1",
+        agentId: "build-specialist",
+        patternKey: "case-proposal|build-specialist|backlog-item",
+        routeContext: "/build",
+        riskClass: "internal-reversible",
+        decisionScope: "company-wwwd",
+        decisionInteractionId: "DI-REVIEW001",
+        reviewerUserId: "user-1",
+        reviewedAt: "2026-06-28T12:00:00.000Z",
+        reviewerNote: "Approve as a Work Case proposal only.",
+        blockers: ["activation-candidate-awaits-governed-promotion"],
+        activationProposed: true,
+        activationCandidate: {
+          state: "candidate",
+          activationAllowed: false,
+          patternKey: "case-proposal|build-specialist|backlog-item",
+          agentId: "build-specialist",
+          routeContext: "/build",
+          riskClass: "internal-reversible",
+          decisionScope: "company-wwwd",
+          currentAutonomyLevel: "shadow",
+          proposedAutonomyLevel: "propose",
+          evidenceSummary: {
+            samples: 20,
+            agreements: 19,
+            agreementRate: 0.95,
+          },
+          blockers: ["activation-candidate-awaits-governed-promotion"],
+        },
+        caseStaging: {
+          status: "stageable",
+          activationAllowed: false,
+          liveMutationAllowed: false,
+          caseRef: {
+            caseId: "backlog-item:BI-123",
+            sourceType: "backlog-item",
+            sourceId: "BI-123",
+          },
+          action: "propose",
+          transitionId: "work-pattern:backlog-item:BI-123:propose:DI-REVIEW001",
+          stagedTransition: {
+            transitionId: "work-pattern:backlog-item:BI-123:propose:DI-REVIEW001",
+            action: "propose",
+            status: "proposed",
+            caseState: "awaiting-decision",
+            a2aStatus: "input-required",
+            terminal: false,
+            committable: false,
+            sourceRef: {
+              kind: "decision-interaction",
+              id: "DI-REVIEW001",
+              status: "proposed",
+            },
+            reason: "Transition propose is proposed and waiting for approve/edit/reject/respond.",
+            nextAction: "Resolve staged transition",
+          },
+          enforcementMode: "governed-action",
+          requiredReceiptKind: "governed-action",
+          receiptCoverage: "required-before-commit",
+          blockers: ["receipt-required-before-commit"],
+          proposalRail: {
+            kind: "coworker-action-envelope-preview",
+            envelopeStatus: "proposed",
+            manifestActionId: "work-case.propose",
+            argsJson: {
+              caseRef: "backlog-item:BI-123",
+              action: "propose",
+            },
+            rationale: "Stage Work Case proposal from approved Living Playbook candidate.",
+          },
+        },
+      },
+    },
+    ...overrides,
+  });
 }
 
 describe("reviewWorkPatternAction", () => {
@@ -377,5 +476,112 @@ describe("reviewWorkPatternAction", () => {
     expect(mockPrisma.skillDefinition.update).not.toHaveBeenCalled();
     expect(mockPrisma.promptTemplate.update).not.toHaveBeenCalled();
     expect(mockPrisma.backlogItem.update).not.toHaveBeenCalled();
+  });
+
+  it("records approved Work Case proposal resolution without committing the case", async () => {
+    mockPrisma.coworkerCapabilityNeed.findUnique.mockResolvedValue(stagedCaseNeedRow());
+
+    await expect(resolveWorkPatternCaseProposal(resolutionForm("approve"))).resolves.toMatchObject({
+      status: "recorded",
+      action: "approve",
+      needId: "NEED-1",
+    });
+
+    expect(mockPrisma.decisionInteraction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        domainClass: "risk-assessment",
+        routeContext: "/platform/ai/agent/build-specialist",
+        outcomeType: "recommend",
+        evidenceBundle: expect.objectContaining({
+          workPatternCaseProposalResolution: expect.objectContaining({
+            status: "approved-awaiting-receipt",
+            commitAllowed: false,
+            receiptCoverage: "required-before-commit",
+          }),
+        }),
+        humanOutcome: expect.objectContaining({
+          type: "work-pattern-case-proposal-resolution",
+          action: "approve",
+          clearsGate: false,
+        }),
+      }),
+    });
+    const update = mockPrisma.coworkerCapabilityNeed.update.mock.calls[0]![0];
+    expect(update).toMatchObject({
+      where: { needId: "NEED-1" },
+      data: {
+        readinessJson: expect.objectContaining({
+          workPatternReview: expect.objectContaining({
+            caseStaging: expect.objectContaining({
+              status: "stageable",
+              resolution: expect.objectContaining({
+                status: "approved-awaiting-receipt",
+                action: "approve",
+                commitAllowed: false,
+              }),
+            }),
+          }),
+        }),
+        evidenceJson: expect.objectContaining({
+          caseProposalResolutionDecisionInteractionId: expect.stringMatching(/^DI-[A-F0-9]{12}$/),
+        }),
+      },
+    });
+    expect(update.data.status).toBeUndefined();
+    expect(mockPrisma.coworkerActionEnvelope.create).not.toHaveBeenCalled();
+    expect(mockPrisma.workCase.update).not.toHaveBeenCalled();
+    expect(mockPrisma.workItem.update).not.toHaveBeenCalled();
+  });
+
+  it("records rejected and deferred Work Case proposal resolutions", async () => {
+    mockPrisma.coworkerCapabilityNeed.findUnique.mockResolvedValue(stagedCaseNeedRow());
+
+    await resolveWorkPatternCaseProposal(resolutionForm("reject"));
+    expect(mockPrisma.coworkerCapabilityNeed.update.mock.calls[0]![0].data.readinessJson)
+      .toMatchObject({
+        workPatternReview: {
+          action: "approve",
+          caseStaging: {
+            resolution: {
+              status: "rejected",
+              action: "reject",
+              commitAllowed: false,
+              receiptCoverage: "not-required",
+            },
+          },
+        },
+      });
+
+    vi.clearAllMocks();
+    mockRequireCapability.mockResolvedValue({ userId: "user-1" });
+    mockPrisma.coworkerCapabilityNeed.findUnique.mockResolvedValue(stagedCaseNeedRow());
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma));
+
+    await resolveWorkPatternCaseProposal(resolutionForm("defer"));
+    expect(mockPrisma.coworkerCapabilityNeed.update.mock.calls[0]![0].data.readinessJson)
+      .toMatchObject({
+        workPatternReview: {
+          action: "approve",
+          caseStaging: {
+            resolution: {
+              status: "deferred",
+              action: "defer",
+              commitAllowed: false,
+              receiptCoverage: "not-required",
+            },
+          },
+        },
+      });
+  });
+
+  it("refuses case proposal resolution before writes when no stageable proposal exists", async () => {
+    mockPrisma.coworkerCapabilityNeed.findUnique.mockResolvedValue(needRow());
+
+    await expect(resolveWorkPatternCaseProposal(resolutionForm("approve"))).rejects.toThrow(
+      "work_pattern_case_proposal_not_stageable",
+    );
+
+    expect(mockPrisma.decisionInteraction.create).not.toHaveBeenCalled();
+    expect(mockPrisma.coworkerCapabilityNeed.update).not.toHaveBeenCalled();
   });
 });
