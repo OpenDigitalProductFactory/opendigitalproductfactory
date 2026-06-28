@@ -1,7 +1,7 @@
 # Company-Level Work Management Architecture
 
 Date: 2026-06-27
-Status: Accepted design; Wave 4 ecosystem/autonomy contracts implemented
+Status: Accepted design; Wave 5 adoption views implemented
 Owner: DPF architecture
 Related capsule: WC-0A3909A2
 Epic: EP-2984B02B - Work Case / Company Work Management
@@ -15,6 +15,8 @@ Wave 3 BI: BI-WC-WAVE3 - Workspace attention lens and Work Case detail surfaces
 Wave 3 plan: docs/superpowers/plans/2026-06-28-work-case-wave-3-operator-surfaces.md
 Wave 4 BI: BI-WC-WAVE4 - Work Case ecosystem and autonomy contracts
 Wave 4 plan: docs/superpowers/plans/2026-06-28-work-case-wave-4-ecosystem-autonomy.md
+Wave 5 BI: BI-WC-WAVE5 - Work Case adoption workflows and constrained external views
+Wave 5 plan: docs/superpowers/plans/2026-06-28-work-case-wave-5-adoption-views.md
 Sibling spec: docs/superpowers/specs/2026-06-27-governed-adaptive-playbooks-design.md (the method-improvement pillar that binds to this object)
 
 ## Summary
@@ -646,6 +648,8 @@ Deliverables:
 - AgentCard-equivalent capability descriptor (identity, sponsor, supported case-types/skills, I/O modes, security, streaming/long-running support) consumed by the source registry for actor routing.
 - Per-transition supervised/autonomous mode read from the existing autopilot trust dial; AgentOps measure/quality loop feeding receipts back into graduation.
 
+Wave 4 implementation note: `agent-capability.ts`, `autonomy-envelope.ts`, and `federation-governance.ts` provide pure AgentCard-compatible routing, trust-dial autonomy projection, and federated actor governance contracts over the existing Work Case substrate.
+
 ### Slice 8: Company Workflow Adoption And Federation
 
 Deliverables:
@@ -654,6 +658,8 @@ Deliverables:
 - WWWD/WSID/WWMD decision-scope validation.
 - External/federated agent participating in a case under the same envelope and receipt stream.
 - Canonical runtime UX verification.
+
+Wave 5 implementation note: `customer-domain-adoption.ts` groups account-resolvable customer Work Cases into WWWD workflow lanes; `portal-case-loader.ts` and `/portal/cases` expose only account-scoped, customer-safe case status; `WorkCaseAttentionLens` now includes a mobile-first attention strip backed by the same Workspace projection. Federation contract work landed in Wave 4; external/customer visibility in Wave 5 is constrained to Portal account scope rather than raw internal source refs.
 
 ## Effort Portfolio (Long-Tail Program)
 
@@ -730,7 +736,7 @@ The tracks sequence into waves. Each wave is more focused than the last because 
 - Wave 2 — Accountability invariants: R3, P5, P6, S3. Sponsor/authority-mode persisted; staging and stop conditions enforced. Implemented under `BI-WC-WAVE2`.
 - Wave 3 — Operator surfaces: R6, R7, S1, S2. UI on a substrate that is already safe. Implemented under `BI-WC-WAVE3`.
 - Wave 4 — Ecosystem and autonomy: S4, S5, S6. Capability advertisement, graduated autonomy, federation. Implemented under `BI-WC-WAVE4` as pure contracts over the existing Work Case, trust-graduation, and federation substrates.
-- Wave 5 — Adoption: S7, S8, S9. First domains and external views.
+- Wave 5 — Adoption: S7, S8, S9. First domains and external views. Implemented under `BI-WC-WAVE5` as customer-domain workflow lanes, constrained Portal case visibility, and a mobile Workspace attention strip.
 - Wave 6+ — The long tail: each new source type, domain workflow, coworker capability, and autonomy graduation is a small, well-scoped BI against a now-stable architecture. This is where the idea stops being a build and becomes a calibration loop — the increasingly focused refinement that continues indefinitely.
 
 ### Program Structure And Governance
@@ -820,4 +826,4 @@ Mitigations:
 
 ## Next Step
 
-Start Wave 5 adoption: first domain workflows and constrained external/customer views. Do not start Wave 5 until the AgentCard-compatible capability descriptor, actor routing, graduated autonomy envelope, federated participation governance, focused contract tests, typecheck, and production build are green.
+Start Wave 6+ long-tail calibration: one focused BI per new source type, domain vocabulary, coworker capability, persisted transition hardening, customer portal drill-down, or autonomy graduation. Treat each tail item as a narrow Work Case extension with its own receipt, UX, and architecture-grounding evidence.

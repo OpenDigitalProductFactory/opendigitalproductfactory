@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, Clock, Inbox, ListChecks, UserCheck } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, Inbox, ListChecks, Smartphone, UserCheck } from "lucide-react";
 
 import { LocalTime } from "@/components/ui/LocalTime";
 import { StatCard, StatusBadge } from "@/components/ui/report-kit";
@@ -67,6 +67,41 @@ function CaseRow({ item, compact = false }: { item: WorkspaceWorkCaseListItem; c
   );
 }
 
+function MobileAttentionStrip({ items }: { items: WorkspaceWorkCaseListItem[] }) {
+  const visibleItems = items.slice(0, 3);
+  if (visibleItems.length === 0) return null;
+
+  return (
+    <section
+      aria-label="Mobile attention"
+      className="grid gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3 md:hidden"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-2">
+          <Smartphone className="size-4 text-[var(--dpf-accent)]" aria-hidden="true" />
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Today</h2>
+        </div>
+        <StatusBadge intent="warning" label={`${items.length} needs you`} variant="soft" />
+      </div>
+      <div className="grid gap-2">
+        {visibleItems.map((item) => (
+          <a
+            key={item.caseId}
+            href={item.href}
+            className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-[var(--dpf-text)]"
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold text-[var(--dpf-text)]">{item.title}</span>
+              <span className="mt-1 block truncate text-xs text-[var(--dpf-muted)]">{item.nextAction}</span>
+            </span>
+            <ArrowRight className="size-4 text-[var(--dpf-muted)]" aria-hidden="true" />
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function WorkCaseAttentionLens({ view }: Props) {
   const attentionCases = view.cases.filter((item) => item.attentionRequired);
 
@@ -95,6 +130,8 @@ export function WorkCaseAttentionLens({ view }: Props) {
         <StatCard label="Unassigned" value={view.stats.unassigned} intent="info" />
         <StatCard label="Due soon" value={view.stats.dueSoon} intent="danger" />
       </section>
+
+      <MobileAttentionStrip items={attentionCases} />
 
       {view.cases.length === 0 ? (
         <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-10 text-center">

@@ -10,6 +10,7 @@ import { buildBrandingStyleTag } from "@/lib/branding";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/portal" },
+  { label: "Cases", href: "/portal/cases" },
   { label: "Orders", href: "/portal/orders" },
   { label: "Services", href: "/portal/services" },
   { label: "Support", href: "/portal/support" },
