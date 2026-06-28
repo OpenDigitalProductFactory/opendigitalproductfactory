@@ -6,7 +6,10 @@ import type {
   WorkPatternReadModel,
   WorkPatternSummary,
 } from "@/lib/tak/work-pattern-read-model";
-import { reviewWorkPatternAction } from "@/lib/actions/work-pattern-review";
+import {
+  resolveWorkPatternCaseProposalAction,
+  reviewWorkPatternAction,
+} from "@/lib/actions/work-pattern-review";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Chip, deepLink, EmptyState, Section } from "./panels";
 
@@ -273,7 +276,12 @@ function PlaybookReviewRow({ pattern, canWrite }: { pattern: WorkPatternSummary;
         <div style={{ fontSize: 10, color: "var(--dpf-muted)", overflowWrap: "anywhere" }}>
           Candidate record only; live autonomy and Work Case state stay unchanged.
         </div>
-        <CaseStagingRow state={caseStaging} />
+        <CaseStagingRow
+          state={caseStaging}
+          canWrite={canWrite}
+          needId={pattern.linkedNeedIds[0] ?? null}
+          agentId={pattern.agentId}
+        />
       </div>
     );
   }
@@ -326,10 +334,22 @@ function PlaybookReviewRow({ pattern, canWrite }: { pattern: WorkPatternSummary;
   );
 }
 
-function CaseStagingRow({ state }: { state: CaseStaging | null }) {
+function CaseStagingRow({
+  state,
+  canWrite,
+  needId,
+  agentId,
+}: {
+  state: CaseStaging | null;
+  canWrite: boolean;
+  needId: string | null;
+  agentId: string;
+}) {
   if (!state || state.status === "not-case-bound") return null;
   const staged = state.status === "stageable";
+  const resolution = state.resolution ?? null;
   const guardrail = caseStagingGuardrailLabel(state);
+  const canResolve = canWrite && staged && !resolution && Boolean(needId);
   return (
     <div
       style={{
@@ -346,11 +366,81 @@ function CaseStagingRow({ state }: { state: CaseStaging | null }) {
         {guardrail ? <Chip tone={staged ? "warning" : "error"}>{guardrail}</Chip> : null}
         {state.action ? <Chip tone="muted">{workCaseActionLabel(state.action)}</Chip> : null}
       </div>
+      {resolution ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
+          <Chip tone={caseResolutionTone(resolution.status)}>{caseResolutionLabel(resolution.status)}</Chip>
+          {resolution.receiptCoverage === "required-before-commit" ? (
+            <Chip tone="warning">receipt evidence needed</Chip>
+          ) : null}
+          {resolution.commitAllowed ? <Chip tone="success">ready for governed commit</Chip> : null}
+        </div>
+      ) : null}
       <div style={{ fontSize: 10, color: "var(--dpf-muted)", overflowWrap: "anywhere" }}>
-        Proposal record only; the case waits for governed approval and receipt evidence before any commit.
+        {resolution
+          ? caseResolutionDetail(resolution.status)
+          : "Proposal record only; the case waits for governed approval and receipt evidence before any commit."}
       </div>
+      {canResolve && needId ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          <CaseResolutionForm
+            needId={needId}
+            agentId={agentId}
+            action="approve"
+            label="Approve proposal"
+            note="Approve this Living Playbook proposal for the governed Work Case action path; do not commit the case."
+          />
+          <CaseResolutionForm
+            needId={needId}
+            agentId={agentId}
+            action="defer"
+            label="Defer"
+            note="Defer this Work Case proposal for more evidence before resolution."
+          />
+          <CaseResolutionForm
+            needId={needId}
+            agentId={agentId}
+            action="reject"
+            label="Reject"
+            note="Reject this Work Case proposal and retain the decision evidence."
+          />
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function caseResolutionTone(status: NonNullable<CaseStaging["resolution"]>["status"]) {
+  if (status === "approved-ready-for-governed-commit") return "success";
+  if (status === "approved-awaiting-receipt" || status === "deferred") return "warning";
+  if (status === "rejected" || status === "blocked") return "error";
+  return "muted";
+}
+
+function caseResolutionLabel(status: NonNullable<CaseStaging["resolution"]>["status"]): string {
+  const labels: Record<NonNullable<CaseStaging["resolution"]>["status"], string> = {
+    "approved-awaiting-receipt": "Approved - receipt evidence needed",
+    "approved-ready-for-governed-commit": "Approved - ready for governed commit",
+    blocked: "Resolution blocked",
+    deferred: "Deferred proposal",
+    rejected: "Rejected proposal",
+  };
+  return labels[status];
+}
+
+function caseResolutionDetail(status: NonNullable<CaseStaging["resolution"]>["status"]): string {
+  if (status === "approved-ready-for-governed-commit") {
+    return "Approval is recorded with receipt evidence; any case change still runs through the governed Work Case action path.";
+  }
+  if (status === "approved-awaiting-receipt") {
+    return "Approval is recorded; receipt evidence is still required before the proposal can be treated as ready to commit.";
+  }
+  if (status === "deferred") {
+    return "Proposal resolution is deferred; the coworker needs more evidence before this can move forward.";
+  }
+  if (status === "rejected") {
+    return "Proposal was rejected and retained as decision evidence so it does not churn back without new facts.";
+  }
+  return "Resolution is blocked until the proposal has enough governed Work Case context.";
 }
 
 function caseStagingGuardrailLabel(state: CaseStaging): string | null {
@@ -414,6 +504,46 @@ function ReviewActionForm({
 }) {
   return (
     <form action={reviewWorkPatternAction} style={{ margin: 0 }}>
+      <input type="hidden" name="needId" value={needId} />
+      <input type="hidden" name="agentId" value={agentId} />
+      <input type="hidden" name="action" value={action} />
+      <input type="hidden" name="note" value={note} />
+      <button
+        type="submit"
+        style={{
+          appearance: "none",
+          border: "1px solid var(--dpf-border-strong)",
+          background: "var(--dpf-surface)",
+          color: "var(--dpf-text)",
+          borderRadius: 5,
+          padding: "4px 8px",
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: "pointer",
+          minHeight: 28,
+        }}
+      >
+        {label}
+      </button>
+    </form>
+  );
+}
+
+function CaseResolutionForm({
+  needId,
+  agentId,
+  action,
+  label,
+  note,
+}: {
+  needId: string;
+  agentId: string;
+  action: "approve" | "defer" | "reject";
+  label: string;
+  note: string;
+}) {
+  return (
+    <form action={resolveWorkPatternCaseProposalAction} style={{ margin: 0 }}>
       <input type="hidden" name="needId" value={needId} />
       <input type="hidden" name="agentId" value={agentId} />
       <input type="hidden" name="action" value={action} />

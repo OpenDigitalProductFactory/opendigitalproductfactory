@@ -23,15 +23,22 @@ import {
   buildWorkPatternReview,
   capabilityNeedStatusForReviewAction,
   mergeWorkPatternReviewState,
+  parseWorkPatternReviewState,
   WORK_PATTERN_REVIEW_ACTIONS,
   type WorkPatternReviewAction,
 } from "@/lib/tak/work-pattern-review";
 import { buildWorkPatternCaseStaging } from "@/lib/tak/work-pattern-case-staging";
+import {
+  buildWorkPatternCaseResolution,
+  WORK_PATTERN_CASE_RESOLUTION_ACTIONS,
+  type WorkPatternCaseResolutionAction,
+} from "@/lib/tak/work-pattern-case-resolution";
 import type {
   WorkPatternCandidate,
   WorkPatternDecisionScope,
 } from "@/lib/tak/work-pattern-types";
 import { parseWorkPatternMetadata } from "@/lib/tak/work-pattern-types";
+import type { ReceiptEnvelope } from "@/lib/work-management/receipt-envelope";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -51,7 +58,7 @@ type ReviewNeedRow = {
 
 export type ReviewActionResult = {
   status: "recorded";
-  action: WorkPatternReviewAction;
+  action: WorkPatternReviewAction | WorkPatternCaseResolutionAction;
   needId: string;
   decisionInteractionId: string;
 };
@@ -84,6 +91,13 @@ function parseAction(value: string | null): WorkPatternReviewAction {
     return value as WorkPatternReviewAction;
   }
   throw new Error("invalid_work_pattern_review_action");
+}
+
+function parseResolutionAction(value: string | null): WorkPatternCaseResolutionAction {
+  if (WORK_PATTERN_CASE_RESOLUTION_ACTIONS.includes(value as WorkPatternCaseResolutionAction)) {
+    return value as WorkPatternCaseResolutionAction;
+  }
+  throw new Error("invalid_work_pattern_case_resolution_action");
 }
 
 function knownKind(value: string): CoworkerCapabilityNeedKind {
@@ -174,6 +188,52 @@ function workPatternMetadataFrom(
     parseWorkPatternMetadata(evidenceJson.workPattern) ??
     parseWorkPatternMetadata(readinessJson.workPattern)
   );
+}
+
+function receiptEnvelopeFromForm(input: {
+  formData: FormData;
+  staging: NonNullable<ReturnType<typeof parseWorkPatternReviewState>>["caseStaging"];
+  decisionInteractionId: string;
+  resolvedAt: Date;
+}): ReceiptEnvelope | null {
+  const receiptId = formString(input.formData, "receiptId");
+  if (!receiptId || !input.staging) return null;
+  const receiptStatus = formString(input.formData, "receiptStatus") ?? "valid";
+  if (
+    receiptStatus !== "valid" &&
+    receiptStatus !== "invalid" &&
+    receiptStatus !== "observed" &&
+    receiptStatus !== "failed"
+  ) {
+    throw new Error("invalid_work_pattern_case_receipt_status");
+  }
+  const enforcementMode =
+    formString(input.formData, "receiptEnforcementMode") ?? input.staging.enforcementMode;
+  if (enforcementMode !== "governed-action" && enforcementMode !== "observed-event") {
+    throw new Error("invalid_work_pattern_case_receipt_enforcement_mode");
+  }
+  const receiptKind =
+    formString(input.formData, "receiptKind") ?? input.staging.requiredReceiptKind ?? enforcementMode;
+  return {
+    receiptId,
+    caseRef: input.staging.caseRef,
+    receiptKind,
+    enforcementMode,
+    sourceRef: {
+      kind: "decision-interaction",
+      id: input.decisionInteractionId,
+      status: "approved",
+    },
+    actionType: input.staging.action,
+    status: receiptStatus,
+    summary: "Receipt evidence supplied for governed Living Playbook Work Case proposal resolution.",
+    occurredAt: input.resolvedAt.toISOString(),
+    policyRefs: input.staging.action ? [`work-case.${input.staging.action}`] : [],
+    rawRef: {
+      table: "ToolExecutionReceipt",
+      id: receiptId,
+    },
+  };
 }
 
 export async function recordWorkPatternReview(formData: FormData): Promise<ReviewActionResult> {
@@ -341,4 +401,155 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
 
 export async function reviewWorkPatternAction(formData: FormData): Promise<void> {
   await recordWorkPatternReview(formData);
+}
+
+export async function resolveWorkPatternCaseProposal(formData: FormData): Promise<ReviewActionResult> {
+  const { userId } = await requireCapability("manage_platform");
+  const needId = formString(formData, "needId");
+  const formAgentId = formString(formData, "agentId");
+  const action = parseResolutionAction(formString(formData, "action"));
+  const note = formString(formData, "note");
+  if (!needId || !formAgentId) {
+    throw new Error("missing_work_pattern_case_resolution_input");
+  }
+
+  const need = await prisma.coworkerCapabilityNeed.findUnique({
+    where: { needId },
+    include: {
+      assessment: {
+        select: { routeContext: true },
+      },
+    },
+  }) as ReviewNeedRow | null;
+  if (!need) throw new Error("work_pattern_need_not_found");
+  if (need.agentId !== formAgentId) throw new Error("work_pattern_need_agent_mismatch");
+
+  const evidenceJson = recordFrom(need.evidenceJson);
+  const readinessJson = recordFrom(need.readinessJson);
+  const reviewState = parseWorkPatternReviewState(readinessJson);
+  const staging = reviewState?.caseStaging ?? null;
+  if (!reviewState || !staging || staging.status !== "stageable") {
+    throw new Error("work_pattern_case_proposal_not_stageable");
+  }
+  if (staging.resolution) {
+    throw new Error("work_pattern_case_proposal_already_resolved");
+  }
+
+  const decisionInteractionId = createDecisionInteractionId();
+  const resolvedAt = new Date();
+  const receipt = receiptEnvelopeFromForm({
+    formData,
+    staging,
+    decisionInteractionId,
+    resolvedAt,
+  });
+  const resolution = buildWorkPatternCaseResolution({
+    staging,
+    action,
+    decisionInteractionId,
+    resolverUserId: userId,
+    resolvedAt,
+    note,
+    receipt,
+  });
+  const reviewWithResolution = {
+    ...reviewState,
+    caseStaging: {
+      ...staging,
+      resolution,
+    },
+  };
+  const updatedReadiness = {
+    ...readinessJson,
+    workPatternReview: reviewWithResolution,
+  };
+  const outcomeType = outcomeTypeFor(action);
+  const routeContext = buildRoute(need.agentId);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.decisionInteraction.create({
+      data: {
+        interactionId: decisionInteractionId,
+        profileId: MARK_DPF_PLATFORM_PROFILE.profileId,
+        profileVersionId: MARK_DPF_PLATFORM_PROFILE.currentVersion.versionId,
+        fallbackProfileId: MARK_DPF_PLATFORM_PROFILE.fallbackProfileId,
+        triggeredByUserId: userId,
+        routeContext,
+        phaseFrom: null,
+        phaseTo: null,
+        domainClass: "risk-assessment",
+        question: `Resolve Work Case proposal for Living Playbook "${need.need}"?`,
+        options: ["Approve proposal", "Defer proposal", "Reject proposal"],
+        evidenceBundle: inputJson({
+          workPatternReview: reviewWithResolution,
+          workPatternCaseProposalResolution: resolution,
+          capabilityNeedId: need.needId,
+          linkedBacklogItemId: need.linkedBacklogItemId ?? null,
+          materialCount: 0,
+          freshnessDistribution: { current: 0, stale: 0, superseded: 0, contradicted: 0 },
+          resolvedProfileChain: [MARK_DPF_PLATFORM_PROFILE.profileId],
+        }),
+        sources: evidenceSources({ need, evidenceJson }),
+        rationale: note ?? `Operator recorded ${action} for Work Case proposal ${staging.transitionId}.`,
+        riskTier: riskTierFor(reviewState.riskClass),
+        confidenceBefore: 0,
+        confidenceAfter: 0,
+        outcomeType,
+        principleConflict: false,
+        outcomePayload: inputJson({
+          outcomeType,
+          domainClass: "risk-assessment",
+          confidenceScore: 0,
+          coverageGap: resolution.receiptCoverage !== "covered",
+          principleConflict: false,
+          resolvedProfileChain: [MARK_DPF_PLATFORM_PROFILE.profileId],
+          materialCount: 0,
+          freshnessDistribution: { current: 0, stale: 0, superseded: 0, contradicted: 0 },
+          workPatternCaseProposalResolution: resolution,
+        }),
+        humanOutcome: {
+          type: "work-pattern-case-proposal-resolution",
+          action,
+          chosenOption:
+            action === "approve"
+              ? "Approve proposal"
+              : action === "defer"
+                ? "Defer proposal"
+                : "Reject proposal",
+          rationale: note,
+          resolverUserId: userId,
+          recordedAt: resolution.resolvedAt,
+          clearsGate: false,
+        },
+      },
+    });
+
+    await tx.coworkerCapabilityNeed.update({
+      where: { needId },
+      data: {
+        evidenceJson: inputJson({
+          ...evidenceJson,
+          caseProposalResolutionDecisionInteractionId: decisionInteractionId,
+          caseProposalResolutionDecisionInteractionIds: appendString(
+            evidenceJson.caseProposalResolutionDecisionInteractionIds,
+            decisionInteractionId,
+          ),
+          decisionInteractionIds: appendString(evidenceJson.decisionInteractionIds, decisionInteractionId),
+        }),
+        readinessJson: inputJson(updatedReadiness),
+      },
+    });
+  });
+
+  revalidatePath(routeContext);
+  return {
+    status: "recorded",
+    action,
+    needId,
+    decisionInteractionId,
+  };
+}
+
+export async function resolveWorkPatternCaseProposalAction(formData: FormData): Promise<void> {
+  await resolveWorkPatternCaseProposal(formData);
 }
