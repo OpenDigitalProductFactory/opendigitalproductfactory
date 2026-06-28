@@ -114,6 +114,77 @@
     "supportsToolUse": true
   },
   {
+    "providerId": "zai",
+    "name": "Z.ai",
+    "category": "direct",
+    "baseUrl": "https://api.z.ai/api/paas/v4",
+    "authMethod": "api_key",
+    "supportedAuthMethods": [
+      "api_key"
+    ],
+    "authHeader": "Authorization",
+    "costModel": "token",
+    "families": [
+      "glm-5",
+      "glm-coding"
+    ],
+    "inputPricePerMToken": 1.4,
+    "outputPricePerMToken": 4.4,
+    "docsUrl": "https://docs.z.ai/guides/overview/quick-start",
+    "consoleUrl": "https://chat.z.ai",
+    "billingLabel": "Pay-per-token API key",
+    "costPerformanceNotes": "Uses a Z.ai API key against the OpenAI-compatible API. OAuth is not enabled until Z.ai publishes an official model API OAuth flow.",
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Z.ai's GLM models for reasoning, long-context analysis, tool use, and coding workflows.",
+      "authExplained": "API key - sign in to Z.ai, create an API key, and paste it here. Z.ai has not published OAuth access for model APIs yet.",
+      "costTier": "pay-per-use",
+      "costExplained": "GLM-5.2 pricing is currently listed at $1.40 per million input tokens and $4.40 per million output tokens. Your Z.ai account plan may add other charges or limits.",
+      "capabilitySummary": "GLM-5.2 supports long-context reasoning, structured responses, function calling, and coding tasks through OpenAI-compatible APIs.",
+      "limitations": "Availability, pricing, and model IDs can depend on the Z.ai account tier. Data is processed by Z.ai's cloud service.",
+      "dataResidency": "Z.ai cloud service. Confirm regional and contractual data terms in your Z.ai account before routing regulated data.",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "Review Z.ai terms and compliance documentation before using sensitive or regulated data."
+    },
+    "supportsToolUse": true
+  },
+  {
+    "providerId": "zai-coding",
+    "name": "Z.ai GLM Coding",
+    "category": "direct",
+    "cliEngine": "opencode",
+    "baseUrl": "https://api.z.ai/api/coding/paas/v4",
+    "authMethod": "api_key",
+    "supportedAuthMethods": [
+      "api_key"
+    ],
+    "authHeader": "Authorization",
+    "costModel": "token",
+    "families": [
+      "glm-5",
+      "glm-coding"
+    ],
+    "inputPricePerMToken": 1.4,
+    "outputPricePerMToken": 4.4,
+    "docsUrl": "https://docs.z.ai/scenario-example/develop-tools/opencode",
+    "consoleUrl": "https://chat.z.ai",
+    "billingLabel": "GLM Coding Plan API key",
+    "costPerformanceNotes": "Uses the Z.ai GLM Coding OpenAI-compatible endpoint for OpenCode. Requires an API key and any account entitlement Z.ai applies to coding plans.",
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Z.ai's OpenCode-compatible GLM coding endpoint for Build Studio code-writing tasks.",
+      "authExplained": "API key - sign in to Z.ai, create an API key for the GLM Coding endpoint, and paste it here.",
+      "costTier": "pay-per-use",
+      "costExplained": "GLM-5.2 pricing is currently listed at $1.40 per million input tokens and $4.40 per million output tokens. Coding endpoint entitlement and account limits may also apply.",
+      "capabilitySummary": "Designed for OpenCode and agentic coding workflows using GLM-5.2 through an OpenAI-compatible endpoint.",
+      "limitations": "May require a Z.ai GLM Coding Plan entitlement distinct from the ordinary model API. Data is processed by Z.ai's cloud service.",
+      "dataResidency": "Z.ai cloud service. Confirm regional and contractual data terms in your Z.ai account before routing regulated data.",
+      "setupDifficulty": "easy",
+      "regulatoryNotes": "Review Z.ai terms and compliance documentation before using sensitive or regulated code or data."
+    },
+    "supportsToolUse": true
+  },
+  {
     "providerId": "azure-openai",
     "name": "Azure OpenAI",
     "category": "direct",

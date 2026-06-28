@@ -54,7 +54,78 @@ const GROK_CORE_CAPABILITIES: ModelCardCapabilities = {
   effortLevels: ["none", "low", "medium", "high"],
 };
 
+const ZAI_GLM_CORE_CAPABILITIES: ModelCardCapabilities = {
+  ...EMPTY_CAPABILITIES,
+  toolUse: true,
+  streaming: true,
+  structuredOutput: true,
+  thinking: true,
+  contextManagement: true,
+};
+
 export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
+  zai: [
+    {
+      modelId: "glm-5.2",
+      friendlyName: "GLM-5.2",
+      summary:
+        "Z.ai GLM-5.2 - long-context reasoning model with OpenAI-compatible tool calling and structured output",
+      qualityTier: "frontier",
+      capabilities: ZAI_GLM_CORE_CAPABILITIES,
+      maxContextTokens: 1_000_000,
+      maxOutputTokens: 128_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      modelClass: "reasoning",
+      modelFamily: "glm-5",
+      capabilityCategory: "advanced",
+      costTier: "$$",
+      bestFor: ["reasoning", "long-context analysis", "tool-use", "structured output", "coding assistance"],
+      avoidFor: ["offline or local-only data-residency tasks"],
+      defaultStatus: "active",
+      scores: {
+        reasoning: 92,
+        codegen: 90,
+        toolFidelity: 88,
+        instructionFollowingScore: 88,
+        structuredOutputScore: 88,
+        conversational: 86,
+        contextRetention: 94,
+      },
+    },
+  ],
+
+  "zai-coding": [
+    {
+      modelId: "glm-5.2",
+      friendlyName: "GLM-5.2 Coding",
+      summary:
+        "Z.ai GLM-5.2 via the GLM Coding endpoint - OpenCode-compatible coding model for Build Studio dispatch",
+      qualityTier: "frontier",
+      capabilities: ZAI_GLM_CORE_CAPABILITIES,
+      maxContextTokens: 1_000_000,
+      maxOutputTokens: 128_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      modelClass: "code",
+      modelFamily: "glm-5",
+      capabilityCategory: "advanced",
+      costTier: "$$",
+      bestFor: ["agentic coding", "Build Studio tasks", "tool-use", "long-context codebase work"],
+      avoidFor: ["offline or local-only builds"],
+      defaultStatus: "active",
+      scores: {
+        reasoning: 90,
+        codegen: 94,
+        toolFidelity: 88,
+        instructionFollowingScore: 88,
+        structuredOutputScore: 88,
+        conversational: 78,
+        contextRetention: 94,
+      },
+    },
+  ],
+
   "anthropic-sub": [
     {
       modelId: "claude-sonnet-4-6",
