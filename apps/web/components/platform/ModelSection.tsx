@@ -39,6 +39,7 @@ type Props = {
   // EP-INF-006: Routing profiles merged into model cards
   routingProfiles?: RoutingProfile[];
   endpointId?: string;
+  showDiagnostics?: boolean;
 };
 
 export function ModelSection({
@@ -50,6 +51,7 @@ export function ModelSection({
   latestDiscovery,
   routingProfiles,
   endpointId,
+  showDiagnostics = false,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -148,28 +150,29 @@ export function ModelSection({
           flexWrap: "wrap",
         }}
       >
-        {/* Search box */}
-        <input
-          type="search"
-          value={search}
-          onChange={handleSearchChange}
-          placeholder="Search models…"
-          style={{
-            background: "var(--dpf-surface-1)",
-            border: "1px solid var(--dpf-border)",
-            color: "var(--dpf-text)",
-            fontSize: 11,
-            padding: "5px 10px",
-            borderRadius: 4,
-            width: 200,
-            outline: "none",
-          }}
-        />
+        {showDiagnostics && (
+          <input
+            type="search"
+            value={search}
+            onChange={handleSearchChange}
+            placeholder="Search models..."
+            style={{
+              background: "var(--dpf-surface-1)",
+              border: "1px solid var(--dpf-border)",
+              color: "var(--dpf-text)",
+              fontSize: 11,
+              padding: "5px 10px",
+              borderRadius: 4,
+              width: 200,
+              outline: "none",
+            }}
+          />
+        )}
 
-        {/* Count label */}
         <span style={{ color: "var(--dpf-muted)", fontSize: 10, flexGrow: 1 }}>
-          {filtered.length} model{filtered.length !== 1 ? "s" : ""}
-          {searchLower ? " matching" : ""}
+          {profiles.length} model{profiles.length !== 1 ? "s" : ""} ready
+          {showDiagnostics && searchLower ? ` - ${filtered.length} matching` : ""}
+          {showDiagnostics && !searchLower && filtered.length !== profiles.length ? ` - ${filtered.length} shown` : ""}
           {unprofiledCount > 0 ? ` — ${unprofiledCount} unprofiled` : ""}
         </span>
       </div>
@@ -215,6 +218,7 @@ export function ModelSection({
               onProfile={handleProfileSingle}
               routingProfile={routingMap.get(model.modelId) ?? null}
               endpointId={endpointId}
+              showDiagnostics={showDiagnostics}
             />
           ))}
         </div>
@@ -225,7 +229,7 @@ export function ModelSection({
       )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {showDiagnostics && totalPages > 1 && (
         <div
           style={{
             display: "flex",
