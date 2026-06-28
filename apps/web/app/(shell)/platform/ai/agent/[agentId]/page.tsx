@@ -17,8 +17,16 @@ import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPr
 import { getCoworkerPostureInheritance } from "@/lib/actions/golden-triangle";
 import { loadCoworkerRecord } from "@/lib/coworker-record/load-record";
 import { loadFamilyCorpusSignals } from "@/lib/coworker-record/corpus-signals";
+import {
+  getCoworkerCapabilityNeedReview,
+  type CoworkerCapabilityNeedReview,
+} from "@/lib/coworker-self-assessment/review-service";
 import { resolveInstallVariantContext } from "@/lib/decision-perspective/install-variant-context";
 import { knownGrantKeys } from "@/lib/tak/agent-grants";
+import {
+  getWorkPatternReadModel,
+  type WorkPatternReadModel,
+} from "@/lib/tak/work-pattern-read-model";
 import { assignTierFromModelId, TIER_LABELS as QUALITY_TIER_LABELS } from "@/lib/routing/quality-tiers";
 import { CoworkerRecordTabs, type CoworkerTab } from "@/components/platform/coworker-record/CoworkerRecordTabs";
 import {
@@ -28,6 +36,7 @@ import {
   PriorityPanel,
   GovernancePanel,
   PerformancePanel,
+  NeedsAndPlaybooksPanel,
   DecisionsPanel,
 } from "@/components/platform/coworker-record/panels";
 
@@ -42,6 +51,41 @@ const TIER_LABELS: Record<number, string> = {
   2: "Specialist",
   3: "Cross-cutting",
 };
+
+function emptyNeedReview(): CoworkerCapabilityNeedReview {
+  return {
+    summary: {
+      total: 0,
+      byStatus: {},
+      bySeverity: {},
+      byKind: {},
+    },
+    filterOptions: {
+      statuses: [],
+      severities: [],
+      kinds: [],
+    },
+    needs: [],
+  };
+}
+
+function emptyWorkPatternReadModel(now = new Date()): WorkPatternReadModel {
+  return {
+    generatedAt: now,
+    window: {
+      since: now,
+      until: now,
+    },
+    summary: {
+      totalPatterns: 0,
+      totalObservedRuns: 0,
+      openNeedCount: 0,
+      readyForReviewCount: 0,
+      candidateOnlyCount: 0,
+    },
+    patterns: [],
+  };
+}
 
 export default async function AgentDetailPage({
   params,
@@ -70,7 +114,17 @@ export default async function AgentDetailPage({
   // WS2 adds: catalog skills already assigned to this coworker (SkillAssignment,
   // keyed by the BUSINESS agentId) and the full active SkillDefinition catalog
   // for the add-select. Tool grants come from the loaded record (agent.toolGrants).
-  const [session, modelConfig, lastModelRows, activeProviders, assignedSkillRows, catalogSkillRows, allProviderStatuses] =
+  const [
+    session,
+    modelConfig,
+    lastModelRows,
+    activeProviders,
+    assignedSkillRows,
+    catalogSkillRows,
+    allProviderStatuses,
+    capabilityNeedReview,
+    workPatternReadModel,
+  ] =
     await Promise.all([
       auth(),
       prisma.agentModelConfig.findUnique({ where: { agentId: agent.agentId } }).catch(() => null),
@@ -110,6 +164,8 @@ export default async function AgentDetailPage({
         .catch(() => [] as Array<{ skillId: string; name: string; category: string; riskBand: string }>),
       // Provider statuses for the summary health chip (mirrors roster.ts logic).
       prisma.modelProvider.findMany({ select: { providerId: true, status: true } }).catch(() => []),
+      getCoworkerCapabilityNeedReview({ agentId: agent.agentId }).catch(() => emptyNeedReview()),
+      getWorkPatternReadModel({ agentId: agent.agentId }).catch(() => emptyWorkPatternReadModel()),
     ]);
 
   const canWrite = !!session?.user && can(
@@ -198,6 +254,8 @@ export default async function AgentDetailPage({
   // WS4: a one-word badge on the Priority tab so an override is visible without
   // opening it ("set" = this coworker has its own override; otherwise inherited).
   const priorityBadge = postureInheritance.hasOwnOverride ? "set" : null;
+  const needsAndPlaybooksCount =
+    capabilityNeedReview.summary.total + workPatternReadModel.summary.totalPatterns;
 
   const tabs: CoworkerTab[] = [
     { id: "overview", label: "Overview" },
@@ -206,6 +264,7 @@ export default async function AgentDetailPage({
     { id: "priority", label: "Priority", badge: priorityBadge },
     { id: "governance", label: "Governance" },
     { id: "performance", label: "Performance" },
+    { id: "needs-playbooks", label: "Needs & Playbooks", badge: needsAndPlaybooksCount > 0 ? String(needsAndPlaybooksCount) : null },
     { id: "decisions", label: "Decisions & Activity", badge: decisions.total > 0 ? String(decisions.total) : null },
   ];
 
@@ -260,6 +319,7 @@ export default async function AgentDetailPage({
         <PriorityPanel priorityControl={priorityControl} />
         <GovernancePanel record={record} />
         <PerformancePanel record={record} />
+        <NeedsAndPlaybooksPanel needs={capabilityNeedReview} workPatterns={workPatternReadModel} />
         <DecisionsPanel record={record} />
       </CoworkerRecordTabs>
     </div>
