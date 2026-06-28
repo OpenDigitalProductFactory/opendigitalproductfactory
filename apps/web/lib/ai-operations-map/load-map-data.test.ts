@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { mockResolveModelSelectionByPhase } = vi.hoisted(() => ({
+  mockResolveModelSelectionByPhase: vi.fn(),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     storefrontConfig: {
@@ -56,11 +60,21 @@ vi.mock("@dpf/db", () => ({
     deliberationRun: {
       findMany: vi.fn(),
     },
+    agentActionProposal: {
+      findMany: vi.fn(),
+    },
   },
+}));
+vi.mock("@/lib/inference/phase-model-resolution", () => ({
+  resolveModelSelectionByPhase: () => mockResolveModelSelectionByPhase(),
 }));
 
 import { prisma } from "@dpf/db";
 import { loadOperationsMapData, mergeTaskRunsDedupeById } from "./load-map-data";
+import {
+  ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
+  activityHarnessProposalParameters,
+} from "@/lib/routing/activity-harness-approval-source";
 
 describe("loadOperationsMapData", () => {
   beforeEach(() => {
@@ -68,10 +82,15 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.agentMessage.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.modelProfile.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
+    mockResolveModelSelectionByPhase.mockResolvedValue({
+      generatedAt: "2026-06-28T20:00:00.000Z",
+      phases: [],
+    });
     // A2A interaction sources default to empty; individual tests override.
     vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.phaseHandoff.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.deliberationRun.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
   });
 
   it("selects the map template from StorefrontConfig archetype truth", async () => {
@@ -96,6 +115,11 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
+    mockResolveModelSelectionByPhase.mockResolvedValue({
+      generatedAt: "2026-06-28T20:00:00.000Z",
+      phases: [],
+    });
 
     const data = await loadOperationsMapData();
 
@@ -178,6 +202,8 @@ describe("loadOperationsMapData", () => {
         title: true,
         startedAt: true,
         completedAt: true,
+        a2aMetadata: true,
+        repeatedPatternKey: true,
       },
     });
     expect(prisma.toolExecutionReceipt.findMany).toHaveBeenCalledWith({
@@ -558,8 +584,282 @@ describe("loadOperationsMapData", () => {
     expect(prisma.deliberationRun.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: { startedAt: "desc" }, take: 40 }),
     );
+    });
   });
-});
+
+  it("attaches Build Studio activity-routing projection from phase model resolution", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.externalEvidenceRecord.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.routeDecisionLog.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+    mockResolveModelSelectionByPhase.mockResolvedValue({
+      generatedAt: "2026-06-28T20:00:00.000Z",
+      phases: [
+        {
+          phase: "plan",
+          label: "Plan",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          rationale: "Selected Claude for high-risk planning.",
+          flags: [],
+        },
+      ],
+    });
+
+    const data = await loadOperationsMapData();
+
+    expect(data.routingTopology.activityRouting).toMatchObject({
+      generatedAt: "2026-06-28T20:00:00.000Z",
+      activities: [
+        {
+          activityId: "build:unknown:plan",
+          activityClass: "plan",
+          selectedProviderId: "anthropic",
+          selectedModelId: "claude-sonnet",
+        },
+      ],
+    });
+  });
+
+  it("merges observed activity outcomes into the loaded activity-routing projection", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.externalEvidenceRecord.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.routeDecisionLog.findMany).mockResolvedValue([
+      makeRouteDecisionRow({
+        id: "decision-plan-1",
+        agentId: "support-specialist",
+        selectedEndpointId: "anthropic:claude-sonnet",
+        selectedModelId: "claude-sonnet",
+        taskType: "reasoning",
+        createdAt: new Date("2026-06-28T20:00:00.000Z"),
+        candidateTrace: [
+          {
+            endpointId: "anthropic:claude-sonnet",
+            providerId: "anthropic",
+            modelId: "claude-sonnet",
+            excluded: false,
+            activityHarness: {
+              recipeKey: "edge.plan.balanced",
+              activityClass: "plan",
+              activityConfidence: "calibrating",
+              promptStrategy: "standard-activity-packet",
+              contextAssembler: "ranked-evidence-context",
+            },
+          },
+        ],
+      }),
+    ] as never);
+    vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([
+      makeTokenUsageRow({
+        agentId: "support-specialist",
+        providerId: "anthropic",
+        contextKey: "reasoning",
+        inputTokens: 900,
+        outputTokens: 600,
+        costUsd: 0.027,
+        createdAt: new Date("2026-06-28T20:00:10.000Z"),
+      }),
+    ] as never);
+    vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([
+      makeRouteOutcomeRow({
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+        taskType: "reasoning",
+        providerErrorCode: null,
+        createdAt: new Date("2026-06-28T20:00:15.000Z"),
+      }),
+    ] as never);
+    vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+    mockResolveModelSelectionByPhase.mockResolvedValue({
+      generatedAt: "2026-06-28T20:00:20.000Z",
+      phases: [
+        {
+          phase: "plan",
+          label: "Plan",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          rationale: "Selected Claude for high-risk planning.",
+          flags: [],
+        },
+      ],
+    });
+
+    const data = await loadOperationsMapData();
+
+    expect(data.routingTopology.activityRouting?.activities[0]).toMatchObject({
+      activityId: "build:unknown:plan",
+      routeDecisionId: "decision-plan-1",
+      tokenTotal: 1500,
+      costUsd: 0.027,
+      successSignal: "valid",
+    });
+  });
+
+  it("loads approved activity harness confidence overrides into the activity-routing projection", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.externalEvidenceRecord.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.routeDecisionLog.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([
+      {
+        proposalId: "AP-ROUTE-1",
+        actionType: ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
+        parameters: activityHarnessProposalParameters({
+          proposalId: "harness-action:plan:edge.plan.balanced:anthropic:claude-sonnet:promote",
+          activityClass: "plan",
+          harnessRecipeKey: "edge.plan.balanced",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          confidence: "trusted",
+        }),
+        status: "approved",
+        decidedById: "user-1",
+        decidedAt: new Date("2026-06-28T21:00:00.000Z"),
+      },
+    ] as never);
+    mockResolveModelSelectionByPhase.mockResolvedValue({
+      generatedAt: "2026-06-28T20:00:20.000Z",
+      phases: [
+        {
+          phase: "plan",
+          label: "Plan",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          rationale: "Selected Claude for high-risk planning.",
+          flags: [],
+        },
+      ],
+    });
+
+    const data = await loadOperationsMapData();
+
+    expect(data.routingTopology.activityRouting?.activities[0]).toMatchObject({
+      activityClass: "plan",
+      harnessRecipeKey: "edge.plan.balanced",
+      confidence: "trusted",
+      approvedConfidenceOverrideId:
+        "harness-action:plan:edge.plan.balanced:anthropic:claude-sonnet:promote",
+    });
+    expect(prisma.agentActionProposal.findMany).toHaveBeenCalledWith({
+      where: {
+        actionType: ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
+        status: { in: ["approve", "approved", "executed"] },
+      },
+      orderBy: { decidedAt: "desc" },
+      take: 40,
+      select: {
+        proposalId: true,
+        actionType: true,
+        parameters: true,
+        status: true,
+        decidedById: true,
+        decidedAt: true,
+      },
+    });
+  });
+
+  it("projects live GLM provider readiness and Work Case patterns as activity packages when no phase routing exists", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.taskRun.findMany)
+      .mockResolvedValueOnce([
+        makeTaskRunRow({
+          id: "tr-work-case",
+          taskRunId: "TR-WORK-CASE",
+          title: "Approve governed playbook proposal",
+          a2aMetadata: {
+            workPattern: {
+              patternKey: "case-resolution:approve",
+              status: "active",
+              scope: "case-transition",
+              version: 1,
+              source: "human-review",
+              decisionScope: "company-wwwd",
+              evidence: [
+                {
+                  taskRunId: "TR-WORK-CASE",
+                  workCaseRef: "WC-CASE-1",
+                  receiptId: "receipt-1",
+                  decisionInteractionId: "decision-1",
+                },
+              ],
+              workCaseBinding: {
+                caseType: "governed-playbook",
+                transitionKey: "approve",
+                governedActionKey: "approve-playbook-proposal",
+                authorityMode: "on-behalf-of",
+                receiptPolicy: "governed-action",
+              },
+            },
+          },
+          repeatedPatternKey: "case-resolution:approve",
+        }),
+      ] as never)
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([] as never);
+    vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.externalEvidenceRecord.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.routeDecisionLog.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([
+      makeModelProviderRow({
+        providerId: "zai",
+        name: "Z.ai",
+        status: "unconfigured",
+      }),
+    ] as never);
+    vi.mocked(prisma.modelProfile.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+
+    const data = await loadOperationsMapData();
+
+    expect(data.routingTopology.activityRouting?.activities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        activityId: "pilot:glm:zai-provider-catalog",
+        selectedProviderId: "zai",
+        selectedModelId: "glm-5.2",
+        confidence: "provisional",
+        successSignal: "attention",
+        decisionSummary: expect.stringContaining("credentials"),
+      }),
+      expect.objectContaining({
+        activityId: "pilot:work-case:case-resolution:approve",
+        label: "Approve governed playbook proposal",
+        activityClass: "tool-act",
+        harnessRecipeKey: "mixed.tool-act.balanced",
+        decisionSummary: "Work Case pattern has governed action, receipt policy, and case evidence.",
+      }),
+    ]));
+  });
 
 function makeAgentRow() {
   return {
@@ -597,7 +897,7 @@ function makeToolExecutionRow() {
   };
 }
 
-function makeTaskRunRow() {
+function makeTaskRunRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "tr-1",
     taskRunId: "TR-SCHED-ABCDE",
@@ -608,6 +908,9 @@ function makeTaskRunRow() {
     title: "Discovery Taxonomy Gap Triage",
     startedAt: new Date("2026-05-10T12:00:30.000Z"),
     completedAt: null,
+    a2aMetadata: null,
+    repeatedPatternKey: null,
+    ...overrides,
   };
 }
 
@@ -653,7 +956,7 @@ function makeExternalEvidenceRow() {
   };
 }
 
-function makeRouteDecisionRow(overrides: { agentId?: string | null; agentMessageId?: string | null } = {}) {
+function makeRouteDecisionRow(overrides: Record<string, unknown> = {}) {
   return {
     ...makeRouteDecisionRowBase(),
     ...overrides,
@@ -712,7 +1015,14 @@ function makeModelProviderRowBase() {
   };
 }
 
-function makeRouteOutcomeRow() {
+function makeRouteOutcomeRow(overrides: Record<string, unknown> = {}) {
+  return {
+    ...makeRouteOutcomeRowBase(),
+    ...overrides,
+  };
+}
+
+function makeRouteOutcomeRowBase() {
   return {
     id: "outcome-claude-auth",
     agentId: null,
@@ -735,7 +1045,14 @@ function makeModelProfileRow() {
   };
 }
 
-function makeTokenUsageRow() {
+function makeTokenUsageRow(overrides: Record<string, unknown> = {}) {
+  return {
+    ...makeTokenUsageRowBase(),
+    ...overrides,
+  };
+}
+
+function makeTokenUsageRowBase() {
   return {
     id: "usage-1",
     agentId: "support-specialist",

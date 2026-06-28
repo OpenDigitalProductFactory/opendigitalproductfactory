@@ -1,4 +1,10 @@
 import type { AuditClass } from "@/lib/audit-classes";
+import type {
+  ActivityClass,
+  ActivityDistributionShape,
+  ActivityParentRef,
+  ActivityRiskClass,
+} from "@/lib/routing/activity-contract";
 
 export type OperationsMapSeverity = "normal" | "attention" | "warning" | "critical";
 
@@ -310,12 +316,82 @@ export type OperationsMapRoutingTopology = {
   coworkers: OperationsMapRoutingCoworker[];
   providers: OperationsMapRoutingProvider[];
   routes: OperationsMapRoutingRoute[];
+  activityRouting: OperationsMapActivityRouting | null;
   a2aEdges: OperationsMapA2aEdge[];
   deliberations: OperationsMapDeliberation[];
   markers: OperationsMapRoutingMarker[];
   timeline: OperationsMapRoutingTimelineMarker[];
   legend: OperationsMapRoutingLegendItem[];
   a2aLegend: OperationsMapA2aLegendItem[];
+};
+
+export type OperationsMapActivitySuccessSignal =
+  | "unknown"
+  | "valid"
+  | "accepted"
+  | "review-passed"
+  | "failed"
+  | "retried"
+  | "attention";
+
+export type OperationsMapActivityRoutingExclusion = {
+  providerId: string;
+  modelId: string | null;
+  reason: string;
+};
+
+export type OperationsMapActivityStep = {
+  activityId: string;
+  label: string;
+  activityClass: ActivityClass;
+  distributionShape: ActivityDistributionShape;
+  riskClass: ActivityRiskClass;
+  selectedProviderId: string | null;
+  selectedModelId: string | null;
+  harnessRecipeKey: string | null;
+  confidence: "provisional" | "calibrating" | "trusted" | "degraded" | null;
+  successSignal: OperationsMapActivitySuccessSignal;
+  costUsd: number | null;
+  tokenTotal: number | null;
+  routeDecisionId: string | null;
+  adapterTelemetryId: string | null;
+  decisionSummary: string;
+  tuningRecommendation?: "observe" | "keep" | "promote" | "degrade" | null;
+  tuningRationale?: string | null;
+  actionProposalId?: string | null;
+  actionProposalAction?: "promote" | "degrade" | null;
+  actionProposalRecommendedConfidence?: "provisional" | "calibrating" | "trusted" | "degraded" | null;
+  actionProposalSummary?: string | null;
+  approvedConfidenceOverrideId?: string | null;
+  exclusions: OperationsMapActivityRoutingExclusion[];
+};
+
+export type OperationsMapActivityRouting = {
+  taskRef: ActivityParentRef;
+  activities: OperationsMapActivityStep[];
+  generatedAt: string;
+};
+
+export type OperationsMapActivityOutcomeEvidenceStrength =
+  | "route-only"
+  | "linked";
+
+export type OperationsMapActivityOutcome = {
+  id: string;
+  routeDecisionId: string;
+  activityClass: ActivityClass;
+  harnessRecipeKey: string;
+  confidence: "provisional" | "calibrating" | "trusted" | "degraded";
+  providerId: string;
+  modelId: string | null;
+  taskType: string;
+  tokenTotal: number | null;
+  costUsd: number | null;
+  successSignal: OperationsMapActivitySuccessSignal;
+  qualitySignal: number | null;
+  evaluatorSource: string | null;
+  evidenceStrength: OperationsMapActivityOutcomeEvidenceStrength;
+  occurredAt: string;
 };
 
 export type OperationsMapQuickViewId = "all" | "exceptions" | "evidence" | "tool-runs";

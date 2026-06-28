@@ -62,6 +62,55 @@ describe("AI operations routing topology projection", () => {
     );
   });
 
+  it("adds activity harness context to decision marker summaries", () => {
+    const topology = projectRoutingTopology({
+      agents: [
+        { agentId: "build-specialist", name: "Build Specialist", stationLabel: "Build" },
+      ],
+      providers: [
+        makeProvider({ providerId: "anthropic", name: "Claude", category: "external" }),
+      ],
+      endpointProfiles: [],
+      routeDecisions: [
+        makeDecision({
+          id: "decision-harness",
+          agentMessageId: "build-specialist",
+          selectedEndpointId: "anthropic:claude-sonnet",
+          selectedModelId: "claude-sonnet",
+          taskType: "analysis",
+          candidateTrace: [
+            makeCandidate({
+              endpointId: "anthropic:claude-sonnet",
+              providerId: "anthropic",
+              modelId: "claude-sonnet",
+              activityHarness: {
+                recipeKey: "high-risk.code-edit.frontier-coding",
+                activityClass: "code-edit",
+                activityConfidence: "trusted",
+                promptStrategy: "repo-packet-with-verification",
+                contextAssembler: "work-case-repo-packet",
+              },
+            }),
+          ],
+        }),
+      ],
+      tokenUsage: [],
+      routeOutcomes: [],
+      scheduledAgentTasks: [],
+      scheduledJobs: [],
+      now: new Date("2026-05-13T15:00:00.000Z"),
+    });
+
+    expect(topology.markers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "marker:decision-harness:decision",
+          summary: expect.stringContaining("Activity harness: code-edit via high-risk.code-edit.frontier-coding (trusted)."),
+        }),
+      ]),
+    );
+  });
+
   it("projects fallback routes and error markers from fallback history", () => {
     const topology = projectRoutingTopology({
       agents: [{ agentId: "ea-architect", name: "EA Architect", stationLabel: "Integrate" }],

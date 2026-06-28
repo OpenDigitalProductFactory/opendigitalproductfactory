@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 
 import { resolveAIDocForAgent, type InternalAIDoc } from "@/lib/identity/aidoc-resolver";
+import { projectActionProposalPresentation } from "@/lib/governance/action-proposal-presentation";
 
 import { getToolGrantMapping } from "./agent-grants";
 import type {
@@ -317,6 +318,7 @@ async function getSupervisorDecisionStateForAgents(
         messageId: true,
         agentId: true,
         actionType: true,
+        parameters: true,
         proposedAt: true,
       },
     }),
@@ -349,6 +351,11 @@ async function getSupervisorDecisionStateForAgents(
 
   for (const proposal of pendingProposals) {
     const current = stateByAgentId.get(proposal.agentId) ?? createEmptySupervisorDecisionState();
+    const presentation = projectActionProposalPresentation({
+      proposalId: proposal.proposalId,
+      actionType: proposal.actionType,
+      parameters: proposal.parameters,
+    });
     stateByAgentId.set(proposal.agentId, {
       ...current,
       pendingProposalCount: current.pendingProposalCount + 1,
@@ -358,6 +365,9 @@ async function getSupervisorDecisionStateForAgents(
         threadId: proposal.threadId,
         messageId: proposal.messageId,
         actionType: proposal.actionType,
+        actionLabel: presentation.shortLabel,
+        actionSummary: presentation.summary,
+        actionDetails: presentation.details,
         proposedAt: proposal.proposedAt.toISOString(),
         decisionEndpoint: buildDecisionEndpoint(proposal.id),
       },

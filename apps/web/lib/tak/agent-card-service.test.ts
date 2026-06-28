@@ -375,6 +375,7 @@ describe("resolveInternalAgentCard", () => {
         messageId: "msg-2",
         agentId: "build-specialist",
         actionType: "register_digital_product_from_build",
+        parameters: {},
         proposedAt: new Date("2026-05-20T15:00:00Z"),
       },
       {
@@ -384,6 +385,7 @@ describe("resolveInternalAgentCard", () => {
         messageId: "msg-1",
         agentId: "build-specialist",
         actionType: "deploy_feature",
+        parameters: {},
         proposedAt: new Date("2026-05-19T15:00:00Z"),
       },
     ] as never);
@@ -430,6 +432,9 @@ describe("resolveInternalAgentCard", () => {
         threadId: "thread-2",
         messageId: "msg-2",
         actionType: "register_digital_product_from_build",
+        actionLabel: "Register digital product from build",
+        actionSummary: "Proposed action register_digital_product_from_build.",
+        actionDetails: [],
         proposedAt: "2026-05-20T15:00:00.000Z",
         decisionEndpoint: "/api/v1/governance/approvals/prop-row-2",
       },
@@ -459,6 +464,7 @@ describe("resolveInternalAgentCard", () => {
         messageId: true,
         agentId: true,
         actionType: true,
+        parameters: true,
         proposedAt: true,
       },
     });
@@ -471,5 +477,59 @@ describe("resolveInternalAgentCard", () => {
         orderBy: { createdAt: "desc" },
       }),
     );
+  });
+
+  it("projects activity-routing proposal details into supervisor decision state", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      {
+        agentId: "activity-routing-governor",
+        name: "Activity Routing Governor",
+        description: null,
+        status: "active",
+        lifecycleStage: "production",
+        sensitivity: "internal",
+        hitlTierDefault: 2,
+        executionConfig: null,
+        governanceProfile: null,
+        skills: [],
+        toolGrants: [],
+      },
+    ] as never);
+    vi.mocked(resolveAIDocForAgent).mockResolvedValue(null);
+    vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([
+      {
+        id: "prop-route-1",
+        proposalId: "harness-action:code-edit:glm.mixed.code-edit.provisional:zai-coding:glm-5.2:promote",
+        threadId: "thread-routing",
+        messageId: "msg-routing",
+        agentId: "activity-routing-governor",
+        actionType: "activity_harness_confidence_override",
+        parameters: {
+          kind: "activity-harness-confidence-override",
+          activityClass: "code-edit",
+          harnessRecipeKey: "glm.mixed.code-edit.provisional",
+          providerId: "zai-coding",
+          modelId: "glm-5.2",
+          confidence: "trusted",
+        },
+        proposedAt: new Date("2026-06-28T20:00:00Z"),
+      },
+    ] as never);
+    vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([]);
+
+    const [card] = await listInternalAgentCards();
+
+    expect(card.extensions.tak.authority.supervisorDecisionState.latestPendingProposal).toMatchObject({
+      actionType: "activity_harness_confidence_override",
+      actionLabel: "Activity routing tuning",
+      actionSummary: "Set code-edit / glm.mixed.code-edit.provisional on zai-coding/glm-5.2 to trusted.",
+      actionDetails: [
+        { label: "Activity", value: "code-edit" },
+        { label: "Harness", value: "glm.mixed.code-edit.provisional" },
+        { label: "Provider", value: "zai-coding" },
+        { label: "Model", value: "glm-5.2" },
+        { label: "Confidence", value: "trusted" },
+      ],
+    });
   });
 });

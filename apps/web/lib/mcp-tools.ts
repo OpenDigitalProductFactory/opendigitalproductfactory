@@ -5173,6 +5173,20 @@ export async function executeTool(
         message: "probe tool body — should not be reached when gate is wired and DPF_TEST_MCP_REFUSE_PROBE=1",
       };
     }
+    case "activity_harness_confidence_override": {
+      return {
+        success: true,
+        message: "Activity routing confidence override approved.",
+        data: {
+          kind: "activity-harness-confidence-override",
+          activityClass: typeof params["activityClass"] === "string" ? params["activityClass"] : null,
+          harnessRecipeKey: typeof params["harnessRecipeKey"] === "string" ? params["harnessRecipeKey"] : null,
+          providerId: typeof params["providerId"] === "string" ? params["providerId"] : null,
+          modelId: typeof params["modelId"] === "string" ? params["modelId"] : null,
+          confidence: typeof params["confidence"] === "string" ? params["confidence"] : null,
+        },
+      };
+    }
     case "spawn_work_thread": {
       if (!context?.threadId) {
         const message = "Error: spawn_work_thread requires caller thread context";

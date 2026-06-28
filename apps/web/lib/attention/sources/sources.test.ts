@@ -112,6 +112,7 @@ describe("agentProposalToAttentionItem", () => {
     const row: AgentActionProposalRow = {
       proposalId: "AP-1",
       actionType: "create_invoice",
+      parameters: {},
       proposedAt: new Date("2026-06-23T07:00:00.000Z"),
     };
     const item = agentProposalToAttentionItem(row);
@@ -119,5 +120,27 @@ describe("agentProposalToAttentionItem", () => {
     expect(item.title).toBe("Approve: Create invoice");
     expect(item.triage.residueReason).toBe("policy-approval");
     expect(item.decisionClass.scorability).toBe("unscorable");
+  });
+
+  it("projects an activity-harness proposal with routing-specific context", () => {
+    const item = agentProposalToAttentionItem({
+      proposalId: "AP-ROUTE",
+      actionType: "activity_harness_confidence_override",
+      parameters: {
+        kind: "activity-harness-confidence-override",
+        activityClass: "code-edit",
+        harnessRecipeKey: "glm.mixed.code-edit.provisional",
+        providerId: "zai-coding",
+        modelId: "glm-5.2",
+        confidence: "trusted",
+      },
+      proposedAt: new Date("2026-06-23T07:00:00.000Z"),
+    });
+
+    expect(item.title).toBe("Approve: Tune activity routing confidence");
+    expect(item.context).toBe(
+      "Set code-edit / glm.mixed.code-edit.provisional on zai-coding/glm-5.2 to trusted.",
+    );
+    expect(item.deepLink).toBe("/platform/ai/operations-map");
   });
 });

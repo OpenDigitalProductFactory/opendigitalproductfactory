@@ -63,6 +63,9 @@ const baseCard: InternalAgentCard = {
             threadId: "thread-2",
             messageId: "msg-2",
             actionType: "register_digital_product_from_build",
+            actionLabel: "Register digital product from build",
+            actionSummary: "Proposed action register_digital_product_from_build.",
+            actionDetails: [],
             proposedAt: "2026-05-20T15:00:00.000Z",
             decisionEndpoint: "/api/v1/governance/approvals/prop-row-2",
           },
@@ -102,6 +105,7 @@ describe("AgentCardSupervisorPanel", () => {
     expect(html).toContain("3 exposed tools");
     expect(html).toContain("Pending proposals");
     expect(html).toContain("PROP-002");
+    expect(html).toContain("Register digital product from build");
     expect(html).toContain("Approval workflow");
     expect(html).toContain("/api/v1/governance/approvals/prop-row-2");
     expect(html).toContain("Latest receipt");

@@ -9,6 +9,22 @@ import {
   projectToolExecutionReceipt,
 } from "./project-events";
 import { projectRoutingTopology } from "./project-routing-topology";
+import { resolveModelSelectionByPhase } from "@/lib/inference/phase-model-resolution";
+import {
+  projectActivityPackagesRouting,
+  projectBuildStudioActivityRouting,
+} from "./project-activity-routing";
+import { projectActivityOutcomes } from "./project-activity-outcomes";
+import {
+  buildGlmActivityPilotPackage,
+  buildWorkCaseActivityPilotPackage,
+  type ActivityPackage,
+} from "@/lib/routing/activity-package";
+import { parseWorkPatternMetadata } from "@/lib/tak/work-pattern-types";
+import {
+  ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
+  activityHarnessOverridesFromProposalRows,
+} from "@/lib/routing/activity-harness-approval-source";
 import {
   projectA2aInteractions,
   type A2aDelegationSourceRow,
@@ -78,6 +94,8 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     phaseHandoffs,
     a2aTaskRuns,
     deliberationRuns,
+    activityHarnessApprovalProposals,
+    phaseModelSelection,
   ] = await Promise.all([
     prisma.storefrontConfig.findFirst({
       include: {
@@ -130,6 +148,8 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
         title: true,
         startedAt: true,
         completedAt: true,
+        a2aMetadata: true,
+        repeatedPatternKey: true,
       },
     }),
     // BI-OPS-MAP-STALLED-WINDOW (2026-05-21): lift stalled rows into the
@@ -156,6 +176,8 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
         title: true,
         startedAt: true,
         completedAt: true,
+        a2aMetadata: true,
+        repeatedPatternKey: true,
       },
     }),
     prisma.toolExecution.findMany({
@@ -438,6 +460,23 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
         },
       },
     }),
+    prisma.agentActionProposal.findMany({
+      where: {
+        actionType: ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
+        status: { in: ["approve", "approved", "executed"] },
+      },
+      orderBy: { decidedAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        proposalId: true,
+        actionType: true,
+        parameters: true,
+        status: true,
+        decidedById: true,
+        decidedAt: true,
+      },
+    }),
+    resolveModelSelectionByPhase(),
   ]);
 
   const routeDecisionAgentMessageIds = [
@@ -485,6 +524,10 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
   // doesn't matter for the projection set — the final sort by occurredAt
   // below handles display order.
   const taskRuns = mergeTaskRunsDedupeById(recentTaskRuns, stalledTaskRuns);
+  const activityPackages = activityPackagesFromLiveState({
+    providers,
+    taskRuns,
+  });
 
   const projections = [
     ...taskRuns.map((row) => projectTaskRun(row as OperationsMapTaskRun, template)),
@@ -495,6 +538,18 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
   ].sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
 
   const stationedAgents = projectAgentsToStations(mapAgents, template);
+  const routeDecisionRows = routeDecisions.map((decision) => ({
+    ...decision,
+    agentId: decision.agentId ?? (decision.agentMessageId ? routeDecisionAgentIdByMessageId.get(decision.agentMessageId) ?? null : null),
+  }));
+  const activityOutcomes = projectActivityOutcomes({
+    routeDecisions: routeDecisionRows,
+    tokenUsage,
+    routeOutcomes,
+  });
+  const approvedActivityHarnessOverrides = activityHarnessOverridesFromProposalRows(
+    activityHarnessApprovalProposals,
+  );
   const routingTopology = projectRoutingTopology({
     agents: stationedAgents.map((agent) => ({
       agentId: agent.agentId,
@@ -509,10 +564,7 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       friendlyName: profile.friendlyName,
       modelStatus: profile.modelStatus,
     })),
-    routeDecisions: routeDecisions.map((decision) => ({
-      ...decision,
-      agentId: decision.agentId ?? (decision.agentMessageId ? routeDecisionAgentIdByMessageId.get(decision.agentMessageId) ?? null : null),
-    })),
+    routeDecisions: routeDecisionRows,
     tokenUsage,
     routeOutcomes,
     scheduledAgentTasks,
@@ -620,6 +672,24 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     projections,
     routingTopology: {
       ...routingTopology,
+      activityRouting: phaseModelSelection.phases.length > 0
+        ? mergeActivityRoutingWithPackages(
+          projectBuildStudioActivityRouting({
+          parentRef: {},
+          generatedAt: new Date(phaseModelSelection.generatedAt),
+          phases: phaseModelSelection.phases,
+          observedOutcomes: activityOutcomes,
+          approvedConfidenceOverrides: approvedActivityHarnessOverrides,
+          }),
+          activityPackages,
+        )
+        : activityPackages.length > 0
+          ? projectActivityPackagesRouting({
+            taskRef: {},
+            generatedAt: new Date(),
+            packages: activityPackages,
+          })
+          : null,
       coworkers: mergedCoworkers,
       a2aEdges: a2aProjection.a2aEdges,
       deliberations,
@@ -627,6 +697,65 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     },
     recentWindowLabel: `Last ${RECENT_TOOL_LIMIT} records per evidence source`,
   };
+}
+
+function mergeActivityRoutingWithPackages(
+  routing: ReturnType<typeof projectBuildStudioActivityRouting>,
+  packages: ActivityPackage[],
+): ReturnType<typeof projectBuildStudioActivityRouting> {
+  if (packages.length === 0) return routing;
+  const packageRouting = projectActivityPackagesRouting({
+    taskRef: routing.taskRef,
+    generatedAt: new Date(routing.generatedAt),
+    packages,
+  });
+  return {
+    ...routing,
+    activities: [...routing.activities, ...packageRouting.activities],
+  };
+}
+
+function activityPackagesFromLiveState(input: {
+  providers: Array<{ providerId: string; status: string | null }>;
+  taskRuns: Array<{
+    taskRunId: string;
+    title: string;
+    a2aMetadata?: unknown;
+    repeatedPatternKey?: string | null;
+  }>;
+}): ActivityPackage[] {
+  const packages: ActivityPackage[] = [];
+  const glmProvider = input.providers.find((provider) =>
+    provider.providerId === "zai" || provider.providerId === "zai-coding",
+  );
+  if (glmProvider) {
+    packages.push(buildGlmActivityPilotPackage({
+      pilotId: "zai-provider-catalog",
+      parentRef: { patternKey: "glm-center-provider-catalog" },
+      credentialReady: glmProvider.status === "active",
+    }));
+  }
+
+  const seenPatterns = new Set<string>();
+  for (const taskRun of input.taskRuns) {
+    const metadata = workPatternFromTaskRunMetadata(taskRun.a2aMetadata);
+    if (!metadata?.workCaseBinding || seenPatterns.has(metadata.patternKey)) {
+      continue;
+    }
+    seenPatterns.add(metadata.patternKey);
+    packages.push(buildWorkCaseActivityPilotPackage({
+      metadata,
+      title: taskRun.title,
+    }));
+  }
+
+  return packages;
+}
+
+function workPatternFromTaskRunMetadata(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  return parseWorkPatternMetadata(record.workPattern);
 }
 
 /**

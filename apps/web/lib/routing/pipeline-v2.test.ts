@@ -9,6 +9,8 @@ import type { RequestContract } from "./request-contract";
 import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
 import { routeEndpointV2, getExclusionReasonV2 } from "./pipeline-v2";
 import { markEndpointUnavailable } from "./rate-tracker";
+import type { ActivityContract } from "./activity-contract";
+import type { ActivityHarnessConfidenceOverride } from "./activity-harness-governance";
 
 // Mock champion-challenger so selectRecipeWithExploration returns null recipe (no DB in unit tests)
 vi.mock("./champion-challenger", () => ({
@@ -80,6 +82,33 @@ function makeContract(overrides: Partial<RequestContract> = {}): RequestContract
     estimatedOutputTokens: 500,
     reasoningDepth: "medium",
     budgetClass: "balanced",
+    ...overrides,
+  };
+}
+
+function makeActivity(overrides: Partial<ActivityContract> = {}): ActivityContract {
+  return {
+    activityId: "task-123:build",
+    parentRef: { workCaseId: "task-123" },
+    activityClass: "code-edit",
+    title: "Build feature slice",
+    distributionShape: "edge",
+    riskClass: "high",
+    successShape: "patch",
+    contextPolicy: "work-case-packet",
+    tokenEnvelope: {
+      maxInputTokens: 64000,
+      maxOutputTokens: 8192,
+      compression: "strict-packet",
+    },
+    evaluationPolicy: {
+      evaluator: "tool-success",
+      minimumSignal: "no-regression",
+    },
+    requestContractHints: {
+      taskType: "analysis",
+      budgetClass: "quality_first",
+    },
     ...overrides,
   };
 }
@@ -588,6 +617,68 @@ describe("routeEndpointV2", () => {
     expect(decision.executionPlan).toBeDefined();
     expect(decision.executionPlan?.maxTokens).toBe(4096); // default plan
     expect(decision.executionPlan?.recipeId).toBeNull();   // no recipe in DB
+  });
+
+  it("attaches an activity harness recipe to the selected executionPlan", async () => {
+    const decision = await routeEndpointV2(
+      [makeEndpoint({ providerId: "zai", modelId: "glm-5.2", modelFamily: "glm" })],
+      makeContract({ taskType: "analysis" }),
+      [],
+      [],
+      { activityContract: makeActivity() },
+    );
+
+    expect(decision.executionPlan?.harness).toMatchObject({
+      recipeKey: "glm.edge.code-edit.provisional",
+      activityClass: "code-edit",
+      activityConfidence: "provisional",
+      providerFamily: "zai",
+      modelFamily: "glm",
+      executionAdapterHint: "opencode",
+      promptStrategy: "glm-center-distribution-packet",
+      contextAssembler: "minimal-ranked-context",
+    });
+  });
+
+  it("applies an approved activity harness confidence override to live execution plans", async () => {
+    const activity = makeActivity({
+      activityClass: "summarize",
+      distributionShape: "center",
+      riskClass: "low",
+      successShape: "text",
+      evaluationPolicy: {
+        evaluator: "human-acceptance",
+        minimumSignal: "accepted",
+      },
+    });
+    const override: ActivityHarnessConfidenceOverride = {
+      calibrationKey: "summarize|center.summarize.cheap-structured|openai|gpt-4o-mini",
+      proposalId: "harness-action:summarize:center.summarize.cheap-structured:openai:gpt-4o-mini:promote",
+      activityClass: "summarize",
+      harnessRecipeKey: "center.summarize.cheap-structured",
+      providerId: "openai",
+      modelId: "gpt-4o-mini",
+      confidence: "trusted",
+      approvedBy: "operator",
+      approvedAt: "2026-06-28T21:00:00.000Z",
+    };
+
+    const decision = await routeEndpointV2(
+      [cheapModel],
+      makeContract({ taskType: "summarization", budgetClass: "minimize_cost" }),
+      [],
+      [],
+      {
+        activityContract: activity,
+        activityHarnessConfidenceOverrides: [override],
+      },
+    );
+
+    expect(decision.executionPlan?.harness).toMatchObject({
+      recipeKey: "center.summarize.cheap-structured",
+      activityClass: "summarize",
+      activityConfidence: "trusted",
+    });
   });
 
   // ── EP-INF-006: Exploration integration ──────────────────────────────

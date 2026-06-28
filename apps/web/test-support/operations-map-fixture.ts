@@ -39,6 +39,7 @@ export function buildOperationsMapTopologyFixture(
       { id: "route:scheduled", coworkerId: "brand-analyst", providerId: "anthropic", state: "scheduled", label: "Brand Analyst scheduled", summary: "scheduled provider routing", occurredAt: T3, decisionId: null, trafficWeight: 1, markerIds: [] },
       { id: "route:historical", coworkerId: "ceo-coworker", providerId: "openai", state: "historical", label: "CEO Coworker historical via OpenAI / Codex", summary: "past route", occurredAt: T0, decisionId: "d0", trafficWeight: 2, markerIds: [] },
     ],
+    activityRouting: null,
     a2aEdges: [
       { id: "a2a:delegation:1", edgeKind: "a2a-delegation", fromCoworkerId: "ceo-coworker", toCoworkerId: "brand-analyst", state: "active", label: "Delegated brand-extract", summary: "Delegated brand extraction", occurredAt: T0, authorityScope: ["brand:read", "brand:write"], skillId: "brand-extract", refs: { delegationChainId: "del-1" }, weight: 2 },
       { id: "a2a:handoff:1", edgeKind: "a2a-handoff", fromCoworkerId: "build-specialist", toCoworkerId: "brand-analyst", state: "completed", label: "Handoff plan → build", summary: "Plan approved", occurredAt: T1, buildId: "FB-1", gateResult: "plan gate passed", refs: { phaseHandoffId: "ph-1" }, weight: 3 },

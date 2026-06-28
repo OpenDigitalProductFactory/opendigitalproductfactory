@@ -10,6 +10,7 @@ import type {
   OperationsMapRoutingTopology,
 } from "./types";
 import { A2A_INTERACTION_LEGEND } from "./project-a2a-interactions";
+import { parseActivityHarnessAudit } from "@/lib/routing/activity-harness-audit";
 
 export type RoutingCoworkerSourceRow = {
   agentId: string;
@@ -119,6 +120,7 @@ type CandidateLike = {
   modelId?: string;
   excluded?: boolean;
   excludedReason?: string;
+  activityHarness?: unknown;
 };
 
 type FallbackLike = {
@@ -198,7 +200,7 @@ export function projectRoutingTopology(input: RoutingTopologyInput): OperationsM
       id: decisionMarkerId,
       type: "decision",
       label: decisionMarkerLabel(decision, coworkerId),
-      summary: decisionMarkerSummary(decision, coworkerId),
+      summary: decisionMarkerSummary(decision, coworkerId, candidates),
       routeId: selectedRouteId,
       coworkerId,
       actorKind: decision.actorKind,
@@ -443,6 +445,7 @@ export function projectRoutingTopology(input: RoutingTopologyInput): OperationsM
     coworkers: sortByLabel(coworkers),
     providers,
     routes,
+    activityRouting: null,
     // A2A interaction edges are contributed by `projectA2aInteractions` and
     // merged in `load-map-data.ts`. Default to empty here so the topology
     // shape is stable when only provider routing is projected.
@@ -619,12 +622,29 @@ function decisionMarkerLabel(decision: RoutingDecisionSourceRow, coworkerId: str
   return "Unattributed route decision";
 }
 
-function decisionMarkerSummary(decision: RoutingDecisionSourceRow, coworkerId: string | null): string {
-  if (coworkerId) return decision.reason;
+function decisionMarkerSummary(
+  decision: RoutingDecisionSourceRow,
+  coworkerId: string | null,
+  candidates: CandidateLike[],
+): string {
+  const harnessSummary = selectedActivityHarnessSummary(decision, candidates);
+  const summary = harnessSummary ? `${decision.reason} ${harnessSummary}` : decision.reason;
+
+  if (coworkerId) return summary;
   if (decision.actorKind && decision.actorKind !== "legacy_unattributed" && decision.actorId) {
-    return `${decision.reason} Actor: ${decision.actorKind}/${decision.actorId}.`;
+    return `${summary} Actor: ${decision.actorKind}/${decision.actorId}.`;
   }
-  return `${decision.reason} RouteDecisionLog did not record the coworker for this decision, so it is shown as provider-side router audit only.`;
+  return `${summary} RouteDecisionLog did not record the coworker for this decision, so it is shown as provider-side router audit only.`;
+}
+
+function selectedActivityHarnessSummary(
+  decision: RoutingDecisionSourceRow,
+  candidates: CandidateLike[],
+): string | null {
+  const selected = candidates.find((candidate) => candidate.endpointId === decision.selectedEndpointId);
+  const harness = parseActivityHarnessAudit(selected?.activityHarness);
+  if (!harness) return null;
+  return `Activity harness: ${harness.activityClass} via ${harness.recipeKey} (${harness.activityConfidence}).`;
 }
 
 function resolveUsageCoworkerId(agentId: string): string | null {

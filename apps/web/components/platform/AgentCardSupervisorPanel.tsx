@@ -167,8 +167,26 @@ function AgentCardArticle({ card }: { card: InternalAgentCard }) {
               <>
                 <p className="mt-1 break-all text-xs text-[var(--dpf-muted)]">
                   {decisionState.latestPendingProposal.proposalId} /{" "}
-                  {decisionState.latestPendingProposal.actionType}
+                  {decisionState.latestPendingProposal.actionLabel}
                 </p>
+                <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+                  {decisionState.latestPendingProposal.actionSummary}
+                </p>
+                {decisionState.latestPendingProposal.actionDetails.length > 0 ? (
+                  <dl className="mt-2 grid grid-cols-2 gap-1 text-xs">
+                    {decisionState.latestPendingProposal.actionDetails.map((detail) => (
+                      <div
+                        key={`${decisionState.latestPendingProposal?.proposalId}:${detail.label}`}
+                        className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1"
+                      >
+                        <dt className="text-[9px] uppercase tracking-[0.12em] text-[var(--dpf-muted)]">
+                          {detail.label}
+                        </dt>
+                        <dd className="mt-0.5 break-all text-[var(--dpf-text)]">{detail.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
                 <p className="mt-1 break-all text-xs text-[var(--dpf-muted)]">
                   Thread {decisionState.latestPendingProposal.threadId} / Message{" "}
                   {decisionState.latestPendingProposal.messageId}

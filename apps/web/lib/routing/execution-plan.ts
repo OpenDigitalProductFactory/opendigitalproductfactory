@@ -10,6 +10,7 @@
 import type { RequestContract } from "./request-contract";
 import type { EndpointManifest } from "./types";
 import type { RecipeRow, RoutedExecutionPlan } from "./recipe-types";
+import type { HarnessRecipe } from "./harness-recipe";
 import { usesResponsesApi, usesCliAdapter, usesCodexCli } from "./provider-utils";
 
 // EP-INF-009c: Model class → execution adapter mapping
@@ -151,5 +152,29 @@ export function buildDefaultPlan(
     providerSettings: {},
     toolPolicy,
     responsePolicy,
+  };
+}
+
+// ── attachHarnessRecipeToPlan ───────────────────────────────────────────────
+
+export function attachHarnessRecipeToPlan(
+  plan: RoutedExecutionPlan,
+  harnessRecipe: HarnessRecipe,
+): RoutedExecutionPlan {
+  return {
+    ...plan,
+    harness: {
+      recipeKey: harnessRecipe.recipeKey,
+      activityClass: harnessRecipe.activityClass,
+      activityConfidence: harnessRecipe.activityConfidence,
+      promptStrategy: harnessRecipe.promptStrategy,
+      contextAssembler: harnessRecipe.contextAssembler,
+      memoryPolicy: harnessRecipe.memoryPolicy,
+      tokenPolicy: harnessRecipe.tokenPolicy,
+      evaluator: harnessRecipe.evaluator,
+      providerFamily: harnessRecipe.providerFamily,
+      modelFamily: harnessRecipe.modelFamily,
+      executionAdapterHint: harnessRecipe.executionAdapterHint,
+    },
   };
 }

@@ -12,6 +12,26 @@ import type {
   AdapterCapabilityRequirement,
   ExecutionAdapterSelector,
 } from "./execution-adapter-types";
+import type { ActivityClass, ActivityEvaluationPolicy } from "./activity-contract";
+
+// ── RoutedHarnessPlan ───────────────────────────────────────────────────────
+
+export interface RoutedHarnessPlan {
+  recipeKey: string;
+  activityClass: ActivityClass;
+  activityConfidence: "provisional" | "calibrating" | "trusted" | "degraded";
+  promptStrategy: string;
+  contextAssembler: string;
+  memoryPolicy: "none" | "thread-summary" | "work-case-packet" | "retrieval-packet";
+  tokenPolicy: {
+    inputPacking: "minimal" | "ranked-evidence" | "full-context" | "compressed";
+    outputBudget: "tight" | "standard" | "expansive";
+  };
+  evaluator: ActivityEvaluationPolicy["evaluator"];
+  providerFamily?: string;
+  modelFamily?: string;
+  executionAdapterHint?: string;
+}
 
 // ── RoutedExecutionPlan ──────────────────────────────────────────────────────
 
@@ -47,6 +67,7 @@ export interface RoutedExecutionPlan {
     strictSchema?: boolean;
     stream?: boolean;
   };
+  harness?: RoutedHarnessPlan;
 }
 
 // ── RecipeRow ────────────────────────────────────────────────────────────────

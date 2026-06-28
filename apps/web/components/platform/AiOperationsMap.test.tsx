@@ -259,4 +259,13 @@ describe("AiOperationsMap", () => {
     // The canvas consumes the filtered topology, not the raw one.
     expect(source).toContain("topology={canvasTopology}");
   });
+
+  it("renders an activity-level routing workbench from the topology DTO", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("ActivityRoutingWorkbench");
+    expect(source).toContain('from "./ActivityRoutingWorkbench"');
+    expect(source).not.toContain('from "@/lib/actions/activity-harness-routing"');
+    expect(source).toContain("routingTopology.activityRouting");
+  });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildEndpointTestRunRequest,
+  executeTool,
   getAvailableTools,
   inferEndpointIdFromRouteContext,
   resolveSavePhaseHandoffTransition,
@@ -218,6 +219,33 @@ describe("mcp tools", () => {
     // Ensure the grant filter is actually applied (work_capsule tools are NOT in build-specialist's grants)
     expect(toolNames).not.toContain("list_work_capsules");
     expect(toolNames).not.toContain("get_work_capsule");
+  });
+
+  it("executes activity harness confidence approvals as governed configuration acknowledgements", async () => {
+    const result = await executeTool(
+      "activity_harness_confidence_override",
+      {
+        kind: "activity-harness-confidence-override",
+        activityClass: "code-edit",
+        harnessRecipeKey: "glm.mixed.code-edit.provisional",
+        providerId: "zai-coding",
+        modelId: "glm-5.2",
+        confidence: "trusted",
+      },
+      "user-1",
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      message: "Activity routing confidence override approved.",
+      data: {
+        activityClass: "code-edit",
+        harnessRecipeKey: "glm.mixed.code-edit.provisional",
+        providerId: "zai-coding",
+        modelId: "glm-5.2",
+        confidence: "trusted",
+      },
+    });
   });
 });
 

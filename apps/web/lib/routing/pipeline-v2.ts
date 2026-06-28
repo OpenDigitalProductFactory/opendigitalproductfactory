@@ -16,6 +16,8 @@ import type {
   SensitivityLevel,
 } from "./types";
 import type { RequestContract } from "./request-contract";
+import type { ActivityContract } from "./activity-contract";
+import type { ActivityHarnessConfidenceOverride } from "./activity-harness-governance";
 import { filterByPolicy } from "./pipeline";
 import { checkModelCapacity, getEndpointRuntimeState } from "./rate-tracker";
 import { satisfiesMinimumCapabilities } from "./agent-capability-types";
@@ -25,7 +27,15 @@ import {
 } from "./cost-ranking";
 import { computeFitness } from "./scoring";
 import { selectRecipeWithExploration } from "./champion-challenger";
-import { buildPlanFromRecipe, buildDefaultPlan } from "./execution-plan";
+import {
+  attachHarnessRecipeToPlan,
+  buildPlanFromRecipe,
+  buildDefaultPlan,
+} from "./execution-plan";
+import {
+  applyHarnessConfidenceOverride,
+  bindHarnessRecipeForActivity,
+} from "./harness-recipe";
 
 // ── Stage 3: Hard filter (V2 — contract-based) ──────────────────────────────
 
@@ -252,7 +262,11 @@ export async function routeEndpointV2(
    * side-effect-free, so it routes with skipRecipe=true: same winner, no roll,
    * executionPlan omitted. The live `routeAndCall` path leaves it false.
    */
-  opts?: { skipRecipe?: boolean },
+  opts?: {
+    skipRecipe?: boolean;
+    activityContract?: ActivityContract;
+    activityHarnessConfidenceOverrides?: ActivityHarnessConfidenceOverride[];
+  },
 ): Promise<RouteDecision> {
   const timestamp = new Date();
   const allCandidates: CandidateTrace[] = [];
@@ -461,11 +475,25 @@ export async function routeEndpointV2(
     : await selectRecipeWithExploration(
         winner.endpoint.providerId, winner.endpoint.modelId, contract,
       );
-  const executionPlan = recipe
+  const baseExecutionPlan = recipe
     ? buildPlanFromRecipe(recipe, contract)
     : opts?.skipRecipe
       ? undefined
       : buildDefaultPlan(winner.endpoint, contract);
+  const executionPlan =
+    baseExecutionPlan && opts?.activityContract
+      ? attachHarnessRecipeToPlan(baseExecutionPlan, (() => {
+          const hint = {
+            providerId: winner.endpoint.providerId,
+            modelId: winner.endpoint.modelId,
+          };
+          return applyHarnessConfidenceOverride(
+            bindHarnessRecipeForActivity(opts.activityContract, hint),
+            hint,
+            opts.activityHarnessConfidenceOverrides,
+          );
+        })())
+      : baseExecutionPlan;
 
   // Build full candidate trace (eligible endpoints, with rankScore as fitnessScore)
   const eligibleTraces: CandidateTrace[] = ranked.map(

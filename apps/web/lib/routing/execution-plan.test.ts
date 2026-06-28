@@ -6,10 +6,13 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  attachHarnessRecipeToPlan,
   buildPlanFromRecipe,
   buildDefaultPlan,
   resolveDefaultExecutionAdapter,
 } from "./execution-plan";
+import { bindHarnessRecipeForActivity } from "./harness-recipe";
+import type { ActivityContract } from "./activity-contract";
 import type { RecipeRow } from "./recipe-types";
 import type { RequestContract } from "./request-contract";
 import type { EndpointManifest } from "./types";
@@ -123,6 +126,33 @@ function makeEndpoint(overrides: Partial<EndpointManifest> = {}): EndpointManife
     metadataSource: "openai-api",
     metadataConfidence: "high",
     perRequestLimits: null,
+    ...overrides,
+  };
+}
+
+function makeActivity(overrides: Partial<ActivityContract> = {}): ActivityContract {
+  return {
+    activityId: "act-build-001",
+    parentRef: { buildId: "phase-build" },
+    activityClass: "code-edit",
+    title: "Build implementation",
+    distributionShape: "edge",
+    riskClass: "high",
+    successShape: "patch",
+    contextPolicy: "work-case-packet",
+    tokenEnvelope: {
+      maxInputTokens: 64000,
+      maxOutputTokens: 8192,
+      compression: "strict-packet",
+    },
+    evaluationPolicy: {
+      evaluator: "tool-success",
+      minimumSignal: "no-regression",
+    },
+    requestContractHints: {
+      taskType: "analysis",
+      budgetClass: "quality_first",
+    },
     ...overrides,
   };
 }
@@ -365,5 +395,43 @@ describe("resolveDefaultExecutionAdapter", () => {
 
   it("falls back to required model-class adapters for generic providers", () => {
     expect(resolveDefaultExecutionAdapter("openai", "embedding")).toBe("embedding");
+  });
+});
+
+describe("attachHarnessRecipeToPlan", () => {
+  it("attaches activity harness metadata without changing the provider-ready plan", () => {
+    const plan = buildDefaultPlan(
+      makeEndpoint({
+        providerId: "codex",
+        modelId: "gpt-5.3-codex",
+        modelClass: "code",
+      }),
+      makeContract(),
+    );
+    const harnessRecipe = bindHarnessRecipeForActivity(makeActivity());
+
+    const planWithHarness = attachHarnessRecipeToPlan(plan, harnessRecipe);
+
+    expect(planWithHarness).not.toBe(plan);
+    expect(planWithHarness.providerId).toBe(plan.providerId);
+    expect(planWithHarness.modelId).toBe(plan.modelId);
+    expect(planWithHarness.executionAdapter).toBe(plan.executionAdapter);
+    expect(planWithHarness.maxTokens).toBe(plan.maxTokens);
+    expect(planWithHarness.toolPolicy).toEqual(plan.toolPolicy);
+    expect(planWithHarness.responsePolicy).toEqual(plan.responsePolicy);
+    expect(planWithHarness.harness).toEqual({
+      recipeKey: harnessRecipe.recipeKey,
+      activityClass: harnessRecipe.activityClass,
+      activityConfidence: harnessRecipe.activityConfidence,
+      promptStrategy: harnessRecipe.promptStrategy,
+      contextAssembler: harnessRecipe.contextAssembler,
+      memoryPolicy: harnessRecipe.memoryPolicy,
+      tokenPolicy: harnessRecipe.tokenPolicy,
+      evaluator: harnessRecipe.evaluator,
+      providerFamily: harnessRecipe.providerFamily,
+      modelFamily: harnessRecipe.modelFamily,
+      executionAdapterHint: harnessRecipe.executionAdapterHint,
+    });
+    expect(plan.harness).toBeUndefined();
   });
 });
