@@ -231,7 +231,11 @@ model Principal {
   kind                                String
   status                              String                              @default("active")
   displayName                         String
+  sponsorPrincipalId                  String?
+  authorityMode                       String?
   aliases                             PrincipalAlias[]
+  sponsorPrincipal                    Principal?                          @relation("PrincipalSponsor", fields: [sponsorPrincipalId], references: [id])
+  sponsoredPrincipals                 Principal[]                         @relation("PrincipalSponsor")
   communicationChannelBindings        CommunicationChannelBinding[]
   communicationChannelSessions        CommunicationChannelSession[]
   // Per AGENTS.md §11 (Principal convergence, 2026-05-09): EdgeNode
@@ -256,6 +260,9 @@ model Principal {
   decisionEscalationsResolved         EscalationCapture[]                 @relation("DecisionEscalationResolverPrincipal")
   createdAt                           DateTime                            @default(now())
   updatedAt                           DateTime                            @updatedAt
+
+  @@index([sponsorPrincipalId])
+  @@index([kind, authorityMode])
 }
 
 model PrincipalAlias {

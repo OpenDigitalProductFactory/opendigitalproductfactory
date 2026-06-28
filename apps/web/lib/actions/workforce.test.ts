@@ -189,6 +189,8 @@ describe("createEmployeeProfile", () => {
       kind: "human",
       status: "active",
       displayName: "Ada Lovelace",
+      sponsorPrincipalId: null,
+      authorityMode: null,
       createdAt: new Date("2026-04-23T00:00:00Z"),
       updatedAt: new Date("2026-04-23T00:00:00Z"),
     });

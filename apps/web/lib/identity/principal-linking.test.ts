@@ -53,6 +53,8 @@ describe("syncEmployeePrincipal", () => {
       kind: "human",
       status: "active",
       displayName: "Ada Lovelace",
+      sponsorPrincipalId: null,
+      authorityMode: null,
       createdAt: new Date("2026-04-23T00:00:00Z"),
       updatedAt: new Date("2026-04-23T00:00:00Z"),
     });
@@ -104,6 +106,8 @@ describe("syncAgentPrincipal", () => {
       kind: "agent",
       status: "active",
       displayName: "Finance Specialist",
+      sponsorPrincipalId: null,
+      authorityMode: null,
       createdAt: new Date("2026-04-23T00:00:00Z"),
       updatedAt: new Date("2026-04-23T00:00:00Z"),
     });
@@ -156,6 +160,8 @@ describe("syncCustomerPrincipal", () => {
       kind: "customer",
       status: "active",
       displayName: "Buyer@Example.com",
+      sponsorPrincipalId: null,
+      authorityMode: null,
       createdAt: new Date("2026-04-26T00:00:00Z"),
       updatedAt: new Date("2026-04-26T00:00:00Z"),
     });
@@ -210,6 +216,8 @@ describe("syncCustomerPrincipal", () => {
       kind: "customer",
       status: "inactive",
       displayName: "former@example.com",
+      sponsorPrincipalId: null,
+      authorityMode: null,
       createdAt: new Date("2026-04-26T00:00:00Z"),
       updatedAt: new Date("2026-04-26T00:00:00Z"),
     });
