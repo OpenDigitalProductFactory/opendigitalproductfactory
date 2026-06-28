@@ -1,107 +1,17 @@
-// apps/web/app/(shell)/workspace/my-queue/page.tsx
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
-import { LocalTime } from "@/components/ui/LocalTime";
-
-const URGENCY_ORDER: Record<string, number> = {
-  emergency: 0,
-  urgent: 1,
-  priority: 2,
-  routine: 3,
-};
-
-const URGENCY_COLORS: Record<string, string> = {
-  emergency: "bg-red-100 text-red-800 border-red-300",
-  urgent: "bg-orange-100 text-orange-800 border-orange-300",
-  priority: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  routine: "bg-[var(--dpf-surface-2)] text-[var(--dpf-text-secondary)] border-[var(--dpf-border)]",
-};
-
-const EFFORT_LABELS: Record<string, string> = {
-  instant: "Quick",
-  short: "Short",
-  medium: "Medium",
-  long: "Long",
-  physical: "Physical",
-};
+import { WorkCaseAttentionLens } from "@/components/workspace/WorkCaseAttentionLens";
+import { loadWorkspaceWorkCaseLens } from "@/lib/work-management/workspace-case-loader";
 
 export default async function MyQueuePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const items = await prisma.workItem.findMany({
-    where: {
-      OR: [
-        { assignedToUserId: session.user.id },
-        { status: "queued", assignedToUserId: null },
-      ],
-      status: { notIn: ["completed", "cancelled"] },
-    },
-    orderBy: [{ createdAt: "asc" }],
-    take: 100,
+  const view = await loadWorkspaceWorkCaseLens({
+    prismaClient: prisma,
+    userId: session.user.id,
   });
 
-  // Sort by urgency then date
-  const sorted = [...items].sort((a, b) => {
-    const ua = URGENCY_ORDER[a.urgency] ?? 99;
-    const ub = URGENCY_ORDER[b.urgency] ?? 99;
-    if (ua !== ub) return ua - ub;
-    return a.createdAt.getTime() - b.createdAt.getTime();
-  });
-
-  return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-semibold mb-6">My Queue</h1>
-
-      {sorted.length === 0 ? (
-        <div className="text-center py-16 text-[var(--dpf-text-secondary)]">
-          <p className="text-lg">No items in your queue</p>
-          <p className="text-sm mt-1">Work items will appear here when assigned to you or available for claiming.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {sorted.map((item) => (
-            <div
-              key={item.id}
-              className="border rounded-lg p-4 bg-white shadow-sm flex items-start justify-between gap-4"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span
-                    className={`inline-block px-2 py-0.5 text-xs font-medium rounded border ${URGENCY_COLORS[item.urgency] ?? URGENCY_COLORS.routine}`}
-                  >
-                    {item.urgency}
-                  </span>
-                  <span className="text-xs text-[var(--dpf-text-secondary)]">
-                    {EFFORT_LABELS[item.effortClass] ?? item.effortClass}
-                  </span>
-                  <span className="text-xs text-[var(--dpf-muted)]">
-                    {item.sourceType}
-                  </span>
-                </div>
-                <h3 className="font-medium text-[var(--dpf-text)] truncate">{item.title}</h3>
-                <p className="text-sm text-[var(--dpf-text-secondary)] mt-0.5 line-clamp-2">{item.description}</p>
-                {item.dueAt && (
-                  <p className="text-xs text-[var(--dpf-muted)] mt-1">
-                    Due: <LocalTime value={item.dueAt} mode="date" />
-                  </p>
-                )}
-              </div>
-              <div className="flex flex-col items-end gap-1 shrink-0">
-                <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700">
-                  {item.status}
-                </span>
-                {item.assignedToUserId === session.user.id ? (
-                  <span className="text-xs text-green-600">Assigned to you</span>
-                ) : (
-                  <span className="text-xs text-[var(--dpf-muted)]">Unassigned</span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  return <WorkCaseAttentionLens view={view} />;
 }

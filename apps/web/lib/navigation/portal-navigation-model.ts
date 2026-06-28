@@ -20,13 +20,7 @@ export type PortalDomain =
   | "knowledge"
   | "customer";
 
-export type PortalShellSectionKey =
-  | "workspace"
-  | "business"
-  | "products"
-  | "delivery"
-  | "platform"
-  | "knowledge";
+export type PortalShellSectionKey = "workspace" | "business" | "products" | "delivery" | "platform" | "knowledge";
 
 export type PortalNavRecord = {
   key: string;
@@ -95,7 +89,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       sectionKey: "workspace",
       description: "See what needs attention next.",
     },
-    sectionSiblings: ["/workspace", "/workspace/inbox", "/workspace/documents"],
+    sectionSiblings: ["/workspace", "/workspace/inbox", "/workspace/my-queue", "/workspace/documents"],
   },
   {
     // EP-ATTENTION-SURFACE keystone (BI-D39484E7): the "Needs you" attention inbox.
@@ -111,6 +105,8 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "section-page",
     capabilityKey: null,
   },
+  { key: "workspace-work-cases", label: "Work Cases", path: "/workspace/my-queue", parentPath: "/workspace", domain: "workspace", audienceModes: ["worker", "operator"], destinationKind: "section-page", capabilityKey: null },
+  { key: "workspace-case-detail", label: "Work Case Detail", path: "/workspace/cases/[caseKey]", parentPath: "/workspace", domain: "workspace", audienceModes: ["worker", "operator"], destinationKind: "detail", capabilityKey: null },
   {
     key: "documents",
     label: "Documents",

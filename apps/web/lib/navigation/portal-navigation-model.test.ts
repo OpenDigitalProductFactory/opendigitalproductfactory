@@ -42,6 +42,14 @@ describe("portal navigation model", () => {
     expect(workerKeys).not.toContain("admin");
   });
 
+  it("keeps Work Cases as a Workspace section with detail as drill-down depth", () => {
+    expect(getSectionNavEntries("/workspace").map((entry) => entry.path)).toContain(
+      "/workspace/my-queue",
+    );
+    expect(getRouteNavRecord("/workspace/my-queue")?.domain).toBe("workspace");
+    expect(getRouteNavRecord("/workspace/cases/[caseKey]")?.destinationKind).toBe("detail");
+  });
+
   it("classifies legacy redirect destinations as redirects, not primary nav", () => {
     expect(getRouteNavRecord("/admin/storefront")?.destinationKind).toBe(
       "legacy-redirect",
