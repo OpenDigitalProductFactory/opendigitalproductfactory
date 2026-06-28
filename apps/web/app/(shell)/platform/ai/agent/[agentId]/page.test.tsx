@@ -66,7 +66,7 @@ vi.mock("@/lib/tak/work-pattern-read-model", () => ({
       until: new Date("2026-06-28T12:00:00.000Z"),
     },
     summary: {
-      totalPatterns: 1,
+      totalPatterns: 2,
       totalObservedRuns: 3,
       openNeedCount: 1,
       readyForReviewCount: 1,
@@ -106,6 +106,8 @@ vi.mock("@/lib/tak/work-pattern-read-model", () => ({
           blockers: ["pattern-status-not-approved-or-active"],
         },
         activationProposed: false,
+        reviewState: null,
+        activationCandidate: null,
         shadowEvaluation: {
           samples: 20,
           agreements: 19,
@@ -129,6 +131,91 @@ vi.mock("@/lib/tak/work-pattern-read-model", () => ({
           },
           blockers: [],
         },
+      },
+      {
+        patternKey: "prompt-refinement|hr-specialist|/build",
+        agentId: "hr-specialist",
+        routeContext: "/build",
+        riskClass: "internal-reversible",
+        status: "candidate",
+        scope: "route",
+        version: 1,
+        source: "observer",
+        decisionScope: "platform-wwmd",
+        observedRuns: 1,
+        completedRuns: 1,
+        failedRuns: 0,
+        outcomeCounts: { completed: 1 },
+        latestObservedAt: new Date("2026-06-28T10:44:00.000Z"),
+        latestTaskRunId: "TR-4",
+        evidenceRefs: [{ decisionInteractionId: "DI-REVIEW001", capabilityNeedId: "NEED-2" }],
+        candidate: {
+          kind: "prompt",
+          need: "Prompt should ask for the sandbox lease evidence first",
+          blocks: "The coworker repeats extra context requests before filing the evidence.",
+          fingerprint: "fp-prompt",
+          evaluationMethod: "capability-need-review",
+        },
+        candidateNeedKinds: ["prompt"],
+        linkedNeedIds: ["NEED-2"],
+        openNeedCount: 0,
+        readiness: {
+          readyForReview: true,
+          readyForCaseActivation: false,
+          blockers: ["activation-candidate-awaits-governed-promotion"],
+        },
+        activationProposed: true,
+        reviewState: {
+          action: "approve",
+          status: "approved-candidate",
+          needId: "NEED-2",
+          agentId: "hr-specialist",
+          patternKey: "prompt-refinement|hr-specialist|/build",
+          routeContext: "/build",
+          riskClass: "internal-reversible",
+          decisionScope: "platform-wwmd",
+          decisionInteractionId: "DI-REVIEW001",
+          reviewerUserId: "user-1",
+          reviewedAt: "2026-06-28T11:00:00.000Z",
+          reviewerNote: "Approve only as a candidate.",
+          blockers: ["activation-candidate-awaits-governed-promotion"],
+          activationProposed: true,
+          activationCandidate: {
+            state: "candidate",
+            activationAllowed: false,
+            patternKey: "prompt-refinement|hr-specialist|/build",
+            agentId: "hr-specialist",
+            routeContext: "/build",
+            riskClass: "internal-reversible",
+            decisionScope: "platform-wwmd",
+            currentAutonomyLevel: "shadow",
+            proposedAutonomyLevel: "propose",
+            evidenceSummary: {
+              samples: 20,
+              agreements: 19,
+              agreementRate: 0.95,
+            },
+            blockers: ["activation-candidate-awaits-governed-promotion"],
+          },
+        },
+        activationCandidate: {
+          state: "candidate",
+          activationAllowed: false,
+          patternKey: "prompt-refinement|hr-specialist|/build",
+          agentId: "hr-specialist",
+          routeContext: "/build",
+          riskClass: "internal-reversible",
+          decisionScope: "platform-wwmd",
+          currentAutonomyLevel: "shadow",
+          proposedAutonomyLevel: "propose",
+          evidenceSummary: {
+            samples: 20,
+            agreements: 19,
+            agreementRate: 0.95,
+          },
+          blockers: ["activation-candidate-awaits-governed-promotion"],
+        },
+        shadowEvaluation: null,
       },
     ],
   }),
@@ -273,5 +360,11 @@ describe("AgentDetailPage", () => {
     expect(html).toContain("Shadow evidence");
     expect(html).toContain("95% agreement");
     expect(html).toContain("approve narrower scope");
+    expect(html).toContain("Approve candidate");
+    expect(html).toContain("Defer");
+    expect(html).toContain("Reject");
+    expect(html).toContain("Decision recorded");
+    expect(html).toContain("activation candidate");
+    expect(html).not.toContain("Activate playbook");
   });
 });

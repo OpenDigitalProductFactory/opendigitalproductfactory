@@ -6,6 +6,7 @@ import type {
   WorkPatternReadModel,
   WorkPatternSummary,
 } from "@/lib/tak/work-pattern-read-model";
+import { reviewWorkPatternAction } from "@/lib/actions/work-pattern-review";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Chip, deepLink, EmptyState, Section } from "./panels";
 
@@ -31,9 +32,11 @@ const deltaLabels: Record<DeltaKey, string> = {
 export function NeedsAndPlaybooksPanel({
   needs,
   workPatterns,
+  canWrite,
 }: {
   needs: CoworkerCapabilityNeedReview;
   workPatterns: WorkPatternReadModel;
+  canWrite: boolean;
 }) {
   const visibleNeeds = needs.needs.slice(0, 5);
   return (
@@ -69,6 +72,7 @@ export function NeedsAndPlaybooksPanel({
               <PlaybookRow
                 key={`${pattern.patternKey}:${pattern.routeContext ?? ""}:${pattern.riskClass ?? ""}`}
                 pattern={pattern}
+                canWrite={canWrite}
               />
             ))}
           </div>
@@ -117,7 +121,7 @@ function NeedRow({ need }: { need: CoworkerCapabilityNeedReviewItem }) {
   );
 }
 
-function PlaybookRow({ pattern }: { pattern: WorkPatternSummary }) {
+function PlaybookRow({ pattern, canWrite }: { pattern: WorkPatternSummary; canWrite: boolean }) {
   const statusTone =
     pattern.status === "active" ? "success" : pattern.status === "candidate" ? "warning" : "accent";
   const blockerLabel =
@@ -176,6 +180,7 @@ function PlaybookRow({ pattern }: { pattern: WorkPatternSummary }) {
       {pattern.shadowEvaluation ? (
         <ShadowEvidenceRow evaluation={pattern.shadowEvaluation} />
       ) : null}
+      <PlaybookReviewRow pattern={pattern} canWrite={canWrite} />
     </div>
   );
 }
@@ -237,6 +242,137 @@ function strongestReductionLabel(totals: ImprovementTotals): string {
   if (!strongest) return "no measured reduction";
   const [key, value] = strongest;
   return `${deltaLabels[key]} ${Math.abs(value).toLocaleString()} lower`;
+}
+
+function PlaybookReviewRow({ pattern, canWrite }: { pattern: WorkPatternSummary; canWrite: boolean }) {
+  if (pattern.reviewState) {
+    const tone = reviewActionTone(pattern.reviewState.action);
+    return (
+      <div
+        style={{
+          display: "grid",
+          gap: 5,
+          marginTop: 8,
+          padding: "7px 8px",
+          borderRadius: 5,
+          border: "1px solid var(--dpf-border)",
+          background: "var(--dpf-surface-1)",
+        }}
+      >
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
+          <Chip tone="success">Decision recorded</Chip>
+          <Chip tone={tone}>{reviewActionLabel(pattern.reviewState.action)}</Chip>
+          <Chip tone="muted">{pattern.reviewState.decisionInteractionId}</Chip>
+          {pattern.activationCandidate ? <Chip tone="accent">activation candidate</Chip> : null}
+          <span style={{ fontSize: 10, color: "var(--dpf-muted)", marginLeft: "auto" }}>
+            <LocalTime value={pattern.reviewState.reviewedAt} mode="date" />
+          </span>
+        </div>
+        <div style={{ fontSize: 10, color: "var(--dpf-muted)", overflowWrap: "anywhere" }}>
+          Candidate record only; live autonomy and Work Case state stay unchanged.
+        </div>
+      </div>
+    );
+  }
+
+  const needId = pattern.linkedNeedIds[0];
+  if (!canWrite || !needId || !pattern.shadowEvaluation) {
+    return null;
+  }
+
+  const approvalEligible = pattern.shadowEvaluation.decision === "approve-narrower-scope";
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 6,
+        alignItems: "center",
+        marginTop: 8,
+        padding: "7px 8px",
+        borderRadius: 5,
+        border: "1px solid var(--dpf-border)",
+        background: "var(--dpf-surface-1)",
+      }}
+    >
+      <Chip tone="accent">Review</Chip>
+      {approvalEligible ? (
+        <ReviewActionForm
+          needId={needId}
+          agentId={pattern.agentId}
+          action="approve"
+          label="Approve candidate"
+          note="Approve as a scoped activation candidate; do not activate live autonomy."
+        />
+      ) : null}
+      <ReviewActionForm
+        needId={needId}
+        agentId={pattern.agentId}
+        action="defer"
+        label="Defer"
+        note="Defer this Living Playbook candidate for more shadow evidence."
+      />
+      <ReviewActionForm
+        needId={needId}
+        agentId={pattern.agentId}
+        action="reject"
+        label="Reject"
+        note="Reject this Living Playbook candidate and retain the decision evidence."
+      />
+    </div>
+  );
+}
+
+function ReviewActionForm({
+  needId,
+  agentId,
+  action,
+  label,
+  note,
+}: {
+  needId: string;
+  agentId: string;
+  action: "approve" | "defer" | "reject";
+  label: string;
+  note: string;
+}) {
+  return (
+    <form action={reviewWorkPatternAction} style={{ margin: 0 }}>
+      <input type="hidden" name="needId" value={needId} />
+      <input type="hidden" name="agentId" value={agentId} />
+      <input type="hidden" name="action" value={action} />
+      <input type="hidden" name="note" value={note} />
+      <button
+        type="submit"
+        style={{
+          appearance: "none",
+          border: "1px solid var(--dpf-border-strong)",
+          background: "var(--dpf-surface)",
+          color: "var(--dpf-text)",
+          borderRadius: 5,
+          padding: "4px 8px",
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: "pointer",
+          minHeight: 28,
+        }}
+      >
+        {label}
+      </button>
+    </form>
+  );
+}
+
+function reviewActionTone(action: "approve" | "defer" | "reject") {
+  if (action === "approve") return "success";
+  if (action === "reject") return "error";
+  return "warning";
+}
+
+function reviewActionLabel(action: "approve" | "defer" | "reject"): string {
+  if (action === "approve") return "approved";
+  if (action === "reject") return "rejected";
+  return "deferred";
 }
 
 function PlaybookStat({ label, value }: { label: string; value: string }) {

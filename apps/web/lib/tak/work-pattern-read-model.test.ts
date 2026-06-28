@@ -138,6 +138,42 @@ describe("getWorkPatternReadModel", () => {
               observedAt: "2026-06-28T10:30:00.000Z",
             })),
           },
+          readinessJson: {
+            activationProposed: true,
+            workPatternReview: {
+              action: "approve",
+              status: "approved-candidate",
+              needId: "NEED-1",
+              agentId: "build-specialist",
+              patternKey: "grant-denial|build-specialist|/build",
+              routeContext: "/build",
+              riskClass: "internal-reversible",
+              decisionScope: "platform-wwmd",
+              decisionInteractionId: "DI-REVIEW001",
+              reviewerUserId: "user-1",
+              reviewedAt: "2026-06-28T11:00:00.000Z",
+              reviewerNote: "Approve only for sandbox lease filing.",
+              blockers: ["activation-candidate-awaits-governed-promotion"],
+              activationProposed: true,
+              activationCandidate: {
+                state: "candidate",
+                activationAllowed: false,
+                patternKey: "grant-denial|build-specialist|/build",
+                agentId: "build-specialist",
+                routeContext: "/build",
+                riskClass: "internal-reversible",
+                decisionScope: "platform-wwmd",
+                currentAutonomyLevel: "shadow",
+                proposedAutonomyLevel: "propose",
+                evidenceSummary: {
+                  samples: 20,
+                  agreements: 19,
+                  agreementRate: 0.95,
+                },
+                blockers: ["activation-candidate-awaits-governed-promotion"],
+              },
+            },
+          },
         }),
         capabilityNeed({
           needId: "NEED-2",
@@ -179,7 +215,22 @@ describe("getWorkPatternReadModel", () => {
       ]),
     );
     expect(observed?.readiness.blockers).toContain("pattern-status-not-approved-or-active");
-    expect(observed?.activationProposed).toBe(false);
+    expect(observed?.activationProposed).toBe(true);
+    expect(observed?.reviewState).toMatchObject({
+      action: "approve",
+      status: "approved-candidate",
+      decisionInteractionId: "DI-REVIEW001",
+    });
+    expect(observed?.activationCandidate).toMatchObject({
+      activationAllowed: false,
+      currentAutonomyLevel: "shadow",
+      proposedAutonomyLevel: "propose",
+    });
+    expect(observed?.evidenceRefs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ decisionInteractionId: "DI-REVIEW001" }),
+      ]),
+    );
     expect(observed?.shadowEvaluation).toMatchObject({
       samples: 20,
       agreements: 19,
@@ -212,6 +263,8 @@ describe("getWorkPatternReadModel", () => {
       linkedNeedIds: ["NEED-2"],
       routeContext: "/build",
       activationProposed: false,
+      reviewState: null,
+      activationCandidate: null,
       shadowEvaluation: null,
     });
   });
