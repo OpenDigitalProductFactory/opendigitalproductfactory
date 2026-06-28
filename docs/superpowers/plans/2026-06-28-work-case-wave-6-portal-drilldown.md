@@ -171,6 +171,14 @@ If stale, regenerate with the same command without `--check`, then rerun with `-
 
 Run: `$env:BASE_SHA='origin/main'; node scripts/check-ux-fit-decision.mjs`
 
-- [ ] **Step 7: Commit, push, PR, CI**
+- [x] **Step 7: Commit, push, PR, CI**
 
 Commit with DCO sign-off, push `feat/work-case-wave-6-portal-drilldown`, open a ready PR, watch CI, fix failures, and merge only after PR health is green.
+
+Closeout evidence:
+- PR: `https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/2497`
+- Merged: `2026-06-28T20:43:01Z` through the main merge queue.
+- Merge commit: `156d81e4fae5a835f55987ccf285445c7bddc114`
+- PR head: `a2e5531b66278146ae4bdb5f5097c83029944be7`
+- PR health before merge: 47 checks, 0 failing, 0 pending, 0 unresolved review threads.
+- Backlog closeout: `BI-WC-WAVE6-DRILLDOWN` done; `WC-305BC2A2` complete with no remaining scope claims.
