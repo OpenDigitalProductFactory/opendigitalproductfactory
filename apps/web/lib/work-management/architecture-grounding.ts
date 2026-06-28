@@ -152,6 +152,15 @@ export const WORK_CASE_ARCHITECTURE_ELEMENTS = [
     verificationCaseId: "VC-WC-12",
   },
   {
+    elementId: "REQ-WC-13",
+    elementType: "requirement",
+    name: "Customer-safe portal case drill-down",
+    description: "Portal customers can inspect a single account-scoped Work Case without seeing internal WorkItem or source references.",
+    implementationStatus: "implemented",
+    itValueStreams: ["consume"],
+    verificationCaseId: "VC-WC-13",
+  },
+  {
     elementId: "SM-WC-LIFECYCLE",
     elementType: "state_machine",
     name: "Work Case lifecycle",
@@ -329,6 +338,14 @@ export const WORK_CASE_ARCHITECTURE_ELEMENTS = [
     itValueStreams: ["consume"],
   },
   {
+    elementId: "PART-WC-portal-case-detail",
+    elementType: "part_definition",
+    name: "Portal Work Case detail",
+    description: "Customer-safe Portal drill-down route and component for a single account-scoped Work Case.",
+    implementationStatus: "implemented",
+    itValueStreams: ["consume"],
+  },
+  {
     elementId: "PART-WC-mobile-attention",
     elementType: "part_definition",
     name: "Mobile Work Case attention strip",
@@ -431,6 +448,14 @@ export const WORK_CASE_ARCHITECTURE_ELEMENTS = [
     description: "Component tests proving Workspace renders a mobile-first attention strip from the canonical Work Case projection.",
     implementationStatus: "implemented",
     itValueStreams: ["operate", "consume"],
+  },
+  {
+    elementId: "VC-WC-13",
+    elementType: "verification_case",
+    name: "Portal case drill-down verification",
+    description: "Loader, component, and route-grounding tests proving Portal case detail is account-scoped, customer-safe, and theme-aware.",
+    implementationStatus: "implemented",
+    itValueStreams: ["consume"],
   },
 ] as const satisfies readonly WorkCaseArchitectureElement[];
 
@@ -602,6 +627,24 @@ export const WORK_CASE_ARCHITECTURE_ALLOCATIONS = [
     relationshipType: "sysml_allocates",
     targetKind: "source_file",
     targetRef: "apps/web/app/(portal)/portal/page.tsx",
+  },
+  {
+    sourceElementId: "PART-WC-portal-case-detail",
+    relationshipType: "sysml_allocates",
+    targetKind: "source_file",
+    targetRef: "apps/web/lib/work-management/portal-case-loader.ts",
+  },
+  {
+    sourceElementId: "PART-WC-portal-case-detail",
+    relationshipType: "sysml_allocates",
+    targetKind: "source_file",
+    targetRef: "apps/web/components/portal/PortalWorkCaseDetail.tsx",
+  },
+  {
+    sourceElementId: "PART-WC-portal-case-detail",
+    relationshipType: "sysml_allocates",
+    targetKind: "source_file",
+    targetRef: "apps/web/app/(portal)/portal/cases/[caseKey]/page.tsx",
   },
   {
     sourceElementId: "PART-WC-mobile-attention",

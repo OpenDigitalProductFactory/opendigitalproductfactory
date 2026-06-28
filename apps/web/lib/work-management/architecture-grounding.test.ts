@@ -13,7 +13,7 @@ const elementById = new Map<string, WorkCaseArchitectureElement>(
 );
 
 describe("Work Case architecture grounding manifest", () => {
-  it("allocates every Wave 0 through Wave 5 source file into the EA/SysML graph", () => {
+  it("allocates every Wave 0 through Wave 6 source file into the EA/SysML graph", () => {
     const allocatedFiles = new Set(
       WORK_CASE_ARCHITECTURE_ALLOCATIONS.map((allocation) => allocation.targetRef),
     );
@@ -47,7 +47,9 @@ describe("Work Case architecture grounding manifest", () => {
         "apps/web/lib/work-management/customer-domain-adoption.ts",
         "apps/web/lib/work-management/portal-case-loader.ts",
         "apps/web/components/portal/PortalWorkCases.tsx",
+        "apps/web/components/portal/PortalWorkCaseDetail.tsx",
         "apps/web/app/(portal)/portal/cases/page.tsx",
+        "apps/web/app/(portal)/portal/cases/[caseKey]/page.tsx",
         "apps/web/app/(portal)/portal/page.tsx",
       ]),
     );
@@ -133,6 +135,17 @@ describe("Work Case architecture grounding manifest", () => {
     expect(elementById.get("PART-WC-customer-domain-adoption")?.implementationStatus).toBe("implemented");
     expect(elementById.get("PART-WC-portal-case-view")?.implementationStatus).toBe("implemented");
     expect(elementById.get("PART-WC-mobile-attention")?.implementationStatus).toBe("implemented");
+  });
+
+  it("grounds Wave 6 customer portal drill-down in an implemented verification case", () => {
+    const requirement = elementById.get("REQ-WC-13");
+    expect(requirement?.implementationStatus).toBe("implemented");
+
+    const verificationCase = elementById.get(requirement?.verificationCaseId ?? "");
+    expect(verificationCase?.elementType).toBe("verification_case");
+    expect(verificationCase?.implementationStatus).toBe("implemented");
+
+    expect(elementById.get("PART-WC-portal-case-detail")?.implementationStatus).toBe("implemented");
   });
 
   it("declares EA Action elements for the Work Case handoff grammar", () => {

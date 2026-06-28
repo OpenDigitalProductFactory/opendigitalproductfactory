@@ -1,7 +1,7 @@
 # Company-Level Work Management Architecture
 
 Date: 2026-06-27
-Status: Accepted design; Wave 5 adoption views implemented
+Status: Accepted design; Wave 6 portal drill-down implemented
 Owner: DPF architecture
 Related capsule: WC-0A3909A2
 Epic: EP-2984B02B - Work Case / Company Work Management
@@ -17,6 +17,8 @@ Wave 4 BI: BI-WC-WAVE4 - Work Case ecosystem and autonomy contracts
 Wave 4 plan: docs/superpowers/plans/2026-06-28-work-case-wave-4-ecosystem-autonomy.md
 Wave 5 BI: BI-WC-WAVE5 - Work Case adoption workflows and constrained external views
 Wave 5 plan: docs/superpowers/plans/2026-06-28-work-case-wave-5-adoption-views.md
+Wave 6 BI: BI-WC-WAVE6-DRILLDOWN - Customer-safe Work Case portal drill-down
+Wave 6 plan: docs/superpowers/plans/2026-06-28-work-case-wave-6-portal-drilldown.md
 Sibling spec: docs/superpowers/specs/2026-06-27-governed-adaptive-playbooks-design.md (the method-improvement pillar that binds to this object)
 
 ## Summary
@@ -661,6 +663,8 @@ Deliverables:
 
 Wave 5 implementation note: `customer-domain-adoption.ts` groups account-resolvable customer Work Cases into WWWD workflow lanes; `portal-case-loader.ts` and `/portal/cases` expose only account-scoped, customer-safe case status; `WorkCaseAttentionLens` now includes a mobile-first attention strip backed by the same Workspace projection. Federation contract work landed in Wave 4; external/customer visibility in Wave 5 is constrained to Portal account scope rather than raw internal source refs.
 
+Wave 6 implementation note: `portal-case-loader.ts` now owns the shared customer-safe case-key/detail projection for Portal list and detail surfaces; `/portal/cases/[caseKey]` renders a constrained single-case digest through `PortalWorkCaseDetail` without exposing internal WorkItem ids, raw source refs, or a new write path. This is the first Wave 6+ long-tail calibration BI: a narrow Portal drill-down extension against the stable Work Case architecture.
+
 ## Effort Portfolio (Long-Tail Program)
 
 The implementation slices above are the first concrete build sequence. This section frames the larger program: Work Case is not a single feature but a *pervasive idea* that many prior efforts were independently converging toward. Naming the convergence makes the long tail legible — refactoring that pays down debt this idea exposed, projection work over the current substrate, and new features and surfaces — and shows why the tail keeps narrowing into ever-more-focused refinement rather than ending.
@@ -737,7 +741,7 @@ The tracks sequence into waves. Each wave is more focused than the last because 
 - Wave 3 — Operator surfaces: R6, R7, S1, S2. UI on a substrate that is already safe. Implemented under `BI-WC-WAVE3`.
 - Wave 4 — Ecosystem and autonomy: S4, S5, S6. Capability advertisement, graduated autonomy, federation. Implemented under `BI-WC-WAVE4` as pure contracts over the existing Work Case, trust-graduation, and federation substrates.
 - Wave 5 — Adoption: S7, S8, S9. First domains and external views. Implemented under `BI-WC-WAVE5` as customer-domain workflow lanes, constrained Portal case visibility, and a mobile Workspace attention strip.
-- Wave 6+ — The long tail: each new source type, domain workflow, coworker capability, and autonomy graduation is a small, well-scoped BI against a now-stable architecture. This is where the idea stops being a build and becomes a calibration loop — the increasingly focused refinement that continues indefinitely.
+- Wave 6+ — The long tail: each new source type, domain workflow, coworker capability, portal drill-down, and autonomy graduation is a small, well-scoped BI against a now-stable architecture. The first item, customer-safe Portal case drill-down, is implemented under `BI-WC-WAVE6-DRILLDOWN`; the remaining tail is the calibration loop — increasingly focused refinement that continues indefinitely.
 
 ### Program Structure And Governance
 
@@ -826,4 +830,4 @@ Mitigations:
 
 ## Next Step
 
-Start Wave 6+ long-tail calibration: one focused BI per new source type, domain vocabulary, coworker capability, persisted transition hardening, customer portal drill-down, or autonomy graduation. Treat each tail item as a narrow Work Case extension with its own receipt, UX, and architecture-grounding evidence.
+Continue Wave 6+ long-tail calibration: one focused BI per new source type, domain vocabulary, coworker capability, persisted transition hardening, additional portal/customer drill-down, or autonomy graduation. Treat each tail item as a narrow Work Case extension with its own receipt, UX, and architecture-grounding evidence.

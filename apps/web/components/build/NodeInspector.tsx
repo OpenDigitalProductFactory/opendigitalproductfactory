@@ -15,7 +15,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { BUILD_STUDIO_TEST_IDS, getNodeInspectorClassName } from "./build-studio-layout";
@@ -125,7 +125,7 @@ export function NodeInspector({
   // ── Esc to close ──────────────────────────────────────────────────────
   // Mount on open, unmount on close. Capture phase so it wins over text
   // inputs inside the inspector.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (typeof document === "undefined") return;
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -142,7 +142,7 @@ export function NodeInspector({
   // outside any element marked as a graph node (data-graph-node attribute),
   // close. Re-clicking the same node is detected by the parent BuildStudio,
   // not here — this hook only handles "click off the graph entirely".
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (typeof document === "undefined") return;
     const handler = (event: MouseEvent) => {
       const target = event.target;
