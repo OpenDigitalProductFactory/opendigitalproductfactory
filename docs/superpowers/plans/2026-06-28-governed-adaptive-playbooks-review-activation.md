@@ -423,7 +423,7 @@ Use `record_capsule_evidence` for:
 - typecheck/build or blocked local gate explanation
 - PR URL and CI summary once available
 
-- [ ] **Step 5: Commit, push, create ready PR, and fix CI**
+- [x] **Step 5: Commit, push, create ready PR, and fix CI**
 
 Commands:
 
