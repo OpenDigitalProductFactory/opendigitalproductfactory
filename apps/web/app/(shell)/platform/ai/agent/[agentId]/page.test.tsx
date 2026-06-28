@@ -58,6 +58,108 @@ vi.mock("@/components/golden-triangle/CoworkerPriorityControl", () => ({
   CoworkerPriorityControl: () => null,
 }));
 
+vi.mock("@/lib/tak/work-pattern-read-model", () => ({
+  getWorkPatternReadModel: vi.fn().mockResolvedValue({
+    generatedAt: new Date("2026-06-28T12:00:00.000Z"),
+    window: {
+      since: new Date("2026-05-29T12:00:00.000Z"),
+      until: new Date("2026-06-28T12:00:00.000Z"),
+    },
+    summary: {
+      totalPatterns: 1,
+      totalObservedRuns: 3,
+      openNeedCount: 1,
+      readyForReviewCount: 1,
+      candidateOnlyCount: 0,
+    },
+    patterns: [
+      {
+        patternKey: "grant-denial|hr-specialist|/build",
+        agentId: "hr-specialist",
+        routeContext: "/build",
+        riskClass: "medium-risk",
+        status: "observed",
+        scope: "route",
+        version: 1,
+        source: "observer",
+        decisionScope: "platform-wwmd",
+        observedRuns: 3,
+        completedRuns: 2,
+        failedRuns: 1,
+        outcomeCounts: { completed: 2, failed: 1 },
+        latestObservedAt: new Date("2026-06-28T10:24:00.000Z"),
+        latestTaskRunId: "TR-3",
+        evidenceRefs: [{ taskRunId: "TR-3", toolExecutionId: "TE-3" }],
+        candidate: {
+          kind: "grant",
+          need: "Missing sandbox lease grant",
+          blocks: "Repeated grant denials blocked local integration verification.",
+          fingerprint: "fp-grant",
+          evaluationMethod: "deterministic-pattern-observer",
+        },
+        candidateNeedKinds: ["grant"],
+        linkedNeedIds: ["NEED-1"],
+        openNeedCount: 1,
+        readiness: {
+          readyForReview: true,
+          readyForCaseActivation: false,
+          blockers: ["pattern-status-not-approved-or-active"],
+        },
+        activationProposed: false,
+      },
+    ],
+  }),
+}));
+
+vi.mock("@/lib/coworker-self-assessment/review-service", () => ({
+  getCoworkerCapabilityNeedReview: vi.fn().mockResolvedValue({
+    summary: {
+      total: 1,
+      byStatus: { submitted: 1 },
+      bySeverity: { important: 1 },
+      byKind: { grant: 1 },
+    },
+    filterOptions: {
+      statuses: ["submitted"],
+      severities: ["important"],
+      kinds: ["grant"],
+    },
+    needs: [
+      {
+        needId: "NEED-1",
+        assessmentId: "CSA-1",
+        agentId: "hr-specialist",
+        coworkerName: "HR Specialist",
+        coworkerSlug: "hr-specialist",
+        coworkerTier: 2,
+        valueStream: "operate",
+        kind: "grant",
+        severity: "important",
+        status: "submitted",
+        need: "Missing sandbox lease grant",
+        blocks: "The coworker cannot claim local integration evidence without the grant.",
+        evidencePreview: "patternKey: grant-denial|hr-specialist|/build",
+        readinessPreview: "readyForReview: true",
+        linkedBacklogItemId: "BI-1",
+        linkedBacklogItemTitle: "Grant sandbox lease capability",
+        linkedBacklogItemStatus: "open",
+        duplicateOfId: null,
+        duplicateOfNeed: null,
+        duplicateCount: 0,
+        reviewerNote: null,
+        assessmentVerdict: "gaps",
+        assessmentConfidence: "medium",
+        missionSummary: "Observed repeated work-pattern friction.",
+        capabilitySummary: "Missing sandbox lease grant",
+        routeContext: "/build",
+        trigger: "work-pattern-observer",
+        createdAtLabel: "Jun 28, 2026",
+        updatedAtLabel: "Jun 28, 2026",
+      },
+    ],
+  }),
+}));
+
 import { prisma } from "@dpf/db";
 import { getAgentGaidMap } from "@/lib/identity/principal-linking";
 
@@ -103,5 +205,47 @@ describe("AgentDetailPage", () => {
 
     expect(html).toContain("GAID:");
     expect(html).toContain("gaid:priv:dpf.internal:hr-specialist");
+  });
+
+  it("shows the coworker's Needs & Playbooks record with living playbook candidates", async () => {
+    vi.mocked(prisma.agent.findFirst).mockResolvedValue({
+      id: "agent-db-1",
+      agentId: "hr-specialist",
+      slugId: "hr-specialist",
+      name: "HR Specialist",
+      displayName: "HR Specialist",
+      kind: "specialist",
+      tier: 2,
+      type: "specialist",
+      description: "HR help",
+      status: "active",
+      valueStream: "operate",
+      sensitivity: "restricted",
+      humanSupervisorId: "HR-100",
+      escalatesTo: null,
+      delegatesTo: [],
+      lifecycleStage: "production",
+      hitlTierDefault: 2,
+      portfolio: null,
+      executionConfig: null,
+      skills: [],
+      toolGrants: [],
+      performanceProfiles: [],
+      degradationMappings: [],
+      promptContext: null,
+      governanceProfile: null,
+      coworkerAssessments: [],
+      ownerships: [],
+    } as never);
+    vi.mocked(getAgentGaidMap).mockResolvedValue(new Map());
+
+    const { default: AgentDetailPage } = await import("./page");
+    const html = renderToStaticMarkup(
+      await AgentDetailPage({ params: Promise.resolve({ agentId: "hr-specialist" }) }),
+    );
+
+    expect(html).toContain("Needs &amp; Playbooks");
+    expect(html).toContain("Living Playbooks");
+    expect(html).toContain("Missing sandbox lease grant");
   });
 });

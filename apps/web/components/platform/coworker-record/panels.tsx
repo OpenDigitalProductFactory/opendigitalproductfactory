@@ -76,7 +76,7 @@ function InfoGrid({ children }: { children: React.ReactNode }) {
   );
 }
 
-function EmptyState({ text }: { text: string }) {
+export function EmptyState({ text }: { text: string }) {
   return (
     <div style={{ fontSize: 11, color: "var(--dpf-muted)", fontStyle: "italic", padding: "8px 0" }}>
       {text}
@@ -84,7 +84,7 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
-function Chip({ children, tone = "muted" }: { children: React.ReactNode; tone?: "muted" | "accent" | "success" | "warning" | "error" }) {
+export function Chip({ children, tone = "muted" }: { children: React.ReactNode; tone?: "muted" | "accent" | "success" | "warning" | "error" }) {
   const toneVar = {
     muted: "var(--dpf-muted)",
     accent: "var(--dpf-accent)",
@@ -109,7 +109,7 @@ function Chip({ children, tone = "muted" }: { children: React.ReactNode; tone?: 
   );
 }
 
-function deepLink(href: string, label: string) {
+export function deepLink(href: string, label: string) {
   return (
     <Link href={href} style={{ fontSize: 11, color: "var(--dpf-accent)", textDecoration: "none" }}>
       {label} →
