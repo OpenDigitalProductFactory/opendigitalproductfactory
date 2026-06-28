@@ -36,6 +36,7 @@ describe("KNOWN_PROVIDER_MODELS", () => {
     expect(glm!.qualityTier).toBe("frontier");
     expect(glm!.modelClass).toBe("reasoning");
     expect(glm!.maxContextTokens).toBe(1_000_000);
+    expect(glm!.maxOutputTokens).toBe(128_000);
     expect(glm!.capabilities.toolUse).toBe(true);
     expect(glm!.capabilities.structuredOutput).toBe(true);
     expect(glm!.scores!.reasoning).toBeGreaterThanOrEqual(90);
@@ -45,6 +46,7 @@ describe("KNOWN_PROVIDER_MODELS", () => {
     expect(coding).toBeDefined();
     expect(coding!.defaultStatus).toBe("active");
     expect(coding!.modelClass).toBe("code");
+    expect(coding!.maxOutputTokens).toBe(128_000);
     expect(coding!.capabilities.toolUse).toBe(true);
     expect(coding!.scores!.codegen).toBeGreaterThanOrEqual(90);
   });

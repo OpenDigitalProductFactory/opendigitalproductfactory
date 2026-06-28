@@ -37,7 +37,9 @@ The user asked for both OAuth and API account options. Current Z.ai documentatio
 - Z.ai quick start documents API-key authentication and an OpenAI-compatible base URL at `https://api.z.ai/api/paas/v4`.
 - Z.ai OpenCode documentation configures OpenCode through an OpenAI-compatible coding endpoint at `https://api.z.ai/api/coding/paas/v4`.
 - Z.ai GLM-5.2 documentation presents GLM-5.2 as the current high-capability model family with long-context support.
+- Z.ai chat-completion documentation lists GLM-5.2 with 1M input context and 128K maximum output.
 - Z.ai function-calling documentation confirms tool-call style capabilities for model API use.
+- Z.ai pricing documentation currently lists GLM-5.2 at $1.40 per 1M input tokens and $4.40 per 1M output tokens.
 - No official OAuth model-access flow was found in Z.ai documentation during this pass.
 
 Sources:
@@ -46,6 +48,8 @@ Sources:
 - `https://docs.z.ai/guides/develop/openai/python`
 - `https://docs.z.ai/guides/llm/glm-5.2`
 - `https://docs.z.ai/guides/capabilities/function-calling`
+- `https://docs.z.ai/api-reference/llm/chat-completion`
+- `https://docs.z.ai/guides/llm/glm-5.2/pricing`
 - `https://docs.z.ai/scenario-example/develop-tools/opencode`
 
 ### Existing DPF Providers
@@ -115,7 +119,8 @@ Initial metadata:
 
 - Quality tier: `frontier` for `glm-5.2` unless live testing downgrades it.
 - Model class: `reasoning` for normal provider, `code` for coding provider.
-- Max context: `1_000_000` if the current Z.ai model docs continue to show 1M-context GLM-5.2 configuration.
+- Max context: `1_000_000`.
+- Max output: `128_000`.
 - Capabilities: tool use, structured output, streaming, thinking/long-context where supported by metadata.
 - Scores are provisional curated priors and must be corrected after live testing with the operator's account.
 

@@ -18,6 +18,8 @@ type ProviderRegistryEntry = {
   authHeader?: string | null;
   cliEngine?: string | null;
   supportsToolUse?: boolean;
+  inputPricePerMToken?: number | null;
+  outputPricePerMToken?: number | null;
   endpointType?: string;
   oauthClientId?: string | null;
   oauthRedirectUri?: string | null;
@@ -58,6 +60,8 @@ describe("model profile seed contract", () => {
       authMethod: "api_key",
       authHeader: "Authorization",
       supportsToolUse: true,
+      inputPricePerMToken: 1.4,
+      outputPricePerMToken: 4.4,
     });
     expect(zai?.supportedAuthMethods).toEqual(["api_key"]);
     expect(zai?.oauthClientId).toBeUndefined();
@@ -70,6 +74,8 @@ describe("model profile seed contract", () => {
       authHeader: "Authorization",
       cliEngine: "opencode",
       supportsToolUse: true,
+      inputPricePerMToken: 1.4,
+      outputPricePerMToken: 4.4,
     });
     expect(coding?.supportedAuthMethods).toEqual(["api_key"]);
     expect(coding?.oauthClientId).toBeUndefined();
