@@ -26,10 +26,12 @@ import {
   WORK_PATTERN_REVIEW_ACTIONS,
   type WorkPatternReviewAction,
 } from "@/lib/tak/work-pattern-review";
+import { buildWorkPatternCaseStaging } from "@/lib/tak/work-pattern-case-staging";
 import type {
   WorkPatternCandidate,
   WorkPatternDecisionScope,
 } from "@/lib/tak/work-pattern-types";
+import { parseWorkPatternMetadata } from "@/lib/tak/work-pattern-types";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -60,6 +62,10 @@ function isRecord(value: unknown): value is JsonRecord {
 
 function recordFrom(value: unknown): JsonRecord {
   return isRecord(value) ? value : {};
+}
+
+function inputJson(value: unknown): Prisma.InputJsonValue {
+  return value as Prisma.InputJsonValue;
 }
 
 function stringField(source: unknown, field: string): string | null {
@@ -160,6 +166,16 @@ function buildRoute(agentId: string): string {
   return `/platform/ai/agent/${agentId}`;
 }
 
+function workPatternMetadataFrom(
+  evidenceJson: JsonRecord,
+  readinessJson: JsonRecord,
+) {
+  return (
+    parseWorkPatternMetadata(evidenceJson.workPattern) ??
+    parseWorkPatternMetadata(readinessJson.workPattern)
+  );
+}
+
 export async function recordWorkPatternReview(formData: FormData): Promise<ReviewActionResult> {
   const { userId } = await requireCapability("manage_platform");
   const needId = formString(formData, "needId");
@@ -229,6 +245,14 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
     reviewedAt: new Date(),
     reviewerNote: note,
   });
+  const caseStaging = buildWorkPatternCaseStaging({
+    review,
+    metadata: workPatternMetadataFrom(evidenceJson, readinessJson),
+  });
+  const reviewWithStaging =
+    caseStaging.status === "not-case-bound"
+      ? review
+      : { ...review, caseStaging };
   const outcomeType = outcomeTypeFor(action);
   const routeContext = buildRoute(need.agentId);
   const confidence = shadowEvaluation?.agreementRate ?? 0;
@@ -247,15 +271,15 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
         domainClass: "risk-assessment",
         question: `Review Living Playbook candidate "${need.need}" for ${need.agentId}?`,
         options: ["Approve scoped activation candidate", "Defer for more evidence", "Reject candidate"],
-        evidenceBundle: {
-          workPatternReview: review,
+        evidenceBundle: inputJson({
+          workPatternReview: reviewWithStaging,
           shadowEvaluation,
           capabilityNeedId: need.needId,
           linkedBacklogItemId: need.linkedBacklogItemId ?? null,
           materialCount: 0,
           freshnessDistribution: { current: 0, stale: 0, superseded: 0, contradicted: 0 },
           resolvedProfileChain: [MARK_DPF_PLATFORM_PROFILE.profileId],
-        },
+        }),
         sources: evidenceSources({ need, evidenceJson }),
         rationale: note ?? `Operator recorded ${action} for Living Playbook candidate ${patternKey}.`,
         riskTier: riskTierFor(shadowEvaluation?.riskClass ?? shadowRiskClass),
@@ -263,7 +287,7 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
         confidenceAfter: confidence,
         outcomeType,
         principleConflict: false,
-        outcomePayload: {
+        outcomePayload: inputJson({
           outcomeType,
           domainClass: "risk-assessment",
           confidenceScore: confidence,
@@ -272,8 +296,8 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
           resolvedProfileChain: [MARK_DPF_PLATFORM_PROFILE.profileId],
           materialCount: 0,
           freshnessDistribution: { current: 0, stale: 0, superseded: 0, contradicted: 0 },
-          workPatternReview: review,
-        },
+          workPatternReview: reviewWithStaging,
+        }),
         humanOutcome: {
           type: "work-pattern-review",
           action,
@@ -285,7 +309,7 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
                 : "Reject candidate",
           rationale: note,
           resolverUserId: userId,
-          recordedAt: review.reviewedAt,
+          recordedAt: reviewWithStaging.reviewedAt,
           clearsGate: false,
         },
       },
@@ -301,7 +325,7 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
           decisionInteractionId,
           decisionInteractionIds: appendString(evidenceJson.decisionInteractionIds, decisionInteractionId),
         } as Prisma.InputJsonValue,
-        readinessJson: mergeWorkPatternReviewState(readinessJson, review) as Prisma.InputJsonValue,
+        readinessJson: mergeWorkPatternReviewState(readinessJson, reviewWithStaging) as Prisma.InputJsonValue,
       },
     });
   });

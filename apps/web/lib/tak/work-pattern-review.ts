@@ -7,6 +7,10 @@ import type {
   WorkPatternCandidate,
   WorkPatternDecisionScope,
 } from "./work-pattern-types";
+import {
+  parseWorkPatternCaseStagingState,
+  type WorkPatternCaseStagingState,
+} from "./work-pattern-case-staging";
 
 export const WORK_PATTERN_REVIEW_ACTIONS = ["approve", "reject", "defer"] as const;
 export type WorkPatternReviewAction = (typeof WORK_PATTERN_REVIEW_ACTIONS)[number];
@@ -52,6 +56,7 @@ export type WorkPatternReviewState = {
   blockers: string[];
   activationProposed: boolean;
   activationCandidate: WorkPatternActivationCandidate | null;
+  caseStaging?: WorkPatternCaseStagingState | null;
 };
 
 export type BuildWorkPatternReviewInput = {
@@ -273,6 +278,7 @@ export function parseWorkPatternReviewState(value: unknown): WorkPatternReviewSt
   }
 
   const activationCandidate = parseActivationCandidate(review.activationCandidate);
+  const caseStaging = parseWorkPatternCaseStagingState(review.caseStaging);
   return {
     action,
     status,
@@ -289,5 +295,6 @@ export function parseWorkPatternReviewState(value: unknown): WorkPatternReviewSt
     blockers: parseStringArray(review.blockers),
     activationProposed: booleanField(review, "activationProposed") ?? Boolean(activationCandidate),
     activationCandidate,
+    caseStaging,
   };
 }

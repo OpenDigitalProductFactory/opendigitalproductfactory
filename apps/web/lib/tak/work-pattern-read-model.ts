@@ -31,6 +31,7 @@ import {
   type WorkPatternActivationCandidate,
   type WorkPatternReviewState,
 } from "./work-pattern-review";
+import type { WorkPatternCaseStagingState } from "./work-pattern-case-staging";
 
 const DEFAULT_WINDOW_DAYS = 30;
 const DEFAULT_TAKE = 200;
@@ -120,6 +121,7 @@ export type WorkPatternSummary = {
   activationProposed: boolean;
   reviewState: WorkPatternReviewState | null;
   activationCandidate: WorkPatternActivationCandidate | null;
+  caseStaging: WorkPatternCaseStagingState | null;
   shadowEvaluation: WorkPatternShadowEvaluation | null;
 };
 
@@ -464,6 +466,7 @@ function createAccumulator(seed: PatternSeed): SummaryAccumulator {
     activationProposed: seed.activationProposed,
     reviewState: null,
     activationCandidate: null,
+    caseStaging: null,
     shadowTrials: [],
     shadowCurrentLevel: null,
     shadowRegulatoryCeiling: null,
@@ -619,6 +622,7 @@ function attachNeed(summary: SummaryAccumulator, row: WorkPatternReadModelNeedRo
   if (reviewState) {
     summary.reviewState = newerReview(summary.reviewState, reviewState);
     summary.activationCandidate = summary.reviewState.activationCandidate;
+    summary.caseStaging = summary.reviewState.caseStaging ?? null;
     summary.activationProposed = Boolean(summary.activationCandidate);
     addEvidence(summary, [{
       capabilityNeedId: row.needId,

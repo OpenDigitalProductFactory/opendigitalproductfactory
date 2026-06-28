@@ -127,6 +127,67 @@ describe("work-pattern-review", () => {
     });
   });
 
+  it("preserves case staging state when parsing persisted review JSON", () => {
+    const review = buildWorkPatternReview(baseInput());
+    const merged = mergeWorkPatternReviewState(
+      { readyForReview: true },
+      {
+        ...review,
+        caseStaging: {
+          status: "stageable",
+          activationAllowed: false,
+          liveMutationAllowed: false,
+          caseRef: {
+            caseId: "backlog-item:BI-123",
+            sourceType: "backlog-item",
+            sourceId: "BI-123",
+          },
+          action: "propose",
+          transitionId: "work-pattern:DI-REVIEW001:propose",
+          stagedTransition: {
+            transitionId: "work-pattern:DI-REVIEW001:propose",
+            action: "propose",
+            status: "proposed",
+            caseState: "awaiting-decision",
+            a2aStatus: "input-required",
+            terminal: false,
+            committable: false,
+            sourceRef: {
+              kind: "decision-interaction",
+              id: "DI-REVIEW001",
+              status: "proposed",
+            },
+            reason: "Transition propose is proposed and waiting for approve/edit/reject/respond.",
+            nextAction: "Resolve staged transition",
+          },
+          enforcementMode: "governed-action",
+          requiredReceiptKind: "governed-action",
+          receiptCoverage: "required-before-commit",
+          blockers: ["receipt-required-before-commit"],
+          proposalRail: {
+            kind: "coworker-action-envelope-preview",
+            envelopeStatus: "proposed",
+            manifestActionId: "work-case.propose",
+            argsJson: {
+              caseRef: "backlog-item:BI-123",
+              action: "propose",
+            },
+            rationale: "Stage Work Case proposal from approved Living Playbook candidate.",
+          },
+        },
+      },
+    );
+
+    expect(parseWorkPatternReviewState(merged)).toMatchObject({
+      action: "approve",
+      caseStaging: {
+        status: "stageable",
+        action: "propose",
+        receiptCoverage: "required-before-commit",
+      },
+    });
+  });
+
   it("maps review actions to need statuses and review statuses", () => {
     expect(capabilityNeedStatusForReviewAction("approve")).toBe("accepted");
     expect(capabilityNeedStatusForReviewAction("defer")).toBe("deferred");
