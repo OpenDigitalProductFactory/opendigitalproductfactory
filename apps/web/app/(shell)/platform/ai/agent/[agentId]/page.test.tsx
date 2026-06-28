@@ -197,6 +197,48 @@ vi.mock("@/lib/tak/work-pattern-read-model", () => ({
             },
             blockers: ["activation-candidate-awaits-governed-promotion"],
           },
+          caseStaging: {
+            status: "stageable",
+            activationAllowed: false,
+            liveMutationAllowed: false,
+            caseRef: {
+              caseId: "backlog-item:BI-123",
+              sourceType: "backlog-item",
+              sourceId: "BI-123",
+            },
+            action: "propose",
+            transitionId: "work-pattern:backlog-item:BI-123:propose:DI-REVIEW001",
+            stagedTransition: {
+              transitionId: "work-pattern:backlog-item:BI-123:propose:DI-REVIEW001",
+              action: "propose",
+              status: "proposed",
+              caseState: "awaiting-decision",
+              a2aStatus: "input-required",
+              terminal: false,
+              committable: false,
+              sourceRef: {
+                kind: "decision-interaction",
+                id: "DI-REVIEW001",
+                status: "proposed",
+              },
+              reason: "Transition propose is proposed and waiting for approve/edit/reject/respond.",
+              nextAction: "Resolve staged transition",
+            },
+            enforcementMode: "governed-action",
+            requiredReceiptKind: "governed-action",
+            receiptCoverage: "required-before-commit",
+            blockers: ["receipt-required-before-commit"],
+            proposalRail: {
+              kind: "coworker-action-envelope-preview",
+              envelopeStatus: "proposed",
+              manifestActionId: "work-case.propose",
+              argsJson: {
+                caseRef: "backlog-item:BI-123",
+                action: "propose",
+              },
+              rationale: "Stage Work Case proposal from approved Living Playbook candidate.",
+            },
+          },
         },
         activationCandidate: {
           state: "candidate",
@@ -214,6 +256,48 @@ vi.mock("@/lib/tak/work-pattern-read-model", () => ({
             agreementRate: 0.95,
           },
           blockers: ["activation-candidate-awaits-governed-promotion"],
+        },
+        caseStaging: {
+          status: "stageable",
+          activationAllowed: false,
+          liveMutationAllowed: false,
+          caseRef: {
+            caseId: "backlog-item:BI-123",
+            sourceType: "backlog-item",
+            sourceId: "BI-123",
+          },
+          action: "propose",
+          transitionId: "work-pattern:backlog-item:BI-123:propose:DI-REVIEW001",
+          stagedTransition: {
+            transitionId: "work-pattern:backlog-item:BI-123:propose:DI-REVIEW001",
+            action: "propose",
+            status: "proposed",
+            caseState: "awaiting-decision",
+            a2aStatus: "input-required",
+            terminal: false,
+            committable: false,
+            sourceRef: {
+              kind: "decision-interaction",
+              id: "DI-REVIEW001",
+              status: "proposed",
+            },
+            reason: "Transition propose is proposed and waiting for approve/edit/reject/respond.",
+            nextAction: "Resolve staged transition",
+          },
+          enforcementMode: "governed-action",
+          requiredReceiptKind: "governed-action",
+          receiptCoverage: "required-before-commit",
+          blockers: ["receipt-required-before-commit"],
+          proposalRail: {
+            kind: "coworker-action-envelope-preview",
+            envelopeStatus: "proposed",
+            manifestActionId: "work-case.propose",
+            argsJson: {
+              caseRef: "backlog-item:BI-123",
+              action: "propose",
+            },
+            rationale: "Stage Work Case proposal from approved Living Playbook candidate.",
+          },
         },
         shadowEvaluation: null,
       },
@@ -365,6 +449,11 @@ describe("AgentDetailPage", () => {
     expect(html).toContain("Reject");
     expect(html).toContain("Decision recorded");
     expect(html).toContain("activation candidate");
+    expect(html).toContain("Work Case proposal staged");
+    expect(html).toContain("receipt required before commit");
     expect(html).not.toContain("Activate playbook");
+    expect(html).not.toContain("scaffold");
+    expect(html).not.toContain("ReceiptEnvelope");
+    expect(html).not.toContain("DecisionInteraction");
   });
 });

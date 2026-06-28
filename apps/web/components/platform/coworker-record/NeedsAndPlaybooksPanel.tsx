@@ -11,6 +11,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { Chip, deepLink, EmptyState, Section } from "./panels";
 
 type ShadowEvaluation = NonNullable<WorkPatternSummary["shadowEvaluation"]>;
+type CaseStaging = NonNullable<WorkPatternSummary["caseStaging"]>;
 type ImprovementTotals = ShadowEvaluation["improvementTotals"];
 type DeltaKey = keyof ImprovementTotals;
 
@@ -247,6 +248,7 @@ function strongestReductionLabel(totals: ImprovementTotals): string {
 function PlaybookReviewRow({ pattern, canWrite }: { pattern: WorkPatternSummary; canWrite: boolean }) {
   if (pattern.reviewState) {
     const tone = reviewActionTone(pattern.reviewState.action);
+    const caseStaging = pattern.caseStaging ?? pattern.reviewState.caseStaging ?? null;
     return (
       <div
         style={{
@@ -271,6 +273,7 @@ function PlaybookReviewRow({ pattern, canWrite }: { pattern: WorkPatternSummary;
         <div style={{ fontSize: 10, color: "var(--dpf-muted)", overflowWrap: "anywhere" }}>
           Candidate record only; live autonomy and Work Case state stay unchanged.
         </div>
+        <CaseStagingRow state={caseStaging} />
       </div>
     );
   }
@@ -321,6 +324,79 @@ function PlaybookReviewRow({ pattern, canWrite }: { pattern: WorkPatternSummary;
       />
     </div>
   );
+}
+
+function CaseStagingRow({ state }: { state: CaseStaging | null }) {
+  if (!state || state.status === "not-case-bound") return null;
+  const staged = state.status === "stageable";
+  const guardrail = caseStagingGuardrailLabel(state);
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 4,
+        paddingTop: 6,
+        borderTop: "1px solid var(--dpf-border)",
+      }}
+    >
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
+        <Chip tone={staged ? "accent" : "warning"}>
+          {staged ? "Work Case proposal staged" : "Case proposal blocked"}
+        </Chip>
+        {guardrail ? <Chip tone={staged ? "warning" : "error"}>{guardrail}</Chip> : null}
+        {state.action ? <Chip tone="muted">{workCaseActionLabel(state.action)}</Chip> : null}
+      </div>
+      <div style={{ fontSize: 10, color: "var(--dpf-muted)", overflowWrap: "anywhere" }}>
+        Proposal record only; the case waits for governed approval and receipt evidence before any commit.
+      </div>
+    </div>
+  );
+}
+
+function caseStagingGuardrailLabel(state: CaseStaging): string | null {
+  if (state.receiptCoverage === "required-before-commit") {
+    return "receipt required before commit";
+  }
+  if (state.status === "blocked") {
+    return caseStagingBlockerLabel(state.blockers[0]);
+  }
+  return null;
+}
+
+function caseStagingBlockerLabel(blocker: string | undefined): string {
+  if (!blocker) return "proposal needs more context";
+  const labels: Record<string, string> = {
+    "missing-case-source-reference": "Work Case reference required",
+    "missing-governed-action-key": "Work Case action required",
+    "unknown-governed-action-key": "Work Case action not recognized",
+    "missing-receipt-policy": "receipt policy required",
+    "missing-authority-mode": "authority mode required",
+    "missing-sponsor-principal": "sponsor required",
+    "missing-authenticated-inbound-principal": "authenticated principal required",
+    "policy-missing_agent_sponsor": "sponsor required",
+    "policy-missing_delegating_principal": "delegating principal required",
+    "policy-missing_authenticated_inbound_principal": "authenticated principal required",
+  };
+  return labels[blocker] ?? blocker.replaceAll("-", " ");
+}
+
+function workCaseActionLabel(action: string): string {
+  const labels: Record<string, string> = {
+    "needs-input": "needs input",
+    "needs-auth": "needs authorization",
+    propose: "propose next move",
+    delegate: "delegate",
+    handoff: "handoff",
+    escalate: "escalate",
+    verify: "verify",
+    complete: "complete",
+    cancel: "cancel",
+    claim: "claim",
+    pause: "pause",
+    respond: "respond",
+    resume: "resume",
+  };
+  return labels[action] ?? action.replaceAll("-", " ");
 }
 
 function ReviewActionForm({

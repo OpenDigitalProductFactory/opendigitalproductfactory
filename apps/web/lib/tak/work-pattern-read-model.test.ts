@@ -172,6 +172,48 @@ describe("getWorkPatternReadModel", () => {
                 },
                 blockers: ["activation-candidate-awaits-governed-promotion"],
               },
+              caseStaging: {
+                status: "stageable",
+                activationAllowed: false,
+                liveMutationAllowed: false,
+                caseRef: {
+                  caseId: "backlog-item:BI-123",
+                  sourceType: "backlog-item",
+                  sourceId: "BI-123",
+                },
+                action: "propose",
+                transitionId: "work-pattern:backlog-item:BI-123:propose:DI-REVIEW001",
+                stagedTransition: {
+                  transitionId: "work-pattern:backlog-item:BI-123:propose:DI-REVIEW001",
+                  action: "propose",
+                  status: "proposed",
+                  caseState: "awaiting-decision",
+                  a2aStatus: "input-required",
+                  terminal: false,
+                  committable: false,
+                  sourceRef: {
+                    kind: "decision-interaction",
+                    id: "DI-REVIEW001",
+                    status: "proposed",
+                  },
+                  reason: "Transition propose is proposed and waiting for approve/edit/reject/respond.",
+                  nextAction: "Resolve staged transition",
+                },
+                enforcementMode: "governed-action",
+                requiredReceiptKind: "governed-action",
+                receiptCoverage: "required-before-commit",
+                blockers: ["receipt-required-before-commit"],
+                proposalRail: {
+                  kind: "coworker-action-envelope-preview",
+                  envelopeStatus: "proposed",
+                  manifestActionId: "work-case.propose",
+                  argsJson: {
+                    caseRef: "backlog-item:BI-123",
+                    action: "propose",
+                  },
+                  rationale: "Stage Work Case proposal from approved Living Playbook candidate.",
+                },
+              },
             },
           },
         }),
@@ -225,6 +267,18 @@ describe("getWorkPatternReadModel", () => {
       activationAllowed: false,
       currentAutonomyLevel: "shadow",
       proposedAutonomyLevel: "propose",
+    });
+    expect(observed?.caseStaging).toMatchObject({
+      status: "stageable",
+      action: "propose",
+      receiptCoverage: "required-before-commit",
+    });
+    expect(observed?.reviewState?.caseStaging).toMatchObject({
+      status: "stageable",
+      stagedTransition: expect.objectContaining({
+        caseState: "awaiting-decision",
+        committable: false,
+      }),
     });
     expect(observed?.evidenceRefs).toEqual(
       expect.arrayContaining([
