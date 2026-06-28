@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  loadPortalWorkCaseDetail,
   loadPortalWorkCaseList,
   type PortalCasePrismaClient,
 } from "./portal-case-loader";
@@ -109,6 +110,64 @@ describe("portal Work Case loader", () => {
     expect(serialized).not.toContain("WI-BOOKING-1");
     expect(serialized).not.toContain("sourceRefs");
     expect(serialized).not.toContain("work-item");
-    expect(view.cases[0].href).toBe("/portal/cases#booking-BK-1");
+    expect(view.cases[0].href).toBe("/portal/cases/booking%3ABK-1");
+  });
+
+  it("loads a customer-safe case detail for the owning account", async () => {
+    const detail = await loadPortalWorkCaseDetail({
+      prismaClient: prismaFor([bookingItem]),
+      customerAccountId: "CUST-1",
+      caseKey: "booking%3ABK-1",
+      now: new Date("2026-06-28T12:00:00.000Z"),
+    });
+
+    expect(detail).toMatchObject({
+      generatedAt: "2026-06-28T12:00:00.000Z",
+      case: {
+        href: "/portal/cases/booking%3ABK-1",
+        title: "Confirm condenser appointment",
+        sourceLabel: "Storefront booking",
+        statusLabel: "Needs your response",
+        nextActionLabel: "Reply requested",
+        supportHref: "/portal/support",
+      },
+    });
+    expect(detail?.timeline.map((event) => event.label)).toEqual([
+      "Received",
+      "Current status",
+      "Due",
+    ]);
+
+    const serialized = JSON.stringify(detail);
+    expect(serialized).not.toContain("WI-BOOKING-1");
+    expect(serialized).not.toContain("sourceRefs");
+    expect(serialized).not.toContain("work-item");
+    expect(serialized).not.toContain("sourceId");
+  });
+
+  it("does not load details for another account or invalid case keys", async () => {
+    await expect(
+      loadPortalWorkCaseDetail({
+        prismaClient: prismaFor([bookingItem]),
+        customerAccountId: "CUST-2",
+        caseKey: "booking%3ABK-1",
+      }),
+    ).resolves.toBeNull();
+
+    await expect(
+      loadPortalWorkCaseDetail({
+        prismaClient: prismaFor([bookingItem]),
+        customerAccountId: "CUST-1",
+        caseKey: "manual-task%3AMANUAL-1",
+      }),
+    ).resolves.toBeNull();
+
+    await expect(
+      loadPortalWorkCaseDetail({
+        prismaClient: prismaFor([bookingItem]),
+        customerAccountId: "CUST-1",
+        caseKey: "not-a-case-key",
+      }),
+    ).resolves.toBeNull();
   });
 });

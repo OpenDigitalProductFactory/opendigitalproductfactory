@@ -24,7 +24,6 @@ const STATUS_INTENT: Record<string, Intent> = {
 function CaseCard({ item }: { item: PortalWorkCaseListItem }) {
   return (
     <article
-      id={item.href.split("#")[1]}
       className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 text-[var(--dpf-text)]"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -37,7 +36,11 @@ function CaseCard({ item }: { item: PortalWorkCaseListItem }) {
             />
             <span className="text-xs text-[var(--dpf-muted)]">{item.sourceLabel}</span>
           </div>
-          <h2 className="text-base font-semibold text-[var(--dpf-text)]">{item.title}</h2>
+          <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+            <a href={item.href} className="hover:text-[var(--dpf-accent)]">
+              {item.title}
+            </a>
+          </h2>
           {item.description ? (
             <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--dpf-muted)]">{item.description}</p>
           ) : null}
@@ -56,7 +59,7 @@ function CaseCard({ item }: { item: PortalWorkCaseListItem }) {
         ) : null}
         {item.attentionRequired ? (
           <a
-            href="/portal/support"
+            href={item.supportHref}
             className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-3)]"
           >
             <MessageCircle className="size-4" aria-hidden="true" />
@@ -68,6 +71,13 @@ function CaseCard({ item }: { item: PortalWorkCaseListItem }) {
             Visible to your account
           </span>
         )}
+        <a
+          href={item.href}
+          className="inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)]"
+        >
+          View details
+          <ArrowRight className="size-4" aria-hidden="true" />
+        </a>
       </div>
     </article>
   );

@@ -15,25 +15,29 @@ const fixture: PortalWorkCaseListView = {
   cases: [
     {
       caseId: "booking:BK-1",
-      href: "/portal/cases#booking-BK-1",
+      href: "/portal/cases/booking%3ABK-1",
       title: "Confirm condenser appointment",
       sourceLabel: "Storefront booking",
       statusLabel: "Needs your response",
       nextActionLabel: "Reply requested",
       description: "Customer needs a scheduling confirmation.",
       dueAt: "2026-06-29T15:00:00.000Z",
+      createdAt: "2026-06-28T10:00:00.000Z",
       attentionRequired: true,
+      supportHref: "/portal/support",
     },
     {
       caseId: "activity:ACT-1",
-      href: "/portal/cases#activity-ACT-1",
+      href: "/portal/cases/activity%3AACT-1",
       title: "Service follow-up",
       sourceLabel: "Activity",
       statusLabel: "In progress",
       nextActionLabel: "We are working on it",
       description: null,
       dueAt: null,
+      createdAt: "2026-06-28T11:00:00.000Z",
       attentionRequired: false,
+      supportHref: "/portal/support",
     },
   ],
 };
@@ -45,6 +49,7 @@ describe("PortalWorkCases", () => {
     expect(html).toContain("Cases");
     expect(html).toContain("Confirm condenser appointment");
     expect(html).toContain("Needs your response");
+    expect(html).toContain('href="/portal/cases/booking%3ABK-1"');
     expect(html).toContain('href="/portal/support"');
     expect(html).not.toContain("sourceRefs");
     expect(html).not.toContain("work-item");

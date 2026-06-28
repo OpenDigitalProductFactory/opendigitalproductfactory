@@ -67,7 +67,9 @@ export interface PortalWorkCaseListItem {
   nextActionLabel: string;
   description: string | null;
   dueAt: string | null;
+  createdAt: string;
   attentionRequired: boolean;
+  supportHref: string;
 }
 
 export interface PortalWorkCaseListView {
@@ -81,13 +83,50 @@ export interface PortalWorkCaseListView {
   cases: PortalWorkCaseListItem[];
 }
 
+export interface PortalWorkCaseTimelineItem {
+  label: string;
+  body: string;
+  at?: string;
+}
+
+export interface PortalWorkCaseDetailView {
+  generatedAt: string;
+  case: PortalWorkCaseListItem;
+  timeline: PortalWorkCaseTimelineItem[];
+}
+
 function iso(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   return value instanceof Date ? value.toISOString() : value;
 }
 
-function slug(value: string): string {
-  return value.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "");
+function requiredIso(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+export function encodePortalCaseKey(caseId: string): string {
+  return encodeURIComponent(caseId);
+}
+
+export function decodePortalCaseKey(
+  caseKey: string,
+): { sourceType: string; sourceId: string } | null {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(caseKey).trim();
+  } catch {
+    return null;
+  }
+  const separatorIndex = decoded.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex === decoded.length - 1) return null;
+  const sourceType = decoded.slice(0, separatorIndex);
+  const sourceId = decoded.slice(separatorIndex + 1);
+  if (!getWorkCaseAccountResolverKey(sourceType)) return null;
+  return { sourceType, sourceId };
+}
+
+function portalCaseHref(caseId: string): string {
+  return `/portal/cases/${encodePortalCaseKey(caseId)}`;
 }
 
 async function accountFromBooking(
@@ -243,15 +282,42 @@ async function toPortalCase({
 
   return {
     caseId: summary.caseId,
-    href: `/portal/cases#${slug(summary.caseId)}`,
+    href: portalCaseHref(summary.caseId),
     title: summary.title,
     sourceLabel: entry?.displayLabel ?? summary.sourceLabel,
     statusLabel: portalStatus.statusLabel,
     nextActionLabel: portalStatus.nextActionLabel,
     description: item.description,
     dueAt: iso(item.dueAt),
+    createdAt: requiredIso(item.createdAt),
     attentionRequired: portalStatus.needsResponse || summary.attention.required,
+    supportHref: "/portal/support",
   };
+}
+
+function buildPortalTimeline(
+  item: PortalWorkItemRecord,
+  portalCase: PortalWorkCaseListItem,
+): PortalWorkCaseTimelineItem[] {
+  const timeline: PortalWorkCaseTimelineItem[] = [
+    {
+      label: "Received",
+      body: "We received this request.",
+      at: requiredIso(item.createdAt),
+    },
+    {
+      label: "Current status",
+      body: portalCase.statusLabel,
+    },
+  ];
+  if (portalCase.dueAt) {
+    timeline.push({
+      label: "Due",
+      body: "Target date for the next update.",
+      at: portalCase.dueAt,
+    });
+  }
+  return timeline;
 }
 
 function sortCases(left: PortalWorkCaseListItem, right: PortalWorkCaseListItem): number {
@@ -297,5 +363,43 @@ export async function loadPortalWorkCaseList({
       resolved: cases.filter((item) => item.statusLabel === "Resolved" || item.statusLabel === "Cancelled").length,
     },
     cases,
+  };
+}
+
+export async function loadPortalWorkCaseDetail({
+  prismaClient,
+  customerAccountId,
+  caseKey,
+  now = new Date(),
+}: {
+  prismaClient: PortalCasePrismaClient;
+  customerAccountId: string;
+  caseKey: string;
+  now?: Date;
+}): Promise<PortalWorkCaseDetailView | null> {
+  const parsed = decodePortalCaseKey(caseKey);
+  if (!parsed) return null;
+
+  const items = await prismaClient.workItem.findMany({
+    where: {
+      sourceType: parsed.sourceType,
+      sourceId: parsed.sourceId,
+    },
+    orderBy: [{ createdAt: "desc" }],
+    take: 10,
+  });
+  const item = items.find(
+    (candidate) =>
+      candidate.sourceType === parsed.sourceType && candidate.sourceId === parsed.sourceId,
+  );
+  if (!item) return null;
+
+  const portalCase = await toPortalCase({ prismaClient, item, customerAccountId });
+  if (!portalCase) return null;
+
+  return {
+    generatedAt: now.toISOString(),
+    case: portalCase,
+    timeline: buildPortalTimeline(item, portalCase),
   };
 }
