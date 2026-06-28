@@ -5316,6 +5316,69 @@ model PromotionBackup {
 
 // ─── Task Governance Runtime ──────────────────────────────────────
 
+// Progressive autonomy substrate (EP-8AF1C996 / BI-DE4BF92F).
+// DecisionShadowLedger records what a coworker would/did decide for a governed
+// activity; TrustState stores the measured aggregate for one
+// coworker x activity x risk triple. These tables measure trust only; they do
+// not authorize runtime autonomy changes.
+model DecisionShadowLedger {
+  id                    String    @id @default(cuid())
+  ledgerId              String    @unique
+  agentId               String
+  activityType          String
+  riskClass             String
+  autonomyLevel         String    @default("shadow")
+  proposedDecision      Json
+  rationale             String?   @db.Text
+  actualDecision        Json?
+  outcome               Json?
+  agreement             Boolean?
+  sourceKind            String?
+  taskRunId             String?
+  toolExecutionId       String?
+  decisionInteractionId String?
+  envelopeId            String?
+  metadata              Json      @default("{}")
+  observedAt            DateTime  @default(now())
+  reconciledAt          DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([agentId, activityType, riskClass, observedAt(sort: Desc)])
+  @@index([agentId, observedAt(sort: Desc)])
+  @@index([activityType, riskClass])
+  @@index([agreement])
+  @@index([taskRunId])
+  @@index([toolExecutionId])
+  @@index([decisionInteractionId])
+  @@index([envelopeId])
+  @@index([observedAt])
+}
+
+model TrustState {
+  id                String    @id @default(cuid())
+  agentId           String
+  activityType      String
+  riskClass         String
+  currentLevel      String    @default("shadow")
+  regulatoryCeiling String?
+  sampleCount       Int       @default(0)
+  agreementCount    Int       @default(0)
+  agreementRate     Float?
+  lastLedgerId      String?
+  recommendation    Json      @default("{}")
+  lastEvaluatedAt   DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([agentId, activityType, riskClass])
+  @@index([agentId, currentLevel])
+  @@index([activityType, riskClass])
+  @@index([currentLevel])
+  @@index([regulatoryCeiling])
+  @@index([lastEvaluatedAt])
+}
+
 model TaskRun {
   id                   String                @id @default(cuid())
   taskRunId            String                @unique
