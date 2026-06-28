@@ -28,13 +28,13 @@ function q(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-/** Fake `pnpm` (exit code configurable via PNPM_EXIT) and an instant `sleep`. */
+/** Fake `pnpm` (exit code configurable via PNPM_EXIT/PNPM_FAIL_MATCH) and an instant `sleep`. */
 function makeFakeBin(root: string): string {
   const bin = join(root, "bin");
   mkdirSync(bin, { recursive: true });
   writeFileSync(
     join(bin, "pnpm"),
-    '#!/bin/sh\necho "[fake pnpm] $*"\nexit ${PNPM_EXIT:-0}\n',
+    '#!/bin/sh\nprintf "%s\\n" "$*" >> "$PNPM_LOG"\necho "[fake pnpm] $*"\ncase "$*" in\n  *"$PNPM_FAIL_MATCH"*) [ -n "$PNPM_FAIL_MATCH" ] && exit 1 ;;\nesac\nexit ${PNPM_EXIT:-0}\n',
   );
   writeFileSync(join(bin, "sleep"), "#!/bin/sh\nexit 0\n"); // instant — no real waits
   chmodSync(join(bin, "pnpm"), 0o755);
@@ -42,11 +42,14 @@ function makeFakeBin(root: string): string {
   return bin;
 }
 
-function run(opts: { appDir: string; fakeBin: string; pnpmExit: number }) {
+function run(opts: { appDir: string; fakeBin: string; pnpmExit: number; pnpmFailMatch?: string }) {
+  const pnpmLog = join(opts.appDir, "pnpm.log");
   const exports = [
     `export PATH=${q(toBashPath(opts.fakeBin))}:"$PATH"`,
     `export DPF_APP_DIR=${q(toBashPath(opts.appDir))}`,
     `export PNPM_EXIT=${opts.pnpmExit}`,
+    `export PNPM_LOG=${q(toBashPath(pnpmLog))}`,
+    `export PNPM_FAIL_MATCH=${q(opts.pnpmFailMatch ?? "")}`,
   ].join("\n");
   // The server command is a marker echo — it only runs if migrate succeeds.
   const r = spawnSync(
@@ -54,7 +57,7 @@ function run(opts: { appDir: string; fakeBin: string; pnpmExit: number }) {
     ["-lc", `${exports}\nbash ${q(toBashPath(SCRIPT))} sh -c 'echo BOOT_MARKER'`],
     { encoding: "utf8" },
   );
-  return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+  return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", pnpmLog };
 }
 
 describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
@@ -68,6 +71,41 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
       expect(r.stdout).toContain("prisma migrate deploy"); // the fake pnpm echoed its args
       expect(r.stdout).toContain("migrations applied");
       expect(r.stdout).toContain("BOOT_MARKER"); // server command was exec'd
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, TIMEOUT_MS);
+
+  it("syncs provider registry and catalog capabilities before starting the server", () => {
+    const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
+    try {
+      const appDir = join(root, "app");
+      mkdirSync(appDir, { recursive: true });
+      const r = run({ appDir, fakeBin: makeFakeBin(root), pnpmExit: 0 });
+      expect(r.status).toBe(0);
+      const log = r.stdout;
+      expect(log.indexOf("prisma migrate deploy")).toBeLessThan(log.indexOf("scripts/sync-provider-registry.ts"));
+      expect(log.indexOf("scripts/sync-provider-registry.ts")).toBeLessThan(log.indexOf("scripts/reconcile-catalog-capabilities.ts"));
+      expect(log.indexOf("scripts/reconcile-catalog-capabilities.ts")).toBeLessThan(log.indexOf("BOOT_MARKER"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, TIMEOUT_MS);
+
+  it("FAILS CLOSED - does not start the server when provider registry sync fails", () => {
+    const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
+    try {
+      const appDir = join(root, "app");
+      mkdirSync(appDir, { recursive: true });
+      const r = run({
+        appDir,
+        fakeBin: makeFakeBin(root),
+        pnpmExit: 0,
+        pnpmFailMatch: "scripts/sync-provider-registry.ts",
+      });
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("provider registry sync failed");
+      expect(r.stdout).not.toContain("BOOT_MARKER");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

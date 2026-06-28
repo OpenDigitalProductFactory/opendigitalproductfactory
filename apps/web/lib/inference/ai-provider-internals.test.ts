@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // this mock is inert for them.
 const credState = vi.hoisted(() => ({
   row: null as Record<string, unknown> | null,
+  rows: new Map<string, Record<string, unknown>>(),
 }));
 const discoveredModelMock = vi.hoisted(() => ({
   findMany: vi.fn(),
@@ -14,7 +15,11 @@ const discoveredModelMock = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({
   prisma: {
     credentialEntry: {
-      findUnique: vi.fn(async () => credState.row),
+      findUnique: vi.fn(async (args: { where?: { providerId?: string } } | undefined) => {
+        const providerId = args?.where?.providerId;
+        if (providerId && credState.rows.has(providerId)) return credState.rows.get(providerId) ?? null;
+        return credState.row;
+      }),
     },
     discoveredModel: discoveredModelMock,
   },
@@ -24,6 +29,7 @@ import {
   buildAutoDiscoveryEvalEvents,
   extractTokenUsage,
   providerHasConfiguredCredential,
+  getDecryptedCredential,
   resolveSyncedToolUse,
   upsertDiscoveredModels,
 } from "./ai-provider-internals";
@@ -90,6 +96,7 @@ describe("buildAutoDiscoveryEvalEvents", () => {
 describe("providerHasConfiguredCredential", () => {
   beforeEach(() => {
     credState.row = null;
+    credState.rows = new Map();
   });
 
   it("treats no-auth endpoints (local runner) as always eligible", async () => {
@@ -114,11 +121,44 @@ describe("providerHasConfiguredCredential", () => {
     expect(await providerHasConfiguredCredential("xai", "api_key")).toBe(false);
   });
 
+  it("treats zai-coding as configured when the main zai provider has an API key", async () => {
+    credState.rows = new Map([
+      ["zai", { providerId: "zai", secretRef: "zai-main-key", clientSecret: null, cachedToken: null, refreshToken: null }],
+    ]);
+
+    expect(await providerHasConfiguredCredential("zai-coding", "api_key")).toBe(true);
+  });
+
   it("oauth2_client_credentials is eligible with a client secret or token material", async () => {
     credState.row = { secretRef: null, clientSecret: "enc:cs", cachedToken: null, refreshToken: null };
     expect(await providerHasConfiguredCredential("p", "oauth2_client_credentials")).toBe(true);
     credState.row = { secretRef: null, clientSecret: null, cachedToken: null, refreshToken: null };
     expect(await providerHasConfiguredCredential("p", "oauth2_client_credentials")).toBe(false);
+  });
+});
+
+describe("getDecryptedCredential", () => {
+  beforeEach(() => {
+    credState.row = null;
+    credState.rows = new Map();
+  });
+
+  it("inherits the main zai API key for the zai-coding endpoint", async () => {
+    credState.rows = new Map([
+      ["zai", {
+        providerId: "zai",
+        secretRef: "zai-main-key",
+        clientSecret: null,
+        cachedToken: null,
+        refreshToken: null,
+        status: "ok",
+      }],
+    ]);
+
+    const credential = await getDecryptedCredential("zai-coding");
+
+    expect(credential?.providerId).toBe("zai");
+    expect(credential?.secretRef).toBe("zai-main-key");
   });
 });
 

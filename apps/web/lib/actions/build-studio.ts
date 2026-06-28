@@ -55,7 +55,7 @@ export async function saveBuildStudioConfig(
       where: { providerId: config.opencodeProviderId, cliEngine: "opencode" },
     });
     if (!opencodeProvider) {
-      throw new Error(`Provider ${config.opencodeProviderId} is not an OpenCode-compatible (local) provider`);
+      throw new Error(`Provider ${config.opencodeProviderId} is not an OpenCode-compatible provider`);
     }
   }
 

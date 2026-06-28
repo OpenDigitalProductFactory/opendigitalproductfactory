@@ -35,5 +35,17 @@ until pnpm --filter @dpf/db exec prisma migrate deploy; do
   sleep 3
 done
 
-echo "[portal-boot] migrations applied; starting server"
+echo "[portal-boot] migrations applied; reconciling provider catalog"
+
+if ! pnpm --filter @dpf/db exec tsx scripts/sync-provider-registry.ts; then
+  echo "[portal-boot] FATAL: provider registry sync failed" >&2
+  exit 1
+fi
+
+if ! pnpm --filter @dpf/db exec tsx scripts/reconcile-catalog-capabilities.ts; then
+  echo "[portal-boot] FATAL: catalog capability reconciliation failed" >&2
+  exit 1
+fi
+
+echo "[portal-boot] provider catalog reconciled; starting server"
 exec "$@"

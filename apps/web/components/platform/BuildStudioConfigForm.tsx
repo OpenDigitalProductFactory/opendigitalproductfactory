@@ -72,6 +72,26 @@ function isConfigured(status: string): boolean {
   return status === "ok" || status === "configured" || status === "pending";
 }
 
+function describeOpenCodeProvider(providerId: string, providers: ProviderOption[]): {
+  label: string;
+  desc: string;
+  isLocal: boolean;
+  providerName: string;
+} {
+  const selected = providers.find((p) => p.providerId === providerId) ?? providers[0];
+  const selectedId = selected?.providerId ?? providerId;
+  const isLocal = selectedId === "local" || selectedId === "ollama" || selectedId === "";
+  const providerName = selected?.name ?? "OpenCode";
+  return {
+    label: isLocal ? "Local model (OpenCode) (Preview)" : `${providerName} (OpenCode) (Preview)`,
+    desc: isLocal
+      ? "Your own local LLM · no credential, runs offline"
+      : `${providerName} via OpenCode · uses inherited provider credentials`,
+    isLocal,
+    providerName,
+  };
+}
+
 export function BuildStudioConfigForm({
   config,
   claudeProviders,
@@ -116,8 +136,14 @@ export function BuildStudioConfigForm({
   const hasCodexCreds = codexProviders.some(p => isConfigured(p.status));
   const hasGrokCreds = grokProviders.some(p => isConfigured(p.status));
   const hasOpencodeProvider = opencodeProviders.length > 0;
+  const openCodeDescription = describeOpenCodeProvider(opencodeProviderId, opencodeProviders);
 
   function runEndpointCheck() {
+    if (!openCodeDescription.isLocal) {
+      setEndpointCheck(null);
+      setContextResult(null);
+      return;
+    }
     setCheckingEndpoint(true);
     setEndpointCheck(null);
     setContextResult(null);
@@ -186,12 +212,12 @@ export function BuildStudioConfigForm({
   // selected engine, so the default view shows the auto-sized context + model
   // read-only — the operator never has to click "Test" or type a token count.
   useEffect(() => {
-    if (provider === "opencode" && hasOpencodeProvider && !autoCheckedRef.current) {
+    if (provider === "opencode" && hasOpencodeProvider && openCodeDescription.isLocal && !autoCheckedRef.current) {
       autoCheckedRef.current = true;
       runEndpointCheck();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider]);
+  }, [provider, openCodeDescription.isLocal]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -288,9 +314,9 @@ export function BuildStudioConfigForm({
             checked={provider === "opencode"}
             onChange={() => setProvider("opencode")}
             disabled={!canWrite || !hasOpencodeProvider}
-            label="Local model (OpenCode) (Preview)"
-            desc="Your own local LLM · no credential, runs offline"
-            unconfiguredMsg={!hasOpencodeProvider ? "No local model provider found." : undefined}
+            label={openCodeDescription.label}
+            desc={openCodeDescription.desc}
+            unconfiguredMsg={!hasOpencodeProvider ? "No OpenCode provider found." : undefined}
             readiness={engineReadiness?.opencode}
             canProvision={canWrite}
           />
@@ -469,10 +495,32 @@ export function BuildStudioConfigForm({
 
           {provider === "opencode" && (
             <div>
+              {opencodeProviders.length > 1 && (
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)", marginBottom: 8 }}>
+                  OpenCode provider:
+                  <select
+                    value={opencodeProviderId}
+                    onChange={(e) => setOpencodeProviderId(e.target.value)}
+                    disabled={!canWrite}
+                    style={{
+                      background: "var(--dpf-surface-2)",
+                      border: "1px solid var(--dpf-border)",
+                      borderRadius: 4,
+                      color: "var(--dpf-text)",
+                      fontSize: 12,
+                      padding: "4px 8px",
+                    }}
+                  >
+                    {opencodeProviders.map((p) => (
+                      <option key={p.providerId} value={p.providerId}>{p.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 8 }}>
-                Runs the open-source OpenCode agent against your install&apos;s own local
-                model — no API key, nothing leaves your machine. DPF picks a coding model and
-                sizes its context automatically from your hardware.
+                {openCodeDescription.isLocal
+                  ? "Runs the open-source OpenCode agent against your install's own local model - no API key, nothing leaves your machine. DPF picks a coding model and sizes its context automatically from your hardware."
+                  : `Runs the open-source OpenCode agent against ${openCodeDescription.providerName}. It uses the inherited provider credential and the provider's coding endpoint for build tasks.`}
               </p>
 
               {/* BI-E06BB38A: default view is one plain, read-only readiness line. The
@@ -490,7 +538,12 @@ export function BuildStudioConfigForm({
                   marginBottom: 8,
                 }}
               >
-                {checkingEndpoint ? (
+                {!openCodeDescription.isLocal ? (
+                  <>
+                    OpenCode provider: <strong>{openCodeDescription.providerName}</strong>
+                    <span style={{ color: "var(--dpf-muted)" }}> · model {opencodeModel.trim() || "auto"}</span>
+                  </>
+                ) : checkingEndpoint ? (
                   "Checking your local model…"
                 ) : endpointCheck?.ok ? (
                   <>
@@ -513,19 +566,21 @@ export function BuildStudioConfigForm({
               </div>
               {/* Non-fatal advisories (e.g. embedding model selected) stay on the default
                   view because they need operator attention. */}
-              {endpointCheck?.warnings?.map((w, i) => (
+              {openCodeDescription.isLocal && endpointCheck?.warnings?.map((w, i) => (
                 <div key={i} role="status" style={{ marginBottom: 6, fontSize: 11, color: "var(--dpf-warning)" }}>
                   ⚠ {w}
                 </div>
               ))}
 
-              <p style={{ fontSize: 10, color: "var(--dpf-muted)", marginBottom: 8 }}>
-                Running fully offline? Turn on{" "}
-                <Link href="/platform/ai/providers" style={{ color: "var(--dpf-accent)", textDecoration: "underline" }}>
-                  local-only inference
-                </Link>{" "}
-                so every build phase stays on local with no silent cloud fallback.
-              </p>
+              {openCodeDescription.isLocal && (
+                <p style={{ fontSize: 10, color: "var(--dpf-muted)", marginBottom: 8 }}>
+                  Running fully offline? Turn on{" "}
+                  <Link href="/platform/ai/providers" style={{ color: "var(--dpf-accent)", textDecoration: "underline" }}>
+                    local-only inference
+                  </Link>{" "}
+                  so every build phase stays on local with no silent cloud fallback.
+                </p>
+              )}
 
               {/* Advanced: the technical knobs (manual model, raw context window, Apply,
                   Test) live here for the rare operator who needs them — off the default
@@ -565,9 +620,11 @@ export function BuildStudioConfigForm({
                         />
                       </label>
                       <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
-                        Leave blank to use the first <strong>coding</strong> model your endpoint
-                        serves (embedding models are skipped). ≥22k context recommended.
+                        {openCodeDescription.isLocal
+                          ? <>Leave blank to use the first <strong>coding</strong> model your endpoint serves (embedding models are skipped). ≥22k context recommended.</>
+                          : "Leave blank to use the provider's default coding model for OpenCode dispatch."}
                       </p>
+                      {openCodeDescription.isLocal && (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)" }}>
                           Context window:
@@ -600,6 +657,7 @@ export function BuildStudioConfigForm({
                           {checkingEndpoint ? "Checking…" : "Test local endpoint"}
                         </button>
                       </div>
+                      )}
                       {contextResult && (
                         <div role="status" style={{ fontSize: 11, color: contextResult.ok ? "var(--dpf-success)" : "var(--dpf-error)" }}>
                           {contextResult.ok

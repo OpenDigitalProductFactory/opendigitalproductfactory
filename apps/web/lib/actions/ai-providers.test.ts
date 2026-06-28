@@ -444,6 +444,49 @@ describe("configureProvider", () => {
       }),
     );
   });
+
+  it("activates the hidden Z.ai coding provider and configures OpenCode from the main Z.ai key", async () => {
+    mockPrisma.modelProvider.findUnique.mockImplementation(({ where, select }: { where?: { providerId?: string }; select?: Record<string, boolean> }) => {
+      if (select?.cliEngine) {
+        return Promise.resolve({ providerId: where?.providerId, cliEngine: where?.providerId === "zai-coding" ? "opencode" : null });
+      }
+      return Promise.resolve({
+        providerId: where?.providerId ?? "zai",
+        name: where?.providerId === "zai-coding" ? "Z.ai GLM Coding" : "Z.ai",
+        consoleUrl: "https://chat.z.ai",
+        docsUrl: "https://docs.z.ai",
+        inputPricePerMToken: 1.4,
+        outputPricePerMToken: 4.4,
+      });
+    });
+    mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
+
+    const result = await configureProvider({
+      providerId: "zai",
+      enabledFamilies: ["glm-5", "glm-coding"],
+      authMethod: "api_key",
+      secretRef: "zai-main-key",
+    });
+
+    expect(result).toEqual({});
+    expect(mockActivateProvider).toHaveBeenCalledWith(
+      "zai",
+      expect.objectContaining({
+        trigger: "api_key_configure",
+        authMethod: "api_key",
+        activateLinked: true,
+      }),
+    );
+    expect(mockPrisma.platformConfig.create).toHaveBeenCalledWith({
+      data: {
+        key: "build-studio-dispatch",
+        value: expect.objectContaining({
+          provider: "opencode",
+          opencodeProviderId: "zai-coding",
+        }),
+      },
+    });
+  });
 });
 
 describe("runProviderCatalogReconciliationIfDue", () => {
