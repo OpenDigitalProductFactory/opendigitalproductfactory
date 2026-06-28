@@ -9,6 +9,7 @@ import {
   extractOpencodeResult,
   buildOpencodeInstructions,
   detectOpencodeFatalError,
+  buildOpencodeRunnerScript,
 } from "./opencode-dispatch";
 
 describe("detectOpencodeFatalError", () => {
@@ -182,6 +183,44 @@ describe("buildOpencodeConfig", () => {
     expect(cfg.provider.local.models["qwen3-coder"]).toBeDefined();
     expect(cfg.model).toBe("local/qwen3-coder");
     expect(cfg.permission).toBe("allow");
+  });
+
+  it("declares a credentialed remote OpenAI-compatible provider without using the local provider slot", () => {
+    const cfg = JSON.parse(buildOpencodeConfig({
+      providerSlug: "zai",
+      displayName: "Z.ai GLM Coding",
+      baseUrl: "https://api.z.ai/api/coding/paas/v4",
+      apiKeyEnvVar: "OPENCODE_ZAI_API_KEY",
+      model: "glm-5.2",
+    }));
+
+    expect(cfg.provider.local).toBeUndefined();
+    expect(cfg.provider.zai.npm).toBe("@ai-sdk/openai-compatible");
+    expect(cfg.provider.zai.name).toBe("Z.ai GLM Coding");
+    expect(cfg.provider.zai.options.baseURL).toBe("https://api.z.ai/api/coding/paas/v4");
+    expect(cfg.provider.zai.options.apiKey).toBe("{env:OPENCODE_ZAI_API_KEY}");
+    expect(cfg.provider.zai.models["glm-5.2"]).toEqual({ name: "glm-5.2" });
+    expect(cfg.model).toBe("zai/glm-5.2");
+    expect(cfg.permission).toBe("allow");
+  });
+});
+
+describe("buildOpencodeRunnerScript", () => {
+  it("runs OpenCode against a credentialed remote provider model", () => {
+    const script = buildOpencodeRunnerScript({
+      workdir: "/workspace",
+      promptFile: "/tmp/prompt.txt",
+      runnerScript: "/tmp/run.sh",
+      providerSlug: "zai",
+      model: "glm-5.2",
+      apiKeyEnvVar: "OPENCODE_ZAI_API_KEY",
+      apiKeyValue: "zai-key-with-'quote",
+    });
+
+    expect(script).toContain("export OPENCODE_ZAI_API_KEY='zai-key-with-'\"'\"'quote'");
+    expect(script).toContain("opencode run --dir '/workspace' -m 'zai/glm-5.2' --format json --dangerously-skip-permissions");
+    expect(script).not.toContain("OPENCODE_LOCAL_KEY");
+    expect(script).not.toContain("-m local/");
   });
 });
 

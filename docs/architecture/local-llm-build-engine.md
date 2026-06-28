@@ -84,11 +84,21 @@ execution engine** that makes code-writing robust on a small local model.
 ## Relationship to the other engines
 
 opencode is one of several Build Studio dispatch engines and is selected by the same
-auto-detection and provider configuration as the rest. The only structural difference is
-the model endpoint: opencode points at a **local** OpenAI-compatible endpoint and needs
-no vendor credential, whereas claude / codex / grok point at a **cloud** API and require
-OAuth or an API key. The in-sandbox agent loop, the preflight, the JSON event parsing,
-and the governed phase gates are shared.
+auto-detection and provider configuration as the rest. Its default role is still the
+local/no-credential engine: opencode points at a local OpenAI-compatible endpoint and
+needs no vendor credential, whereas claude / codex / grok point at a cloud API and
+require OAuth or an API key.
+
+The engine itself is provider-neutral. DPF can also point opencode at a credentialed
+OpenAI-compatible coding endpoint, such as Z.ai's GLM Coding endpoint, by writing an
+opencode provider config with a non-`local` provider name and exporting the provider API
+key only inside the sandbox runner script. Local providers keep the Docker Model Runner
+preflight because DPF can inspect their served models and context window; remote
+OpenCode providers resolve through `ModelProvider` + `CredentialEntry` and surface
+account-tier/model-entitlement failures from the provider call.
+
+The in-sandbox agent loop, JSON event parsing, dispatch-attempt evidence, and governed
+phase gates stay shared across local and credentialed opencode targets.
 
 > **Versioning note:** the opencode CLI contract above is pinned to a specific release
 > and was researched against opencode's own documentation. Re-verify the `run` flags and

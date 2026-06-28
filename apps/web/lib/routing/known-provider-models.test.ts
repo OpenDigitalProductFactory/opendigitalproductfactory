@@ -29,6 +29,26 @@ describe("KNOWN_PROVIDER_MODELS", () => {
     expect(grokBuild?.capabilities.toolUse).toBe(true);
   });
 
+  it("adds GLM-5.2 catalog entries for Z.ai inference and OpenCode coding", () => {
+    const glm = KNOWN_PROVIDER_MODELS.zai.find((model) => model.modelId === "glm-5.2");
+    expect(glm).toBeDefined();
+    expect(glm!.defaultStatus).toBe("active");
+    expect(glm!.qualityTier).toBe("frontier");
+    expect(glm!.modelClass).toBe("reasoning");
+    expect(glm!.maxContextTokens).toBe(1_000_000);
+    expect(glm!.capabilities.toolUse).toBe(true);
+    expect(glm!.capabilities.structuredOutput).toBe(true);
+    expect(glm!.scores!.reasoning).toBeGreaterThanOrEqual(90);
+    expect(glm!.scores!.toolFidelity).toBeGreaterThanOrEqual(85);
+
+    const coding = KNOWN_PROVIDER_MODELS["zai-coding"].find((model) => model.modelId === "glm-5.2");
+    expect(coding).toBeDefined();
+    expect(coding!.defaultStatus).toBe("active");
+    expect(coding!.modelClass).toBe("code");
+    expect(coding!.capabilities.toolUse).toBe(true);
+    expect(coding!.scores!.codegen).toBeGreaterThanOrEqual(90);
+  });
+
   // ── Anthropic subscription models ─────────────────────────────────────────
 
   it("has an anthropic-sub catalog entry", () => {

@@ -23,6 +23,7 @@
 //     exists; the provider must be declared).
 
 import type { AssignedTask, SpecialistRole } from "./task-dependency-graph";
+import { prisma } from "@dpf/db";
 import {
   buildSpecialistInstructions,
   buildSpecialistTaskPrompt,
@@ -33,6 +34,8 @@ import {
 import { getOllamaBaseUrl } from "@/lib/inference/ollama-url";
 import { getServedContextTokens } from "@/lib/inference/dmr-runtime-config";
 import { NON_CHAT_MODEL_RE, isEmbeddingModelId } from "@/lib/inference/local-model-policy";
+import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
+import { KNOWN_PROVIDER_MODELS } from "@/lib/routing/known-provider-models";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
@@ -243,29 +246,165 @@ export async function preflightLocalEndpoint(
   return { ok: true, resolvedModel, models, contextOk: true, servedContextTokens, warnings, reportedContextTokens: reported ?? null, reason: null };
 }
 
+export type OpencodeProviderConfigTarget = {
+  providerSlug: string;
+  displayName: string;
+  baseUrl: string;
+  apiKeyEnvVar: string;
+  model: string;
+};
+
+type OpencodeDispatchTarget = OpencodeProviderConfigTarget & {
+  providerId: string;
+  apiKeyValue: string;
+  portalBaseUrl: string;
+  sandboxBaseUrl: string;
+};
+
+function localOpencodeTarget(sandboxBaseUrl: string, model: string): OpencodeProviderConfigTarget {
+  return {
+    providerSlug: "local",
+    displayName: "DPF Local",
+    baseUrl: sandboxBaseUrl,
+    apiKeyEnvVar: "OPENCODE_LOCAL_KEY",
+    model,
+  };
+}
+
 /**
- * Build the opencode.json that declares the install's local endpoint as a
- * custom OpenAI-compatible provider named "local". A dummy apiKey is required
- * by the schema but ignored by local servers; "permission":"allow" keeps the
- * headless run from blocking on a permission prompt.
+ * Build the opencode.json that declares an OpenAI-compatible provider.
+ * The two-argument form preserves the install's local endpoint contract; the
+ * target-object form lets Build Studio point OpenCode at credentialed remote
+ * coding endpoints without reusing the local provider slot.
  */
-export function buildOpencodeConfig(sandboxBaseUrl: string, model: string): string {
+export function buildOpencodeConfig(sandboxBaseUrl: string, model: string): string;
+export function buildOpencodeConfig(target: OpencodeProviderConfigTarget): string;
+export function buildOpencodeConfig(
+  targetOrSandboxBaseUrl: string | OpencodeProviderConfigTarget,
+  maybeModel?: string,
+): string {
+  const target =
+    typeof targetOrSandboxBaseUrl === "string"
+      ? localOpencodeTarget(targetOrSandboxBaseUrl, maybeModel ?? "")
+      : targetOrSandboxBaseUrl;
+
   return JSON.stringify({
     $schema: "https://opencode.ai/config.json",
     provider: {
-      local: {
+      [target.providerSlug]: {
         npm: "@ai-sdk/openai-compatible",
-        name: "DPF Local",
+        name: target.displayName,
         options: {
-          baseURL: sandboxBaseUrl,
-          apiKey: "{env:OPENCODE_LOCAL_KEY}",
+          baseURL: target.baseUrl,
+          apiKey: `{env:${target.apiKeyEnvVar}}`,
         },
-        models: { [model]: { name: model } },
+        models: { [target.model]: { name: target.model } },
       },
     },
-    model: `local/${model}`,
+    model: `${target.providerSlug}/${target.model}`,
     permission: "allow",
   });
+}
+
+function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+export function buildOpencodeRunnerScript(args: {
+  workdir: string;
+  promptFile: string;
+  runnerScript: string;
+  providerSlug: string;
+  model: string;
+  apiKeyEnvVar: string;
+  apiKeyValue: string;
+}): string {
+  const modelRef = `${args.providerSlug}/${args.model}`;
+  return [
+    "#!/bin/sh",
+    "set -e",
+    `cleanup() { rm -f ${shellSingleQuote(args.promptFile)} ${shellSingleQuote(args.runnerScript)} 2>/dev/null || true; }`,
+    "trap cleanup EXIT INT TERM",
+    `cd ${shellSingleQuote(args.workdir)}`,
+    `export ${args.apiKeyEnvVar}=${shellSingleQuote(args.apiKeyValue)}`,
+    // POSIX: the result of $(...) expansion assigned to PROMPT is NOT re-expanded
+    // when referenced as "$PROMPT", so code containing $ or backticks is safe.
+    `PROMPT=$(cat ${shellSingleQuote(args.promptFile)})`,
+    `opencode run --dir ${shellSingleQuote(args.workdir)} -m ${shellSingleQuote(modelRef)} --format json --dangerously-skip-permissions "$PROMPT"`,
+    "cleanup",
+  ].join("\n");
+}
+
+function defaultKnownOpencodeModel(providerId: string): string | null {
+  const models = KNOWN_PROVIDER_MODELS[providerId] ?? [];
+  return models.find((model) => model.defaultStatus === "active")?.modelId ?? models[0]?.modelId ?? null;
+}
+
+async function resolveOpencodeDispatchTarget(params: {
+  providerId: string;
+  requestedModel: string;
+  fetchImpl: typeof fetch;
+}): Promise<{ ok: true; target: OpencodeDispatchTarget } | { ok: false; reason: string }> {
+  const providerId = params.providerId || "local";
+  const requestedModel = params.requestedModel.trim();
+
+  if (providerId === "local" || providerId === "ollama") {
+    const portalBaseUrl = getOllamaBaseUrl().replace(/\/$/, "");
+    const sandboxBaseUrl = sandboxReachableUrl(portalBaseUrl);
+    const pre = await preflightLocalEndpoint(portalBaseUrl, requestedModel, params.fetchImpl, { checkServedContext: true });
+    if (!pre.ok || !pre.resolvedModel) {
+      return { ok: false, reason: pre.reason ?? "local endpoint preflight failed" };
+    }
+    return {
+      ok: true,
+      target: {
+        ...localOpencodeTarget(sandboxBaseUrl, pre.resolvedModel),
+        providerId,
+        apiKeyValue: "local",
+        portalBaseUrl,
+        sandboxBaseUrl,
+      },
+    };
+  }
+
+  const provider = await prisma.modelProvider.findUnique({
+    where: { providerId },
+    select: { providerId: true, name: true, baseUrl: true, cliEngine: true },
+  });
+  if (!provider || provider.cliEngine !== "opencode") {
+    return { ok: false, reason: `Provider "${providerId}" is not configured as an OpenCode provider.` };
+  }
+  if (!provider.baseUrl) {
+    return { ok: false, reason: `Provider "${providerId}" does not have an OpenCode base URL configured.` };
+  }
+
+  const credential = await getDecryptedCredential(providerId);
+  if (!credential?.secretRef) {
+    return { ok: false, reason: `Provider "${providerId}" needs an API key before OpenCode dispatch can run.` };
+  }
+
+  const model = requestedModel || defaultKnownOpencodeModel(providerId);
+  if (!model) {
+    return { ok: false, reason: `Provider "${providerId}" has no OpenCode model configured.` };
+  }
+
+  const providerSlug = providerId === "zai-coding" ? "zai" : providerId.replace(/[^a-zA-Z0-9_-]/g, "-");
+  const envSlug = providerSlug.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  const baseUrl = provider.baseUrl.replace(/\/$/, "");
+  return {
+    ok: true,
+    target: {
+      providerId,
+      providerSlug,
+      displayName: provider.name,
+      baseUrl,
+      apiKeyEnvVar: `OPENCODE_${envSlug}_API_KEY`,
+      apiKeyValue: credential.secretRef,
+      model,
+      portalBaseUrl: baseUrl,
+      sandboxBaseUrl: baseUrl,
+    },
+  };
 }
 
 export function buildOpencodeInstructions(
@@ -324,22 +463,25 @@ export async function dispatchOpencodeTask(params: {
 
   // Resolve the endpoint the PORTAL uses (for preflight) and the rewritten URL
   // the SANDBOX uses (for the actual run).
-  const portalBaseUrl = getOllamaBaseUrl().replace(/\/$/, "");
-  const sandboxBaseUrl = sandboxReachableUrl(portalBaseUrl);
-
-  // Hard preflight: endpoint reachable + model present + served context clears
-  // the agent floor. A failure here is an honest BLOCKED, not a silent degrade
-  // (and not a silent truncation when the served context is too small).
-  const pre = await preflightLocalEndpoint(portalBaseUrl, params.model ?? "", params.fetchImpl ?? fetch, { checkServedContext: true });
-  if (!pre.ok || !pre.resolvedModel) {
+  // the SANDBOX uses (for the actual run). Local endpoints keep the hard
+  // preflight; credentialed remote OpenCode providers resolve through
+  // ModelProvider + CredentialEntry because their /models behavior can vary by
+  // account entitlement.
+  const targetResult = await resolveOpencodeDispatchTarget({
+    providerId,
+    requestedModel: params.model ?? "",
+    fetchImpl: params.fetchImpl ?? fetch,
+  });
+  if (!targetResult.ok) {
     return {
-      content: `BLOCKED: ${pre.reason ?? "local endpoint preflight failed"}`,
+      content: `BLOCKED: ${targetResult.reason}`,
       success: false,
       executedTools: [],
       durationMs: Date.now() - startMs,
     };
   }
-  const model = pre.resolvedModel;
+  const target = targetResult.target;
+  const model = target.model;
 
   const timeoutMs = role === "data-architect" ? OPENCODE_SCHEMA_TASK_TIMEOUT_MS : OPENCODE_TASK_TIMEOUT_MS;
 
@@ -363,7 +505,7 @@ export async function dispatchOpencodeTask(params: {
     // written as the `node` user — the runner script is executed as `node`
     // (docker exec --user node) and `cat`s the prompt file; writing them as root
     // with chmod 600 would make them unreadable to node ("Permission denied").
-    const config = buildOpencodeConfig(sandboxBaseUrl, model);
+    const config = buildOpencodeConfig(target);
     await writeSandboxFile({
       containerId,
       path: "~/.config/opencode/opencode.json",
@@ -375,19 +517,15 @@ export async function dispatchOpencodeTask(params: {
 
     await writeSandboxFile({ containerId, path: promptFile, content: taskPrompt, mode: "600", asNodeUser: true });
 
-    const script = [
-      "#!/bin/sh",
-      "set -e",
-      `cleanup() { rm -f ${promptFile} ${runnerScript} 2>/dev/null || true; }`,
-      "trap cleanup EXIT INT TERM",
-      `cd ${workdir}`,
-      "export OPENCODE_LOCAL_KEY=local", // dummy key; local servers ignore auth
-      // POSIX: the result of $(...) expansion assigned to PROMPT is NOT re-expanded
-      // when referenced as "$PROMPT", so code containing $ or backticks is safe.
-      `PROMPT=$(cat ${promptFile})`,
-      `opencode run --dir ${workdir} -m local/${model} --format json --dangerously-skip-permissions "$PROMPT"`,
-      "cleanup",
-    ].join("\n");
+    const script = buildOpencodeRunnerScript({
+      workdir,
+      promptFile,
+      runnerScript,
+      providerSlug: target.providerSlug,
+      model,
+      apiKeyEnvVar: target.apiKeyEnvVar,
+      apiKeyValue: target.apiKeyValue,
+    });
     await writeSandboxFile({ containerId, path: runnerScript, content: script, mode: "700", asNodeUser: true });
 
     // task.title and the model id originate from operator-authored BIs and the
@@ -395,7 +533,7 @@ export async function dispatchOpencodeTask(params: {
     // strips C0 + DEL before the line lands.
     console.log(
       sanitizeForLog(
-        `[opencode-dispatch] Starting task "${task.title}" with local/${model} in ${containerId} (timeout: ${timeoutMs / 1000}s, endpoint: ${sandboxBaseUrl})`,
+        `[opencode-dispatch] Starting task "${task.title}" with ${target.providerSlug}/${model} in ${containerId} (timeout: ${timeoutMs / 1000}s, endpoint: ${target.sandboxBaseUrl})`,
       ),
     );
 

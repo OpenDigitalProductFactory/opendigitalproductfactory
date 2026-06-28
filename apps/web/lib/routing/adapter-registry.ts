@@ -17,6 +17,8 @@ const ADAPTERS: Record<string, ProviderAdapter> = {
   anthropic: anthropicAdapter,
   "anthropic-sub": anthropicAdapter,
   openai: openAIAdapter,
+  zai: openAIAdapter,
+  "zai-coding": openAIAdapter,
   chatgpt: openAIAdapter,
   codex: openAIAdapter,
   gemini: geminiAdapter,

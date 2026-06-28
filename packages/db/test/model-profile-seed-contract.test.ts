@@ -11,6 +11,13 @@ const DATA_DIR = join(__dirname, "..", "data");
 
 type ProviderRegistryEntry = {
   providerId: string;
+  name?: string;
+  baseUrl?: string | null;
+  authMethod?: string;
+  supportedAuthMethods?: string[];
+  authHeader?: string | null;
+  cliEngine?: string | null;
+  supportsToolUse?: boolean;
   endpointType?: string;
   oauthClientId?: string | null;
   oauthRedirectUri?: string | null;
@@ -37,6 +44,35 @@ describe("model profile seed contract", () => {
 
     expect(entries.find((entry) => entry.providerId === "codex")?.endpointType).toBe("responses");
     expect(entries.find((entry) => entry.providerId === "chatgpt")?.endpointType).toBe("responses");
+  });
+
+  it("seeds Z.ai as API-key providers for inference and OpenCode coding", () => {
+    const entries = JSON.parse(
+      readFileSync(join(DATA_DIR, "providers-registry.json"), "utf8"),
+    ) as ProviderRegistryEntry[];
+
+    const zai = entries.find((entry) => entry.providerId === "zai");
+    expect(zai).toMatchObject({
+      name: "Z.ai",
+      baseUrl: "https://api.z.ai/api/paas/v4",
+      authMethod: "api_key",
+      authHeader: "Authorization",
+      supportsToolUse: true,
+    });
+    expect(zai?.supportedAuthMethods).toEqual(["api_key"]);
+    expect(zai?.oauthClientId).toBeUndefined();
+
+    const coding = entries.find((entry) => entry.providerId === "zai-coding");
+    expect(coding).toMatchObject({
+      name: "Z.ai GLM Coding",
+      baseUrl: "https://api.z.ai/api/coding/paas/v4",
+      authMethod: "api_key",
+      authHeader: "Authorization",
+      cliEngine: "opencode",
+      supportsToolUse: true,
+    });
+    expect(coding?.supportedAuthMethods).toEqual(["api_key"]);
+    expect(coding?.oauthClientId).toBeUndefined();
   });
 
   // Regression guard for the ChatGPT OAuth `unknown_error` bug. The upstream

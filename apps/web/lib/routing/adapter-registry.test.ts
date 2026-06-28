@@ -27,6 +27,11 @@ describe("adapter-registry", () => {
       expect(getAdapter("openai")).toBe(openAIAdapter);
     });
 
+    it("returns the OpenAI adapter for Z.ai OpenAI-compatible providers", () => {
+      expect(getAdapter("zai")).toBe(openAIAdapter);
+      expect(getAdapter("zai-coding")).toBe(openAIAdapter);
+    });
+
     it('returns the Gemini adapter for "gemini"', () => {
       expect(getAdapter("gemini")).toBe(geminiAdapter);
     });
