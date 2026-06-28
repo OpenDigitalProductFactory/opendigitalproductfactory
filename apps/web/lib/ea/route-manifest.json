@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 523,
+  "routeCount": 524,
   "routes": [
     {
       "routePath": "/",
@@ -5398,6 +5398,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(portal)/portal/account/page.tsx"
+    },
+    {
+      "routePath": "/portal/cases",
+      "kind": "page",
+      "segments": [
+        "portal",
+        "cases"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(portal)/portal/cases/page.tsx"
     },
     {
       "routePath": "/portal/orders",

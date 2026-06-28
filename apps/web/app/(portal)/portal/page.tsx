@@ -1,8 +1,15 @@
 // apps/web/app/(portal)/portal/page.tsx
 // Customer dashboard — self-service home page.
+import type { ReactNode } from "react";
+import { BriefcaseBusiness, LifeBuoy, Package, Settings, Wrench } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
+import { StatusBadge } from "@/components/ui/report-kit";
+import {
+  loadPortalWorkCaseList,
+  type PortalCasePrismaClient,
+} from "@/lib/work-management/portal-case-loader";
 
 export default async function CustomerDashboardPage() {
   const session = await auth();
@@ -11,119 +18,148 @@ export default async function CustomerDashboardPage() {
   const user = session.user;
 
   // Fetch customer account data
-  const account = user.accountId
-    ? await prisma.customerAccount.findUnique({
-        where: { accountId: user.accountId },
-        select: {
-          name: true,
-          status: true,
-          accountId: true,
-          contacts: {
-            select: { email: true, isActive: true },
+  const [account, caseView] = await Promise.all([
+    user.accountId
+      ? prisma.customerAccount.findUnique({
+          where: { accountId: user.accountId },
+          select: {
+            name: true,
+            status: true,
+            accountId: true,
+            contacts: {
+              select: { email: true, isActive: true },
+            },
           },
-        },
-      })
-    : null;
+        })
+      : null,
+    user.accountId
+      ? loadPortalWorkCaseList({
+          prismaClient: prisma as unknown as PortalCasePrismaClient,
+          customerAccountId: user.accountId,
+          limit: 20,
+        })
+      : null,
+  ]);
+  const accountStatusIntent =
+    account?.status === "active"
+      ? "success"
+      : account?.status === "suspended" || account?.status === "closed"
+        ? "danger"
+        : "warning";
 
   return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>
+    <div className="space-y-6 text-[var(--dpf-text)]">
+      <div>
+        <h1 className="text-2xl font-semibold text-[var(--dpf-text)]">
           Welcome, {account?.name ?? "Customer"}
         </h1>
-        <p style={{ fontSize: 13, color: "var(--dpf-muted)", marginTop: 4 }}>
+        <p className="mt-1 text-sm text-[var(--dpf-muted)]">
           Account {user.accountId}
         </p>
       </div>
 
-      {/* Quick actions grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 32 }}>
-        {/* Orders/Services/Support backends are not built yet, so no count is
-            displayed — a hardcoded "0 active" would be a fabricated measurement.
-            Wire `count` to a real query once each backend ships. */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <DashboardCard
+          title="Cases"
+          description="Track requests and service updates"
+          href="/portal/cases"
+          accentVar="var(--dpf-accent)"
+          icon={<BriefcaseBusiness className="size-4" aria-hidden="true" />}
+          count={caseView?.stats.total ?? 0}
+          countLabel="open"
+          attentionCount={caseView?.stats.needsResponse ?? 0}
+        />
         <DashboardCard
           title="Orders"
           description="View your order history and track deliveries"
           href="/portal/orders"
-          color="#38bdf8"
+          accentVar="var(--dpf-info)"
+          icon={<Package className="size-4" aria-hidden="true" />}
         />
         <DashboardCard
           title="Services"
           description="Manage your active services and subscriptions"
           href="/portal/services"
-          color="#4ade80"
+          accentVar="var(--dpf-success)"
+          icon={<Wrench className="size-4" aria-hidden="true" />}
         />
         <DashboardCard
           title="Support"
           description="Get help or submit a support request"
           href="/portal/support"
-          color="#a78bfa"
+          accentVar="var(--dpf-warning)"
+          icon={<LifeBuoy className="size-4" aria-hidden="true" />}
         />
         <DashboardCard
           title="Account"
           description="Manage your account settings and contacts"
           href="/portal/account"
-          color="#fb923c"
+          accentVar="var(--dpf-muted)"
+          icon={<Settings className="size-4" aria-hidden="true" />}
           count={account?.contacts.length ?? 0}
           countLabel="contacts"
         />
       </div>
 
-      {/* Account info */}
-      <div style={{
-        background: "var(--dpf-surface-1)",
-        border: "1px solid var(--dpf-border)",
-        borderRadius: 8,
-        padding: 20,
-      }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 12 }}>
+      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+        <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
           Account Details
         </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "8px 16px", fontSize: 13 }}>
-          <span style={{ color: "var(--dpf-muted)" }}>Account ID</span>
-          <span style={{ color: "var(--dpf-text)", fontFamily: "monospace" }}>{user.accountId}</span>
-          <span style={{ color: "var(--dpf-muted)" }}>Company</span>
-          <span style={{ color: "var(--dpf-text)" }}>{account?.name}</span>
-          <span style={{ color: "var(--dpf-muted)" }}>Status</span>
-          <span style={{
-            color: account?.status === "active" ? "#4ade80" : "#fbbf24",
-          }}>{account?.status}</span>
-          <span style={{ color: "var(--dpf-muted)" }}>Contacts</span>
-          <span style={{ color: "var(--dpf-text)" }}>{account?.contacts.length ?? 0}</span>
+        <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+            <p className="text-xs text-[var(--dpf-muted)]">Account ID</p>
+            <p className="mt-1 font-mono text-sm text-[var(--dpf-text)]">{user.accountId}</p>
+          </div>
+          <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+            <p className="text-xs text-[var(--dpf-muted)]">Company</p>
+            <p className="mt-1 text-sm font-medium text-[var(--dpf-text)]">{account?.name ?? "Unlinked"}</p>
+          </div>
+          <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+            <p className="text-xs text-[var(--dpf-muted)]">Status</p>
+            <div className="mt-1">
+              <StatusBadge intent={accountStatusIntent} label={account?.status ?? "unknown"} variant="soft" />
+            </div>
+          </div>
+          <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+            <p className="text-xs text-[var(--dpf-muted)]">Contacts</p>
+            <p className="mt-1 text-sm font-medium text-[var(--dpf-text)]">{account?.contacts.length ?? 0}</p>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
 
-function DashboardCard({ title, description, href, color, count, countLabel }: {
+function DashboardCard({ title, description, href, accentVar, icon, count, countLabel, attentionCount = 0 }: {
   title: string;
   description: string;
   href: string;
-  color: string;
+  accentVar: string;
+  icon: ReactNode;
   count?: number;
   countLabel?: string;
+  attentionCount?: number;
 }) {
   return (
     <a
       href={href}
+      className="block rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 text-[var(--dpf-text)] no-underline transition-colors hover:bg-[var(--dpf-surface-2)]"
       style={{
-        display: "block",
-        padding: 16,
-        background: "var(--dpf-surface-1)",
-        border: "1px solid var(--dpf-border)",
-        borderLeft: `3px solid ${color}`,
-        borderRadius: 8,
-        textDecoration: "none",
-        transition: "background 0.15s",
+        borderLeft: `3px solid ${accentVar}`,
       }}
     >
-      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 4 }}>{title}</div>
-      <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 8 }}>{description}</div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="inline-flex size-8 items-center justify-center rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+          {icon}
+        </div>
+        {attentionCount > 0 ? <StatusBadge intent="warning" label={`${attentionCount} needs reply`} /> : null}
+      </div>
+      <div className="text-sm font-semibold text-[var(--dpf-text)]">{title}</div>
+      <div className="mt-1 min-h-10 text-xs leading-5 text-[var(--dpf-muted)]">{description}</div>
       {count !== undefined && (
-        <div style={{ fontSize: 18, fontWeight: 700, color }}>
+        <div className="mt-3 text-xl font-semibold text-[var(--dpf-text)]">
           {count}
-          <span style={{ fontSize: 10, color: "var(--dpf-muted)", marginLeft: 4 }}>{countLabel}</span>
+          <span className="ml-1 text-xs font-normal text-[var(--dpf-muted)]">{countLabel}</span>
         </div>
       )}
     </a>

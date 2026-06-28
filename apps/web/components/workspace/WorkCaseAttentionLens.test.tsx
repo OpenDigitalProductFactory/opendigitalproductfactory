@@ -70,6 +70,16 @@ describe("WorkCaseAttentionLens", () => {
     expect(html).toContain('href="/workspace/cases/booking%3ABK-1"');
   });
 
+  it("renders a mobile-first today strip for urgent attention cases", () => {
+    const html = renderToStaticMarkup(<WorkCaseAttentionLens view={fixture} />);
+
+    expect(html).toContain('aria-label="Mobile attention"');
+    expect(html).toContain("Today");
+    expect(html).toContain("Confirm condenser appointment");
+    expect(html).toContain("Collect required input");
+    expect(html).toContain('href="/workspace/cases/booking%3ABK-1"');
+  });
+
   it("uses theme tokens and report-kit status styling instead of hardcoded status colors", () => {
     const html = renderToStaticMarkup(<WorkCaseAttentionLens view={fixture} />);
 
