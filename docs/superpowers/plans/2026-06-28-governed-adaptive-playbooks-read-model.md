@@ -14,7 +14,7 @@
 
 - Create `apps/web/lib/tak/work-pattern-read-model.ts` for DB-backed and injectable read-model projection.
 - Create `apps/web/lib/tak/work-pattern-read-model.test.ts` for TDD coverage of grouping, evidence links, candidate-only projection, and no-activation guarantees.
-- Modify `apps/web/components/platform/coworker-record/panels.tsx` to add a `NeedsAndPlaybooksPanel` that accepts preloaded needs and playbook summaries.
+- Add `apps/web/components/platform/coworker-record/NeedsAndPlaybooksPanel.tsx` for the preloaded needs and playbook summaries panel, reusing coworker-record primitives without growing the shared panel module.
 - Modify `apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx` to load `getCoworkerCapabilityNeedReview({ agentId })` and `getWorkPatternReadModel({ agentId })`, then add the `Needs & Playbooks` tab.
 - Modify `apps/web/app/(shell)/platform/ai/agent/[agentId]/page.test.tsx` to mock the new loaders and assert the tab/panel is rendered.
 

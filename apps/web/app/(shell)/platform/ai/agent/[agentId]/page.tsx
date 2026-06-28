@@ -36,9 +36,9 @@ import {
   PriorityPanel,
   GovernancePanel,
   PerformancePanel,
-  NeedsAndPlaybooksPanel,
   DecisionsPanel,
 } from "@/components/platform/coworker-record/panels";
+import { NeedsAndPlaybooksPanel } from "@/components/platform/coworker-record/NeedsAndPlaybooksPanel";
 
 const BUDGET_CLASS_LABELS: Record<string, string> = {
   quality_first: "Quality first",
