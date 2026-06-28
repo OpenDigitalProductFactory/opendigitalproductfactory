@@ -9,6 +9,25 @@ import type {
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Chip, deepLink, EmptyState, Section } from "./panels";
 
+type ShadowEvaluation = NonNullable<WorkPatternSummary["shadowEvaluation"]>;
+type ImprovementTotals = ShadowEvaluation["improvementTotals"];
+type DeltaKey = keyof ImprovementTotals;
+
+const shadowDecisionLabels: Record<ShadowEvaluation["decision"], string> = {
+  "approve-narrower-scope": "approve narrower scope",
+  "continue-shadow": "continue shadow",
+  "insufficient-evidence": "insufficient evidence",
+  "reject-candidate": "reject candidate",
+};
+
+const deltaLabels: Record<DeltaKey, string> = {
+  contextTokenDelta: "context tokens",
+  failureDelta: "failures",
+  manualTouchDelta: "manual touches",
+  reviewFailureDelta: "review failures",
+  toolCallDelta: "tool calls",
+};
+
 export function NeedsAndPlaybooksPanel({
   needs,
   workPatterns,
@@ -154,8 +173,70 @@ function PlaybookRow({ pattern }: { pattern: WorkPatternSummary }) {
           </span>
         ) : null}
       </div>
+      {pattern.shadowEvaluation ? (
+        <ShadowEvidenceRow evaluation={pattern.shadowEvaluation} />
+      ) : null}
     </div>
   );
+}
+
+function ShadowEvidenceRow({ evaluation }: { evaluation: ShadowEvaluation }) {
+  const agreement =
+    evaluation.agreementRate == null
+      ? "agreement pending"
+      : `${Math.round(evaluation.agreementRate * 100)}% agreement`;
+  const decision = shadowDecisionLabels[evaluation.decision];
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 5,
+        marginTop: 8,
+        padding: "7px 8px",
+        borderRadius: 5,
+        border: "1px solid var(--dpf-border)",
+        background: "var(--dpf-surface-1)",
+      }}
+    >
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
+        <Chip tone="accent">Shadow evidence</Chip>
+        <Chip tone="muted">{evaluation.samples} trials</Chip>
+        <Chip tone={evaluation.agreementRate != null && evaluation.agreementRate >= 0.9 ? "success" : "warning"}>
+          {agreement}
+        </Chip>
+        <Chip tone={shadowDecisionTone(evaluation.decision)}>{decision}</Chip>
+      </div>
+      <div style={{ fontSize: 10, color: "var(--dpf-muted)", overflowWrap: "anywhere" }}>
+        {trustRecommendationLabel(evaluation)}. {strongestReductionLabel(evaluation.improvementTotals)}
+      </div>
+    </div>
+  );
+}
+
+function shadowDecisionTone(decision: ShadowEvaluation["decision"]) {
+  if (decision === "approve-narrower-scope") return "success";
+  if (decision === "reject-candidate") return "error";
+  if (decision === "insufficient-evidence") return "warning";
+  return "accent";
+}
+
+function trustRecommendationLabel(evaluation: ShadowEvaluation): string {
+  const recommendation = evaluation.trustRecommendation;
+  if (!recommendation) return "trust projection pending";
+  if (recommendation.action === "hold") return `trust holds at ${recommendation.level}`;
+  if (recommendation.action === "promote") {
+    return `trust projection ${recommendation.from} to ${recommendation.to}`;
+  }
+  return `trust projection ${recommendation.from} down to ${recommendation.to}`;
+}
+
+function strongestReductionLabel(totals: ImprovementTotals): string {
+  const strongest = (Object.entries(totals) as Array<[DeltaKey, number]>)
+    .filter((entry) => entry[1] < 0)
+    .sort((left, right) => left[1] - right[1])[0];
+  if (!strongest) return "no measured reduction";
+  const [key, value] = strongest;
+  return `${deltaLabels[key]} ${Math.abs(value).toLocaleString()} lower`;
 }
 
 function PlaybookStat({ label, value }: { label: string; value: string }) {

@@ -4,6 +4,7 @@ import {
   COWORKER_CAPABILITY_NEED_KINDS,
   type CoworkerCapabilityNeedKind,
 } from "@/lib/coworker-self-assessment/types";
+import type { AutonomyLevel, RiskClass } from "@/lib/autonomy/trust-graduation";
 import {
   WORK_PATTERN_DECISION_SCOPES,
   evaluatePatternReadiness,
@@ -17,6 +18,14 @@ import {
   type WorkPatternSource,
   type WorkPatternStatus,
 } from "./work-pattern-types";
+import {
+  evaluateWorkPatternShadowEvidence,
+  parseAutonomyLevel,
+  parseRiskClass,
+  parseWorkPatternShadowTrials,
+  type WorkPatternShadowEvaluation,
+  type WorkPatternShadowTrial,
+} from "./work-pattern-shadow-evaluation";
 
 const DEFAULT_WINDOW_DAYS = 30;
 const DEFAULT_TAKE = 200;
@@ -104,6 +113,7 @@ export type WorkPatternSummary = {
   openNeedCount: number;
   readiness: WorkPatternReadiness;
   activationProposed: boolean;
+  shadowEvaluation: WorkPatternShadowEvaluation | null;
 };
 
 export type WorkPatternReadModel = {
@@ -122,10 +132,17 @@ export type WorkPatternReadModel = {
   patterns: WorkPatternSummary[];
 };
 
-type SummaryAccumulator = Omit<WorkPatternSummary, "candidateNeedKinds" | "linkedNeedIds" | "evidenceRefs"> & {
+type SummaryAccumulator = Omit<
+  WorkPatternSummary,
+  "candidateNeedKinds" | "linkedNeedIds" | "evidenceRefs" | "shadowEvaluation"
+> & {
   candidateNeedKinds: Set<CoworkerCapabilityNeedKind>;
   linkedNeedIds: Set<string>;
   evidenceRefs: Map<string, WorkPatternEvidenceRef>;
+  shadowTrials: WorkPatternShadowTrial[];
+  shadowCurrentLevel: AutonomyLevel | null;
+  shadowRegulatoryCeiling: AutonomyLevel | null;
+  shadowRiskClass: RiskClass | null;
 };
 
 type PatternSeed = {
@@ -225,6 +242,10 @@ function booleanField(source: unknown, field: string): boolean | null {
   if (!isRecord(source)) return null;
   const value = source[field];
   return typeof value === "boolean" ? value : null;
+}
+
+function unknownField(source: unknown, field: string): unknown {
+  return isRecord(source) ? source[field] : undefined;
 }
 
 function dateFrom(value: unknown): Date | null {
@@ -345,6 +366,32 @@ function readinessFromNeed(row: WorkPatternReadModelNeedRow): WorkPatternReadine
   };
 }
 
+function autonomyLevelFromNeed(
+  row: WorkPatternReadModelNeedRow,
+  field: string,
+): AutonomyLevel | null {
+  return (
+    parseAutonomyLevel(stringField(row.evidenceJson, field)) ??
+    parseAutonomyLevel(stringField(row.readinessJson, field))
+  );
+}
+
+function shadowRiskClassFromNeed(row: WorkPatternReadModelNeedRow): RiskClass | null {
+  return (
+    parseRiskClass(stringField(row.evidenceJson, "shadowRiskClass")) ??
+    parseRiskClass(stringField(row.readinessJson, "shadowRiskClass")) ??
+    parseRiskClass(stringField(row.evidenceJson, "riskClass")) ??
+    parseRiskClass(stringField(row.readinessJson, "riskClass"))
+  );
+}
+
+function shadowTrialsFromNeed(row: WorkPatternReadModelNeedRow): WorkPatternShadowTrial[] {
+  return [
+    ...parseWorkPatternShadowTrials(unknownField(row.evidenceJson, "shadowTrials")),
+    ...parseWorkPatternShadowTrials(unknownField(row.readinessJson, "shadowTrials")),
+  ];
+}
+
 function seedFromNeed(row: WorkPatternReadModelNeedRow): PatternSeed | null {
   const patternKey =
     stringField(row.evidenceJson, "patternKey") ?? stringField(row.readinessJson, "patternKey");
@@ -408,6 +455,10 @@ function createAccumulator(seed: PatternSeed): SummaryAccumulator {
     openNeedCount: 0,
     readiness: seed.readiness,
     activationProposed: seed.activationProposed,
+    shadowTrials: [],
+    shadowCurrentLevel: null,
+    shadowRegulatoryCeiling: null,
+    shadowRiskClass: null,
   };
 }
 
@@ -545,15 +596,43 @@ function attachNeed(summary: SummaryAccumulator, row: WorkPatternReadModelNeedRo
   summary.activationProposed =
     summary.activationProposed ||
     (booleanField(row.readinessJson, "activationProposed") ?? false);
+  summary.shadowTrials.push(...shadowTrialsFromNeed(row));
+  summary.shadowCurrentLevel =
+    summary.shadowCurrentLevel ?? autonomyLevelFromNeed(row, "currentAutonomyLevel");
+  summary.shadowRegulatoryCeiling =
+    summary.shadowRegulatoryCeiling ?? autonomyLevelFromNeed(row, "regulatoryCeiling");
+  summary.shadowRiskClass =
+    summary.shadowRiskClass ?? shadowRiskClassFromNeed(row);
   addEvidence(summary, needEvidence(row));
 }
 
 function serializeSummary(summary: SummaryAccumulator): WorkPatternSummary {
+  const {
+    candidateNeedKinds,
+    evidenceRefs,
+    linkedNeedIds,
+    shadowCurrentLevel,
+    shadowRegulatoryCeiling,
+    shadowRiskClass,
+    shadowTrials,
+    ...base
+  } = summary;
+  const shadowEvaluation =
+    shadowTrials.length > 0
+      ? evaluateWorkPatternShadowEvidence({
+          trials: shadowTrials,
+          currentLevel: shadowCurrentLevel,
+          regulatoryCeiling: shadowRegulatoryCeiling,
+          riskClass: shadowRiskClass,
+        })
+      : null;
+
   return {
-    ...summary,
-    evidenceRefs: [...summary.evidenceRefs.values()],
-    candidateNeedKinds: [...summary.candidateNeedKinds].sort(),
-    linkedNeedIds: [...summary.linkedNeedIds].sort(),
+    ...base,
+    evidenceRefs: [...evidenceRefs.values()],
+    candidateNeedKinds: [...candidateNeedKinds].sort(),
+    linkedNeedIds: [...linkedNeedIds].sort(),
+    shadowEvaluation,
   };
 }
 

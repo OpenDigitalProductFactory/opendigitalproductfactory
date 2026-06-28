@@ -106,6 +106,29 @@ vi.mock("@/lib/tak/work-pattern-read-model", () => ({
           blockers: ["pattern-status-not-approved-or-active"],
         },
         activationProposed: false,
+        shadowEvaluation: {
+          samples: 20,
+          agreements: 19,
+          agreementRate: 0.95,
+          riskClass: "internal-reversible",
+          currentLevel: "shadow",
+          trustRecommendation: {
+            action: "promote",
+            from: "shadow",
+            to: "propose",
+            reason: "agreement 95% >= 90% over 20 samples",
+          },
+          decision: "approve-narrower-scope",
+          activationAllowed: false,
+          improvementTotals: {
+            toolCallDelta: -40,
+            failureDelta: -20,
+            manualTouchDelta: 0,
+            contextTokenDelta: -18000,
+            reviewFailureDelta: 0,
+          },
+          blockers: [],
+        },
       },
     ],
   }),
@@ -247,5 +270,8 @@ describe("AgentDetailPage", () => {
     expect(html).toContain("Needs &amp; Playbooks");
     expect(html).toContain("Living Playbooks");
     expect(html).toContain("Missing sandbox lease grant");
+    expect(html).toContain("Shadow evidence");
+    expect(html).toContain("95% agreement");
+    expect(html).toContain("approve narrower scope");
   });
 });

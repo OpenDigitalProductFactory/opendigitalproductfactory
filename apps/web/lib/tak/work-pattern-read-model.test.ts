@@ -61,6 +61,8 @@ function capabilityNeed(input: {
   status?: string;
   kind?: string;
   routeContext?: string | null;
+  evidenceJson?: Record<string, unknown>;
+  readinessJson?: Record<string, unknown>;
 }) {
   return {
     needId: input.needId,
@@ -75,11 +77,13 @@ function capabilityNeed(input: {
       fingerprint: "fp-grant",
       taskRunId: "TR-1",
       toolExecutionId: "TE-1",
+      ...input.evidenceJson,
     },
     readinessJson: {
       readyForReview: true,
       readyForCaseActivation: false,
       blockers: ["pattern-status-not-approved-or-active"],
+      ...input.readinessJson,
     },
     linkedBacklogItemId: "BI-1",
     duplicateOfId: null,
@@ -117,6 +121,23 @@ describe("getWorkPatternReadModel", () => {
         capabilityNeed({
           needId: "NEED-1",
           patternKey: "grant-denial|build-specialist|/build",
+          evidenceJson: {
+            currentAutonomyLevel: "shadow",
+            shadowTrials: Array.from({ length: 20 }, (_, index) => ({
+              trialId: `S-${index + 1}`,
+              riskClass: "internal-reversible",
+              candidateDecision: "file grant need",
+              actualDecision: index === 19 ? "defer" : "file grant need",
+              outcome: index === 19 ? "missed" : "accepted",
+              agreement: index !== 19,
+              toolCallDelta: -2,
+              failureDelta: -1,
+              manualTouchDelta: 0,
+              contextTokenDelta: -900,
+              reviewFailureDelta: 0,
+              observedAt: "2026-06-28T10:30:00.000Z",
+            })),
+          },
         }),
         capabilityNeed({
           needId: "NEED-2",
@@ -159,6 +180,26 @@ describe("getWorkPatternReadModel", () => {
     );
     expect(observed?.readiness.blockers).toContain("pattern-status-not-approved-or-active");
     expect(observed?.activationProposed).toBe(false);
+    expect(observed?.shadowEvaluation).toMatchObject({
+      samples: 20,
+      agreements: 19,
+      agreementRate: 0.95,
+      decision: "approve-narrower-scope",
+      activationAllowed: false,
+      riskClass: "internal-reversible",
+      improvementTotals: {
+        toolCallDelta: -40,
+        failureDelta: -20,
+        manualTouchDelta: 0,
+        contextTokenDelta: -18000,
+        reviewFailureDelta: 0,
+      },
+      trustRecommendation: {
+        action: "promote",
+        from: "shadow",
+        to: "propose",
+      },
+    });
 
     const candidateOnly = model.patterns.find(
       (item) => item.patternKey === "tool-surface|build-specialist|/build",
@@ -171,6 +212,7 @@ describe("getWorkPatternReadModel", () => {
       linkedNeedIds: ["NEED-2"],
       routeContext: "/build",
       activationProposed: false,
+      shadowEvaluation: null,
     });
   });
 });
