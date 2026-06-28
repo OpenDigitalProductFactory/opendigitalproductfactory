@@ -18,13 +18,13 @@ describe("postureLabel — every position reads meaningfully (never bare 'Custom
     expect(postureLabel(preferenceFromPreset("assured"))).toBe("Assured");
     expect(postureLabel(preferenceFromPreset("frugal"))).toBe("Frugal");
   });
-  it("labels the maxed corner as 'Max <dimension>'", () => {
-    expect(postureLabel({ preset: "custom", qualityWeight: 1, costWeight: 0, timeWeight: 0 })).toBe("Max Quality");
-    expect(postureLabel({ preset: "custom", qualityWeight: 0, costWeight: 1, timeWeight: 0 })).toBe("Max Cost");
-    expect(postureLabel({ preset: "custom", qualityWeight: 0, costWeight: 0, timeWeight: 1 })).toBe("Max Speed");
+  it("labels a maxed corner with the vertex it sits on", () => {
+    expect(postureLabel({ preset: "custom", qualityWeight: 1, costWeight: 0, timeWeight: 0 })).toBe("Higher Reasoning");
+    expect(postureLabel({ preset: "custom", qualityWeight: 0, costWeight: 1, timeWeight: 0 })).toBe("Lower Cost");
+    expect(postureLabel({ preset: "custom", qualityWeight: 0, costWeight: 0, timeWeight: 1 })).toBe("Lower Time");
   });
-  it("labels a strong-but-not-max lean as '<dimension>-first'", () => {
-    expect(postureLabel({ preset: "custom", qualityWeight: 0.7, costWeight: 0.2, timeWeight: 0.1 })).toBe("Quality-first");
+  it("labels a strong lean by the corner it leans toward", () => {
+    expect(postureLabel({ preset: "custom", qualityWeight: 0.7, costWeight: 0.2, timeWeight: 0.1 })).toBe("Higher Reasoning");
   });
   it("labels a near-centroid custom posture 'Balanced'", () => {
     expect(postureLabel({ preset: "custom", qualityWeight: 0.34, costWeight: 0.33, timeWeight: 0.33 })).toBe("Balanced");

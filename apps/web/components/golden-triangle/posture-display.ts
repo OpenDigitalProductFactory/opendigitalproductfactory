@@ -106,26 +106,17 @@ function dominantAxis(p: GoldenTrianglePreference): { axis: "quality" | "cost" |
   return { axis, weight };
 }
 
-// The work scales continuously with the triangle: maxing an axis is that
-// dimension's FULL setting. For Quality, the top of the rigor ladder is a
-// multi-perspective debate (the compiler emits it at qualityWeight >= 0.85, the
-// same QUALITY_DEBATE_FLOOR) — above the single review the Assured preset buys.
-const QUALITY_DEBATE_FLOOR = 0.85;
-
 /**
- * A short, meaningful label for ANY posture — the preset name for a preset, or a
- * dimension + intensity descriptor for a custom one. So an extreme reads as e.g.
- * "Max Quality" (never a bare "Custom"), conveying that a corner is that
- * dimension's full setting.
+ * A short, meaningful label for ANY posture — the preset name for a preset, or the
+ * corner a custom posture leans toward, named exactly as the triangle's vertex
+ * labels (Higher Reasoning / Lower Cost / Lower Time). So a dragged posture reads
+ * e.g. "Lower Cost", never a bare "Custom" or the ambiguous "Max Cost".
  */
 export function postureLabel(pref: GoldenTrianglePreference): string {
   if (pref.preset !== "custom") return PRESET_META[pref.preset].label;
   const { axis, weight } = dominantAxis(pref);
   if (weight < 0.4) return "Balanced";
-  const dim = axis === "quality" ? "Quality" : axis === "cost" ? "Cost" : "Speed";
-  if (weight >= QUALITY_DEBATE_FLOOR) return `Max ${dim}`;
-  if (weight >= 0.55) return `${dim}-first`;
-  return `${dim}-leaning`;
+  return axis === "quality" ? "Higher Reasoning" : axis === "cost" ? "Lower Cost" : "Lower Time";
 }
 
 /**
