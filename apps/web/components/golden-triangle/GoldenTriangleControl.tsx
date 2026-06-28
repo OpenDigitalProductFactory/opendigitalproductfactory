@@ -94,8 +94,8 @@ export function GoldenTriangleControl({
   const vQuality = unitToVb(0.5, 0);
   const vCost = unitToVb(0, 1);
   const vTime = unitToVb(1, 1);
-  // A meaningful label at every position — an extreme reads as e.g. "Max Quality"
-  // (the corner = that dimension's full setting), never a bare "Custom".
+  // A meaningful label at every position — a dragged posture reads as the corner it
+  // leans toward, e.g. "Lower Cost" (matching the vertex labels), never a bare "Custom".
   const activeLabel = postureLabel(value);
 
   const balanceColor = `var(${balance.token})`;

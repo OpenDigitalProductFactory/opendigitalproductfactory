@@ -16,7 +16,7 @@ import { getCoworkerGoldenTrianglePosture, saveCoworkerGoldenTrianglePosture } f
 
 import { GoldenTriangleControl } from "./GoldenTriangleControl";
 import { GoldenTriangleGradient } from "./GoldenTriangleGradient";
-import { PRESET_META, preferenceFromPreset } from "./posture-display";
+import { postureLabel, preferenceFromPreset } from "./posture-display";
 
 export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
   const [pref, setPref] = useState<GoldenTrianglePreference>(preferenceFromPreset("balanced"));
@@ -43,7 +43,9 @@ export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
     };
   }, [agentId]);
 
-  const activeLabel = pref.preset === "custom" ? "Custom" : PRESET_META[pref.preset].label;
+  // Same meaningful label as the expanded control's badge — a dragged posture
+  // reads e.g. "Lower Cost" (the corner it sits on), never a bare "Custom".
+  const activeLabel = postureLabel(pref);
 
   function onChange(next: GoldenTrianglePreference) {
     setPref(next);
