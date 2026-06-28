@@ -1,4 +1,9 @@
 import type { EnvelopeStatus } from "../coworker/envelope-state-machine";
+import {
+  validateWorkCaseAccountability,
+  type WorkCaseAccountabilityContext,
+  type WorkCaseAccountabilityDenialReason,
+} from "./accountability";
 import { getWorkCaseAction } from "./action-registry";
 import type {
   WorkCaseActionVerb,
@@ -15,6 +20,7 @@ export type WorkCaseAutonomyMode = "autonomous" | "supervised" | "observed";
 
 export interface WorkCasePolicyEnvelope {
   autonomyMode: WorkCaseAutonomyMode;
+  accountability?: WorkCaseAccountabilityContext | null;
   receiptPolicy?: {
     required: boolean;
     kind: WorkCaseReceiptKind;
@@ -48,6 +54,7 @@ export type WorkCasePolicyDenialReason =
   | "unknown_action"
   | "unsupported_transition"
   | "terminal_case_sealed"
+  | WorkCaseAccountabilityDenialReason
   | "missing_receipt_policy"
   | "stop_condition_tripped"
   | "missing_decision_interaction"
@@ -109,6 +116,13 @@ export function evaluateWorkCasePolicy(
       "terminal_case_sealed",
       `Work Case ${input.caseRef.caseId} is terminal and cannot accept consequential action '${action.action}'.`,
     );
+  }
+
+  if (action.consequential && input.envelope.accountability) {
+    const accountability = validateWorkCaseAccountability(input.envelope.accountability);
+    if (!accountability.ok) {
+      return deny(accountability.reason, accountability.message);
+    }
   }
 
   const trippedStop = input.stopConditions?.find((condition) => condition.tripped);

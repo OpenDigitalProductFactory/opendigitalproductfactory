@@ -1,12 +1,16 @@
 # Company-Level Work Management Architecture
 
 Date: 2026-06-27
-Status: Proposed design
+Status: Accepted design; Wave 2 implementation in progress
 Owner: DPF architecture
 Related capsule: WC-0A3909A2
 Epic: EP-2984B02B - Work Case / Company Work Management
 Wave 0 BI: BI-40EE7AFD - Work Case source registry, status projection, and read-model skeleton
 Wave 0 plan: docs/superpowers/plans/2026-06-27-work-case-wave-0.md
+Wave 1 BI: BI-D633F7AF - Work Case governed Actions, receipt envelope, and coverage guard
+Wave 1 plan: docs/superpowers/plans/2026-06-27-work-case-wave-1-enforcement.md
+Wave 2 BI: BI-WC-WAVE2 - Work Case accountability, staged transitions, and stop conditions
+Wave 2 plan: docs/superpowers/plans/2026-06-28-work-case-wave-2-accountability.md
 Sibling spec: docs/superpowers/specs/2026-06-27-governed-adaptive-playbooks-design.md (the method-improvement pillar that binds to this object)
 
 ## Summary
@@ -88,7 +92,7 @@ The current schema and code already contain most of the required primitives:
 - `WorkCapsuleActivity`, `WorkItemMessage`, `RuntimeVerification`, `ExternalEvidenceRecord`, `BacklogItemActivity`, and Build Studio records already hold evidence and timeline fragments, but no common Work Case receipt projection exists.
 - A receipt concept already exists in a narrower scope: `GoldenTriangleReceipt` at `apps/web/lib/golden-triangle/receipt.ts` with a `receipt-store.ts`, plus the receipt-chain model in `docs/architecture/gaid-diagrams/03-receipt-chain.mmd`. The Work Case `ReceiptEnvelope` must be defined as a superset/normalizer that subsumes the Golden Triangle receipt rather than a competing parallel receipt type, or the two will diverge.
 - `report-kit` exists at `apps/web/components/ui/report-kit` (co-located in the web app, not a standalone package) and already provides `StatusBadge`, `DataTable`, `FilterBar`, `StatCard`, `ExportButton`, `Chart`, and `statusColors.ts`. No new component library is needed.
-- The acting-agent identity primitive is present (`Principal`), but `DelegationChain` is keyed on `fromAgentId`/`toAgentId` with `originUserId` and `authorityScope` — it is agent-to-agent, with no first-class "named human sponsor accountable for this agent" field and no typed authority-mode (autonomous / on-behalf-of / authenticated-inbound).
+- The acting-agent identity primitive is present (`Principal`). Wave 2 adds nullable `sponsorPrincipalId` and `authorityMode` fields to `Principal` as the first persisted accountability invariant. `DelegationChain` remains agent-to-agent centric (`fromAgentId`/`toAgentId`, `originUserId`, `authorityScope`) and still needs principal-aware participant/handoff projection in a later slice.
 
 Two refactoring signals are important:
 
@@ -192,7 +196,7 @@ Agents should be visible delegates, not invisible assignees. Humans or explicit 
 
 Three identity disciplines from the enterprise platforms should harden this:
 
-- **Named sponsor / accountable human.** Following Microsoft Entra Agent ID and Workday's business-owner model, every acting agent principal carries a named human (or explicit role) sponsor accountable for its lifecycle and for outcomes requiring business judgment. An agent without a resolvable sponsor cannot act on a case. The DPF substrate has `Principal` but no sponsor field; this is the gap to close (see Substrate Verification).
+- **Named sponsor / accountable human.** Following Microsoft Entra Agent ID and Workday's business-owner model, every acting agent principal carries a named human (or explicit role) sponsor accountable for its lifecycle and for outcomes requiring business judgment. An agent without a resolvable sponsor cannot act on a case unless it is operating under verified `authenticated-inbound` authority. Wave 2 persists this as nullable `Principal.sponsorPrincipalId` and enforces it in the Work Case policy envelope.
 - **Authority mode is typed.** Effective authority resolves in one of three explicit modes per the Entra model: **autonomous** (rights held by the agent principal itself), **on-behalf-of** (acting with a delegating principal's rights, bounded by what was delegated), and **authenticated-inbound** (the case can verify which principal — human or agent — invoked an action). DPF currently blends these; the policy envelope should record which mode is in force for the current actor.
 - **Authority is derived at invocation, not statically stamped.** Per Palantir's layered model, effective authority for a transition is computed as the intersection of the agent's own scope, the sponsor/on-behalf-of grant, and the case's sensitivity ceiling and route context — evaluated when the Action runs, not read from a grant snapshot taken when the case opened. This is the CSA accountability-lineage triple in operation: every transition traces to the data relied on, the policy that allowed it, and the human accountable.
 
@@ -524,7 +528,7 @@ Refactor handoff modeling toward Principal-aware participants.
 
 The current `DelegationChain` is useful but agent-centric (`fromAgentId`/`toAgentId`, `originUserId`, `authorityScope`). Company work needs handoffs among users, teams, agents, service principals, external participants, and source systems. The first implementation can project participants from existing records, but the durable model should not be limited to `fromAgentId` and `toAgentId`.
 
-It must also carry, per acting agent principal, a **sponsor** (named accountable human/role) and the **authority mode** (autonomous / on-behalf-of / authenticated-inbound). These do not exist on `Principal` or `DelegationChain` today and are the most likely first place projection proves insufficient — accountability and authority-mode are invariants, not derivable views. Treat adding them as the leading candidate for the first persisted schema change.
+It must also carry, per acting agent principal, a **sponsor** (named accountable human/role) and the **authority mode** (autonomous / on-behalf-of / authenticated-inbound). Wave 2 persists these on `Principal`; `DelegationChain` still needs principal-aware projection beyond `fromAgentId` and `toAgentId`.
 
 ### 5. Policy Envelope Types
 
@@ -537,6 +541,9 @@ Candidate module:
 - `apps/web/lib/work-management/status-projection.ts`
 - `apps/web/lib/work-management/receipt-envelope.ts`
 - `apps/web/lib/work-management/policy-envelope.ts`
+- `apps/web/lib/work-management/accountability.ts`
+- `apps/web/lib/work-management/staged-transition.ts`
+- `apps/web/lib/work-management/stop-conditions.ts`
 
 ### 6. Workspace UI Refactor
 
@@ -595,6 +602,8 @@ Deliverables:
 - Authority derived at invocation (agent scope ∩ sponsor/on-behalf-of grant ∩ sensitivity ceiling ∩ route context).
 - Migration for the identity fields (the expected first persisted schema change); delegation/handoff events with receipts.
 
+Wave 2 implementation note: `Principal.sponsorPrincipalId` and `Principal.authorityMode` are persisted with a nullable migration, and `apps/web/lib/work-management/accountability.ts` enforces the agent sponsor / on-behalf-of / authenticated-inbound invariants in the policy envelope. Generalized participant projection remains a later hardening task.
+
 ### Slice 4: Staged Transitions And Stop Conditions
 
 Deliverables:
@@ -602,6 +611,8 @@ Deliverables:
 - `propose` (staged-before-commit) transition state with approve/edit/reject/respond resolution.
 - Typed, enforced stop conditions (max iterations, cost/budget ceiling tied to OrchestrationBudget, time box, required-approval gates); the receipt records which condition halted.
 - Lifecycle terminal-state sealing.
+
+Wave 2 implementation note: `staged-transition.ts` and `stop-conditions.ts` provide pure deterministic projection/evaluation helpers. Later write-path slices should connect them to persisted staged transition records and receipt emission as mutators are wrapped.
 
 ### Slice 5: Workspace Attention Refactor
 
@@ -706,9 +717,9 @@ The program runs as three concurrent tracks. Each has a near-term spine (the sli
 
 The tracks sequence into waves. Each wave is more focused than the last because more of the foundation is fixed; the tail is the steady-state refinement that does not end.
 
-- Wave 0 — Foundations: R1, R5, P1 (+ tests). The projection skeleton.
-- Wave 1 — Enforcement spine: R2, R4, P2, P3, P4, P7. The governed write path is the keystone; everything trustworthy depends on it.
-- Wave 2 — Accountability invariants: R3, P5, P6, S3. Sponsor/authority-mode persisted; staging and stop conditions enforced.
+- Wave 0 — Foundations: R1, R5, P1 (+ tests). The projection skeleton. Implemented under `BI-40EE7AFD`.
+- Wave 1 — Enforcement spine: R2, R4, P2, P3, P4, P7. The governed write path is the keystone; everything trustworthy depends on it. Implemented under `BI-D633F7AF`.
+- Wave 2 — Accountability invariants: R3, P5, P6, S3. Sponsor/authority-mode persisted; staging and stop conditions enforced. In implementation under `BI-WC-WAVE2`.
 - Wave 3 — Operator surfaces: R6, R7, S1, S2. UI on a substrate that is already safe.
 - Wave 4 — Ecosystem and autonomy: S4, S5, S6. Capability advertisement, graduated autonomy, federation.
 - Wave 5 — Adoption: S7, S8, S9. First domains and external views.
@@ -801,4 +812,4 @@ Mitigations:
 
 ## Next Step
 
-Execute Wave 0 under `EP-2984B02B` / `BI-40EE7AFD`: canonical source registry (R1), status projection helpers (R5), and the Work Case projection skeleton (P1) with tests. Use `docs/superpowers/plans/2026-06-27-work-case-wave-0.md` as the implementation plan. Do not start UI (Wave 3) until the governed write path and receipt-coverage guard from Wave 1 are green; do not start operator surfaces on an unenforced projection. Persist sponsor and authority-mode (R3) as the first schema change when Wave 2 begins, rather than deferring it to a late slice.
+Complete Wave 2 verification and PR under `BI-WC-WAVE2`, then start Wave 3 operator surfaces: the Workspace attention refactor and Case Detail slice. Do not start Wave 3 until the Wave 2 migration, accountability policy tests, staged-transition tests, stop-condition tests, existing Wave 0/1 tests, typecheck, and production build are green.

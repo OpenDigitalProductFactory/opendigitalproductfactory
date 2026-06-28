@@ -108,6 +108,72 @@ describe("evaluateWorkCasePolicy", () => {
     });
   });
 
+  it("denies consequential agent actions without accountable sponsor context", () => {
+    expect(
+      evaluateWorkCasePolicy({
+        caseRef: CASE_REF,
+        sourceKey: "backlog-item",
+        action: "claim",
+        currentState: ACTIVE_STATE,
+        envelope: {
+          ...GOVERNED_ENVELOPE,
+          accountability: {
+            actor: { actorKind: "agent", actorId: "agt-1" },
+            authorityMode: "autonomous",
+          },
+        },
+      }),
+    ).toMatchObject({
+      ok: false,
+      reason: "missing_agent_sponsor",
+    });
+  });
+
+  it("allows consequential agent actions with valid authenticated-inbound accountability", () => {
+    expect(
+      evaluateWorkCasePolicy({
+        caseRef: CASE_REF,
+        sourceKey: "backlog-item",
+        action: "claim",
+        currentState: ACTIVE_STATE,
+        envelope: {
+          ...GOVERNED_ENVELOPE,
+          accountability: {
+            actor: { actorKind: "agent", actorId: "external-agent-1" },
+            authorityMode: "authenticated-inbound",
+            authenticatedInboundPrincipalId: "prn-customer-agent-1",
+          },
+        },
+      }),
+    ).toEqual({
+      ok: true,
+      enforcementMode: "governed-action",
+      requiredReceiptKind: "governed-action",
+    });
+  });
+
+  it("denies on-behalf-of agent actions without a delegating principal", () => {
+    expect(
+      evaluateWorkCasePolicy({
+        caseRef: CASE_REF,
+        sourceKey: "backlog-item",
+        action: "claim",
+        currentState: ACTIVE_STATE,
+        envelope: {
+          ...GOVERNED_ENVELOPE,
+          accountability: {
+            actor: { actorKind: "agent", actorId: "agt-1" },
+            authorityMode: "on-behalf-of",
+            sponsorPrincipalId: "prn-sponsor-1",
+          },
+        },
+      }),
+    ).toMatchObject({
+      ok: false,
+      reason: "missing_delegating_principal",
+    });
+  });
+
   it("denies consequential decision actions when decisionInteractionId is missing", () => {
     expect(
       evaluateWorkCasePolicy({
