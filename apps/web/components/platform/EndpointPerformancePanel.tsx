@@ -87,18 +87,22 @@ export default function EndpointPerformancePanel({
   recentEvals,
   testRuns,
   profile,
+  showDiagnostics = false,
 }: {
   endpointId: string;
   performances: TaskPerformance[];
   recentEvals: Evaluation[];
   testRuns: TestRun[];
   profile: Profile;
+  showDiagnostics?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<"performance" | "evaluations" | "tests">("performance");
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
   const [testMessage, setTestMessage] = useState<string | null>(null);
+  const diagnosticsVisible = showDiagnostics || diagnosticsOpen;
 
   function handleRunTests(probesOnly: boolean) {
     setTestMessage(null);
@@ -131,26 +135,37 @@ export default function EndpointPerformancePanel({
             </div>
           )}
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleRunTests(true)}
-            disabled={isPending}
-            className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/30 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
-          >
-            {isPending ? "Running..." : "Run Probes"}
-          </button>
-          <button
-            onClick={() => handleRunTests(false)}
-            disabled={isPending}
-            className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/30 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
-          >
-            {isPending ? "Running..." : "Run Full Tests"}
-          </button>
-        </div>
-        <div className="text-[10px] text-[var(--dpf-muted)] mt-1">
-          {testMessage && <span style={{ color: "var(--dpf-accent)" }}>{testMessage} </span>}
-          Re-run model evaluations. Required for routing — run once after pulling new models so the router can pick them. Each run also produces evidence visible in the Recent Evaluations tab below.
-        </div>
+        <button
+          type="button"
+          onClick={() => setDiagnosticsOpen((value) => !value)}
+          className="px-3 py-1.5 text-xs rounded-lg border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
+        >
+          {diagnosticsVisible ? "Hide diagnostics" : "Advanced diagnostics"}
+        </button>
+        {diagnosticsVisible && (
+          <div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => handleRunTests(true)}
+                disabled={isPending}
+                className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/30 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
+              >
+                {isPending ? "Running..." : "Run Probes"}
+              </button>
+              <button
+                onClick={() => handleRunTests(false)}
+                disabled={isPending}
+                className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/30 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
+              >
+                {isPending ? "Running..." : "Run Full Tests"}
+              </button>
+            </div>
+            <div className="text-[10px] text-[var(--dpf-muted)] mt-1 text-right max-w-md">
+              {testMessage && <span style={{ color: "var(--dpf-accent)" }}>{testMessage} </span>}
+              Manual diagnostic runs for routing evidence and regression checks.
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -251,7 +266,7 @@ export default function EndpointPerformancePanel({
         <div className="space-y-2">
           {testRuns.length === 0 ? (
             <div className="text-center py-8 text-[var(--dpf-muted)] text-xs">
-              No test runs yet. Click &quot;Run Probes&quot; or &quot;Run Full Tests&quot; above.
+              No test runs yet. Automated and diagnostic runs will appear here.
             </div>
           ) : (
             testRuns.map((tr) => {

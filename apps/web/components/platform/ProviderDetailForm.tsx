@@ -59,6 +59,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const [profilingResult, setProfilingResult]       = useState<{ profiled: number; failed: number; error?: string } | null>(null);
   const [disconnectConfirm, setDisconnectConfirm]   = useState(false);
   const [pipelineStatus, setPipelineStatus]         = useState<string | null>(null);
+  const [showDiagnostics, setShowDiagnostics]       = useState(false);
 
   const [clientId, setClientId]                     = useState(credential?.clientId ?? "");
   const [clientSecret, setClientSecret]             = useState("");  // write-only
@@ -93,57 +94,51 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     );
   }
 
-  function handleSave() {
-    startTransition(async () => {
-      const shouldPersistAuthMethod = hasDualAuth || selectedAuthMethod !== provider.authMethod;
-      const saveInput = {
-        providerId: provider.providerId,
-        enabledFamilies,
-        ...(shouldPersistAuthMethod && { authMethod: selectedAuthMethod }),
-        ...(selectedAuthMethod === "api_key" && secretRef ? { secretRef } : {}),
-        ...(selectedAuthMethod === "oauth2_client_credentials" && clientId       ? { clientId }       : {}),
-        ...(selectedAuthMethod === "oauth2_client_credentials" && clientSecret   ? { clientSecret }   : {}),
-        ...(selectedAuthMethod === "oauth2_client_credentials" && tokenEndpoint  ? { tokenEndpoint }  : {}),
-        ...(selectedAuthMethod === "oauth2_client_credentials" && scope          ? { scope }          : {}),
-        ...(needsEndpoint && endpoint ? { endpoint } : {}),
-        ...(isCompute ? { computeWatts: Number(computeWatts), electricityRateKwh: Number(electricityRate) } : {}),
-      };
-      const result = await configureProvider(saveInput);
-      setSaveMessage(result.error ? `Error: ${result.error}` : "Saved");
-      router.refresh();
-    });
+  function buildSaveInput() {
+    const shouldPersistAuthMethod = hasDualAuth || selectedAuthMethod !== provider.authMethod;
+    return {
+      providerId: provider.providerId,
+      enabledFamilies,
+      ...(shouldPersistAuthMethod && { authMethod: selectedAuthMethod }),
+      ...(selectedAuthMethod === "api_key" && secretRef ? { secretRef } : {}),
+      ...(selectedAuthMethod === "oauth2_client_credentials" && clientId       ? { clientId }       : {}),
+      ...(selectedAuthMethod === "oauth2_client_credentials" && clientSecret   ? { clientSecret }   : {}),
+      ...(selectedAuthMethod === "oauth2_client_credentials" && tokenEndpoint  ? { tokenEndpoint }  : {}),
+      ...(selectedAuthMethod === "oauth2_client_credentials" && scope          ? { scope }          : {}),
+      ...(needsEndpoint && endpoint ? { endpoint } : {}),
+      ...(isCompute ? { computeWatts: Number(computeWatts), electricityRateKwh: Number(electricityRate) } : {}),
+    };
   }
 
-  function handleTest() {
+  function handleReadyProvider() {
     startTransition(async () => {
-      // Step 1: Test connection
-      setPipelineStatus("Testing connection...");
+      setPipelineStatus("Saving provider settings...");
       setTestResult(null);
       setDiscoveryResult(null);
       setProfilingResult(null);
-      const result = await testProviderAuth(provider.providerId);
-      setTestResult(result);
 
-      if (!result.ok) {
+      const result = await configureProvider(buildSaveInput());
+      if (result.error) {
+        setSaveMessage(`Error: ${result.error}`);
         setPipelineStatus(null);
         return;
       }
+      setSaveMessage("Settings saved");
 
-      // Step 2: Discover models
-      setPipelineStatus("Discovering available models...");
-      const discovery = await discoverModels(provider.providerId);
-      setDiscoveryResult(discovery);
-
-      if (discovery.discovered === 0) {
+      setPipelineStatus("Checking connection...");
+      const test = await testProviderAuth(provider.providerId);
+      setTestResult(test);
+      if (!test.ok) {
         setPipelineStatus(null);
         router.refresh();
         return;
       }
 
-      // Step 3: Sync routing profiles for all discovered models.
-      // Uses metadata extraction + family baseline registry — no LLM calls, instant.
+      setPipelineStatus("Refreshing model catalog...");
+      const discovery = await discoverModels(provider.providerId);
+      setDiscoveryResult(discovery);
       if (discovery.discovered > 0) {
-        setPipelineStatus(`Syncing routing profiles for ${discovery.discovered} model${discovery.discovered !== 1 ? "s" : ""}...`);
+        setPipelineStatus("Preparing routing metadata...");
         const profResult = await profileModels(provider.providerId);
         setProfilingResult(profResult);
       }
@@ -170,28 +165,16 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     });
   }
 
-  // Guided setup: determine which step the user is on.
-  // A provider is only truly "credentialed" if auth is "none" OR a credential exists.
   const hasProfiles = profiles.length > 0 || (profilingResult != null && profilingResult.profiled > 0);
   const hasCredential = selectedAuthMethod === "none"
     || credential?.secretHint
     || (selectedAuthMethod === "oauth2_authorization_code" && credential?.status === "ok")
     || secretRef;
-  const step = provider.status === "active" && hasProfiles && hasCredential ? 5
-    : provider.status === "active" && hasCredential ? 4
-    : testResult?.ok ? 3
-    : hasCredential ? 2
-    : 1;
-
-  const STEPS = [
-    { n: 1, label: "Credentials" },
-    { n: 2, label: "Connect" },
-    { n: 3, label: "Discover" },
-    { n: 4, label: "Profile" },
-    { n: 5, label: "Ready" },
-  ];
-
-  const statusColour = provider.status === "active" ? "var(--dpf-success)" : provider.status === "inactive" ? "var(--dpf-muted)" : "var(--dpf-warning)";
+  const readinessState = provider.status === "active" && hasProfiles && hasCredential
+    ? { label: "Ready", tone: "var(--dpf-success)", detail: "Connection, catalog, and routing metadata are prepared." }
+    : hasCredential
+      ? { label: "Needs readiness check", tone: "var(--dpf-warning)", detail: "Save once and DPF will test, discover, and prepare models automatically." }
+      : { label: "Needs credentials", tone: "var(--dpf-muted)", detail: "Add credentials, then DPF will handle the readiness checks." };
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
@@ -213,33 +196,27 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   return (
     <div>
       <div style={{ maxWidth: 560 }}>
-      {/* Setup progress */}
-      <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 24 }}>
-        {STEPS.map((s, i) => {
-          const isLastStep = s.n === STEPS.length;
-          const done = step > s.n || (isLastStep && step === s.n);
-          const current = step === s.n && !isLastStep;
-          const colour = done ? "var(--dpf-success)" : current ? "var(--dpf-accent)" : "var(--dpf-border)";
-          return (
-            <div key={s.n} style={{ display: "flex", alignItems: "center" }}>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 60 }}>
-                <div style={{
-                  width: 24, height: 24, borderRadius: "50%",
-                  background: done ? "color-mix(in srgb, var(--dpf-success) 19%, transparent)" : current ? "color-mix(in srgb, var(--dpf-accent) 20%, transparent)" : "var(--dpf-surface-1)",
-                  border: `2px solid ${colour}`,
-                  display: "grid", placeItems: "center",
-                  fontSize: 11, fontWeight: 600, color: colour,
-                }}>
-                  {done ? "\u2713" : s.n}
-                </div>
-                <span style={{ fontSize: 10, color: current ? "var(--dpf-text)" : "var(--dpf-muted)", marginTop: 4 }}>{s.label}</span>
-              </div>
-              {i < STEPS.length - 1 && (
-                <div style={{ width: 32, height: 2, background: done ? "color-mix(in srgb, var(--dpf-success) 38%, transparent)" : "var(--dpf-border)", marginBottom: 16 }} />
-              )}
-            </div>
-          );
-        })}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ color: "var(--dpf-muted)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+          Provider readiness
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            color: readinessState.tone,
+            background: `color-mix(in srgb, ${readinessState.tone} 14%, transparent)`,
+            border: `1px solid color-mix(in srgb, ${readinessState.tone} 28%, transparent)`,
+            borderRadius: 4,
+            padding: "4px 8px",
+            fontSize: 12,
+            fontWeight: 600,
+          }}>
+            {readinessState.label}
+          </span>
+          <span style={{ color: "var(--dpf-muted)", fontSize: 12 }}>{readinessState.detail}</span>
+        </div>
       </div>
 
       {/* Status + toggle */}
@@ -249,10 +226,10 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       </div>
 
       {/* Model families — hidden during initial setup, shown as advanced after profiling */}
-      {hasProfiles && (
+      {showDiagnostics && hasProfiles && (
         <details style={{ marginBottom: 16 }}>
           <summary style={{ color: "var(--dpf-muted)", fontSize: 12, cursor: "pointer", marginBottom: 6 }}>
-            Advanced: model families ({enabledFamilies.length}/{provider.families.length} enabled)
+            Model families ({enabledFamilies.length}/{provider.families.length} enabled)
           </summary>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
             {provider.families.map((f) => (
@@ -585,19 +562,11 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       {canWrite && (
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button
-            onClick={handleSave}
+            onClick={handleReadyProvider}
             disabled={isPending}
             style={{ padding: "8px 16px", background: "var(--dpf-surface-2)", border: "1px solid var(--dpf-accent)", color: "var(--dpf-accent)", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
           >
-            Save
-          </button>
-          <button
-            onClick={handleTest}
-            disabled={isPending}
-            title="Verifies the connection, then discovers and profiles the provider's models."
-            style={{ padding: "8px 16px", background: "transparent", border: "1px solid var(--dpf-border)", color: "var(--dpf-text)", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
-          >
-            Test &amp; Discover
+            {isPending ? "Preparing..." : "Save & ready provider"}
           </button>
           {saveMessage && <span style={{ fontSize: 12, color: saveMessage.startsWith("Error") ? "var(--dpf-error)" : "var(--dpf-success)" }}>{saveMessage}</span>}
           {testResult && (
@@ -613,14 +582,24 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         </div>
       )}
 
-      {canWrite && provider.status === "active" && (
+      <div style={{ marginTop: 12 }}>
+        <button
+          type="button"
+          onClick={() => setShowDiagnostics((value) => !value)}
+          style={{ background: "transparent", border: "1px solid var(--dpf-border)", color: "var(--dpf-muted)", fontSize: 12, padding: "6px 10px", borderRadius: 4, cursor: "pointer" }}
+        >
+          {showDiagnostics ? "Hide diagnostics" : "Advanced diagnostics"}
+        </button>
+      </div>
+
+      {showDiagnostics && canWrite && provider.status === "active" && (
         <div style={{ marginTop: 12 }}>
           <button
             onClick={handleRefreshModels}
             disabled={isPending}
             style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", color: "var(--dpf-text)", fontSize: 13, padding: "8px 14px", borderRadius: 4, cursor: isPending ? "not-allowed" : "pointer", opacity: isPending ? 0.6 : 1 }}
           >
-            {isPending ? "Syncing..." : "Discover & Profile Models"}
+            {isPending ? "Syncing..." : "Refresh model diagnostics"}
           </button>
           {isPending && (
             <span style={{ marginLeft: 8, fontSize: 12, color: "var(--dpf-muted)" }} className="animate-pulse">
@@ -671,6 +650,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             latestDiscovery={models.length > 0 ? new Date(Math.max(...models.map(m => new Date(m.lastSeenAt).getTime()))) : null}
             routingProfiles={routingProfiles}
             endpointId={provider.providerId}
+            showDiagnostics={showDiagnostics}
           />
         </div>
       )}

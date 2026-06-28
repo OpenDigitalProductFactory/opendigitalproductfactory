@@ -35,6 +35,7 @@ type Props = {
   routingProfile?: RoutingProfileData | null;
   endpointId?: string;
   onRunEval?: (modelId: string) => void;
+  showDiagnostics?: boolean;
 };
 
 // ── Metadata confidence colours ──────────────────────────────────────────────
@@ -229,9 +230,9 @@ function ActionButton({
   );
 }
 
-export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, hasActiveProvider, onProfile, routingProfile, endpointId, onRunEval }: Props) {
+export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, hasActiveProvider, onProfile, routingProfile, endpointId, onRunEval, showDiagnostics = false }: Props) {
   const router = useRouter();
-  const [showScores, setShowScores] = useState(false);
+  const [showScores, setShowScores] = useState(showDiagnostics);
   const [isPending, startTransition] = useTransition();
   const [evalMessage, setEvalMessage] = useState<string | null>(null);
   const [tierOverride, setTierOverride] = useState(profile?.qualityTier ?? "");
@@ -361,7 +362,7 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
         )}
 
         {/* EP-INF-006: Collapsible routing scores section */}
-        {hasRouting && (
+        {showDiagnostics && hasRouting && (
           <div style={{ marginTop: 4 }}>
             <button
               onClick={() => setShowScores(!showScores)}
