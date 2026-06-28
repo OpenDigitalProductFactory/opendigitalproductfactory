@@ -44,6 +44,19 @@ describe("resolveWorkCaseAutonomyEnvelope", () => {
     });
   });
 
+  it("explains when a regulatory ceiling caps otherwise autonomous work", () => {
+    expect(
+      resolveWorkCaseAutonomyEnvelope({
+        action: "respond",
+        sourceKey: "engagement",
+        trustLevel: "autopilot",
+        risk: "read-only",
+        regulatoryCeiling: "supervised",
+        agreementWindow: { samples: 120, agreements: 120 },
+      }).reason,
+    ).toMatch(/regulatory policy/);
+  });
+
   it("uses the existing trust graduation core to explain holds and promotions", () => {
     expect(
       resolveWorkCaseAutonomyEnvelope({

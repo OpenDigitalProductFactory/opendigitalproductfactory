@@ -75,6 +75,13 @@ function receiptKindFor(sourceKey: string): WorkCaseReceiptKind {
   return getWorkCaseSourceEntry(sourceKey)?.receiptPolicy.defaultReceiptKind ?? "governed-action";
 }
 
+function capSourceLabel(input: WorkCaseAutonomyEnvelopeInput, riskCeiling: AutonomyLevel, ceiling: AutonomyLevel): string {
+  if (input.regulatoryCeiling && ceiling === input.regulatoryCeiling && input.regulatoryCeiling !== riskCeiling) {
+    return "regulatory policy";
+  }
+  return `${input.risk} risk`;
+}
+
 export function resolveWorkCaseAutonomyEnvelope(
   input: WorkCaseAutonomyEnvelopeInput,
 ): WorkCaseAutonomyEnvelopeResolution {
@@ -111,6 +118,6 @@ export function resolveWorkCaseAutonomyEnvelope(
     reason:
       effectiveTrustLevel === input.trustLevel
         ? trustRecommendation.reason
-        : `trust ${input.trustLevel} capped to ${effectiveTrustLevel} by ${input.risk} risk`,
+        : `trust ${input.trustLevel} capped to ${effectiveTrustLevel} by ${capSourceLabel(input, riskCeiling, ceiling)}`,
   };
 }

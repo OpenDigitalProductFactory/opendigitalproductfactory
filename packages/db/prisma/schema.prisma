@@ -5338,6 +5338,8 @@ model DecisionShadowLedger {
   toolExecutionId       String?
   decisionInteractionId String?
   envelopeId            String?
+  regulatoryPolicyId    String?
+  regulatoryEvidence    Json      @default("{}")
   metadata              Json      @default("{}")
   observedAt            DateTime  @default(now())
   reconciledAt          DateTime?
@@ -5352,6 +5354,7 @@ model DecisionShadowLedger {
   @@index([toolExecutionId])
   @@index([decisionInteractionId])
   @@index([envelopeId])
+  @@index([regulatoryPolicyId])
   @@index([observedAt])
 }
 
@@ -5377,6 +5380,36 @@ model TrustState {
   @@index([currentLevel])
   @@index([regulatoryCeiling])
   @@index([lastEvaluatedAt])
+}
+
+model RegulatoryAutonomyPolicy {
+  id                   String    @id @default(cuid())
+  policyId             String    @unique
+  policyKey            String
+  version              Int       @default(1)
+  industry             String?
+  jurisdiction         String    @default("global")
+  jurisdictionBasis    String    @default("global")
+  activityClass        String
+  maxAutonomyLevel     String    @default("propose")
+  humanControlRequired Boolean   @default(true)
+  requiredEvidence     Json      @default("[]")
+  regulationId         String?
+  rationale            String?   @db.Text
+  sourceKind           String    @default("operator")
+  status               String    @default("active")
+  effectiveFrom        DateTime  @default(now())
+  effectiveUntil       DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([policyKey, version])
+  @@index([status, effectiveFrom, effectiveUntil])
+  @@index([industry, jurisdiction, activityClass])
+  @@index([jurisdiction, jurisdictionBasis])
+  @@index([activityClass])
+  @@index([maxAutonomyLevel])
+  @@index([regulationId])
 }
 
 model TaskRun {
