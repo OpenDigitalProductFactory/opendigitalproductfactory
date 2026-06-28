@@ -319,7 +319,11 @@ export default async function AgentDetailPage({
         <PriorityPanel priorityControl={priorityControl} />
         <GovernancePanel record={record} />
         <PerformancePanel record={record} />
-        <NeedsAndPlaybooksPanel needs={capabilityNeedReview} workPatterns={workPatternReadModel} />
+        <NeedsAndPlaybooksPanel
+          needs={capabilityNeedReview}
+          workPatterns={workPatternReadModel}
+          canWrite={canWrite}
+        />
         <DecisionsPanel record={record} />
       </CoworkerRecordTabs>
     </div>

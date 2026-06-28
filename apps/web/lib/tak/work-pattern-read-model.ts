@@ -26,6 +26,11 @@ import {
   type WorkPatternShadowEvaluation,
   type WorkPatternShadowTrial,
 } from "./work-pattern-shadow-evaluation";
+import {
+  parseWorkPatternReviewState,
+  type WorkPatternActivationCandidate,
+  type WorkPatternReviewState,
+} from "./work-pattern-review";
 
 const DEFAULT_WINDOW_DAYS = 30;
 const DEFAULT_TAKE = 200;
@@ -113,6 +118,8 @@ export type WorkPatternSummary = {
   openNeedCount: number;
   readiness: WorkPatternReadiness;
   activationProposed: boolean;
+  reviewState: WorkPatternReviewState | null;
+  activationCandidate: WorkPatternActivationCandidate | null;
   shadowEvaluation: WorkPatternShadowEvaluation | null;
 };
 
@@ -455,6 +462,8 @@ function createAccumulator(seed: PatternSeed): SummaryAccumulator {
     openNeedCount: 0,
     readiness: seed.readiness,
     activationProposed: seed.activationProposed,
+    reviewState: null,
+    activationCandidate: null,
     shadowTrials: [],
     shadowCurrentLevel: null,
     shadowRegulatoryCeiling: null,
@@ -562,6 +571,19 @@ function maxDate(left: Date | null, right: Date | null): Date | null {
   return right.getTime() > left.getTime() ? right : left;
 }
 
+function reviewTimestamp(review: WorkPatternReviewState): number {
+  const timestamp = Date.parse(review.reviewedAt);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function newerReview(
+  left: WorkPatternReviewState | null,
+  right: WorkPatternReviewState,
+): WorkPatternReviewState {
+  if (!left) return right;
+  return reviewTimestamp(right) >= reviewTimestamp(left) ? right : left;
+}
+
 function observeRun(summary: SummaryAccumulator, row: WorkPatternReadModelTaskRunRow): void {
   const status = row.status ?? "unknown";
   summary.observedRuns += 1;
@@ -585,6 +607,7 @@ function observeRun(summary: SummaryAccumulator, row: WorkPatternReadModelTaskRu
 
 function attachNeed(summary: SummaryAccumulator, row: WorkPatternReadModelNeedRow): void {
   const kind = knownKind(row.kind);
+  const reviewState = parseWorkPatternReviewState(row.readinessJson);
   summary.candidateNeedKinds.add(kind);
   summary.linkedNeedIds.add(row.needId);
   if (OPEN_NEED_STATUSES.has(row.status)) {
@@ -593,9 +616,19 @@ function attachNeed(summary: SummaryAccumulator, row: WorkPatternReadModelNeedRo
   if (!summary.candidate) {
     summary.candidate = seedFromNeed(row)?.candidate ?? null;
   }
-  summary.activationProposed =
-    summary.activationProposed ||
-    (booleanField(row.readinessJson, "activationProposed") ?? false);
+  if (reviewState) {
+    summary.reviewState = newerReview(summary.reviewState, reviewState);
+    summary.activationCandidate = summary.reviewState.activationCandidate;
+    summary.activationProposed = Boolean(summary.activationCandidate);
+    addEvidence(summary, [{
+      capabilityNeedId: row.needId,
+      decisionInteractionId: reviewState.decisionInteractionId,
+    }]);
+  } else {
+    summary.activationProposed =
+      summary.activationProposed ||
+      (booleanField(row.readinessJson, "activationProposed") ?? false);
+  }
   summary.shadowTrials.push(...shadowTrialsFromNeed(row));
   summary.shadowCurrentLevel =
     summary.shadowCurrentLevel ?? autonomyLevelFromNeed(row, "currentAutonomyLevel");
