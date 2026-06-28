@@ -46,6 +46,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const isClaudeSubscription = provider.providerId === "anthropic-sub";
+  const isZaiCodingProvider = provider.providerId === "zai-coding";
 
   // Secrets are write-only — never sent from server. Empty = no change on save.
   const [secretRef, setSecretRef]                   = useState("");
@@ -302,6 +303,21 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
         return (
         <div style={{ marginBottom: 16 }}>
+          {isZaiCodingProvider && (
+            <div style={{
+              background: "var(--dpf-surface-1)",
+              border: "1px solid var(--dpf-border)",
+              borderRadius: 6,
+              padding: "10px 12px",
+              marginBottom: 12,
+              fontSize: 12,
+              lineHeight: 1.6,
+              color: "var(--dpf-muted)",
+            }}>
+              <div style={{ fontWeight: 600, color: "var(--dpf-accent)", marginBottom: 4 }}>Uses your main Z.ai account key</div>
+              <div>Build Studio points OpenCode at this coding endpoint, but credentials are inherited from the main Z.ai provider. Add a separate key here only if Z.ai requires a distinct GLM Coding Plan key for your account.</div>
+            </div>
+          )}
           {isAnyAnthropic && (
             <div style={{
               background: "var(--dpf-surface-1)",
@@ -349,6 +365,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                 ? "Paste subscription token (sk-ant-oat...)"
                 : isAnthropicApi
                   ? "Paste API key (sk-ant-api...)"
+                  : isZaiCodingProvider && credential?.secretHint ? "Advanced override only"
                   : credential?.secretHint ? "Enter new key to replace" : "Enter API key"
             }
             style={{

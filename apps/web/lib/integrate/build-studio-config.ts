@@ -7,6 +7,7 @@ import { prisma } from "@dpf/db";
 import type { BuildModelTier } from "@/lib/explore/build-process-matrix";
 import { DEFAULT_BUILD_POSTURE, coerceBuildPosture } from "@/lib/explore/build-rightsizing-dial";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
+import { resolveCredentialProviderId } from "@/lib/inference/ai-provider-internals";
 
 export type BuildStudioDispatchConfig = {
   provider: "claude" | "codex" | "grok" | "opencode" | "agentic";
@@ -54,7 +55,7 @@ async function findConfiguredProvider(cliEngine: string): Promise<string> {
     // path that lets a credential-free install auto-select the opencode runner.
     if (p.authMethod === "none") return p.providerId;
     const cred = await prisma.credentialEntry.findUnique({
-      where: { providerId: p.providerId },
+      where: { providerId: resolveCredentialProviderId(p.providerId) },
       select: { status: true },
     });
     if (cred && (cred.status === "ok" || cred.status === "configured" || cred.status === "pending")) {

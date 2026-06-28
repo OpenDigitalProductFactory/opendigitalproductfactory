@@ -32,7 +32,7 @@ export interface ActivateProviderOpts {
   /** Skip model discovery (MCP services, seeds that handle discovery separately). */
   skipDiscovery?: boolean;
 
-  /** Activate the codex↔chatgpt sibling after this provider. */
+  /** Activate a provider sibling that intentionally shares this credential. */
   activateLinked?: boolean;
 }
 
@@ -138,7 +138,7 @@ export async function activateProvider(
       err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
   }
 
-  // 4. Activate sibling provider (codex↔chatgpt bidirectional sync)
+  // 4. Activate sibling provider (shared-account execution endpoints)
   if (opts.activateLinked) {
     try {
       await activateLinkedSibling(providerId, opts);
@@ -209,18 +209,21 @@ export async function activateProvider(
 
 // ─── Sibling activation ─────────────────────────────────────────────────────────
 
-// Codex and ChatGPT share the same OpenAI OAuth token.
+// Codex and ChatGPT share the same OpenAI OAuth token. Z.ai and Z.ai GLM Coding
+// share one Z.ai account key, but the coding sibling points OpenCode at Z.ai's
+// separate coding endpoint.
 // TODO(F-13): Replace this map with a `linkedProviderId` field on ModelProvider.
-const OPENAI_PAIR: Record<string, string> = {
+const LINKED_PROVIDER_SIBLINGS: Record<string, string> = {
   codex: "chatgpt",
   chatgpt: "codex",
+  zai: "zai-coding",
 };
 
 async function activateLinkedSibling(
   providerId: string,
   parentOpts: ActivateProviderOpts,
 ): Promise<void> {
-  const siblingId = OPENAI_PAIR[providerId];
+  const siblingId = LINKED_PROVIDER_SIBLINGS[providerId];
   if (!siblingId) return;
 
   const sibling = await prisma.modelProvider.findUnique({

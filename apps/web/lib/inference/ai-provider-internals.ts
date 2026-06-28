@@ -81,11 +81,20 @@ export function resolveSyncedToolUse(input: {
 
 // ─── Shared helpers (exported for use by ai-providers.ts server actions) ─────
 
+const CREDENTIAL_PARENT_BY_PROVIDER_ID: Record<string, string> = {
+  "zai-coding": "zai",
+};
+
+export function resolveCredentialProviderId(providerId: string): string {
+  return CREDENTIAL_PARENT_BY_PROVIDER_ID[providerId] ?? providerId;
+}
+
 /** Decrypt the API key / client secret for a provider (server-only).
  *  Returns null when the credential row is missing OR when decryption fails
  *  (e.g. the encryption key was rotated after these credentials were stored). */
 export async function getDecryptedCredential(providerId: string) {
-  const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
+  const credentialProviderId = resolveCredentialProviderId(providerId);
+  const cred = await prisma.credentialEntry.findUnique({ where: { providerId: credentialProviderId } });
   if (!cred) {
     // CodeQL js/log-injection: providerId is user-influenced. JSON.stringify
     // is a CodeQL-recognised sanitiser — escapes CR/LF, quotes the value.
@@ -150,7 +159,7 @@ export async function providerHasConfiguredCredential(
   if (method === "none" || method === "") return true;
 
   const cred = await prisma.credentialEntry.findUnique({
-    where: { providerId },
+    where: { providerId: resolveCredentialProviderId(providerId) },
     select: {
       secretRef: true,
       clientSecret: true,

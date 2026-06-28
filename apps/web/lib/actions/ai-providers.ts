@@ -31,12 +31,16 @@ import { activateProvider } from "@/lib/govern/activate-provider";
 import { seedAiProviderFinanceBridge } from "@/lib/finance/ai-provider-finance";
 
 const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
+const SHARED_ACCOUNT_LINKED_PROVIDERS = new Set(["zai"]);
 
-function getOpenAiLinkedActivationOptions(
+function getLinkedActivationOptions(
   providerId: string,
   authMethod: string | null | undefined,
 ): { authMethod: string; activateLinked: true } | Record<string, never> {
   if (authMethod === "oauth2_authorization_code" && OPENAI_OAUTH_LINKED_PROVIDERS.has(providerId)) {
+    return { authMethod, activateLinked: true };
+  }
+  if (authMethod === "api_key" && SHARED_ACCOUNT_LINKED_PROVIDERS.has(providerId)) {
     return { authMethod, activateLinked: true };
   }
   return {};
@@ -283,7 +287,7 @@ export async function configureProvider(input: {
   await activateProvider(input.providerId, {
     trigger: "api_key_configure",
     authMethod: input.authMethod,
-    ...getOpenAiLinkedActivationOptions(input.providerId, input.authMethod),
+    ...getLinkedActivationOptions(input.providerId, input.authMethod),
   });
 
   const providerForFinance = await prisma.modelProvider.findUnique({
@@ -325,13 +329,14 @@ export async function configureProvider(input: {
  * providerId is empty, fill it in.
  */
 async function autoConfigureBuildStudio(providerId: string): Promise<void> {
+  const buildProviderId = providerId === "zai" ? "zai-coding" : providerId;
   const provider = await prisma.modelProvider.findUnique({
-    where: { providerId },
+    where: { providerId: buildProviderId },
     select: { cliEngine: true },
   });
   if (!provider?.cliEngine) return; // Not a CLI-dispatchable provider
 
-  const cliEngine = provider.cliEngine as "claude" | "codex" | "grok";
+  const cliEngine = provider.cliEngine as "claude" | "codex" | "grok" | "opencode";
   const existing = await prisma.platformConfig.findUnique({
     where: { key: "build-studio-dispatch" },
   });
@@ -340,12 +345,14 @@ async function autoConfigureBuildStudio(providerId: string): Promise<void> {
     // No config at all — create one auto-selecting this engine
     const config = {
       provider: cliEngine,
-      claudeProviderId: cliEngine === "claude" ? providerId : "",
-      codexProviderId: cliEngine === "codex" ? providerId : "",
-      grokProviderId: cliEngine === "grok" ? providerId : "",
+      claudeProviderId: cliEngine === "claude" ? buildProviderId : "",
+      codexProviderId: cliEngine === "codex" ? buildProviderId : "",
+      grokProviderId: cliEngine === "grok" ? buildProviderId : "",
+      opencodeProviderId: cliEngine === "opencode" ? buildProviderId : "",
       claudeModel: "sonnet",
       codexModel: "",
       grokModel: "",
+      opencodeModel: "",
     };
     await prisma.platformConfig.create({
       data: {
@@ -362,9 +369,10 @@ async function autoConfigureBuildStudio(providerId: string): Promise<void> {
     const claudeKey = "claudeProviderId";
     const codexKey = "codexProviderId";
     const grokKey = "grokProviderId";
+    const opencodeKey = "opencodeProviderId";
 
     if (cliEngine === "claude" && !config[claudeKey]) {
-      config[claudeKey] = providerId;
+      config[claudeKey] = buildProviderId;
       if (config.provider === "agentic" || (config.provider === "codex" && !config[codexKey])) {
         config.provider = "claude";
       }
@@ -373,7 +381,7 @@ async function autoConfigureBuildStudio(providerId: string): Promise<void> {
         data: { value: config as unknown as Prisma.InputJsonValue },
       });
     } else if (cliEngine === "codex" && !config[codexKey]) {
-      config[codexKey] = providerId;
+      config[codexKey] = buildProviderId;
       if (config.provider === "agentic") {
         config.provider = "codex";
       }
@@ -382,9 +390,18 @@ async function autoConfigureBuildStudio(providerId: string): Promise<void> {
         data: { value: config as unknown as Prisma.InputJsonValue },
       });
     } else if (cliEngine === "grok" && !config[grokKey]) {
-      config[grokKey] = providerId;
+      config[grokKey] = buildProviderId;
       if (config.provider === "agentic") {
         config.provider = "grok";
+      }
+      await prisma.platformConfig.update({
+        where: { key: "build-studio-dispatch" },
+        data: { value: config as unknown as Prisma.InputJsonValue },
+      });
+    } else if (cliEngine === "opencode" && !config[opencodeKey]) {
+      config[opencodeKey] = buildProviderId;
+      if (config.provider === "agentic") {
+        config.provider = "opencode";
       }
       await prisma.platformConfig.update({
         where: { key: "build-studio-dispatch" },
@@ -516,7 +533,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
       if (res.ok || res.status === 400) {
         await activateProvider(providerId, {
           trigger: "test_auth",
-          ...getOpenAiLinkedActivationOptions(providerId, provider.authMethod),
+          ...getLinkedActivationOptions(providerId, provider.authMethod),
         });
         return { ok: true, message: "Connected via OAuth — Responses API verified" };
       }
@@ -556,7 +573,10 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
     res = await fetch(testUrl, { headers, signal: AbortSignal.timeout(8_000) });
     if (res.ok) {
       // Clearance derived automatically: local/ollama → 4 levels, cloud → 3 levels
-      await activateProvider(providerId, { trigger: "test_auth" });
+      await activateProvider(providerId, {
+        trigger: "test_auth",
+        ...getLinkedActivationOptions(providerId, provider.authMethod),
+      });
       return { ok: true, message: `Connected — HTTP ${res.status}` };
     }
     return { ok: false, message: `HTTP ${res.status} — ${res.statusText}` };

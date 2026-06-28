@@ -9,6 +9,9 @@ const mockPrisma = vi.hoisted(() => ({
   modelProvider: {
     findMany: vi.fn(),
   },
+  credentialEntry: {
+    findMany: vi.fn(),
+  },
   modelProfile: {
     findMany: vi.fn(),
     groupBy: vi.fn(),
@@ -33,6 +36,7 @@ vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
 vi.mock("react", () => ({ cache: (fn: any) => fn }));
 
 import {
+  getProviders,
   getProviderModelSummaries,
   getRecipesForProvider,
   getActivatedMcpServers,
@@ -41,6 +45,81 @@ import {
 } from "./ai-provider-data";
 
 beforeEach(() => { vi.clearAllMocks(); });
+
+describe("getProviders", () => {
+  it("does not include hidden execution endpoints in the normal provider catalog", async () => {
+    mockPrisma.modelProvider.findMany.mockResolvedValue([
+      {
+        providerId: "zai",
+        name: "Z.ai",
+        families: ["glm-5"],
+        enabledFamilies: ["glm-5"],
+        supportedAuthMethods: ["api_key"],
+        catalogVisibility: "visible",
+        sensitivityClearance: [],
+        taskTags: [],
+      },
+      {
+        providerId: "zai-coding",
+        name: "Z.ai GLM Coding",
+        families: ["glm-coding"],
+        enabledFamilies: ["glm-coding"],
+        supportedAuthMethods: ["api_key"],
+        catalogVisibility: "hidden",
+        sensitivityClearance: [],
+        taskTags: [],
+      },
+    ]);
+    mockPrisma.credentialEntry.findMany.mockResolvedValue([]);
+
+    const result = await getProviders();
+
+    expect(result.map((pw) => pw.provider.providerId)).toEqual(["zai"]);
+  });
+
+  it("can include hidden execution endpoints with inherited credential status for Build Studio", async () => {
+    mockPrisma.modelProvider.findMany.mockResolvedValue([
+      {
+        providerId: "zai",
+        name: "Z.ai",
+        families: ["glm-5"],
+        enabledFamilies: ["glm-5"],
+        supportedAuthMethods: ["api_key"],
+        catalogVisibility: "visible",
+        sensitivityClearance: [],
+        taskTags: [],
+      },
+      {
+        providerId: "zai-coding",
+        name: "Z.ai GLM Coding",
+        families: ["glm-coding"],
+        enabledFamilies: ["glm-coding"],
+        supportedAuthMethods: ["api_key"],
+        catalogVisibility: "hidden",
+        sensitivityClearance: [],
+        taskTags: [],
+      },
+    ]);
+    mockPrisma.credentialEntry.findMany.mockResolvedValue([
+      {
+        providerId: "zai",
+        secretRef: "enc:key",
+        clientId: null,
+        clientSecret: null,
+        tokenEndpoint: null,
+        scope: null,
+        status: "ok",
+        tokenExpiresAt: null,
+        refreshToken: null,
+      },
+    ]);
+
+    const result = await getProviders({ includeHidden: true });
+
+    expect(result.map((pw) => pw.provider.providerId)).toEqual(["zai", "zai-coding"]);
+    expect(result.find((pw) => pw.provider.providerId === "zai-coding")?.credential?.status).toBe("ok");
+  });
+});
 
 describe("getProviderModelSummaries", () => {
   it("aggregates counts, classes, derived tier, and the calibrated routing-score rollup per provider", async () => {

@@ -19,6 +19,7 @@ import type {
 } from "./ai-provider-types";
 import { getProviderDisplayNameForSpend } from "./ai-provider-cost-view";
 import { rollUpProviderModels, type ProfileForRollup } from "./provider-routing-rollup";
+import { resolveCredentialProviderId } from "./ai-provider-internals";
 
 /** Mask a secret to `••••••1234` (last 4 chars visible). */
 function maskSecret(value: string | null): string | null {
@@ -54,14 +55,19 @@ function maskCredential(cred: {
   };
 }
 
-export const getProviders = cache(async (): Promise<ProviderWithCredential[]> => {
-  const providers = await prisma.modelProvider.findMany({ orderBy: { name: "asc" } });
+export const getProviders = cache(async (opts?: { includeHidden?: boolean }): Promise<ProviderWithCredential[]> => {
+  const providers = (await prisma.modelProvider.findMany({ orderBy: { name: "asc" } }))
+    .filter((p) => opts?.includeHidden || p.catalogVisibility !== "hidden");
   const credentials = await prisma.credentialEntry.findMany({
-    where: { providerId: { in: providers.map((p) => p.providerId) } },
+    where: {
+      providerId: {
+        in: Array.from(new Set(providers.flatMap((p) => [p.providerId, resolveCredentialProviderId(p.providerId)]))),
+      },
+    },
   });
   const credMap = new Map(credentials.map((c) => [c.providerId, c]));
   return providers.map((p) => {
-    const raw = credMap.get(p.providerId);
+    const raw = credMap.get(p.providerId) ?? credMap.get(resolveCredentialProviderId(p.providerId));
     return {
       provider: {
         ...p,
@@ -91,7 +97,9 @@ export const getProviders = cache(async (): Promise<ProviderWithCredential[]> =>
 export const getProviderById = cache(async (providerId: string): Promise<ProviderWithCredential | null> => {
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return null;
-  const credential = await prisma.credentialEntry.findUnique({ where: { providerId } });
+  const credential = await prisma.credentialEntry.findUnique({
+    where: { providerId: resolveCredentialProviderId(providerId) },
+  });
   return {
     provider: {
       ...provider,

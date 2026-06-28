@@ -168,6 +168,21 @@ describe("getBuildStudioConfig", () => {
     expect(config.opencodeProviderId).toBe("local");
   });
 
+  it("auto-detects zai-coding for OpenCode when only the main zai credential exists", async () => {
+    mockFindUnique.mockResolvedValue(null);
+    mockProviderFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([providerRow("zai-coding", "active", "api_key")]);
+    mockCredentialFindUnique.mockResolvedValue(credentialRow("ok"));
+
+    const config = await getBuildStudioConfig();
+
+    expect(config.provider).toBe("opencode");
+    expect(config.opencodeProviderId).toBe("zai-coding");
+  });
+
   it("prefers a configured frontier CLI over the local opencode provider", async () => {
     mockFindUnique.mockResolvedValue(null);
     mockProviderFindMany

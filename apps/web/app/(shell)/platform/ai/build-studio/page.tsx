@@ -42,7 +42,7 @@ export default async function BuildStudioPage() {
   const baseUrl = `${proto}://${host}`;
 
   const [allProviders, config, contributorMcpReadiness, engineStates] = await Promise.all([
-    getProviders(),
+    getProviders({ includeHidden: true }),
     getBuildStudioConfig(),
     user
       ? getContributorMcpReadiness(user.id, { probe: false })
