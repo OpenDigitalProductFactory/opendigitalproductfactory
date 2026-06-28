@@ -1,7 +1,7 @@
 # Company-Level Work Management Architecture
 
 Date: 2026-06-27
-Status: Accepted design; Wave 3 implementation in progress
+Status: Accepted design; Wave 4 ecosystem/autonomy contracts implemented
 Owner: DPF architecture
 Related capsule: WC-0A3909A2
 Epic: EP-2984B02B - Work Case / Company Work Management
@@ -13,6 +13,8 @@ Wave 2 BI: BI-WC-WAVE2 - Work Case accountability, staged transitions, and stop 
 Wave 2 plan: docs/superpowers/plans/2026-06-28-work-case-wave-2-accountability.md
 Wave 3 BI: BI-WC-WAVE3 - Workspace attention lens and Work Case detail surfaces
 Wave 3 plan: docs/superpowers/plans/2026-06-28-work-case-wave-3-operator-surfaces.md
+Wave 4 BI: BI-WC-WAVE4 - Work Case ecosystem and autonomy contracts
+Wave 4 plan: docs/superpowers/plans/2026-06-28-work-case-wave-4-ecosystem-autonomy.md
 Sibling spec: docs/superpowers/specs/2026-06-27-governed-adaptive-playbooks-design.md (the method-improvement pillar that binds to this object)
 
 ## Summary
@@ -726,8 +728,8 @@ The tracks sequence into waves. Each wave is more focused than the last because 
 - Wave 0 — Foundations: R1, R5, P1 (+ tests). The projection skeleton. Implemented under `BI-40EE7AFD`.
 - Wave 1 — Enforcement spine: R2, R4, P2, P3, P4, P7. The governed write path is the keystone; everything trustworthy depends on it. Implemented under `BI-D633F7AF`.
 - Wave 2 — Accountability invariants: R3, P5, P6, S3. Sponsor/authority-mode persisted; staging and stop conditions enforced. Implemented under `BI-WC-WAVE2`.
-- Wave 3 — Operator surfaces: R6, R7, S1, S2. UI on a substrate that is already safe. In implementation under `BI-WC-WAVE3`.
-- Wave 4 — Ecosystem and autonomy: S4, S5, S6. Capability advertisement, graduated autonomy, federation.
+- Wave 3 — Operator surfaces: R6, R7, S1, S2. UI on a substrate that is already safe. Implemented under `BI-WC-WAVE3`.
+- Wave 4 — Ecosystem and autonomy: S4, S5, S6. Capability advertisement, graduated autonomy, federation. Implemented under `BI-WC-WAVE4` as pure contracts over the existing Work Case, trust-graduation, and federation substrates.
 - Wave 5 — Adoption: S7, S8, S9. First domains and external views.
 - Wave 6+ — The long tail: each new source type, domain workflow, coworker capability, and autonomy graduation is a small, well-scoped BI against a now-stable architecture. This is where the idea stops being a build and becomes a calibration loop — the increasingly focused refinement that continues indefinitely.
 
@@ -818,4 +820,4 @@ Mitigations:
 
 ## Next Step
 
-Complete Wave 3 verification and PR under `BI-WC-WAVE3`, then start Wave 4 ecosystem/autonomy: AgentCard-compatible capability advertisement, actor routing, graduated autonomy, federation/control-tower governance. Do not start Wave 4 until the Workspace Work Case lens, Case Detail route, focused UI tests, desktop/mobile UX verification, typecheck, and production build are green.
+Start Wave 5 adoption: first domain workflows and constrained external/customer views. Do not start Wave 5 until the AgentCard-compatible capability descriptor, actor routing, graduated autonomy envelope, federated participation governance, focused contract tests, typecheck, and production build are green.
