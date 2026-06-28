@@ -34,7 +34,7 @@ import {
 import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store";
 import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
-import { assessToolSurface, computeToolSelectionAccuracy } from "./context-economy-metrics";
+import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
@@ -1281,22 +1281,21 @@ export async function runAgenticLoop(params: {
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
   let previousResponseId: string | undefined; // Responses API conversation chaining
 
-  // Per-turn observability: one structured summary line per user turn, carrying
-  // the correlation key (threadId) and the figures that make a slow turn
-  // self-evident — number of inference dispatches, nudges, whether tools were
-  // attached, and total wall-clock. Before this, diagnosing a 135s "hello"
-  // meant hand-stitching timestamps across un-correlated [cli-adapter] /
-  // [agentic-loop] lines while a concurrent coworker's logs interleaved. See
-  // the Portfolio Analyst latency investigation, 2026-06-04.
+  // Per-turn observability: one structured summary line with the correlation
+  // key and the figures that make slow or tool-heavy turns self-evident.
   const toolsAttachedForTurn = Boolean((toolsForProvider && toolsForProvider.length > 0) || planEnabled);
   const logTurnSummary = (provider: string, model: string): void => {
-    // Context-economy gauge (R8/P12): the tool-surface size + estimated
-    // definition-token cost banded against the local selection cliff, plus this
-    // turn's tool-selection accuracy. Observability-only — never changes what is
-    // sent; makes a ballooning surface or a repeatedly-failing tool loud.
+    // Context-economy gauge (R8/P12): observability only, never model input.
+    const ctxPressure = classifyContextPressure(ctxPeakTokens, resolvedMaxContextTokens);
     const surface = assessToolSurface({ tools: toolsForProvider, windowTokens: resolvedMaxContextTokens });
     const turnToolAccuracy = computeToolSelectionAccuracy(
       executedTools.map((t) => ({ toolName: t.name, success: t.result.success })),
+    );
+    const economyMetrics = contextEconomyTurnMetricFields(
+      ctxPressure.estimatedTokens,
+      resolvedMaxContextTokens,
+      surface,
+      turnToolAccuracy,
     );
     console.log(
       sanitizeForLog(
@@ -1305,9 +1304,9 @@ export async function runAgenticLoop(params: {
         `dispatches=${inferenceCallCount} nudges=${continuationNudges} ` +
         `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} ` +
         `totalMs=${Date.now() - startTime} ` +
-        `ctxPeakTokens=${ctxPeakTokens} ctxZone=${classifyContextPressure(ctxPeakTokens, resolvedMaxContextTokens).zone} ` +
+        `ctxPeakTokens=${ctxPeakTokens} ctxZone=${ctxPressure.zone} ` +
         `toolSurface=${surface.toolCount} estToolTokens=${surface.estDefinitionTokens} surfaceZone=${surface.zone} ` +
-        `toolAccuracy=${turnToolAccuracy.total === 0 ? "na" : turnToolAccuracy.accuracy.toFixed(2)}`,
+        `toolAccuracy=${economyMetrics.toolSelectionAccuracy === null ? "na" : economyMetrics.toolSelectionAccuracy.toFixed(2)}`,
       ),
     );
     // BI-47443B67: persist the same rollup durably so the regression detector
@@ -1325,6 +1324,7 @@ export async function runAgenticLoop(params: {
       toolsAttached: toolsAttachedForTurn,
       executedTools: executedTools.length,
       totalMs: Date.now() - startTime,
+      ...economyMetrics,
     });
   };
 

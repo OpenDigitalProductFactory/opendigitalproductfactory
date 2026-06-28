@@ -34,6 +34,13 @@ export type RecordCoworkerTurnMetricInput = {
   toolsAttached?: boolean | null;
   executedTools?: number | null;
   totalMs?: number | null;
+  ctxPeakTokens?: number | null;
+  ctxWindowTokens?: number | null;
+  toolSurfaceCount?: number | null;
+  toolDefinitionTokens?: number | null;
+  toolSurfaceExceedsLocalCliff?: boolean | null;
+  toolSurfaceWindowShare?: number | null;
+  toolSelectionAccuracy?: number | null;
 };
 
 /**
@@ -60,6 +67,11 @@ function intOrZero(value: number | null | undefined): number {
 
 /** Coerce an optional numeric to a nullable stored value (totalMs). */
 function intOrNull(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** Coerce an optional floating-point telemetry value to nullable storage. */
+function floatOrNull(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
@@ -105,6 +117,13 @@ export async function recordCoworkerTurnMetric(
       toolsAttached: Boolean(input.toolsAttached),
       executedTools: intOrZero(input.executedTools),
       totalMs: intOrNull(input.totalMs),
+      ctxPeakTokens: intOrNull(input.ctxPeakTokens),
+      ctxWindowTokens: intOrNull(input.ctxWindowTokens),
+      toolSurfaceCount: intOrNull(input.toolSurfaceCount),
+      toolDefinitionTokens: intOrNull(input.toolDefinitionTokens),
+      toolSurfaceExceedsLocalCliff: Boolean(input.toolSurfaceExceedsLocalCliff),
+      toolSurfaceWindowShare: floatOrNull(input.toolSurfaceWindowShare),
+      toolSelectionAccuracy: floatOrNull(input.toolSelectionAccuracy),
     };
 
     await delegate.upsert({

@@ -358,6 +358,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "work-pattern-profile-review",
+    inngestId: "quality/work-pattern-profile-review",
+    name: "Work pattern profile review",
+    purpose:
+      "Reviews coworker work-pattern telemetry and proposes capability needs. If it stops, repeated agent friction stays anecdotal instead of becoming governed improvement evidence.",
+    cron: "17 7 * * *",
+    cadence: "Daily at 07:17",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "log-signature-scanner",
     inngestId: "ops/log-signature-scanner",
     name: "Log signature scanner",

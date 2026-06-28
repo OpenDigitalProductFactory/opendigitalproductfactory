@@ -21,39 +21,22 @@
 //      trigger again over the same PlatformIssueReport increments
 //      recurrenceCount instead of producing a parallel signal.
 
-import { randomUUID } from "crypto";
-
 import type { Prisma } from "@dpf/db";
 import { prisma } from "@dpf/db";
 
-import { createOrTouchImprovementSignal } from "@/lib/improvement-flywheel/signals";
+import {
+  getReflectionDepth,
+  isReflectionLoopGuarded,
+  isReflectionRun,
+  runObservation,
+  type ReflectionDepthSource,
+  type RunObservationResult,
+} from "./pattern-observer/core";
 
 const REFLECTION_TITLE = "Skill reflection: repeated tool use";
 
-export type ReflectionDepthSource = {
-  source?: string | null;
-  title?: string | null;
-  a2aMetadata?: Prisma.JsonValue | null;
-};
-
-/**
- * Read `a2aMetadata.reflectionDepth` off a TaskRun-shaped row. Defaults to
- * 0 when the value is missing or the metadata is not an object. Callers
- * should NEVER reach into `a2aMetadata` directly — go through this helper
- * so the shape is enforced in one place.
- */
-export function getReflectionDepth(parent: ReflectionDepthSource | null | undefined): number {
-  if (!parent) return 0;
-  const meta = parent.a2aMetadata;
-  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return 0;
-  const value = (meta as { reflectionDepth?: unknown }).reflectionDepth;
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-export function isReflectionRun(parent: ReflectionDepthSource | null | undefined): boolean {
-  if (!parent) return false;
-  return parent.source === "proactive" && (parent.title ?? "").startsWith("Skill reflection:");
-}
+export { getReflectionDepth, isReflectionRun };
+export type { ReflectionDepthSource };
 
 export type ProcessRuntimeIssueReflectionInput = {
   /** The parent agentic run that just finished. Used for precise correlation. */
@@ -70,10 +53,7 @@ export type ProcessRuntimeIssueReflectionInput = {
   since: Date;
 };
 
-export type ProcessRuntimeIssueReflectionResult = {
-  processed: number;
-  skippedReason?: "reflection-loop-guard";
-};
+export type ProcessRuntimeIssueReflectionResult = RunObservationResult;
 
 /**
  * Inspect PlatformIssueReport rows that this run produced (or, for legacy
@@ -92,7 +72,7 @@ export async function processRuntimeIssueReflection(
         select: { source: true, title: true, a2aMetadata: true },
       })
       .catch(() => null);
-    if (parent && (isReflectionRun(parent) || getReflectionDepth(parent) >= 1)) {
+    if (isReflectionLoopGuarded(parent)) {
       return { processed: 0, skippedReason: "reflection-loop-guard" };
     }
   }
@@ -157,7 +137,7 @@ export async function processRuntimeIssueReflection(
   let processed = 0;
   for (const row of rows) {
     try {
-      await reflectOnIssue({
+      const result = await reflectOnIssue({
         parentTaskRunId: input.taskRunId,
         userId: input.userId,
         agentId: input.agentId,
@@ -165,7 +145,7 @@ export async function processRuntimeIssueReflection(
         routeContext: input.routeContext,
         issue: row,
       });
-      processed++;
+      processed += result.processed;
     } catch (err) {
       // Reflection must never break the user response path. Log and keep
       // processing the next row.
@@ -191,107 +171,51 @@ async function reflectOnIssue(input: {
     description: string | null;
     taskRunId: string | null;
   };
-}): Promise<void> {
-  const parentDepth = await readParentReflectionDepth(input.parentTaskRunId);
-
-  // Spawn a proactive TaskRun for the reflection so the evidence is
-  // attributable. Stamp reflectionDepth onto a2aMetadata.
-  const reflectionTaskRunId = `TR-RFL-${randomUUID().slice(0, 8).toUpperCase()}`;
-  const reflectionRun = await prisma.taskRun.create({
-    data: {
-      taskRunId: reflectionTaskRunId,
-      userId: input.userId,
-      threadId: input.threadId,
-      contextId: input.threadId,
-      initiatingAgentId: input.agentId,
-      currentAgentId: input.agentId,
-      parentTaskRunId: input.parentTaskRunId,
-      routeContext: input.routeContext,
-      title: REFLECTION_TITLE,
-      objective:
-        `Reflect on PlatformIssueReport ${input.issue.reportId} and file durable evidence ` +
-        `(self-assessment, capability need, improvement signal).`,
-      source: "proactive",
-      status: "working",
-      authorityScope: [],
-      a2aMetadata: {
-        trigger: "runtime-issue-reflection",
-        platformIssueReportId: input.issue.reportId,
-        reflectionDepth: parentDepth + 1,
-      } as Prisma.InputJsonValue,
-    },
-    select: { id: true, taskRunId: true },
-  });
-
-  // Self-assessment + skill need. Reuses submitCoworkerSelfAssessment so the
-  // existing review surfaces show the row without changes.
-  const { submitCoworkerSelfAssessment } = await import(
-    "@/lib/coworker-self-assessment/assessment-service"
-  );
-  await submitCoworkerSelfAssessment({
+}): Promise<RunObservationResult> {
+  return runObservation({
+    parentTaskRunId: input.parentTaskRunId,
+    userId: input.userId,
     agentId: input.agentId,
-    trigger: "runtime-issue-reflection",
+    threadId: input.threadId,
     routeContext: input.routeContext,
-    verdict: "gaps",
-    confidence: "medium",
-    missionSummary: input.issue.title,
+    sourceTitle: input.issue.title,
+    sourceDescription: input.issue.description ?? null,
+    objective:
+      `Reflect on PlatformIssueReport ${input.issue.reportId} and file durable evidence ` +
+      `(self-assessment, capability need, improvement signal).`,
     capabilitySummary:
       "The coworker hit the repeated-tool guard. A skill or workflow change is likely required.",
     rawPayload: {
       platformIssueReportId: input.issue.reportId,
-      reflectionTaskRunId: reflectionRun.taskRunId,
     },
-    needs: [
-      {
-        kind: "skill",
-        severity: "important",
-        need:
-          "Add or update the coworker skill that handles this workflow so it does not retry " +
-          "with identical arguments after a failure.",
-        blocks: input.issue.title,
-        evidenceJson: {
-          platformIssueReportId: input.issue.reportId,
-          threadId: input.threadId,
-          taskRunId: input.parentTaskRunId,
-          routeContext: input.routeContext,
-        },
-      },
-    ],
-  });
-
-  // Emit a deduped ImprovementSignal so the portfolio flywheel can prioritize
-  // across signals. Sourcing on the public reportId is intentional: re-firing
-  // reflection over the same issue increments recurrenceCount.
-  await createOrTouchImprovementSignal({
-    sourceType: "platform_issue_report",
-    sourceId: input.issue.reportId,
-    title: input.issue.title,
-    description: input.issue.description ?? null,
-    evidence: {
+    signalEvidence: {
       threadId: input.threadId,
-      parentTaskRunId: input.parentTaskRunId,
-      reflectionTaskRunId: reflectionRun.taskRunId,
+      taskRunId: input.parentTaskRunId,
     },
-    routeContext: input.routeContext,
-    agentId: input.agentId,
-    threadId: input.threadId,
-    suspectedRootCause: "repeated-tool-call",
+    spec: {
+      title: REFLECTION_TITLE,
+      trigger: "runtime-issue-reflection",
+      verdict: "gaps",
+      confidence: "medium",
+      sourceType: "platform_issue_report",
+      sourceId: input.issue.reportId,
+      suspectedRootCause: "repeated-tool-call",
+      needs: [
+        {
+          kind: "skill",
+          severity: "important",
+          need:
+            "Add or update the coworker skill that handles this workflow so it does not retry " +
+            "with identical arguments after a failure.",
+          blocks: input.issue.title,
+          evidenceJson: {
+            platformIssueReportId: input.issue.reportId,
+            threadId: input.threadId,
+            taskRunId: input.parentTaskRunId,
+            routeContext: input.routeContext,
+          },
+        },
+      ],
+    },
   });
-
-  // Mark the reflection run completed. The user-facing run is unaffected.
-  await prisma.taskRun.update({
-    where: { id: reflectionRun.id },
-    data: { status: "completed", completedAt: new Date() },
-  });
-}
-
-async function readParentReflectionDepth(parentTaskRunId: string | null): Promise<number> {
-  if (!parentTaskRunId) return 0;
-  const parent = await prisma.taskRun
-    .findUnique({
-      where: { taskRunId: parentTaskRunId },
-      select: { source: true, title: true, a2aMetadata: true },
-    })
-    .catch(() => null);
-  return getReflectionDepth(parent);
 }

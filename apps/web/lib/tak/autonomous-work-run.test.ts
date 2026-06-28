@@ -11,6 +11,12 @@ vi.mock("@dpf/db", () => {
 });
 
 vi.mock("@/lib/tak/agentic-loop", () => ({ runAgenticLoop: vi.fn() }));
+vi.mock("@/lib/tak/pattern-observer-service", () => ({
+  observeWorkPatternsAfterRun: vi.fn(),
+}));
+vi.mock("@/lib/tak/pattern-observer/observer", () => ({
+  observeCoworkerPatterns: vi.fn(),
+}));
 vi.mock("@/lib/mcp-tools", () => ({
   executeTool: vi.fn(),
   getAvailableTools: vi.fn(),
@@ -32,6 +38,11 @@ describe("createAutonomousWorkRun", () => {
 
     const agentic = await import("@/lib/tak/agentic-loop");
     vi.mocked(agentic.runAgenticLoop).mockReset();
+
+    const observer = await import("@/lib/tak/pattern-observer-service");
+    vi.mocked(observer.observeWorkPatternsAfterRun).mockReset();
+    const systemicObserver = await import("@/lib/tak/pattern-observer/observer");
+    vi.mocked(systemicObserver.observeCoworkerPatterns).mockReset();
 
     const tools = await import("@/lib/mcp-tools");
     vi.mocked(tools.executeTool).mockReset();
@@ -258,6 +269,83 @@ describe("createAutonomousWorkRun", () => {
         threadId: "thread-1",
       }),
     );
+  });
+
+  it("fires the pattern observer after an agentic loop run", async () => {
+    const agentic = await import("@/lib/tak/agentic-loop");
+    vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "Done.", executedTools: [] } as never);
+    const observer = await import("@/lib/tak/pattern-observer-service");
+    vi.mocked(observer.observeWorkPatternsAfterRun).mockResolvedValue({ processed: 0 } as never);
+    const systemicObserver = await import("@/lib/tak/pattern-observer/observer");
+    vi.mocked(systemicObserver.observeCoworkerPatterns).mockResolvedValue({
+      processed: 0,
+      submitted: false,
+      skippedReason: "no-signals",
+    } as never);
+
+    const { executeAutonomousAgenticLoop } = await import("./autonomous-work-run");
+
+    await executeAutonomousAgenticLoop({
+      systemPrompt: "You are helpful.",
+      chatHistory: [{ role: "user", content: "Run it." }],
+      sensitivity: "internal",
+      tools: [],
+      toolsForProvider: [],
+      userId: "user-1",
+      routeContext: "/platform/tools/discovery",
+      agentId: "inventory-specialist",
+      threadId: "thread-1",
+      taskRunId: "TR-SCHED-ABCDEF12",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(observer.observeWorkPatternsAfterRun).toHaveBeenCalledWith({
+      taskRunId: "TR-SCHED-ABCDEF12",
+      userId: "user-1",
+      agentId: "inventory-specialist",
+      threadId: "thread-1",
+      routeContext: "/platform/tools/discovery",
+      since: expect.any(Date),
+    });
+    expect(systemicObserver.observeCoworkerPatterns).toHaveBeenCalledWith({
+      agentId: "inventory-specialist",
+      routeContext: "/platform/tools/discovery",
+      since: expect.any(Date),
+      toolSurface: [],
+    });
+  });
+
+  it("skips the systemic observer when the guarded observer reports a reflection loop", async () => {
+    const agentic = await import("@/lib/tak/agentic-loop");
+    vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "Done.", executedTools: [] } as never);
+    const observer = await import("@/lib/tak/pattern-observer-service");
+    vi.mocked(observer.observeWorkPatternsAfterRun).mockResolvedValue({
+      processed: 0,
+      skippedReason: "reflection-loop-guard",
+    } as never);
+    const systemicObserver = await import("@/lib/tak/pattern-observer/observer");
+    vi.mocked(systemicObserver.observeCoworkerPatterns).mockResolvedValue({
+      processed: 0,
+      submitted: false,
+    } as never);
+
+    const { executeAutonomousAgenticLoop } = await import("./autonomous-work-run");
+
+    await executeAutonomousAgenticLoop({
+      systemPrompt: "You are helpful.",
+      chatHistory: [{ role: "user", content: "Run it." }],
+      sensitivity: "internal",
+      tools: [],
+      toolsForProvider: [],
+      userId: "user-1",
+      routeContext: "/platform/tools/discovery",
+      agentId: "inventory-specialist",
+      threadId: "thread-1",
+      taskRunId: "TR-RFL-ABCDEF12",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(systemicObserver.observeCoworkerPatterns).not.toHaveBeenCalled();
   });
 
   it("forwards MCP token identity into the agentic loop", async () => {

@@ -38,6 +38,7 @@ import { wikiLint } from "./wiki-lint";
 import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verification";
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
+import { workPatternProfileReview } from "./work-pattern-profile-review";
 import {
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
@@ -81,6 +82,7 @@ export const scheduledFunctions = [
   wikiLint,
   skillMetricsAggregator,
   skillCurator,
+  workPatternProfileReview,
   researchScheduleScan,
   materialFreshnessDecay,
   allBackupsDailyScheduled,
