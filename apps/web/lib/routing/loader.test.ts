@@ -65,6 +65,28 @@ describe("persistRouteDecision", () => {
       }),
     });
   });
+
+  it("serializes selected activity harness metadata into the candidate trace", async () => {
+    await persistRouteDecision(makeDecisionWithHarness(), { actor: { kind: "agent", id: "build-specialist" } });
+
+    const data = mockPrisma.routeDecisionLog.create.mock.calls[0]?.[0].data;
+    expect(data.candidateTrace).toEqual([
+      expect.objectContaining({
+        endpointId: "anthropic:claude-sonnet",
+        activityHarness: {
+          recipeKey: "high-risk.code-edit.frontier-coding",
+          activityClass: "code-edit",
+          activityConfidence: "trusted",
+          promptStrategy: "repo-packet-with-verification",
+          contextAssembler: "work-case-repo-packet",
+          memoryPolicy: "work-case-packet",
+          tokenPolicy: { inputPacking: "full-context", outputBudget: "expansive" },
+          evaluator: "tool-success",
+          providerFamily: "frontier",
+        },
+      }),
+    ]);
+  });
 });
 
 describe("loadEndpointManifests", () => {
@@ -296,5 +318,33 @@ function makeDecision(): RouteDecision {
     taskType: "conversation",
     sensitivity: "internal",
     timestamp: new Date("2026-05-14T10:00:00.000Z"),
+  };
+}
+
+function makeDecisionWithHarness(): RouteDecision {
+  return {
+    ...makeDecision(),
+    executionPlan: {
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+      recipeId: null,
+      contractFamily: "sync.tool_action",
+      executionAdapter: "claude-cli",
+      maxTokens: 4096,
+      providerSettings: {},
+      toolPolicy: { toolChoice: "auto" },
+      responsePolicy: { stream: true },
+      harness: {
+        recipeKey: "high-risk.code-edit.frontier-coding",
+        activityClass: "code-edit",
+        activityConfidence: "trusted",
+        promptStrategy: "repo-packet-with-verification",
+        contextAssembler: "work-case-repo-packet",
+        memoryPolicy: "work-case-packet",
+        tokenPolicy: { inputPacking: "full-context", outputBudget: "expansive" },
+        evaluator: "tool-success",
+        providerFamily: "frontier",
+      },
+    },
   };
 }

@@ -46,6 +46,9 @@ export type RuntimeSupervisorDecisionState = {
     threadId: string;
     messageId: string;
     actionType: string;
+    actionLabel: string;
+    actionSummary: string;
+    actionDetails: Array<{ label: string; value: string }>;
     proposedAt: string;
     decisionEndpoint: string;
   } | null;

@@ -33,6 +33,10 @@
 import { prisma } from "@dpf/db";
 import { previewRoute, type RouteAndCallOptions } from "@/lib/inference/routed-inference";
 import {
+  compileBuildStudioPhaseActivity,
+  routeContextFromActivity,
+} from "@/lib/routing/activity-compiler";
+import {
   getBuildStudioConfig,
   type BuildStudioDispatchConfig,
 } from "@/lib/integrate/build-studio-config";
@@ -162,6 +166,15 @@ async function resolveRoutedPhase(args: {
   sample: string;
   opts: RouteAndCallOptions;
 }): Promise<PhaseResolution> {
+  const activity = compileBuildStudioPhaseActivity({
+    phase: args.phase,
+    parentRef: {},
+  });
+  const routeOptions = {
+    ...routeContextFromActivity(activity),
+    activityContract: activity,
+    ...args.opts,
+  } as RouteAndCallOptions;
   const base = {
     phase: args.phase,
     label: args.label,
@@ -173,7 +186,7 @@ async function resolveRoutedPhase(args: {
     const { decision, selectedManifest } = await previewRoute(
       [{ role: "user", content: args.sample }],
       "internal",
-      args.opts,
+      routeOptions,
     );
     if (!decision.selectedEndpoint || !selectedManifest) {
       return {

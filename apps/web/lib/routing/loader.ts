@@ -80,6 +80,7 @@ import {
   type RouteDecisionActor,
 } from "./route-decision-attribution";
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
+import { serializeActivityHarnessAudit } from "./activity-harness-audit";
 
 /**
  * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
@@ -376,7 +377,7 @@ export async function persistRouteDecision(
       reason: decision.reason,
       // Normalize to DB invariant 0..1 (pipeline scores are 0..100 or unbounded).
       fitnessScore: Math.min(Math.max(decision.fitnessScore / 100, 0), 1),
-      candidateTrace: decision.candidates as any,
+      candidateTrace: serializeCandidateTraceForAudit(decision) as any,
       excludedTrace: decision.candidates.filter((c) => c.excluded) as any,
       policyRulesApplied: decision.policyRulesApplied,
       fallbackChain: decision.fallbackChain,
@@ -384,4 +385,19 @@ export async function persistRouteDecision(
     },
   });
   return record.id;
+}
+
+function serializeCandidateTraceForAudit(
+  decision: import("./types").RouteDecision,
+): Array<import("./types").CandidateTrace & { activityHarness?: unknown }> {
+  const activityHarness = serializeActivityHarnessAudit(decision.executionPlan?.harness);
+  if (!activityHarness || !decision.selectedEndpoint) {
+    return decision.candidates;
+  }
+
+  return decision.candidates.map((candidate) =>
+    candidate.endpointId === decision.selectedEndpoint
+      ? { ...candidate, activityHarness }
+      : candidate,
+  );
 }

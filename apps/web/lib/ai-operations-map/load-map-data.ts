@@ -9,6 +9,11 @@ import {
   projectToolExecutionReceipt,
 } from "./project-events";
 import { projectRoutingTopology } from "./project-routing-topology";
+import { resolveModelSelectionByPhase } from "@/lib/inference/phase-model-resolution";
+import { projectActivityRoutingFromLiveState } from "./activity-routing-live-state";
+import {
+  ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
+} from "@/lib/routing/activity-harness-approval-source";
 import {
   projectA2aInteractions,
   type A2aDelegationSourceRow,
@@ -78,6 +83,8 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     phaseHandoffs,
     a2aTaskRuns,
     deliberationRuns,
+    activityHarnessApprovalProposals,
+    phaseModelSelection,
   ] = await Promise.all([
     prisma.storefrontConfig.findFirst({
       include: {
@@ -130,6 +137,8 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
         title: true,
         startedAt: true,
         completedAt: true,
+        a2aMetadata: true,
+        repeatedPatternKey: true,
       },
     }),
     // BI-OPS-MAP-STALLED-WINDOW (2026-05-21): lift stalled rows into the
@@ -156,6 +165,8 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
         title: true,
         startedAt: true,
         completedAt: true,
+        a2aMetadata: true,
+        repeatedPatternKey: true,
       },
     }),
     prisma.toolExecution.findMany({
@@ -438,6 +449,23 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
         },
       },
     }),
+    prisma.agentActionProposal.findMany({
+      where: {
+        actionType: ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
+        status: { in: ["approve", "approved", "executed"] },
+      },
+      orderBy: { decidedAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        proposalId: true,
+        actionType: true,
+        parameters: true,
+        status: true,
+        decidedById: true,
+        decidedAt: true,
+      },
+    }),
+    resolveModelSelectionByPhase(),
   ]);
 
   const routeDecisionAgentMessageIds = [
@@ -495,6 +523,10 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
   ].sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
 
   const stationedAgents = projectAgentsToStations(mapAgents, template);
+  const routeDecisionRows = routeDecisions.map((decision) => ({
+    ...decision,
+    agentId: decision.agentId ?? (decision.agentMessageId ? routeDecisionAgentIdByMessageId.get(decision.agentMessageId) ?? null : null),
+  }));
   const routingTopology = projectRoutingTopology({
     agents: stationedAgents.map((agent) => ({
       agentId: agent.agentId,
@@ -509,10 +541,7 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       friendlyName: profile.friendlyName,
       modelStatus: profile.modelStatus,
     })),
-    routeDecisions: routeDecisions.map((decision) => ({
-      ...decision,
-      agentId: decision.agentId ?? (decision.agentMessageId ? routeDecisionAgentIdByMessageId.get(decision.agentMessageId) ?? null : null),
-    })),
+    routeDecisions: routeDecisionRows,
     tokenUsage,
     routeOutcomes,
     scheduledAgentTasks,
@@ -620,6 +649,15 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     projections,
     routingTopology: {
       ...routingTopology,
+      activityRouting: projectActivityRoutingFromLiveState({
+        providers,
+        taskRuns,
+        routeDecisions: routeDecisionRows,
+        tokenUsage,
+        routeOutcomes,
+        activityHarnessApprovalProposals,
+        phaseModelSelection,
+      }),
       coworkers: mergedCoworkers,
       a2aEdges: a2aProjection.a2aEdges,
       deliberations,

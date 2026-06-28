@@ -17,6 +17,7 @@ import type {
 } from "@/lib/routing/types";
 import type { RouteSensitivity } from "@/lib/agent-sensitivity";
 import type { ModelClass } from "@/lib/routing/model-card-types";
+import type { ActivityContract } from "@/lib/routing/activity-contract";
 import { inferContract } from "@/lib/routing/request-contract";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import {
@@ -26,7 +27,12 @@ import {
   persistRouteDecision,
 } from "@/lib/routing/loader";
 import { routeEndpointV2 } from "@/lib/routing/pipeline-v2";
+import {
+  ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
+  activityHarnessOverridesFromProposalRows,
+} from "@/lib/routing/activity-harness-approval-source";
 import { callWithFallbackChain } from "@/lib/routing/fallback";
+import { prisma } from "@dpf/db";
 import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { resolveDispatchPosture, type DispatchPosture } from "@/lib/golden-triangle/dispatch";
 import { logTokenUsage } from "@/lib/ai-inference";
@@ -166,6 +172,12 @@ export interface RouteAndCallOptions {
   /** Responses API: chain to a previous response for conversation state. */
   previousResponseId?: string;
   /**
+   * Activity-level routing contract for task-aware harness binding. When set,
+   * the selected RouteDecision.executionPlan carries harness metadata for
+   * evidence, evaluation, and future activity-specific prompt/context assembly.
+   */
+  activityContract?: ActivityContract;
+  /**
    * Display name of the coworker invoking this call (e.g. "AI Ops Engineer").
    * When tools are stripped due to model capability limits, this name is
    * preserved in the degraded system prompt so the model can identify itself
@@ -297,8 +309,32 @@ async function prepareRoute(
     );
   }
 
+  const activityHarnessConfidenceOverrides =
+    options?.activityContract && !prep?.skipRecipe
+      ? activityHarnessOverridesFromProposalRows(
+          await prisma.agentActionProposal.findMany({
+            where: {
+              actionType: ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
+              status: { in: ["approve", "approved", "executed"] },
+            },
+            orderBy: { decidedAt: "desc" },
+            take: 40,
+            select: {
+              proposalId: true,
+              actionType: true,
+              parameters: true,
+              status: true,
+              decidedById: true,
+              decidedAt: true,
+            },
+          }),
+        )
+      : [];
+
   const decision = await routeEndpointV2(manifests, contract, policies, overrides, {
     skipRecipe: prep?.skipRecipe,
+    activityContract: options?.activityContract,
+    activityHarnessConfidenceOverrides,
   });
 
   return { contract, decision, manifests, policies, overrides, taskType, posture };

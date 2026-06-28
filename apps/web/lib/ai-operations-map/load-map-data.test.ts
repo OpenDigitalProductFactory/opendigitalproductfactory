@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { mockResolveModelSelectionByPhase } = vi.hoisted(() => ({
+  mockResolveModelSelectionByPhase: vi.fn(),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     storefrontConfig: {
@@ -56,11 +60,17 @@ vi.mock("@dpf/db", () => ({
     deliberationRun: {
       findMany: vi.fn(),
     },
+    agentActionProposal: {
+      findMany: vi.fn(),
+    },
   },
+}));
+vi.mock("@/lib/inference/phase-model-resolution", () => ({
+  resolveModelSelectionByPhase: () => mockResolveModelSelectionByPhase(),
 }));
 
 import { prisma } from "@dpf/db";
-import { loadOperationsMapData, mergeTaskRunsDedupeById } from "./load-map-data";
+import { loadOperationsMapData } from "./load-map-data";
 
 describe("loadOperationsMapData", () => {
   beforeEach(() => {
@@ -68,10 +78,15 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.agentMessage.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.modelProfile.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
+    mockResolveModelSelectionByPhase.mockResolvedValue({
+      generatedAt: "2026-06-28T20:00:00.000Z",
+      phases: [],
+    });
     // A2A interaction sources default to empty; individual tests override.
     vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.phaseHandoff.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.deliberationRun.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
   });
 
   it("selects the map template from StorefrontConfig archetype truth", async () => {
@@ -96,6 +111,11 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
+    mockResolveModelSelectionByPhase.mockResolvedValue({
+      generatedAt: "2026-06-28T20:00:00.000Z",
+      phases: [],
+    });
 
     const data = await loadOperationsMapData();
 
@@ -178,6 +198,8 @@ describe("loadOperationsMapData", () => {
         title: true,
         startedAt: true,
         completedAt: true,
+        a2aMetadata: true,
+        repeatedPatternKey: true,
       },
     });
     expect(prisma.toolExecutionReceipt.findMany).toHaveBeenCalledWith({
@@ -558,8 +580,8 @@ describe("loadOperationsMapData", () => {
     expect(prisma.deliberationRun.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: { startedAt: "desc" }, take: 40 }),
     );
+    });
   });
-});
 
 function makeAgentRow() {
   return {
@@ -597,7 +619,7 @@ function makeToolExecutionRow() {
   };
 }
 
-function makeTaskRunRow() {
+function makeTaskRunRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "tr-1",
     taskRunId: "TR-SCHED-ABCDE",
@@ -608,6 +630,9 @@ function makeTaskRunRow() {
     title: "Discovery Taxonomy Gap Triage",
     startedAt: new Date("2026-05-10T12:00:30.000Z"),
     completedAt: null,
+    a2aMetadata: null,
+    repeatedPatternKey: null,
+    ...overrides,
   };
 }
 
@@ -653,7 +678,7 @@ function makeExternalEvidenceRow() {
   };
 }
 
-function makeRouteDecisionRow(overrides: { agentId?: string | null; agentMessageId?: string | null } = {}) {
+function makeRouteDecisionRow(overrides: Record<string, unknown> = {}) {
   return {
     ...makeRouteDecisionRowBase(),
     ...overrides,
@@ -712,7 +737,14 @@ function makeModelProviderRowBase() {
   };
 }
 
-function makeRouteOutcomeRow() {
+function makeRouteOutcomeRow(overrides: Record<string, unknown> = {}) {
+  return {
+    ...makeRouteOutcomeRowBase(),
+    ...overrides,
+  };
+}
+
+function makeRouteOutcomeRowBase() {
   return {
     id: "outcome-claude-auth",
     agentId: null,
@@ -735,7 +767,14 @@ function makeModelProfileRow() {
   };
 }
 
-function makeTokenUsageRow() {
+function makeTokenUsageRow(overrides: Record<string, unknown> = {}) {
+  return {
+    ...makeTokenUsageRowBase(),
+    ...overrides,
+  };
+}
+
+function makeTokenUsageRowBase() {
   return {
     id: "usage-1",
     agentId: "support-specialist",
@@ -771,54 +810,3 @@ function makeScheduledJobRow() {
     lastStatus: "ok",
   };
 }
-
-describe("mergeTaskRunsDedupeById", () => {
-  // BI-OPS-MAP-STALLED-WINDOW (2026-05-21): loadOperationsMapData fetches
-  // two task-run windows — recent-40 and stalled-200. They overlap when a
-  // row is stalled AND in the recent-40 (typical case). The merge helper
-  // dedupes by cuid id so a row appears exactly once in the projection set.
-
-  it("returns recent rows when stalled list is empty", () => {
-    const recent = [{ id: "a" }, { id: "b" }];
-    expect(mergeTaskRunsDedupeById(recent, [])).toEqual(recent);
-  });
-
-  it("returns stalled rows when recent list is empty", () => {
-    const stalled = [{ id: "x" }, { id: "y" }];
-    expect(mergeTaskRunsDedupeById([], stalled)).toEqual(stalled);
-  });
-
-  it("appends stalled rows that aren't already in recent", () => {
-    const recent = [{ id: "a" }, { id: "b" }];
-    const stalled = [{ id: "c" }, { id: "d" }];
-    expect(mergeTaskRunsDedupeById(recent, stalled).map((r) => r.id)).toEqual([
-      "a",
-      "b",
-      "c",
-      "d",
-    ]);
-  });
-
-  it("dedupes rows that appear in both lists (a row stalled AND in recent-40)", () => {
-    const recent = [{ id: "a" }, { id: "b" }, { id: "c" }];
-    const stalled = [{ id: "b" }, { id: "d" }];
-    const merged = mergeTaskRunsDedupeById(recent, stalled);
-    expect(merged.map((r) => r.id)).toEqual(["a", "b", "c", "d"]);
-    expect(merged.filter((r) => r.id === "b")).toHaveLength(1);
-  });
-
-  it("preserves the recent-list version when the same id is in both", () => {
-    // The recent-list copy wins — it's inserted first. This matters because
-    // both queries select identical fields today, but if they diverge in
-    // future (e.g. recent adds a field), the recent shape is canonical.
-    const recent = [{ id: "a", source: "recent" }];
-    const stalled = [{ id: "a", source: "stalled" }];
-    const merged = mergeTaskRunsDedupeById(recent, stalled);
-    expect(merged).toHaveLength(1);
-    expect(merged[0]!.source).toBe("recent");
-  });
-
-  it("handles both empty", () => {
-    expect(mergeTaskRunsDedupeById([], [])).toEqual([]);
-  });
-});

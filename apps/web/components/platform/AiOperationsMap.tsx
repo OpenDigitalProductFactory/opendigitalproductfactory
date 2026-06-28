@@ -2,12 +2,7 @@
 
 import { type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  RotateCcw,
-  type LucideIcon,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
+import { RotateCcw, type LucideIcon, ZoomIn, ZoomOut } from "lucide-react";
 import type {
   OperationsMapProjection,
   OperationsMapProjectionSource,
@@ -39,6 +34,7 @@ import { StalledTaskRecoveryActions } from "./StalledTaskRecoveryActions";
 import { A2aInteractionsPanel } from "./A2aInteractionsPanel";
 import { DeliberationLensPanel } from "./DeliberationLensPanel";
 import { OperationsTopologyCanvas } from "./OperationsTopologyCanvas";
+import { ActivityRoutingWorkbench } from "./ActivityRoutingWorkbench";
 import {
   applyRoutingControlFilters,
   applyA2aControlFilters,
@@ -371,6 +367,8 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
             {canvasPreview ? "Unified canvas: on" : "Unified canvas (preview)"}
           </button>
         </div>
+
+        <ActivityRoutingWorkbench activityRouting={routingTopology.activityRouting} />
 
         {canvasPreview ? (
           <section

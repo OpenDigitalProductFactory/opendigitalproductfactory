@@ -58,9 +58,86 @@ export { inferContract } from "./request-contract";
 export { estimateCost, estimateSuccessProbability, rankByCostPerSuccess } from "./cost-ranking";
 export { routeEndpointV2 } from "./pipeline-v2";
 
+// Activity-level routing harness
+export type {
+  ActivityClass,
+  ActivityContract,
+  ActivityContextPolicy,
+  ActivityDistributionShape,
+  ActivityEvaluationPolicy,
+  ActivityParentRef,
+  ActivityRiskClass,
+  ActivityRouteContext,
+  ActivityRouteContextHints,
+  ActivitySuccessShape,
+  ActivityTokenEnvelope,
+} from "./activity-contract";
+export {
+  compileCompoundRequestActivities,
+  compileBuildStudioPhaseActivity,
+  routeContextFromActivity,
+} from "./activity-compiler";
+export {
+  buildGlmActivityPilotPackage,
+  buildWorkCaseActivityPilotPackage,
+} from "./activity-package";
+export type {
+  BuildStudioActivityPhase,
+  CompileBuildStudioPhaseActivityInput,
+  CompileCompoundRequestActivitiesInput,
+} from "./activity-compiler";
+export type {
+  ActivityPackage,
+  ActivityPackageReadiness,
+  ActivityPackageRouteContext,
+  BuildGlmActivityPilotPackageInput,
+  BuildWorkCaseActivityPilotPackageInput,
+} from "./activity-package";
+export {
+  applyHarnessConfidenceOverride,
+  bindHarnessRecipeForActivity,
+  isGlmHarnessRecipe,
+} from "./harness-recipe";
+export {
+  parseActivityHarnessAudit,
+  serializeActivityHarnessAudit,
+} from "./activity-harness-audit";
+export { calibrateActivityHarnesses } from "./activity-harness-calibration";
+export {
+  applyApprovedActivityHarnessActions,
+  buildActivityHarnessActionProposals,
+} from "./activity-harness-governance";
+export {
+  ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
+  activityHarnessOverridesFromProposalRows,
+  activityHarnessProposalParameters,
+} from "./activity-harness-approval-source";
+export type {
+  HarnessBindingHint,
+  HarnessRecipe,
+  HarnessRecipeConfidence,
+} from "./harness-recipe";
+export type { ActivityHarnessAudit } from "./activity-harness-audit";
+export type {
+  ActivityHarnessCalibration,
+  ActivityHarnessCalibrationRecommendation,
+  ActivityHarnessOutcomeSample,
+  ActivityHarnessSuccessSignal,
+} from "./activity-harness-calibration";
+export type {
+  ActivityHarnessActionProposal,
+  ActivityHarnessActionDecision,
+  ActivityHarnessConfidenceOverride,
+  ActivityHarnessGovernedAction,
+} from "./activity-harness-governance";
+export type {
+  ActivityHarnessApprovalProposalRow,
+  ActivityHarnessProposalParametersInput,
+} from "./activity-harness-approval-source";
+
 // EP-INF-005b: Execution recipes
-export type { RoutedExecutionPlan, RecipeRow } from "./recipe-types";
-export { buildPlanFromRecipe, buildDefaultPlan } from "./execution-plan";
+export type { RoutedExecutionPlan, RoutedHarnessPlan, RecipeRow } from "./recipe-types";
+export { buildPlanFromRecipe, buildDefaultPlan, attachHarnessRecipeToPlan } from "./execution-plan";
 export { buildSeedRecipe } from "./recipe-seeder";
 export { loadChampionRecipe } from "./recipe-loader";
 

@@ -92,6 +92,52 @@ describe("GET /api/v1/governance/approvals", () => {
     expect(body.data).toBeInstanceOf(Array);
     expect(body.data.length).toBe(1);
     expect(body.data[0].proposalId).toBe("PROP-001");
+    expect(body.data[0].presentation).toMatchObject({
+      title: "Create epic",
+      summary: "Proposed action create_epic.",
+    });
+  });
+
+  it("adds routing-specific presentation metadata for activity harness proposals", async () => {
+    (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
+    (prisma.agentThread.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "thread-1" },
+    ]);
+    (prisma.agentActionProposal.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: "prop-1",
+        proposalId: "AP-ROUTE",
+        actionType: "activity_harness_confidence_override",
+        parameters: {
+          kind: "activity-harness-confidence-override",
+          activityClass: "verify",
+          harnessRecipeKey: "frontier.verify.strict",
+          providerId: "openai",
+          modelId: "gpt-5.2",
+          confidence: "trusted",
+        },
+        status: "proposed",
+        proposedAt: new Date(),
+        message: { id: "msg-1", role: "assistant", content: "Tune routing?", agentId: "agent-1", createdAt: new Date() },
+      },
+    ]);
+
+    const res = await approvalsListHandler(getRequest("/api/v1/governance/approvals"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data[0].presentation).toMatchObject({
+      title: "Tune activity routing confidence",
+      shortLabel: "Activity routing tuning",
+      summary: "Set verify / frontier.verify.strict on openai/gpt-5.2 to trusted.",
+      details: [
+        { label: "Activity", value: "verify" },
+        { label: "Harness", value: "frontier.verify.strict" },
+        { label: "Provider", value: "openai" },
+        { label: "Model", value: "gpt-5.2" },
+        { label: "Confidence", value: "trusted" },
+      ],
+    });
   });
 
   it("returns empty when user has no threads", async () => {

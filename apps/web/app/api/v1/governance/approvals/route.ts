@@ -6,6 +6,7 @@ import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
 import { parsePagination, buildPaginatedResponse } from "@/lib/api/pagination";
+import { projectActionProposalPresentation } from "@/lib/governance/action-proposal-presentation";
 
 export async function GET(request: Request) {
   try {
@@ -51,7 +52,18 @@ export async function GET(request: Request) {
       },
     });
 
-    return apiSuccess(buildPaginatedResponse(proposals, limit));
+    const page = buildPaginatedResponse(proposals, limit);
+    return apiSuccess({
+      ...page,
+      data: page.data.map((proposal) => ({
+        ...proposal,
+        presentation: projectActionProposalPresentation({
+          proposalId: proposal.proposalId,
+          actionType: proposal.actionType,
+          parameters: proposal.parameters,
+        }),
+      })),
+    });
   } catch (e) {
     if (e instanceof ApiError) return e.toResponse();
     return NextResponse.json(

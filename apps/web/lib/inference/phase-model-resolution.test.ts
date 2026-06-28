@@ -118,6 +118,30 @@ beforeEach(() => {
 });
 
 describe("resolveModelSelectionByPhase — the local-but-cloud blind spot", () => {
+  it("passes activity-derived route context into routed phase previews", async () => {
+    mockGetConfig.mockResolvedValue(OPENCODE_CONFIG);
+    mockPreviewRoute.mockResolvedValue(cloudWinner());
+    mockPreflight.mockResolvedValue(HEALTHY_PREFLIGHT);
+
+    await resolveModelSelectionByPhase();
+
+    const planCall = mockPreviewRoute.mock.calls.find(([, , opts]) =>
+      Boolean(opts && typeof opts === "object" && (opts as { activityId?: string }).activityId === "build:unknown:plan"),
+    );
+    expect(planCall?.[2]).toMatchObject({
+      activityId: "build:unknown:plan",
+      activityClass: "plan",
+      distributionShape: "edge",
+      riskClass: "high",
+      successShape: "decision",
+      contextPolicy: "work-case-packet",
+      taskType: "reasoning",
+      budgetClass: "quality_first",
+      reasoningDepth: "high",
+      minimumTier: "frontier",
+    });
+  });
+
   it("flags every reasoning phase that routes to cloud when the build engine is Local (OpenCode)", async () => {
     mockGetConfig.mockResolvedValue(OPENCODE_CONFIG);
     mockPreviewRoute.mockResolvedValue(cloudWinner()); // ideate, plan, design-review, plan-review
