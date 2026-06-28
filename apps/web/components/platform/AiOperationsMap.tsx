@@ -2,12 +2,7 @@
 
 import { type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  RotateCcw,
-  type LucideIcon,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
+import { RotateCcw, type LucideIcon, ZoomIn, ZoomOut } from "lucide-react";
 import type {
   OperationsMapProjection,
   OperationsMapProjectionSource,

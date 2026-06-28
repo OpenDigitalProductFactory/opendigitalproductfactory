@@ -45,6 +45,7 @@ import { workbooksPack } from "@/lib/mcp/packs/workbooks-pack";
 import { feedbackPack } from "@/lib/mcp/packs/feedback-pack";
 import { marketingPack } from "@/lib/mcp/packs/marketing-pack";
 import { orgDecisionPack } from "@/lib/mcp/packs/org-decision-pack";
+import { activityRoutingPack } from "@/lib/mcp/packs/activity-routing-pack";
 import { composeToolPacks } from "@/lib/mcp/tool-registry";
 import {
   createLicenseReadinessIssue,
@@ -436,7 +437,7 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 
 // Scoped tool packs compose into the registry; mcp-tools.ts is the thin layer
 // over them (definitions spread into PLATFORM_TOOLS below; dispatch in executeTool).
-const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, marketingPack]);
+const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, marketingPack, activityRoutingPack]);
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,
@@ -5171,20 +5172,6 @@ export async function executeTool(
       return {
         success: true,
         message: "probe tool body — should not be reached when gate is wired and DPF_TEST_MCP_REFUSE_PROBE=1",
-      };
-    }
-    case "activity_harness_confidence_override": {
-      return {
-        success: true,
-        message: "Activity routing confidence override approved.",
-        data: {
-          kind: "activity-harness-confidence-override",
-          activityClass: typeof params["activityClass"] === "string" ? params["activityClass"] : null,
-          harnessRecipeKey: typeof params["harnessRecipeKey"] === "string" ? params["harnessRecipeKey"] : null,
-          providerId: typeof params["providerId"] === "string" ? params["providerId"] : null,
-          modelId: typeof params["modelId"] === "string" ? params["modelId"] : null,
-          confidence: typeof params["confidence"] === "string" ? params["confidence"] : null,
-        },
       };
     }
     case "spawn_work_thread": {

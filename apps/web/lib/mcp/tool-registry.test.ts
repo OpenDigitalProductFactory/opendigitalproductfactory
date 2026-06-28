@@ -14,6 +14,7 @@ import { runtimeCoordinationPack } from "./packs/runtime-coordination-pack";
 import { workCapsulesPack } from "./packs/work-capsules-pack";
 import { workbooksPack } from "./packs/workbooks-pack";
 import { feedbackPack } from "./packs/feedback-pack";
+import { activityRoutingPack } from "./packs/activity-routing-pack";
 import { composeToolPacks } from "./tool-registry";
 // The inline-case ratchet's extractor lives in the CI guard (scripts/), kept as
 // the single source of truth so this test and the guard can never disagree.
@@ -139,6 +140,30 @@ describe("feedback tool pack", () => {
   it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
     const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
     for (const def of feedbackPack.definitions) {
+      expect(platformNames.has(def.name), def.name).toBe(true);
+    }
+  });
+});
+
+describe("activity-routing tool pack", () => {
+  it("bundles the harness confidence approval acknowledgement tool", () => {
+    expect(activityRoutingPack.definitions.map((t) => t.name)).toEqual([
+      "activity_harness_confidence_override",
+    ]);
+    for (const def of activityRoutingPack.definitions) {
+      expect(activityRoutingPack.handlers[def.name], def.name).toBeTypeOf("function");
+    }
+  });
+
+  it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
+    for (const [name, grants] of Object.entries(activityRoutingPack.grants)) {
+      expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
+    }
+  });
+
+  it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
+    const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
+    for (const def of activityRoutingPack.definitions) {
       expect(platformNames.has(def.name), def.name).toBe(true);
     }
   });
