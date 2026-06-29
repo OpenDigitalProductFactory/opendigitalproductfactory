@@ -272,11 +272,11 @@ Expected: PASS.
 **Files:**
 - Verify `/platform/ai/readiness` in governed runtime if available.
 
-- [ ] **Step 1: Run live-install preflight or lease-governed contributor preview**
+- [x] **Step 1: Run live-install preflight or lease-governed contributor preview**
 
 Use the DPF live-install preflight or local-integration-ci lease path required by AGENTS.md. Do not launch an ungated dev server.
 
-- [ ] **Step 2: Browser-check the console**
+- [x] **Step 2: Browser-check the console**
 
 Verify:
 - First viewport shows verdict and four readiness rows.
@@ -284,7 +284,7 @@ Verify:
 - Diagnostics links navigate to existing AI pages.
 - Layout is compact and text does not overflow on desktop or mobile viewport.
 
-- [ ] **Step 3: Record evidence**
+- [x] **Step 3: Record evidence**
 
 Record evidence on `BI-EFDD78EE` and `WC-25CCCA03`.
 
