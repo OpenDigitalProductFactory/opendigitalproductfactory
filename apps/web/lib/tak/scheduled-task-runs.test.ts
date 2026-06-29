@@ -65,4 +65,46 @@ describe("createTaskRunForScheduledTask", () => {
     });
     expect(String(arg?.data?.taskRunId)).toMatch(/^TR-SCHED-/);
   });
+
+  it("passes scheduled proactivity plans into TaskRun metadata", async () => {
+    const { prisma } = await import("@dpf/db");
+    vi.mocked(prisma.taskRun.create).mockResolvedValue({
+      id: "tr_internal_2",
+      taskRunId: "TR-SCHED-PROACT",
+      contextId: "thread-2",
+    } as never);
+
+    const proactivity = {
+      resolvedLevel: "balanced" as const,
+      policyId: "proactivity:scheduled-task:balanced",
+      attentionWindowMinutes: 60,
+      followUpCadenceMinutes: [120],
+      maxAttempts: 2,
+      spendClass: "standard" as const,
+      channelPolicy: "preferred-channel" as const,
+      escalationTarget: "attention-surface" as const,
+      actionBoundary: "propose" as const,
+      explanation: "Balanced scheduled follow-up.",
+      evidenceRefs: [{ kind: "activity-family", id: "scheduled-task" }],
+    };
+
+    const { createTaskRunForScheduledTask } = await import("./scheduled-task-runs");
+
+    await createTaskRunForScheduledTask({
+      taskId: "daily-summary",
+      ownerUserId: "user-1",
+      agentId: "workspace-coworker",
+      threadId: "thread-2",
+      routeContext: "/workspace",
+      title: "Daily Summary",
+      prompt: "Summarize today.",
+      proactivity,
+    });
+
+    const arg = vi.mocked(prisma.taskRun.create).mock.calls[0]?.[0];
+    expect(arg?.data?.a2aMetadata).toMatchObject({
+      trigger: "scheduled",
+      proactivity,
+    });
+  });
 });

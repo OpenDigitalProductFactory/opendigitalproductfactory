@@ -2,6 +2,7 @@ import {
   createAutonomousWorkRun,
   type AutonomousWorkRunRef,
 } from "@/lib/tak/autonomous-work-run";
+import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
 
 export type ScheduledTaskRunRef = AutonomousWorkRunRef;
 
@@ -13,6 +14,7 @@ export async function createTaskRunForScheduledTask(input: {
   routeContext: string;
   title: string;
   prompt: string;
+  proactivity?: ProactivityPlan;
 }): Promise<ScheduledTaskRunRef> {
   return createAutonomousWorkRun({
     trigger: "scheduled",
@@ -27,5 +29,6 @@ export async function createTaskRunForScheduledTask(input: {
       kind: "scheduled-task",
       id: input.taskId,
     },
+    proactivity: input.proactivity,
   });
 }

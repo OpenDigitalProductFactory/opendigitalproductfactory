@@ -366,6 +366,14 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
     await executeScheduledAgentTask("discovery-taxonomy-gap-triage-daily");
 
     expect(mocks.prisma.taskRun.create).toHaveBeenCalledOnce();
+    const taskRunCreateArg = mocks.prisma.taskRun.create.mock.calls[0]?.[0];
+    expect(taskRunCreateArg?.data?.a2aMetadata).toMatchObject({
+      proactivity: {
+        resolvedLevel: "balanced",
+        policyId: "proactivity:scheduled-task:balanced",
+        actionBoundary: "propose",
+      },
+    });
     expect(mocks.runAgenticLoop).toHaveBeenCalledWith(
       expect.objectContaining({
         taskRunId: "TR-SCHED-ABCDE",
