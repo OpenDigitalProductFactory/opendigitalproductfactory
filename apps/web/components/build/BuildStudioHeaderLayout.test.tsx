@@ -468,16 +468,42 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).not.toContain("Decision:");
   });
 
-  it("limits the default fleet to the highest-signal work and folds the rest under AI Coworker custody", () => {
-    const builds = Array.from({ length: 8 }, (_, index) =>
+  it("shows only focus work in the operator fleet and parks quiet research/design builds under coworker custody", () => {
+    const parkedBuilds = Array.from({ length: 5 }, (_, index) =>
       makeBuild({
-        id: `build-row-${index + 1}`,
-        buildId: `FB-OVERFLOW-${index + 1}`,
-        title: `Operator build ${index + 1}`,
-        phase: "plan",
+        id: `parked-row-${index + 1}`,
+        buildId: `FB-PARKED-${index + 1}`,
+        title: `Parked research build ${index + 1}`,
+        phase: "ideate",
         originator: null,
       }),
     );
+    const builds = [
+      makeBuild({
+        id: "focus-row",
+        buildId: "FB-FOCUS",
+        title: "Review customer entry gate",
+        phase: "review",
+        originator: null,
+      }),
+      makeBuild({
+        id: "working-row",
+        buildId: "FB-WORKING",
+        title: "Ship provider readiness check",
+        phase: "build",
+        buildExecState: { step: "code_generated" } as unknown as FeatureBuildRow["buildExecState"],
+        originator: null,
+      }),
+      makeBuild({
+        id: "needs-row",
+        buildId: "FB-NEEDS-YOU",
+        title: "Choose recovery path for failed review",
+        phase: "plan",
+        planReview: { decision: "fail" } as unknown as FeatureBuildRow["planReview"],
+        originator: null,
+      }),
+      ...parkedBuilds,
+    ];
 
     const html = renderToStaticMarkup(
       <BuildStudio
@@ -489,13 +515,15 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("Work in progress:");
+    expect(html).toContain("Needs you: 1 · Working: 2 · Parked: 5");
     expect(html).not.toContain("WIP slots");
-    expect(html).toContain("Operator build 1");
-    expect(html).toContain("Operator build 4");
-    expect(html).not.toContain("Operator build 5");
-    expect(html).toContain("AI Coworker is tracking 4 more builds");
-    expect(html).toContain("Show 4 more builds");
+    expect(html).toContain("Review customer entry gate");
+    expect(html).toContain("Ship provider readiness check");
+    expect(html).toContain("Choose recovery path for failed review");
+    expect(html).not.toContain("Parked research build 1");
+    expect(html).not.toContain("Parked research build 5");
+    expect(html).toContain("AI Coworker is watching 5 parked builds");
+    expect(html).not.toContain("Show 5 more builds");
   });
 
   it("renders an implementation control once the plan is approved and start approval is recorded", () => {

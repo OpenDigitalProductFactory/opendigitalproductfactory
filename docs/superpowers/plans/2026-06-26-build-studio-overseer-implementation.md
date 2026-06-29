@@ -42,9 +42,9 @@ Implemented defaults:
 - `BuildSolutionSummaryBand` caps the operator brief and suppresses technical plan text such as data model/provider/API detail.
 - `BuildDecisionLedgerBand` is compact by default (`AI Coworker decision` + current call + short why); full options and unresolved technical evidence only render in Engineer view.
 - Fleet rows replace phase-dot rails, queue glyphs, and attention dots with plain statuses (`Working`, `Waiting`, `Needs you`, etc.).
-- The fleet defaults to the highest-signal four current items and folds the rest under "AI Coworker is tracking N more builds" with a single show-more control.
+- The fleet is now an operator focus queue: selected, running, queued, blocked, and needs-you builds stay visible; quiet ideation/planning probes are parked under `AI Coworker is watching N parked builds` and remain available from Details.
 
-UX-Fit-Decision: choose the plain custodian view over the technical dashboard or chat-punt recovery. `principle_decide` returned low confidence and a tool-biased edge for the technical dashboard, so the decision was made on merits per the UX-fit rule: reduce human cognitive load, keep governance evidence in drill-down, and make the default action surface clear for non-technical operators.
+UX-Fit-Decision: choose the plain custodian view and focus queue over the technical dashboard, chat-punt recovery, or "show all current builds" rail. `principle_decide` retrieved mostly process-commandment dimensions for the focus-queue decision and recommended "show all current" without scoring operator cognitive load; the decision was made on merits per the UX-fit rule: reduce human cognitive load, keep governance evidence in drill-down, and make the default action surface clear for non-technical operators.
 
 ## Verification
 

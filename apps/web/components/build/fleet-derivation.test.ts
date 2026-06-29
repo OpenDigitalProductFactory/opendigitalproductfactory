@@ -11,7 +11,9 @@ import {
   deriveFleetCounts,
   deriveNeedsAttention,
   deriveQueueState,
+  formatOperatorFocusHeader,
   formatFleetHeader,
+  isOperatorFocusEntry,
 } from "./fleet-derivation";
 import {
   normalizeHappyPathState,
@@ -219,9 +221,98 @@ describe("deriveFleetCounts", () => {
   });
 });
 
+describe("isOperatorFocusEntry", () => {
+  it("keeps idle ideation work out of the operator focus queue", () => {
+    const build = makeBuild({ buildId: "FB-IDLE", phase: "ideate" });
+
+    expect(
+      isOperatorFocusEntry(
+        {
+          build,
+          queueState: { kind: "idle" },
+          needsAttention: false,
+        },
+        null,
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps the selected build visible even when it is otherwise parked", () => {
+    const build = makeBuild({ buildId: "FB-SELECTED", phase: "plan" });
+
+    expect(
+      isOperatorFocusEntry(
+        {
+          build,
+          queueState: { kind: "idle" },
+          needsAttention: false,
+        },
+        "FB-SELECTED",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps running, queued, blocked, and attention-needing builds visible", () => {
+    const base = makeBuild({ buildId: "FB-FOCUS", phase: "build" });
+
+    expect(
+      isOperatorFocusEntry(
+        {
+          build: base,
+          queueState: { kind: "running", stepLabel: "Generating code" },
+          needsAttention: false,
+        },
+        null,
+      ),
+    ).toBe(true);
+    expect(
+      isOperatorFocusEntry(
+        {
+          build: base,
+          queueState: { kind: "queued", position: 1, reason: "capacity", ahead: 0 },
+          needsAttention: false,
+        },
+        null,
+      ),
+    ).toBe(true);
+    expect(
+      isOperatorFocusEntry(
+        {
+          build: base,
+          queueState: { kind: "blocked", reason: "Plan review failed" },
+          needsAttention: false,
+        },
+        null,
+      ),
+    ).toBe(true);
+    expect(
+      isOperatorFocusEntry(
+        {
+          build: base,
+          queueState: { kind: "idle" },
+          needsAttention: true,
+        },
+        null,
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("formatFleetHeader", () => {
-  it("uses operator language instead of WIP jargon", () => {
-    expect(formatFleetHeader(2, 3, 4)).toBe("Work in progress: 2 of 3 active · 4 waiting");
-    expect(formatFleetHeader(0, 5, 0)).toBe("Work in progress: 0 of 5 active · 0 waiting");
+  it("keeps the legacy formatter on the operator-focus language", () => {
+    expect(formatFleetHeader(2, 3, 4)).toBe("Needs you: 0 · Working: 2 · Waiting: 4 · Parked: 0");
+    expect(formatFleetHeader(0, 5, 0)).toBe("Needs you: 0 · Working: 0 · Parked: 0");
+  });
+});
+
+describe("formatOperatorFocusHeader", () => {
+  it("summarizes the human-facing queue without in-flight jargon", () => {
+    expect(
+      formatOperatorFocusHeader({
+        needsYouCount: 1,
+        workingCount: 2,
+        parkedCount: 8,
+      }),
+    ).toBe("Needs you: 1 · Working: 2 · Parked: 8");
   });
 });

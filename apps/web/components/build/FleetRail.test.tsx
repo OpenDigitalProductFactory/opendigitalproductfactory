@@ -14,6 +14,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FleetRail, formatFleetHeader, sortFleetEntries, type FleetRailEntry } from "./FleetRail";
+import { formatOperatorFocusHeader } from "./fleet-derivation";
 import {
   normalizeHappyPathState,
   type FeatureBuildRow,
@@ -81,9 +82,22 @@ function entry(
 }
 
 describe("formatFleetHeader", () => {
-  it("formats running/cap and queued count", () => {
-    expect(formatFleetHeader(2, 3, 4)).toBe("Work in progress: 2 of 3 active · 4 waiting");
-    expect(formatFleetHeader(0, 5, 0)).toBe("Work in progress: 0 of 5 active · 0 waiting");
+  it("uses the current operator-focus wording for legacy callers", () => {
+    expect(formatFleetHeader(2, 3, 4)).toBe("Needs you: 0 · Working: 2 · Waiting: 4 · Parked: 0");
+    expect(formatFleetHeader(0, 5, 0)).toBe("Needs you: 0 · Working: 0 · Parked: 0");
+  });
+});
+
+describe("formatOperatorFocusHeader", () => {
+  it("formats the human-facing FleetRail summary", () => {
+    expect(
+      formatOperatorFocusHeader({
+        needsYouCount: 1,
+        workingCount: 2,
+        queuedCount: 3,
+        parkedCount: 4,
+      }),
+    ).toBe("Needs you: 1 · Working: 2 · Waiting: 3 · Parked: 4");
   });
 });
 
@@ -141,13 +155,14 @@ describe("FleetRail rendering", () => {
         cap={3}
         runningCount={1}
         queuedCount={2}
+        parkedCount={4}
         isDevEnvironment={false}
         onOpenQueueDrawer={vi.fn()}
         onSelectBuild={vi.fn()}
         onDeleteBuild={vi.fn()}
       />,
     );
-    expect(screen.getByTestId("fleet-header-label")).toHaveTextContent("Work in progress: 1 of 3 active · 2 waiting");
+    expect(screen.getByTestId("fleet-header-label")).toHaveTextContent("Needs you: 0 · Working: 1 · Waiting: 2 · Parked: 4");
     expect(screen.queryByLabelText("Queued, position 2")).not.toBeInTheDocument();
   });
 

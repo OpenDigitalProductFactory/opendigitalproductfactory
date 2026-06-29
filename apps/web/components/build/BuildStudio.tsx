@@ -27,11 +27,11 @@ import { BuildAssuranceGateCard } from "./BuildAssuranceGateCard";
 import { BuildListItem } from "./BuildListItem";
 import { EpicRollupListItem } from "./EpicRollupListItem";
 import {
-  DEFAULT_BUILD_STUDIO_WIP_SLOT_CAP,
   deriveFleetCounts,
   deriveNeedsAttention,
   deriveQueueState,
-  formatFleetHeader,
+  formatOperatorFocusHeader,
+  isOperatorFocusEntry,
 } from "./fleet-derivation";
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
@@ -1140,6 +1140,7 @@ function BsQueueSection({ builds }: { builds: readonly FeatureBuildRow[] }) {
   }));
   const kindRank = { running: 0, blocked: 1, queued: 2, idle: 3 } as const;
   const sorted = [...entries].sort((a, b) => {
+    if (a.needsAttention !== b.needsAttention) return a.needsAttention ? -1 : 1;
     const ra = kindRank[a.queueState.kind];
     const rb = kindRank[b.queueState.kind];
     if (ra !== rb) return ra - rb;
@@ -1425,51 +1426,82 @@ function FleetRailZone({
     return a.build.buildId.localeCompare(b.build.buildId);
   });
 
-  // Split entries into active (needs attention) vs completed (historical). The
-  // fleet rail surfaces what needs attention; completed work is one click away
-  // via the "{N} completed" toggle below. Current-work overflow is folded by
-  // default so the operator sees a bounded list, not the entire backlog.
-  const activeEntries = sorted.filter((e) => e.build.phase !== "complete");
+  // Split entries into focus work, parked coworker-custody work, and completed
+  // history. Quiet ideation/planning probes stay out of the operator's default
+  // list until they run, block, ask for a decision, or are selected.
+  const nonCompletedEntries = sorted.filter((e) => e.build.phase !== "complete");
+  const focusEntries = nonCompletedEntries.filter((entry) =>
+    isOperatorFocusEntry(entry, activeBuildId),
+  );
+  const parkedEntries = nonCompletedEntries.filter((entry) =>
+    !isOperatorFocusEntry(entry, activeBuildId),
+  );
   const completedEntries = sorted.filter((e) => e.build.phase === "complete");
-  const activeEpicRollups = epicRollups.filter((rollup) => rollup.status !== "complete");
+  const isFocusRollup = (rollup: EpicRollupView) => {
+    if (rollup.status === "complete") return false;
+    if (rollup.status === "needs-attention" || rollup.status === "blocked") return true;
+    if (rollup.children.some((child) => child.buildId === activeBuildId)) return true;
+    return rollup.children.some((child) => child.phase === "build" || child.phase === "review");
+  };
+  const focusEpicRollups = epicRollups.filter(isFocusRollup);
+  const parkedEpicRollups = epicRollups.filter((rollup) =>
+    rollup.status !== "complete" && !isFocusRollup(rollup),
+  );
   const completedEpicRollups = epicRollups.filter((rollup) => rollup.status === "complete");
   const completedItemCount = completedEntries.length + completedEpicRollups.length;
   const [showCompleted, setShowCompleted] = useState(false);
-  const [showAllActive, setShowAllActive] = useState(false);
+  const [showAllFocus, setShowAllFocus] = useState(false);
 
-  const counts = deriveFleetCounts(entries.map((e) => e.queueState));
-  const wipSlotCap = Math.max(DEFAULT_BUILD_STUDIO_WIP_SLOT_CAP, counts.runningCount);
-  const totalActiveItemCount = activeEpicRollups.length + activeEntries.length;
-  const shouldCollapseActive = totalActiveItemCount > MAX_OPERATOR_FLEET_ITEMS && !showAllActive;
+  const counts = deriveFleetCounts(focusEntries.map((e) => e.queueState));
+  const parkedItemCount = parkedEntries.length + parkedEpicRollups.length;
+  const needsYouCount =
+    focusEntries.filter((entry) => entry.needsAttention).length
+    + focusEpicRollups.filter((rollup) => rollup.status === "needs-attention").length;
+  const blockedCount =
+    focusEntries.filter((entry) => !entry.needsAttention && entry.queueState.kind === "blocked").length
+    + focusEpicRollups.filter((rollup) => rollup.status === "blocked").length;
+  const workingEpicCount = focusEpicRollups.filter((rollup) =>
+    rollup.status === "in-progress"
+    && rollup.children.some((child) => child.phase === "build" || child.phase === "review"),
+  ).length;
+  const focusHeaderLabel = formatOperatorFocusHeader({
+    needsYouCount,
+    workingCount: counts.runningCount + workingEpicCount,
+    blockedCount,
+    queuedCount: counts.queuedCount,
+    parkedCount: parkedItemCount,
+  });
+  const totalFocusItemCount = focusEpicRollups.length + focusEntries.length;
+  const shouldCollapseFocus = totalFocusItemCount > MAX_OPERATOR_FLEET_ITEMS && !showAllFocus;
 
-  let visibleActiveEpicRollups = activeEpicRollups;
-  let visibleActiveEntries = activeEntries;
-  if (shouldCollapseActive) {
-    const activeEpicIndex = activeEpicRollups.findIndex((rollup) =>
+  let visibleFocusEpicRollups = focusEpicRollups;
+  let visibleFocusEntries = focusEntries;
+  if (shouldCollapseFocus) {
+    const activeEpicIndex = focusEpicRollups.findIndex((rollup) =>
       rollup.children.some((child) => child.buildId === activeBuildId),
     );
-    const activeEntryIndex = activeEntries.findIndex((entry) => entry.build.buildId === activeBuildId);
-    visibleActiveEpicRollups = activeEpicRollups.slice(0, Math.min(MAX_OPERATOR_FLEET_ITEMS, activeEpicRollups.length));
-    let remainingSlots = Math.max(0, MAX_OPERATOR_FLEET_ITEMS - visibleActiveEpicRollups.length);
+    const activeEntryIndex = focusEntries.findIndex((entry) => entry.build.buildId === activeBuildId);
+    visibleFocusEpicRollups = focusEpicRollups.slice(0, Math.min(MAX_OPERATOR_FLEET_ITEMS, focusEpicRollups.length));
+    let remainingSlots = Math.max(0, MAX_OPERATOR_FLEET_ITEMS - visibleFocusEpicRollups.length);
 
-    if (activeEpicIndex >= MAX_OPERATOR_FLEET_ITEMS && visibleActiveEpicRollups.length > 0) {
-      visibleActiveEpicRollups = [
-        ...visibleActiveEpicRollups.slice(0, MAX_OPERATOR_FLEET_ITEMS - 1),
-        activeEpicRollups[activeEpicIndex],
+    if (activeEpicIndex >= MAX_OPERATOR_FLEET_ITEMS && visibleFocusEpicRollups.length > 0) {
+      visibleFocusEpicRollups = [
+        ...visibleFocusEpicRollups.slice(0, MAX_OPERATOR_FLEET_ITEMS - 1),
+        focusEpicRollups[activeEpicIndex],
       ];
       remainingSlots = 0;
     }
 
-    visibleActiveEntries = activeEntries.slice(0, remainingSlots);
+    visibleFocusEntries = focusEntries.slice(0, remainingSlots);
     if (activeEntryIndex >= remainingSlots && remainingSlots > 0) {
-      visibleActiveEntries = [
-        ...visibleActiveEntries.slice(0, remainingSlots - 1),
-        activeEntries[activeEntryIndex],
+      visibleFocusEntries = [
+        ...visibleFocusEntries.slice(0, remainingSlots - 1),
+        focusEntries[activeEntryIndex],
       ];
     }
   }
-  const hiddenActiveItemCount =
-    totalActiveItemCount - visibleActiveEpicRollups.length - visibleActiveEntries.length;
+  const hiddenFocusItemCount =
+    totalFocusItemCount - visibleFocusEpicRollups.length - visibleFocusEntries.length;
 
   useEffect(() => {
     if (!activeBuildId) return;
@@ -1510,30 +1542,27 @@ function FleetRailZone({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Compact fleet header — surfaces in-flight aggregate so the
-          operator can see queue pressure without opening every build.
-          Click opens the DetailsDrawer's BS-Queue section. */}
+      {/* Compact fleet header — summarizes the focus queue while quiet work
+          stays under AI Coworker custody. Click opens the DetailsDrawer's
+          BS-Queue section for the full diagnostic view. */}
       <button
         type="button"
         onClick={onOpenQueueDrawer}
         role="status"
         aria-live="polite"
-        aria-label={`Open build details drawer - queue section. ${formatFleetHeader(counts.runningCount, wipSlotCap, counts.queuedCount)}`}
+        aria-label={`Open build details drawer - queue section. ${focusHeaderLabel}`}
         data-testid="build-studio-fleet-header"
         className="flex w-full shrink-0 cursor-pointer items-center justify-between border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--dpf-text)] transition-colors hover:bg-[var(--dpf-surface-3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
       >
         <span data-testid="fleet-header-label" className="inline-flex min-w-0 items-center gap-1">
           <span className="truncate">
-            {formatFleetHeader(counts.runningCount, wipSlotCap, counts.queuedCount)}
+            {focusHeaderLabel}
           </span>
-          {counts.blockedCount > 0 && (
-            <> · <span className="text-[var(--dpf-warning)]">{counts.blockedCount} blocked</span></>
-          )}
         </span>
         <span aria-hidden="true" className="text-[var(--dpf-muted)]">›</span>
       </button>
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1" data-testid="fleet-rail-body">
-        {visibleActiveEpicRollups.map((rollup, idx) => (
+        {visibleFocusEpicRollups.map((rollup, idx) => (
           <li key={rollup.epicId}>
             <EpicRollupListItem
               rollup={rollup}
@@ -1545,12 +1574,12 @@ function FleetRailZone({
             />
           </li>
         ))}
-        {visibleActiveEntries.map((entry, idx) => (
+        {visibleFocusEntries.map((entry, idx) => (
           <li key={entry.build.buildId}>
             <BuildListItem
               build={entry.build}
               active={activeBuildId === entry.build.buildId}
-              index={visibleActiveEpicRollups.length + idx}
+              index={visibleFocusEpicRollups.length + idx}
               lifecycleLabel={entry.lifecycleLabel}
               isDevEnvironment={isDevEnvironment}
               density="fleet"
@@ -1561,29 +1590,40 @@ function FleetRailZone({
             />
           </li>
         ))}
-        {visibleActiveEpicRollups.length === 0 && visibleActiveEntries.length === 0 && (
+        {visibleFocusEpicRollups.length === 0 && visibleFocusEntries.length === 0 && (
           <li className="px-3 py-6 text-center text-[11px] text-[var(--dpf-muted)]">
-            No active builds. Type a feature name above and click "Start a new build" to start.
+            Nothing needs you right now. AI Coworker is watching the build queue.
           </li>
         )}
-        {totalActiveItemCount > MAX_OPERATOR_FLEET_ITEMS && (
+        {parkedItemCount > 0 && (
+          <li>
+            <button
+              type="button"
+              onClick={onOpenQueueDrawer}
+              className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-left text-[11px] leading-snug text-[var(--dpf-muted)] transition-colors hover:bg-[var(--dpf-surface-3)] hover:text-[var(--dpf-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+            >
+              AI Coworker is watching {parkedItemCount} parked build{parkedItemCount === 1 ? "" : "s"}. Open details for the full queue.
+            </button>
+          </li>
+        )}
+        {totalFocusItemCount > MAX_OPERATOR_FLEET_ITEMS && (
           <li>
             <div className="mt-1 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-[11px] leading-snug text-[var(--dpf-muted)]">
               <p>
-                {showAllActive
-                  ? "AI Coworker is tracking all current builds."
-                  : `AI Coworker is tracking ${hiddenActiveItemCount} more build${hiddenActiveItemCount === 1 ? "" : "s"}.`}
+                {showAllFocus
+                  ? "AI Coworker is showing all focus work."
+                  : `AI Coworker is keeping ${hiddenFocusItemCount} more focus build${hiddenFocusItemCount === 1 ? "" : "s"} ready.`}
               </p>
               <button
                 type="button"
-                onClick={() => setShowAllActive((v) => !v)}
-                aria-expanded={showAllActive}
+                onClick={() => setShowAllFocus((v) => !v)}
+                aria-expanded={showAllFocus}
                 data-testid="fleet-rail-active-toggle"
                 className="mt-1 inline-flex rounded px-0 text-[11px] font-semibold text-[var(--dpf-accent)] hover:text-[var(--dpf-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
               >
-                {showAllActive
-                  ? "Show fewer builds"
-                  : `Show ${hiddenActiveItemCount} more build${hiddenActiveItemCount === 1 ? "" : "s"}`}
+                {showAllFocus
+                  ? "Show fewer focus builds"
+                  : `Show ${hiddenFocusItemCount} more focus build${hiddenFocusItemCount === 1 ? "" : "s"}`}
               </button>
             </div>
           </li>
@@ -1616,7 +1656,7 @@ function FleetRailZone({
                         rollup={rollup}
                         activeBuildId={activeBuildId}
                         expanded={expandedEpicIds.has(rollup.epicId)}
-                        index={visibleActiveEpicRollups.length + visibleActiveEntries.length + idx}
+                        index={visibleFocusEpicRollups.length + visibleFocusEntries.length + idx}
                         onToggle={() => toggleEpic(rollup.epicId)}
                         onSelectBuild={onSelectBuildById}
                       />
@@ -1627,7 +1667,7 @@ function FleetRailZone({
                       <BuildListItem
                         build={entry.build}
                         active={activeBuildId === entry.build.buildId}
-                        index={visibleActiveEpicRollups.length + visibleActiveEntries.length + completedEpicRollups.length + idx}
+                        index={visibleFocusEpicRollups.length + visibleFocusEntries.length + completedEpicRollups.length + idx}
                         lifecycleLabel={entry.lifecycleLabel}
                         isDevEnvironment={isDevEnvironment}
                         density="fleet"
