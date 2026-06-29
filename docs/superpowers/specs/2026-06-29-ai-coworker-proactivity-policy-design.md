@@ -121,6 +121,21 @@ Adopted pattern: silence is a signal. DPF already has Build Studio stall detecti
 
 Rejected pattern: background polling with no explicit policy or heartbeat/attempt accounting.
 
+### 4.5 Iconography and color accessibility
+
+NN/g's icon-usability guidance says icons are often ambiguous without visible labels, even when they save space. W3C WCAG 2.2 guidance for use of color says color should not be the only way information is conveyed. Sources: [NN/g Icon Usability](https://www.nngroup.com/articles/icon-usability/), [WCAG Understanding SC 1.4.1 Use of Color](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html).
+
+Lucide's `Gauge` and `CircleGauge` icons fit the dimension because they represent a dial, meter, speed, measure, and level. That maps to proactivity better than symbols that imply danger, alerts, or automatic permission. Sources: [Lucide Gauge](https://lucide.dev/icons/gauge), [Lucide CircleGauge](https://lucide.dev/icons/circle-gauge).
+
+Adopted pattern: use a gauge/speedometer-style symbol plus the text label. The symbol communicates adjustable intensity; the label disambiguates that the dimension is proactivity, not safety, priority, or authority.
+
+Rejected patterns:
+
+- Alert/warning symbol: reads as an incident or danger state, not a user-controlled behavior posture.
+- Flame/lightning symbol: reads as urgency, but can imply unsafe action or escalation.
+- Pure traffic-light dots: compact, but color-only without a semantic shape.
+- Three unrelated symbols for the three levels: creates recognition cost and makes the setting feel like three different modes instead of one adjustable dimension.
+
 ## 5. Core Concepts
 
 ### 5.1 Closed enum
@@ -293,13 +308,17 @@ The proactivity chip should be compact enough to fit in the available horizontal
 
 Recommended visual language:
 
-| Level | Accent | Meaning |
-| --- | --- | --- |
-| Quiet | Green | Minimum unsolicited follow-up. |
-| Balanced | Yellow | Normal default persistence. |
-| Assertive | Red | Aggressive monitoring, earlier warning, faster escalation. |
+| Level | Symbol treatment | Accent | Meaning |
+| --- | --- | --- | --- |
+| Quiet | Gauge needle low-left, calm fill/arc | Green | Minimum unsolicited follow-up. |
+| Balanced | Gauge needle centered | Yellow | Normal default persistence. |
+| Assertive | Gauge needle high-right, stronger fill/arc | Red | Aggressive monitoring, earlier warning, faster escalation. |
 
 Use these colors as accents only, paired with the text label and accessible name. Color must not be the only signal. The red state should communicate stronger persistence, not danger or unauthorized action.
+
+Preferred symbol: a compact gauge/speedometer icon, implemented with `Gauge` or `CircleGauge` from `lucide-react` where possible. If a level-specific needle position is required and the stock icon cannot express it, create a tiny local `ProactivityGaugeIcon` using the same stroke width and sizing conventions as Lucide. Keep it visually parallel to the golden triangle: compact, geometric, and meaningful at 14-16px.
+
+Do not use warning triangles, alert circles, flame/lightning marks, or color-only dots for the main resting-state symbol.
 
 Click opens a small segmented control:
 
