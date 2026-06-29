@@ -159,6 +159,7 @@ describe("buildSandboxSourceCurrencyProbeCommand", () => {
     expect(command).toContain("status --porcelain --untracked-files=all -- .");
     expect(command).toContain("localSourceChangeCount");
     expect(command).toContain(":!**/.next/**");
+    expect(command).toContain(":!apps/web/next-env.d.ts");
     expect(command).toContain(":!.pnpm-store");
   });
 });

@@ -36,6 +36,7 @@ function makeDb(overrides: Partial<SandboxRecoveryDb> = {}): SandboxRecoveryDb {
       updateMany: vi.fn(),
     },
     featureBuild: {
+      findUnique: vi.fn(),
       update: vi.fn(),
     },
     ...overrides,
@@ -130,5 +131,56 @@ describe("recoverSandbox", () => {
       where: { buildId: "FB-TEST" },
       data: expect.objectContaining({ status: "available", buildId: null }),
     }));
+  });
+
+  it("checks out the registered build branch after preserving stale in-flight work", async () => {
+    const runCommand = vi.fn().mockResolvedValue("");
+    const recordActivity = vi.fn();
+    const db = makeDb({
+      featureBuild: {
+        findUnique: vi.fn().mockResolvedValue({ buildBranch: "build/FB-TEST" }),
+        update: vi.fn(),
+      },
+    });
+
+    const result = await recoverSandbox({
+      buildId: "FB-TEST",
+      action: "checkout_registered_branch",
+      confirmation: null,
+      diagnose: vi.fn()
+        .mockResolvedValueOnce(snapshot({
+          state: "branch_mismatch",
+          containerId: "dpf-sandbox-1",
+          branchName: "build/FB-STALE",
+        }))
+        .mockResolvedValueOnce(snapshot({
+          state: "healthy",
+          canDeploy: true,
+          canContribute: true,
+          summary: "healthy",
+          branchName: "build/FB-TEST",
+        })),
+      runCommand,
+      recordActivity,
+      db,
+    });
+
+    expect(result.success).toBe(true);
+    expect(runCommand).toHaveBeenCalledWith("docker", [
+      "exec",
+      "dpf-sandbox-1",
+      "sh",
+      "-lc",
+      expect.stringContaining("git -C /workspace checkout 'build/FB-TEST'"),
+    ]);
+    const command = (runCommand.mock.calls[0]?.[1] as string[])[4] ?? "";
+    expect(command).toContain("preserve in-flight build work before branch switch");
+    expect(command).toContain("git reset --hard HEAD");
+    expect(command).toContain("git -C /workspace update-index --skip-worktree apps/web/next-env.d.ts");
+    expect(recordActivity).toHaveBeenCalledWith(
+      "FB-TEST",
+      "sandbox_recovery: checkout_registered_branch build/FB-TEST",
+    );
+    expect(result.snapshot?.state).toBe("healthy");
   });
 });

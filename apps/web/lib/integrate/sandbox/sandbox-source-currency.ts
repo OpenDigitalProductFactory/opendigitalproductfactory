@@ -57,6 +57,9 @@ const SOURCE_DIFF_EXCLUDES = [
   ":!**/.pnpm-store/**",
   ":!*.tsbuildinfo",
   ":!**/*.tsbuildinfo",
+  // Next dev rewrites this tracked generated shim between .next/types and
+  // .next/dev/types. It is not build source and must not stall recovery.
+  ":!apps/web/next-env.d.ts",
   ":!pnpm-lock*",
   ":!**/generated/client/**",
   ":!packages/db/generated/**",

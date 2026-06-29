@@ -3,6 +3,12 @@ import { prisma } from "@dpf/db";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 
 import { diagnoseSandboxReadiness } from "./sandbox-admin";
+import {
+  buildSandboxBranchSwitchPrepCommand,
+  buildSandboxCommitInFlightWorkCommand,
+  buildSandboxGitCleanCommand,
+  wrapSandboxGitCommand,
+} from "./build-branch";
 import type {
   SandboxReadinessSnapshot,
   SandboxRecoveryAction,
@@ -29,6 +35,7 @@ export type SandboxRecoveryDb = {
     updateMany(args: unknown): Promise<unknown>;
   };
   featureBuild?: {
+    findUnique?(args: unknown): Promise<{ buildBranch?: string | null } | null>;
     update(args: unknown): Promise<unknown>;
   };
 };
@@ -123,8 +130,16 @@ export async function recoverSandbox(args: RecoverSandboxArgs): Promise<SandboxR
         snapshot: before,
       };
 
-    case "rebind_runtime_target":
     case "checkout_registered_branch":
+      return checkoutRegisteredBranch({
+        ...args,
+        db,
+        diagnose,
+        runCommand,
+        before,
+      });
+
+    case "rebind_runtime_target":
       return {
         success: false,
         error: "recovery action not implemented",
@@ -132,6 +147,51 @@ export async function recoverSandbox(args: RecoverSandboxArgs): Promise<SandboxR
         snapshot: before,
       };
   }
+}
+
+async function checkoutRegisteredBranch(args: RecoverSandboxArgs & {
+  db: SandboxRecoveryDb;
+  diagnose: (buildId: string) => Promise<SandboxReadinessSnapshot>;
+  runCommand: (command: string, args: string[]) => Promise<string>;
+  before: SandboxReadinessSnapshot;
+}): Promise<SandboxRecoveryResult> {
+  const containerId = requireContainerId(args.before);
+  if (!containerId) {
+    return {
+      success: false,
+      error: "container id missing",
+      message: "Sandbox recovery cannot run because the diagnosis did not return a container id.",
+      snapshot: args.before,
+    };
+  }
+
+  const branchName = await resolveRegisteredBuildBranch(args.db, args.buildId);
+  if (!branchName) {
+    return {
+      success: false,
+      error: "build branch missing",
+      message: "Sandbox recovery cannot checkout the registered branch because this build has no buildBranch on record.",
+      snapshot: args.before,
+    };
+  }
+
+  const command = wrapSandboxGitCommand([
+    buildSandboxCommitInFlightWorkCommand(),
+    buildSandboxBranchSwitchPrepCommand(),
+    buildSandboxGitCleanCommand(),
+    `git -C /workspace checkout ${shellQuote(branchName)}`,
+    // Next dev rewrites this tracked generated shim on boot; hide it from
+    // readiness checks without changing source.
+    `git -C /workspace update-index --skip-worktree apps/web/next-env.d.ts 2>/dev/null || true`,
+  ].join(" && "));
+
+  await args.runCommand("docker", ["exec", containerId, "sh", "-lc", command]);
+  await recordRecoveryActivity(
+    args,
+    args.db,
+    `sandbox_recovery: checkout_registered_branch ${branchName}`,
+  );
+  return successWithSnapshot(args.buildId, "Registered build branch checked out.", args.diagnose);
 }
 
 async function runContainerAction(args: {
@@ -290,8 +350,21 @@ function requireContainerId(snapshot: SandboxReadinessSnapshot): string {
   return snapshot.containerId ?? "";
 }
 
+async function resolveRegisteredBuildBranch(db: SandboxRecoveryDb, buildId: string): Promise<string | null> {
+  const build = await db.featureBuild?.findUnique?.({
+    where: { buildId },
+    select: { buildBranch: true },
+  });
+  const branchName = build?.buildBranch?.trim();
+  return branchName || null;
+}
+
 function hasReason(confirmation: NonNullable<SandboxRecoveryConfirmation>): boolean {
   return typeof confirmation.reason === "string" && confirmation.reason.trim().length > 0;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
 async function runCommandDefault(command: string, args: string[]): Promise<string> {
