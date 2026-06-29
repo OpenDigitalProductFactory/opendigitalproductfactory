@@ -281,11 +281,25 @@ Examples:
 
 ## 8. UX Design
 
-### 8.1 Coworker panel header
+### 8.1 Coworker composer critical-settings dock
 
-Add one compact header affordance near existing mode/profile controls:
+The primary coworker-chat placement is the existing golden-triangle priority dock just above the composer input (`CoworkerPriorityDock`). Proactivity is another critical behavior setting, so it should sit immediately to the right of the collapsed golden-triangle chip in the same strip.
 
-`Proactivity: Balanced`
+Collapsed resting state:
+
+`Priority  Higher Reasoning    Proactivity  Balanced`
+
+The proactivity chip should be compact enough to fit in the available horizontal space to the right of the triangle. It is a sibling control, not a replacement for the triangle. Priority answers cost/quality/time posture; proactivity answers how persistently the coworker should pursue allowed work.
+
+Recommended visual language:
+
+| Level | Accent | Meaning |
+| --- | --- | --- |
+| Quiet | Green | Minimum unsolicited follow-up. |
+| Balanced | Yellow | Normal default persistence. |
+| Assertive | Red | Aggressive monitoring, earlier warning, faster escalation. |
+
+Use these colors as accents only, paired with the text label and accessible name. Color must not be the only signal. The red state should communicate stronger persistence, not danger or unauthorized action.
 
 Click opens a small segmented control:
 
@@ -297,9 +311,13 @@ Plain-language helper copy:
 - Balanced: "Follow up when timing, commitments, or risk make it useful."
 - Assertive: "Stay on this, warn earlier, and escalate sooner when allowed."
 
-The control should use familiar segmented-button styling, theme tokens, and no hardcoded color. It must not crowd mobile. On narrow widths, fold it into the profile/settings disclosure rather than expanding the header row.
+The control should use familiar segmented-button styling, theme tokens, and no hardcoded color. It must not crowd mobile. On narrow widths, fold it into the existing profile/settings disclosure or a second line inside the dock rather than forcing the composer/header to overflow.
 
-### 8.2 Coworker profile
+### 8.2 Coworker panel header
+
+The broader panel header may also show a read-only proactivity status when space allows, but editing should happen in the composer critical-settings dock and profile/settings surfaces. This keeps the behavior control close to where the operator is actively talking to the coworker.
+
+### 8.3 Coworker profile
 
 `CoworkerProfilePanel` gains a "Proactivity" section:
 
@@ -311,7 +329,7 @@ The control should use familiar segmented-button styling, theme tokens, and no h
 
 Advanced details include cadence, max attempts, spend class, channels, escalation target, and action boundary.
 
-### 8.3 Scheduled Work / AI Operations
+### 8.4 Scheduled Work / AI Operations
 
 Scheduled work and AI Operations surfaces show the effective proactivity plan for recurring activity. Operators can filter for:
 
@@ -321,7 +339,7 @@ Scheduled work and AI Operations surfaces show the effective proactivity plan fo
 - policies with repeated ignored attempts,
 - coworker-proposed policy changes pending acknowledgement.
 
-### 8.4 Attention Surface
+### 8.5 Attention Surface
 
 The Attention Surface should render proactivity as one reason an item appears:
 
@@ -529,13 +547,15 @@ Acceptance:
 Files:
 
 - Modify `apps/web/components/agent/AgentPanelHeader.tsx`
+- Modify `apps/web/components/golden-triangle/CoworkerPriorityDock.tsx`
 - Modify `apps/web/components/agent/CoworkerProfilePanel.tsx`
 - Add small presentational component if needed: `ProactivityLevelControl.tsx`
 
 Acceptance:
 
-- compact level control renders without crowding desktop header.
+- compact level control renders beside the golden-triangle priority chip without crowding the composer dock.
 - mobile folds control into profile/details.
+- green/yellow/red accents map Quiet/Balanced/Assertive while preserving text labels and accessible names.
 - copy uses shared proactivity copy.
 - admin profile shows advanced details.
 - no hardcoded colors.
