@@ -59,6 +59,14 @@ Design anchor: [Attention Surface §3.4](../specs/2026-06-23-human-attention-sur
 
 WWMD/UX-Fit-Decision: choose the Attention Surface amendment plus Build Studio pilot over a Build-Studio-only addendum or a standalone new spec. `principle_decide` recommended this direction with high confidence (composite 9.479, margin 2.200, commandmentConflict:false). The merits are the deciding rationale: no duplicate queue, no second backlog, no fabricated priority score, and a clear path from a painful Build Studio incident to a reusable coworker primitive.
 
+Implementation slice:
+
+- Add a pure `deriveBuildStudioCustodianPrompt` projection next to the existing workflow-action derivation. It watches the same source-owned build state plus `BuildProgressVisibility` quiet-agent signals; it does not introduce a new table or queue.
+- Render `BuildStudioCustodianCallout` only when the prompt is active. In compact mode it replaces the normal `ActionBanner`, so the operator still sees one visible status surface and one primary action rather than a stacked alert plus banner.
+- Covered prompt classes: UX-review evidence gaps (including the "retry felt inert" case), quiet review/build states, missing-evidence gates, and existing guided repair paths (`rerun-plan-review`, `resume-implementation`, retry/reset).
+- Add session snooze and collapsed "Show why" context. Snooze is intentionally local/session-scoped for the pilot; the platform primitive (`BI-5B6F666F`) owns durable cross-coworker quiet thresholds.
+- Primary actions reuse existing plumbing: workflow recovery uses the existing Build Studio primary action handler; coworker custody opens the existing agent panel with a narrowed custodian prompt.
+
 ## Verification
 
 Source-only worktree → typecheck / vitest / production build / migration-apply are CI-gated. Band 2's parser + the band component are unit/render tested. The narrative's *generation quality* depends on the model tier (local vs robust) and is validated by a real build run; the structure ships now so it is ready the moment a build completes.

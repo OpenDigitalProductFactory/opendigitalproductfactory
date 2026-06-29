@@ -568,6 +568,37 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).not.toContain('data-testid="action-banner-detail"');
   });
 
+  it("replaces the compact banner with custodian help when review recovery would otherwise look inert", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild({
+          phase: "review",
+          draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+          buildPlan: {
+            fileStructure: [{ path: "apps/web/components/build/BuildStudio.tsx", action: "modify", purpose: "Surface proactive help." }],
+            tasks: [{ title: "Add proactive help", testFirst: "Add tests.", implement: "Render the prompt.", verify: "Run checks." }],
+          },
+          planReview: {
+            decision: "pass",
+            summary: "Ready to review.",
+            issues: [],
+          },
+          uxVerificationStatus: "failed",
+          uxTestResults: [{ step: "Open the build", passed: false, screenshotUrl: null, error: "No evidence captured." }],
+        })]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    expect(html).toContain('data-testid="build-studio-custodian-callout"');
+    expect(html).toContain("I can collect what is missing.");
+    expect(html.match(/Finish review with coworker/g)).toHaveLength(1);
+    expect(html).not.toContain('data-testid="build-studio-action-banner"');
+  });
+
   it("mounts the footer OpenSandboxButton — single shared sandbox link", () => {
     // Footer surfaces the shared sandbox without resorting to a per-build
     // Preview tab. When a build has a live sandboxPort, the footer button
