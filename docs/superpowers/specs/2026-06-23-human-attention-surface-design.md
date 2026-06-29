@@ -10,6 +10,7 @@
 | Related substrate | [`Notification`](../../../packages/db/prisma/schema.prisma) (schema.prisma:4362), [`/api/v1/notifications`](../../../apps/web/app/api/v1/notifications/route.ts), [`/api/v1/governance/approvals`](../../../apps/web/app/api/v1/governance/approvals/route.ts), [`command-center`](../../../apps/web/lib/workspace/command-center.ts), [`escalation-attention`](../../../apps/web/lib/quality/escalation-attention.ts), [`evaluateDecisionPerspective`](../../../apps/web/lib/decision-perspective/evaluator.ts), [`evaluateBuildStudioDecision`](../../../apps/web/lib/build/decision-service.ts), [`option-scoring`](../../../apps/web/lib/decision/option-scoring.ts), [`founder-review`](../../../apps/web/app/(shell)/platform/ai/founder-review/page.tsx), [`portal-navigation-model`](../../../apps/web/lib/navigation/portal-navigation-model.ts). |
 | Related designs | [Paused AI work approval surface](../plans/2026-05-13-paused-ai-work-approval-surface.md), [Realtime HITL + mobile companion](2026-05-13-realtime-hitl-mobile-companion-design.md), [Portal UX simplification spine](../plans/2026-05-26-portal-ux-simplification-spine.md), [Build Studio overseer UX](2026-06-22-build-studio-overseer-ux-design.md). |
 | Composes epics | `EP-INTAKE-UNIFY` (the WORK front door — peer), `EP-WWMD-MCP` (record-outcome write-back), `EP-HITL-MOBILE` (channels), `EP-COWORKER-INTERACTIVITY` (cross-page HITL handoff), `EP-LEARNING-COMMONS` (trust-dial tuning), `EP-BUILD-STUDIO-UX` (BI-FD796419 "Where we need you" band), `EP-NAV-COHERENCE` (DONE — nav rules to obey). |
+| 2026-06-29 addendum | Founder direction: AI Coworkers should act as proactive custodians, not passive task lists. Backlog: `BI-5B6F666F` (platform primitive) + `BI-ACB04A21` (Build Studio pilot). |
 
 ---
 
@@ -87,6 +88,8 @@ Mature human-in-the-loop products converge on two delivery shapes, and DPF shoul
 
 Security constraints carried from OWASP agentic guidance (already cited in the paused-work plan): no unauthenticated one-tap approval of high-risk/irreversible actions; the AI-written brief is never the *only* evidence (raw action shown beside it); every decision is audited; the channel must resist summary-forging ("Lies in the Loop").
 
+**Todoist precedent (focus discipline, not the operating model).** Mark named Todoist as the everyday mental model: a human-managed list that keeps attention focused. Current Todoist docs show the familiar primitives: priorities lift important timed work near the top of Today/Upcoming, filters narrow tasks by date/project/label/priority, and reminders nudge around dated work ([priorities](https://www.todoist.com/help/articles/set-a-priority-in-todoist-Wy82Jp), [filters](https://www.todoist.com/help/articles/introduction-to-filters-V98wIH), [reminders](https://www.todoist.com/help/articles/introduction-to-reminders-9PezfU)). DPF should adopt the focus discipline — clear order, filters, reminders, snooze — but reject the manual-list premise. The coworker already owns live operational context, so it should generate attention from source state and explain why it is interrupting.
+
 ---
 
 ## 3. The kernels-first routing pipeline (the spine)
@@ -135,6 +138,29 @@ From the attendance design §14, kept as a first-class acceptance constraint, no
 
 For V1 the dial is **conservative everywhere**: every consequential item is propose-and-review. Autonomy graduates per decision-class only as evidence earns it. This is the same posture the escalation auto-resolve took in #2315 (resolve only on provably-settled state).
 
+### 3.4 Proactive custodian mode — quiet until useful
+
+The long-term posture is not "AI creates more tasks for the human." It is **AI Coworker as custodian**: the coworker watches its own work, the human-facing surface, and the relevant source-owned state, then steps forward only when doing so reduces uncertainty or keeps work moving.
+
+This mode is cross-coworker. Build Studio is the first pilot because the 2026-06-29 live incident made the gap concrete: the operator clicked **Retry UX Verification**, work was technically enqueued, but the page still felt inert while hidden blockers accumulated (browser-use import crash, sandbox branch mismatch, missing recovery implementation, then an acceptance-criteria mismatch). A non-technical user should never need to reverse-engineer that from build IDs, branch chips, phase labels, or logs. The coworker should say, in one line, what is happening and what it can safely do next.
+
+**Custodian trigger classes (source-state driven, not vibes):**
+
+1. **Human required:** the existing attention residue path — approvals, escalations, paused work, missing evidence, review decisions.
+2. **Work appears inert:** the user took an action or a build entered a state, but no visible progress/evidence/result appears inside a bounded time window.
+3. **Safe self-recovery is available:** the coworker can retry, resume, refresh evidence, repair a known transient condition, or collect missing context within its grants.
+4. **Priority materially changed:** a deadline, risk, blocker, or blast radius changed enough that the attention order should update.
+
+**Intervention contract:** every proactive intervention has a reason and a bounded action. It renders as: `Why now` (one line), `Recommended next action` (one primary button), and quiet alternatives (`Snooze`, `Show why`, `Let coworker handle it` when safe, or `Open details`). It must also state when no human action is required: "I'm working on it" is a valid status; "Waiting on you" is reserved for a real human decision. Internal identifiers, branch names, queue mechanics, and diagnostics stay behind engineer disclosure by default.
+
+**Anti-nagging rule:** the coworker remains silent while work is progressing normally. Producers debounce repeated signals per `(source, itemKey, triggerClass)`, suppress re-entry while an unread/active notification exists, and respect snooze/not-now decisions. Repeated failure after a self-recovery attempt escalates with the last attempted action and evidence, not another generic prompt.
+
+**Relationship to Todoist:** Todoist helps the human curate and revisit their list; DPF should instead curate from live operating state. The user may pin, snooze, group, or correct order, but the default list is produced by source adapters and the triage rules in §4.4. That distinction is the value of an AI Coworker: the human is not maintaining the system's awareness by hand.
+
+**Relationship to autonomy:** proactive does not mean unilateral. The trust dial in §3.3 still governs execution: low-risk reversible recovery may become "coworker handles it"; consequential or irreversible action remains propose-and-review. The intervention itself is a recommendation envelope, not a prompt-send or hidden authorization.
+
+**WWMD / UX-Fit decision (2026-06-29):** `principle_decide` scored three design-placement options and recommended **A: amend this Attention Surface spec and cross-link Build Studio as the pilot** with high confidence (composite 9.479, margin 2.200, commandmentConflict:false). The decision was also made on merits: this avoids a duplicate queue/spec, keeps source truth in the existing attention plane, and preserves Build Studio as the concrete proof point. The operator UX bar is: one status, one next action, and no jargon in the default view.
+
 ---
 
 ## 4. The aggregator — a projector over existing queues, riding the Notification backbone
@@ -181,6 +207,7 @@ Each source is a small pure adapter (`lib/attention/sources/<source>.ts`) return
 The projector answers "what's in the inbox right now." `Notification` answers "tell the human a *new* thing arrived" and carries the cross-channel delivery (§7). The `HitlNotificationEvent` contract from the mobile-companion spec is the canonical event:
 
 - When a source row enters a pending-human state (an escalation is filed, a `TaskRun` pauses, a `DecisionInteraction` records `escalate/defer`, a bill needs approval), the producer emits a `HitlNotificationEvent` and writes one user-targeted `Notification` row (`type`, `title`, `body`, `deepLink` to the inbox item, `read`). This is the under-used backbone from §1 finally carrying traffic.
+- When a source row enters a proactive-custodian trigger (§3.4), the producer uses the same event spine and dedup behavior. It does **not** create a new queue; it creates a timely attention signal for a source-owned fact.
 - The inbox list reads the **projector** (live truth); the notification feed + badges read **`Notification`** (the "new since you last looked" signal). One is state, the other is event. Per the mobile spec, add a narrow `NotificationDelivery` table **only if** per-channel retry/state is required — not in V1.
 - `agent-event-bus.ts` + `/api/agent/stream` (SSE) already exist for live portal refresh; reuse, don't add a transport.
 
@@ -209,6 +236,8 @@ Aggregation is necessary but not sufficient. A founder looking at a bill, a paus
 **Context on every card — what makes the order legible.** Each item answers "why this, why now" by surfacing its factors, plus two one-liners the founder specifically needs: **"what's blocked / what happens if you don't act"** (the consequence) and **"why it's here"** (the residue reason — the kernel's honest *"I couldn't decide this because…"*). That is the context without which prioritization is guesswork.
 
 **Triage controls — the human keeps the final call.** Pin, **snooze / defer-until** (a date; the item re-surfaces then), **group-by** (source / deadline / risk), and a per-item "not now" that records a *labeled triage decision*. The tiered order is a strong, explainable default; the human re-ranks with full context. And the trust dial (§3.3) applies to **triage** exactly as to decisions: as the AI's ordering proves correct (the human rarely re-orders a class), it earns the right to auto-snooze low-priority items and batch low-risk classes — triage autonomy earned by evidence, never asserted.
+
+**Proactive mode changes surfacing, not truth.** A custodian trigger (§3.4) can bring an item forward, add a "why now" line, or offer a recovery action, but it cannot invent urgency. It still derives from the same factors above and the same source-owned state. If the system cannot explain why it interrupted, it should not interrupt.
 
 **Distinct from the Golden Triangle.** `/platform/ai/priority` (the Golden Triangle, `EP-GOLDEN-TRIANGLE`) prioritizes AI *work effort* — a Cost/Quality/Time posture compiled into model tier, effort, and verification. Attention-triage prioritizes *human decisions* — which residue to address first. Different planes (like backlog vs attention): **compose the vocabulary, do not merge the surfaces.**
 
@@ -283,7 +312,8 @@ This surface is an **aggregator + router + home**. It deliberately owns very lit
 | Channels (push/email/mobile, event contract) | `EP-HITL-MOBILE` (4/6 done) | **Reuse.** `HitlNotificationEvent`, channel policy, `notification-adapter.ts` come from here. We are the portal surface those channels deep-link into. |
 | Cross-page HITL handoff, PUC envelope | `EP-COWORKER-INTERACTIVITY` | **Reuse.** A coworker handing a decision to a human routes into our inbox. |
 | Trust-dial tuning (override → refine scope) | `EP-LEARNING-COMMONS` (in-flight) | **Emit, don't build.** We emit the labeled-correction signal; the Commons refines WWMD/WWWD/WSID. |
-| Build "Where we need you" band | `EP-BUILD-STUDIO-UX` BI-FD796419 | **Compose.** The build overseer band is the build-scoped view of the same residue; it should render the inbox's build items, not a parallel queue. |
+| Proactive custodian mode | `EP-ATTENTION-SURFACE` `BI-5B6F666F` | **Own.** Cross-coworker contract for "quiet until useful" interventions: why now, one action, snooze/show-why, no duplicate task list. |
+| Build Studio custodian pilot | `EP-BUILD-STUDIO-UX` `BI-ACB04A21` (extends BI-FD796419) | **Compose.** Build Studio proves the pattern with one status + one next action per build, proactive stuck detection, and in-place guided recovery. It should render build attention through this plane, not a parallel queue. |
 | Nav rules | `EP-NAV-COHERENCE` (done) | **Obey.** No new rail; no cross-section secondary nav; audience-aware. |
 
 ---
@@ -317,6 +347,7 @@ Substrate verification for the epic: `EP-INTAKE-UNIFY` is the *work* front door 
 | 6 | BI-AS-6 | Realize the founder-review **resolution** loop: `wwmd_record_outcome` write-back from the inbox; founder-review becomes the `ai-decision` lens | M | Unblocks the disabled "Record outcome"; composes `EP-WWMD-MCP`; emits the `EP-LEARNING-COMMONS` correction signal. |
 | 7 | BI-AS-7 | Trust-dial overview: per-decision-class counts/outcomes/anomalies with drill-in; emit labeled-correction signal on override | M | §3.3 reviewer-of-evidence posture; feeds the Commons tuning loop. |
 | 8 | BI-AS-8 | **Triage & prioritization model** — per-item factors (time-to-act, risk, blast-radius, residue-reason, decide-effort), tiered ordering, "why this / why now" + "what's blocked" context lines, and snooze/pin/group-by controls. **No composite priority score**; the kernel ranks only genuinely-commensurable items | M | §4.4 — makes heterogeneous topics comparable *with the context that justifies the order* (Mark: prioritizing one over another is hard without triage + context). |
+| 9 | BI-5B6F666F | **Proactive AI Coworker custodian mode** — source-state triggers for human-required, inert/stalled, safe-self-recovery, and material-priority-change moments; render one "why now" line, one recommended action, snooze/show-why, and quiet thresholds. Build Studio pilot: BI-ACB04A21 | L | §3.4 — turns the Attention Surface from a passive inbox into the coworker's proactive team-custodian primitive without creating a second backlog or magic priority score. |
 
 Keystone BI-AS-1 ships the split, the home, and a basic tiered order; 2–3 make it kernels-first and live; 4–5 complete aggregation + channels; 6–7 close the resolution + tuning loops; 8 makes the queue genuinely triable (the founder's prioritization need) on top of the keystone's tiered baseline. Each is design-first input for Mark's review — **no feature code in this task.**
 
