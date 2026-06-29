@@ -142,6 +142,15 @@ export interface BuildExecuteRunEvent {
   };
 }
 
+export interface BuildPreBuildReviewRepairEvent {
+  name: "build/pre-build-review.repair";
+  data: {
+    buildId: string;
+    userId: string;
+    kind: "design" | "plan";
+  };
+}
+
 export interface AssuranceBomGenerateEvent {
   name: "assurance/bom.generate";
   data: {

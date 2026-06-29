@@ -8169,7 +8169,7 @@ export async function executeTool(
         if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
         logBuildActivity(buildId, "reviewDesignDoc", `Fix review: ${review.decision}. ${review.summary}`);
         if (review.decision === "fail") {
-          triggerDesignReviewAutoRepair(buildId, userId, context);
+          await triggerDesignReviewAutoRepair(buildId, userId, context);
           return { success: true, message: `Fix review FAILED. ${review.issues[0]?.description ?? review.summary}`, data: { review, blocked: true, action: "revise_and_resubmit" } };
         }
         let fixPhaseGateBlocker: string | null = null;
@@ -8347,7 +8347,7 @@ export async function executeTool(
 
       // Failed review → structured recovery instructions, no auto-advance
       if (review.decision === "fail") {
-        triggerDesignReviewAutoRepair(buildId, userId, context);
+        await triggerDesignReviewAutoRepair(buildId, userId, context);
         const criticalIssues = review.issues.filter((i: { severity: string }) => i.severity === "critical");
         const issueList = criticalIssues.length > 0
           ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
@@ -8658,7 +8658,7 @@ export async function executeTool(
           agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
         }
         logBuildActivity(buildId, "reviewBuildPlan", `Plan review: fail. ${review.summary}`);
-        triggerPlanReviewAutoRepair(buildId, userId, context);
+        await triggerPlanReviewAutoRepair(buildId, userId, context);
         return {
           success: true,
           message: `Plan review FAILED. Blocking issues: ${normalizedPlan.unresolvedModifyPaths.join(", ")} no longer exist in the repo. Revise the implementation plan to target the current files, then re-run reviewBuildPlan.`,
@@ -8833,7 +8833,7 @@ export async function executeTool(
           planReviewIsGating = true; // fail safe: keep the stricter loop on any gate-read error
         }
         if (planReviewIsGating) {
-          triggerPlanReviewAutoRepair(buildId, userId, context);
+          await triggerPlanReviewAutoRepair(buildId, userId, context);
           const criticalIssues = review.issues.filter((i: { severity: string }) => i.severity === "critical");
           const issueList = criticalIssues.length > 0
             ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
