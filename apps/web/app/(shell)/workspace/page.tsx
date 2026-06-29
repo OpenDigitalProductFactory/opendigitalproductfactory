@@ -44,7 +44,7 @@ export default async function WorkspacePage() {
       {/* The "Needs you" attention band — first-viewport decisions that need a human
           now, separate from the work backlog (EP-ATTENTION-SURFACE). Renders nothing
           when the queue is empty. */}
-      <NeedsYouBand />
+      <NeedsYouBand userId={session.user.id} />
       <PlatformWorkspaceHome data={platformHomeData} />
     </div>
   );

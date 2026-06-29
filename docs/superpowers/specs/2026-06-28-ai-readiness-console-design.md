@@ -128,7 +128,14 @@ Add a top-level AI route:
 - `/platform/ai/model-assignment` or existing routing views - routing policy detail
 - `/platform/ai/runtime-health` - redirect or alias to the runtime section of readiness after the console ships
 
-The AI nav label should be "Readiness" or "AI Readiness", not "Runtime Health". Operators do not think in runtimes first; they think in whether the platform can do the work.
+The `/platform/ai` section already carries eight sub-nav items (Overview, Operations Map, Capacity Continuity, Priority & Models, Prompts, Skills, Providers & Routing, Build Studio). Readiness must reduce that load, not add a ninth peer:
+
+- Readiness becomes the section **default** - it replaces or absorbs "Overview" as the entry point (`/platform/ai` resolves to readiness), so there is one front door, not two status pages.
+- It is distinct from "Operations Map" (real-time agent routing topology) and "Capacity Continuity" (capacity/failover); keep those as drilldowns and do not duplicate their content in the readiness rows.
+- Providers & Routing, Priority & Models, and Build Studio become the per-domain drilldowns named above.
+- `runtime-health` is a page operators must currently know the URL for - it is not in the nav today - so fold it into the Routing Confidence drilldown and alias the old link rather than promoting "Runtime Health" as a label.
+
+This is a net surface reduction - several setup destinations behind one verdict - and respects nav-coherence: no new top-level rail, no cross-section teleports, ordered facts not a composite score (EP-NAV-COHERENCE). Operators think in whether the platform can do the work, not in runtimes.
 
 ### 6.2 Default console layout
 
@@ -151,7 +158,22 @@ Example states:
 | Tool Access | MCP write token active; live probe passed | Token expires soon | Missing required grants |
 | Routing Confidence | Phase preview passes | New models need background eval | No tool-capable endpoint for build |
 
+### 6.3 Blockers Reach The Operator Where They Already Are
+
+The readiness console must not be a page the operator has to remember to visit. A `blocked` domain that needs a human action should project into the existing "Needs you" inbox (`/workspace/inbox`, EP-ATTENTION-SURFACE) as a new attention source, resolvable in place, with the console as the one-click drilldown. This is the single-inbox principle - surface what needs a person where they already look ([ServiceNow unified notifications](https://www.servicenow.com/community/employee-slate-and-employee/servicenow-employeeworks-introducing-employee-slate/ba-p/3537890); [NN/g Progressive Disclosure](https://www.nngroup.com/articles/progressive-disclosure/)).
+
+Rules:
+
+- Only `blocked` domains (and `attention` with a near-term deadline, e.g. a token expiring) project an attention item; `ready` and background `diagnostic` work never do - they would be noise.
+- Each readiness blocker projects exactly once (single projection, no duplicate re-notify), consistent with the attention-surface discipline.
+- The attention item carries the domain, the one recommended action, and a deep link to the console drilldown; resolving the blocker clears the item.
+- Implementation: extend the `AttentionSource` union in `apps/web/lib/attention/types.ts` with `"ai-readiness-blocker"` plus a projector mapping `AiReadinessSummary` to `AttentionItem[]`. No new inbox.
+
+Framing: the console is the drilldown of last resort - the verdict is a badge, the alert is in the inbox, and the machinery is hidden until asked for.
+
 ## 7. Automation Policy
+
+The guiding principle is convention over configuration: the platform self-configures providers, engines, and routing from available signal and reports the result; the operator confirms outcomes and only touches a control to override a default ([convention over configuration](https://en.wikipedia.org/wiki/Convention_over_configuration); zero-config PaaS such as Vercel and Heroku). Readiness is an auto-detected outcome, not a setup form.
 
 ### 7.1 Provider setup
 
@@ -163,6 +185,8 @@ On credential save or OAuth completion, the platform should:
 4. Sync routing profiles.
 5. Queue background eval/probe work when the model is a viable routing candidate.
 6. Refresh the readiness summary.
+
+Provider catalog refresh is automatic install/startup/scheduled maintenance. The default provider list shows only catalog freshness ("last updated" or "updates automatically") and never asks the operator to decide when to sync metadata. Manual refresh belongs in advanced scheduled-job recovery or AI Coworker-assisted troubleshooting.
 
 The default button should be outcome-oriented, such as "Connect provider" or "Save and ready provider". Manual "Discover", "Profile", "Run Eval", "Run probes", and "Run fill tests" remain in diagnostics with freshness timestamps.
 
@@ -207,6 +231,14 @@ Z.ai should enter through Model Supply:
 - It should not appear as a Build Dispatch Engine unless DPF adds an approved execution adapter or CLI engine for it.
 
 This separates supply ("what models can answer?") from execution ("what process runs autonomous build work?").
+
+### 7.6 Coordination with the Governed Adaptive Playbooks observer
+
+The [Governed Adaptive Playbooks](2026-06-27-governed-adaptive-playbooks-design.md) observer also watches runtime evidence, including model-tier mismatch and stale calibration. The two efforts must not build parallel background-sweep machinery:
+
+- The AI Readiness Console **owns provider/model/routing calibration queueing**: discovery, profiling, eval, probe, routing-profile sync, and stale-calibration jobs (sections 7.1, 7.4, and Phase 3). This is the single source of truth for what calibration work is queued or stale.
+- The playbook observer must not run a second provider-calibration sweep. For model-tier-mismatch or stale-routing signals it composes this console's readiness summary and `provider-routing-eligibility` and emits a reviewable capability need, rather than queuing its own eval/probe jobs.
+- Both use one background-job mechanism, not two schedulers; routing-confidence freshness thresholds live here, and the observer reads them.
 
 ## 8. Read Model
 
@@ -257,6 +289,8 @@ No new database table is required for Phase 1. If later performance requires per
 - Keep raw model IDs, eval counts, probe lists, and routing dimensions out of the default row unless they explain a blocker.
 - Use disclosure for diagnostics. NN/g's progressive disclosure guidance supports showing advanced or rarely used details only when needed so users can focus on the primary task.
 - Show system status continuously. NN/g's visibility-of-system-status heuristic applies directly: the console must tell the operator what is happening now, such as "profiling in background" or "MCP probe passed 3 minutes ago".
+- Convey every readiness state with text + icon + color, never color alone. The Ready / Needs attention / Blocked indicators must satisfy [WCAG 2.1 SC 1.4.1 Use of Color (Level A)](https://www.w3.org/WAI/WCAG21/Understanding/use-of-color.html): color is not the only visual means of conveying information. Model the status atom as `{ state, label, icon }` with color as reinforcement, reusing report-kit `StatusBadge` and DPF `--dpf-*` intents rather than raw color classes.
+- Lead with one outcome verdict, not a grid of checks. A single health view scoped to one question - "can the platform run AI work?" - with drilldowns beats an everything-board; the "single pane of glass" fails when it tries to show everything at once ([Checkly](https://www.checklyhq.com/blog/broken-windows-why-the-single-pane-of-glass-is-imp/)). Keep unrelated platform telemetry out.
 - Prefer recognition over recall: labels should be "Model Supply" and "Build Execution", not "ModelProfile" or "cliEngine".
 - Never show two equivalent primary buttons for the same domain. If the system can choose "discover and profile", the human should not choose "discover" versus "profile".
 
@@ -304,6 +338,13 @@ Existing components to reuse:
 - `phase-model-resolution.ts` already dry-runs real routing. The console must keep this as the routing-confidence source.
 - `contributor-readiness.ts` already evaluates MCP state and recommended action. The console should move it up, not duplicate it.
 - `BuildEngineState` already persists engine presence. The console should consume it and show selected fallback behavior.
+
+### 11.5 Console, status, and onboarding precedent
+
+- [WCAG 2.1 SC 1.4.1 Use of Color (Level A)](https://www.w3.org/WAI/WCAG21/Understanding/use-of-color.html) - status must never rely on color alone; pair Ready / Needs attention / Blocked with icon + text. This is a Level-A conformance requirement, not a nicety.
+- [Checkly - the single-pane-of-glass impossible triangle](https://www.checklyhq.com/blog/broken-windows-why-the-single-pane-of-glass-is-imp/) and [BETSOL - the myth of the single pane of glass](https://www.betsol.com/blog/the-myth-of-the-single-pane-of-glass/) - lead with one outcome verdict and tiered drilldowns; a view that shows everything buries the signal. Scope the console to one operator job.
+- [Convention over configuration](https://en.wikipedia.org/wiki/Convention_over_configuration) and zero-config PaaS (Vercel, Heroku) - readiness is an auto-detected outcome the operator confirms, not a configuration form; only deviations need a control.
+- [ServiceNow unified notifications (Employee Slate)](https://www.servicenow.com/community/employee-slate-and-employee/servicenow-employeeworks-introducing-employee-slate/ba-p/3537890) - surface and resolve blockers in the operator's existing inbox; do not rely on a console they must remember to open.
 
 ## 12. Phased Delivery
 
@@ -361,3 +402,5 @@ Required tests for implementation:
 - Build Studio setup no longer requires selecting between Claude/Codex/Grok/OpenCode/Agentic unless the operator opens Advanced Execution Policy.
 - Z.ai and similar providers appear as model supply and routing candidates, not as build dispatch engines.
 - Every blocker has exactly one recommended action, and every non-blocking background task shows status or freshness.
+- A blocked readiness domain also appears in the operator's "Needs you" inbox (`/workspace/inbox`) with its one action and a deep link to the console - the operator is not required to remember to open the console.
+- Every readiness state is conveyed by text and icon, not color alone (WCAG 1.4.1).

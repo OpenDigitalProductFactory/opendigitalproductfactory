@@ -74,6 +74,15 @@ const platformSectionSiblings = [
   "/platform/audit",
 ] as const;
 
+function platformAiRoute(
+  key: string,
+  label: string,
+  path: string,
+  destinationKind: PortalDestinationKind = "section-page",
+): PortalNavRecord {
+  return { key, label, path, parentPath: "/platform/ai", domain: "platform", audienceModes: ["operator"], destinationKind, capabilityKey: "view_platform" };
+}
+
 export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   {
     key: "workspace",
@@ -431,6 +440,8 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       description: "Oversee AI specialists and their authority.",
     },
   },
+  platformAiRoute("platform-ai-readiness", "Readiness", "/platform/ai/readiness"),
+  platformAiRoute("platform-ai-overview", "AI Workforce Directory", "/platform/ai/overview"),
   {
     // BI-ARCH-DELIVERY-IA: one operator home for delivery work. A hub that
     // launches the delivery surfaces (Build Studio, work capsules, change lanes,
@@ -586,97 +597,21 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "section-page",
     capabilityKey: "view_platform",
   },
-  {
-    key: "platform-ai-operations-map",
-    label: "Operations Map",
-    path: "/platform/ai/operations-map",
-    parentPath: "/platform/ai",
-    domain: "platform",
-    audienceModes: ["operator"],
-    destinationKind: "section-page",
-    capabilityKey: "view_platform",
-  },
+  platformAiRoute("platform-ai-operations-map", "Operations Map", "/platform/ai/operations-map"),
   // EP-GOLDEN-TRIANGLE surface consolidation: no "platform-ai-priority" record —
   // /platform/ai/priority is now a redirect-only shim into the unified
   // "Priority & Models" surface (mirrors /platform/ai/model-assignment, which
   // likewise has no nav record). Redirect-only routes carry neither a nav subItem
   // nor a record.
-  {
-    key: "platform-ai-capacity-continuity",
-    label: "Capacity Continuity",
-    path: "/platform/ai/capacity-continuity",
-    parentPath: "/platform/ai",
-    domain: "platform",
-    audienceModes: ["operator"],
-    destinationKind: "section-page",
-    capabilityKey: "view_platform",
-  },
-  {
-    key: "platform-ai-assignments",
-    label: "Priority & Models",
-    path: "/platform/ai/assignments",
-    parentPath: "/platform/ai",
-    domain: "platform",
-    audienceModes: ["operator"],
-    destinationKind: "section-page",
-    capabilityKey: "view_platform",
-  },
-  {
-    key: "platform-ai-prompts",
-    label: "Prompts",
-    path: "/platform/ai/prompts",
-    parentPath: "/platform/ai",
-    domain: "platform",
-    audienceModes: ["operator"],
-    destinationKind: "section-page",
-    capabilityKey: "view_platform",
-  },
-  {
-    key: "platform-ai-skills",
-    label: "Skills",
-    path: "/platform/ai/skills",
-    parentPath: "/platform/ai",
-    domain: "platform",
-    audienceModes: ["operator"],
-    destinationKind: "section-page",
-    capabilityKey: "view_platform",
-  },
-  {
-    // Capability needs converged into the Backlog (EP-INTAKE-UNIFY); this path is now a
-    // pure redirect shim to /ops?origin=capability-need. Classified legacy-redirect so the
-    // model tells the truth: it is dropped from nav-reachability (not a teleport, not a
-    // live destination) while staying a known route. Safe now that redirect shims are
-    // excluded from the orphan set (no route-not-in-canonical-nav) — the reason the
-    // earlier teleport fix (#2287) had to leave it as section-page.
-    key: "platform-ai-capability-needs",
-    label: "Capability Needs",
-    path: "/platform/ai/capability-needs",
-    parentPath: "/platform/ai",
-    domain: "platform",
-    audienceModes: ["operator"],
-    destinationKind: "legacy-redirect",
-    capabilityKey: "view_platform",
-  },
-  {
-    key: "platform-ai-providers",
-    label: "Providers & Routing",
-    path: "/platform/ai/providers",
-    parentPath: "/platform/ai",
-    domain: "platform",
-    audienceModes: ["operator"],
-    destinationKind: "section-page",
-    capabilityKey: "view_platform",
-  },
-  {
-    key: "platform-ai-build-studio",
-    label: "Build Runtime",
-    path: "/platform/ai/build-studio",
-    parentPath: "/platform/ai",
-    domain: "platform",
-    audienceModes: ["operator"],
-    destinationKind: "settings",
-    capabilityKey: "view_platform",
-  },
+  platformAiRoute("platform-ai-capacity-continuity", "Capacity Continuity", "/platform/ai/capacity-continuity"),
+  platformAiRoute("platform-ai-assignments", "Priority & Models", "/platform/ai/assignments"),
+  platformAiRoute("platform-ai-prompts", "Prompts", "/platform/ai/prompts"),
+  platformAiRoute("platform-ai-skills", "Skills", "/platform/ai/skills"),
+  // Capability needs converged into the Backlog (EP-INTAKE-UNIFY); this route stays
+  // known as a redirect shim without rendering an AI Operations tab.
+  platformAiRoute("platform-ai-capability-needs", "Capability Needs", "/platform/ai/capability-needs", "legacy-redirect"),
+  platformAiRoute("platform-ai-providers", "Providers & Routing", "/platform/ai/providers"),
+  platformAiRoute("platform-ai-build-studio", "Build Runtime", "/platform/ai/build-studio", "settings"),
   {
     key: "platform-tools",
     label: "Tools & Services",

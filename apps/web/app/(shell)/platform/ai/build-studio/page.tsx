@@ -10,6 +10,7 @@ import {
   CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS,
   getMcpTokenTemplate,
 } from "@/lib/mcp-token-scopes";
+import { AiReadinessHeaderLink } from "@/components/platform/AiReadinessHeaderLink";
 import { BuildStudioConfigForm } from "@/components/platform/BuildStudioConfigForm";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "@/components/platform/build-studio-route-copy";
 import Link from "next/link";
@@ -93,12 +94,15 @@ export default async function BuildStudioPage() {
           {BUILD_STUDIO_CONFIG_ROUTE_COPY.description}
         </p>
         </div>
-        <Link
-          href={BUILD_STUDIO_CONFIG_ROUTE_COPY.openStudioHref}
-          className="inline-flex items-center rounded-lg bg-[var(--dpf-accent)] px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-        >
-          {BUILD_STUDIO_CONFIG_ROUTE_COPY.openStudioLabel}
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <AiReadinessHeaderLink />
+          <Link
+            href={BUILD_STUDIO_CONFIG_ROUTE_COPY.openStudioHref}
+            className="inline-flex items-center rounded-lg bg-[var(--dpf-accent)] px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            {BUILD_STUDIO_CONFIG_ROUTE_COPY.openStudioLabel}
+          </Link>
+        </div>
       </div>
 
       <BuildStudioConfigForm

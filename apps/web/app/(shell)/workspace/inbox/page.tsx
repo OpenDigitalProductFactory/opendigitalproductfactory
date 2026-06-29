@@ -19,7 +19,9 @@ export default async function WorkspaceInboxPage() {
   // zero-write once converged.
   await runEscalationHygiene().catch(() => {});
 
-  const { items, failedSources } = await loadAttentionItems(prisma);
+  const { items, failedSources } = await loadAttentionItems(prisma, {
+    aiReadinessUserId: session.user.id,
+  });
   // V1 operator-view; worker scoping (own approvals only) is BI-AS-4.
   const visible = filterAttentionForAudience(items, { operator: true });
 

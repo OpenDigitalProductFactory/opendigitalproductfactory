@@ -14,8 +14,10 @@ import { orderReason, attentionAgeLabel, isOverrideTier, overrideReason } from "
 
 const PREVIEW_COUNT = 5;
 
-export async function NeedsYouBand() {
-  const { items, failedSources } = await loadAttentionItems(prisma);
+export async function NeedsYouBand({ userId }: { userId?: string }) {
+  const { items, failedSources } = await loadAttentionItems(prisma, {
+    aiReadinessUserId: userId,
+  });
   const visible = filterAttentionForAudience(items, { operator: true });
   if (visible.length === 0 && failedSources.length === 0) return null;
 

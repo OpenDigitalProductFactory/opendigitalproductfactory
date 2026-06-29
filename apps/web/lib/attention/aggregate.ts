@@ -17,6 +17,8 @@ import {
   loadRegulatoryItems,
   loadResearchItems,
 } from "./sources/business-approvals";
+import { getAiReadinessSummary } from "@/lib/ai-readiness/readiness-summary";
+import { projectAiReadinessAttentionItems } from "@/lib/ai-readiness/attention";
 
 type Db = typeof prisma;
 
@@ -69,8 +71,11 @@ export function filterAttentionForAudience(
 }
 
 /** Production entry point — wires the real source loaders over the db client. */
-export async function loadAttentionItems(db: Db): Promise<AttentionResult> {
-  return aggregateAttention([
+export async function loadAttentionItems(
+  db: Db,
+  opts: { aiReadinessUserId?: string } = {},
+): Promise<AttentionResult> {
+  const loaders: AttentionSourceLoader[] = [
     { source: "escalation", load: () => loadEscalationItems() },
     { source: "ai-decision", load: () => loadAiDecisionItems(db) },
     { source: "paused-ai", load: () => loadPausedAiItems(db) },
@@ -80,5 +85,15 @@ export async function loadAttentionItems(db: Db): Promise<AttentionResult> {
     { source: "approval-expense", load: () => loadExpenseItems(db) },
     { source: "compliance-submission", load: () => loadRegulatoryItems(db) },
     { source: "research-proposal", load: () => loadResearchItems(db) },
-  ]);
+  ];
+  if (opts.aiReadinessUserId) {
+    loaders.push({
+      source: "ai-readiness-blocker",
+      load: async () =>
+        projectAiReadinessAttentionItems(
+          await getAiReadinessSummary(opts.aiReadinessUserId),
+        ),
+    });
+  }
+  return aggregateAttention(loaders);
 }

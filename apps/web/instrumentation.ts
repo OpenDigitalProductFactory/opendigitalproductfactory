@@ -1130,8 +1130,8 @@ export async function register() {
     // Runs 15s after startup. Detects active providers with zero model
     // profiles (the exact state after a fresh install where the seed +
     // post-init SQL activated providers but no discovery has run yet).
-    // This eliminates the need to manually click "Update Providers" or
-    // "Run Eval" — the platform is ready to route immediately.
+    // This keeps provider catalog/model readiness as background maintenance
+    // instead of asking operators to run catalog or eval chores by hand.
     //
     // BI-INST-001 (2026-05-23): the original first-boot hook stopped after
     // discoverModels + profileModels. ModelProfile rows existed but the
