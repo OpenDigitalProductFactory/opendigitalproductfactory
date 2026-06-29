@@ -242,6 +242,8 @@ The resolver must also intersect with governance:
 - Cost/budget policy constrains `spendClass`.
 - Decision-routing governance constrains legal, tax, compliance, and business judgment responses.
 
+Delegated coworker work is a future resolution layer, not a V1 blocker. If a coworker delegates subtasks to other coworkers, the subtasks should still execute once legitimately delegated; proactivity does not decide whether the work exists. The initiating task may eventually pass advisory context posture, including its proactivity level and golden-triangle cost/quality/time intent. The receiving coworker must then resolve that advisory context against its own local policy, mission, risk, authority, and quality floor. A time-priority caller can bias subtasks toward time, but a receiving coworker responsible for regulated, high-risk, or quality-critical work can override toward higher quality. Track this as `BI-424CFE7A`; do not implement propagation in V1.
+
 ## 7. Defaults
 
 ### 7.1 Activity defaults
@@ -498,6 +500,10 @@ Notification preference controls channels a person accepts. Proactivity selects 
 
 Right-sizing controls process intensity for development work. Proactivity controls monitoring/escalation behavior around the process.
 
+### Proactivity vs delegated coworker execution
+
+Delegation decides which coworker owns a subtask. Proactivity decides how persistently that coworker should monitor, follow up, and escalate within its authority. In V1, subtasks execute according to the receiving coworker's local policy. Future work may pass an initiating context override for proactivity and golden-triangle posture, but the receiving coworker's local risk and quality requirements must remain able to override it.
+
 ### Proactivity vs Attention Surface
 
 The Attention Surface is where unresolved human-needed items land. Proactivity determines when and why an item gets moved there.
@@ -641,6 +647,7 @@ Runtime-bound gates must run on canonical local install or shared local-CI conve
 2. Whether the header control should be visible for every user or only when the user has authority to change the effective level. Recommendation: visible as status for all, editable only when permitted.
 3. Whether `assertive` can ever imply preauthorized customer notifications. Recommendation: only when a separate automation policy exists and the communication event is low-risk and reversible enough.
 4. Whether Build Studio custodian mode owns a specialized policy overlay. Recommendation: consume the shared resolver; do not fork.
+5. Whether delegated coworkers should inherit initiating task posture. Recommendation: create a future context override model where caller posture is advisory and receiving coworker local policy can override. Backlog: `BI-424CFE7A`.
 
 ## 19. Recommendation
 

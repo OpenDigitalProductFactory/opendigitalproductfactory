@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-06-29-ai-coworker-proactivity-policy-design.md`
 
+**Deferred backlog:** `BI-424CFE7A` covers delegated coworker posture propagation: carry advisory proactivity and golden-triangle context from an initiating task into child coworker subtasks, with the receiving coworker's local policy/risk/quality requirements able to override. This is not part of V1.
+
 ---
 
 ## File Structure
@@ -790,5 +792,6 @@ Open a regular ready-for-review PR only after unit tests, typecheck, production 
 - Preserve the 20 percent refactoring budget from the spec: shared resolver, shared copy, no one-off threshold fields in Build Studio, scheduled tasks, or field dispatch.
 - Keep `field-dispatch-policy.ts` pure. Proactivity belongs in runtime behavior around the intents.
 - Keep `assertive` bounded: more persistence, earlier warnings, faster escalation, higher spend class when allowed; never broader authority.
+- Do not implement delegated coworker posture propagation in this V1 plan. Subtasks should execute once legitimately delegated; future work (`BI-424CFE7A`) can pass advisory caller proactivity and golden-triangle posture into child tasks, with receiving coworker local policy taking precedence where risk or quality demands it.
 - Use `lucide-react` before adding custom icon code. Add `ProactivityGaugeIcon` only if the stock icon cannot express the three needle positions clearly.
 - Use theme tokens and accessible labels; green/yellow/red must not be the only signal.
