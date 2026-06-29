@@ -46,6 +46,19 @@ Implemented defaults:
 
 UX-Fit-Decision: choose the plain custodian view and focus queue over the technical dashboard, chat-punt recovery, or "show all current builds" rail. `principle_decide` retrieved mostly process-commandment dimensions for the focus-queue decision and recommended "show all current" without scoring operator cognitive load; the decision was made on merits per the UX-fit rule: reduce human cognitive load, keep governance evidence in drill-down, and make the default action surface clear for non-technical operators.
 
+## Proactive custodian extension (2026-06-29)
+
+Mark's follow-up reframes the next step: Build Studio should not merely be simpler after the user asks for help; the AI Coworker should notice when the human-facing flow has gone quiet or confusing and offer to keep the build moving. The live trigger was `Retry UX Verification`: the click enqueued work, but hidden blockers made the page feel inert. That is the exact failure mode the proactive custodian primitive must handle.
+
+Backlog capture:
+
+- Platform primitive: `BI-5B6F666F` under `EP-ATTENTION-SURFACE` — proactive AI Coworker custodian mode.
+- Build Studio pilot: `BI-ACB04A21` under `EP-BUILD-STUDIO-UX` — proactive stuck detection and guided next action.
+
+Design anchor: [Attention Surface §3.4](../specs/2026-06-23-human-attention-surface-design.md#34-proactive-custodian-mode--quiet-until-useful). Build Studio remains the pilot surface, but the behavior is cross-coworker: watch source-owned state, interrupt only when useful, explain "why now" in one line, show one recommended action, offer snooze/show-why, and hide internal IDs/branches/diagnostics by default.
+
+WWMD/UX-Fit-Decision: choose the Attention Surface amendment plus Build Studio pilot over a Build-Studio-only addendum or a standalone new spec. `principle_decide` recommended this direction with high confidence (composite 9.479, margin 2.200, commandmentConflict:false). The merits are the deciding rationale: no duplicate queue, no second backlog, no fabricated priority score, and a clear path from a painful Build Studio incident to a reusable coworker primitive.
+
 ## Verification
 
 Source-only worktree → typecheck / vitest / production build / migration-apply are CI-gated. Band 2's parser + the band component are unit/render tested. The narrative's *generation quality* depends on the model tier (local vs robust) and is validated by a real build run; the structure ships now so it is ready the moment a build completes.
