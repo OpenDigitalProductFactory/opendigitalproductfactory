@@ -292,4 +292,4 @@ Record evidence on `BI-EFDD78EE` and `WC-25CCCA03`.
 
 Commit with DCO sign-off, push `feat/ai-readiness-console`, open a ready PR after local gates pass, watch CI, fix failures, and merge only after PR health is green.
 
-Evidence: PR #2508 (`feat/ai-readiness-console` at `da5ebf6c7`) is pushed and ready for review. GitHub CI is green: unit tests, Typecheck, Production Build, Module Size Guard, Route Manifest Freshness, UX-Fit Gate, Spec/Plan/Doc Gate, ADP Integration Tests, CodeQL, gitleaks, DCO, and policy guards passed. Merge was not performed in this implementation turn.
+Evidence: PR #2508 (`feat/ai-readiness-console`) is pushed and ready for review. GitHub CI is green on the current PR head: unit tests, Typecheck, Production Build, Module Size Guard, Route Manifest Freshness, UX-Fit Gate, Spec/Plan/Doc Gate, ADP Integration Tests, CodeQL, gitleaks, DCO, and policy guards passed. Merge was not performed in this implementation turn.
