@@ -140,6 +140,7 @@ describe("buildSandboxStageCommand", () => {
     expect(command).toContain("cd /workspace");
     expect(command).toContain(":!**/node_modules/**");
     expect(command).toContain(":!**/.next/**");
+    expect(command).toContain(":!apps/web/next-env.d.ts");
     expect(command).toContain(":!**/*.tsbuildinfo");
     expect(command).toContain(":!pnpm-lock*");
     expect(command).toContain(":!packages/db/generated/**");
@@ -178,6 +179,7 @@ describe("buildSandboxListReleasableFilesCommand", () => {
 
     expect(command).toContain("git diff --cached --name-only -- .");
     expect(command).toContain(":(exclude)**/.next/**");
+    expect(command).toContain(":(exclude)apps/web/next-env.d.ts");
     expect(command).toContain(":(exclude)**/node_modules/**");
     expect(command).not.toContain("grep -v");
   });
@@ -193,6 +195,7 @@ describe("buildSandboxListReleasableFilesCommand", () => {
 
     expect(command).toContain("git diff --cached 'client/abc-123' --name-only -- .");
     expect(command).toContain(":(exclude)**/.next/**");
+    expect(command).toContain(":(exclude)apps/web/next-env.d.ts");
   });
 });
 

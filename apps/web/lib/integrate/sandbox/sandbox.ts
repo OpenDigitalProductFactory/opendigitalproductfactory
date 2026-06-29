@@ -25,6 +25,9 @@ const SANDBOX_STAGE_EXCLUDES = [
   ":!.next/**",
   ":!.pnpm-store/**",
   ":!**/*.tsbuildinfo",
+  // Next dev rewrites this tracked generated shim; do not let preview churn
+  // enter Build Studio diffs or block deploy readiness.
+  ":!apps/web/next-env.d.ts",
   ":!pnpm-lock*",
   // Never include the generated Prisma client — it is regenerated from schema.prisma
   // on every `prisma generate` and would bloat the diff with hundreds of KB of
@@ -39,6 +42,7 @@ const SANDBOX_DIFF_EXCLUDES = [
   ":(exclude).next/**",
   ":(exclude).pnpm-store/**",
   ":(exclude)**/*.tsbuildinfo",
+  ":(exclude)apps/web/next-env.d.ts",
   ":(exclude)pnpm-lock*",
   // Generated Prisma client — see SANDBOX_STAGE_EXCLUDES comment above.
   ":(exclude)**/generated/client/**",
