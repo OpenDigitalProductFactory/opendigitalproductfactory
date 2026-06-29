@@ -18,6 +18,8 @@ import type { ResumeBuildImplementationOutcome } from "@/lib/build/progress-visi
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { DecisionGateCaptureDraft } from "@/lib/decision-perspective/capture-types";
 import { ActionBanner, type ActionBannerState } from "./ActionBanner";
+import { BuildStudioCustodianCallout } from "./BuildStudioCustodianCallout";
+import type { BuildStudioCustodianPrompt } from "./build-studio-custodian";
 import { DecisionPerspectiveGatePanel } from "./DecisionPerspectiveGatePanel";
 import { TruthSourceBadge } from "./TruthSourceBadge";
 import {
@@ -29,6 +31,8 @@ type Props = {
   build: FeatureBuildRow;
   action: BuildStudioWorkflowAction;
   compact?: boolean;
+  custodianPrompt?: BuildStudioCustodianPrompt | null;
+  onCustodianSnooze?: (prompt: BuildStudioCustodianPrompt) => void;
   onCompleted?: () => Promise<void> | void;
 };
 
@@ -62,6 +66,8 @@ export function BuildStudioWorkflowActionCard({
   build,
   action,
   compact = false,
+  custodianPrompt = null,
+  onCustodianSnooze,
   onCompleted,
 }: Props) {
   const router = useRouter();
@@ -220,14 +226,26 @@ export function BuildStudioWorkflowActionCard({
   }
 
   function handleCoworkerAction() {
+    openCoworkerPanel(action.coworkerPrompt);
+  }
+
+  function openCoworkerPanel(prompt: string) {
     document.dispatchEvent(
       new CustomEvent("open-agent-panel", {
         detail: {
-          autoMessage: action.coworkerPrompt,
+          autoMessage: prompt,
           targetBuildId: build.buildId,
         },
       }),
     );
+  }
+
+  async function handleCustodianPrimaryAction(prompt: BuildStudioCustodianPrompt) {
+    if (prompt.primaryAction === "workflow") {
+      await handlePrimaryAction();
+      return;
+    }
+    openCoworkerPanel(prompt.coworkerPrompt);
   }
 
   async function handleDecisionCapture(capture: DecisionGateCaptureDraft) {
@@ -258,6 +276,26 @@ export function BuildStudioWorkflowActionCard({
   // 40px banner has no room for the capture UI.
   const compactBannerEligible = compact && !decisionInteraction;
   if (compactBannerEligible) {
+    if (custodianPrompt) {
+      return (
+        <div data-testid="build-studio-workflow-action-card">
+          <BuildStudioCustodianCallout
+            prompt={custodianPrompt}
+            onPrimaryAction={() => void handleCustodianPrimaryAction(custodianPrompt)}
+            onSnooze={() => onCustodianSnooze?.(custodianPrompt)}
+          />
+          {error && (
+            <div
+              role="alert"
+              className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-2 text-xs text-[var(--dpf-danger)]"
+            >
+              {error}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     const bannerState = deriveActionBannerState(build, action);
     const bannerPrimaryAction = operatorGuidance.nextLabel
       ? {

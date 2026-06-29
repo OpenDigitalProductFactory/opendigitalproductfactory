@@ -494,6 +494,92 @@ describe("BuildStudioWorkflowActionCard compact rendering", () => {
     expect(banner).toHaveTextContent("Plan review failed. Refine the plan first.");
   });
 
+  it("compact=true replaces the banner with custodian prompt when proactive help is active", () => {
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild({ phase: "review", decisionInteraction: null })}
+        action={implementationAction({ primaryLabel: "Run UX Verification" })}
+        compact
+        custodianPrompt={{
+          dismissKey: "custodian-one",
+          title: "I can keep this review moving.",
+          whyNow: "UX verification still needs clean evidence.",
+          recommendedAction: "I can collect the acceptance evidence.",
+          primaryLabel: "Let AI Coworker handle it",
+          primaryAction: "coworker",
+          coworkerPrompt: "Act as the Build Studio custodian.",
+          statusLabel: "Needs evidence",
+          intent: "warning",
+          details: ["Review evidence is missing."],
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("region", { name: "Current build action" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "AI Coworker proactive help" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Let AI Coworker handle it/ })).toBeInTheDocument();
+  });
+
+  it("custodian coworker action opens the agent panel with the custodian prompt", () => {
+    const listener = vi.fn();
+    document.addEventListener("open-agent-panel", listener);
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild({ phase: "review", decisionInteraction: null })}
+        action={implementationAction({ primaryLabel: "Run UX Verification" })}
+        compact
+        custodianPrompt={{
+          dismissKey: "custodian-two",
+          title: "I can keep this review moving.",
+          whyNow: "UX verification still needs clean evidence.",
+          recommendedAction: "I can collect the acceptance evidence.",
+          primaryLabel: "Let AI Coworker handle it",
+          primaryAction: "coworker",
+          coworkerPrompt: "Act as the Build Studio custodian.",
+          statusLabel: "Needs evidence",
+          intent: "warning",
+          details: ["Review evidence is missing."],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Let AI Coworker handle it/ }));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    const event = listener.mock.calls[0]?.[0] as CustomEvent;
+    expect(event.detail.autoMessage).toBe("Act as the Build Studio custodian.");
+    expect(event.detail.targetBuildId).toBe("FB-9B19098C");
+    document.removeEventListener("open-agent-panel", listener);
+  });
+
+  it("custodian workflow action reuses the existing primary dispatch", async () => {
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild({ phase: "plan", decisionInteraction: null })}
+        action={implementationAction()}
+        compact
+        custodianPrompt={{
+          dismissKey: "custodian-three",
+          title: "I found the recovery path.",
+          whyNow: "This stop has a guided repair.",
+          recommendedAction: "Try the guided fix now.",
+          primaryLabel: "Start Implementation",
+          primaryAction: "workflow",
+          coworkerPrompt: "Act as the Build Studio custodian.",
+          statusLabel: "Blocked",
+          intent: "danger",
+          details: ["Use the existing dispatch."],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Start Implementation/ }));
+
+    await waitFor(() => {
+      expect(mockAdvanceBuildPhase).toHaveBeenCalledWith("FB-9B19098C", "build");
+    });
+  });
+
   it("compact=true falls back to the full card when a decision interaction needs capture", () => {
     // makeBuild() default already includes a decisionInteraction that
     // requires capture — perfect setup for the fallback path.

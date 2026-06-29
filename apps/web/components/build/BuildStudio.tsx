@@ -35,6 +35,7 @@ import {
 } from "./fleet-derivation";
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
+import { deriveBuildStudioCustodianPrompt, type BuildStudioCustodianPrompt } from "./build-studio-custodian";
 import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
 import { BuildChangeSummaryBand } from "./BuildChangeSummaryBand";
 import { BuildSolutionSummaryBand } from "./BuildSolutionSummaryBand";
@@ -103,6 +104,7 @@ const MISSING_BOM_SUMMARY: BomSummary = {
 };
 
 const MAX_OPERATOR_FLEET_ITEMS = 4;
+const BUILD_CUSTODIAN_SNOOZE_KEY = "dpf:build-studio-custodian-snoozed";
 
 /** Map the build's lifecycle phase onto the 5-dot overseer phase rail. */
 function toRailPhase(phase: BuildPhase): PhaseRailPhase {
@@ -117,6 +119,28 @@ function toRailPhase(phase: BuildPhase): PhaseRailPhase {
       return "ship";
     default:
       return "build";
+  }
+}
+
+function readCustodianSnoozes(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.sessionStorage.getItem(BUILD_CUSTODIAN_SNOOZE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value): value is string => typeof value === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeCustodianSnoozes(values: Set<string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(BUILD_CUSTODIAN_SNOOZE_KEY, JSON.stringify([...values]));
+  } catch {
+    // Best-effort session snooze only; a storage failure should never block Build Studio.
   }
 }
 
@@ -173,6 +197,7 @@ export function BuildStudio({
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(BUILD_ENGINEER_VIEW_KEY) === "true";
   });
+  const [snoozedCustodianKeys, setSnoozedCustodianKeys] = useState(readCustodianSnoozes);
   const toggleEngineerView = useCallback(() => {
     setEngineerView((prev) => {
       const next = !prev;
@@ -236,6 +261,25 @@ export function BuildStudio({
       progressVisibility,
     })
     : null;
+  const custodianPromptRaw = activeBuild && workflowAction
+    ? deriveBuildStudioCustodianPrompt({
+      build: activeBuild,
+      action: workflowAction,
+      progressVisibility,
+    })
+    : null;
+  const custodianPrompt =
+    custodianPromptRaw && !snoozedCustodianKeys.has(custodianPromptRaw.dismissKey)
+      ? custodianPromptRaw
+      : null;
+  const snoozeCustodianPrompt = useCallback((prompt: BuildStudioCustodianPrompt) => {
+    setSnoozedCustodianKeys((previous) => {
+      const next = new Set(previous);
+      next.add(prompt.dismissKey);
+      writeCustodianSnoozes(next);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!activeBuild?.buildId) return;
@@ -789,6 +833,8 @@ export function BuildStudio({
                       build={activeBuild}
                       action={workflowAction}
                       compact
+                      custodianPrompt={custodianPrompt}
+                      onCustodianSnooze={snoozeCustodianPrompt}
                       onCompleted={() => refreshActiveBuildState(activeBuild.buildId)}
                     />
                     {workflowAction.kind === "decompose-now" && activeBuild.designDoc && (
