@@ -1,0 +1,66 @@
+export const PROACTIVITY_LEVELS = ["quiet", "balanced", "assertive"] as const;
+export type ProactivityLevel = (typeof PROACTIVITY_LEVELS)[number];
+
+export const PROACTIVITY_ACTIVITY_FAMILIES = [
+  "interactive-chat",
+  "todo-follow-up",
+  "scheduled-task",
+  "field-dispatch-appointment",
+  "build-studio-custodian",
+  "technology-debt",
+  "platform-health",
+  "tax-compliance",
+  "customer-communication",
+  "finance-close",
+  "security-incident",
+] as const;
+export type ProactivityActivityFamily = (typeof PROACTIVITY_ACTIVITY_FAMILIES)[number];
+
+export type ProactivitySpendClass = "minimal" | "standard" | "elevated";
+export type ProactivityChannelPolicy = "in-app-only" | "preferred-channel" | "urgent-channel" | "multi-channel";
+export type ProactivityActionBoundary = "advise" | "propose" | "preauthorized";
+export type ProactivityRiskBand = "low" | "medium" | "high" | "critical";
+
+export type ProactivityEscalationTarget =
+  | "attention-surface"
+  | "owner"
+  | "role"
+  | "dispatcher"
+  | "platform-operator";
+
+export type ProactivityPlan = {
+  resolvedLevel: ProactivityLevel;
+  policyId: string;
+  attentionWindowMinutes: number;
+  followUpCadenceMinutes: number[];
+  maxAttempts: number;
+  spendClass: ProactivitySpendClass;
+  channelPolicy: ProactivityChannelPolicy;
+  escalationTarget: ProactivityEscalationTarget;
+  actionBoundary: ProactivityActionBoundary;
+  explanation: string;
+  evidenceRefs: Array<{ kind: string; id: string }>;
+};
+
+export type ProactivityResolverInput = {
+  activityFamily: ProactivityActivityFamily;
+  agentId?: string | null;
+  routeContext?: string | null;
+  riskBand?: ProactivityRiskBand;
+  statusSignal?: "normal" | "blocked" | "stalled" | "degraded" | "offline" | null;
+  deadlineWindowDays?: number | null;
+  regulated?: boolean;
+  archetype?: {
+    archetypeId?: string | null;
+    archetypeCategory?: string | null;
+    demandSignature?: string | null;
+    capacityUnit?: string | null;
+    fieldDispatchRunningLate?: boolean;
+    loadBearingStageKeys?: string[];
+    trustGates?: string[];
+  } | null;
+};
+
+export function isProactivityLevel(value: unknown): value is ProactivityLevel {
+  return typeof value === "string" && (PROACTIVITY_LEVELS as readonly string[]).includes(value);
+}
