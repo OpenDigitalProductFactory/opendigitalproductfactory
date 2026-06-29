@@ -6,8 +6,7 @@ import {
   FLEET_ROW_HEIGHT_CLASS,
 } from "./build-studio-layout";
 import { FleetDensityBar } from "./FleetDensityBar";
-import { PhaseMiniRail, type PhaseRailPhase } from "./PhaseMiniRail";
-import { QueueStateBadge, type BuildQueueState } from "./QueueStateBadge";
+import type { BuildQueueState } from "./QueueStateBadge";
 
 export type BuildListItemDensity = "comfortable" | "fleet";
 
@@ -22,10 +21,9 @@ type BuildListItemProps = {
   /** Optional density variant. Defaults to "comfortable" so existing callers
    *  render the legacy card. The fleet rail uses "fleet" for ≤32px rows. */
   density?: BuildListItemDensity;
-  /** Runtime queue state surfaced as a badge between the claim and the
-   *  attention dot. Used only by the fleet density variant. */
+  /** Runtime queue state surfaced as a plain status label. Fleet density only. */
   queueState?: BuildQueueState;
-  /** Render the attention dot when true. Fleet density only. */
+  /** Render "Needs you" as the row status when true. Fleet density only. */
   needsAttention?: boolean;
 };
 
@@ -33,28 +31,8 @@ function formatUpdatedAt(value: Date | string) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   }).format(new Date(value));
-}
-
-/** Resolve which canonical PhaseMiniRail phase to render for an FB phase.
- *  The mini-rail only knows about the 5 canonical phases — failed/complete
- *  fall back to the closest sensible representation. */
-function toPhaseRailPhase(phase: FeatureBuildRow["phase"]): PhaseRailPhase {
-  switch (phase) {
-    case "ideate":
-    case "plan":
-    case "build":
-    case "review":
-    case "ship":
-      return phase;
-    case "complete":
-      return "ship";
-    case "failed":
-      // Treat terminal-failure as still-in-review for the mini-rail.
-      return "review";
-    default:
-      return "ideate";
-  }
 }
 
 export function BuildListItem({
@@ -145,7 +123,7 @@ export function BuildListItem({
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
-/* Fleet density — compact 32px row with phase mini-rail + queue badge.       */
+/* Fleet density — compact 32px row with a plain operator status.             */
 /* ────────────────────────────────────────────────────────────────────────── */
 
 type FleetRowProps = {
@@ -159,6 +137,67 @@ type FleetRowProps = {
   needsAttention: boolean;
 };
 
+type FleetRowStatus = {
+  label: string;
+  className: string;
+};
+
+function statusClassName(intent: "info" | "warning" | "danger" | "success" | "neutral"): string {
+  const base = "inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none";
+  if (intent === "danger") {
+    return `${base} border-[var(--dpf-error)] bg-[var(--dpf-state-error)] text-[var(--dpf-error)]`;
+  }
+  if (intent === "warning") {
+    return `${base} border-[var(--dpf-warning)] bg-[var(--dpf-state-warning)] text-[var(--dpf-warning)]`;
+  }
+  if (intent === "success") {
+    return `${base} border-[var(--dpf-success)] bg-[var(--dpf-state-success)] text-[var(--dpf-success)]`;
+  }
+  if (intent === "info") {
+    return `${base} border-[var(--dpf-info)] bg-[var(--dpf-state-info)] text-[var(--dpf-info)]`;
+  }
+  return `${base} border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]`;
+}
+
+function deriveFleetRowStatus(
+  build: FeatureBuildRow,
+  queueState: BuildQueueState,
+  needsAttention: boolean,
+): FleetRowStatus {
+  if (needsAttention) {
+    return { label: "Needs you", className: statusClassName("danger") };
+  }
+
+  if (queueState.kind === "blocked") {
+    return { label: "Blocked", className: statusClassName("warning") };
+  }
+  if (queueState.kind === "queued") {
+    return { label: "Waiting", className: statusClassName("neutral") };
+  }
+  if (queueState.kind === "running") {
+    return { label: "Working", className: statusClassName("info") };
+  }
+
+  switch (build.phase) {
+    case "ideate":
+      return { label: "Designing", className: statusClassName("neutral") };
+    case "plan":
+      return { label: "Planning", className: statusClassName("neutral") };
+    case "build":
+      return { label: "Building", className: statusClassName("info") };
+    case "review":
+      return { label: "Reviewing", className: statusClassName("info") };
+    case "ship":
+      return { label: "Ready", className: statusClassName("warning") };
+    case "complete":
+      return { label: "Done", className: statusClassName("success") };
+    case "failed":
+      return { label: "Blocked", className: statusClassName("warning") };
+    default:
+      return { label: "Queued", className: statusClassName("neutral") };
+  }
+}
+
 function FleetDensityRow({
   build,
   active,
@@ -169,7 +208,7 @@ function FleetDensityRow({
   queueState,
   needsAttention,
 }: FleetRowProps) {
-  const railPhase = toPhaseRailPhase(build.phase);
+  const status = deriveFleetRowStatus(build, queueState, needsAttention);
   return (
     <div
       data-testid={BUILD_STUDIO_TEST_IDS.buildListItem}
@@ -204,7 +243,13 @@ function FleetDensityRow({
         onClick={onSelect}
         className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
       >
-        <PhaseMiniRail currentPhase={railPhase} />
+        <span
+          data-testid="fleet-row-status"
+          aria-label={`Status: ${status.label}`}
+          className={status.className}
+        >
+          {status.label}
+        </span>
         {build.phase === "build" && (
           <FleetDensityBar taskResults={build.taskResults} buildPlan={build.buildPlan} />
         )}
@@ -216,16 +261,6 @@ function FleetDensityRow({
           >
             ●
           </span>
-        )}
-        <QueueStateBadge state={queueState} />
-        {needsAttention && (
-          <span
-            role="img"
-            aria-label="Needs attention"
-            title="Needs your attention"
-            data-testid="fleet-row-attention"
-            className="inline-flex h-2.5 w-2.5 shrink-0 items-center justify-center rounded-full bg-[var(--dpf-error)] ring-1 ring-[var(--dpf-error)] ring-offset-1 ring-offset-[var(--dpf-surface-1)]"
-          />
         )}
         <span className="ml-auto min-w-0 truncate text-[11px] text-[var(--dpf-muted)]">
           {build.title}

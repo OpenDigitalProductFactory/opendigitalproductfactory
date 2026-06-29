@@ -10,8 +10,6 @@
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { BuildQueueState } from "./QueueStateBadge";
 
-export const DEFAULT_BUILD_STUDIO_WIP_SLOT_CAP = 3;
-
 /**
  * Derive a BuildQueueState from the FeatureBuildRow's phase + execution state.
  *
@@ -86,7 +84,8 @@ function humanizeStep(step: string): string {
  *   - phase=ship with no acceptanceMet → yes (operator decision needed)
  *   - claim status indicates a stalled / abandoned claim → yes
  *
- * The dot is shape+color (red dot + ring) so color-blind users still see it.
+ * The fleet row renders this as the plain "Needs you" status so the cue is
+ * readable without decoding symbols.
  */
 export function deriveNeedsAttention(build: FeatureBuildRow): boolean {
   if (build.phase === "failed") return true;
@@ -129,10 +128,63 @@ export function deriveFleetCounts(states: readonly BuildQueueState[]): {
   return { runningCount: running, queuedCount: queued, blockedCount: blocked };
 }
 
+export type OperatorFocusEntry = {
+  build: Pick<FeatureBuildRow, "buildId" | "phase">;
+  queueState: BuildQueueState;
+  needsAttention: boolean;
+};
+
+/**
+ * The operator fleet is a focus queue, not a dump of every not-complete row.
+ * Quiet ideation / planning probes remain under the AI Coworker's custody;
+ * builds stay visible when they are selected, running, queued, blocked, or
+ * waiting on the human.
+ */
+export function isOperatorFocusEntry(
+  entry: OperatorFocusEntry,
+  activeBuildId: string | null,
+): boolean {
+  if (activeBuildId && entry.build.buildId === activeBuildId) return true;
+  if (entry.needsAttention) return true;
+  return entry.queueState.kind !== "idle";
+}
+
+export function formatOperatorFocusHeader({
+  needsYouCount,
+  workingCount,
+  parkedCount,
+  blockedCount = 0,
+  queuedCount = 0,
+}: {
+  needsYouCount: number;
+  workingCount: number;
+  parkedCount: number;
+  blockedCount?: number;
+  queuedCount?: number;
+}): string {
+  const parts = [
+    `Needs you: ${needsYouCount}`,
+    `Working: ${workingCount}`,
+  ];
+  if (blockedCount > 0) {
+    parts.push(`Blocked: ${blockedCount}`);
+  }
+  if (queuedCount > 0) {
+    parts.push(`Waiting: ${queuedCount}`);
+  }
+  parts.push(`Parked: ${parkedCount}`);
+  return parts.join(" · ");
+}
+
 export function formatFleetHeader(
   runningCount: number,
-  cap: number = DEFAULT_BUILD_STUDIO_WIP_SLOT_CAP,
+  _cap: number = 0,
   queuedCount: number = 0,
 ): string {
-  return `WIP slots: ${runningCount} of ${cap} in use · ${queuedCount} queued`;
+  return formatOperatorFocusHeader({
+    needsYouCount: 0,
+    workingCount: runningCount,
+    queuedCount,
+    parkedCount: 0,
+  });
 }

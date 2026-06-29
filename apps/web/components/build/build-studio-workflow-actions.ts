@@ -395,20 +395,20 @@ function statusForAction(
 
 function nextSentenceForAction(action: BuildStudioWorkflowAction): string {
   if (action.disabledReason) {
-    return "Next: clear the missing evidence with the coworker, then come back to this button.";
+    return "Next: ask the AI Coworker to collect the missing evidence.";
   }
 
   switch (action.kind) {
     case "approve-start":
-      return "Next: record approval so Build Studio can keep going.";
+      return "Next: approve the start. I will keep planning from there.";
     case "advance-phase":
-      if (action.targetPhase === "plan") return "Next: move the reviewed design into planning.";
-      if (action.targetPhase === "build") return "Next: start implementation from Build Studio.";
-      if (action.targetPhase === "review") return "Next: run verification review from Build Studio.";
+      if (action.targetPhase === "plan") return "Next: move this design into planning.";
+      if (action.targetPhase === "build") return "Next: start implementation. I will track the checks.";
+      if (action.targetPhase === "review") return "Next: run verification review. I will collect the evidence.";
       if (action.targetPhase === "ship") return "Next: continue to release decisions.";
       return "Next: move this build to the next stage.";
     case "run-review-verification":
-      return "Next: run UX verification from Build Studio.";
+      return "Next: run UX verification. I will use the result to keep this build moving.";
     case "record-acceptance":
       return "Next: record acceptance so release decisions can unlock.";
     case "retry-build":
@@ -416,15 +416,15 @@ function nextSentenceForAction(action: BuildStudioWorkflowAction): string {
     case "reset-build":
       return "Next: reset the build pipeline and start it again.";
     case "resume-implementation":
-      return "Next: try to fix the failed work from Build Studio.";
+      return "Next: try to fix the failed work. I will rerun the recovery path.";
     case "decompose-now":
       return "Next: split this build into smaller builds.";
     case "amend-parent-design":
       return "Next: amend the parent design before this child continues.";
     case "rerun-plan-review":
-      return "Next: try to fix the plan review in place.";
+      return "Next: try to fix the plan review here.";
     case "review-only":
-      return "Next: watch this stage, or ask the coworker what needs attention.";
+      return "Next: I am watching this stage. Ask if anything looks stuck.";
   }
 }
 

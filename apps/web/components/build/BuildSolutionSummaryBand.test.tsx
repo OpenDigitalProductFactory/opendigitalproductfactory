@@ -19,6 +19,26 @@ describe("BuildSolutionSummaryBand", () => {
     expect(html).toContain("Apply 10% at checkout for customers with 5+ orders.");
   });
 
+  it("keeps technical implementation detail out of the operator summary", () => {
+    const html = renderToStaticMarkup(
+      <BuildSolutionSummaryBand
+        problemStatement="Build Studio currently lets operators start a build that cannot run, which wastes time and creates confusion."
+        proposedApproach={[
+          "Data Model: Use existing configuration and runtime evidence.",
+          "ModelProvider supplies whether a provider is active, inactive, local, remote, API-backed, or CLI-backed.",
+          "BuildEngine supplies local opencode execution if the project chooses it.",
+        ].join(" ")}
+        fallbackIntent={null}
+      />,
+    );
+
+    expect(html).toContain("Build Studio currently lets operators start a build");
+    expect(html).toContain("AI Coworker has the technical plan");
+    expect(html).not.toContain("Data Model");
+    expect(html).not.toContain("ModelProvider");
+    expect(html).not.toContain("BuildEngine");
+  });
+
   it("falls back to the captured intent when no design doc exists yet", () => {
     const html = renderToStaticMarkup(
       <BuildSolutionSummaryBand

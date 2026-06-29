@@ -261,7 +261,8 @@ export function getDetailsDrawerPillClassName(): string {
 }
 
 /**
- * Fleet rail header — shows `WIP slots: {running} of {cap} in use · {queuedCount} queued`.
+ * Fleet rail header — shows the operator focus summary
+ * (`Needs you: N · Working: N · Waiting: N · Parked: N`).
  * Uses `role="status"` + `aria-live="polite"` (set on the element itself, not here).
  */
 export function getFleetRailHeaderClassName(): string {

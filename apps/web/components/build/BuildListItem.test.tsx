@@ -167,7 +167,7 @@ describe("BuildListItem fleet density", () => {
     expect(html).not.toContain("Updated Apr");
   });
 
-  it("renders the phase mini-rail wrapper", () => {
+  it("renders a plain work status label instead of an unlabeled phase dot rail", () => {
     const html = renderToStaticMarkup(
       <BuildListItem
         build={makeBuild()}
@@ -180,12 +180,13 @@ describe("BuildListItem fleet density", () => {
         onDelete={vi.fn()}
       />,
     );
-    // PhaseMiniRail emits role=img + Active: <phase> in its aria-label.
-    expect(html).toMatch(/role="img"/);
-    expect(html).toContain("Active: build");
+    expect(html).toContain('data-testid="fleet-row-status"');
+    expect(html).toContain("Building");
+    expect(html).not.toContain(BUILD_STUDIO_TEST_IDS.phaseMiniRail);
+    expect(html).not.toContain("Active: build");
   });
 
-  it("renders QueueStateBadge when queueState !== 'idle'", () => {
+  it("renders queued state as plain text when queueState is not idle", () => {
     const html = renderToStaticMarkup(
       <BuildListItem
         build={makeBuild()}
@@ -199,8 +200,10 @@ describe("BuildListItem fleet density", () => {
         onDelete={vi.fn()}
       />,
     );
-    expect(html).toContain('aria-label="Queued, position 3"');
-    expect(html).toContain('data-kind="queued"');
+    expect(html).toContain('data-testid="fleet-row-status"');
+    expect(html).toContain("Waiting");
+    expect(html).not.toContain('aria-label="Queued, position 3"');
+    expect(html).not.toContain('data-kind="queued"');
   });
 
   it("omits the QueueStateBadge when queueState is 'idle' (or missing)", () => {
@@ -222,7 +225,7 @@ describe("BuildListItem fleet density", () => {
     expect(html).not.toContain('data-kind="blocked"');
   });
 
-  it("renders the attention dot when needsAttention is true", () => {
+  it("renders needs-attention as a plain operator status, not a standalone dot", () => {
     const html = renderToStaticMarkup(
       <BuildListItem
         build={makeBuild()}
@@ -236,11 +239,13 @@ describe("BuildListItem fleet density", () => {
         onDelete={vi.fn()}
       />,
     );
-    expect(html).toContain('data-testid="fleet-row-attention"');
-    expect(html).toContain('aria-label="Needs attention"');
+    expect(html).toContain('data-testid="fleet-row-status"');
+    expect(html).toContain("Needs you");
+    expect(html).not.toContain('data-testid="fleet-row-attention"');
+    expect(html).not.toContain('aria-label="Needs attention"');
   });
 
-  it("omits the attention dot when needsAttention is false (default)", () => {
+  it("omits the needs-you status when needsAttention is false (default)", () => {
     const html = renderToStaticMarkup(
       <BuildListItem
         build={makeBuild()}
@@ -253,7 +258,7 @@ describe("BuildListItem fleet density", () => {
         onDelete={vi.fn()}
       />,
     );
-    expect(html).not.toContain('data-testid="fleet-row-attention"');
+    expect(html).not.toContain("Needs you");
   });
 
   it("uses 4px left-border accent + aria-current for the active row (not just color)", () => {

@@ -23,6 +23,27 @@ type Props = {
   fallbackIntent?: string | null;
 };
 
+const OPERATOR_SUMMARY_LIMIT = 260;
+const OPERATOR_APPROACH_LIMIT = 170;
+
+function normalizeCopy(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function compactCopy(value: string, maxLength: number): string {
+  const normalized = normalizeCopy(value);
+  if (normalized.length <= maxLength) return normalized;
+  const sentenceBreak = normalized.lastIndexOf(".", maxLength);
+  const cutAt = sentenceBreak >= 80 ? sentenceBreak + 1 : maxLength;
+  return `${normalized.slice(0, cutAt).trim()}...`;
+}
+
+function isTechnicalPlanCopy(value: string): boolean {
+  const normalized = normalizeCopy(value);
+  if (normalized.length > OPERATOR_APPROACH_LIMIT) return true;
+  return /\b(Data Model|ModelProvider|BuildEngine|API Route|server-side|tool-use|CLI-backed|opencode|schema|migration)\b/i.test(normalized);
+}
+
 export function BuildSolutionSummaryBand({
   problemStatement,
   proposedApproach,
@@ -31,6 +52,10 @@ export function BuildSolutionSummaryBand({
   const problem = problemStatement?.trim() || null;
   const approach = proposedApproach?.trim() || null;
   const fallback = fallbackIntent?.trim() || null;
+  const primaryCopy = problem ?? fallback;
+  const operatorProblem = primaryCopy ? compactCopy(primaryCopy, OPERATOR_SUMMARY_LIMIT) : null;
+  const showApproach = approach != null && !isTechnicalPlanCopy(approach);
+  const operatorApproach = showApproach ? compactCopy(approach, OPERATOR_APPROACH_LIMIT) : null;
 
   // Nothing to say yet → render nothing (the caller also gates, but stay safe).
   if (!problem && !approach && !fallback) return null;
@@ -59,21 +84,19 @@ export function BuildSolutionSummaryBand({
         </h3>
       </div>
 
-      {problem ? (
-        <p className="mt-2 text-sm leading-relaxed text-[var(--dpf-text)]">{problem}</p>
-      ) : fallback ? (
-        <p className="mt-2 text-sm leading-relaxed text-[var(--dpf-text)]">{fallback}</p>
+      {operatorProblem ? (
+        <p className="mt-2 text-sm leading-relaxed text-[var(--dpf-text)]">{operatorProblem}</p>
       ) : null}
 
-      {approach ? (
+      {operatorApproach ? (
         <p className="mt-1 text-xs leading-relaxed text-[var(--dpf-text-secondary)]">
-          {approach}
+          {operatorApproach}
+        </p>
+      ) : approach ? (
+        <p className="mt-2 text-[11px] font-medium text-[var(--dpf-muted)]">
+          AI Coworker has the technical plan.
         </p>
       ) : null}
-
-      <p className="mt-2 text-[11px] text-[var(--dpf-muted)]">
-        Use &ldquo;Open live preview&rdquo; at the bottom to see it running.
-      </p>
     </section>
   );
 }

@@ -356,7 +356,7 @@ describe("deriveBuildStudioWorkflowAction", () => {
     const guidance = deriveBuildStudioOperatorGuidance(action);
     expect(guidance.status.label).toBe("Waiting on you");
     expect(guidance.nextLabel).toBe("Try to fix");
-    expect(guidance.nextSentence).toBe("Next: try to fix the plan review in place.");
+    expect(guidance.nextSentence).toBe("Next: try to fix the plan review here.");
     expect(guidance.guidedRecovery).toBe(true);
   });
 

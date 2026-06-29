@@ -420,7 +420,7 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("Portal context");
+    expect(html).toContain("Build context");
     expect(html).toContain("Build Studio");
     expect(html).toContain("Portal overlay");
     expect(html).not.toContain("WC-123");
@@ -448,6 +448,82 @@ describe("BuildStudio active-build header layout", () => {
     // Legacy chrome explicitly absent.
     expect(html).not.toContain(">Build Status<");
     expect(html).not.toContain(">Review with coworker<");
+  });
+
+  it("presents backlog context as a short work request, not an internal canonical record", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild()]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    expect(html).toContain("Work request");
+    expect(html).toContain("Why it matters:");
+    expect(html).not.toContain("Canonical backlog item");
+    expect(html).not.toContain("Triage:");
+    expect(html).not.toContain("Decision:");
+  });
+
+  it("shows only focus work in the operator fleet and parks quiet research/design builds under coworker custody", () => {
+    const parkedBuilds = Array.from({ length: 5 }, (_, index) =>
+      makeBuild({
+        id: `parked-row-${index + 1}`,
+        buildId: `FB-PARKED-${index + 1}`,
+        title: `Parked research build ${index + 1}`,
+        phase: "ideate",
+        originator: null,
+      }),
+    );
+    const builds = [
+      makeBuild({
+        id: "focus-row",
+        buildId: "FB-FOCUS",
+        title: "Review customer entry gate",
+        phase: "review",
+        originator: null,
+      }),
+      makeBuild({
+        id: "working-row",
+        buildId: "FB-WORKING",
+        title: "Ship provider readiness check",
+        phase: "build",
+        buildExecState: { step: "code_generated" } as unknown as FeatureBuildRow["buildExecState"],
+        originator: null,
+      }),
+      makeBuild({
+        id: "needs-row",
+        buildId: "FB-NEEDS-YOU",
+        title: "Choose recovery path for failed review",
+        phase: "plan",
+        planReview: { decision: "fail" } as unknown as FeatureBuildRow["planReview"],
+        originator: null,
+      }),
+      ...parkedBuilds,
+    ];
+
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={builds}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    expect(html).toContain("Needs you: 1 · Working: 2 · Parked: 5");
+    expect(html).not.toContain("WIP slots");
+    expect(html).toContain("Review customer entry gate");
+    expect(html).toContain("Ship provider readiness check");
+    expect(html).toContain("Choose recovery path for failed review");
+    expect(html).not.toContain("Parked research build 1");
+    expect(html).not.toContain("Parked research build 5");
+    expect(html).toContain("AI Coworker is watching 5 parked builds");
+    expect(html).not.toContain("Show 5 more builds");
   });
 
   it("renders an implementation control once the plan is approved and start approval is recorded", () => {
@@ -612,8 +688,8 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
     expect(queryByTestId("build-studio-header-details")).toBeNull();
   });
 
-  it("clicking Details reveals the build ID chip", async () => {
-    const { getByRole, findByTestId } = render(
+  it("clicking Details keeps internal IDs hidden in operator mode", async () => {
+    const { getByRole, findByTestId, queryByTestId } = render(
       <BuildStudio
         builds={[makeBuild({ buildId: "FB-DALE02" })]}
         epicRollups={[]}
@@ -631,7 +707,11 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
 
     const details = await findByTestId("build-studio-header-details");
     expect(details).toBeDefined();
-    expect(details.textContent).toContain("FB-DALE02");
+    expect(details.textContent).toContain("AI Coworker is handling");
+    expect(details.textContent).not.toContain("FB-DALE02");
+    expect(details.textContent).not.toContain("BI-5B839D74");
+    expect(details.textContent).not.toContain("dpf/");
+    expect(queryByTestId("build-studio-build-id")).toBeNull();
   });
 
   it("clicking Details again collapses the panel", async () => {
@@ -685,7 +765,29 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
       />,
     );
     const details = await findByTestId("build-studio-header-details");
-    expect(details.textContent).toContain("FB-RESTORED");
+    expect(details.textContent).toContain("AI Coworker is handling");
+    expect(details.textContent).not.toContain("FB-RESTORED");
+  });
+
+  it("reveals IDs and branch only when Engineer view is enabled", async () => {
+    localStorage.setItem("dpf:build-studio-engineer-view", "true");
+    const { getByRole, findByTestId } = render(
+      <BuildStudio
+        builds={[makeBuild({ buildId: "FB-ENGINEER" })]}
+        epicRollups={[]}
+        portfolios={[]}
+        governedBacklogEnabled
+        portalContext={makePortalContextEnvelope()}
+        projectBranch="main"
+        submissionBranchShortId="aabbccdd"
+      />,
+    );
+
+    getByRole("button", { name: /Details/ }).click();
+    const details = await findByTestId("build-studio-header-details");
+    expect(details.textContent).toContain("FB-ENGINEER");
+    expect(details.textContent).toContain("BI-5B839D74");
+    expect(details.textContent).toContain("dpf/aabbccdd/");
   });
 });
 
