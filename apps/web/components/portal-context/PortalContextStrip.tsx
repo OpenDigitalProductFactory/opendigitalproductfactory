@@ -14,10 +14,15 @@ import { PortalContextOverlayDrawer } from "./PortalContextOverlayDrawer";
 
 type PortalContextStripProps = {
   envelope: PortalContextEnvelope | null;
+  contextLabel?: string;
   showInternalIds?: boolean;
 };
 
-export function PortalContextStrip({ envelope, showInternalIds = true }: PortalContextStripProps) {
+export function PortalContextStrip({
+  envelope,
+  contextLabel = "Portal context",
+  showInternalIds = true,
+}: PortalContextStripProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   if (!envelope) return null;
 
@@ -42,7 +47,7 @@ export function PortalContextStrip({ envelope, showInternalIds = true }: PortalC
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-normal text-[var(--dpf-muted)]">
             <Network className="h-4 w-4" aria-hidden="true" />
-            Portal context
+            {contextLabel}
           </span>
           <span className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs font-medium text-[var(--dpf-text)]">
             {envelope.route.domain}
@@ -61,7 +66,9 @@ export function PortalContextStrip({ envelope, showInternalIds = true }: PortalC
           >
             {capsuleLabel}
           </span>
-          {primarySignal && showAttentionChip && <AttentionChip signal={primarySignal} />}
+          {primarySignal && showAttentionChip && (
+            <AttentionChip signal={primarySignal} showInternalIds={showInternalIds} />
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -117,14 +124,20 @@ function formatCapsuleTitle(capsule: WorkCapsuleAnchor | null, showInternalIds: 
   return capsule.title || "Work capsule";
 }
 
-function AttentionChip({ signal }: { signal: AttentionSignal }) {
+function AttentionChip({
+  signal,
+  showInternalIds,
+}: {
+  signal: AttentionSignal;
+  showInternalIds: boolean;
+}) {
   return (
     <span className={[
       "inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-medium",
       severityClassName(signal.severity),
     ].join(" ")}>
       <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-      {signalLabel(signal)}
+      {signalLabel(signal, showInternalIds)}
     </span>
   );
 }
@@ -135,10 +148,10 @@ function severityClassName(severity: AttentionSignal["severity"]): string {
   return "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-info)]";
 }
 
-function signalLabel(signal: AttentionSignal): string {
+function signalLabel(signal: AttentionSignal, showInternalIds: boolean): string {
   if (signal.kind === "no_active_build") return "No active build";
   if (signal.kind === "capsule_not_linked") return "Capsule not linked";
-  if (signal.kind === "missing_evidence") return "Missing evidence";
+  if (signal.kind === "missing_evidence") return showInternalIds ? "Missing evidence" : "Waiting on you";
   if (signal.kind === "lease_expired") return "Lease expired";
   return signal.kind.replace(/_/g, " ");
 }

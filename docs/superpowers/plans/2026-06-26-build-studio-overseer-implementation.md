@@ -24,7 +24,7 @@ The altitude flip (spec §3.1, Option B) landed: the plain "Solution & Oversight
 
 ## Operator clarity correction (2026-06-29)
 
-Live `/build` review showed the reframe was still too technical for a non-technical overseer: the default view exposed FB/BI/WC IDs, branch chips, phase-dot rails, queue glyphs, a "Canonical backlog item" strip, and long design-plan copy. The correction treats the AI Coworker as custodian of the build process and keeps the operator surface to one status, one next action, and a bounded current-work list.
+Live `/build` review showed the reframe was still too technical for a non-technical overseer: the default view exposed FB/BI/WC IDs, branch chips, phase-dot rails, queue glyphs, a "Canonical backlog item" strip, and long design-plan / review-decision copy. The correction treats the AI Coworker as custodian of the build process and keeps the operator surface to one status, one next action, and a bounded current-work list.
 
 Research anchors:
 
@@ -37,8 +37,10 @@ Implemented defaults:
 
 - `ActionBanner` now names the `AI Coworker`, shows the single operator status, and uses first-person custody copy ("I will track the checks", "I will collect the evidence").
 - Header `Details` stays human-readable unless `Engineer view` is on; FB/BI IDs, WC IDs, and raw branches remain behind Engineer view.
+- The shared context strip says `Build context` in Build Studio and maps missing-evidence attention to `Waiting on you` when internal IDs are hidden.
 - The backlog strip is now `Work request` with a short "Why it matters" line; status/triage/size/decision metadata moves to the details drawer.
 - `BuildSolutionSummaryBand` caps the operator brief and suppresses technical plan text such as data model/provider/API detail.
+- `BuildDecisionLedgerBand` is compact by default (`AI Coworker decision` + current call + short why); full options and unresolved technical evidence only render in Engineer view.
 - Fleet rows replace phase-dot rails, queue glyphs, and attention dots with plain statuses (`Working`, `Waiting`, `Needs you`, etc.).
 - The fleet defaults to the highest-signal four current items and folds the rest under "AI Coworker is tracking N more builds" with a single show-more control.
 

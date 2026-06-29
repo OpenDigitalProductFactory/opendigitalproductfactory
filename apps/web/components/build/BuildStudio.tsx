@@ -708,6 +708,7 @@ export function BuildStudio({
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--dpf-surface-1)]">
           <PortalContextStrip
             envelope={portalContext ?? null}
+            contextLabel="Build context"
             showInternalIds={engineerView}
           />
           {activeBuild ? (
@@ -828,7 +829,7 @@ export function BuildStudio({
                 )}
                 {decisionLedger.length > 0 && (
                   <div className="border-b border-[var(--dpf-border)] px-4 py-3">
-                    <BuildDecisionLedgerBand entries={decisionLedger} />
+                    <BuildDecisionLedgerBand entries={decisionLedger} engineerView={engineerView} />
                   </div>
                 )}
                 {/* Workflow graph — always-visible primary surface of the

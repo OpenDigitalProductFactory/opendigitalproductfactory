@@ -24,14 +24,31 @@ function entry(over: Partial<BuildDecisionLedgerEntry> = {}): BuildDecisionLedge
 describe("BuildDecisionLedgerBand", () => {
   it("renders the heading and an honest empty state when there are no entries", () => {
     const html = renderToStaticMarkup(<BuildDecisionLedgerBand entries={[]} />);
-    expect(html).toContain("The decisions we made");
-    expect(html).toContain("No decisions have been recorded");
+    expect(html).toContain("AI Coworker decision");
+    expect(html).toContain("No build decision is waiting on you");
   });
 
-  it("renders an entry's call, weighed options, why, governance tag, and open risks", () => {
+  it("summarizes the latest decision for the operator without dumping review prose", () => {
     const html = renderToStaticMarkup(
       <BuildDecisionLedgerBand entries={[entry({ unresolvedRisks: ["Coupon stacking unresolved"] })]} />,
     );
+    expect(html).toContain("AI Coworker decision");
+    expect(html).toContain("Current call: Keep this as one build");
+    expect(html).toContain("Why: Small enough to ship safely in one go.");
+    expect(html).toContain("Governed");
+    expect(html).toContain("AI Coworker is carrying 1 technical concern");
+    expect(html).not.toContain("Weighed:");
+    expect(html).not.toContain("Coupon stacking unresolved");
+  });
+
+  it("renders an entry's call, weighed options, why, governance tag, and open risks in engineer view", () => {
+    const html = renderToStaticMarkup(
+      <BuildDecisionLedgerBand
+        entries={[entry({ unresolvedRisks: ["Coupon stacking unresolved"] })]}
+        engineerView
+      />,
+    );
+    expect(html).toContain("The decisions we made");
     expect(html).toContain("Keep this as one build");
     expect(html).toContain("Keep as one vs Split into three");
     expect(html).toContain("Small enough to ship safely in one go.");
@@ -51,6 +68,7 @@ describe("BuildDecisionLedgerBand", () => {
             governance: false,
           }),
         ]}
+        engineerView
       />,
     );
     expect(html).toContain("Accepted the plan after peer review");

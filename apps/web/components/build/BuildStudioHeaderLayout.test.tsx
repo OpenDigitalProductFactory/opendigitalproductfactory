@@ -420,7 +420,7 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("Portal context");
+    expect(html).toContain("Build context");
     expect(html).toContain("Build Studio");
     expect(html).toContain("Portal overlay");
     expect(html).not.toContain("WC-123");

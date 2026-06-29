@@ -88,6 +88,26 @@ describe("PortalContextStrip", () => {
     expect(html).toContain("Missing evidence");
   });
 
+  it("can use operator-facing labels while preserving the shared strip", () => {
+    const html = renderToStaticMarkup(
+      <PortalContextStrip
+        envelope={makeEnvelope({
+          attention: [{
+            kind: "missing_evidence",
+            severity: "warning",
+            message: "Required design doc is missing.",
+          }],
+        })}
+        contextLabel="Build context"
+        showInternalIds={false}
+      />,
+    );
+
+    expect(html).toContain("Build context");
+    expect(html).toContain("Waiting on you");
+    expect(html).not.toContain("Missing evidence");
+  });
+
   it("hides raw build and capsule IDs in operator-facing mode", () => {
     const base = makeEnvelope();
     const html = renderToStaticMarkup(
