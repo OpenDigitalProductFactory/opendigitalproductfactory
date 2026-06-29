@@ -11,6 +11,7 @@ import {
   deriveFleetCounts,
   deriveNeedsAttention,
   deriveQueueState,
+  formatFleetHeader,
 } from "./fleet-derivation";
 import {
   normalizeHappyPathState,
@@ -215,5 +216,12 @@ describe("deriveFleetCounts", () => {
       queuedCount: 0,
       blockedCount: 0,
     });
+  });
+});
+
+describe("formatFleetHeader", () => {
+  it("uses operator language instead of WIP jargon", () => {
+    expect(formatFleetHeader(2, 3, 4)).toBe("Work in progress: 2 of 3 active · 4 waiting");
+    expect(formatFleetHeader(0, 5, 0)).toBe("Work in progress: 0 of 5 active · 0 waiting");
   });
 });

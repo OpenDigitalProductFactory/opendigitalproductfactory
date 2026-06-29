@@ -33,12 +33,12 @@ import {
   deriveQueueState,
   formatFleetHeader,
 } from "./fleet-derivation";
-import { QueueStateBadge } from "./QueueStateBadge";
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
 import { BuildChangeSummaryBand } from "./BuildChangeSummaryBand";
 import { BuildSolutionSummaryBand } from "./BuildSolutionSummaryBand";
+import { BuildOperatorHeaderDetails, BuildWorkRequestStrip, formatOperatorPhaseLabel } from "./BuildOperatorContext";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
@@ -102,6 +102,8 @@ const MISSING_BOM_SUMMARY: BomSummary = {
   },
 };
 
+const MAX_OPERATOR_FLEET_ITEMS = 4;
+
 /** Map the build's lifecycle phase onto the 5-dot overseer phase rail. */
 function toRailPhase(phase: BuildPhase): PhaseRailPhase {
   switch (phase) {
@@ -146,9 +148,8 @@ export function BuildStudio({
   // DetailsDrawer accordion (PR #912's DetailsDrawer + this slice).
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerInitialSectionId, setDrawerInitialSectionId] = useState<string | null>(null);
-  // BI-63EAD801: collapse internal IDs / git branch chip by default so
+  // BI-63EAD801: keep internal IDs / git branch chip behind Engineer view so
   // end-users (Dale) don't see FB-*, WC-*, and raw branch names in the header.
-  // Engineering users can expand with one click; state persists to localStorage.
   const BUILD_DETAILS_KEY = "dpf:build-studio-header-details-expanded";
   const [headerDetailsExpanded, setHeaderDetailsExpanded] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -666,10 +667,9 @@ export function BuildStudio({
           )}
 
           {/* Fleet rail (compact density) — replaces the legacy comfortable
-              build cards. Per spec §1: one row per in-flight build, ≤32px
-              tall, phase mini-rail + queue badge + needs-attention dot.
-              Order: running → blocked → queued → idle. Falls back to FB
-              ascending for same-kind tie-break. */}
+              build cards. Rows use plain operator status labels; overflow is
+              folded under AI Coworker custody. Order: running → blocked →
+              queued → idle. Falls back to FB ascending for same-kind tie-break. */}
           <FleetRailZone
             buildRows={buildRows}
             epicRollups={rollupRows}
@@ -708,7 +708,7 @@ export function BuildStudio({
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--dpf-surface-1)]">
           <PortalContextStrip
             envelope={portalContext ?? null}
-            showInternalIds={engineerView || headerDetailsExpanded}
+            showInternalIds={engineerView}
           />
           {activeBuild ? (
             <>
@@ -724,11 +724,9 @@ export function BuildStudio({
                     <ClaimBadge agentId={activeBuild.claimedByAgentId ?? null} claimStatus={activeBuild.claimStatus ?? null} claimedAt={activeBuild.claimedAt ?? null} />
                   </div>
                   {/* BI-63EAD801 (D13): Internal IDs and git branch chip are
-                      hidden from default view — end-users (Dale) have no use
-                      for FB-*, WC-*, or raw branch names. A "Details" toggle
-                      reveals them for engineering workflows. State persists to
-                      localStorage so engineers don't have to re-expand every
-                      session. */}
+                      hidden from the operator view — end-users (Dale) have no
+                      use for FB-*, WC-*, or raw branch names. Engineer view is
+                      the explicit opt-in for those details. */}
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)]">
                     <button
                       type="button"
@@ -746,24 +744,11 @@ export function BuildStudio({
                         className="flex flex-wrap items-center gap-2"
                         data-testid="build-studio-header-details"
                       >
-                        <span data-testid="build-studio-build-id">{activeBuild.buildId}</span>
-                        {activeBuild.originator && (
-                          <>
-                            <span>&middot;</span>
-                            <span className="inline-flex items-center gap-1 rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 font-medium text-[var(--dpf-text)]">
-                              {activeBuild.originator.itemId}
-                            </span>
-                          </>
-                        )}
-                        {branchBadge && (
-                          <>
-                            <span>&middot;</span>
-                            <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-1.5 py-0.5 font-mono" title={branchBadge.title}>
-                              <svg className="shrink-0" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z" /></svg>
-                              <span className="truncate">{branchBadge.value}</span>
-                            </span>
-                          </>
-                        )}
+                        <BuildOperatorHeaderDetails
+                          build={activeBuild}
+                          branchBadge={branchBadge}
+                          engineerView={engineerView}
+                        />
                       </span>
                     )}
                   </div>
@@ -776,37 +761,13 @@ export function BuildStudio({
               )}
 
               <div className="flex min-h-0 flex-1 flex-col">
-                {activeBuild.originator && (
-                  <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)]">
-                      <span className="font-semibold text-[var(--dpf-text)]">Canonical backlog item</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDrawerInitialSectionId("canonical-doc");
-                          setDrawerOpen(true);
-                        }}
-                        title="Open the full description and Scout findings"
-                        className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]"
-                        data-testid="build-studio-canonical-doc-trigger"
-                      >
-                        {activeBuild.originator.title}
-                      </button>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)]">
-                      <span>Status: {activeBuild.originator.status}</span>
-                      {activeBuild.originator.triageOutcome && (
-                        <span>Triage: {activeBuild.originator.triageOutcome}</span>
-                      )}
-                      {activeBuild.originator.effortSize && (
-                        <span>Size: {activeBuild.originator.effortSize}</span>
-                      )}
-                      {activeBuild.originator.resolution && (
-                        <span>Decision: {activeBuild.originator.resolution}</span>
-                      )}
-                    </div>
-                  </div>
-                )}
+                <BuildWorkRequestStrip
+                  build={activeBuild}
+                  onOpenWorkRequest={() => {
+                    setDrawerInitialSectionId("canonical-doc");
+                    setDrawerOpen(true);
+                  }}
+                />
                 {activeBuild && activeBuild.phase === "ship" && (
                   <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
                     <ReleaseDecisionPanel
@@ -999,7 +960,7 @@ export function BuildStudio({
           driver replaces the dishonest per-build Preview tab). */}
       <BuildStudioFooter
         builds={supervisedBuildRows}
-        showDrivingBuildCode={engineerView || headerDetailsExpanded}
+        showDrivingBuildCode={engineerView}
       />
     </div>
   );
@@ -1187,17 +1148,24 @@ function BsQueueSection({ builds }: { builds: readonly FeatureBuildRow[] }) {
     return a.build.buildId.localeCompare(b.build.buildId);
   });
   const counts = deriveFleetCounts(entries.map((e) => e.queueState));
+  const labelForQueueState = (entry: (typeof entries)[number]) => {
+    if (entry.needsAttention) return "Needs you";
+    if (entry.queueState.kind === "running") return "Working";
+    if (entry.queueState.kind === "blocked") return "Blocked";
+    if (entry.queueState.kind === "queued") return `Waiting ${entry.queueState.position}`;
+    return formatOperatorPhaseLabel(entry.build.phase);
+  };
 
   return (
     <div className="flex flex-col gap-2">
       <p className="text-[var(--dpf-muted)]">
-        Shared sandbox runtime — read-only view. Per spec §10, queue mutation
-        (start/cancel/reorder) belongs to the concurrency thread, not this layout.
+        AI Coworker workload, read-only here. Use the build's main action when
+        one of these needs you.
       </p>
       <div className="flex flex-wrap gap-3 text-[11px] text-[var(--dpf-text)]">
-        <span>Running: <span className="font-semibold">{counts.runningCount}</span></span>
+        <span>Working: <span className="font-semibold">{counts.runningCount}</span></span>
         <span>Blocked: <span className="font-semibold text-[var(--dpf-warning)]">{counts.blockedCount}</span></span>
-        <span>Queued: <span className="font-semibold">{counts.queuedCount}</span></span>
+        <span>Waiting: <span className="font-semibold">{counts.queuedCount}</span></span>
       </div>
       <ul className="flex flex-col gap-1">
         {sorted.map((entry) => (
@@ -1207,11 +1175,9 @@ function BsQueueSection({ builds }: { builds: readonly FeatureBuildRow[] }) {
             data-build-id={entry.build.buildId}
             data-queue-kind={entry.queueState.kind}
           >
-            <span className="font-mono text-[var(--dpf-text)]">{entry.build.buildId}</span>
-            <span className="truncate text-[var(--dpf-muted)]">{entry.build.title}</span>
-            <span className="ml-auto text-[10px] uppercase tracking-wider text-[var(--dpf-muted)]">
-              {entry.queueState.kind}
-              {entry.queueState.kind === "queued" && ` @${entry.queueState.position}`}
+            <span className="min-w-0 flex-1 truncate text-[var(--dpf-text)]">{entry.build.title}</span>
+            <span className="ml-auto shrink-0 text-[10px] font-semibold text-[var(--dpf-muted)]">
+              {labelForQueueState(entry)}
             </span>
           </li>
         ))}
@@ -1460,17 +1426,49 @@ function FleetRailZone({
 
   // Split entries into active (needs attention) vs completed (historical). The
   // fleet rail surfaces what needs attention; completed work is one click away
-  // via the "{N} completed" toggle below. Matches the WIP-slots header
-  // semantic: the list should only show inflight work by default.
+  // via the "{N} completed" toggle below. Current-work overflow is folded by
+  // default so the operator sees a bounded list, not the entire backlog.
   const activeEntries = sorted.filter((e) => e.build.phase !== "complete");
   const completedEntries = sorted.filter((e) => e.build.phase === "complete");
   const activeEpicRollups = epicRollups.filter((rollup) => rollup.status !== "complete");
   const completedEpicRollups = epicRollups.filter((rollup) => rollup.status === "complete");
   const completedItemCount = completedEntries.length + completedEpicRollups.length;
   const [showCompleted, setShowCompleted] = useState(false);
+  const [showAllActive, setShowAllActive] = useState(false);
 
   const counts = deriveFleetCounts(entries.map((e) => e.queueState));
   const wipSlotCap = Math.max(DEFAULT_BUILD_STUDIO_WIP_SLOT_CAP, counts.runningCount);
+  const totalActiveItemCount = activeEpicRollups.length + activeEntries.length;
+  const shouldCollapseActive = totalActiveItemCount > MAX_OPERATOR_FLEET_ITEMS && !showAllActive;
+
+  let visibleActiveEpicRollups = activeEpicRollups;
+  let visibleActiveEntries = activeEntries;
+  if (shouldCollapseActive) {
+    const activeEpicIndex = activeEpicRollups.findIndex((rollup) =>
+      rollup.children.some((child) => child.buildId === activeBuildId),
+    );
+    const activeEntryIndex = activeEntries.findIndex((entry) => entry.build.buildId === activeBuildId);
+    visibleActiveEpicRollups = activeEpicRollups.slice(0, Math.min(MAX_OPERATOR_FLEET_ITEMS, activeEpicRollups.length));
+    let remainingSlots = Math.max(0, MAX_OPERATOR_FLEET_ITEMS - visibleActiveEpicRollups.length);
+
+    if (activeEpicIndex >= MAX_OPERATOR_FLEET_ITEMS && visibleActiveEpicRollups.length > 0) {
+      visibleActiveEpicRollups = [
+        ...visibleActiveEpicRollups.slice(0, MAX_OPERATOR_FLEET_ITEMS - 1),
+        activeEpicRollups[activeEpicIndex],
+      ];
+      remainingSlots = 0;
+    }
+
+    visibleActiveEntries = activeEntries.slice(0, remainingSlots);
+    if (activeEntryIndex >= remainingSlots && remainingSlots > 0) {
+      visibleActiveEntries = [
+        ...visibleActiveEntries.slice(0, remainingSlots - 1),
+        activeEntries[activeEntryIndex],
+      ];
+    }
+  }
+  const hiddenActiveItemCount =
+    totalActiveItemCount - visibleActiveEpicRollups.length - visibleActiveEntries.length;
 
   useEffect(() => {
     if (!activeBuildId) return;
@@ -1527,16 +1525,6 @@ function FleetRailZone({
           <span className="truncate">
             {formatFleetHeader(counts.runningCount, wipSlotCap, counts.queuedCount)}
           </span>
-          {counts.queuedCount > 0 && (
-            <QueueStateBadge
-              state={{
-                kind: "queued",
-                position: counts.queuedCount,
-                reason: "capacity",
-                ahead: Math.max(0, counts.queuedCount - 1),
-              }}
-            />
-          )}
           {counts.blockedCount > 0 && (
             <> · <span className="text-[var(--dpf-warning)]">{counts.blockedCount} blocked</span></>
           )}
@@ -1544,7 +1532,7 @@ function FleetRailZone({
         <span aria-hidden="true" className="text-[var(--dpf-muted)]">›</span>
       </button>
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1" data-testid="fleet-rail-body">
-        {activeEpicRollups.map((rollup, idx) => (
+        {visibleActiveEpicRollups.map((rollup, idx) => (
           <li key={rollup.epicId}>
             <EpicRollupListItem
               rollup={rollup}
@@ -1556,12 +1544,12 @@ function FleetRailZone({
             />
           </li>
         ))}
-        {activeEntries.map((entry, idx) => (
+        {visibleActiveEntries.map((entry, idx) => (
           <li key={entry.build.buildId}>
             <BuildListItem
               build={entry.build}
               active={activeBuildId === entry.build.buildId}
-              index={activeEpicRollups.length + idx}
+              index={visibleActiveEpicRollups.length + idx}
               lifecycleLabel={entry.lifecycleLabel}
               isDevEnvironment={isDevEnvironment}
               density="fleet"
@@ -1572,9 +1560,31 @@ function FleetRailZone({
             />
           </li>
         ))}
-        {activeEpicRollups.length === 0 && activeEntries.length === 0 && (
+        {visibleActiveEpicRollups.length === 0 && visibleActiveEntries.length === 0 && (
           <li className="px-3 py-6 text-center text-[11px] text-[var(--dpf-muted)]">
             No active builds. Type a feature name above and click "Start a new build" to start.
+          </li>
+        )}
+        {totalActiveItemCount > MAX_OPERATOR_FLEET_ITEMS && (
+          <li>
+            <div className="mt-1 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-[11px] leading-snug text-[var(--dpf-muted)]">
+              <p>
+                {showAllActive
+                  ? "AI Coworker is tracking all current builds."
+                  : `AI Coworker is tracking ${hiddenActiveItemCount} more build${hiddenActiveItemCount === 1 ? "" : "s"}.`}
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowAllActive((v) => !v)}
+                aria-expanded={showAllActive}
+                data-testid="fleet-rail-active-toggle"
+                className="mt-1 inline-flex rounded px-0 text-[11px] font-semibold text-[var(--dpf-accent)] hover:text-[var(--dpf-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+              >
+                {showAllActive
+                  ? "Show fewer builds"
+                  : `Show ${hiddenActiveItemCount} more build${hiddenActiveItemCount === 1 ? "" : "s"}`}
+              </button>
+            </div>
           </li>
         )}
         {completedItemCount > 0 && (
@@ -1605,7 +1615,7 @@ function FleetRailZone({
                         rollup={rollup}
                         activeBuildId={activeBuildId}
                         expanded={expandedEpicIds.has(rollup.epicId)}
-                        index={activeEpicRollups.length + activeEntries.length + idx}
+                        index={visibleActiveEpicRollups.length + visibleActiveEntries.length + idx}
                         onToggle={() => toggleEpic(rollup.epicId)}
                         onSelectBuild={onSelectBuildById}
                       />
@@ -1616,7 +1626,7 @@ function FleetRailZone({
                       <BuildListItem
                         build={entry.build}
                         active={activeBuildId === entry.build.buildId}
-                        index={activeEpicRollups.length + activeEntries.length + completedEpicRollups.length + idx}
+                        index={visibleActiveEpicRollups.length + visibleActiveEntries.length + completedEpicRollups.length + idx}
                         lifecycleLabel={entry.lifecycleLabel}
                         isDevEnvironment={isDevEnvironment}
                         density="fleet"

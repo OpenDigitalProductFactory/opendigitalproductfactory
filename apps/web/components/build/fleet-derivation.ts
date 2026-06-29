@@ -86,7 +86,8 @@ function humanizeStep(step: string): string {
  *   - phase=ship with no acceptanceMet → yes (operator decision needed)
  *   - claim status indicates a stalled / abandoned claim → yes
  *
- * The dot is shape+color (red dot + ring) so color-blind users still see it.
+ * The fleet row renders this as the plain "Needs you" status so the cue is
+ * readable without decoding symbols.
  */
 export function deriveNeedsAttention(build: FeatureBuildRow): boolean {
   if (build.phase === "failed") return true;
@@ -134,5 +135,5 @@ export function formatFleetHeader(
   cap: number = DEFAULT_BUILD_STUDIO_WIP_SLOT_CAP,
   queuedCount: number = 0,
 ): string {
-  return `WIP slots: ${runningCount} of ${cap} in use · ${queuedCount} queued`;
+  return `Work in progress: ${runningCount} of ${cap} active · ${queuedCount} waiting`;
 }

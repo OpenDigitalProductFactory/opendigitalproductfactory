@@ -105,6 +105,9 @@ export function ActionBanner({ state, operatorStatus, sentence, primaryAction, d
     >
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 font-semibold text-[var(--dpf-muted)]">
+            AI Coworker
+          </span>
           {operatorStatus && (
             <StatusBadge
               intent={operatorStatus.intent}

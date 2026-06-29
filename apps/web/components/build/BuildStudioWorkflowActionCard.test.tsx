@@ -260,7 +260,7 @@ describe("BuildStudioWorkflowActionCard resume visibility", () => {
 
     expect(screen.getByText("Reset blocked tasks")).toBeInTheDocument();
     expect(screen.getByText("Blocked (technical)")).toBeInTheDocument();
-    expect(screen.getByTestId("build-next-action")).toHaveTextContent("Next: try to fix the failed work from Build Studio.");
+    expect(screen.getByTestId("build-next-action")).toHaveTextContent("Next: try to fix the failed work. I will rerun the recovery path.");
     expect(screen.getByTestId("build-guided-recovery")).toHaveTextContent("Something looks off");
     expect(screen.getByText("DB")).toBeInTheDocument();
     expect(screen.getByText("3 blocked tasks will be reset before the existing resume path is queued.")).toBeInTheDocument();
@@ -296,7 +296,7 @@ describe("BuildStudioWorkflowActionCard resume visibility", () => {
     );
 
     expect(screen.getByText("Waiting on you")).toBeInTheDocument();
-    expect(screen.getByTestId("build-next-action")).toHaveTextContent("Next: try to fix the plan review in place.");
+    expect(screen.getByTestId("build-next-action")).toHaveTextContent("Next: try to fix the plan review here.");
     expect(screen.getByTestId("build-guided-recovery")).toHaveTextContent("Try to fix");
     expect(screen.getByRole("button", { name: "Something looks off" })).toBeInTheDocument();
 
@@ -451,7 +451,7 @@ describe("BuildStudioWorkflowActionCard compact rendering", () => {
     // The compact sentence is the derived one-line Next action, paired with a
     // single operator status.
     expect(banner).toHaveTextContent("Waiting on you");
-    expect(banner).toHaveTextContent("Next: start implementation from Build Studio.");
+    expect(banner).toHaveTextContent("Next: start implementation. I will track the checks.");
     expect(screen.queryByText("Build Status")).not.toBeInTheDocument();
     expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
   });
@@ -490,7 +490,7 @@ describe("BuildStudioWorkflowActionCard compact rendering", () => {
     const banner = screen.getByRole("region", { name: "Current build action" });
     expect(banner).toHaveAttribute("data-state", "blocked");
     expect(banner).toHaveTextContent("Waiting on you");
-    expect(banner).toHaveTextContent("Next: clear the missing evidence with the coworker");
+    expect(banner).toHaveTextContent("Next: ask the AI Coworker to collect the missing evidence.");
     expect(banner).toHaveTextContent("Plan review failed. Refine the plan first.");
   });
 

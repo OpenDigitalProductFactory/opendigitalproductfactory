@@ -82,8 +82,8 @@ function entry(
 
 describe("formatFleetHeader", () => {
   it("formats running/cap and queued count", () => {
-    expect(formatFleetHeader(2, 3, 4)).toBe("WIP slots: 2 of 3 in use · 4 queued");
-    expect(formatFleetHeader(0, 5, 0)).toBe("WIP slots: 0 of 5 in use · 0 queued");
+    expect(formatFleetHeader(2, 3, 4)).toBe("Work in progress: 2 of 3 active · 4 waiting");
+    expect(formatFleetHeader(0, 5, 0)).toBe("Work in progress: 0 of 5 active · 0 waiting");
   });
 });
 
@@ -147,8 +147,8 @@ describe("FleetRail rendering", () => {
         onDeleteBuild={vi.fn()}
       />,
     );
-    expect(screen.getByTestId("fleet-header-label")).toHaveTextContent("WIP slots: 1 of 3 in use · 2 queued");
-    expect(screen.getByLabelText("Queued, position 2")).toBeInTheDocument();
+    expect(screen.getByTestId("fleet-header-label")).toHaveTextContent("Work in progress: 1 of 3 active · 2 waiting");
+    expect(screen.queryByLabelText("Queued, position 2")).not.toBeInTheDocument();
   });
 
   it("header has role=status + aria-live=polite for queue-change announcement", () => {

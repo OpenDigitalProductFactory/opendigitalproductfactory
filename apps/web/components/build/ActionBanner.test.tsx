@@ -45,12 +45,13 @@ describe("ActionBanner", () => {
       <ActionBanner
         state="ready"
         operatorStatus={{ label: "Waiting on you", intent: "accent" }}
-        sentence="Next: start implementation from Build Studio."
+        sentence="Next: start implementation. I will track the checks."
       />,
     );
+    expect(html).toContain("AI Coworker");
     expect(html).toContain("Waiting on you");
     expect(html).toContain('data-intent="accent"');
-    expect(html).toContain("Next: start implementation from Build Studio.");
+    expect(html).toContain("Next: start implementation. I will track the checks.");
   });
 
   it("does NOT render a 'Build Status' or 'Operational status' label", () => {
