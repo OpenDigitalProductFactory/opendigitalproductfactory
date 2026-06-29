@@ -230,6 +230,14 @@ Z.ai should enter through Model Supply:
 
 This separates supply ("what models can answer?") from execution ("what process runs autonomous build work?").
 
+### 7.6 Coordination with the Governed Adaptive Playbooks observer
+
+The [Governed Adaptive Playbooks](2026-06-27-governed-adaptive-playbooks-design.md) observer also watches runtime evidence, including model-tier mismatch and stale calibration. The two efforts must not build parallel background-sweep machinery:
+
+- The AI Readiness Console **owns provider/model/routing calibration queueing**: discovery, profiling, eval, probe, routing-profile sync, and stale-calibration jobs (sections 7.1, 7.4, and Phase 3). This is the single source of truth for what calibration work is queued or stale.
+- The playbook observer must not run a second provider-calibration sweep. For model-tier-mismatch or stale-routing signals it composes this console's readiness summary and `provider-routing-eligibility` and emits a reviewable capability need, rather than queuing its own eval/probe jobs.
+- Both use one background-job mechanism, not two schedulers; routing-confidence freshness thresholds live here, and the observer reads them.
+
 ## 8. Read Model
 
 Add a server-side read model, initially pure TypeScript:

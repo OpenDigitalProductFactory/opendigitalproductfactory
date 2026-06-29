@@ -25,7 +25,10 @@ export function SyncProvidersButton({ lastSyncAt }: Props) {
         if (res.error) {
           setResult({ ok: false, message: res.error });
         } else {
-          setResult({ ok: true, message: `${res.added} added, ${res.updated} updated` });
+          setResult({
+            ok: true,
+            message: `${res.added} added, ${res.updated} refreshed; credentials kept`,
+          });
         }
         router.refresh();
       } catch (err) {
@@ -60,8 +63,15 @@ export function SyncProvidersButton({ lastSyncAt }: Props) {
 
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-      <button onClick={handleClick} disabled={isPending} style={buttonStyle}>
-        {isPending ? "Syncing…" : "Sync Provider Registry"}
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={isPending}
+        style={buttonStyle}
+        title="Refresh provider catalog metadata. Existing credentials, enabled families, status, and custom endpoints are preserved."
+        aria-label="Refresh provider catalog metadata without changing credentials"
+      >
+        {isPending ? "Refreshing..." : "Refresh Provider Catalog"}
       </button>
       {result && (
         <span style={{ fontSize: 10, color: result.ok ? "var(--dpf-success)" : "var(--dpf-error)" }}>
@@ -70,7 +80,9 @@ export function SyncProvidersButton({ lastSyncAt }: Props) {
       )}
       {!result && isStale && !isPending && (
         <span style={{ fontSize: 10, color: "var(--dpf-warning)" }}>
-          {lastSyncAt ? "Last updated over a month ago" : "Providers are loaded automatically on install. Click to refresh if you've updated the platform."}
+          {lastSyncAt
+            ? "Catalog metadata is over a month old; credentials and setup are preserved."
+            : "Providers load automatically on install. Refresh only updates catalog metadata; credentials and setup stay as-is."}
         </span>
       )}
     </span>
