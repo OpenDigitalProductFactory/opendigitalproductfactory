@@ -174,6 +174,54 @@ describe("createAutonomousWorkRun", () => {
     expect(String(arg?.data?.taskRunId)).toMatch(/^TR-CAP-/);
   });
 
+  it("writes explicit proactivity metadata without letting generic metadata clobber it", async () => {
+    const { prisma } = await import("@dpf/db");
+    vi.mocked(prisma.taskRun.create).mockResolvedValue({
+      id: "tr_internal_proactivity",
+      taskRunId: "TR-SCHED-PROACT",
+      contextId: "thread-proactivity",
+    } as never);
+
+    const proactivity = {
+      resolvedLevel: "assertive" as const,
+      policyId: "proactivity:field-dispatch-appointment:assertive",
+      attentionWindowMinutes: 20,
+      followUpCadenceMinutes: [30, 60],
+      maxAttempts: 3,
+      spendClass: "elevated" as const,
+      channelPolicy: "urgent-channel" as const,
+      escalationTarget: "dispatcher" as const,
+      actionBoundary: "propose" as const,
+      explanation: "Customer appointment timing is at risk.",
+      evidenceRefs: [{ kind: "activity-family", id: "field-dispatch-appointment" }],
+    };
+
+    const { createAutonomousWorkRun } = await import("./autonomous-work-run");
+
+    await createAutonomousWorkRun({
+      trigger: "scheduled",
+      userId: "dispatcher-1",
+      agentId: "dispatch-coworker",
+      routeContext: "/storefront/schedule",
+      title: "Appointment delay watch",
+      objective: "Watch appointment delay risk.",
+      prompt: "Watch appointment delay risk.",
+      threadId: "thread-proactivity",
+      metadata: {
+        proactivity: { resolvedLevel: "quiet" },
+        context: "field-dispatch",
+      },
+      proactivity,
+    });
+
+    const arg = vi.mocked(prisma.taskRun.create).mock.calls[0]?.[0];
+    expect(arg?.data?.a2aMetadata).toMatchObject({
+      trigger: "scheduled",
+      context: "field-dispatch",
+      proactivity,
+    });
+  });
+
   it("finds the newest unarchived TaskRun for an interactive thread", async () => {
     const { prisma } = await import("@dpf/db");
     vi.mocked(prisma.taskRun.findFirst).mockResolvedValue({ taskRunId: "TR-CHAT-123" } as never);
