@@ -2,17 +2,28 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 vi.mock("@/lib/auth", () => ({
-  auth: vi.fn().mockResolvedValue(null),
+  auth: vi.fn().mockResolvedValue({
+    user: { platformRole: "admin", isSuperuser: true },
+  }),
 }));
 
 vi.mock("@/lib/permissions", () => ({
-  can: vi.fn().mockReturnValue(false),
+  can: vi.fn().mockReturnValue(true),
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     scheduledJob: {
-      findMany: vi.fn().mockResolvedValue([]),
+      findMany: vi.fn().mockResolvedValue([
+        {
+          jobId: "provider-registry-sync",
+          schedule: "daily",
+          lastRunAt: new Date("2026-06-28T12:00:00.000Z"),
+          nextRunAt: new Date("2099-01-01T00:00:00.000Z"),
+          lastStatus: "ok",
+          lastError: null,
+        },
+      ]),
       update: vi.fn(),
     },
     modelProvider: {
@@ -25,7 +36,16 @@ vi.mock("@/lib/ai-provider-data", () => ({
   getProviders: vi.fn().mockResolvedValue([]),
   getTokenSpendByProvider: vi.fn().mockResolvedValue([]),
   getTokenSpendByAgent: vi.fn().mockResolvedValue([]),
-  getScheduledJobs: vi.fn().mockResolvedValue([]),
+  getScheduledJobs: vi.fn().mockResolvedValue([
+    {
+      jobId: "provider-registry-sync",
+      schedule: "daily",
+      lastRunAt: new Date("2026-06-28T12:00:00.000Z"),
+      nextRunAt: new Date("2099-01-01T00:00:00.000Z"),
+      lastStatus: "ok",
+      lastError: null,
+    },
+  ]),
   groupByEndpointTypeAndCategory: vi.fn().mockReturnValue([]),
   getProviderModelSummaries: vi.fn().mockResolvedValue(new Map()),
 }));
@@ -50,10 +70,6 @@ vi.mock("@/components/platform/TokenSpendPanel", () => ({
 
 vi.mock("@/components/platform/ScheduledJobsTable", () => ({
   ScheduledJobsTable: () => <div>scheduled-jobs-table</div>,
-}));
-
-vi.mock("@/components/platform/SyncProvidersButton", () => ({
-  SyncProvidersButton: () => <div>sync-providers-button</div>,
 }));
 
 vi.mock("@/components/platform/ServiceSection", () => ({
@@ -83,5 +99,15 @@ describe("ProvidersPage", () => {
     expect(html).not.toContain("Tool Inventory");
     expect(html).toContain('href="/platform/ai/readiness"');
     expect(html).toContain('href="/platform/tools/services"');
+  });
+
+  it("shows provider catalog freshness without a normal-path refresh action", async () => {
+    const { default: ProvidersPage } = await import("./page");
+    const html = renderToStaticMarkup(await ProvidersPage());
+
+    expect(html).toContain("Provider catalog");
+    expect(html).toContain("Last updated");
+    expect(html).not.toContain("Refresh Provider Catalog");
+    expect(html).not.toContain("Sync Provider Registry");
   });
 });

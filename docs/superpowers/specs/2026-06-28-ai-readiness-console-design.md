@@ -186,6 +186,8 @@ On credential save or OAuth completion, the platform should:
 5. Queue background eval/probe work when the model is a viable routing candidate.
 6. Refresh the readiness summary.
 
+Provider catalog refresh is automatic install/startup/scheduled maintenance. The default provider list shows only catalog freshness ("last updated" or "updates automatically") and never asks the operator to decide when to sync metadata. Manual refresh belongs in advanced scheduled-job recovery or AI Coworker-assisted troubleshooting.
+
 The default button should be outcome-oriented, such as "Connect provider" or "Save and ready provider". Manual "Discover", "Profile", "Run Eval", "Run probes", and "Run fill tests" remain in diagnostics with freshness timestamps.
 
 ### 7.2 Build execution

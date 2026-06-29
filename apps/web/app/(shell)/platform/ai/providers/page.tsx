@@ -8,7 +8,6 @@ import { DetectedServicesBanner } from "@/components/platform/DetectedServicesBa
 import { checkBundledProviders } from "@/lib/ollama";
 import { TokenSpendPanel } from "@/components/platform/TokenSpendPanel";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
-import { SyncProvidersButton } from "@/components/platform/SyncProvidersButton";
 import { ServiceSection } from "@/components/platform/ServiceSection";
 import { ServiceRow } from "@/components/platform/ServiceRow";
 import { getAllCliPoolStatuses, type CliPoolState } from "@/lib/routing/cli-pool-status";
@@ -154,17 +153,19 @@ export default async function ProvidersPage() {
         </p>
       </div>
 
-      {/* Section 1: External Services Registry */}
+      {/* Section 1: Provider catalog */}
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Providers
           </div>
-          {canWrite && <SyncProvidersButton lastSyncAt={lastSync ?? null} />}
+          <ProviderCatalogStatus lastSyncAt={lastSync ?? null} />
         </div>
 
         {aiProviders.length === 0 ? (
-          <p style={{ color: "var(--dpf-muted)", fontSize: 11 }}>No providers registered. Click &quot;Update Providers&quot; to import.</p>
+          <p style={{ color: "var(--dpf-muted)", fontSize: 11 }}>
+            No providers are registered yet. The provider catalog loads automatically; setup actions appear only when a provider needs credentials or review.
+          </p>
         ) : (
           groupByEndpointTypeAndCategory(aiProviders).map((group) => (
             <ServiceSection
@@ -199,6 +200,24 @@ export default async function ProvidersPage() {
         </div>
         <ScheduledJobsTable jobs={freshJobs} canWrite={canWrite} />
       </div>
+    </div>
+  );
+}
+
+function ProviderCatalogStatus({ lastSyncAt }: { lastSyncAt: Date | null }) {
+  return (
+    <div style={{ textAlign: "right", fontSize: 10, color: "var(--dpf-muted)" }}>
+      <div style={{ color: "var(--dpf-text)", fontWeight: 600 }}>Provider catalog</div>
+      <div>
+        {lastSyncAt ? (
+          <>
+            Last updated <LocalTime value={lastSyncAt} mode="date" />
+          </>
+        ) : (
+          "Updates automatically"
+        )}
+      </div>
+      <div>Ask AI Coworker if this status looks wrong.</div>
     </div>
   );
 }

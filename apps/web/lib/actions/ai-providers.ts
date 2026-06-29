@@ -72,9 +72,9 @@ function inferServiceKindFromRegistryEntry(entry: RegistryProviderEntry): "mcp" 
 
 /**
  * Sync provider registry from local JSON file. No auth guard — called from
- * server component on page load for any view_platform holder. Use
- * triggerProviderSync() for the admin button (which adds the
- * manage_provider_connections check).
+ * server component on page load when the scheduled catalog refresh is due.
+ * Manual recovery goes through the scheduled-job runner, not the normal
+ * provider setup flow.
  */
 export async function syncProviderRegistry(): Promise<{ added: number; updated: number; error?: string }> {
   const job = await prisma.scheduledJob.findUnique({ where: { jobId: "provider-registry-sync" } });
@@ -183,12 +183,6 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
   }
 
   return { added, updated };
-}
-
-/** Admin button wrapper — requires manage_provider_connections. */
-export async function triggerProviderSync(): Promise<{ added: number; updated: number; error?: string }> {
-  await requireManageProviders();
-  return syncProviderRegistry();
 }
 
 // ─── Configure provider ───────────────────────────────────────────────────────
