@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";
+import { getProactivityLevelCopy } from "@/lib/proactivity/proactivity-copy";
+import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
 
 type Props = {
   agent: AgentInfo;
@@ -62,6 +64,11 @@ const categoryLabels: Record<string, string> = {
 export function CoworkerProfilePanel({ agent, onClose }: Props) {
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
   const grouped = groupSkillsByCategory(agent.skills);
+  const proactivityPlan = resolveProactivityPlan({
+    activityFamily: "scheduled-task",
+    agentId: agent.agentId,
+  });
+  const proactivityCopy = getProactivityLevelCopy(proactivityPlan.resolvedLevel);
 
   // Separate skills from tools based on enriched data
   const skills = agent.skills.filter((s) => !s.allowedTools || s.allowedTools.length === 0 || s.taskType !== "tool");
@@ -130,6 +137,48 @@ export function CoworkerProfilePanel({ agent, onClose }: Props) {
 
       {/* Scrollable content */}
       <div style={{ flex: 1, overflow: "auto", padding: "14px" }}>
+        {/* Proactivity Section */}
+        <div style={sectionStyle}>
+          <div style={{ ...sectionHeaderStyle, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 12 }}>Proactivity</span>
+            <span style={{ fontSize: 9, color: "var(--dpf-muted)", fontWeight: 400 }}>
+              How persistently I follow up
+            </span>
+          </div>
+          <div
+            style={{
+              border: "1px solid var(--dpf-border)",
+              borderRadius: 6,
+              padding: "8px 9px",
+              background: "color-mix(in srgb, var(--dpf-surface-2) 70%, transparent)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-text)" }}>
+                {proactivityCopy.label}
+              </span>
+              <span
+                style={{
+                  ...tagStyle,
+                  fontSize: 10,
+                  color: "var(--dpf-accent)",
+                  borderColor: "color-mix(in srgb, var(--dpf-accent) 40%, transparent)",
+                }}
+              >
+                {proactivityPlan.policyId}
+              </span>
+            </div>
+            <div style={{ fontSize: 10, color: "var(--dpf-muted)", marginTop: 6, lineHeight: 1.45 }}>
+              {proactivityPlan.explanation}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
+              <span style={{ ...tagStyle, fontSize: 10 }}>Spend: {proactivityPlan.spendClass}</span>
+              <span style={{ ...tagStyle, fontSize: 10 }}>Boundary: {proactivityPlan.actionBoundary}</span>
+              <span style={{ ...tagStyle, fontSize: 10 }}>Escalates: {proactivityPlan.escalationTarget}</span>
+            </div>
+          </div>
+        </div>
+
         {/* Skills Section */}
         <div style={sectionStyle}>
           <div style={{ ...sectionHeaderStyle, display: "flex", alignItems: "center", gap: 6 }}>
