@@ -9,11 +9,26 @@ const { mockPrisma, mockRequireCapability, mockRevalidatePath } = vi.hoisted(() 
     decisionInteraction: {
       create: vi.fn(),
     },
+    businessContext: {
+      findFirst: vi.fn(),
+    },
+    storefrontConfig: {
+      findFirst: vi.fn(),
+    },
+    regulatoryAutonomyPolicy: {
+      findMany: vi.fn(),
+    },
+    decisionShadowLedger: {
+      upsert: vi.fn(),
+      findMany: vi.fn(),
+    },
     coworkerActionEnvelope: {
       create: vi.fn(),
       update: vi.fn(),
     },
     trustState: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
       update: vi.fn(),
       create: vi.fn(),
     },
@@ -85,6 +100,7 @@ function needRow(overrides: Record<string, unknown> = {}) {
     blocks: "Repeated grant denials block verification.",
     evidenceJson: {
       patternKey: "grant-denial|build-specialist|/build",
+      activityClass: "work-pattern.grant-denial",
       decisionScope: "platform-wwmd",
       riskClass: "internal-reversible",
       currentAutonomyLevel: "shadow",
@@ -265,6 +281,43 @@ describe("reviewWorkPatternAction", () => {
       id: "decision-row-1",
       ...data,
     }));
+    mockPrisma.businessContext.findFirst.mockResolvedValue({
+      operatesIn: ["eu"],
+      sellsTo: [],
+      employsIn: [],
+      dataResidency: [],
+      industry: "legacy-industry",
+    });
+    mockPrisma.storefrontConfig.findFirst.mockResolvedValue({
+      archetype: { category: "professional-services" },
+    });
+    mockPrisma.regulatoryAutonomyPolicy.findMany.mockResolvedValue([
+      {
+        policyId: "RAP-GLOBAL-WORK-PATTERN",
+        policyKey: "global-work-pattern",
+        version: 1,
+        status: "active",
+        industry: null,
+        jurisdiction: "global",
+        jurisdictionBasis: "global",
+        activityClass: "work-pattern.grant-denial",
+        maxAutonomyLevel: "propose",
+        humanControlRequired: true,
+        requiredEvidence: ["decision-shadow-ledger", "operator-review"],
+        effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+        effectiveUntil: null,
+      },
+    ]);
+    mockPrisma.decisionShadowLedger.upsert.mockResolvedValue({});
+    mockPrisma.decisionShadowLedger.findMany.mockResolvedValue(
+      shadowTrials().map((trial) => ({
+        ledgerId: `DI-LEDGER:${trial.trialId}`,
+        agreement: trial.agreement,
+        observedAt: new Date(trial.observedAt),
+      })),
+    );
+    mockPrisma.trustState.findUnique.mockResolvedValue(null);
+    mockPrisma.trustState.upsert.mockResolvedValue({});
     mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma));
   });
 
@@ -311,7 +364,64 @@ describe("reviewWorkPatternAction", () => {
         }),
       }),
     });
+    expect(mockPrisma.regulatoryAutonomyPolicy.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: "active" }),
+      }),
+    );
+    expect(mockPrisma.decisionShadowLedger.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { ledgerId: expect.stringMatching(/^DI-[A-F0-9]{12}:S-1$/) },
+        create: expect.objectContaining({
+          agentId: "build-specialist",
+          activityType: "work-pattern.grant-denial",
+          riskClass: "internal-reversible",
+          autonomyLevel: "shadow",
+          taskRunId: "TR-1",
+          toolExecutionId: "TE-1",
+          regulatoryPolicyId: "RAP-GLOBAL-WORK-PATTERN",
+          regulatoryEvidence: expect.objectContaining({
+            ceiling: "propose",
+            matchedPolicyIds: ["RAP-GLOBAL-WORK-PATTERN"],
+            requiredEvidence: ["decision-shadow-ledger", "operator-review"],
+          }),
+        }),
+      }),
+    );
+    expect(mockPrisma.trustState.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          agentId: "build-specialist",
+          activityType: "work-pattern.grant-denial",
+          riskClass: "internal-reversible",
+          regulatoryCeiling: "propose",
+          sampleCount: 20,
+          agreementCount: 19,
+        }),
+      }),
+    );
     expect(mockRevalidatePath).toHaveBeenCalledWith("/platform/ai/agent/build-specialist");
+  });
+
+  it("uses DB-resolved regulatory ceilings instead of stale evidence JSON during approval", async () => {
+    mockPrisma.coworkerCapabilityNeed.findUnique.mockResolvedValue(
+      needRow({
+        evidenceJson: {
+          ...needRow().evidenceJson,
+          currentAutonomyLevel: "propose",
+          regulatoryCeiling: "autopilot",
+        },
+      }),
+    );
+
+    await expect(recordWorkPatternReview(form("approve"))).rejects.toThrow(
+      "approval_requires_promotable_shadow_evidence",
+    );
+
+    expect(mockPrisma.regulatoryAutonomyPolicy.findMany).toHaveBeenCalled();
+    expect(mockPrisma.decisionInteraction.create).not.toHaveBeenCalled();
+    expect(mockPrisma.decisionShadowLedger.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.trustState.upsert).not.toHaveBeenCalled();
   });
 
   it("records approved case-bound candidates as staged Work Case proposals", async () => {
@@ -463,11 +573,10 @@ describe("reviewWorkPatternAction", () => {
     expect(mockPrisma.decisionInteraction.create).not.toHaveBeenCalled();
   });
 
-  it("does not mutate live autonomy, Work Cases, skills, prompts, or backlog", async () => {
+  it("does not mutate live Work Cases, skills, prompts, grants, or backlog", async () => {
     await recordWorkPatternReview(form("approve"));
 
-    expect(mockPrisma.trustState.update).not.toHaveBeenCalled();
-    expect(mockPrisma.trustState.create).not.toHaveBeenCalled();
+    expect(mockPrisma.trustState.upsert).toHaveBeenCalled();
     expect(mockPrisma.coworkerActionEnvelope.create).not.toHaveBeenCalled();
     expect(mockPrisma.coworkerActionEnvelope.update).not.toHaveBeenCalled();
     expect(mockPrisma.workCase.update).not.toHaveBeenCalled();

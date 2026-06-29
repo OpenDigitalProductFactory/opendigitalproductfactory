@@ -10,6 +10,12 @@ import type {
   DecisionRiskTier,
 } from "@/lib/decision-perspective/types";
 import {
+  recordRegulatoryDecisionShadowEvidence,
+  resolveRuntimeRegulatoryAutonomyCeiling,
+  type RegulatoryAutonomyRuntimeDb,
+  type RuntimeRegulatoryAutonomyCeiling,
+} from "@/lib/autonomy/regulatory-autonomy-runtime";
+import {
   COWORKER_CAPABILITY_NEED_KINDS,
   type CoworkerCapabilityNeedKind,
 } from "@/lib/coworker-self-assessment/types";
@@ -190,6 +196,40 @@ function workPatternMetadataFrom(
   );
 }
 
+function activityClassForReview(input: {
+  evidenceJson: JsonRecord;
+  readinessJson: JsonRecord;
+  metadata: ReturnType<typeof workPatternMetadataFrom>;
+  patternKey: string;
+}): string {
+  const explicit =
+    stringField(input.evidenceJson, "activityClass") ??
+    stringField(input.readinessJson, "activityClass");
+  if (explicit) return explicit;
+
+  const binding = input.metadata?.workCaseBinding;
+  if (binding?.governedActionKey) {
+    return `work-case.${binding.caseType ?? "case"}.${binding.governedActionKey}`;
+  }
+
+  return input.patternKey;
+}
+
+function regulatorySummary(runtime: RuntimeRegulatoryAutonomyCeiling | null): JsonRecord | null {
+  if (!runtime) return null;
+  return {
+    activityClass: runtime.activityClass,
+    industry: runtime.industry,
+    ceiling: runtime.resolution.ceiling,
+    defaulted: runtime.resolution.defaulted,
+    humanControlRequired: runtime.resolution.humanControlRequired,
+    requiredEvidence: runtime.resolution.requiredEvidence,
+    matchedPolicyIds: runtime.resolution.matchedPolicies.map((policy) => policy.policyId),
+    matchedBasis: runtime.resolution.matchedBasis,
+    reason: runtime.resolution.reason,
+  };
+}
+
 function receiptEnvelopeFromForm(input: {
   formData: FormData;
   staging: NonNullable<ReturnType<typeof parseWorkPatternReviewState>>["caseStaging"];
@@ -259,6 +299,7 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
 
   const evidenceJson = recordFrom(need.evidenceJson);
   const readinessJson = recordFrom(need.readinessJson);
+  const metadata = workPatternMetadataFrom(evidenceJson, readinessJson);
   const patternKey =
     stringField(evidenceJson, "patternKey") ?? stringField(readinessJson, "patternKey");
   if (!patternKey) throw new Error("work_pattern_missing_pattern_key");
@@ -278,11 +319,26 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
     parseRiskClass(stringField(readinessJson, "shadowRiskClass")) ??
     parseRiskClass(stringField(evidenceJson, "riskClass")) ??
     parseRiskClass(stringField(readinessJson, "riskClass"));
+  const activityClass = activityClassForReview({
+    evidenceJson,
+    readinessJson,
+    metadata,
+    patternKey,
+  });
+  const reviewedAt = new Date();
+  const runtimeRegulatory = shadowTrials.length > 0
+    ? await resolveRuntimeRegulatoryAutonomyCeiling(prisma as unknown as RegulatoryAutonomyRuntimeDb, {
+        activityClass,
+        asOf: reviewedAt,
+      })
+    : null;
+  const effectiveRegulatoryCeiling =
+    runtimeRegulatory?.resolution.ceiling ?? regulatoryCeiling;
   const shadowEvaluation = shadowTrials.length > 0
     ? evaluateWorkPatternShadowEvidence({
         trials: shadowTrials,
         currentLevel,
-        regulatoryCeiling,
+        regulatoryCeiling: effectiveRegulatoryCeiling,
         riskClass: shadowRiskClass,
       })
     : null;
@@ -302,12 +358,12 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
     shadowEvaluation,
     decisionInteractionId,
     reviewerUserId: userId,
-    reviewedAt: new Date(),
+    reviewedAt,
     reviewerNote: note,
   });
   const caseStaging = buildWorkPatternCaseStaging({
     review,
-    metadata: workPatternMetadataFrom(evidenceJson, readinessJson),
+    metadata,
   });
   const reviewWithStaging =
     caseStaging.status === "not-case-bound"
@@ -334,6 +390,7 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
         evidenceBundle: inputJson({
           workPatternReview: reviewWithStaging,
           shadowEvaluation,
+          runtimeRegulatoryAutonomy: regulatorySummary(runtimeRegulatory),
           capabilityNeedId: need.needId,
           linkedBacklogItemId: need.linkedBacklogItemId ?? null,
           materialCount: 0,
@@ -357,6 +414,7 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
           materialCount: 0,
           freshnessDistribution: { current: 0, stale: 0, superseded: 0, contradicted: 0 },
           workPatternReview: reviewWithStaging,
+          runtimeRegulatoryAutonomy: regulatorySummary(runtimeRegulatory),
         }),
         humanOutcome: {
           type: "work-pattern-review",
@@ -374,6 +432,20 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
         },
       },
     });
+
+    if (runtimeRegulatory && shadowEvaluation?.riskClass && shadowTrials.length > 0) {
+      await recordRegulatoryDecisionShadowEvidence(tx as unknown as RegulatoryAutonomyRuntimeDb, {
+        agentId: need.agentId,
+        activityType: activityClass,
+        riskClass: shadowEvaluation.riskClass,
+        currentLevel: shadowEvaluation.currentLevel,
+        decisionInteractionId,
+        taskRunId: stringField(evidenceJson, "taskRunId"),
+        toolExecutionId: stringField(evidenceJson, "toolExecutionId"),
+        regulatory: runtimeRegulatory,
+        trials: shadowTrials,
+      });
+    }
 
     await tx.coworkerCapabilityNeed.update({
       where: { needId },
