@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 525,
+  "routeCount": 527,
   "routes": [
     {
       "routePath": "/",
@@ -4489,7 +4489,8 @@
         "ai"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/platform/ai/page.tsx"
+      "file": "apps/web/app/(shell)/platform/ai/page.tsx",
+      "redirectTo": "/platform/ai/readiness"
     },
     {
       "routePath": "/platform/ai/agent/[agentId]",
@@ -4673,6 +4674,17 @@
       "file": "apps/web/app/(shell)/platform/ai/operations-map/page.tsx"
     },
     {
+      "routePath": "/platform/ai/overview",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "overview"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/overview/page.tsx"
+    },
+    {
       "routePath": "/platform/ai/priority",
       "kind": "page",
       "segments": [
@@ -4731,6 +4743,17 @@
         "providerId"
       ],
       "file": "apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/readiness",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "readiness"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/readiness/page.tsx"
     },
     {
       "routePath": "/platform/ai/routing",
