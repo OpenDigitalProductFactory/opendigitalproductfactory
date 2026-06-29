@@ -53,7 +53,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
     description: "Manage coworkers, assignments, skills, providers, routing, and build runtime from one AI operations surface.",
     matchPrefixes: ["/platform/ai"],
     subItems: [
-      { label: "Overview", href: "/platform/ai" },
+      { label: "Readiness", href: "/platform/ai/readiness" },
       { label: "Operations Map", href: "/platform/ai/operations-map" },
       { label: "Capacity Continuity", href: "/platform/ai/capacity-continuity" },
       // EP-GOLDEN-TRIANGLE surface consolidation: the everyday Cost/Quality/Time

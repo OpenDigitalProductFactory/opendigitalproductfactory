@@ -19,6 +19,7 @@ import { AgentBudgetEventsPanel } from "@/components/platform/AgentBudgetEventsP
 import { LocalOnlyInferenceToggle } from "@/components/platform/LocalOnlyInferenceToggle";
 import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { AiReadinessHeaderLink } from "@/components/platform/AiReadinessHeaderLink";
 import Link from "next/link";
 
 
@@ -111,12 +112,15 @@ export default async function ProvidersPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>Providers &amp; Routing</h1>
-        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
-          {aiProviders.length} provider{aiProviders.length !== 1 ? "s" : ""} registered
-          {lastSync ? <> · last synced <LocalTime value={lastSync} mode="date" /></> : ""}
-        </p>
+      <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>Providers &amp; Routing</h1>
+          <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
+            {aiProviders.length} provider{aiProviders.length !== 1 ? "s" : ""} registered
+            {lastSync ? <> · last synced <LocalTime value={lastSync} mode="date" /></> : ""}
+          </p>
+        </div>
+        <AiReadinessHeaderLink />
       </div>
 
       <DetectedServicesBanner detected={detected} />

@@ -24,6 +24,7 @@ vi.mock("next/link", () => ({
 }));
 
 import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
+import { PLATFORM_FAMILIES } from "@/components/platform/platform-nav";
 
 describe("PlatformTabNav", () => {
   it("renders grouped top-level workflow tabs", () => {
@@ -74,6 +75,17 @@ describe("PlatformTabNav", () => {
     // …but no Capability Needs tab that teleports the operator to /ops.
     expect(html).not.toContain('href="/platform/ai/capability-needs"');
     expect(html).not.toContain(">Capability Needs<");
+  });
+
+  it("shows Readiness as the first AI Operations sub-item without an Overview peer", () => {
+    pathname = "/platform/ai/readiness";
+    const html = renderToStaticMarkup(<PlatformTabNav />);
+
+    const aiFamily = PLATFORM_FAMILIES.find((family) => family.key === "ai")!;
+
+    expect(aiFamily.subItems[0]).toEqual({ label: "Readiness", href: "/platform/ai/readiness" });
+    expect(aiFamily.subItems.some((item) => item.label === "Overview")).toBe(false);
+    expect(html).toContain(">Readiness<");
   });
 
   it("uses compact chrome on the operations map so the visual route map starts sooner", () => {

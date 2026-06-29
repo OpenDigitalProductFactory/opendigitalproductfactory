@@ -5,7 +5,7 @@ import { SectionNav } from "@/components/shell/SectionNav";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 
 const TABS = [
-  { label: "Overview", href: "/platform/ai" },
+  { label: "Readiness", href: "/platform/ai/readiness" },
   { label: "Assignments", href: "/platform/ai/assignments" },
   { label: "Routing & Calibration", href: "/platform/ai/providers" },
   { label: BUILD_STUDIO_CONFIG_ROUTE_COPY.navLabel, href: "/platform/ai/build-studio" },

@@ -81,6 +81,7 @@ describe("ProvidersPage", () => {
     expect(html).toContain("scheduled-jobs-table");
     expect(html).not.toContain("Activated MCP Services");
     expect(html).not.toContain("Tool Inventory");
+    expect(html).toContain('href="/platform/ai/readiness"');
     expect(html).toContain('href="/platform/tools/services"');
   });
 });

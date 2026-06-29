@@ -14,6 +14,7 @@ import {
   type FlagSeverity,
 } from "@/lib/inference/phase-model-resolution";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { AiReadinessHeaderLink } from "@/components/platform/AiReadinessHeaderLink";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -99,16 +100,19 @@ export default async function RuntimeHealthPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>
-          Model Selection &amp; Runtime Health
-        </h1>
-        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2, maxWidth: 760 }}>
-          One authoritative view of which model, provider, and engine will run each
-          build phase <em>right now</em> — and where live config contradicts platform
-          guidance. Resolved before a build runs, using the same routing logic the
-          build uses.
-        </p>
+      <div style={{ marginBottom: 20, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>
+            Model Selection &amp; Runtime Health
+          </h1>
+          <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2, maxWidth: 760 }}>
+            One authoritative view of which model, provider, and engine will run each
+            build phase <em>right now</em> — and where live config contradicts platform
+            guidance. Resolved before a build runs, using the same routing logic the
+            build uses.
+          </p>
+        </div>
+        <AiReadinessHeaderLink />
       </div>
 
       {loadError && (
