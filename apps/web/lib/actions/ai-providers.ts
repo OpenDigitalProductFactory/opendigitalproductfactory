@@ -1,7 +1,7 @@
 "use server";
 
 import { lazyFs, lazyPath, lazyFsPromises } from "@/lib/shared/lazy-node";
-import { prisma, type Prisma } from "@dpf/db";
+import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import {
@@ -29,6 +29,7 @@ import {
 } from "@/lib/provider-catalog-reconciliation";
 import { activateProvider } from "@/lib/govern/activate-provider";
 import { seedAiProviderFinanceBridge } from "@/lib/finance/ai-provider-finance";
+import { autoConfigureBuildStudio } from "@/lib/ai-provider-build-studio-config";
 
 const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
 const SHARED_ACCOUNT_LINKED_PROVIDERS = new Set(["zai"]);
@@ -321,94 +322,6 @@ export async function configureProvider(input: {
   await autoConfigureBuildStudio(input.providerId);
 
   return {};
-}
-
-/**
- * If no Build Studio config exists, automatically set it based on the
- * newly configured provider. If config exists but the relevant engine's
- * providerId is empty, fill it in.
- */
-async function autoConfigureBuildStudio(providerId: string): Promise<void> {
-  const buildProviderId = providerId === "zai" ? "zai-coding" : providerId;
-  const provider = await prisma.modelProvider.findUnique({
-    where: { providerId: buildProviderId },
-    select: { cliEngine: true },
-  });
-  if (!provider?.cliEngine) return; // Not a CLI-dispatchable provider
-
-  const cliEngine = provider.cliEngine as "claude" | "codex" | "grok" | "opencode";
-  const existing = await prisma.platformConfig.findUnique({
-    where: { key: "build-studio-dispatch" },
-  });
-
-  if (!existing) {
-    // No config at all — create one auto-selecting this engine
-    const config = {
-      provider: cliEngine,
-      claudeProviderId: cliEngine === "claude" ? buildProviderId : "",
-      codexProviderId: cliEngine === "codex" ? buildProviderId : "",
-      grokProviderId: cliEngine === "grok" ? buildProviderId : "",
-      opencodeProviderId: cliEngine === "opencode" ? buildProviderId : "",
-      claudeModel: "sonnet",
-      codexModel: "",
-      grokModel: "",
-      opencodeModel: "",
-    };
-    await prisma.platformConfig.create({
-      data: {
-        key: "build-studio-dispatch",
-        value: config as unknown as Prisma.InputJsonValue,
-      },
-    });
-    return;
-  }
-
-  // Config exists — fill in the provider ID if it's empty for this engine
-  if (existing.value && typeof existing.value === "object") {
-    const config = existing.value as Record<string, unknown>;
-    const claudeKey = "claudeProviderId";
-    const codexKey = "codexProviderId";
-    const grokKey = "grokProviderId";
-    const opencodeKey = "opencodeProviderId";
-
-    if (cliEngine === "claude" && !config[claudeKey]) {
-      config[claudeKey] = buildProviderId;
-      if (config.provider === "agentic" || (config.provider === "codex" && !config[codexKey])) {
-        config.provider = "claude";
-      }
-      await prisma.platformConfig.update({
-        where: { key: "build-studio-dispatch" },
-        data: { value: config as unknown as Prisma.InputJsonValue },
-      });
-    } else if (cliEngine === "codex" && !config[codexKey]) {
-      config[codexKey] = buildProviderId;
-      if (config.provider === "agentic") {
-        config.provider = "codex";
-      }
-      await prisma.platformConfig.update({
-        where: { key: "build-studio-dispatch" },
-        data: { value: config as unknown as Prisma.InputJsonValue },
-      });
-    } else if (cliEngine === "grok" && !config[grokKey]) {
-      config[grokKey] = buildProviderId;
-      if (config.provider === "agentic") {
-        config.provider = "grok";
-      }
-      await prisma.platformConfig.update({
-        where: { key: "build-studio-dispatch" },
-        data: { value: config as unknown as Prisma.InputJsonValue },
-      });
-    } else if (cliEngine === "opencode" && !config[opencodeKey]) {
-      config[opencodeKey] = buildProviderId;
-      if (config.provider === "agentic") {
-        config.provider = "opencode";
-      }
-      await prisma.platformConfig.update({
-        where: { key: "build-studio-dispatch" },
-        data: { value: config as unknown as Prisma.InputJsonValue },
-      });
-    }
-  }
 }
 
 // ─── Test provider auth ───────────────────────────────────────────────────────
