@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 
 import { getProactivityLevelCopy } from "./proactivity-copy";
-import { resolveProactivityPlan } from "./proactivity-resolver";
+import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "./proactivity-resolver";
 import { resolveUserAwareProactivityPlan } from "./proactivity-resolver.server";
 import { PROACTIVITY_ACTIVITY_FAMILIES, PROACTIVITY_LEVELS, isProactivityLevel } from "./proactivity-types";
 
@@ -92,6 +92,14 @@ describe("resolveProactivityPlan", () => {
 
     expect(plan.resolvedLevel).toBe("assertive");
     expect(["advise", "propose"]).toContain(plan.actionBoundary);
+  });
+
+  it("keeps forced assertive fallback explanation aligned with the resolved level", () => {
+    const plan = resolveProactivityPlanForLevel({ activityFamily: "scheduled-task" }, "assertive", "user-override");
+
+    expect(plan.resolvedLevel).toBe("assertive");
+    expect(plan.explanation).toMatch(/stay on this|warn earlier|escalate sooner/i);
+    expect(plan.explanation).not.toMatch(/quiet minimizes/i);
   });
 });
 

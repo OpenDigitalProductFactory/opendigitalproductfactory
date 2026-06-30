@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";
+import { getCoworkerProactivityPreference } from "@/lib/actions/proactivity";
 import { getProactivityLevelCopy } from "@/lib/proactivity/proactivity-copy";
-import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
+import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "@/lib/proactivity/proactivity-resolver";
+import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 
 type Props = {
   agent: AgentInfo;
@@ -84,12 +86,28 @@ function formatProactivityEscalation(escalationTarget: string): string {
 
 export function CoworkerProfilePanel({ agent, onClose }: Props) {
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
+  const [savedProactivityLevel, setSavedProactivityLevel] = useState<ProactivityLevel | null>(null);
   const grouped = groupSkillsByCategory(agent.skills);
-  const proactivityPlan = resolveProactivityPlan({
+  const proactivityInput = {
     activityFamily: "scheduled-task",
     agentId: agent.agentId,
-  });
+  } as const;
+  const proactivityPlan = savedProactivityLevel
+    ? resolveProactivityPlanForLevel(proactivityInput, savedProactivityLevel, "user-override")
+    : resolveProactivityPlan(proactivityInput);
   const proactivityCopy = getProactivityLevelCopy(proactivityPlan.resolvedLevel);
+
+  useEffect(() => {
+    let alive = true;
+    getCoworkerProactivityPreference(agent.agentId)
+      .then((level) => {
+        if (alive) setSavedProactivityLevel(level);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [agent.agentId]);
 
   // Separate skills from tools based on enriched data
   const skills = agent.skills.filter((s) => !s.allowedTools || s.allowedTools.length === 0 || s.taskType !== "tool");

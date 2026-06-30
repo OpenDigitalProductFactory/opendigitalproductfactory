@@ -30,10 +30,12 @@
 - Create `apps/web/components/proactivity/ProactivityGaugeIcon.tsx`: compact gauge icon if stock Lucide cannot represent needle positions well enough.
 - Create `apps/web/components/proactivity/ProactivityLevelControl.tsx`: compact dock control and expanded segmented picker.
 - Create `apps/web/components/proactivity/ProactivityLevelControl.test.tsx`: interaction and accessible-label tests.
+- Create `apps/web/lib/actions/proactivity.ts`: server actions for reading and writing the current user's agent-scoped proactivity preference via `UserFact`.
+- Create `apps/web/lib/actions/proactivity.test.ts`: preference read/write tests for the manual dock setting.
 - Modify `apps/web/components/golden-triangle/CoworkerPriorityDock.tsx`: render the proactivity chip beside the golden triangle and keep the dock collapsed by default.
-- Modify `apps/web/components/golden-triangle/CoworkerPriorityDock.test.tsx`: assert dock layout, collapsed state, and mobile-safe labels.
-- Modify `apps/web/components/agent/CoworkerProfilePanel.tsx`: show effective proactivity explanation and advanced policy details.
-- Modify `apps/web/components/agent/CoworkerProfilePanel.test.tsx` or add one if no local test exists.
+- Modify `apps/web/components/golden-triangle/CoworkerPriorityDock.test.tsx`: assert dock layout, collapsed state, persisted proactivity loading/saving, and mobile-safe labels.
+- Modify `apps/web/components/agent/CoworkerProfilePanel.tsx`: show effective proactivity explanation and advanced policy details using the same saved preference as the dock.
+- Modify `apps/web/components/agent/CoworkerProfilePanel.test.tsx` or add one if no local test exists; assert saved preference consistency and no raw policy IDs.
 - Modify `apps/web/lib/tak/autonomous-work-run.ts`: accept optional proactivity metadata and write it into `TaskRun.a2aMetadata.proactivity`.
 - Modify `apps/web/lib/tak/scheduled-task-runs.ts`: accept proactivity metadata for scheduled runs if this helper owns the actual `TaskRun` create path.
 - Modify `apps/web/lib/actions/agent-task-scheduler.ts`: resolve and pass scheduled-task proactivity plan without bypassing owner/tool/HITL checks.

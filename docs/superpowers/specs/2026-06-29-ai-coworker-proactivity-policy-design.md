@@ -221,6 +221,8 @@ type ProactivityPlan = {
 
 The plan is written into `TaskRun.a2aMetadata.proactivity` for work that creates a `TaskRun`, and into the relevant outbound/action metadata when no task run exists yet.
 
+Manual UI changes use the same `UserFact` preference substrate as acknowledged coworker proposals. A user changing the dock control writes an agent-scoped fact keyed `aiCoworkerProactivity:agent:<agentId>` with `source = "manual-setting"`. The server resolver already treats that fact as a user override, so scheduled work, field-dispatch proposal builders, and future Attention Surface projections consume the same value without a second settings table.
+
 ## 6. Resolution Order
 
 The resolver answers: "Given this activity, what level and behavior should apply?"
@@ -604,10 +606,13 @@ Files:
 - Modify `apps/web/components/golden-triangle/CoworkerPriorityDock.tsx`
 - Modify `apps/web/components/agent/CoworkerProfilePanel.tsx`
 - Add small presentational component if needed: `ProactivityLevelControl.tsx`
+- Add `apps/web/lib/actions/proactivity.ts` for user-scoped manual dock reads/writes through `UserFact`.
 
 Acceptance:
 
 - compact level control renders beside the golden-triangle priority chip without crowding the composer dock.
+- dock changes persist as agent-scoped `UserFact` preferences and reload for the same user/coworker.
+- profile/details summary reads the same saved preference and does not show a contradictory default level.
 - mobile folds control into profile/details.
 - green/yellow/red accents map Quiet/Balanced/Assertive while preserving text labels and accessible names.
 - copy uses shared proactivity copy.
