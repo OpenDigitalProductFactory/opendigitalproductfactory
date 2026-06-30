@@ -189,6 +189,7 @@ const DEVELOPMENT_TEMPLATE_GRANTS = [
   "telemetry_read",
   "portfolio_read",
   "document_read",
+  "coworker_catalog_read",
   // Writes / actions for the build-studio + ship loop
   "backlog_write",
   "backlog_triage",
@@ -206,6 +207,7 @@ const DEVELOPMENT_TEMPLATE_GRANTS = [
   "decision_record_create",
   "tool_evaluation_create",
   "document_write",
+  "coworker_engagement_write",
 ] as const;
 
 const EMPLOYEE_FINANCE_TEMPLATE_GRANTS = [
