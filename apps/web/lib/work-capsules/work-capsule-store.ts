@@ -12,12 +12,14 @@ import {
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
   normalizeBranchTaxonomy,
+  normalizeWorkCapsuleScopeInput,
   parseScopeClaims,
   type ScopeClaim,
   type WorkCapsuleActivityKind,
   type WorkCapsuleBranchTaxonomy,
   type WorkCapsuleEvidenceKind,
   type WorkCapsuleExecutorKind,
+  type WorkCapsuleScopeInput,
   type WorkCapsuleSource,
   type WorkCapsuleStatus,
 } from "@/lib/work-capsules";
@@ -55,6 +57,7 @@ type CapsuleCreateInput = {
   epicId?: string | null;
   featureBuildId?: string | null;
   workspaceState?: Record<string, unknown>;
+  scope?: WorkCapsuleScopeInput | null;
 };
 
 type CapsuleAdoptionInput = {
@@ -67,6 +70,7 @@ type CapsuleAdoptionInput = {
   baseSha?: string | null;
   headSha?: string | null;
   executorKind?: WorkCapsuleExecutorKind | null;
+  scope?: WorkCapsuleScopeInput | null;
 };
 
 type CapsuleEvidenceInput = {
@@ -153,6 +157,7 @@ export async function createWorkCapsule(args: {
   if (args.input.status && !isWorkCapsuleStatus(args.input.status)) {
     throw new Error("Invalid capsule status");
   }
+  const scope = normalizeWorkCapsuleScopeInput(args.input.scope);
 
   const existing = await args.db.workCapsule.findUnique({
     where: { idempotencyKey: args.input.idempotencyKey },
@@ -173,6 +178,13 @@ export async function createWorkCapsule(args: {
           backlogItemId: args.input.backlogItemId ?? null,
           epicId: args.input.epicId ?? null,
           featureBuildId: args.input.featureBuildId ?? null,
+          decisionScope: scope.decisionScope,
+          portfolioRole: scope.portfolioRole,
+          servedPersona: scope.servedPersona,
+          activityKind: scope.activityKind,
+          outcomeAnchor: scope.outcomeAnchor ?? {},
+          servesPortfolioRoles: scope.servesPortfolioRoles,
+          dependsOnPortfolioRoles: scope.dependsOnPortfolioRoles,
           workspaceState: args.input.workspaceState ?? {},
           idempotencyKey: args.input.idempotencyKey,
           leaseHolderPrincipalId: isExternalLeaseExecutor(args.input.executorKind)
@@ -210,6 +222,7 @@ export async function adoptWorktreeCapsule(args: {
   if (args.input.executorKind && !isWorkCapsuleExecutorKind(args.input.executorKind)) {
     throw new Error("Invalid executor kind");
   }
+  const scope = normalizeWorkCapsuleScopeInput(args.input.scope);
 
   const existing = await args.db.workCapsule.findFirst({
     where: {
@@ -238,6 +251,13 @@ export async function adoptWorktreeCapsule(args: {
           headSha: args.input.headSha ?? null,
           worktreePath: args.input.worktreePath,
           branchTaxonomy: normalizeBranchTaxonomy(args.input.headBranch),
+          decisionScope: scope.decisionScope,
+          portfolioRole: scope.portfolioRole,
+          servedPersona: scope.servedPersona,
+          activityKind: scope.activityKind,
+          outcomeAnchor: scope.outcomeAnchor ?? {},
+          servesPortfolioRoles: scope.servesPortfolioRoles,
+          dependsOnPortfolioRoles: scope.dependsOnPortfolioRoles,
           leaseHolderPrincipalId: isExternalLeaseExecutor(args.input.executorKind)
             ? args.actor.principalId
             : null,

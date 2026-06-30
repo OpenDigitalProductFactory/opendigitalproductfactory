@@ -78,6 +78,68 @@ describe("work capsule store", () => {
     }));
   });
 
+  it("persists scope metadata when creating a backlog-free company capsule", async () => {
+    db.workCapsule.findUnique.mockResolvedValueOnce(null);
+    db.workCapsule.create.mockResolvedValueOnce({
+      id: "row-1",
+      capsuleId: "WC-SCOPED",
+      title: "Customer onboarding",
+    });
+
+    const result = await createWorkCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Customer onboarding",
+        objective: "Coordinate a customer onboarding work case.",
+        source: "manual",
+        idempotencyKey: "manual:customer-onboarding",
+        scope: {
+          decisionScope: "wwwd",
+          portfolioRole: "productsAndServicesSold",
+          servedPersona: " customer ",
+          activityKind: "delivery",
+          outcomeAnchor: { kind: "work-case", id: "CASE-123", label: " Onboard Contoso " },
+          servesPortfolioRoles: ["productsAndServicesSold", "manufactureAndDeliver"],
+          dependsOnPortfolioRoles: ["foundational"],
+        },
+      },
+      actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
+    });
+
+    expect(result.capsuleId).toBe("WC-SCOPED");
+    expect(db.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        backlogItemId: null,
+        decisionScope: "wwwd",
+        portfolioRole: "productsAndServicesSold",
+        servedPersona: "customer",
+        activityKind: "delivery",
+        outcomeAnchor: { kind: "work-case", id: "CASE-123", label: "Onboard Contoso" },
+        servesPortfolioRoles: ["productsAndServicesSold", "manufactureAndDeliver"],
+        dependsOnPortfolioRoles: ["foundational"],
+      }),
+    }));
+  });
+
+  it("rejects invalid scope metadata before creating a capsule", async () => {
+    db.workCapsule.findUnique.mockResolvedValueOnce(null);
+
+    await expect(createWorkCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Bad scope",
+        objective: "Should not persist.",
+        source: "manual",
+        idempotencyKey: "manual:bad-scope",
+        scope: { portfolioRole: "sales" },
+      },
+      actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
+    })).rejects.toThrow(/portfolioRole/i);
+
+    expect(db.workCapsule.create).not.toHaveBeenCalled();
+    expect(db.workCapsuleActivity.create).not.toHaveBeenCalled();
+  });
+
   it("returns the existing capsule on idempotent retry without writing a duplicate activity", async () => {
     db.workCapsule.findUnique.mockResolvedValueOnce({
       id: "row-1",
@@ -124,6 +186,42 @@ describe("work capsule store", () => {
     expect(result.capsuleId).toBe("WC-ADOPT01");
     expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "adopted" }),
+    }));
+  });
+
+  it("persists scope metadata when adopting a platform worktree", async () => {
+    db.workCapsule.findFirst.mockResolvedValue(null);
+    db.workCapsule.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPTSCOPE" });
+
+    const result = await adoptWorktreeCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Adopt Work Capsule scope branch",
+        objective: "Implement platform scope metadata.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "feat/layer-scoped-work-capsules",
+        worktreePath: "D:/DPF-worktrees/layer-scoped-work-capsules",
+        executorKind: "codex-desktop",
+        scope: {
+          decisionScope: "wwmd",
+          portfolioRole: "manufactureAndDeliver",
+          servedPersona: "platform-team",
+          activityKind: "improvement",
+          outcomeAnchor: { kind: "backlog-item", id: "BI-5F70A7DA" },
+        },
+      },
+      actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
+    });
+
+    expect(result.capsuleId).toBe("WC-ADOPTSCOPE");
+    expect(db.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        decisionScope: "wwmd",
+        portfolioRole: "manufactureAndDeliver",
+        servedPersona: "platform-team",
+        activityKind: "improvement",
+        outcomeAnchor: { kind: "backlog-item", id: "BI-5F70A7DA" },
+      }),
     }));
   });
 
