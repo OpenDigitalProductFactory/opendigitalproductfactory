@@ -1,4 +1,5 @@
 import type { CoworkerOfferCatalogItem } from "./catalog";
+import { verifyCoworkerOfferGaidAuthority } from "./gaid-authority";
 
 export type CoworkerAgentCardAccessProfile = "internal-a2a" | "partner-a2a" | "external-a2a";
 
@@ -42,11 +43,21 @@ export type CoworkerAgentCard = {
 
 export type CoworkerAgentCardProjection =
   | { ok: true; card: CoworkerAgentCard }
-  | { ok: false; reason: "offer_not_available_for_access_profile" | "cross_boundary_identity_or_terms_missing"; missing: string[] };
+  | {
+      ok: false;
+      reason:
+        | "offer_not_available_for_access_profile"
+        | "cross_boundary_identity_or_terms_missing"
+        | "gaid_authority_not_verified"
+        | "gaid_authority_scope_mismatch"
+        | "gaid_authority_expired"
+        | "gaid_authority_subject_mismatch";
+      missing: string[];
+    };
 
 export function projectCoworkerOfferAgentCard(
   offer: CoworkerOfferCatalogItem,
-  options: { accessProfile: CoworkerAgentCardAccessProfile },
+  options: { accessProfile: CoworkerAgentCardAccessProfile; now?: Date },
 ): CoworkerAgentCardProjection {
   if (!isAvailableForProfile(offer, options.accessProfile)) {
     return { ok: false, reason: "offer_not_available_for_access_profile", missing: [] };
@@ -69,6 +80,11 @@ export function projectCoworkerOfferAgentCard(
     if (missing.length > 0) {
       return { ok: false, reason: "cross_boundary_identity_or_terms_missing", missing };
     }
+    const gaidAuthority = verifyCoworkerOfferGaidAuthority(offer, {
+      accessProfile: options.accessProfile,
+      now: options.now,
+    });
+    if (!gaidAuthority.ok) return gaidAuthority;
   }
 
   return {

@@ -12,6 +12,7 @@ describe("coworker service catalog MCP surface", () => {
     expect(names).toContain("get_coworker_offer");
     expect(names).toContain("resolve_coworker_offer_agent_card");
     expect(names).toContain("request_coworker_engagement");
+    expect(names).toContain("analyze_coworker_engagement_refinement");
   });
 
   it("maps catalog tools to explicit coworker catalog grants", () => {
@@ -20,5 +21,6 @@ describe("coworker service catalog MCP surface", () => {
     expect(TOOL_TO_GRANTS.get_coworker_offer).toEqual(["coworker_catalog_read"]);
     expect(TOOL_TO_GRANTS.resolve_coworker_offer_agent_card).toEqual(["coworker_catalog_read"]);
     expect(TOOL_TO_GRANTS.request_coworker_engagement).toEqual(["coworker_engagement_write"]);
+    expect(TOOL_TO_GRANTS.analyze_coworker_engagement_refinement).toEqual(["coworker_catalog_read"]);
   });
 });

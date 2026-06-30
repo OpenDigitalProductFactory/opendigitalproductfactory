@@ -108,6 +108,51 @@ describe("projectCoworkerOfferAgentCard", () => {
     });
   });
 
+  it("rejects external projection when GAID authority is not verified", () => {
+    const result = projectCoworkerOfferAgentCard(
+      offer({
+        availabilityScope: "external",
+        metadata: { gaid: "gaid:public:legal", aidocRef: "aidoc://legal/public" },
+        legalTerms: { termsRef: "terms://legal" },
+        dataBoundary: { classification: "external" },
+      }),
+      { accessProfile: "external-a2a" },
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "gaid_authority_not_verified",
+      missing: ["gaidAuthority"],
+    });
+  });
+
+  it("projects external offers only when cross-boundary GAID authority is verified", () => {
+    const result = projectCoworkerOfferAgentCard(
+      offer({
+        availabilityScope: "external",
+        metadata: {
+          gaid: "gaid:public:legal",
+          aidocRef: "aidoc://legal/public",
+          gaidAuthority: {
+            state: "verified",
+            exposure: "public",
+            subjectAgentId: "legal-operations-counsel",
+            verifiedAt: "2026-06-01T00:00:00.000Z",
+            expiresAt: "2099-01-01T00:00:00.000Z",
+          },
+        },
+        legalTerms: { termsRef: "terms://legal" },
+        dataBoundary: { classification: "external" },
+      }),
+      { accessProfile: "external-a2a", now: new Date("2026-06-30T00:00:00.000Z") },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.card.exposure).toBe("public");
+    expect(result.card.delegationReceiptPolicy.requireGaidForCrossOrganization).toBe(true);
+  });
+
   it("keeps internal-only offers out of partner and external projections", () => {
     const result = projectCoworkerOfferAgentCard(offer(), { accessProfile: "partner-a2a" });
 

@@ -198,6 +198,7 @@ describe("self-upgrade tool pack", () => {
 describe("coworker service catalog tool pack", () => {
   it("bundles the coworker catalog discovery and engagement tools", () => {
     expect(coworkerServiceCatalogPack.definitions.map((t) => t.name).sort()).toEqual([
+      "analyze_coworker_engagement_refinement",
       "get_coworker_offer",
       "list_coworker_offers",
       "list_coworker_services",

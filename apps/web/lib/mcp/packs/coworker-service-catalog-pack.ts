@@ -99,6 +99,21 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     coworkerArtifact: true,
   },
+  {
+    name: "analyze_coworker_engagement_refinement",
+    description: "Analyze recent coworker engagements for repeatable patterns and aggregate offer candidates.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        offerId: { type: "string", description: "Optional offer id filter." },
+        limit: { type: "number", description: "Max recent engagements (default 100, max 500)." },
+        repeatableThreshold: { type: "number", description: "Minimum matching engagements for a candidate." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    sideEffect: false,
+  },
 ];
 
 async function listCoworkerServices(params: Record<string, unknown>): Promise<ToolResult> {
@@ -236,6 +251,42 @@ async function requestCoworkerEngagement(
   }
 }
 
+async function analyzeCoworkerEngagementRefinement(params: Record<string, unknown>): Promise<ToolResult> {
+  const { prisma } = await import("@dpf/db");
+  const { analyzeCoworkerEngagementRefinement } = await import("@/lib/coworker-service-catalog/process-refinement");
+  const offerId = typeof params["offerId"] === "string" && params["offerId"].trim() ? params["offerId"].trim() : undefined;
+  const take = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 500) : 100;
+  const repeatableThreshold =
+    typeof params["repeatableThreshold"] === "number" ? Math.min(Math.max(2, params["repeatableThreshold"]), 25) : 3;
+
+  const engagements = await prisma.coworkerEngagement.findMany({
+    where: offerId ? { offerId } : undefined,
+    orderBy: { createdAt: "desc" },
+    take,
+    select: {
+      engagementId: true,
+      offerId: true,
+      serviceId: true,
+      providerAgentId: true,
+      requestedOutcome: true,
+      status: true,
+      metadata: true,
+      createdAt: true,
+      updatedAt: true,
+      completedAt: true,
+    },
+  });
+  const analysis = analyzeCoworkerEngagementRefinement(engagements, { repeatableThreshold });
+  return {
+    success: true,
+    message:
+      analysis.aggregateOfferCandidates.length > 0
+        ? `${analysis.aggregateOfferCandidates.length} aggregate offer candidate(s) found.`
+        : "No aggregate offer candidates found in the selected engagement window.",
+    data: analysis,
+  };
+}
+
 export const coworkerServiceCatalogPack: ToolPack = {
   packId: "coworker-service-catalog",
   definitions,
@@ -246,6 +297,7 @@ export const coworkerServiceCatalogPack: ToolPack = {
     resolve_coworker_offer_agent_card: (params) => resolveCoworkerOfferAgentCard(params),
     request_coworker_engagement: (params, userId, context) =>
       requestCoworkerEngagement(params, userId, context),
+    analyze_coworker_engagement_refinement: (params) => analyzeCoworkerEngagementRefinement(params),
   },
   grants: {
     list_coworker_services: ["coworker_catalog_read"],
@@ -253,5 +305,6 @@ export const coworkerServiceCatalogPack: ToolPack = {
     get_coworker_offer: ["coworker_catalog_read"],
     resolve_coworker_offer_agent_card: ["coworker_catalog_read"],
     request_coworker_engagement: ["coworker_engagement_write"],
+    analyze_coworker_engagement_refinement: ["coworker_catalog_read"],
   },
 };

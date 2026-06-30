@@ -172,7 +172,7 @@ Different callers need different catalog projections:
 - Cross-organization A2A/API: sales, marketing, procurement, supplier-facing, and customer-facing coworkers require partner/external availability, GAID-federated or GAID-public identity, provider organization, authenticated card variants where needed, explicit terms, data boundary, audit, and revocation posture.
 - Back-office specialist boundaries: legal, finance, security, and HR specialists can be invoked by internal coordinators, but their offers should stay narrow, approval-aware, and hidden from external discovery unless an explicitly reviewed partner-facing offer exists.
 
-The first implementation slice delivers the human portal, MCP request surface, Build Studio requirements broker, a bounded Agent Card projection for selected coworker offers, and a read-only Agent Card endpoint at `/api/a2a/coworkers/[agentId]/offers/[offerId]`. It records enough cost, terms, availability, and data-boundary metadata to support later full A2A task exchange. It does not yet implement a stateful A2A task lifecycle endpoint or GAID authority verification service.
+The first implementation slice delivers the human portal, MCP request surface, Build Studio requirements broker, a bounded Agent Card projection for selected coworker offers, GAID authority verification for cross-boundary Agent Cards, A2A-style task endpoints backed by `CoworkerEngagement`, and executable engagement-refinement analysis. Agent Cards are exposed at `/api/a2a/coworkers/[agentId]/offers/[offerId]`; external callers can submit a task with `POST` to that offer endpoint and read lifecycle state at `/api/a2a/tasks/[taskId]`. MCP callers can run `analyze_coworker_engagement_refinement` to find repeated engagement patterns and aggregate offer/playbook candidates without loading full raw history.
 
 ## Build Studio Requirements Surface
 
@@ -264,6 +264,7 @@ Add governed read/write tools:
 - `list_coworker_offers`: read-only, filterable, paginated.
 - `get_coworker_offer`: read-only offer detail.
 - `request_coworker_engagement`: writes an engagement request and returns status/required approval/capsule guidance.
+- `analyze_coworker_engagement_refinement`: reads recent engagement history and returns emergent/repeatable/codified counts plus aggregate offer/playbook candidates.
 
 Add grant mappings:
 
