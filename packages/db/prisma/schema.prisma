@@ -581,6 +581,7 @@ model Portfolio {
   budgetKUsd                    Int?
   agents                        Agent[]
   products                      DigitalProduct[]
+  coworkerServices              CoworkerService[]             @relation("CoworkerServicePortfolio")
   eaElements                    EaElement[]
   epicPortfolios                EpicPortfolio[]
   inventoryEntities             InventoryEntity[]
@@ -620,6 +621,8 @@ model DigitalProduct {
   capabilityMaturityAssessments CapabilityMaturityAssessment[]
   versions                      ProductVersion[]
   serviceOfferings              ServiceOffering[]
+  coworkerServices              CoworkerService[]
+  coworkerOffers                CoworkerOffer[]
   quoteLineItems                QuoteLineItem[]
   changeItems                   ChangeItem[]                   @relation("ChangeItemProduct")
   businessModels                ProductBusinessModel[]
@@ -944,9 +947,136 @@ model ServiceOffering {
   effectiveFrom      DateTime?
   effectiveTo        DateTime?
   digitalProduct     DigitalProduct @relation(fields: [digitalProductId], references: [id])
+  coworkerServices   CoworkerService[]
 
   @@index([digitalProductId])
   @@index([status])
+}
+
+model CoworkerService {
+  id                String           @id @default(cuid())
+  serviceId         String           @unique
+  providerAgentId   String
+  digitalProductId  String?
+  serviceOfferingId String?
+  portfolioId       String?
+  name              String
+  summary           String?
+  description       String?
+  status            String           @default("draft")
+  riskTier          String           @default("low")
+  hitlTier          Int?
+  authorityBoundary String           @default("advice-only")
+  availabilityScope String           @default("internal")
+  personas          Json             @default("[]")
+  portfolioRoles    Json             @default("[]")
+  valueStreams      Json             @default("[]")
+  archetypes        Json             @default("[]")
+  jurisdictions     Json             @default("[]")
+  requiredInputs    Json             @default("[]")
+  producedOutputs   Json             @default("[]")
+  backingSkillIds   Json             @default("[]")
+  backingToolNames  Json             @default("[]")
+  backingGrantKeys  Json             @default("[]")
+  costModel         Json             @default("{}")
+  contractTerms     Json             @default("{}")
+  dataBoundary      Json             @default("{}")
+  metadata          Json             @default("{}")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  provider          Agent            @relation(fields: [providerAgentId], references: [agentId], onDelete: Cascade)
+  digitalProduct    DigitalProduct?  @relation(fields: [digitalProductId], references: [productId])
+  serviceOffering   ServiceOffering? @relation(fields: [serviceOfferingId], references: [offeringId])
+  portfolio         Portfolio?       @relation("CoworkerServicePortfolio", fields: [portfolioId], references: [id])
+  offers            CoworkerOffer[]
+  engagements       CoworkerEngagement[]
+
+  @@index([providerAgentId])
+  @@index([digitalProductId])
+  @@index([serviceOfferingId])
+  @@index([portfolioId])
+  @@index([status])
+  @@index([riskTier])
+  @@index([availabilityScope])
+}
+
+model CoworkerOffer {
+  id                   String                @id @default(cuid())
+  offerId              String                @unique
+  serviceId            String
+  digitalProductId     String?
+  name                 String
+  summary              String?
+  description          String?
+  status               String                @default("draft")
+  version              String                @default("1.0.0")
+  providerOrganization String?
+  availabilityScope    String                @default("internal")
+  riskTier             String                @default("low")
+  authorityBoundary    String                @default("advice-only")
+  eligibleConsumers    Json                  @default("[]")
+  budgetEnvelope       Json                  @default("{}")
+  sla                  Json                  @default("{}")
+  requiredApprovals    Json                  @default("[]")
+  legalTerms           Json                  @default("{}")
+  dataBoundary         Json                  @default("{}")
+  deliverables         Json                  @default("[]")
+  filters              Json                  @default("{}")
+  metadata             Json                  @default("{}")
+  expiresAt            DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  service              CoworkerService       @relation(fields: [serviceId], references: [serviceId], onDelete: Cascade)
+  digitalProduct       DigitalProduct?       @relation(fields: [digitalProductId], references: [productId])
+  engagements          CoworkerEngagement[]
+
+  @@index([serviceId])
+  @@index([digitalProductId])
+  @@index([status])
+  @@index([riskTier])
+  @@index([availabilityScope])
+}
+
+model CoworkerEngagement {
+  id                  String          @id @default(cuid())
+  engagementId        String          @unique
+  offerId             String
+  serviceId           String
+  providerAgentId     String
+  requestedByUserId   String?
+  requestedByAgentId  String?
+  requestedForPersona String?
+  requestedOutcome    String          @db.Text
+  priority            String          @default("normal")
+  status              String          @default("requested")
+  inputPayload        Json            @default("{}")
+  fundingContext      Json            @default("{}")
+  contractContext     Json            @default("{}")
+  approvalContext     Json            @default("{}")
+  proposalId          String?
+  envelopeId          String?
+  workCapsuleId       String?
+  toolExecutionId     String?
+  auditRefs           Json            @default("{}")
+  metadata            Json            @default("{}")
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  acceptedAt          DateTime?
+  completedAt         DateTime?
+  offer               CoworkerOffer   @relation(fields: [offerId], references: [offerId])
+  service             CoworkerService @relation(fields: [serviceId], references: [serviceId])
+  provider            Agent           @relation(fields: [providerAgentId], references: [agentId])
+
+  @@index([offerId])
+  @@index([serviceId])
+  @@index([providerAgentId])
+  @@index([requestedByUserId, createdAt(sort: Desc)])
+  @@index([requestedByAgentId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([proposalId])
+  @@index([envelopeId])
+  @@index([workCapsuleId])
+  @@index([toolExecutionId])
 }
 
 model TaxonomyNode {
@@ -2008,6 +2138,8 @@ model Agent {
   executionConfig      AgentExecutionConfig?
   skills               AgentSkillAssignment[]
   toolGrants           AgentToolGrant[]
+  coworkerServices     CoworkerService[]
+  coworkerEngagements  CoworkerEngagement[]
   coworkerAssessments  CoworkerSelfAssessment[]    @relation("CoworkerSelfAssessmentAgent")
   coworkerNeeds        CoworkerCapabilityNeed[]    @relation("CoworkerCapabilityNeedAgent")
   performanceProfiles  AgentPerformance[]

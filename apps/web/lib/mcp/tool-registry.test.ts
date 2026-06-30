@@ -16,6 +16,7 @@ import { workbooksPack } from "./packs/workbooks-pack";
 import { feedbackPack } from "./packs/feedback-pack";
 import { activityRoutingPack } from "./packs/activity-routing-pack";
 import { selfUpgradePack } from "./packs/self-upgrade-pack";
+import { coworkerServiceCatalogPack } from "./packs/coworker-service-catalog-pack";
 import { composeToolPacks } from "./tool-registry";
 // The inline-case ratchet's extractor lives in the CI guard (scripts/), kept as
 // the single source of truth so this test and the guard can never disagree.
@@ -194,6 +195,35 @@ describe("self-upgrade tool pack", () => {
   });
 });
 
+describe("coworker service catalog tool pack", () => {
+  it("bundles the coworker catalog discovery and engagement tools", () => {
+    expect(coworkerServiceCatalogPack.definitions.map((t) => t.name).sort()).toEqual([
+      "analyze_coworker_engagement_refinement",
+      "get_coworker_offer",
+      "list_coworker_offers",
+      "list_coworker_services",
+      "request_coworker_engagement",
+      "resolve_coworker_offer_agent_card",
+    ]);
+    for (const def of coworkerServiceCatalogPack.definitions) {
+      expect(coworkerServiceCatalogPack.handlers[def.name], def.name).toBeTypeOf("function");
+    }
+  });
+
+  it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
+    for (const [name, grants] of Object.entries(coworkerServiceCatalogPack.grants)) {
+      expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
+    }
+  });
+
+  it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
+    const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
+    for (const def of coworkerServiceCatalogPack.definitions) {
+      expect(platformNames.has(def.name), def.name).toBe(true);
+    }
+  });
+});
+
 describe("composeToolPacks", () => {
   it("composes definitions + handler/grant lookup from packs", () => {
     const registry = composeToolPacks([deliberationSiemPack]);
@@ -211,6 +241,7 @@ describe("composeToolPacks", () => {
       workbooksPack,
       feedbackPack,
       selfUpgradePack,
+      coworkerServiceCatalogPack,
     ]);
     expect(registry.definitions).toHaveLength(
       deliberationSiemPack.definitions.length +
@@ -218,13 +249,15 @@ describe("composeToolPacks", () => {
         workCapsulesPack.definitions.length +
         workbooksPack.definitions.length +
         feedbackPack.definitions.length +
-        selfUpgradePack.definitions.length,
+        selfUpgradePack.definitions.length +
+        coworkerServiceCatalogPack.definitions.length,
     );
     expect(registry.getHandler("register_runtime_target")).toBeTypeOf("function");
     expect(registry.getHandler("create_work_capsule")).toBeTypeOf("function");
     expect(registry.getHandler("workbook_list_tables")).toBeTypeOf("function");
     expect(registry.getHandler("report_quality_issue")).toBeTypeOf("function");
     expect(registry.getHandler("request_self_upgrade")).toBeTypeOf("function");
+    expect(registry.getHandler("list_coworker_offers")).toBeTypeOf("function");
   });
 
   it("rejects the same tool name claimed by two packs", () => {

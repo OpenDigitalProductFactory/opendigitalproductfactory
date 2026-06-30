@@ -191,6 +191,43 @@ describe("getBuildContextSection", () => {
     expect(section).toContain("A customer feedback form");
     expect(section).toContain("products_and_services_sold");
   });
+  it("injects bounded coworker requirements packets for regulated provider builds", async () => {
+    const section = await getBuildContextSection({
+      buildId: "FB-REQS",
+      phase: "plan",
+      title: "Credit card checkout with D&B authority",
+      brief: {
+        title: "Credit card checkout with D&B authority",
+        description: "Take customer credit card payment and validate company names through D&B Direct+.",
+        portfolioContext: "platform",
+        targetRoles: ["operator"],
+        inputs: ["card payment", "company name"],
+        dataNeeds: "card token, DUNS number, billing audit log",
+        acceptanceCriteria: ["Customer can pay by card.", "Company identity is authoritative."],
+      },
+      buildPlan: {
+        fileStructure: [],
+        tasks: [
+          {
+            title: "Wire provider tokens",
+            testFirst: "Add provider-token test",
+            implement: "Acquire paid provider tokens for D&B Direct+ and payment processor.",
+            verify: "Run provider integration tests.",
+          },
+        ],
+      },
+      plan: null,
+      portfolioId: "platform",
+    });
+
+    expect(section).toContain("--- Coworker Requirements Packet ---");
+    expect(section).toContain("payment-cardholder-data");
+    expect(section).toContain("company-identity-data-authority");
+    expect(section).toContain("paid-provider");
+    expect(section).toContain("Do not store raw PAN");
+    expect(section).toContain("budget owner");
+    expect(section).toContain("bounded requirements packet");
+  });
   it("includes approved design evidence for the plan phase", async () => {
     const section = await getBuildContextSection({
       buildId: "FB-12345678",

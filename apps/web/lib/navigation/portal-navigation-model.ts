@@ -442,6 +442,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   platformAiRoute("platform-ai-readiness", "Readiness", "/platform/ai/readiness"),
   platformAiRoute("platform-ai-overview", "AI Workforce Directory", "/platform/ai/overview"),
+  platformAiRoute("platform-ai-catalog", "Catalog", "/platform/ai/catalog"),
   {
     // BI-ARCH-DELIVERY-IA: one operator home for delivery work. A hub that
     // launches the delivery surfaces (Build Studio, work capsules, change lanes,

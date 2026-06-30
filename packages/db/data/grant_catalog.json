@@ -193,6 +193,30 @@
       "implies": []
     },
     {
+      "key": "coworker_catalog_read",
+      "description": "Read coworker service and offer catalog entries for governed AI workforce discovery.",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "get_coworker_offer",
+        "list_coworker_offers",
+        "list_coworker_services"
+      ],
+      "implies": []
+    },
+    {
+      "key": "coworker_engagement_write",
+      "description": "Create governed coworker engagement requests against catalog offers.",
+      "category": "platform",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "request_coworker_engagement"
+      ],
+      "implies": [
+        "coworker_catalog_read"
+      ]
+    },
+    {
       "key": "build_evidence",
       "description": "Pseudo-User Contract (BI-B2F7ABF5): record evidence against a FeatureBuild — execution outcome, notes, persisted artifacts. Finer-grained successor to the build-evidence-related slice of backlog_write; lets scoped coworker tokens record build progress without authority to mutate the broader backlog. Implied by backlog_write (one-way).",
       "category": "integrate",

@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 527,
+  "routeCount": 530,
   "routes": [
     {
       "routePath": "/",
@@ -308,6 +308,37 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/admin/wiki/lint/page.tsx"
+    },
+    {
+      "routePath": "/api/a2a/coworkers/[agentId]/offers/[offerId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "a2a",
+        "coworkers",
+        "[agentId]",
+        "offers",
+        "[offerId]"
+      ],
+      "dynamicParams": [
+        "agentId",
+        "offerId"
+      ],
+      "file": "apps/web/app/api/a2a/coworkers/[agentId]/offers/[offerId]/route.ts"
+    },
+    {
+      "routePath": "/api/a2a/tasks/[taskId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "a2a",
+        "tasks",
+        "[taskId]"
+      ],
+      "dynamicParams": [
+        "taskId"
+      ],
+      "file": "apps/web/app/api/a2a/tasks/[taskId]/route.ts"
     },
     {
       "routePath": "/api/admin/bs-dispatch-test",
@@ -4600,6 +4631,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/platform/ai/capacity-continuity/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/catalog",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "catalog"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/catalog/page.tsx"
     },
     {
       "routePath": "/platform/ai/decisions/[interactionId]",
