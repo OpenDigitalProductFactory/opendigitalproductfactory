@@ -20,6 +20,7 @@ const SOURCE_LABEL: Record<AttentionSource, string> = {
   escalation: "Build escalation",
   "ai-decision": "AI decision",
   "paused-ai": "Paused AI",
+  "scheduled-task": "Scheduled work",
   "agent-proposal": "Approval",
   "approval-outbound": "Marketing",
   "approval-bill": "Bill",

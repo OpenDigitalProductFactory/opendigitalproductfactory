@@ -9,6 +9,7 @@ import { orderAttention } from "./triage";
 import { loadEscalationItems } from "./sources/escalation";
 import { loadAiDecisionItems } from "./sources/ai-decision";
 import { loadPausedAiItems } from "./sources/paused-ai";
+import { loadScheduledTaskItems } from "./sources/scheduled-task";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
 import {
   loadOutboundItems,
@@ -79,6 +80,7 @@ export async function loadAttentionItems(
     { source: "escalation", load: () => loadEscalationItems() },
     { source: "ai-decision", load: () => loadAiDecisionItems(db) },
     { source: "paused-ai", load: () => loadPausedAiItems(db) },
+    { source: "scheduled-task", load: () => loadScheduledTaskItems(db) },
     { source: "agent-proposal", load: () => loadAgentProposalItems(db) },
     { source: "approval-outbound", load: () => loadOutboundItems(db) },
     { source: "approval-bill", load: () => loadBillItems(db) },

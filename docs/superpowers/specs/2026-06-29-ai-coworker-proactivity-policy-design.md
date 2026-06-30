@@ -579,7 +579,7 @@ Acceptance:
 - failures and ignored attempts can escalate to Attention Surface according to plan.
 - no scheduled task bypasses existing owner/tool/HITL checks.
 
-Status, 2026-06-30: implemented for scheduled task execution with user-aware resolution. The shared pure resolver remains available for client and fixture callers; the server resolver applies acknowledged override/cooldown facts before scheduled work writes proactivity metadata. Remaining work in this slice is Attention Surface escalation projection for ignored/failing scheduled work.
+Status, 2026-06-30: implemented for scheduled task execution with user-aware resolution. The shared pure resolver remains available for client and fixture callers; the server resolver applies acknowledged override/cooldown facts before scheduled work writes proactivity metadata. Failed scheduled work now projects into the existing Attention Surface when the stored proactivity plan is not quiet, using plain "why now" copy and one review action. Quiet user-overridden scheduled work stays out of the inbox by reading `TaskRun.a2aMetadata.proactivity` before falling back to default scheduled-task policy.
 
 ### Slice 2A: Delegated coworker posture substrate
 
