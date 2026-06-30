@@ -61,6 +61,27 @@ const categoryLabels: Record<string, string> = {
   general: "General",
 };
 
+function formatProactivitySpend(spendClass: string): string {
+  if (spendClass === "minimal") return "Light";
+  if (spendClass === "elevated") return "Elevated";
+  return "Standard";
+}
+
+function formatProactivityBoundary(actionBoundary: string): string {
+  if (actionBoundary === "advise") return "Advises only";
+  if (actionBoundary === "preauthorized") return "Pre-approved actions";
+  return "Asks first";
+}
+
+function formatProactivityEscalation(escalationTarget: string): string {
+  if (escalationTarget === "attention-surface") return "Needs you";
+  if (escalationTarget === "platform-operator") return "Platform operator";
+  if (escalationTarget === "dispatcher") return "Dispatcher";
+  if (escalationTarget === "owner") return "Owner";
+  if (escalationTarget === "role") return "Responsible role";
+  return "Needs you";
+}
+
 export function CoworkerProfilePanel({ agent, onClose }: Props) {
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
   const grouped = groupSkillsByCategory(agent.skills);
@@ -157,24 +178,21 @@ export function CoworkerProfilePanel({ agent, onClose }: Props) {
               <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-text)" }}>
                 {proactivityCopy.label}
               </span>
-              <span
-                style={{
-                  ...tagStyle,
-                  fontSize: 10,
-                  color: "var(--dpf-accent)",
-                  borderColor: "color-mix(in srgb, var(--dpf-accent) 40%, transparent)",
-                }}
-              >
-                {proactivityPlan.policyId}
-              </span>
+              <span style={{ ...tagStyle, fontSize: 10 }}>Effective now</span>
             </div>
             <div style={{ fontSize: 10, color: "var(--dpf-muted)", marginTop: 6, lineHeight: 1.45 }}>
               {proactivityPlan.explanation}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
-              <span style={{ ...tagStyle, fontSize: 10 }}>Spend: {proactivityPlan.spendClass}</span>
-              <span style={{ ...tagStyle, fontSize: 10 }}>Boundary: {proactivityPlan.actionBoundary}</span>
-              <span style={{ ...tagStyle, fontSize: 10 }}>Escalates: {proactivityPlan.escalationTarget}</span>
+              <span style={{ ...tagStyle, fontSize: 10 }}>
+                Monitoring: {formatProactivitySpend(proactivityPlan.spendClass)}
+              </span>
+              <span style={{ ...tagStyle, fontSize: 10 }}>
+                Approval: {formatProactivityBoundary(proactivityPlan.actionBoundary)}
+              </span>
+              <span style={{ ...tagStyle, fontSize: 10 }}>
+                Escalates to: {formatProactivityEscalation(proactivityPlan.escalationTarget)}
+              </span>
             </div>
           </div>
         </div>

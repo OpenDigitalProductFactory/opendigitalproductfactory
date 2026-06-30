@@ -30,7 +30,10 @@ describe("CoworkerProfilePanel", () => {
     expect(screen.getByText("Proactivity")).toBeTruthy();
     expect(screen.getByText("Balanced")).toBeTruthy();
     expect(screen.getByText(/Balanced is the default proactivity level/i)).toBeTruthy();
-    expect(screen.getByText(/Spend: standard/i)).toBeTruthy();
-    expect(screen.getByText(/Boundary: propose/i)).toBeTruthy();
+    expect(screen.getByText(/Monitoring: Standard/i)).toBeTruthy();
+    expect(screen.getByText(/Approval: Asks first/i)).toBeTruthy();
+    expect(screen.queryByText(/Spend: standard/i)).toBeNull();
+    expect(screen.queryByText(/Boundary: propose/i)).toBeNull();
+    expect(screen.queryByText(/proactivity:scheduled-task:balanced/i)).toBeNull();
   });
 });
