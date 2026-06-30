@@ -3,8 +3,12 @@ import { describe, expect, it } from "vitest";
 import { PLATFORM_TOOLS } from "./mcp-tools";
 import {
   WORK_CAPSULE_BRANCH_TAXONOMIES,
+  WORK_CAPSULE_DECISION_SCOPES,
   WORK_CAPSULE_EVIDENCE_KINDS,
   WORK_CAPSULE_EXECUTOR_KINDS,
+  WORK_CAPSULE_OUTCOME_ANCHOR_KINDS,
+  WORK_CAPSULE_PORTFOLIO_ROLES,
+  WORK_CAPSULE_SCOPE_ACTIVITY_KINDS,
   WORK_CAPSULE_SOURCES,
   WORK_CAPSULE_STATUSES,
 } from "./work-capsules";
@@ -27,6 +31,31 @@ describe("work capsule MCP enum parity", () => {
 
   it("create_work_capsule.executorKind mirrors WORK_CAPSULE_EXECUTOR_KINDS", () => {
     expect(enumOf("create_work_capsule", "executorKind")).toEqual([...WORK_CAPSULE_EXECUTOR_KINDS]);
+  });
+
+  it("create_work_capsule scope enums mirror source constants", () => {
+    expect(enumOf("create_work_capsule", "decisionScope")).toEqual([...WORK_CAPSULE_DECISION_SCOPES]);
+    expect(enumOf("create_work_capsule", "portfolioRole")).toEqual([...WORK_CAPSULE_PORTFOLIO_ROLES]);
+    expect(enumOf("create_work_capsule", "activityKind")).toEqual([...WORK_CAPSULE_SCOPE_ACTIVITY_KINDS]);
+
+    const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === "create_work_capsule");
+    const schema = tool?.inputSchema as {
+      properties?: Record<string, { properties?: Record<string, { enum?: string[] }> }>;
+    };
+    expect(schema.properties?.outcomeAnchor?.properties?.kind?.enum).toEqual([
+      ...WORK_CAPSULE_OUTCOME_ANCHOR_KINDS,
+    ]);
+  });
+
+  it("adopt_worktree scope enums mirror source constants", () => {
+    expect(enumOf("adopt_worktree", "decisionScope")).toEqual([...WORK_CAPSULE_DECISION_SCOPES]);
+    expect(enumOf("adopt_worktree", "portfolioRole")).toEqual([...WORK_CAPSULE_PORTFOLIO_ROLES]);
+    expect(enumOf("adopt_worktree", "activityKind")).toEqual([...WORK_CAPSULE_SCOPE_ACTIVITY_KINDS]);
+  });
+
+  it("list_work_capsules scope filters mirror source constants", () => {
+    expect(enumOf("list_work_capsules", "decisionScope")).toEqual([...WORK_CAPSULE_DECISION_SCOPES]);
+    expect(enumOf("list_work_capsules", "portfolioRole")).toEqual([...WORK_CAPSULE_PORTFOLIO_ROLES]);
   });
 
   it("record_capsule_evidence.kind mirrors WORK_CAPSULE_EVIDENCE_KINDS", () => {
