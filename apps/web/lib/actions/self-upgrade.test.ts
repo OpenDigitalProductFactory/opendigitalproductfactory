@@ -20,16 +20,6 @@ vi.mock("@/lib/permissions", () => ({
   can: vi.fn(),
 }));
 
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: {
-    send: vi.fn(),
-  },
-}));
-
-vi.mock("@/lib/queue/functions/self-upgrade", () => ({
-  SELF_UPGRADE_EVENT: "ops/self-upgrade.run",
-}));
-
 vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: vi.fn(),
 }));
@@ -38,17 +28,14 @@ vi.mock("@/lib/self-upgrade/version", () => ({
   getUpgradeVersionState: vi.fn(),
 }));
 
-vi.mock("@/lib/self-upgrade/run-store", () => ({
-  createRun: vi.fn(),
-  failRun: vi.fn(),
-  getLatestRun: vi.fn(),
+vi.mock("@/lib/self-upgrade/request", () => ({
+  requestSelfUpgrade: vi.fn(),
 }));
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { inngest } from "@/lib/queue/inngest-client";
-import { createRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
+import { requestSelfUpgrade } from "@/lib/self-upgrade/request";
 import { requestPortalSelfUpgradeAction } from "./self-upgrade";
 
 describe("requestPortalSelfUpgradeAction", () => {
@@ -62,52 +49,58 @@ describe("requestPortalSelfUpgradeAction", () => {
       },
     } as never);
     vi.mocked(can).mockReturnValue(true);
-    vi.mocked(getLatestRun).mockResolvedValue(null);
-    vi.mocked(createRun).mockResolvedValue({
-      runId: "SUR-QUEUED1",
+    vi.mocked(requestSelfUpgrade).mockResolvedValue({
+      success: true,
       status: "queued",
+      runId: "SUR-QUEUED1",
+      triggeredBy: "manual:user-ops-1",
+      eventIds: ["evt-1"],
     } as never);
   });
 
-  it("creates a durable queued run before sending the worker event", async () => {
+  it("delegates to the shared request service as a human manual trigger", async () => {
     await requestPortalSelfUpgradeAction();
 
-    expect(createRun).toHaveBeenCalledWith({ triggeredBy: "manual:user-ops-1" });
-    expect(inngest.send).toHaveBeenCalledWith({
-      name: "ops/self-upgrade.run",
-      data: {
-        runId: "SUR-QUEUED1",
-        triggeredBy: "manual:user-ops-1",
-      },
+    expect(requestSelfUpgrade).toHaveBeenCalledWith({
+      requestedBy: "manual:user-ops-1",
+      actorKind: "human",
     });
     expect(revalidatePath).toHaveBeenCalledWith("/ops/self-upgrade");
   });
 
   it.each(["running", "queued", "pending"])(
-    "does not dispatch a duplicate event while the latest run is %s",
+    "delegates duplicate suppression to the shared service when latest run is %s",
     async (status) => {
-      vi.mocked(getLatestRun).mockResolvedValue({
+      vi.mocked(requestSelfUpgrade).mockResolvedValueOnce({
+        success: true,
+        status: "already_active",
         runId: "SUR-ACTIVE1",
-        status,
       } as never);
 
       await requestPortalSelfUpgradeAction();
 
-      expect(createRun).not.toHaveBeenCalled();
-      expect(inngest.send).not.toHaveBeenCalled();
+      expect(requestSelfUpgrade).toHaveBeenCalledWith({
+        requestedBy: "manual:user-ops-1",
+        actorKind: "human",
+      });
       expect(revalidatePath).toHaveBeenCalledWith("/ops/self-upgrade");
     },
   );
 
-  it("marks the queued run failed when event dispatch fails", async () => {
-    vi.mocked(inngest.send).mockRejectedValueOnce(new Error("inngest offline"));
+  it("still revalidates when the shared request service reports dispatch failure", async () => {
+    vi.mocked(requestSelfUpgrade).mockResolvedValueOnce({
+      success: false,
+      status: "dispatch_failed",
+      runId: "SUR-QUEUED1",
+      message: "queue-dispatch-failed: inngest offline",
+    } as never);
 
     await requestPortalSelfUpgradeAction();
 
-    expect(failRun).toHaveBeenCalledWith(
-      "SUR-QUEUED1",
-      "queue-dispatch-failed: inngest offline",
-    );
+    expect(requestSelfUpgrade).toHaveBeenCalledWith({
+      requestedBy: "manual:user-ops-1",
+      actorKind: "human",
+    });
     expect(revalidatePath).toHaveBeenCalledWith("/ops/self-upgrade");
   });
 });
