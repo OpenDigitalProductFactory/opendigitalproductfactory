@@ -141,6 +141,18 @@ Closed application-level string sets:
 
 The first slice uses a catalog projection service that reads persisted catalog rows and enriches them with existing `Agent`, `SkillAssignment`, `AgentToolGrant`, `DigitalProduct`, and `ServiceOffering` data. It also includes a guarded Legal Operations Counsel example projection only when the legal coworker identity exists, so this branch does not need to duplicate the in-flight legal coworker branch.
 
+The durable seed must keep the first catalog useful without turning it into a full enterprise service universe. The baseline seed therefore includes a compact set of high-leverage offers that cover the common cross-surface handoffs identified during implementation:
+
+- Build Studio sensitive-domain requirements packet for coding and review agents;
+- PCI and regulated-control requirements review;
+- Legal contract and counsel packet preparation, with Legal Operations Counsel as an internal coworker;
+- Paid provider, token, renewal, D&B-style authority data, ADP/payroll, and procurement/cost intake;
+- external customer sales/service intake;
+- external marketing/partner collaboration intake;
+- external provider and MCP catalog scouting.
+
+External offers must carry public GAID metadata, AIDoc references, verified GAID authority, explicit legal terms, and data-boundary metadata before they can project into cross-organization A2A Agent Cards. Internal legal/compliance/finance offers remain authenticated and approval-aware by default. The seed is intentionally small: other specialist services should be added as repeated engagements prove they are repeatable or codified, not because an agent might theoretically need them.
+
 Legal offers:
 
 - Legal intake;

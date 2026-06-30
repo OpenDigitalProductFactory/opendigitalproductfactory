@@ -186,6 +186,16 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     sensitivity: "confidential",
   },
   {
+    agentId: "legal-operations-counsel",
+    slugId: "legal-operations-counsel",
+    name: "Legal Operations Counsel",
+    tier: 2,
+    type: "coworker",
+    description: "Legal review packet preparation, contract issue spotting, and counsel handoff coordination",
+    valueStream: "cross-cutting",
+    sensitivity: "confidential",
+  },
+  {
     agentId: "finance-controller",
     slugId: "finance-controller",
     name: "Finance Controller",
@@ -266,6 +276,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "backlog_write",
     "tool_evaluation_create",
   ],
+  "legal-operations-counsel": ["file_read", "document_read", "document_write", "registry_read"],
   "finance-controller": ["registry_read", "backlog_read", "portfolio_read"],
   // Reads field-service jobs and customer contact data, updates job status, and
   // proposes customer notifications for approval.
