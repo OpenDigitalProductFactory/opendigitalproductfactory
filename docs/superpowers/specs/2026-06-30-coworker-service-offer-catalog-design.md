@@ -54,6 +54,8 @@ Primary references reviewed for this design extension:
 - Model Context Protocol tool documentation: tools are model-callable functions exposed by an MCP server. Adopted: bounded list/detail/request tools for catalog discovery. Rejected: injecting every coworker and offer into every agent context.
 - DPF GAID architecture: GAID separates enduring identity, AIDoc, exposure state, protocol profiles, and delegation receipts. Adopted: private GAID for internal coworkers and federated/public posture for cross-organization exposure. Rejected: protocol-specific identifiers that fragment one agent identity across MCP, A2A, and HTTP.
 - ASQ DMAIC overview: define, measure, analyze, improve, control is a durable improvement loop. Adopted: emergent coworker engagements can be measured, codified into aggregate offers, and continuously refined. Rejected: one-time catalog publication with no performance feedback loop.
+- PCI Security Standards Council: PCI DSS applies to entities that store, process, transmit, or could affect cardholder data environments, and provides technical and operational requirements to protect payment account data. Adopted: payment/cardholder-data feature builds must trigger compliance/security/legal requirement engagement before implementation.
+- D&B Direct+ and ADP developer surfaces: some capabilities require paid third-party data, identity, or payroll/workforce service providers. Adopted: provider-dependent feature builds must trigger procurement, finance, contract, data-boundary, and ongoing cost tracking before Build Studio treats the dependency as available.
 
 ## Conceptual Model
 
@@ -165,11 +167,43 @@ Different callers need different catalog projections:
 
 - Human portal: authenticated operators browse the catalog, compare offers, inspect authority/cost/terms, and request engagements. Legal Operations Counsel is internal-only by default and visible only to trusted authenticated humans and non-human actors with the right grants.
 - MCP: external AI agents and model-mediated clients use `list_coworker_services`, `list_coworker_offers`, `get_coworker_offer`, and `request_coworker_engagement`. List tools must remain capped and filter-first; detail is fetched only after a candidate offer is selected.
+- Build Studio/coding agents: build planners, coding agents, and review agents use a bounded catalog broker to identify business-level coworkers that must contribute feature requirements before implementation. Most feature builds will not need this path. It becomes mandatory when the brief, plan, dependencies, data model, or route surface matches regulated domains, paid providers, sensitive data movement, external-customer/supplier engagement, or operational authority changes.
 - Internal A2A: trusted coworkers should engage peer coworkers through direct A2A task flows once a target has been selected. The catalog should supply the Agent Card projection and routing metadata, not replace A2A task exchange.
 - Cross-organization A2A/API: sales, marketing, procurement, supplier-facing, and customer-facing coworkers require partner/external availability, GAID-federated or GAID-public identity, provider organization, authenticated card variants where needed, explicit terms, data boundary, audit, and revocation posture.
 - Back-office specialist boundaries: legal, finance, security, and HR specialists can be invoked by internal coordinators, but their offers should stay narrow, approval-aware, and hidden from external discovery unless an explicitly reviewed partner-facing offer exists.
 
 The first implementation slice delivers the human portal and MCP request surface. It records enough cost, terms, availability, and data-boundary metadata to support later A2A/GAID projection, but it does not yet implement A2A Agent Card publication or GAID verification.
+
+## Build Studio Requirements Surface
+
+The catalog must support Build Studio without turning business coworkers into always-on context baggage for coding agents. The pattern is a build requirements broker:
+
+1. During feature brief, design review, decomposition, and implementation review, Build Studio scans the feature for trigger signals.
+2. If a trigger matches, the broker selects one or more coworker offers and requests a requirements engagement.
+3. The engagement returns a requirements packet that becomes an input to the feature plan, acceptance criteria, implementation guardrails, and review checklist.
+4. Coding agents receive only the resulting bounded requirements packet and links to underlying coworker engagement evidence, not the whole catalog.
+5. If the implementation drifts into a newly triggered domain, review agents can request a late engagement, but the system should treat that as process debt to reduce over time.
+
+Initial trigger families:
+
+- payment/cardholder-data features: route to compliance, security, legal, finance, and possibly provider-management coworkers for PCI DSS scope, cardholder-data environment impact, tokenization/provider requirements, logging restrictions, evidence, and acceptance criteria;
+- payroll/workforce compensation features, including ADP integration: route to HR/payroll, finance, legal, procurement, security, and data-governance coworkers for authority, privacy, payroll-cycle, audit, contract, and operational-risk criteria;
+- company identity/data authority features, including D&B-style provider feeds: route to procurement, finance, data governance, customer/supplier master-data owners, and legal for paid-data terms, data lineage, refresh cadence, usage limits, and cost allocation;
+- external paid services, model providers, data feeds, enrichment APIs, or token acquisition: route to procurement and finance for approval, cost center, renewal/usage tracking, termination rights, and budget evidence before the dependency is accepted;
+- regulated or sensitive domains such as tax, employment, healthcare, financial reporting, identity/authentication, security monitoring, customer communications, and supplier onboarding: route to the relevant specialist aggregate offer before build execution.
+
+The output should be structured, concise, and testable:
+
+- applicable obligations and non-goals;
+- required controls, acceptance criteria, and evidence artifacts;
+- prohibited implementation patterns;
+- approved providers or provider-selection requirements;
+- cost model, funding context, and renewal/usage tracking requirements;
+- required approvals and human checkpoints;
+- data-boundary and retention constraints;
+- citations or internal policy links used to derive the packet.
+
+This turns business-level coworkers into early requirements contributors for coding agents. It reduces the common failure mode where PCI, payroll, paid data, contract, or procurement constraints are discovered only during late review, after implementation assumptions have already hardened.
 
 ## Catalog Context Budget and Delegation
 
@@ -179,6 +213,7 @@ The catalog should encourage delegation without flooding every agent's context w
 - Catalog list responses should return summaries optimized for selection: offer id, provider, short outcome, availability, risk, authority, cost band, required inputs, and matching reasons.
 - Offer detail should be pulled on demand when an agent is deciding whether to delegate, requesting approval, or creating an engagement.
 - Coordinator agents should be prompted and instrumented to engage the right coworker when the requested work crosses their authority, skill, risk, jurisdiction, or cognitive-load boundary.
+- Build Studio agents should be prompted and instrumented to request specialist requirement packets when a feature crosses regulated, paid-provider, sensitive-data, or operational-authority boundaries.
 - Engagement requests should capture routing rationale: why this coworker/offer was chosen, what alternatives were considered, and whether the request is emergent, repeatable, or part of a codified process.
 - The catalog broker/recommender should eventually use prior engagement outcomes, cost, latency, risk, and satisfaction signals to rank candidates, but ranking must remain explainable and overrideable.
 
