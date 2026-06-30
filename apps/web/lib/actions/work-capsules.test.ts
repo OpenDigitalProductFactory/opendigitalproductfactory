@@ -66,6 +66,13 @@ describe("getWorkControlData", () => {
         status: "working",
         source: "external-adoption",
         executorKind: null,
+        decisionScope: "wwmd",
+        portfolioRole: "manufactureAndDeliver",
+        servedPersona: "platform-team",
+        activityKind: "improvement",
+        outcomeAnchor: { kind: "backlog-item", id: "BI-1" },
+        servesPortfolioRoles: ["manufactureAndDeliver"],
+        dependsOnPortfolioRoles: ["foundational"],
         headBranch: "feat/already-adopted",
         worktreePath: "D:/DPF-adopted",
         pullRequestUrl: null,
@@ -84,7 +91,14 @@ describe("getWorkControlData", () => {
     const data = await getWorkControlData();
 
     expect(data.capsules).toEqual([
-      expect.objectContaining({ capsuleId: "WC-1", branch: "feat/already-adopted" }),
+      expect.objectContaining({
+        capsuleId: "WC-1",
+        branch: "feat/already-adopted",
+        scope: expect.objectContaining({
+          decisionScopeLabel: "WWMD",
+          portfolioRoleLabel: "Manufacture & Deliver",
+        }),
+      }),
     ]);
     expect(data.adoptable).toEqual([
       expect.objectContaining({
@@ -94,6 +108,17 @@ describe("getWorkControlData", () => {
       }),
     ]);
     expect(mockGetWorktreeDirtySummary).toHaveBeenCalledWith("D:/DPF-orphan");
+    expect(mockPrisma.workCapsule.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        decisionScope: true,
+        portfolioRole: true,
+        servedPersona: true,
+        activityKind: true,
+        outcomeAnchor: true,
+        servesPortfolioRoles: true,
+        dependsOnPortfolioRoles: true,
+      }),
+    }));
   });
 
   it("does not present the release main worktree as adoptable work", async () => {

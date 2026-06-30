@@ -40,4 +40,40 @@ describe("presentCapsuleRow", () => {
     expect(row.executorKind).toBe("unassigned");
     expect(row.branch).toBe("no branch");
   });
+
+  it("presents readable scope labels for Work Control", () => {
+    const row = presentCapsuleRow({
+      capsuleId: "WC-SCOPE",
+      title: "Customer onboarding",
+      status: "working",
+      source: "manual",
+      executorKind: "codex-desktop",
+      decisionScope: "wwwd",
+      portfolioRole: "productsAndServicesSold",
+      servedPersona: "customer",
+      activityKind: "delivery",
+      outcomeAnchor: { kind: "work-case", id: "CASE-123", label: "Onboard Contoso" },
+      servesPortfolioRoles: ["productsAndServicesSold", "manufactureAndDeliver"],
+      dependsOnPortfolioRoles: ["foundational"],
+      headBranch: "feat/customer-onboarding",
+      worktreePath: "D:/DPF-customer-onboarding",
+      pullRequestUrl: null,
+      leaseExpiresAt: null,
+      lastSyncedAt: null,
+      updatedAt: new Date("2026-05-14T00:00:00.000Z"),
+    });
+
+    expect(row.scope).toEqual({
+      decisionScope: "wwwd",
+      decisionScopeLabel: "WWWD",
+      portfolioRole: "productsAndServicesSold",
+      portfolioRoleLabel: "Products & Services Sold",
+      servedPersona: "customer",
+      activityKind: "delivery",
+      activityKindLabel: "Delivery",
+      outcomeAnchorLabel: "Onboard Contoso",
+      servesPortfolioRoleLabels: ["Products & Services Sold", "Manufacture & Deliver"],
+      dependsOnPortfolioRoleLabels: ["Foundational"],
+    });
+  });
 });

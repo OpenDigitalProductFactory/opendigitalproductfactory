@@ -6,6 +6,13 @@ type CapsuleRowInput = {
   status: string;
   source: string;
   executorKind: string | null;
+  decisionScope?: string | null;
+  portfolioRole?: string | null;
+  servedPersona?: string | null;
+  activityKind?: string | null;
+  outcomeAnchor?: unknown;
+  servesPortfolioRoles?: unknown;
+  dependsOnPortfolioRoles?: unknown;
   headBranch: string | null;
   worktreePath: string | null;
   pullRequestUrl: string | null;
@@ -15,6 +22,48 @@ type CapsuleRowInput = {
 };
 
 export type PresentedCapsuleRow = ReturnType<typeof presentCapsuleRow>;
+
+const DECISION_SCOPE_LABELS: Record<string, string> = {
+  wwmd: "WWMD",
+  wwwd: "WWWD",
+  wsid: "WSID",
+};
+
+const PORTFOLIO_ROLE_LABELS: Record<string, string> = {
+  foundational: "Foundational",
+  manufactureAndDeliver: "Manufacture & Deliver",
+  forEmployees: "For Employees",
+  productsAndServicesSold: "Products & Services Sold",
+};
+
+const ACTIVITY_KIND_LABELS: Record<string, string> = {
+  delivery: "Delivery",
+  support: "Support",
+  improvement: "Improvement",
+  governance: "Governance",
+  "launch-readiness": "Launch Readiness",
+  "craft-judgment": "Craft Judgment",
+  lifecycle: "Lifecycle",
+  remediation: "Remediation",
+};
+
+function labelOf(value: string | null | undefined, labels: Record<string, string>): string | null {
+  if (!value) return null;
+  return labels[value] ?? value;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+function outcomeAnchorLabel(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.label === "string" && candidate.label.trim()) return candidate.label.trim();
+  if (typeof candidate.id === "string" && candidate.id.trim()) return candidate.id.trim();
+  if (typeof candidate.kind === "string" && candidate.kind.trim()) return labelOf(candidate.kind.trim(), ACTIVITY_KIND_LABELS);
+  return null;
+}
 
 export function presentCapsuleRow(row: CapsuleRowInput, now = new Date()) {
   const leaseExpired = row.leaseExpiresAt != null && row.leaseExpiresAt.getTime() < now.getTime();
@@ -27,6 +76,18 @@ export function presentCapsuleRow(row: CapsuleRowInput, now = new Date()) {
     source: row.source,
     executorKind: row.executorKind ?? "unassigned",
     branch: row.headBranch ?? "no branch",
+    scope: {
+      decisionScope: row.decisionScope ?? null,
+      decisionScopeLabel: labelOf(row.decisionScope, DECISION_SCOPE_LABELS),
+      portfolioRole: row.portfolioRole ?? null,
+      portfolioRoleLabel: labelOf(row.portfolioRole, PORTFOLIO_ROLE_LABELS),
+      servedPersona: row.servedPersona ?? null,
+      activityKind: row.activityKind ?? null,
+      activityKindLabel: labelOf(row.activityKind, ACTIVITY_KIND_LABELS),
+      outcomeAnchorLabel: outcomeAnchorLabel(row.outcomeAnchor),
+      servesPortfolioRoleLabels: stringArray(row.servesPortfolioRoles).map((role) => labelOf(role, PORTFOLIO_ROLE_LABELS) ?? role),
+      dependsOnPortfolioRoleLabels: stringArray(row.dependsOnPortfolioRoles).map((role) => labelOf(role, PORTFOLIO_ROLE_LABELS) ?? role),
+    },
     worktreePath: row.worktreePath,
     pullRequestUrl: row.pullRequestUrl,
     health: leaseExpired ? "lease-expired" : staleCache ? "stale-cache" : "ok",

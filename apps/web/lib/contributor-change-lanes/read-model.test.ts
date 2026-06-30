@@ -79,6 +79,58 @@ describe("loadContributorChangeLaneReadModel — Phase 3", () => {
     expect(byName.get("github-pr")?.message).toContain("Contributor MCP card");
   });
 
+  it("maps Work Capsule scope fields into projected lanes", async () => {
+    db.workCapsule.findMany.mockResolvedValue([
+      {
+        capsuleId: "WC-SCOPED",
+        title: "Customer onboarding",
+        status: "working",
+        executorKind: "codex-desktop",
+        executorRef: null,
+        decisionScope: "wwwd",
+        portfolioRole: "productsAndServicesSold",
+        servedPersona: "customer",
+        activityKind: "delivery",
+        outcomeAnchor: { kind: "work-case", id: "CASE-123", label: "Onboard Contoso" },
+        headBranch: "feat/customer-onboarding",
+        headSha: "abc",
+        worktreePath: "D:/DPF-customer-onboarding",
+        pullRequestUrl: null,
+        backlogItemId: null,
+        featureBuildId: null,
+        leaseHolderPrincipalId: "principal-1",
+        leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+        updatedAt: RECENT,
+        objective: "Coordinate customer onboarding.",
+      },
+    ]);
+
+    const result = await loadContributorChangeLaneReadModel({
+      db: dbAsAny(db),
+      now: NOW,
+    });
+
+    expect(db.workCapsule.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        decisionScope: true,
+        portfolioRole: true,
+        servedPersona: true,
+        activityKind: true,
+        outcomeAnchor: true,
+      }),
+    }));
+    expect(result.lanes).toEqual([
+      expect.objectContaining({
+        workCapsuleId: "WC-SCOPED",
+        decisionScope: "wwwd",
+        portfolioRole: "productsAndServicesSold",
+        servedPersona: "customer",
+        activityKind: "delivery",
+        outcomeAnchor: { kind: "work-case", id: "CASE-123", label: "Onboard Contoso" },
+      }),
+    ]);
+  });
+
   it("ok: each source resolves to its latest-successful row independently", async () => {
     const worktreePayload = {
       path: "/repo/wt-a",

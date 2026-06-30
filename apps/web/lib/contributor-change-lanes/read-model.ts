@@ -278,6 +278,28 @@ async function readWorkCapsules(
       where: { status: { notIn: ["archived"] } },
       orderBy: { updatedAt: "desc" },
       take: 250,
+      select: {
+        capsuleId: true,
+        title: true,
+        status: true,
+        executorKind: true,
+        executorRef: true,
+        decisionScope: true,
+        portfolioRole: true,
+        servedPersona: true,
+        activityKind: true,
+        outcomeAnchor: true,
+        headBranch: true,
+        headSha: true,
+        worktreePath: true,
+        pullRequestUrl: true,
+        backlogItemId: true,
+        featureBuildId: true,
+        leaseHolderPrincipalId: true,
+        leaseExpiresAt: true,
+        updatedAt: true,
+        objective: true,
+      },
     });
     const out = rows.map(toWorkCapsuleSnapshot);
     freshness.push({
@@ -404,6 +426,11 @@ type WorkCapsuleRowLike = {
   status: string;
   executorKind: string | null;
   executorRef: string | null;
+  decisionScope: string | null;
+  portfolioRole: string | null;
+  servedPersona: string | null;
+  activityKind: string | null;
+  outcomeAnchor: unknown;
   headBranch: string | null;
   headSha: string | null;
   worktreePath: string | null;
@@ -423,6 +450,11 @@ function toWorkCapsuleSnapshot(row: WorkCapsuleRowLike): WorkCapsuleSnapshot {
     status: row.status,
     executorKind: row.executorKind,
     executorRef: row.executorRef,
+    decisionScope: row.decisionScope,
+    portfolioRole: row.portfolioRole,
+    servedPersona: row.servedPersona,
+    activityKind: row.activityKind,
+    outcomeAnchor: row.outcomeAnchor,
     headBranch: row.headBranch,
     headSha: row.headSha,
     worktreePath: row.worktreePath,

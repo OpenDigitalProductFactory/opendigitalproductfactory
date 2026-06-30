@@ -34,6 +34,16 @@ const LANE_STATUS_PRIORITY: Record<ContributorLaneStatus, number> = {
   shipped: 9,
 };
 
+function scopeFromCapsule(capsule: WorkCapsuleSnapshot | null) {
+  return {
+    decisionScope: capsule?.decisionScope ?? null,
+    portfolioRole: capsule?.portfolioRole ?? null,
+    servedPersona: capsule?.servedPersona ?? null,
+    activityKind: capsule?.activityKind ?? null,
+    outcomeAnchor: capsule?.outcomeAnchor ?? null,
+  };
+}
+
 export function projectContributorChangeLanes(
   input: LaneProjectionInput,
 ): LaneProjectionResult {
@@ -111,6 +121,7 @@ export function projectContributorChangeLanes(
       runtimeUrl: target.hostUrl,
       workCapsuleId: capsule?.capsuleId ?? null,
       backlogItemId: capsule?.backlogItemId ?? null,
+      ...scopeFromCapsule(capsule),
       expiresAt: lease?.expiresAt ?? target.expiresAt ?? null,
       lastHeartbeatAt: target.lastHeartbeatAt,
       latestVerification: presentVerification(latestVerification),
@@ -170,6 +181,7 @@ export function projectContributorChangeLanes(
       runtimeUrl: null,
       workCapsuleId: capsule.capsuleId,
       backlogItemId: capsule.backlogItemId,
+      ...scopeFromCapsule(capsule),
       expiresAt: capsule.leaseExpiresAt,
       lastHeartbeatAt: capsule.updatedAt,
       latestVerification: presentVerification(null),

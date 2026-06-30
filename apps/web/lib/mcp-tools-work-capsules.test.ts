@@ -54,6 +54,43 @@ describe("work capsule MCP tools", () => {
     expect(mockPrisma.workCapsuleActivity.create).not.toHaveBeenCalled();
   });
 
+  it("list_work_capsules filters by decision scope and portfolio role", async () => {
+    mockPrisma.workCapsule.findMany.mockResolvedValue([
+      {
+        capsuleId: "WC-WWWD",
+        title: "Customer onboarding",
+        status: "working",
+        source: "manual",
+        executorKind: "codex-desktop",
+        decisionScope: "wwwd",
+        portfolioRole: "productsAndServicesSold",
+        updatedAt: new Date("2026-05-14T00:00:00.000Z"),
+      },
+    ]);
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "list_work_capsules",
+      { decisionScope: "wwwd", portfolioRole: "productsAndServicesSold" },
+      "user-1",
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.workCapsule.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        decisionScope: "wwwd",
+        portfolioRole: "productsAndServicesSold",
+      },
+    }));
+    expect(result.data?.capsules).toEqual([
+      expect.objectContaining({
+        capsuleId: "WC-WWWD",
+        decisionScope: "wwwd",
+        portfolioRole: "productsAndServicesSold",
+      }),
+    ]);
+  });
+
   it("get_work_capsule does not renew leases for read-only hydration", async () => {
     mockPrisma.workCapsule.findUnique.mockResolvedValue({
       id: "row-1",
@@ -82,6 +119,64 @@ describe("work capsule MCP tools", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe("missing_idempotencyKey");
+  });
+
+  it("create_work_capsule accepts scope metadata without a backlog item", async () => {
+    mockPrisma.workCapsule.findUnique.mockResolvedValue(null);
+    mockPrisma.workCapsule.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-SCOPECREATE" });
+    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "create_work_capsule",
+      {
+        title: "Customer onboarding",
+        objective: "Coordinate a customer onboarding work case.",
+        source: "manual",
+        idempotencyKey: "manual:customer-onboarding",
+        decisionScope: "wwwd",
+        portfolioRole: "productsAndServicesSold",
+        servedPersona: "customer",
+        activityKind: "delivery",
+        outcomeAnchor: { kind: "work-case", id: "CASE-123" },
+        servesPortfolioRoles: ["productsAndServicesSold", "manufactureAndDeliver"],
+      },
+      "user-1",
+      { agentId: "codex" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        backlogItemId: null,
+        decisionScope: "wwwd",
+        portfolioRole: "productsAndServicesSold",
+        servedPersona: "customer",
+        activityKind: "delivery",
+        outcomeAnchor: { kind: "work-case", id: "CASE-123" },
+        servesPortfolioRoles: ["productsAndServicesSold", "manufactureAndDeliver"],
+      }),
+    }));
+  });
+
+  it("create_work_capsule rejects invalid scope metadata", async () => {
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "create_work_capsule",
+      {
+        title: "Bad scope",
+        objective: "Should not persist.",
+        source: "manual",
+        idempotencyKey: "manual:bad-scope",
+        portfolioRole: "sales",
+      },
+      "user-1",
+      { agentId: "codex" },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("invalid_scope");
+    expect(mockPrisma.workCapsule.create).not.toHaveBeenCalled();
   });
 
   it("heartbeat_capsule renews a lease", async () => {
@@ -166,6 +261,38 @@ describe("work capsule MCP tools", () => {
 
     expect(result.success).toBe(true);
     expect(result.entityId).toBe("WC-ADOPT");
+  });
+
+  it("adopt_worktree persists scope metadata", async () => {
+    mockPrisma.workCapsule.findFirst.mockResolvedValue(null);
+    mockPrisma.workCapsule.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPTSCOPE" });
+    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool("adopt_worktree", {
+      title: "Adopt scoped branch",
+      objective: "Implement Work Capsule scope metadata.",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      headBranch: "feat/layer-scoped-work-capsules",
+      worktreePath: "D:/DPF-worktrees/layer-scoped-work-capsules",
+      executorKind: "codex-desktop",
+      decisionScope: "wwmd",
+      portfolioRole: "manufactureAndDeliver",
+      servedPersona: "platform-team",
+      activityKind: "improvement",
+      outcomeAnchor: { kind: "backlog-item", id: "BI-5F70A7DA" },
+    }, "user-1", { agentId: "codex" });
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        decisionScope: "wwmd",
+        portfolioRole: "manufactureAndDeliver",
+        servedPersona: "platform-team",
+        activityKind: "improvement",
+        outcomeAnchor: { kind: "backlog-item", id: "BI-5F70A7DA" },
+      }),
+    }));
   });
 
   it("plan_capsule_worktree persists the planned workspace", async () => {

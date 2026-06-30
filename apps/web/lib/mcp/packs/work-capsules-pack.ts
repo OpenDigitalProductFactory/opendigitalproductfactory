@@ -14,6 +14,35 @@ import type { ToolPack } from "../tool-pack";
 
 const ENUMS = workCapsuleToolEnums();
 
+const scopeProperties = {
+  decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "WWMD, WWWD, or WSID activity scope." },
+  portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Primary portfolio role coordinated by the capsule." },
+  servedPersona: { type: "string", description: "Human-readable persona served by the activity." },
+  activityKind: { type: "string", enum: ENUMS.scopeActivityKinds, description: "Kind of outcome activity coordinated by the capsule." },
+  outcomeAnchor: {
+    type: "object",
+    additionalProperties: true,
+    properties: {
+      kind: { type: "string", enum: ENUMS.outcomeAnchorKinds },
+      id: { type: "string" },
+      label: { type: "string" },
+      url: { type: "string" },
+      source: { type: "string" },
+    },
+    description: "Optional business, platform, coworker, or document outcome anchor.",
+  },
+  servesPortfolioRoles: {
+    type: "array",
+    items: { type: "string", enum: ENUMS.portfolioRoles },
+    description: "Portfolio roles this activity serves.",
+  },
+  dependsOnPortfolioRoles: {
+    type: "array",
+    items: { type: "string", enum: ENUMS.portfolioRoles },
+    description: "Portfolio roles this activity depends on.",
+  },
+} as const;
+
 const definitions: ToolDefinition[] = [
   {
     name: "list_work_capsules",
@@ -22,6 +51,8 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         status: { type: "string", enum: ENUMS.statuses, description: "Filter by Work Capsule status." },
+        decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "Filter by WWMD, WWWD, or WSID scope." },
+        portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Filter by primary portfolio role." },
         limit: { type: "number", description: "Max results (default 50, max 100)." },
       },
       required: [],
@@ -55,6 +86,7 @@ const definitions: ToolDefinition[] = [
         source: { type: "string", enum: ENUMS.sources, description: "Origin of the capsule." },
         idempotencyKey: { type: "string", description: "Stable caller-provided key used to make create retries idempotent." },
         executorKind: { type: "string", enum: ENUMS.executors, description: "Optional executor expected to work the capsule." },
+        ...scopeProperties,
       },
       required: ["title", "objective", "source", "idempotencyKey"],
     },
@@ -91,6 +123,7 @@ const definitions: ToolDefinition[] = [
         baseSha: { type: "string", description: "Optional current base SHA." },
         headSha: { type: "string", description: "Optional current head SHA." },
         executorKind: { type: "string", enum: ENUMS.executors, description: "Optional executor adopting the worktree." },
+        ...scopeProperties,
       },
       required: ["title", "objective", "repositoryFullName", "headBranch", "worktreePath"],
     },

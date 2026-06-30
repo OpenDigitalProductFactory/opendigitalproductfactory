@@ -15,6 +15,18 @@ describe("WorkControlPanel", () => {
           source: "external-adoption",
           executorKind: "codex-desktop",
           branch: "feat/adopt",
+          scope: {
+            decisionScope: "wwwd",
+            decisionScopeLabel: "WWWD",
+            portfolioRole: "productsAndServicesSold",
+            portfolioRoleLabel: "Products & Services Sold",
+            servedPersona: "customer",
+            activityKind: "delivery",
+            activityKindLabel: "Delivery",
+            outcomeAnchorLabel: "Onboard Contoso",
+            servesPortfolioRoleLabels: ["Products & Services Sold"],
+            dependsOnPortfolioRoleLabels: ["Foundational"],
+          },
           worktreePath: "D:/DPF-adopt",
           pullRequestUrl: null,
           health: "ok",
@@ -27,6 +39,10 @@ describe("WorkControlPanel", () => {
 
     expect(html).toContain("Work Control");
     expect(html).toContain("Adopt work");
+    expect(html).toContain("WWWD");
+    expect(html).toContain("Products &amp; Services Sold");
+    expect(html).toContain("customer");
+    expect(html).toContain("Onboard Contoso");
     expect(html).toContain("feat/adopt");
   });
 

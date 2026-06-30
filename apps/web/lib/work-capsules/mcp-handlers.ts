@@ -4,17 +4,25 @@ import type { ToolResult } from "@/lib/mcp-tools";
 import {
   WORK_CAPSULE_ACTIVITY_KINDS,
   WORK_CAPSULE_BRANCH_TAXONOMIES,
+  WORK_CAPSULE_DECISION_SCOPES,
   WORK_CAPSULE_EVIDENCE_KINDS,
   WORK_CAPSULE_EXECUTOR_KINDS,
+  WORK_CAPSULE_OUTCOME_ANCHOR_KINDS,
+  WORK_CAPSULE_PORTFOLIO_ROLES,
+  WORK_CAPSULE_SCOPE_ACTIVITY_KINDS,
   WORK_CAPSULE_SOURCES,
   WORK_CAPSULE_STATUSES,
   isWorkCapsuleBranchTaxonomy,
+  isWorkCapsuleDecisionScope,
   isWorkCapsuleEvidenceKind,
   isWorkCapsuleExecutorKind,
+  isWorkCapsulePortfolioRole,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
+  normalizeWorkCapsuleScopeInput,
   type ScopeClaim,
   type WorkCapsuleEvidenceKind,
+  type WorkCapsuleScopeInput,
 } from "@/lib/work-capsules";
 
 import {
@@ -47,6 +55,10 @@ export function workCapsuleToolEnums() {
     activityKinds: [...WORK_CAPSULE_ACTIVITY_KINDS],
     taxonomies: [...WORK_CAPSULE_BRANCH_TAXONOMIES],
     evidenceKinds: [...WORK_CAPSULE_EVIDENCE_KINDS],
+    decisionScopes: [...WORK_CAPSULE_DECISION_SCOPES],
+    portfolioRoles: [...WORK_CAPSULE_PORTFOLIO_ROLES],
+    scopeActivityKinds: [...WORK_CAPSULE_SCOPE_ACTIVITY_KINDS],
+    outcomeAnchorKinds: [...WORK_CAPSULE_OUTCOME_ANCHOR_KINDS],
   };
 }
 
@@ -78,6 +90,26 @@ function stringParam(params: Record<string, unknown>, key: string): string | nul
 function numberParam(params: Record<string, unknown>, key: string): number | null {
   const value = params[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput {
+  return {
+    decisionScope: params.decisionScope,
+    portfolioRole: params.portfolioRole,
+    servedPersona: params.servedPersona,
+    activityKind: params.activityKind,
+    outcomeAnchor: params.outcomeAnchor,
+    servesPortfolioRoles: params.servesPortfolioRoles,
+    dependsOnPortfolioRoles: params.dependsOnPortfolioRoles,
+  };
+}
+
+function invalidScopeResult(error: unknown): ToolResult {
+  return {
+    success: false,
+    error: "invalid_scope",
+    message: error instanceof Error ? error.message : "Invalid Work Capsule scope metadata.",
+  };
 }
 
 function workCapsuleDb(): CapsuleDb {
@@ -145,6 +177,8 @@ function parseReleaseInputs(params: Record<string, unknown>): Array<Pick<ScopeCl
 
 export async function listWorkCapsulesTool(params: Record<string, unknown>): Promise<ToolResult> {
   const status = stringParam(params, "status");
+  const decisionScope = stringParam(params, "decisionScope");
+  const portfolioRole = stringParam(params, "portfolioRole");
   if (status && !isWorkCapsuleStatus(status)) {
     return {
       success: false,
@@ -152,10 +186,29 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>): Pro
       message: `status must be one of: ${WORK_CAPSULE_STATUSES.join(", ")}.`,
     };
   }
+  if (decisionScope && !isWorkCapsuleDecisionScope(decisionScope)) {
+    return {
+      success: false,
+      error: "invalid_decisionScope",
+      message: `decisionScope must be one of: ${WORK_CAPSULE_DECISION_SCOPES.join(", ")}.`,
+    };
+  }
+  if (portfolioRole && !isWorkCapsulePortfolioRole(portfolioRole)) {
+    return {
+      success: false,
+      error: "invalid_portfolioRole",
+      message: `portfolioRole must be one of: ${WORK_CAPSULE_PORTFOLIO_ROLES.join(", ")}.`,
+    };
+  }
 
   const limit = numberParam(params, "limit");
+  const where = {
+    ...(status ? { status } : {}),
+    ...(decisionScope ? { decisionScope } : {}),
+    ...(portfolioRole ? { portfolioRole } : {}),
+  };
   const capsules = await prisma.workCapsule.findMany({
-    where: status ? { status } : {},
+    where,
     orderBy: { updatedAt: "desc" },
     take: limit === null ? 50 : Math.min(Math.max(Math.trunc(limit), 1), 100),
     select: {
@@ -164,6 +217,13 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>): Pro
       status: true,
       source: true,
       executorKind: true,
+      decisionScope: true,
+      portfolioRole: true,
+      servedPersona: true,
+      activityKind: true,
+      outcomeAnchor: true,
+      servesPortfolioRoles: true,
+      dependsOnPortfolioRoles: true,
       headBranch: true,
       worktreePath: true,
       pullRequestUrl: true,
@@ -241,6 +301,11 @@ export async function adoptWorktreeTool(
   const validatedExecutorKind = executorKind && isWorkCapsuleExecutorKind(executorKind)
     ? executorKind
     : null;
+  try {
+    normalizeWorkCapsuleScopeInput(parseScopeInput(params));
+  } catch (error) {
+    return invalidScopeResult(error);
+  }
 
   const capsule = await adoptWorktreeCapsule({
     db: workCapsuleDb(),
@@ -254,6 +319,7 @@ export async function adoptWorktreeTool(
       baseSha: stringParam(params, "baseSha") ?? null,
       headSha: stringParam(params, "headSha") ?? null,
       executorKind: validatedExecutorKind,
+      scope: parseScopeInput(params),
     },
     actor: await actor(userId, context),
   });
@@ -430,6 +496,11 @@ export async function createWorkCapsuleTool(
   const validatedExecutorKind = executorKind && isWorkCapsuleExecutorKind(executorKind)
     ? executorKind
     : null;
+  try {
+    normalizeWorkCapsuleScopeInput(parseScopeInput(params));
+  } catch (error) {
+    return invalidScopeResult(error);
+  }
 
   const capsule = await createWorkCapsule({
     db: workCapsuleDb(),
@@ -439,6 +510,7 @@ export async function createWorkCapsuleTool(
       source,
       idempotencyKey,
       executorKind: validatedExecutorKind,
+      scope: parseScopeInput(params),
     },
     actor: await actor(userId, context),
   });
