@@ -6,6 +6,10 @@
 
 **Architecture:** Build a shared `apps/web/lib/proactivity` module first, then consume it from UI and runtime callers. V1 keeps system/archetype defaults in typed code and writes runtime evidence into existing metadata; persistent overrides are added only after an implementation sweep proves no suitable existing preference substrate exists. Proactivity changes timing, persistence, escalation, spend class, and explanation only; existing autonomy, HITL, grants, routing, and outbound governance remain authoritative.
 
+**Backlog ownership:** This branch owns the first shared implementation slice of `BI-5B6F666F` (`Attention Surface — proactive AI Coworker custodian mode`) under `EP-ATTENTION-SURFACE`. `BI-ACB04A21` is already shipped as the Build Studio pilot/proof point under the closed `EP-BUILD-STUDIO-UX`; this plan must compose with that pilot and must not rebuild Build Studio-specific custodian UX. Build Studio work in this plan is limited to consuming or exposing the shared proactivity plan where an existing runtime/progress seam needs it.
+
+**User outcome guardrail:** Every proactive intervention should be quiet until useful, explain "why now" in one plain-language line, show one recommended action, offer bounded alternatives such as snooze/show why, and hide internal IDs, queues, branches, and diagnostic jargon by default.
+
 **Tech Stack:** Next.js 16, React 19, TypeScript, Prisma 7, Vitest, lucide-react, DPF theme tokens, existing golden-triangle coworker dock, existing TAK `TaskRun.a2aMetadata`.
 
 **Spec:** `docs/superpowers/specs/2026-06-29-ai-coworker-proactivity-policy-design.md`
@@ -567,6 +571,8 @@ git commit -s -m "feat: apply proactivity to field dispatch delays"
 **Files:**
 - Modify: Build Studio stuck/custodian caller identified during implementation.
 - Test: nearest Build Studio stall/custodian test.
+
+**Boundary:** Do not duplicate the shipped Build Studio custodian mode from `BI-ACB04A21`. Treat it as pilot evidence. This task should only add shared `ProactivityPlan` composition where Build Studio already has a progress/stall/escalation seam, preserving its existing one-status/one-next-action UX.
 
 - [ ] **Step 1: Locate Build Studio caller**
 

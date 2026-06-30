@@ -27,6 +27,8 @@ The answer must vary by mission. A casual chat coworker should not nag. A todo r
 
 This spec defines a cross-surface `ProactivityPolicy` contract and a simple UX dial that resolves into detailed runtime policy.
 
+Backlog ownership: this design is the active shared-primitive implementation slice for `BI-5B6F666F` under `EP-ATTENTION-SURFACE`. The shipped Build Studio pilot `BI-ACB04A21` under the closed `EP-BUILD-STUDIO-UX` is proof and input, not duplicated scope. Build Studio consumption in this design must compose with its existing proactive custodian UX: one plain-language status, one recommended action, bounded alternatives, and details behind disclosure.
+
 ## 2. Design Thesis
 
 Show humans a simple behavior dial. Let the platform resolve the actual policy.
@@ -440,6 +442,9 @@ Accepted changes write an auditable policy override. Dismissed proposals should 
 3. Coworker surfaces guided next action and can propose retry/abandon/escalate.
 4. Recovery still follows Build Studio phase rules and governance.
 5. Spend class remains bounded by Build Studio right-sizing and cost governance.
+6. Do not fork the shipped Build Studio custodian implementation from `BI-ACB04A21`; consume or expose the shared `ProactivityPlan` at existing Build Studio progress/stall/escalation seams.
+
+User-facing rule: Build Studio and every other consuming surface should remain quiet while work is progressing, then surface one recommended action with bounded alternatives such as snooze/show why. Internal IDs, queues, branches, and diagnostic jargon remain hidden by default and appear only in engineer-oriented disclosures.
 
 ## 11. Data Model Strategy
 
