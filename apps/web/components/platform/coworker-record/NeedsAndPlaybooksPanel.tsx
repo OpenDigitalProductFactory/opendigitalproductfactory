@@ -350,6 +350,8 @@ function CaseStagingRow({
   const resolution = state.resolution ?? null;
   const guardrail = caseStagingGuardrailLabel(state);
   const canResolve = canWrite && staged && !resolution && Boolean(needId);
+  const canAttachReceipt =
+    canWrite && staged && resolution?.status === "approved-awaiting-receipt" && Boolean(needId);
   return (
     <div
       style={{
@@ -405,6 +407,23 @@ function CaseStagingRow({
           />
         </div>
       ) : null}
+      {canAttachReceipt && needId && resolution ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          <CaseResolutionForm
+            needId={needId}
+            agentId={agentId}
+            action="approve"
+            label="Attach receipt evidence"
+            note="Attach receipt evidence for the approved Living Playbook Work Case proposal; do not commit the case."
+            receipt={{
+              receiptId: receiptIdForCaseResolution(needId, resolution.decisionInteractionId),
+              receiptStatus: "valid",
+              receiptEnforcementMode: state.enforcementMode ?? "governed-action",
+              receiptKind: state.requiredReceiptKind ?? state.enforcementMode ?? "governed-action",
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -444,6 +463,9 @@ function caseResolutionDetail(status: NonNullable<CaseStaging["resolution"]>["st
 }
 
 function caseStagingGuardrailLabel(state: CaseStaging): string | null {
+  if (state.resolution?.receiptCoverage === "covered") {
+    return null;
+  }
   if (state.receiptCoverage === "required-before-commit") {
     return "receipt required before commit";
   }
@@ -487,6 +509,10 @@ function workCaseActionLabel(action: string): string {
     resume: "resume",
   };
   return labels[action] ?? action.replaceAll("-", " ");
+}
+
+function receiptIdForCaseResolution(needId: string, decisionInteractionId: string): string {
+  return `TER-LP-${needId}-${decisionInteractionId}`;
 }
 
 function ReviewActionForm({
@@ -535,12 +561,19 @@ function CaseResolutionForm({
   action,
   label,
   note,
+  receipt,
 }: {
   needId: string;
   agentId: string;
   action: "approve" | "defer" | "reject";
   label: string;
   note: string;
+  receipt?: {
+    receiptId: string;
+    receiptStatus: "valid" | "invalid" | "observed" | "failed";
+    receiptEnforcementMode: "governed-action" | "observed-event";
+    receiptKind: string;
+  };
 }) {
   return (
     <form action={resolveWorkPatternCaseProposalAction} style={{ margin: 0 }}>
@@ -548,6 +581,14 @@ function CaseResolutionForm({
       <input type="hidden" name="agentId" value={agentId} />
       <input type="hidden" name="action" value={action} />
       <input type="hidden" name="note" value={note} />
+      {receipt ? (
+        <>
+          <input type="hidden" name="receiptId" value={receipt.receiptId} />
+          <input type="hidden" name="receiptStatus" value={receipt.receiptStatus} />
+          <input type="hidden" name="receiptEnforcementMode" value={receipt.receiptEnforcementMode} />
+          <input type="hidden" name="receiptKind" value={receipt.receiptKind} />
+        </>
+      ) : null}
       <button
         type="submit"
         style={{

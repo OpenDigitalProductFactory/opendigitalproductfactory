@@ -156,6 +156,12 @@ Assert that a stageable case-bound Living Playbook row shows:
 
 Use existing chip/row styles and theme variables. Keep the new controls inside the existing review row. Do not add a dashboard, route, tab, modal, or chat prompt.
 
+- [x] **Step 3: Attach receipt evidence after approval**
+
+Follow-up slice `feat/living-playbook-receipt-evidence` closes the receipt-backed transition that browser shepherding exposed: a proposal approved without receipt evidence stops at `approved-awaiting-receipt` with `commitAllowed: false`. The existing row now exposes one contextual `Attach receipt evidence` action only in that state. The action reuses `resolveWorkPatternCaseProposal`, supplies a `ReceiptEnvelope` through the existing form fields, and records a second `DecisionInteraction` that moves the persisted resolution to `approved-ready-for-governed-commit` with `receiptCoverage: "covered"` and `commitAllowed: true`.
+
+This is still not a Work Case commit. The slice preserves the Work Case governed Action boundary and continues to assert that no `CoworkerActionEnvelope`, Work Case, WorkItem, source-record, skill, prompt, grant, model-route, backlog, or live autonomy mutation occurs.
+
 ---
 
 ## Chunk 4: Verification, PR, and Landing
@@ -207,10 +213,10 @@ Rollback is a revert of this PR. The slice is migration-free and writes only rea
 
 ## Definition of Done
 
-- [ ] Stageable case-bound Living Playbook proposals can be approved, deferred, or rejected.
-- [ ] Approval records receipt requirements and does not commit Work Case state.
-- [ ] Valid receipt evidence can mark the proposal ready for the governed commit path.
-- [ ] No live Work Case/autonomy/source mutation is introduced.
-- [ ] Existing Work Case helpers are reused; no parallel table, receipt, action rail, or dashboard is added.
-- [ ] Focused tests, typecheck, and production build pass.
+- [x] Stageable case-bound Living Playbook proposals can be approved, deferred, or rejected.
+- [x] Approval records receipt requirements and does not commit Work Case state.
+- [x] Valid receipt evidence can mark the proposal ready for the governed commit path.
+- [x] No live Work Case/autonomy/source mutation is introduced.
+- [x] Existing Work Case helpers are reused; no parallel table, receipt, action rail, or dashboard is added.
+- [x] Focused tests, typecheck, and production build pass.
 - [ ] PR is DCO-signed, pushed, opened non-draft, CI-green, and merged.

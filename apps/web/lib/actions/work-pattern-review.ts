@@ -134,7 +134,8 @@ function appendString(values: unknown, next: string): string[] {
   const existing = Array.isArray(values)
     ? values.filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
     : [];
-  return [...new Set([...existing, next])];
+  const additions = next.trim().length > 0 ? [next] : [];
+  return [...new Set([...existing, ...additions])];
 }
 
 function evidenceSources(input: {
@@ -503,7 +504,12 @@ export async function resolveWorkPatternCaseProposal(formData: FormData): Promis
   if (!reviewState || !staging || staging.status !== "stageable") {
     throw new Error("work_pattern_case_proposal_not_stageable");
   }
-  if (staging.resolution) {
+  const existingResolution = staging.resolution ?? null;
+  const receiptCompletion =
+    existingResolution?.status === "approved-awaiting-receipt" &&
+    action === "approve" &&
+    Boolean(formString(formData, "receiptId"));
+  if (existingResolution && !receiptCompletion) {
     throw new Error("work_pattern_case_proposal_already_resolved");
   }
 
@@ -603,7 +609,10 @@ export async function resolveWorkPatternCaseProposal(formData: FormData): Promis
           ...evidenceJson,
           caseProposalResolutionDecisionInteractionId: decisionInteractionId,
           caseProposalResolutionDecisionInteractionIds: appendString(
-            evidenceJson.caseProposalResolutionDecisionInteractionIds,
+            appendString(
+              evidenceJson.caseProposalResolutionDecisionInteractionIds,
+              existingResolution?.decisionInteractionId ?? "",
+            ),
             decisionInteractionId,
           ),
           decisionInteractionIds: appendString(evidenceJson.decisionInteractionIds, decisionInteractionId),
