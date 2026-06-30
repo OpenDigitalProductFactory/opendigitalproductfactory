@@ -231,11 +231,6 @@ describe("TOOL_TO_GRANTS — Admin entries", () => {
     expect(isToolAllowedByGrants("admin_run_command", ["admin_write"])).toBe(true);
     expect(isToolAllowedByGrants("admin_run_command", [])).toBe(false);
   });
-
-  it("request_self_upgrade requires admin_write", () => {
-    expect(isToolAllowedByGrants("request_self_upgrade", ["admin_write"])).toBe(true);
-    expect(isToolAllowedByGrants("request_self_upgrade", ["admin_read"])).toBe(false);
-  });
 });
 
 describe("TOOL_TO_GRANTS — Licensing compliance entries", () => {

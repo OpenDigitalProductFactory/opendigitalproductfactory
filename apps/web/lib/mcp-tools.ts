@@ -434,8 +434,6 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 }
 
 // ─── Tool Registry ───────────────────────────────────────────────────────────
-
-
 // Scoped tool packs compose into the registry; mcp-tools.ts is the thin layer
 // over them (definitions spread into PLATFORM_TOOLS below; dispatch in executeTool).
 const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, marketingPack, activityRoutingPack, selfUpgradePack]);
