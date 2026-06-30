@@ -614,12 +614,16 @@ export async function callProvider(
         classification: err.capacity,
         source: "api",
         rawSnippet: err.rawBody ?? err.message,
+      }).catch((capacityErr) => {
+        console.warn("[ai-inference] Failed to record provider capacity:", capacityErr);
       });
     }
     throw err;
   }
 
-  void clearProviderCapacityStatus({ providerId, source: "api" });
+  void clearProviderCapacityStatus({ providerId, source: "api" }).catch((capacityErr) => {
+    console.warn("[ai-inference] Failed to clear provider capacity:", capacityErr);
+  });
 
   // 4. Record token and cost metrics
   aiInferenceTokens.inc({ provider: providerId, model: modelId, direction: "input" }, result.usage.inputTokens);
