@@ -1089,6 +1089,13 @@ model WorkCapsule {
   taskRunId               String?
   gitPromotionCandidateId String?
   changePromotionId       String?
+  decisionScope           String?
+  portfolioRole           String?
+  servedPersona           String?
+  activityKind            String?
+  outcomeAnchor           Json                  @default("{}")
+  servesPortfolioRoles    Json                  @default("[]")
+  dependsOnPortfolioRoles Json                  @default("[]")
   repositoryFullName      String?
   baseBranch              String?
   baseSha                 String?
@@ -1125,6 +1132,9 @@ model WorkCapsule {
   @@index([gitPromotionCandidateId])
   @@index([changePromotionId])
   @@index([epicId])
+  @@index([decisionScope])
+  @@index([portfolioRole])
+  @@index([activityKind])
   @@index([headBranch])
   @@index([sandboxId])
   @@index([leaseExpiresAt])
