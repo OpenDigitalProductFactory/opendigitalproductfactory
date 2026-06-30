@@ -585,6 +585,8 @@ describe("AgentDetailPage", () => {
     expect(html).toContain("receipt required before commit");
     expect(html).toContain("Approve proposal");
     expect(html).toContain("Approved - receipt evidence needed");
+    expect(html).toContain("Attach receipt evidence");
+    expect(html).toContain("TER-LP-NEED-3-DI-RESOLVE001");
     expect(html).not.toContain("Activate playbook");
     expect(html).not.toContain("scaffold");
     expect(html).not.toContain("ReceiptEnvelope");

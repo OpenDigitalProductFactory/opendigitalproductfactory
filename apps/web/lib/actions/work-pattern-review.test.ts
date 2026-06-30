@@ -184,6 +184,18 @@ function resolutionForm(action: string) {
   return data;
 }
 
+function receiptResolutionForm() {
+  const data = resolutionForm("approve");
+  for (const [key, value] of Object.entries({
+    note: "Attach receipt evidence for the governed Work Case proposal.",
+    receiptId: "TER-LP-RECEIPT-1",
+    receiptStatus: "valid",
+    receiptEnforcementMode: "governed-action",
+    receiptKind: "governed-action",
+  })) data.set(key, value);
+  return data;
+}
+
 function stagedCaseNeedRow(overrides: Record<string, unknown> = {}) {
   return caseBoundNeedRow({
     readinessJson: {
@@ -269,6 +281,37 @@ function stagedCaseNeedRow(overrides: Record<string, unknown> = {}) {
     },
     ...overrides,
   });
+}
+
+function awaitingReceiptCaseNeedRow() {
+  const row = stagedCaseNeedRow() as ReturnType<typeof stagedCaseNeedRow>;
+  return {
+    ...row,
+    readinessJson: {
+      ...(row.readinessJson as Record<string, unknown>),
+      workPatternReview: {
+        ...((row.readinessJson as Record<string, unknown>).workPatternReview as Record<string, unknown>),
+        caseStaging: {
+          ...(((row.readinessJson as Record<string, unknown>).workPatternReview as Record<string, unknown>)
+            .caseStaging as Record<string, unknown>),
+          resolution: {
+            status: "approved-awaiting-receipt",
+            action: "approve",
+            activationAllowed: false,
+            liveMutationAllowed: false,
+            commitAllowed: false,
+            decisionInteractionId: "DI-FIRSTRES01",
+            resolverUserId: "user-1",
+            resolvedAt: "2026-06-28T12:05:00.000Z",
+            note: "Approve the proposal; receipt evidence still required.",
+            receiptCoverage: "required-before-commit",
+            receiptId: null,
+            blockers: ["receipt-required-before-commit"],
+          },
+        },
+      },
+    },
+  };
 }
 
 describe("reviewWorkPatternAction", () => {
@@ -651,6 +694,54 @@ describe("reviewWorkPatternAction", () => {
     expect(mockPrisma.coworkerActionEnvelope.create).not.toHaveBeenCalled();
     expect(mockPrisma.workCase.update).not.toHaveBeenCalled();
     expect(mockPrisma.workItem.update).not.toHaveBeenCalled();
+  });
+
+  it("records receipt evidence for an approved Work Case proposal without committing the case", async () => {
+    mockPrisma.coworkerCapabilityNeed.findUnique.mockResolvedValue(awaitingReceiptCaseNeedRow());
+
+    await expect(resolveWorkPatternCaseProposal(receiptResolutionForm())).resolves.toMatchObject({ action: "approve" });
+
+    expect(mockPrisma.decisionInteraction.create.mock.calls[0]![0].data).toMatchObject({
+      outcomeType: "recommend",
+      evidenceBundle: {
+        workPatternCaseProposalResolution: {
+          status: "approved-ready-for-governed-commit",
+          commitAllowed: true,
+          receiptCoverage: "covered",
+          receiptId: "TER-LP-RECEIPT-1",
+        },
+      },
+      outcomePayload: { coverageGap: false },
+      humanOutcome: { type: "work-pattern-case-proposal-resolution", action: "approve" },
+    });
+    const update = mockPrisma.coworkerCapabilityNeed.update.mock.calls[0]![0];
+    expect(update).toMatchObject({
+      where: { needId: "NEED-1" },
+      data: {
+        readinessJson: expect.objectContaining({
+          workPatternReview: expect.objectContaining({
+            caseStaging: expect.objectContaining({
+              status: "stageable",
+              resolution: expect.objectContaining({
+                status: "approved-ready-for-governed-commit",
+                commitAllowed: true,
+                receiptCoverage: "covered",
+                receiptId: "TER-LP-RECEIPT-1",
+              }),
+            }),
+          }),
+        }),
+        evidenceJson: expect.objectContaining({
+          caseProposalResolutionDecisionInteractionId: expect.stringMatching(/^DI-[A-F0-9]{12}$/),
+          caseProposalResolutionDecisionInteractionIds: expect.arrayContaining([
+            "DI-FIRSTRES01",
+            expect.stringMatching(/^DI-[A-F0-9]{12}$/),
+          ]),
+        }),
+      },
+    });
+    expect(mockPrisma.coworkerActionEnvelope.create).not.toHaveBeenCalled();
+    expect(mockPrisma.workCase.update).not.toHaveBeenCalled();
   });
 
   it("records rejected and deferred Work Case proposal resolutions", async () => {
