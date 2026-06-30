@@ -116,8 +116,8 @@ export async function createCoworkerA2aTask(
   return mapCoworkerEngagementToA2aTask({
     engagementId: result.engagementId,
     offerId: input.offerId,
-    serviceId: "",
-    providerAgentId: "",
+    serviceId: result.serviceId,
+    providerAgentId: result.providerAgentId,
     requestedOutcome: input.requestedOutcome,
     status: result.status,
     inputPayload: input.inputPayload ?? {},

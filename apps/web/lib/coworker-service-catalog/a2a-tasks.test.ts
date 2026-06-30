@@ -65,6 +65,8 @@ describe("Coworker A2A task lifecycle", () => {
     const createEngagement = vi.fn(async (_input: CreateCoworkerEngagementInput): Promise<CoworkerEngagementResult> => ({
       engagementId: "CE-A2A",
       status: "requested",
+      serviceId: "svc-sales",
+      providerAgentId: "sales-coworker",
       workCapsuleId: null,
       approvalContext: { required: false, reasons: [] },
     }));
@@ -108,6 +110,9 @@ describe("Coworker A2A task lifecycle", () => {
     expect(task).toMatchObject({
       id: "CE-A2A",
       contextId: "ctx-1",
+      serviceId: "svc-sales",
+      providerAgentId: "sales-coworker",
+      metadata: { delegatedAgentId: "sales-coworker" },
       status: { state: "submitted" },
     });
   });
