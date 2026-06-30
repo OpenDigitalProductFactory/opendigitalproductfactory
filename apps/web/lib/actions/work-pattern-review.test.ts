@@ -403,6 +403,17 @@ describe("reviewWorkPatternAction", () => {
     expect(mockRevalidatePath).toHaveBeenCalledWith("/platform/ai/agent/build-specialist");
   });
 
+  it("does not persist the static platform fallback profile on review decisions", async () => {
+    await recordWorkPatternReview(form("defer"));
+
+    expect(mockPrisma.decisionInteraction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        profileId: "mark-dpf-platform",
+        fallbackProfileId: null,
+      }),
+    });
+  });
+
   it("uses DB-resolved regulatory ceilings instead of stale evidence JSON during approval", async () => {
     mockPrisma.coworkerCapabilityNeed.findUnique.mockResolvedValue(
       needRow({
