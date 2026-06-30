@@ -1,3 +1,9 @@
+import {
+  PROACTIVITY_CHANGE_ACTION,
+  parseProactivityChangeProposalParameters,
+} from "@/lib/proactivity/proactivity-change-proposal";
+import { getProactivityLevelCopy } from "@/lib/proactivity/proactivity-copy";
+
 export type ActionProposalPresentationInput = {
   proposalId: string;
   actionType: string;
@@ -22,6 +28,27 @@ const ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION =
 export function projectActionProposalPresentation(
   input: ActionProposalPresentationInput,
 ): ActionProposalPresentation {
+  if (input.actionType === PROACTIVITY_CHANGE_ACTION) {
+    const parameters = parseProactivityChangeProposalParameters(input.parameters);
+    if (parameters) {
+      const current = getProactivityLevelCopy(parameters.currentLevel).label;
+      const proposed = getProactivityLevelCopy(parameters.proposedLevel).label;
+
+      return {
+        title: `Change proactivity to ${proposed}`,
+        shortLabel: "Proactivity change",
+        summary: `Why now: ${parameters.rationale}`,
+        details: [
+          { label: "Current", value: current },
+          { label: "Recommended", value: proposed },
+          { label: "Scope", value: readableScope(parameters.scope, parameters.activityFamily ?? parameters.routeContext) },
+          { label: "Spend", value: parameters.spendImpact },
+          { label: "Authority", value: parameters.authorityImpact },
+        ],
+      };
+    }
+  }
+
   if (input.actionType === ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION) {
     const parameters = asRecord(input.parameters);
     const activityClass = readString(parameters?.activityClass) ?? "unknown activity";
@@ -51,6 +78,11 @@ export function projectActionProposalPresentation(
     summary: `Proposed action ${input.actionType}.`,
     details: [],
   };
+}
+
+function readableScope(scope: string, scopeRef?: string | null): string {
+  const label = scope.replace(/-/g, " ");
+  return scopeRef ? `${label}: ${scopeRef}` : label;
 }
 
 function humanizeActionType(actionType: string): string {

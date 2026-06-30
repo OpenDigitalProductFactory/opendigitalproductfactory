@@ -28,6 +28,7 @@ describe("CoworkerPriorityDock", () => {
     const header = screen.getByRole("button", { name: /Priority/ });
     expect(header).toBeTruthy();
     expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: /Proactivity balanced/i })).toBeTruthy();
     expect(screen.queryByRole("radio", { name: /Assured/ })).toBeNull();
   });
 

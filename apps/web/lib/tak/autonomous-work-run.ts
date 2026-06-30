@@ -5,6 +5,7 @@ import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-rev
 import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { AgentEvent } from "@/lib/tak/agent-event-bus";
+import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
@@ -62,6 +63,7 @@ export type AutonomousWorkRunInput = {
     id: string;
   };
   metadata?: Record<string, unknown>;
+  proactivity?: ProactivityPlan;
 };
 
 const TRIGGER_PREFIX: Record<AutonomousWorkTrigger, string> = {
@@ -114,6 +116,7 @@ export async function createAutonomousWorkRun(
         trigger: input.trigger,
         ...(input.sourceRef ? { sourceRef: input.sourceRef } : {}),
         ...(input.metadata ?? {}),
+        ...(input.proactivity ? { proactivity: input.proactivity } : {}),
       },
     },
     select: { id: true, taskRunId: true, contextId: true },

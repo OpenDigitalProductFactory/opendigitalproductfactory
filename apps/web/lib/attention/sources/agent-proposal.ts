@@ -4,6 +4,11 @@
 
 import type { prisma } from "@dpf/db";
 import { projectActionProposalPresentation } from "@/lib/governance/action-proposal-presentation";
+import {
+  PROACTIVITY_CHANGE_ACTION,
+  parseProactivityChangeProposalParameters,
+} from "@/lib/proactivity/proactivity-change-proposal";
+import { getProactivityLevelCopy } from "@/lib/proactivity/proactivity-copy";
 import type { AttentionItem } from "../types";
 
 type Db = typeof prisma;
@@ -19,6 +24,46 @@ export type AgentActionProposalRow = {
 export function agentProposalToAttentionItem(row: AgentActionProposalRow): AttentionItem {
   const presentation = projectActionProposalPresentation(row);
   const isActivityRoutingAction = row.actionType === "activity_harness_confidence_override";
+  const proactivityChange = row.actionType === PROACTIVITY_CHANGE_ACTION
+    ? parseProactivityChangeProposalParameters(row.parameters)
+    : null;
+
+  if (proactivityChange) {
+    const current = getProactivityLevelCopy(proactivityChange.currentLevel).label;
+    const proposed = getProactivityLevelCopy(proactivityChange.proposedLevel).label;
+    const scopeRef =
+      proactivityChange.activityFamily ??
+      proactivityChange.routeContext ??
+      proactivityChange.agentId ??
+      proactivityChange.scope;
+
+    return {
+      id: `agent-proposal:${row.proposalId}`,
+      source: "agent-proposal",
+      title: `Review proactivity: ${current} -> ${proposed}`,
+      context: presentation.summary,
+      decisionClass: { scorability: "unscorable" },
+      riskClass: "bounded-write",
+      triage: {
+        timeToAct: "none",
+        residueReason: "policy-approval",
+        blastRadius: scopeRef,
+        decideEffort: "review",
+        irreversible: false,
+      },
+      createdAtIso: row.proposedAt.toISOString(),
+      actions: [{
+        kind: "open-in-context",
+        label: "Review proactivity change",
+        href: "/platform/ai",
+      }, {
+        kind: "snooze",
+        label: "Snooze",
+      }],
+      deepLink: "/platform/ai",
+      audience: { operator: true },
+    };
+  }
 
   return {
     id: `agent-proposal:${row.proposalId}`,

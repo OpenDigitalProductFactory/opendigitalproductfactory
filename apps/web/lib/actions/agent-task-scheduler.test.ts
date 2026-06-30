@@ -358,14 +358,12 @@ function arrangeHiveScoutTask() {
 describe("executeScheduledAgentTask TaskRun lifecycle", () => {
   it("creates a TaskRun before the first runAgenticLoop call and links it back to ScheduledAgentTask", async () => {
     arrangeScheduledTask();
-    mocks.runAgenticLoop.mockResolvedValue({
-      content: "Done.",
-      executedTools: [{ name: "run_discovery_triage", args: {}, result: { success: true } }],
-    });
+    mocks.runAgenticLoop.mockResolvedValue({ content: "Done.", executedTools: [{ name: "run_discovery_triage", args: {}, result: { success: true } }] });
 
     await executeScheduledAgentTask("discovery-taxonomy-gap-triage-daily");
 
     expect(mocks.prisma.taskRun.create).toHaveBeenCalledOnce();
+    expect(mocks.prisma.taskRun.create.mock.calls[0]?.[0]?.data?.a2aMetadata?.proactivity).toMatchObject({ resolvedLevel: "balanced", policyId: "proactivity:scheduled-task:balanced", actionBoundary: "propose" });
     expect(mocks.runAgenticLoop).toHaveBeenCalledWith(
       expect.objectContaining({
         taskRunId: "TR-SCHED-ABCDE",

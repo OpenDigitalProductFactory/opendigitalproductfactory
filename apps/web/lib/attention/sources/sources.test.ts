@@ -143,4 +143,31 @@ describe("agentProposalToAttentionItem", () => {
     );
     expect(item.deepLink).toBe("/platform/ai/operations-map");
   });
+
+  it("projects a proactivity change proposal with why-now context and a bounded review action", () => {
+    const item = agentProposalToAttentionItem({
+      proposalId: "AP-PROACTIVE",
+      actionType: "propose_proactivity_change",
+      parameters: {
+        kind: "proactivity-change",
+        agentId: "dispatcher",
+        activityFamily: "field-dispatch-appointment",
+        currentLevel: "balanced",
+        proposedLevel: "assertive",
+        scope: "activity-family",
+        rationale: "Late customer appointments should be warned earlier.",
+        evidenceRefs: [{ kind: "dispatch-event", id: "running-late" }],
+        spendImpact: "may increase monitoring and notification spend within existing authority",
+        authorityImpact: "does not grant new tools, permissions, or approval bypasses",
+      },
+      proposedAt: new Date("2026-06-23T07:00:00.000Z"),
+    });
+
+    expect(item.title).toBe("Review proactivity: Balanced -> Assertive");
+    expect(item.context).toBe("Why now: Late customer appointments should be warned earlier.");
+    expect(item.triage.blastRadius).toBe("field-dispatch-appointment");
+    expect(item.actions).toContainEqual({ kind: "open-in-context", label: "Review proactivity change", href: "/platform/ai" });
+    expect(item.actions).toContainEqual({ kind: "snooze", label: "Snooze" });
+    expect(item.context).not.toMatch(/AP-|queue|diagnostic/i);
+  });
 });
