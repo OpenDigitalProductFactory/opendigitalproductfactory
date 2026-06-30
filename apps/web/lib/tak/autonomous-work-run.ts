@@ -1,10 +1,12 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@dpf/db";
+import type { Prisma } from "@dpf/db";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-review";
 import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { AgentEvent } from "@/lib/tak/agent-event-bus";
+import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
 import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
@@ -64,6 +66,7 @@ export type AutonomousWorkRunInput = {
   };
   metadata?: Record<string, unknown>;
   proactivity?: ProactivityPlan;
+  delegatedPosture?: ResolvedDelegatedPosture;
 };
 
 const TRIGGER_PREFIX: Record<AutonomousWorkTrigger, string> = {
@@ -96,6 +99,13 @@ export async function createAutonomousWorkRun(
   input: AutonomousWorkRunInput,
 ): Promise<AutonomousWorkRunRef> {
   const threadId = input.threadId ?? null;
+  const a2aMetadata = {
+    trigger: input.trigger,
+    ...(input.sourceRef ? { sourceRef: input.sourceRef } : {}),
+    ...(input.metadata ?? {}),
+    ...(input.proactivity ? { proactivity: input.proactivity } : {}),
+    ...(input.delegatedPosture ? { delegatedPosture: input.delegatedPosture } : {}),
+  } as Prisma.InputJsonValue;
 
   return prisma.taskRun.create({
     data: {
@@ -112,12 +122,7 @@ export async function createAutonomousWorkRun(
       source: taskRunSourceForTrigger(input.trigger),
       status: initialStatusForTrigger(input.trigger),
       authorityScope: input.authorityScope ?? [],
-      a2aMetadata: {
-        trigger: input.trigger,
-        ...(input.sourceRef ? { sourceRef: input.sourceRef } : {}),
-        ...(input.metadata ?? {}),
-        ...(input.proactivity ? { proactivity: input.proactivity } : {}),
-      },
+      a2aMetadata,
     },
     select: { id: true, taskRunId: true, contextId: true },
   });

@@ -222,6 +222,67 @@ describe("createAutonomousWorkRun", () => {
     });
   });
 
+  it("writes delegated posture metadata without letting generic metadata clobber it", async () => {
+    const { prisma } = await import("@dpf/db");
+    vi.mocked(prisma.taskRun.create).mockResolvedValue({
+      id: "tr_internal_delegate",
+      taskRunId: "TR-CHAT-DELEG",
+      contextId: "thread-child",
+    } as never);
+
+    const delegatedPosture = {
+      executionAllowed: true as const,
+      proactivity: {
+        inheritedLevel: "assertive" as const,
+        localLevel: "balanced" as const,
+        effectiveLevel: "assertive" as const,
+        source: "inherited-bias" as const,
+        actionBoundary: "propose" as const,
+        explanation: "Caller context increases persistence without changing authority.",
+      },
+      priority: {
+        inherited: { preset: "fast" as const, qualityWeight: 0.1, costWeight: 0.1, timeWeight: 0.8 },
+        local: { preset: "balanced" as const, qualityWeight: 1 / 3, costWeight: 1 / 3, timeWeight: 1 / 3 },
+        effective: { preset: "fast" as const, qualityWeight: 0.1, costWeight: 0.1, timeWeight: 0.8 },
+        source: "inherited-bias" as const,
+        dominantAxis: "time" as const,
+        explanation: "Caller priority is advisory context.",
+      },
+      metadata: {
+        source: "delegated-coworker" as const,
+        fromAgentId: "dispatch-coordinator",
+        toAgentId: "parts-specialist",
+        parentTaskRunId: "TR-PARENT",
+      },
+    };
+
+    const { createAutonomousWorkRun } = await import("./autonomous-work-run");
+
+    await createAutonomousWorkRun({
+      trigger: "interactive",
+      userId: "user-1",
+      agentId: "parts-specialist",
+      routeContext: "/storefront/schedule",
+      title: "Find replacement part",
+      objective: "Find the replacement part for a delayed appointment.",
+      prompt: "Find the replacement part for a delayed appointment.",
+      threadId: "thread-child",
+      parentTaskRunId: "TR-PARENT",
+      metadata: {
+        delegatedPosture: { executionAllowed: false },
+        context: "field-dispatch",
+      },
+      delegatedPosture,
+    });
+
+    const arg = vi.mocked(prisma.taskRun.create).mock.calls[0]?.[0];
+    expect(arg?.data?.a2aMetadata).toMatchObject({
+      trigger: "interactive",
+      context: "field-dispatch",
+      delegatedPosture,
+    });
+  });
+
   it("finds the newest unarchived TaskRun for an interactive thread", async () => {
     const { prisma } = await import("@dpf/db");
     vi.mocked(prisma.taskRun.findFirst).mockResolvedValue({ taskRunId: "TR-CHAT-123" } as never);
