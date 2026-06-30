@@ -104,6 +104,40 @@ describe("deriveProviderHealth", () => {
     expect(h.status).toBe("billing");
   });
 
+  it("persisted billing capacity state takes precedence over recent telemetry", () => {
+    const h = base({
+      capacityStatus: {
+        state: "billing_action_required",
+        action: "add_credits_or_plan",
+        retryAt: null,
+        safeSummary: "Z.ai needs coding credits.",
+        isHumanActionRequired: true,
+      },
+      recentOutcomes: [outcome({ ageMs: 1_000, latencyMs: 1200 })],
+    });
+
+    expect(h.status).toBe("billing");
+    expect(h.remediationKind).toBe("provider_settings");
+    expect(h.safeSummary).toBe("Z.ai needs coding credits.");
+  });
+
+  it("persisted quota reset state maps to rate_limited with cooldownUntil", () => {
+    const retryAt = new Date(NOW + 90_000);
+    const h = base({
+      capacityStatus: {
+        state: "quota_resets_at",
+        action: "retry_at",
+        retryAt,
+        safeSummary: "Quota refreshes soon.",
+        isHumanActionRequired: false,
+      },
+    });
+
+    expect(h.status).toBe("rate_limited");
+    expect(h.remediationKind).toBe("wait");
+    expect(h.cooldownUntil).toBe(retryAt.getTime());
+  });
+
   // ── Disabled lifecycle (fallback.ts disables on auth/billing) ──
   it("disabled + recent billing error → billing", () => {
     const h = base({

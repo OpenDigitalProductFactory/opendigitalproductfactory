@@ -13,6 +13,17 @@ describe("InferenceError", () => {
     const err = new InferenceError("rate limited", "rate_limit", "openai", 429);
     expect(err.statusCode).toBe(429);
   });
+
+  it("carries provider capacity classification when provided", () => {
+    const err = new InferenceError("needs credits", "billing", "zai-coding", 429, undefined, undefined, {
+      state: "billing_action_required",
+      action: "add_credits_or_plan",
+      safeSummary: "Z.ai needs coding credits.",
+      confidence: "exact",
+      isHumanActionRequired: true,
+    });
+    expect(err.capacity?.action).toBe("add_credits_or_plan");
+  });
 });
 
 describe("classifyHttpError", () => {
@@ -37,6 +48,27 @@ describe("classifyHttpError", () => {
 
     expect(err.code).toBe("overloaded");
     expect(err.statusCode).toBe(503);
+  });
+
+  it("attaches Z.ai capacity classification for insufficient coding credits", () => {
+    const err = classifyHttpError(
+      429,
+      "zai-coding",
+      JSON.stringify({
+        error: {
+          code: "1113",
+          message: "Insufficient balance or no resource package. Please recharge.",
+        },
+      }),
+    );
+
+    expect(err.code).toBe("billing");
+    expect(err.capacity).toMatchObject({
+      state: "billing_action_required",
+      action: "add_credits_or_plan",
+      providerCode: "1113",
+      isHumanActionRequired: true,
+    });
   });
 });
 

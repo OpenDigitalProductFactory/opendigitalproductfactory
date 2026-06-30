@@ -40,7 +40,7 @@ export async function loadProviderHealth(
 ): Promise<ProviderHealth> {
   const now = opts.now ?? Date.now();
 
-  const [provider, outcomes] = await Promise.all([
+  const [provider, outcomes, capacityStatus] = await Promise.all([
     prisma.modelProvider.findUnique({
       where: { providerId },
       select: { status: true, authMethod: true },
@@ -55,6 +55,16 @@ export async function loadProviderHealth(
         createdAt: true,
         latencyMs: true,
         modelId: true,
+      },
+    }),
+    prisma.providerCapacityStatus.findUnique({
+      where: { providerId },
+      select: {
+        state: true,
+        action: true,
+        retryAt: true,
+        safeSummary: true,
+        isHumanActionRequired: true,
       },
     }),
   ]);
@@ -89,6 +99,7 @@ export async function loadProviderHealth(
     lifecycleStatus: provider.status,
     authMethod: provider.authMethod,
     recentOutcomes,
+    capacityStatus,
     ...(runtimeCooldown ? { runtimeCooldown } : {}),
     now,
   });

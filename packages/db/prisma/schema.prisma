@@ -1591,6 +1591,7 @@ model ModelProvider {
   credentialOwnerMode      String?
   modelProfiles            ModelProfile[]
   financeProfile           AiProviderFinanceProfile?
+  capacityStatus           ProviderCapacityStatus?
 }
 
 model DiscoveredModel {
@@ -11147,6 +11148,32 @@ model CliPoolStatus {
   updatedAt         DateTime  @updatedAt
 
   @@index([adapterType, resetAt])
+}
+
+// Current live capacity state for a provider. This separates runtime capacity
+// (quota, throttles, credits, plan limits) from ModelProvider.status, which is
+// the configured/admin lifecycle state.
+model ProviderCapacityStatus {
+  id                    String        @id @default(cuid())
+  providerId            String        @unique
+  state                 String
+  action                String
+  retryAt               DateTime?
+  retryAfterSeconds     Int?
+  providerCode          String?
+  safeSummary           String
+  confidence            String
+  isHumanActionRequired Boolean       @default(false)
+  lastObservedAt        DateTime      @default(now())
+  lastSuccessAt         DateTime?
+  source                String
+  rawSnippet            String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  provider              ModelProvider @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+
+  @@index([state, retryAt])
+  @@index([isHumanActionRequired, updatedAt])
 }
 
 // ─── Reduction Gear Phase 0 — GearInterface canonical observation envelope ────
