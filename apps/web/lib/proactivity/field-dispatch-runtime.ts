@@ -39,22 +39,34 @@ export function buildFieldDispatchNotificationProposals(
     });
 
     return [
-      {
-        actionType: FIELD_DISPATCH_CUSTOMER_NOTIFICATION_ACTION,
-        parameters: {
-          kind: "field-dispatch-customer-notification",
-          jobId: action.jobId,
-          intent: action.intent,
-          recommendedAction: recommendedNotificationAction(action.intent),
-          whyNow: proactivity.explanation,
-          proactivity,
-        },
-      },
+      buildFieldDispatchNotificationProposal({
+        jobId: action.jobId,
+        intent: action.intent,
+        proactivity,
+      }),
     ];
   });
 }
 
-function recommendedNotificationAction(intent: DispatchNotificationIntent): string {
+export function buildFieldDispatchNotificationProposal(input: {
+  jobId: string;
+  intent: DispatchNotificationIntent;
+  proactivity: ProactivityPlan;
+}): FieldDispatchNotificationProposalDraft {
+  return {
+    actionType: FIELD_DISPATCH_CUSTOMER_NOTIFICATION_ACTION,
+    parameters: {
+      kind: "field-dispatch-customer-notification",
+      jobId: input.jobId,
+      intent: input.intent,
+      recommendedAction: recommendedNotificationAction(input.intent),
+      whyNow: input.proactivity.explanation,
+      proactivity: input.proactivity,
+    },
+  };
+}
+
+export function recommendedNotificationAction(intent: DispatchNotificationIntent): string {
   if (intent.event === "running-late") return "Send running-late customer update";
   if (intent.event === "on-my-way") return "Send on-my-way customer update";
   if (intent.event === "confirm") return "Send appointment confirmation";

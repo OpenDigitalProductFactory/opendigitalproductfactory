@@ -488,7 +488,7 @@ model ProactivityOverride {
 
 Do not add a large generic rules engine in V1.
 
-Implementation status, 2026-06-30: the implementation sweep found `UserFact` suitable for narrow user-scoped proactivity acknowledgements, so V1 does not add `ProactivityOverride`. Accepted coworker proposals persist `preference` facts keyed as `aiCoworkerProactivity:<scopeKey>`; dismissed proposals persist cooldown facts keyed as `aiCoworkerProactivityCooldown:<scopeKey>`. The pure resolver remains client-safe in `proactivity-resolver.ts`; the server-only resolver in `proactivity-resolver.server.ts` reads `UserFact`, applies the most-specific active acknowledgement by agent, route context, then activity family, and returns evidence refs plus cooldown suppression metadata. Scheduled task execution consumes the server resolver with `ownerUserId` so `TaskRun.a2aMetadata.proactivity` reflects the effective user-aware plan without bundling Prisma into client surfaces.
+Implementation status, 2026-06-30: the implementation sweep found `UserFact` suitable for narrow user-scoped proactivity acknowledgements, so V1 does not add `ProactivityOverride`. Accepted coworker proposals persist `preference` facts keyed as `aiCoworkerProactivity:<scopeKey>`; dismissed proposals persist cooldown facts keyed as `aiCoworkerProactivityCooldown:<scopeKey>`. The pure resolver remains client-safe in `proactivity-resolver.ts`; the server-only resolver in `proactivity-resolver.server.ts` reads `UserFact`, applies the most-specific active acknowledgement by agent, route context, then activity family, and returns evidence refs plus cooldown suppression metadata. Scheduled task execution consumes the server resolver with `ownerUserId` so `TaskRun.a2aMetadata.proactivity` reflects the effective user-aware plan without bundling Prisma into client surfaces. Field-dispatch now follows the same boundary: `field-dispatch-runtime.ts` stays pure, while `field-dispatch-runtime.server.ts` applies acknowledged user overrides and cooldowns before producing customer notification proposal metadata.
 
 ### V2: first-class policy rows
 
@@ -643,6 +643,8 @@ Acceptance:
 - running-late appointment produces assertive plan and early customer-update proposal.
 - blocked Build Studio work produces assertive custodian guidance.
 - normal Build Studio progress remains balanced.
+
+Status, 2026-06-30: field-dispatch runtime has a server-only user-aware proposal builder. Running-late customer updates still resolve assertive by default, but acknowledged user overrides can quiet or rebalance them, and cooldown facts are carried into proposal metadata so the coworker can avoid repeated policy-change suggestions. Build Studio remains already composed through its shipped custodian pilot and shared resolver consumption; broader Attention Surface projection remains open.
 
 ## 16. Verification
 
