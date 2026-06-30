@@ -262,6 +262,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   list_coworker_services: ["coworker_catalog_read"],
   list_coworker_offers: ["coworker_catalog_read"],
   get_coworker_offer: ["coworker_catalog_read"],
+  resolve_coworker_offer_agent_card: ["coworker_catalog_read"],
   request_coworker_engagement: ["coworker_engagement_write"],
   search_knowledge: ["registry_read"],
   search_knowledge_base: ["registry_read"],

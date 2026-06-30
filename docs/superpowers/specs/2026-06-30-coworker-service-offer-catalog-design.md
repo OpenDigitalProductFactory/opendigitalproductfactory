@@ -172,7 +172,7 @@ Different callers need different catalog projections:
 - Cross-organization A2A/API: sales, marketing, procurement, supplier-facing, and customer-facing coworkers require partner/external availability, GAID-federated or GAID-public identity, provider organization, authenticated card variants where needed, explicit terms, data boundary, audit, and revocation posture.
 - Back-office specialist boundaries: legal, finance, security, and HR specialists can be invoked by internal coordinators, but their offers should stay narrow, approval-aware, and hidden from external discovery unless an explicitly reviewed partner-facing offer exists.
 
-The first implementation slice delivers the human portal and MCP request surface. It records enough cost, terms, availability, and data-boundary metadata to support later A2A/GAID projection, but it does not yet implement A2A Agent Card publication or GAID verification.
+The first implementation slice delivers the human portal, MCP request surface, Build Studio requirements broker, and a bounded Agent Card projection for selected coworker offers. It records enough cost, terms, availability, and data-boundary metadata to support later full A2A task exchange. It does not yet implement a live external A2A task endpoint or GAID authority verification service.
 
 ## Build Studio Requirements Surface
 
@@ -204,6 +204,8 @@ The output should be structured, concise, and testable:
 - citations or internal policy links used to derive the packet.
 
 This turns business-level coworkers into early requirements contributors for coding agents. It reduces the common failure mode where PCI, payroll, paid data, contract, or procurement constraints are discovered only during late review, after implementation assumptions have already hardened.
+
+Implementation note: the first broker slice is deterministic and bounded. `build-requirements.ts` detects the initial trigger families, returns concise packets, and `build-agent-prompts.ts` injects only that packet into Build Studio context. The packet becomes plan/review guidance; it does not load the whole coworker catalog into coding-agent prompts.
 
 ## Catalog Context Budget and Delegation
 
@@ -273,7 +275,7 @@ Future A2A/GAID tools should not expand this first MCP list into a huge universa
 - search/select candidate offers with filters and explanation;
 - fetch one offer detail;
 - request an engagement;
-- resolve one selected offer into an A2A Agent Card or GAID/AIDoc reference when the caller has authority.
+- resolve one selected offer into an A2A Agent Card or GAID/AIDoc reference when the caller has authority. The first resolver is `resolve_coworker_offer_agent_card`; it projects one selected offer and rejects cross-boundary projection when GAID/AIDoc, legal terms, or data-boundary metadata is missing.
 
 ## Security and Governance
 

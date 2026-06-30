@@ -61,6 +61,24 @@ const definitions: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "resolve_coworker_offer_agent_card",
+    description: "Resolve one selected coworker offer into a bounded A2A Agent Card projection when the caller has authority.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        offerId: { type: "string", description: "Coworker offer id." },
+        accessProfile: {
+          type: "string",
+          enum: ["internal-a2a", "partner-a2a", "external-a2a"],
+          description: "A2A exposure profile for the caller.",
+        },
+      },
+      required: ["offerId", "accessProfile"],
+    },
+    requiredCapability: "view_platform",
+    sideEffect: false,
+  },
+  {
     name: "request_coworker_engagement",
     description: "Create a governed request to engage a coworker offer. High-risk or external offers return approval requirements.",
     inputSchema: {
@@ -146,6 +164,41 @@ async function getCoworkerOffer(params: Record<string, unknown>): Promise<ToolRe
   };
 }
 
+async function resolveCoworkerOfferAgentCard(params: Record<string, unknown>): Promise<ToolResult> {
+  const offerId = typeof params["offerId"] === "string" ? params["offerId"].trim() : "";
+  const accessProfile = typeof params["accessProfile"] === "string" ? params["accessProfile"].trim() : "";
+  if (!offerId || !accessProfile) return { success: false, error: "missing_fields", message: "offerId and accessProfile are required." };
+  if (!["internal-a2a", "partner-a2a", "external-a2a"].includes(accessProfile)) {
+    return { success: false, error: "invalid_accessProfile", message: "accessProfile must be internal-a2a, partner-a2a, or external-a2a." };
+  }
+
+  const { loadCoworkerCatalog } = await import("@/lib/coworker-service-catalog/catalog");
+  const { projectCoworkerOfferAgentCard } = await import("@/lib/coworker-service-catalog/agent-card");
+  const catalog = await loadCoworkerCatalog();
+  const offer = catalog.offers.find((candidate) => candidate.offerId === offerId);
+  if (!offer) return { success: false, error: "not_found", message: `Coworker offer ${offerId} not found.` };
+
+  const projection = projectCoworkerOfferAgentCard(offer, {
+    accessProfile: accessProfile as "internal-a2a" | "partner-a2a" | "external-a2a",
+  });
+  if (!projection.ok) {
+    return {
+      success: false,
+      error: projection.reason,
+      message: projection.missing.length > 0
+        ? `Cannot project ${offerId}: missing ${projection.missing.join(", ")}.`
+        : `Cannot project ${offerId}: offer is not available for ${accessProfile}.`,
+      data: projection,
+    };
+  }
+
+  return {
+    success: true,
+    message: `Resolved ${offerId} to ${projection.card.exposure} A2A Agent Card for ${projection.card.agentId}.`,
+    data: { agentCard: projection.card },
+  };
+}
+
 async function requestCoworkerEngagement(
   params: Record<string, unknown>,
   userId: string,
@@ -190,6 +243,7 @@ export const coworkerServiceCatalogPack: ToolPack = {
     list_coworker_services: (params) => listCoworkerServices(params),
     list_coworker_offers: (params) => listCoworkerOffers(params),
     get_coworker_offer: (params) => getCoworkerOffer(params),
+    resolve_coworker_offer_agent_card: (params) => resolveCoworkerOfferAgentCard(params),
     request_coworker_engagement: (params, userId, context) =>
       requestCoworkerEngagement(params, userId, context),
   },
@@ -197,6 +251,7 @@ export const coworkerServiceCatalogPack: ToolPack = {
     list_coworker_services: ["coworker_catalog_read"],
     list_coworker_offers: ["coworker_catalog_read"],
     get_coworker_offer: ["coworker_catalog_read"],
+    resolve_coworker_offer_agent_card: ["coworker_catalog_read"],
     request_coworker_engagement: ["coworker_engagement_write"],
   },
 };

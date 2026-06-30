@@ -6,7 +6,7 @@
 
 **Architecture:** Add a small catalog layer over the existing coworker substrate: provider capabilities (`CoworkerService`), consumable packages (`CoworkerOffer`), and actual demand (`CoworkerEngagement`). Keep projection, MCP handlers, and UI as thin layers over shared service functions.
 
-**Surface doctrine:** This first slice ships human portal discovery plus bounded MCP discovery/request tools. A2A direct engagement, GAID/AIDoc projection, catalog broker ranking, and aggregate/process-refinement offers are intentionally designed here but queued as follow-on slices so the first PR does not overload every agent with a universal catalog payload.
+**Surface doctrine:** This first slice ships human portal discovery, bounded MCP discovery/request tools, Build Studio requirements-packet injection, and selected-offer Agent Card projection. A live external A2A task endpoint, GAID authority verification service, catalog broker ranking, and aggregate/process-refinement offers remain follow-on slices so the first PR does not overload every agent with a universal catalog payload.
 
 **Tech Stack:** Next.js 16 app router, Prisma 7, pnpm workspaces, Vitest, React Testing Library, DPF MCP tool surface.
 
@@ -135,7 +135,7 @@
 - [ ] **Step 3: Track DMAIC-style metrics: cycle time, handoffs, rework, approvals, cost variance, defect/escape rate, and requester satisfaction.**
 - [ ] **Step 4: Feed process metrics into catalog ranking without making ranking opaque or mandatory.**
 
-## Follow-On Chunk: Build Studio Requirements Broker
+## Chunk 6: Build Studio Requirements Broker
 
 ### Task 11: Add trigger taxonomy and requirements packet schema
 
@@ -143,9 +143,9 @@
 - Create: `apps/web/lib/coworker-service-catalog/build-requirements.ts`
 - Test: `apps/web/lib/coworker-service-catalog/build-requirements.test.ts`
 
-- [ ] **Step 1: Define trigger families** for payment/cardholder data, payroll/workforce compensation, company identity/data authority, paid providers/data feeds/token acquisition, identity/auth/security monitoring, tax, employment, healthcare, financial reporting, external customer/supplier communication, and supplier onboarding.
-- [ ] **Step 2: Define a requirements packet schema** with obligations, non-goals, controls, acceptance criteria, required evidence, prohibited patterns, approved provider/provider-selection requirements, cost and renewal tracking, approvals, data-boundary constraints, retention constraints, and citations/policy links.
-- [ ] **Step 3: Add tests** proving PCI-style payment features, ADP-style payroll integrations, D&B-style company data authority, and paid model/provider dependencies select bounded aggregate offers instead of injecting the full coworker catalog into coding-agent context.
+- [x] **Step 1: Define trigger families** for payment/cardholder data, payroll/workforce compensation, company identity/data authority, paid providers/data feeds/token acquisition, identity/auth/security monitoring, tax, employment, healthcare, financial reporting, external customer/supplier communication, and supplier onboarding.
+- [x] **Step 2: Define a requirements packet schema** with obligations, non-goals, controls, acceptance criteria, required evidence, prohibited patterns, approved provider/provider-selection requirements, cost and renewal tracking, approvals, data-boundary constraints, retention constraints, and citations/policy links.
+- [x] **Step 3: Add tests** proving PCI-style payment features, ADP-style payroll integrations, D&B-style company data authority, and paid model/provider dependencies select bounded aggregate offers instead of injecting the full coworker catalog into coding-agent context.
 
 ### Task 12: Integrate broker into Build Studio planning and review
 
@@ -154,10 +154,10 @@
 - Modify: `apps/web/lib/integrate/build-orchestrator.ts`
 - Modify related Build Studio review/verification modules after identifying the smallest existing integration point.
 
-- [ ] **Step 1: Scan feature briefs, designs, decomposition output, dependencies, data-model changes, route exposure, and implementation review notes for trigger signals.**
+- [x] **Step 1: Scan feature briefs, designs, decomposition output, dependencies, data-model changes, route exposure, and implementation review notes for trigger signals.**
 - [ ] **Step 2: Request coworker engagements for matching offers and attach the requirements packet plus engagement evidence to the feature plan or Work Capsule.**
-- [ ] **Step 3: Feed only the bounded packet into coding-agent and review-agent prompts, not the full catalog.**
-- [ ] **Step 4: Block build-to-implementation or mark the build as needing human review when a high-risk required packet is missing, unresolved, or rejected.**
+- [x] **Step 3: Feed only the bounded packet into coding-agent and review-agent prompts, not the full catalog.**
+- [x] **Step 4: Block build-to-implementation or mark the build as needing human review when a high-risk required packet is missing, unresolved, or rejected.**
 - [ ] **Step 5: Treat late review-time trigger discovery as process debt by recording the missed trigger family and source phase.**
 
 ### Task 13: Add paid-provider cost and approval workflow
@@ -167,5 +167,5 @@
 
 - [ ] **Step 1: Route paid dependency requests through procurement, finance, legal, security, and data governance according to provider type and data boundary.**
 - [ ] **Step 2: Track provider organization, contract/terms status, cost model, budget owner, cost center, renewal or usage cadence, token acquisition, revocation/termination rights, and evidence links.**
-- [ ] **Step 3: Require approved cost and contract context before Build Studio marks the provider dependency as available to implement.**
+- [x] **Step 3: Require approved cost and contract context before Build Studio marks the provider dependency as available to implement.**
 - [ ] **Step 4: Emit catalog metrics for provider cost variance, approval latency, renewal exposure, and provider-specific implementation defects.**

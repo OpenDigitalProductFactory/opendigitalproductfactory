@@ -202,6 +202,7 @@ describe("coworker service catalog tool pack", () => {
       "list_coworker_offers",
       "list_coworker_services",
       "request_coworker_engagement",
+      "resolve_coworker_offer_agent_card",
     ]);
     for (const def of coworkerServiceCatalogPack.definitions) {
       expect(coworkerServiceCatalogPack.handlers[def.name], def.name).toBeTypeOf("function");

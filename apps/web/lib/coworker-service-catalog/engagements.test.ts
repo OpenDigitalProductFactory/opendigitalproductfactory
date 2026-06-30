@@ -101,6 +101,47 @@ describe("createCoworkerEngagement", () => {
     });
   });
 
+  it("requires paid-provider funding and contract evidence before request is execution-ready", async () => {
+    const fakeDb = db({
+      coworkerOffer: {
+        findUnique: vi.fn(async () => ({
+          offerId: "offer-paid-provider",
+          serviceId: "svc-paid-provider",
+          riskTier: "medium",
+          authorityBoundary: "proposal-only",
+          availabilityScope: "internal",
+          budgetEnvelope: { paidProvider: true, requiresBudgetApproval: true },
+          legalTerms: { termsRequired: true },
+          dataBoundary: { dataBoundaryRequired: true },
+          service: {
+            serviceId: "svc-paid-provider",
+            providerAgentId: "procurement-finance-coordinator",
+            authorityBoundary: "proposal-only",
+            riskTier: "medium",
+          },
+        })),
+      },
+    });
+
+    const result = await createCoworkerEngagement(
+      {
+        offerId: "offer-paid-provider",
+        requestedByUserId: "user-1",
+        requestedOutcome: "Approve D&B Direct+ provider usage.",
+      },
+      { db: fakeDb },
+    );
+
+    expect(result.status).toBe("needs-approval");
+    expect(result.approvalContext.reasons).toEqual(
+      expect.arrayContaining([
+        "paid-provider:funding-context-missing",
+        "contract-terms:missing",
+        "data-boundary:missing",
+      ]),
+    );
+  });
+
   it("rejects external offers without terms and data boundary context", async () => {
     const fakeDb = db({
       coworkerOffer: {
@@ -134,4 +175,3 @@ describe("createCoworkerEngagement", () => {
     ).rejects.toThrow("External coworker offers require contractContext.termsRef and contractContext.dataBoundaryRef.");
   });
 });
-

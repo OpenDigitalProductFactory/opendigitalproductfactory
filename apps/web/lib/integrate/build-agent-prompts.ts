@@ -12,6 +12,7 @@ import type {
 import { PROJECT_CONTEXT } from "./build-project-context";
 import { loadPrompt } from "@/lib/tak/prompt-loader";
 import { withCoworkerInteractionContract } from "@/lib/tak/coworker-interaction-contract";
+import { formatBuildRequirementsContextSection } from "./build-requirements-context";
 
 // ─── IT4IT Value Stream Mapping ─────────────────────────────────────────────
 // Each build phase maps to an IT4IT value stream stage and responsible agents.
@@ -950,6 +951,9 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
       }
     }
   }
+
+  const requirementsPacket = formatBuildRequirementsContextSection(ctx);
+  if (requirementsPacket) lines.push(requirementsPacket);
 
   lines.push(...formatReviewGateSection(ctx));
   lines.push(...formatCodeIntelligenceSection(ctx.phase));

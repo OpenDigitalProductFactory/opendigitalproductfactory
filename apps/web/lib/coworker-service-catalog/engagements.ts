@@ -10,6 +10,7 @@ type DbClient = {
       riskTier: string;
       authorityBoundary: string;
       availabilityScope: string;
+      budgetEnvelope?: unknown;
       legalTerms: unknown;
       dataBoundary: unknown;
       service: {
@@ -72,7 +73,7 @@ export async function createCoworkerEngagement(
     throw new Error("External coworker offers require contractContext.termsRef and contractContext.dataBoundaryRef.");
   }
 
-  const approvalContext = approvalForOffer(offer);
+  const approvalContext = approvalForOffer(offer, input);
   const status: CoworkerEngagementStatus = approvalContext.required ? "needs-approval" : "requested";
   const created = await db.coworkerEngagement.create({
     data: {
@@ -104,11 +105,27 @@ export async function createCoworkerEngagement(
   };
 }
 
-function approvalForOffer(offer: { riskTier: string; authorityBoundary: string }) {
+function approvalForOffer(
+  offer: { riskTier: string; authorityBoundary: string; budgetEnvelope?: unknown; legalTerms?: unknown; dataBoundary?: unknown },
+  input: CreateCoworkerEngagementInput,
+) {
   const reasons: string[] = [];
   if (offer.riskTier === "high" || offer.riskTier === "critical") reasons.push(`risk-tier:${offer.riskTier}`);
   if (offer.authorityBoundary === "approval-required" || offer.authorityBoundary === "never-allowed") {
     reasons.push(`authority-boundary:${offer.authorityBoundary}`);
+  }
+  const budgetEnvelope = record(offer.budgetEnvelope);
+  const legalTerms = record(offer.legalTerms);
+  const dataBoundary = record(offer.dataBoundary);
+  const fundingContext = record(input.fundingContext);
+  if ((budgetEnvelope.paidProvider === true || budgetEnvelope.requiresBudgetApproval === true) && !hasFundingApprovalContext(fundingContext)) {
+    reasons.push("paid-provider:funding-context-missing");
+  }
+  if (legalTerms.termsRequired === true && !input.contractContext?.termsRef?.trim()) {
+    reasons.push("contract-terms:missing");
+  }
+  if (dataBoundary.dataBoundaryRequired === true && !input.contractContext?.dataBoundaryRef?.trim()) {
+    reasons.push("data-boundary:missing");
   }
   return { required: reasons.length > 0, reasons };
 }
@@ -117,7 +134,18 @@ function hasExternalContractContext(input: CreateCoworkerEngagementInput["contra
   return Boolean(input?.termsRef?.trim() && input?.dataBoundaryRef?.trim());
 }
 
+function hasFundingApprovalContext(input: Record<string, unknown>): boolean {
+  return Boolean(stringValue(input.budgetOwner) && (stringValue(input.costCenter) || stringValue(input.approvalRef)));
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
 function buildEngagementId(): string {
   return `CE-${Math.random().toString(16).slice(2, 10).toUpperCase()}`;
 }
-
