@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
     user: {
       findUnique: vi.fn(),
     },
+    userFact: { findMany: vi.fn() },
     taskRun: {
       create: vi.fn(),
       update: vi.fn(),
@@ -74,10 +75,7 @@ vi.mock("@/lib/ea/architecture-parity-steward", () => ({
   runArchitectureParitySteward: mocks.runArchitectureParitySteward,
 }));
 
-import {
-  executeScheduledAgentTask,
-  scheduleAgentTask,
-} from "./agent-task-scheduler";
+import { executeScheduledAgentTask, scheduleAgentTask } from "./agent-task-scheduler";
 import {
   extractDiscoveryTriageSummary,
   extractHiveScoutSummary,
@@ -262,6 +260,7 @@ function arrangeScheduledTask() {
   mocks.prisma.agentThread.upsert.mockResolvedValue({ id: "thread-1" });
   mocks.prisma.agentMessage.create.mockResolvedValue({});
   mocks.prisma.user.findUnique.mockResolvedValue({ id: "user-1", isSuperuser: true });
+  mocks.prisma.userFact.findMany.mockResolvedValue([]);
   mocks.resolveAgentForRouteWithPrompts.mockResolvedValue({
     systemPrompt: "You are Inventory Specialist.",
     sensitivity: "internal",
@@ -317,6 +316,7 @@ function arrangeHiveScoutTask() {
   mocks.prisma.agentThread.upsert.mockResolvedValue({ id: "thread-1" });
   mocks.prisma.agentMessage.create.mockResolvedValue({});
   mocks.prisma.user.findUnique.mockResolvedValue({ id: "user-1", isSuperuser: true });
+  mocks.prisma.userFact.findMany.mockResolvedValue([]);
   mocks.resolveAgentForRouteWithPrompts.mockResolvedValue({
     agentId: "platform-engineer",
     systemPrompt: "You are Platform Engineer.",

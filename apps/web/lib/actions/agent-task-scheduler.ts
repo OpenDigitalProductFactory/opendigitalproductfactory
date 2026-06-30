@@ -25,7 +25,7 @@ import {
   resolveAutonomousWorkAgent,
   resolveAutonomousWorkTools,
 } from "@/lib/tak/autonomous-work-run";
-import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
+import { resolveUserAwareProactivityPlan } from "@/lib/proactivity/proactivity-resolver.server";
 
 // ─── Cron helpers ───────────────────────────────────────────────────────────
 
@@ -176,10 +176,13 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     });
 
-    const proactivity = resolveProactivityPlan({
-      activityFamily: "scheduled-task",
-      agentId: task.agentId,
-      routeContext: task.routeContext,
+    const proactivity = await resolveUserAwareProactivityPlan({
+      userId: task.ownerUserId,
+      input: {
+        activityFamily: "scheduled-task",
+        agentId: task.agentId,
+        routeContext: task.routeContext,
+      },
     });
 
     taskRunRef = await createTaskRunForScheduledTask({

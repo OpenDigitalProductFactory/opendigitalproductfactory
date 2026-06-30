@@ -50,6 +50,14 @@ const DEFAULTS_BY_LEVEL: Record<ProactivityLevel, PlanDefaults> = {
 
 export function resolveProactivityPlan(input: ProactivityResolverInput): ProactivityPlan {
   const level = resolveLevel(input);
+  return resolveProactivityPlanForLevel(input, level);
+}
+
+export function resolveProactivityPlanForLevel(
+  input: ProactivityResolverInput,
+  level: ProactivityLevel,
+  preferenceSource: ProactivityPlan["preferenceSource"] = "rule",
+): ProactivityPlan {
   const defaults = { ...DEFAULTS_BY_LEVEL[level] };
   const evidenceRefs = evidenceFor(input);
 
@@ -76,6 +84,7 @@ export function resolveProactivityPlan(input: ProactivityResolverInput): Proacti
     ...defaults,
     explanation: explanationFor(input, level),
     evidenceRefs,
+    preferenceSource,
   };
 }
 

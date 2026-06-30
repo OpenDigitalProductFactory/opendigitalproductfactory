@@ -1,7 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  prisma: {
+    userFact: {
+      findMany: vi.fn(),
+    },
+  },
+}));
+
+vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 
 import { getProactivityLevelCopy } from "./proactivity-copy";
 import { resolveProactivityPlan } from "./proactivity-resolver";
+import { resolveUserAwareProactivityPlan } from "./proactivity-resolver.server";
 import { PROACTIVITY_ACTIVITY_FAMILIES, PROACTIVITY_LEVELS, isProactivityLevel } from "./proactivity-types";
 
 describe("proactivity types", () => {
@@ -81,5 +92,86 @@ describe("resolveProactivityPlan", () => {
 
     expect(plan.resolvedLevel).toBe("assertive");
     expect(["advise", "propose"]).toContain(plan.actionBoundary);
+  });
+});
+
+describe("resolveUserAwareProactivityPlan", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("applies the most specific acknowledged user override over rule defaults", async () => {
+    mocks.prisma.userFact.findMany.mockResolvedValue([
+      {
+        id: "fact-agent",
+        key: "aiCoworkerProactivity:agent:dispatcher",
+        value: JSON.stringify({
+          scopeKey: "agent:dispatcher",
+          level: "quiet",
+          acknowledgedAt: "2026-06-30T18:30:00.000Z",
+        }),
+        createdAt: new Date("2026-06-30T18:30:00.000Z"),
+      },
+      {
+        id: "fact-family",
+        key: "aiCoworkerProactivity:activity-family:field-dispatch-appointment",
+        value: JSON.stringify({
+          scopeKey: "activity-family:field-dispatch-appointment",
+          level: "assertive",
+          acknowledgedAt: "2026-06-30T18:00:00.000Z",
+        }),
+        createdAt: new Date("2026-06-30T18:00:00.000Z"),
+      },
+    ]);
+
+    const plan = await resolveUserAwareProactivityPlan({
+      userId: "user-1",
+      input: {
+        activityFamily: "field-dispatch-appointment",
+        agentId: "dispatcher",
+        archetype: {
+          demandSignature: "emergency-reactive",
+          capacityUnit: "slot-hours",
+        },
+      },
+    });
+
+    expect(plan).toMatchObject({
+      resolvedLevel: "quiet",
+      preferenceSource: "user-override",
+      userOverrideScopeKey: "agent:dispatcher",
+      policyId: "proactivity:field-dispatch-appointment:quiet",
+      actionBoundary: "advise",
+    });
+    expect(plan.evidenceRefs).toContainEqual({ kind: "user-fact", id: "fact-agent" });
+  });
+
+  it("surfaces active cooldown facts so repeat proactivity suggestions can be suppressed", async () => {
+    mocks.prisma.userFact.findMany.mockResolvedValue([
+      {
+        id: "cooldown-family",
+        key: "aiCoworkerProactivityCooldown:activity-family:todo-follow-up",
+        value: JSON.stringify({
+          scopeKey: "activity-family:todo-follow-up",
+          proposedLevel: "assertive",
+          cooldownUntil: "2026-07-07T18:30:00.000Z",
+        }),
+        createdAt: new Date("2026-06-30T18:30:00.000Z"),
+      },
+    ]);
+
+    const plan = await resolveUserAwareProactivityPlan({
+      userId: "user-1",
+      now: new Date("2026-07-01T12:00:00.000Z"),
+      input: { activityFamily: "todo-follow-up" },
+    });
+
+    expect(plan).toMatchObject({
+      resolvedLevel: "balanced",
+      suggestionSuppressed: true,
+      suggestionCooldownUntil: "2026-07-07T18:30:00.000Z",
+      suggestionCooldownScopeKey: "activity-family:todo-follow-up",
+    });
+    expect(plan.evidenceRefs).toContainEqual({ kind: "user-fact", id: "cooldown-family" });
   });
 });
