@@ -4,10 +4,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentInfo } from "@/lib/agent-coworker-types";
 
+const getProactivityPreference = vi.fn();
+
+vi.mock("@/lib/actions/proactivity", () => ({
+  getCoworkerProactivityPreference: (agentId: string) => getProactivityPreference(agentId),
+}));
+
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
 
 afterEach(() => {
   cleanup();
+  getProactivityPreference.mockReset();
 });
 
 function makeAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
@@ -25,6 +32,7 @@ function makeAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
 
 describe("CoworkerProfilePanel", () => {
   it("shows the effective proactivity plan and boundaries", () => {
+    getProactivityPreference.mockResolvedValue(null);
     render(<CoworkerProfilePanel agent={makeAgent()} onClose={vi.fn()} />);
 
     expect(screen.getByText("Proactivity")).toBeTruthy();
@@ -35,5 +43,15 @@ describe("CoworkerProfilePanel", () => {
     expect(screen.queryByText(/Spend: standard/i)).toBeNull();
     expect(screen.queryByText(/Boundary: propose/i)).toBeNull();
     expect(screen.queryByText(/proactivity:scheduled-task:balanced/i)).toBeNull();
+  });
+
+  it("loads the saved coworker proactivity preference for the profile summary", async () => {
+    getProactivityPreference.mockResolvedValue("assertive");
+
+    render(<CoworkerProfilePanel agent={makeAgent()} onClose={vi.fn()} />);
+
+    expect(await screen.findByText("Assertive")).toBeTruthy();
+    expect(screen.getByText(/Stay on this/i)).toBeTruthy();
+    expect(screen.queryByText(/proactivity:scheduled-task:assertive/i)).toBeNull();
   });
 });

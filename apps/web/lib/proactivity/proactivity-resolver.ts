@@ -153,7 +153,11 @@ function explanationFor(input: ProactivityResolverInput, level: ProactivityLevel
     return "A compliance deadline is close enough to justify assertive reminders while keeping advice and filing approval-gated.";
   }
 
-  return level === "balanced"
-    ? "Balanced is the default proactivity level for useful follow-up without noisy repeated interruption."
-    : "Quiet minimizes unsolicited follow-up unless urgency or prior approval justifies attention.";
+  if (level === "balanced") {
+    return "Balanced is the default proactivity level for useful follow-up without noisy repeated interruption.";
+  }
+  if (level === "assertive") {
+    return "Stay on this, warn earlier, and escalate sooner while preserving approval boundaries.";
+  }
+  return "Quiet minimizes unsolicited follow-up unless urgency or prior approval justifies attention.";
 }

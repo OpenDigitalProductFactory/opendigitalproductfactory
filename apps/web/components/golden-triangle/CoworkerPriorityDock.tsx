@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 
 import { getCoworkerGoldenTrianglePosture, saveCoworkerGoldenTrianglePosture } from "@/lib/actions/golden-triangle";
+import { getCoworkerProactivityPreference, saveCoworkerProactivityPreference } from "@/lib/actions/proactivity";
 
 import { ProactivityLevelControl } from "@/components/proactivity/ProactivityLevelControl";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
@@ -47,6 +48,18 @@ export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
     };
   }, [agentId]);
 
+  useEffect(() => {
+    let alive = true;
+    getCoworkerProactivityPreference(agentId)
+      .then((level) => {
+        if (alive && level) setProactivityLevel(level);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [agentId]);
+
   // Same meaningful label as the expanded control's badge — a dragged posture
   // reads e.g. "Lower Cost" (the corner it sits on), never a bare "Custom".
   const activeLabel = postureLabel(pref);
@@ -62,6 +75,11 @@ export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
         saveCoworkerGoldenTrianglePosture(agentId, next).catch(() => {});
       }
     }, 800);
+  }
+
+  function onProactivityChange(next: ProactivityLevel) {
+    setProactivityLevel(next);
+    saveCoworkerProactivityPreference(agentId, next).catch(() => {});
   }
 
   return (
@@ -96,7 +114,7 @@ export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
             {collapsed ? "▸" : "▾"}
           </span>
         </button>
-        <ProactivityLevelControl value={proactivityLevel} onChange={setProactivityLevel} />
+        <ProactivityLevelControl value={proactivityLevel} onChange={onProactivityChange} />
       </div>
       {!collapsed && (
         <div style={{ padding: "0 12px 10px" }}>

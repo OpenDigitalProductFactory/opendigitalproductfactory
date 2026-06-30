@@ -5,10 +5,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getPosture = vi.fn();
 const savePosture = vi.fn();
+const getProactivityPreference = vi.fn();
+const saveProactivityPreference = vi.fn();
 
 vi.mock("@/lib/actions/golden-triangle", () => ({
   getCoworkerGoldenTrianglePosture: (agentId: string) => getPosture(agentId),
   saveCoworkerGoldenTrianglePosture: (agentId: string, pref: unknown) => savePosture(agentId, pref),
+}));
+
+vi.mock("@/lib/actions/proactivity", () => ({
+  getCoworkerProactivityPreference: (agentId: string) => getProactivityPreference(agentId),
+  saveCoworkerProactivityPreference: (agentId: string, level: unknown) => saveProactivityPreference(agentId, level),
 }));
 
 import { CoworkerPriorityDock } from "./CoworkerPriorityDock";
@@ -17,7 +24,11 @@ describe("CoworkerPriorityDock", () => {
   beforeEach(() => {
     getPosture.mockReset();
     savePosture.mockReset();
+    getProactivityPreference.mockReset();
+    saveProactivityPreference.mockReset();
     savePosture.mockResolvedValue({ ok: true });
+    getProactivityPreference.mockResolvedValue(null);
+    saveProactivityPreference.mockResolvedValue({ ok: true });
   });
 
   it("is collapsed by default — the resting state is the chip, triangle hidden until opened", async () => {
@@ -58,5 +69,19 @@ describe("CoworkerPriorityDock", () => {
     await waitFor(() => expect(savePosture).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(savePosture.mock.calls[0][0]).toBe("agent-1");
     expect((savePosture.mock.calls[0][1] as { preset: string }).preset).toBe("assured");
+  });
+
+  it("loads and saves this coworker's proactivity level next to priority", async () => {
+    getPosture.mockResolvedValueOnce(null);
+    getProactivityPreference.mockResolvedValueOnce("assertive");
+
+    render(<CoworkerPriorityDock agentId="agent-1" />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Proactivity assertive/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /Proactivity assertive/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Quiet/i }));
+
+    await waitFor(() => expect(saveProactivityPreference).toHaveBeenCalledWith("agent-1", "quiet"));
+    expect(screen.getByRole("button", { name: /Proactivity quiet/i })).toBeTruthy();
   });
 });
