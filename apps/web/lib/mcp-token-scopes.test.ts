@@ -124,6 +124,16 @@ describe("MCP_TOKEN_TEMPLATES", () => {
       expect(development!.grants).toContain(grant);
     }
   });
+
+  it("includes coworker service catalog grants in development and admin templates", () => {
+    const development = getMcpTokenTemplate("development");
+    const admin = getMcpTokenTemplate("admin");
+
+    for (const template of [development, admin]) {
+      expect(template?.grants).toContain("coworker_catalog_read");
+      expect(template?.grants).toContain("coworker_engagement_write");
+    }
+  });
 });
 
 describe("resolveTemplateGrants", () => {
@@ -161,6 +171,8 @@ describe("templateScopesForTier", () => {
       "build_plan_write",
       "registry_read",
       "decision_record_create",
+      "coworker_catalog_read",
+      "coworker_engagement_write",
     ]) {
       expect(scopes).toContain(g);
     }
