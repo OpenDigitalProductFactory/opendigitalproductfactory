@@ -13,6 +13,7 @@ export type AttentionSource =
   | "escalation" // PlatformIssueReport awaiting_escalation_ack (build-stall) — re-homed off /ops
   | "ai-decision" // DecisionInteraction outcomeType escalate/defer, humanOutcome null
   | "paused-ai" // TaskRun input-required / auth-required
+  | "scheduled-task" // ScheduledAgentTask lastStatus=error with non-quiet proactivity
   | "agent-proposal" // AgentActionProposal status=proposed
   | "approval-outbound" // OutboundDraft pending-review (marketing)
   | "approval-bill" // Bill awaiting_approval (AP — carries a dueDate)

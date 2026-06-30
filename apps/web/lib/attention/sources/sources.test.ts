@@ -3,6 +3,7 @@ import { escalationToAttentionItem } from "./escalation";
 import { aiDecisionToAttentionItem, type DecisionInteractionRow } from "./ai-decision";
 import { pausedAiToAttentionItem, type TaskRunRow } from "./paused-ai";
 import { agentProposalToAttentionItem, type AgentActionProposalRow } from "./agent-proposal";
+import { loadScheduledTaskItems, scheduledTaskToAttentionItem, type ScheduledTaskAttentionRow } from "./scheduled-task";
 import type { OpenEscalation } from "@/lib/quality/escalation-attention";
 
 describe("escalationToAttentionItem", () => {
@@ -169,5 +170,106 @@ describe("agentProposalToAttentionItem", () => {
     expect(item.actions).toContainEqual({ kind: "open-in-context", label: "Review proactivity change", href: "/platform/ai" });
     expect(item.actions).toContainEqual({ kind: "snooze", label: "Snooze" });
     expect(item.context).not.toMatch(/AP-|queue|diagnostic/i);
+  });
+});
+
+describe("scheduledTaskToAttentionItem", () => {
+  const base: ScheduledTaskAttentionRow = {
+    taskId: "customer-follow-up-daily",
+    title: "Customer follow-up review",
+    agentId: "customer-success",
+    routeContext: "/customer",
+    ownerUserId: "user-1",
+    lastStatus: "error",
+    lastError: "Provider timeout after 30 seconds",
+    lastRunAt: new Date("2026-06-30T18:30:00.000Z"),
+    nextRunAt: new Date("2026-07-01T18:30:00.000Z"),
+    taskRunId: "TR-SCHEDULED-1",
+  };
+
+  it("projects failed proactive scheduled work as a plain-language attention item", () => {
+    const item = scheduledTaskToAttentionItem({
+      row: base,
+      proactivity: {
+        resolvedLevel: "assertive",
+        policyId: "proactivity:scheduled-task:assertive",
+        attentionWindowMinutes: 15,
+        followUpCadenceMinutes: [15, 30],
+        maxAttempts: 3,
+        spendClass: "elevated",
+        channelPolicy: "preferred-channel",
+        escalationTarget: "attention-surface",
+        actionBoundary: "propose",
+        explanation: "This scheduled customer follow-up should be reviewed quickly.",
+        evidenceRefs: [{ kind: "activity-family", id: "scheduled-task" }],
+      },
+    });
+
+    expect(item).not.toBeNull();
+    if (!item) throw new Error("Expected scheduled task attention item");
+    expect(item.id).toBe("scheduled-task:customer-follow-up-daily");
+    expect(item.source).toBe("scheduled-task");
+    expect(item.title).toBe("Scheduled work needs review");
+    expect(item.context).toBe("Customer follow-up review did not finish. This scheduled customer follow-up should be reviewed quickly.");
+    expect(item.triage.residueReason).toBe("input-required");
+    expect(item.triage.blastRadius).toBe("Customer follow-up review");
+    expect(item.actions).toEqual([
+      { kind: "open-in-context", label: "Review scheduled work", href: "/platform/schedule" },
+      { kind: "snooze", label: "Snooze" },
+    ]);
+    expect(item.context).not.toMatch(/TR-|customer-follow-up-daily|Provider timeout|queue|diagnostic/i);
+  });
+
+  it("does not project quiet failed scheduled work into attention", () => {
+    expect(
+      scheduledTaskToAttentionItem({
+        row: base,
+        proactivity: {
+          resolvedLevel: "quiet",
+          policyId: "proactivity:scheduled-task:quiet",
+          attentionWindowMinutes: 120,
+          followUpCadenceMinutes: [],
+          maxAttempts: 1,
+          spendClass: "minimal",
+          channelPolicy: "in-app-only",
+          escalationTarget: "attention-surface",
+          actionBoundary: "advise",
+          explanation: "Keep this scheduled work quiet unless asked.",
+          evidenceRefs: [{ kind: "activity-family", id: "scheduled-task" }],
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("loads the latest TaskRun proactivity metadata before projecting scheduled failures", async () => {
+    const db = {
+      scheduledAgentTask: {
+        findMany: async () => [base],
+      },
+      taskRun: {
+        findMany: async () => [
+          {
+            taskRunId: "TR-SCHEDULED-1",
+            a2aMetadata: {
+              proactivity: {
+                resolvedLevel: "quiet",
+                policyId: "proactivity:scheduled-task:quiet",
+                attentionWindowMinutes: 120,
+                followUpCadenceMinutes: [],
+                maxAttempts: 1,
+                spendClass: "minimal",
+                channelPolicy: "in-app-only",
+                escalationTarget: "attention-surface",
+                actionBoundary: "advise",
+                explanation: "The user asked this scheduled work to stay quiet unless requested.",
+                evidenceRefs: [{ kind: "user-fact", id: "fact-quiet-scheduled" }],
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    await expect(loadScheduledTaskItems(db as never)).resolves.toEqual([]);
   });
 });
