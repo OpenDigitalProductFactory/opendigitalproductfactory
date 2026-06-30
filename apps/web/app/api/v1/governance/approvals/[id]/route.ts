@@ -5,6 +5,15 @@ import { prisma } from "@dpf/db";
 import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError, apiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
+import {
+  PROACTIVITY_CHANGE_ACTION,
+  parseProactivityChangeProposalParameters,
+} from "@/lib/proactivity/proactivity-change-proposal";
+import {
+  buildProactivityDismissalFact,
+  buildProactivityOverrideFact,
+  persistProactivityFact,
+} from "@/lib/proactivity/proactivity-override-preferences";
 
 export async function POST(
   request: Request,
@@ -40,6 +49,33 @@ export async function POST(
       throw apiError("NOT_FOUND", "Proposal not found", 404);
     }
 
+    if (proposal.actionType === PROACTIVITY_CHANGE_ACTION) {
+      const parsed = parseProactivityChangeProposalParameters(proposal.parameters);
+      if (!parsed) {
+        return NextResponse.json(
+          { code: "VALIDATION_ERROR", message: "Invalid proactivity proposal parameters" },
+          { status: 422 },
+        );
+      }
+      const decidedAt = new Date();
+      const fact = decision === "approve"
+        ? buildProactivityOverrideFact({
+            proposalId: proposal.proposalId,
+            acknowledgedByUserId: user.id,
+            acknowledgedAt: decidedAt.toISOString(),
+            proposal: parsed,
+          })
+        : buildProactivityDismissalFact({
+            proposalId: proposal.proposalId,
+            dismissedByUserId: user.id,
+            dismissedAt: decidedAt.toISOString(),
+            cooldownUntil: cooldownUntil(decidedAt).toISOString(),
+            proposal: parsed,
+          });
+
+      await persistProactivityFact(user.id, fact);
+    }
+
     const updated = await prisma.agentActionProposal.update({
       where: { id },
       data: {
@@ -66,4 +102,10 @@ export async function POST(
       { status: 500 },
     );
   }
+}
+
+function cooldownUntil(dismissedAt: Date): Date {
+  const until = new Date(dismissedAt);
+  until.setUTCDate(until.getUTCDate() + 7);
+  return until;
 }

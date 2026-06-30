@@ -9,6 +9,7 @@ vi.mock("@dpf/db", () => ({
     agentThread: { findMany: vi.fn(), findUnique: vi.fn() },
     agentActionProposal: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     authorizationDecisionLog: { findMany: vi.fn() },
+    userFact: { findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },
   },
 }));
 
@@ -189,6 +190,60 @@ describe("POST /api/v1/governance/approvals/:id", () => {
 
     expect(res.status).toBe(200);
     expect(body.status).toBe("approve");
+  });
+
+  it("persists proactivity overrides when approving a proactivity change proposal", async () => {
+    (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
+    (prisma.userFact.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (prisma.userFact.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (prisma.userFact.create as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (prisma.agentActionProposal.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "prop-1",
+      proposalId: "AP-PROACTIVE",
+      actionType: "propose_proactivity_change",
+      status: "proposed",
+      parameters: {
+        kind: "proactivity-change",
+        agentId: "dispatcher",
+        activityFamily: "field-dispatch-appointment",
+        currentLevel: "balanced",
+        proposedLevel: "assertive",
+        scope: "activity-family",
+        rationale: "Late customer appointments should be warned earlier.",
+        evidenceRefs: [{ kind: "dispatch-event", id: "running-late" }],
+        spendImpact: "may increase monitoring and notification spend within existing authority",
+        authorityImpact: "does not grant new tools, permissions, or approval bypasses",
+      },
+      thread: { userId: "user-1" },
+    });
+    (prisma.agentActionProposal.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "prop-1",
+      status: "approve",
+    });
+
+    const res = await approvalDecideHandler(
+      postRequest("/api/v1/governance/approvals/prop-1", { decision: "approve", rationale: "Looks good" }),
+      { params: Promise.resolve({ id: "prop-1" }) },
+    );
+
+    expect(res.status).toBe(200);
+    expect(prisma.userFact.create).toHaveBeenCalledWith({
+      data: {
+        userId: "user-1",
+        category: "preference",
+        key: "aiCoworkerProactivity:activity-family:field-dispatch-appointment",
+        sourceRoute: "/platform/ai",
+        sourceAgentId: "dispatcher",
+        value: expect.any(String),
+        confidence: 1,
+        lastValidatedAt: expect.any(Date),
+      },
+    });
+    expect(JSON.parse((prisma.userFact.create as ReturnType<typeof vi.fn>).mock.calls[0][0].data.value)).toMatchObject({
+      scopeKey: "activity-family:field-dispatch-appointment",
+      level: "assertive",
+      acknowledgedByUserId: "user-1",
+    });
   });
 
   it("rejects a proposal", async () => {
