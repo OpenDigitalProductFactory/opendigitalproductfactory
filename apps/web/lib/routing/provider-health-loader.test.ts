@@ -4,6 +4,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     modelProvider: { findUnique: vi.fn() },
     routeOutcome: { findMany: vi.fn() },
+    providerCapacityStatus: { findUnique: vi.fn() },
   },
 }));
 
@@ -12,11 +13,13 @@ import { prisma } from "@dpf/db";
 
 const mockProvider = prisma.modelProvider.findUnique as ReturnType<typeof vi.fn>;
 const mockOutcomes = prisma.routeOutcome.findMany as ReturnType<typeof vi.fn>;
+const mockCapacity = prisma.providerCapacityStatus.findUnique as ReturnType<typeof vi.fn>;
 
 const NOW = 1_700_000_000_000;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockCapacity.mockResolvedValue(null);
 });
 
 describe("loadProviderHealth", () => {
@@ -83,5 +86,34 @@ describe("loadProviderHealth", () => {
     expect(mockOutcomes).toHaveBeenCalledWith(
       expect.objectContaining({ take: 5, orderBy: { createdAt: "desc" } }),
     );
+  });
+
+  it("loads persisted provider capacity status", async () => {
+    mockProvider.mockResolvedValue({ status: "active", authMethod: "api_key" });
+    mockOutcomes.mockResolvedValue([
+      { providerErrorCode: null, fallbackOccurred: false, createdAt: new Date(NOW - 1_000), latencyMs: 1000, modelId: "glm-5.2" },
+    ]);
+    mockCapacity.mockResolvedValue({
+      state: "billing_action_required",
+      action: "add_credits_or_plan",
+      retryAt: null,
+      safeSummary: "Z.ai needs coding credits.",
+      isHumanActionRequired: true,
+    });
+
+    const health = await loadProviderHealth("zai-coding", { now: NOW });
+
+    expect(mockCapacity).toHaveBeenCalledWith({
+      where: { providerId: "zai-coding" },
+      select: {
+        state: true,
+        action: true,
+        retryAt: true,
+        safeSummary: true,
+        isHumanActionRequired: true,
+      },
+    });
+    expect(health.status).toBe("billing");
+    expect(health.safeSummary).toBe("Z.ai needs coding credits.");
   });
 });

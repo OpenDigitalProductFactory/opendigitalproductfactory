@@ -1,4 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+const recordProviderCapacityStatusMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/routing/provider-capacity/store", () => ({
+  recordProviderCapacityStatus: recordProviderCapacityStatusMock,
+}));
+
 import {
   sandboxReachableUrl,
   preflightLocalEndpoint,
@@ -10,6 +17,7 @@ import {
   buildOpencodeInstructions,
   detectOpencodeFatalError,
   buildOpencodeRunnerScript,
+  recordOpencodeCapacityFailure,
 } from "./opencode-dispatch";
 
 describe("detectOpencodeFatalError", () => {
@@ -36,6 +44,33 @@ describe("detectOpencodeFatalError", () => {
 
   it("tolerates non-JSON / empty lines", () => {
     expect(detectOpencodeFatalError("plain log line\n\nnot json")).toBeNull();
+  });
+});
+
+describe("recordOpencodeCapacityFailure", () => {
+  it("records Z.ai insufficient credits as provider capacity state", async () => {
+    recordProviderCapacityStatusMock.mockResolvedValue(undefined);
+
+    await recordOpencodeCapacityFailure({
+      providerId: "zai-coding",
+      output: JSON.stringify({
+        error: {
+          code: "1113",
+          message: "Insufficient balance or no resource package. Please recharge.",
+        },
+      }),
+    });
+
+    expect(recordProviderCapacityStatusMock).toHaveBeenCalledWith({
+      providerId: "zai-coding",
+      source: "opencode",
+      rawSnippet: expect.stringContaining("1113"),
+      classification: expect.objectContaining({
+        state: "billing_action_required",
+        action: "add_credits_or_plan",
+        providerCode: "1113",
+      }),
+    });
   });
 });
 

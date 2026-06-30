@@ -29,6 +29,14 @@ import {
 } from "../routing/execution-adapter-types";
 import { writeAdapterTelemetry } from "../routing/adapter-telemetry-writer";
 import { getCliPoolStatus } from "../routing/cli-pool-status";
+import {
+  classifyProviderCapacity,
+  type ProviderCapacityClassification,
+} from "../routing/provider-capacity";
+import {
+  clearProviderCapacityStatus,
+  recordProviderCapacityStatus,
+} from "../routing/provider-capacity/store";
 import "../routing/chat-adapter"; // side-effect: registers "chat" adapter
 import "../routing/responses-adapter"; // side-effect: registers "responses" adapter
 import "../routing/image-gen-adapter"; // EP-INF-009c: registers "image_gen" adapter
@@ -127,6 +135,7 @@ export class InferenceError extends Error {
     public readonly statusCode?: number,
     public readonly headers?: Record<string, string>,
     public readonly rawBody?: string,
+    public readonly capacity?: ProviderCapacityClassification,
   ) {
     super(message);
     this.name = "InferenceError";
@@ -154,29 +163,36 @@ export function classifyHttpError(
   const headers = rateLimitHeaders && Object.keys(rateLimitHeaders).length > 0
     ? rateLimitHeaders
     : undefined;
+  const capacity = classifyProviderCapacity({
+    providerId,
+    statusCode: status,
+    headers: responseHeaders ?? headers,
+    bodyText: body,
+    now: new Date(),
+  });
 
   if (status === 401 || status === 403) {
-    return new InferenceError(`Auth failed for ${providerId}: ${body.slice(0, 200)}`, "auth", providerId, status, headers, body);
+    return new InferenceError(`Auth failed for ${providerId}: ${body.slice(0, 200)}`, "auth", providerId, status, headers, body, capacity);
   }
-  if (status === 402) {
-    return new InferenceError(`Billing error on ${providerId}: ${body.slice(0, 200)}`, "billing", providerId, status, headers, body);
+  if (status === 402 || capacity.state === "billing_action_required" || capacity.state === "unsupported_plan") {
+    return new InferenceError(`Billing error on ${providerId}: ${body.slice(0, 200)}`, "billing", providerId, status, headers, body, capacity);
   }
   if (status === 413) {
-    return new InferenceError(`Request too large for ${providerId}: ${body.slice(0, 200)}`, "request_too_large", providerId, status, headers, body);
+    return new InferenceError(`Request too large for ${providerId}: ${body.slice(0, 200)}`, "request_too_large", providerId, status, headers, body, capacity);
   }
   if (status === 429) {
-    return new InferenceError(`Rate limited by ${providerId}`, "rate_limit", providerId, status, headers, body);
+    return new InferenceError(`Rate limited by ${providerId}`, "rate_limit", providerId, status, headers, body, capacity);
   }
   if (status === 529 || /\b529\b|overloaded/i.test(body)) {
-    return new InferenceError(`Provider overloaded on ${providerId}: ${body.slice(0, 300)}`, "overloaded", providerId, status, headers, body);
+    return new InferenceError(`Provider overloaded on ${providerId}: ${body.slice(0, 300)}`, "overloaded", providerId, status, headers, body, capacity);
   }
   if (status === 404) {
-    return new InferenceError(`Model not found on ${providerId}: ${body.slice(0, 200)}`, "model_not_found", providerId, status, headers, body);
+    return new InferenceError(`Model not found on ${providerId}: ${body.slice(0, 200)}`, "model_not_found", providerId, status, headers, body, capacity);
   }
   if (status === 408 || status === 500 || status === 502 || status === 503 || status === 504) {
-    return new InferenceError(`Transient error (${status}) from ${providerId}: ${body.slice(0, 200)}`, "transient", providerId, status, headers, body);
+    return new InferenceError(`Transient error (${status}) from ${providerId}: ${body.slice(0, 200)}`, "transient", providerId, status, headers, body, capacity);
   }
-  return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status, headers, body);
+  return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status, headers, body, capacity);
 }
 
 // ─── Build Auth Headers ──────────────────────────────────────────────────────
@@ -592,8 +608,22 @@ export async function callProvider(
       skillId: attribution?.skillId ?? undefined,
       agentMessageId: attribution?.agentMessageId ?? undefined,
     });
+    if (err instanceof InferenceError && err.capacity) {
+      void recordProviderCapacityStatus({
+        providerId,
+        classification: err.capacity,
+        source: "api",
+        rawSnippet: err.rawBody ?? err.message,
+      }).catch((capacityErr) => {
+        console.warn("[ai-inference] Failed to record provider capacity:", capacityErr);
+      });
+    }
     throw err;
   }
+
+  void clearProviderCapacityStatus({ providerId, source: "api" }).catch((capacityErr) => {
+    console.warn("[ai-inference] Failed to clear provider capacity:", capacityErr);
+  });
 
   // 4. Record token and cost metrics
   aiInferenceTokens.inc({ provider: providerId, model: modelId, direction: "input" }, result.usage.inputTokens);

@@ -63,6 +63,14 @@ export interface RecentOutcome {
   latencyMs: number;
 }
 
+export interface ProviderCapacityHealthInput {
+  state: string;
+  action: string;
+  retryAt: Date | null;
+  safeSummary: string;
+  isHumanActionRequired: boolean;
+}
+
 export interface ProviderHealthInput {
   providerId: string;
   /** ModelProvider.status — admin lifecycle state. */
@@ -71,6 +79,8 @@ export interface ProviderHealthInput {
   authMethod?: string | null;
   /** Recent RouteOutcome rows for this provider. */
   recentOutcomes: RecentOutcome[];
+  /** Current provider-capacity state from ProviderCapacityStatus. */
+  capacityStatus?: ProviderCapacityHealthInput | null;
   /** Runtime circuit state from rate-tracker.getEndpointRuntimeState (optional). */
   runtimeCooldown?: { unavailable: boolean; reason?: string; until?: number };
   /** Epoch ms — injected for deterministic tests (no Date.now in a pure fn). */
@@ -150,6 +160,11 @@ export function deriveProviderHealth(input: ProviderHealthInput): ProviderHealth
     };
   }
 
+  if (input.capacityStatus && input.capacityStatus.state !== "available") {
+    const capacityHealth = mapCapacityStatusToHealth(input.capacityStatus, input.providerId);
+    if (capacityHealth) return capacityHealth;
+  }
+
   // 3. Lifecycle disabled — fallback.ts disables on auth/billing. Use the most
   // recent hard-failure class to choose the remediation wording.
   if (input.lifecycleStatus === "disabled") {
@@ -185,6 +200,52 @@ export function deriveProviderHealth(input: ProviderHealthInput): ProviderHealth
     remediationKind: "none",
     safeSummary: "No recent activity. Health will update after the next request.",
   };
+}
+
+function mapCapacityStatusToHealth(
+  capacity: ProviderCapacityHealthInput,
+  providerId: string,
+): ProviderHealth | null {
+  switch (capacity.state) {
+    case "billing_action_required":
+    case "unsupported_plan":
+      return {
+        status: "billing",
+        remediationKind: "provider_settings",
+        adminActionHref: providerDetailHref(providerId),
+        safeSummary: capacity.safeSummary,
+        lastFailureClass: "billing",
+      };
+    case "quota_resets_at":
+    case "rate_limited":
+      return {
+        status: "rate_limited",
+        remediationKind: "wait",
+        safeSummary: capacity.safeSummary,
+        lastFailureClass: "rate_limit",
+        ...(capacity.retryAt ? { cooldownUntil: capacity.retryAt.getTime() } : {}),
+      };
+    case "reauth_required":
+      return reauthHealth(providerId, null, "auth");
+    case "request_too_large":
+      return {
+        status: "degraded",
+        remediationKind: "choose_smaller_request",
+        safeSummary: capacity.safeSummary,
+        lastFailureClass: "request_too_large",
+      };
+    case "cooling_down":
+    case "provider_degraded":
+      return {
+        status: "cooling_down",
+        remediationKind: "wait",
+        safeSummary: capacity.safeSummary,
+        lastFailureClass: "provider_error",
+        ...(capacity.retryAt ? { cooldownUntil: capacity.retryAt.getTime() } : {}),
+      };
+    default:
+      return null;
+  }
 }
 
 function mapReasonToHealth(

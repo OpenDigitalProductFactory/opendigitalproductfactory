@@ -39,6 +39,8 @@ import { KNOWN_PROVIDER_MODELS } from "@/lib/routing/known-provider-models";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
+import { classifyProviderCapacity } from "@/lib/routing/provider-capacity";
+import { recordProviderCapacityStatus } from "@/lib/routing/provider-capacity/store";
 
 const DEFAULT_SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -335,6 +337,29 @@ export function buildOpencodeRunnerScript(args: {
   ].join("\n");
 }
 
+export async function recordOpencodeCapacityFailure(args: {
+  providerId: string;
+  output: string;
+  statusCode?: number;
+}): Promise<void> {
+  const classification = classifyProviderCapacity({
+    providerId: args.providerId,
+    statusCode: args.statusCode ?? 429,
+    bodyText: args.output,
+    errorMessage: args.output,
+    now: new Date(),
+  });
+
+  if (classification.state === "unknown") return;
+
+  await recordProviderCapacityStatus({
+    providerId: args.providerId,
+    source: "opencode",
+    classification,
+    rawSnippet: args.output,
+  });
+}
+
 function defaultKnownOpencodeModel(providerId: string): string | null {
   const models = KNOWN_PROVIDER_MODELS[providerId] ?? [];
   return models.find((model) => model.defaultStatus === "active")?.modelId ?? models[0]?.modelId ?? null;
@@ -585,6 +610,12 @@ export async function dispatchOpencodeTask(params: {
         stdout: content,
         stderr: fatalError,
       });
+      await recordOpencodeCapacityFailure({
+        providerId,
+        output: fatalError,
+      }).catch((recordErr) => {
+        console.warn("[opencode-dispatch] Failed to record provider capacity:", recordErr);
+      });
       return {
         content: `OpenCode task failed: ${fatalError}`,
         success: false,
@@ -638,6 +669,12 @@ export async function dispatchOpencodeTask(params: {
       success: false,
       stdout: execErr.stdout ?? "",
       stderr: output || execErr.message || "",
+    });
+    await recordOpencodeCapacityFailure({
+      providerId,
+      output: output || execErr.message || "",
+    }).catch((recordErr) => {
+      console.warn("[opencode-dispatch] Failed to record provider capacity:", recordErr);
     });
 
     return {
