@@ -19,6 +19,7 @@ This install runs three local runtime roles:
 - The **Contributor preview** is opt-in via the `dev` compose profile. A plain `docker compose up -d` does not start it, and customer installs do not ship it by default.
 - Promote changes through branch → PR → merge → `/ops/self-upgrade` / governed promoter → Live portal verification rather than treating the Live portal as a scratch environment.
 - **Step zero for Live portal verification:** run `pnpm verify:preflight` (or the `verify_live_install_readiness` MCP tool / the `dpf-verify-on-live-install` skill) for a deterministic `CAN-TEST` / `MUST-ADVANCE` / `BLOCKED` verdict before driving a feature's happy path — instead of hand-comparing the served SHA. A `BLOCKED` verdict caused by an unrelated defect is a stop-and-file-a-BI condition, not a cue to refresh the portal by hand. Canonical procedure: [`2026-06-06-procedural-functional-verification-design.md`](../superpowers/specs/2026-06-06-procedural-functional-verification-design.md).
+- **Agent-led advancement:** when `verify_live_install_readiness` returns `MUST-ADVANCE`, agents may call the side-effecting `request_self_upgrade` MCP tool. The tool queues the same governed self-upgrade path as `/ops/self-upgrade` only when the install is inside the allowed off-hours window. Outside that window, or when the safe window cannot be determined, it returns `human_override_required` and the human operator must trigger `/ops/self-upgrade` intentionally.
 
 ## Why this matters
 

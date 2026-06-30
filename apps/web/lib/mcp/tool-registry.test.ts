@@ -15,6 +15,7 @@ import { workCapsulesPack } from "./packs/work-capsules-pack";
 import { workbooksPack } from "./packs/workbooks-pack";
 import { feedbackPack } from "./packs/feedback-pack";
 import { activityRoutingPack } from "./packs/activity-routing-pack";
+import { selfUpgradePack } from "./packs/self-upgrade-pack";
 import { composeToolPacks } from "./tool-registry";
 // The inline-case ratchet's extractor lives in the CI guard (scripts/), kept as
 // the single source of truth so this test and the guard can never disagree.
@@ -169,6 +170,30 @@ describe("activity-routing tool pack", () => {
   });
 });
 
+describe("self-upgrade tool pack", () => {
+  it("bundles the governed self-upgrade request tool", () => {
+    expect(selfUpgradePack.definitions.map((t) => t.name)).toEqual([
+      "request_self_upgrade",
+    ]);
+    for (const def of selfUpgradePack.definitions) {
+      expect(selfUpgradePack.handlers[def.name], def.name).toBeTypeOf("function");
+    }
+  });
+
+  it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
+    for (const [name, grants] of Object.entries(selfUpgradePack.grants)) {
+      expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
+    }
+  });
+
+  it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
+    const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
+    for (const def of selfUpgradePack.definitions) {
+      expect(platformNames.has(def.name), def.name).toBe(true);
+    }
+  });
+});
+
 describe("composeToolPacks", () => {
   it("composes definitions + handler/grant lookup from packs", () => {
     const registry = composeToolPacks([deliberationSiemPack]);
@@ -185,18 +210,21 @@ describe("composeToolPacks", () => {
       workCapsulesPack,
       workbooksPack,
       feedbackPack,
+      selfUpgradePack,
     ]);
     expect(registry.definitions).toHaveLength(
       deliberationSiemPack.definitions.length +
         runtimeCoordinationPack.definitions.length +
         workCapsulesPack.definitions.length +
         workbooksPack.definitions.length +
-        feedbackPack.definitions.length,
+        feedbackPack.definitions.length +
+        selfUpgradePack.definitions.length,
     );
     expect(registry.getHandler("register_runtime_target")).toBeTypeOf("function");
     expect(registry.getHandler("create_work_capsule")).toBeTypeOf("function");
     expect(registry.getHandler("workbook_list_tables")).toBeTypeOf("function");
     expect(registry.getHandler("report_quality_issue")).toBeTypeOf("function");
+    expect(registry.getHandler("request_self_upgrade")).toBeTypeOf("function");
   });
 
   it("rejects the same tool name claimed by two packs", () => {

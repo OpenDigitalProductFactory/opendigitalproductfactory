@@ -541,6 +541,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // that just pushed a branch / opened a PR can force the cron to run
   // out-of-band rather than waiting up to 10 minutes (BI-063BDF1B Phase 5).
   trigger_contributor_inventory_sync: ["admin_write"],
+  request_self_upgrade: ["admin_write"],
 
   // Design intelligence (read-only references)
   search_design_intelligence: ["file_read"],
