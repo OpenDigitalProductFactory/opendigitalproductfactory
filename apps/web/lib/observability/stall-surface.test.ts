@@ -30,9 +30,15 @@ describe("buildStallSurface", () => {
     expect(surface.execState.stalledByWatchdog).toBe(true);
     expect(surface.execState.containerId).toBe("dpf-sandbox-1"); // prior fields preserved
     expect(surface.error).toMatch(/stalled \(heartbeat_timeout\)/);
+    expect(surface.proactivityPlan).toMatchObject({
+      resolvedLevel: "assertive",
+      escalationTarget: "platform-operator",
+      actionBoundary: "propose",
+    });
     expect(surface.verificationPatch).toEqual({
       failureAxis: "timeout",
       stalledByWatchdog: true,
+      proactivity: surface.proactivityPlan,
       observedAt: "2026-06-16T01:00:00.000Z",
     });
   });
@@ -63,14 +69,32 @@ describe("buildStallSurface", () => {
 });
 
 describe("mergeVerificationPatch", () => {
+  const proactivity = buildStallSurface({
+    reason: "heartbeat_timeout",
+    phase: "build",
+    heartbeatTimeoutSeconds: 180,
+    totalPhaseTimeoutSeconds: 3600,
+    priorExecState: null,
+    now: "2026-06-16T01:00:00.000Z",
+  }).proactivityPlan;
+
   it("merges over an existing verificationOut, preserving prior fields", () => {
     const merged = mergeVerificationPatch(
       { testsPassed: 3, fullOutput: "ok" },
-      { failureAxis: "timeout", stalledByWatchdog: true, observedAt: "2026-06-16T01:00:00.000Z" },
+      {
+        failureAxis: "timeout",
+        stalledByWatchdog: true,
+        observedAt: "2026-06-16T01:00:00.000Z",
+        proactivity,
+      },
     );
     expect(merged.testsPassed).toBe(3);
     expect(merged.failureAxis).toBe("timeout");
     expect(merged.stalledByWatchdog).toBe(true);
+    expect(merged.proactivity).toMatchObject({
+      resolvedLevel: "assertive",
+      policyId: "proactivity:build-studio-custodian:assertive",
+    });
   });
 
   it("tolerates a null/non-object existing value", () => {
@@ -78,6 +102,7 @@ describe("mergeVerificationPatch", () => {
       failureAxis: "timeout",
       stalledByWatchdog: true,
       observedAt: "2026-06-16T01:00:00.000Z",
+      proactivity,
     });
     expect(merged.failureAxis).toBe("timeout");
   });

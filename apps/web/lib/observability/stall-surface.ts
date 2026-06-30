@@ -14,6 +14,8 @@
 // Pure + unit-tested; the watchdog applies the result in its stall transaction.
 
 import type { BuildFailureAxis } from "@/lib/build/progress-visibility-types";
+import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
+import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
 
 export type StallReason =
   | "heartbeat_timeout"
@@ -34,10 +36,16 @@ export function stallReasonToFailureAxis(_reason: StallReason): BuildFailureAxis
 export type StallSurface = {
   failureAxis: BuildFailureAxis;
   error: string;
+  proactivityPlan: ProactivityPlan;
   /** New buildExecState JSON to persist (failed checkpoint). */
   execState: Record<string, unknown>;
   /** Patch to merge into verificationOut so deriveFailureAxis surfaces it. */
-  verificationPatch: { failureAxis: BuildFailureAxis; stalledByWatchdog: true; observedAt: string };
+  verificationPatch: {
+    failureAxis: BuildFailureAxis;
+    stalledByWatchdog: true;
+    observedAt: string;
+    proactivity: ProactivityPlan;
+  };
 };
 
 /**
@@ -69,12 +77,18 @@ export function buildStallSurface(args: {
     priorStep && priorStep !== "failed" && priorStep !== "complete"
       ? priorStep
       : priorFailedAt ?? "code_generated";
+  const proactivityPlan = resolveProactivityPlan({
+    activityFamily: "build-studio-custodian",
+    statusSignal: "stalled",
+    routeContext: "build-studio",
+  });
 
   return {
     failureAxis,
     error,
+    proactivityPlan,
     execState: { ...prior, step: "failed", failedAt, error, stalledByWatchdog: true },
-    verificationPatch: { failureAxis, stalledByWatchdog: true, observedAt: args.now },
+    verificationPatch: { failureAxis, stalledByWatchdog: true, observedAt: args.now, proactivity: proactivityPlan },
   };
 }
 
