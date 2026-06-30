@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft - design clarification |
+| Status | Implemented - first product slice |
 | Date | 2026-06-29 |
 | Owner surface | Work Case / Company Work Management, AI Workforce, Portfolio |
 | Related epic | EP-2984B02B - Work Case / Company Work Management |
@@ -67,7 +67,7 @@ The capsule should carry typed scope that answers:
 
 ## 5. Proposed Scope Model
 
-Add first-class, queryable scope to `WorkCapsule` or an equivalent one-to-one capsule scope record:
+Add first-class, queryable scope to `WorkCapsule`:
 
 | Field | Purpose |
 | --- | --- |
@@ -79,7 +79,7 @@ Add first-class, queryable scope to `WorkCapsule` or an equivalent one-to-one ca
 | `servesPortfolioRoles` | Zero or more portfolio roles this activity serves. Required for cross-portfolio and recursive delivery work. |
 | `dependsOnPortfolioRoles` | Zero or more portfolio roles this activity depends on. Used for line-of-sight, readiness, and delivery risk. |
 
-The exact storage can be direct columns for the high-cardinality dimensions plus a typed JSON anchor for heterogeneous references. The important rule is that the core scope dimensions are typed and queryable; they should not disappear into opaque JSON.
+Implementation decision: use direct nullable `WorkCapsule` columns for `decisionScope`, `portfolioRole`, `servedPersona`, and `activityKind`; use JSON for `outcomeAnchor`, `servesPortfolioRoles`, and `dependsOnPortfolioRoles`. This keeps the core routing dimensions queryable while leaving heterogeneous work-object anchors flexible.
 
 ## 6. Portfolio Semantics
 
@@ -176,17 +176,28 @@ The design is successful when later implementation can prove:
 9. Profession/craft decisions resolve against WSID when role doctrine exists.
 10. The implementation reuses Work Capsule as the coordination plane instead of creating a parallel execution tracker.
 
-## 11. Open Questions
+## 11. Implementation Decisions
 
-1. Should `decisionScope`, `portfolioRole`, `servedPersona`, and `activityKind` be direct columns on `WorkCapsule`, or should they live in a `WorkCapsuleScope` one-to-one record?
-2. What is the closed enum for `activityKind`?
-3. Should `outcomeAnchor` use a typed JSON envelope first, or a normalized polymorphic anchor table?
-4. Which existing Work Case models should become valid outcome anchors?
-5. Which AI coworker records should be promoted into Digital Product records, and what lifecycle states apply?
-6. Should the `forEmployees` display label become Workforce everywhere, or only on business/user-facing views?
-7. How should WWMD/WWWD/WSID routing be enforced at capsule initiation time?
+The first product slice is implemented by `docs/superpowers/plans/2026-06-30-layer-scoped-work-capsules.md`.
 
-## 12. Implementation Posture
+Resolved decisions:
+
+1. `decisionScope`, `portfolioRole`, `servedPersona`, and `activityKind` are direct fields on `WorkCapsule`.
+2. `activityKind` is a closed enum in code: `delivery`, `support`, `improvement`, `governance`, `launch-readiness`, `craft-judgment`, `lifecycle`, and `remediation`.
+3. `outcomeAnchor` starts as a typed JSON envelope with `kind`, optional `id`, `label`, `url`, and `source`.
+4. `servesPortfolioRoles` and `dependsOnPortfolioRoles` are JSON arrays validated against the four portfolio roles.
+5. Backlog links remain optional anchors. A scoped Work Capsule can be valid without `backlogItemId` or `epicId`.
+6. Work Control and Contributor Change Lanes project scope context; status and lane semantics remain unchanged.
+
+## 12. Open Questions
+
+1. Which existing Work Case models should become valid outcome anchors?
+2. Which AI coworker records should be promoted into Digital Product records, and what lifecycle states apply?
+3. Should the `forEmployees` display label become Workforce everywhere, or only on business/user-facing views?
+4. How should WWMD/WWWD/WSID routing be enforced at capsule initiation time beyond MCP/input validation?
+5. When should `outcomeAnchor` graduate from JSON to normalized relationships?
+
+## 13. Implementation Posture
 
 This spec should produce a small implementation plan, not a broad rewrite.
 
@@ -200,9 +211,10 @@ Recommended phases:
 
 The implementation must remain compatible with the existing Unified Tracking work. This design extends the capsule; it does not replace it.
 
-## 13. Internal References
+## 14. Internal References
 
 - `docs/superpowers/specs/2026-06-07-business-operating-model-portfolio-wiring-design.md` - four-portfolio Business Operating Model and Workforce / Products and Services Sold wiring.
+- `docs/superpowers/plans/2026-06-30-layer-scoped-work-capsules.md` - implementation plan for the first product slice.
 - `docs/architecture/archetype-business-value-streams.md` - customer operational value streams and WWWD-vs-WWMD separation.
 - `docs/superpowers/specs/2026-06-19-unified-build-studio-tracking-all-surfaces-design.md` - Work Capsule as the executor-agnostic coordination unit for development activity.
 - `docs/user-guide/ai-workforce/decision-perspective.md` - WWMD, WWWD, and WSID decision scopes.
