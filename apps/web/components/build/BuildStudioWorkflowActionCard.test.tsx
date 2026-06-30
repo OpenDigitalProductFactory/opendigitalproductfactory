@@ -13,6 +13,7 @@ import {
   normalizeHappyPathState,
   type FeatureBuildRow,
 } from "@/lib/feature-build-types";
+import type { BuildStudioCustodianPrompt } from "./build-studio-custodian";
 
 const { mockAdvanceBuildPhase, mockCaptureDecisionInteraction, mockRerunPlanReview, mockResumeBuildImplementation } = vi.hoisted(() => ({
   mockAdvanceBuildPhase: vi.fn(),
@@ -59,6 +60,37 @@ beforeEach(() => {
     message: "Plan review passed; implementation is unlocked.",
   });
 });
+
+function custodianPrompt(
+  overrides: Partial<BuildStudioCustodianPrompt> = {},
+): BuildStudioCustodianPrompt {
+  return {
+    dismissKey: "custodian",
+    title: "I can keep this review moving.",
+    whyNow: "UX verification still needs clean evidence.",
+    recommendedAction: "I can collect the acceptance evidence.",
+    primaryLabel: "Let AI Coworker handle it",
+    primaryAction: "coworker",
+    coworkerPrompt: "Act as the Build Studio custodian.",
+    statusLabel: "Needs evidence",
+    intent: "warning",
+    details: ["Review evidence is missing."],
+    proactivityPlan: {
+      resolvedLevel: "assertive",
+      policyId: "proactivity:build-studio-custodian:assertive",
+      attentionWindowMinutes: 30,
+      followUpCadenceMinutes: [30, 60, 120],
+      maxAttempts: 3,
+      spendClass: "elevated",
+      channelPolicy: "urgent-channel",
+      escalationTarget: "platform-operator",
+      actionBoundary: "propose",
+      explanation: "Build Studio work is blocked or stalled.",
+      evidenceRefs: [{ kind: "activity-family", id: "build-studio-custodian" }],
+    },
+    ...overrides,
+  };
+}
 
 function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
   return {
@@ -500,18 +532,9 @@ describe("BuildStudioWorkflowActionCard compact rendering", () => {
         build={makeBuild({ phase: "review", decisionInteraction: null })}
         action={implementationAction({ primaryLabel: "Run UX Verification" })}
         compact
-        custodianPrompt={{
+        custodianPrompt={custodianPrompt({
           dismissKey: "custodian-one",
-          title: "I can keep this review moving.",
-          whyNow: "UX verification still needs clean evidence.",
-          recommendedAction: "I can collect the acceptance evidence.",
-          primaryLabel: "Let AI Coworker handle it",
-          primaryAction: "coworker",
-          coworkerPrompt: "Act as the Build Studio custodian.",
-          statusLabel: "Needs evidence",
-          intent: "warning",
-          details: ["Review evidence is missing."],
-        }}
+        })}
       />,
     );
 
@@ -528,18 +551,9 @@ describe("BuildStudioWorkflowActionCard compact rendering", () => {
         build={makeBuild({ phase: "review", decisionInteraction: null })}
         action={implementationAction({ primaryLabel: "Run UX Verification" })}
         compact
-        custodianPrompt={{
+        custodianPrompt={custodianPrompt({
           dismissKey: "custodian-two",
-          title: "I can keep this review moving.",
-          whyNow: "UX verification still needs clean evidence.",
-          recommendedAction: "I can collect the acceptance evidence.",
-          primaryLabel: "Let AI Coworker handle it",
-          primaryAction: "coworker",
-          coworkerPrompt: "Act as the Build Studio custodian.",
-          statusLabel: "Needs evidence",
-          intent: "warning",
-          details: ["Review evidence is missing."],
-        }}
+        })}
       />,
     );
 
@@ -558,18 +572,17 @@ describe("BuildStudioWorkflowActionCard compact rendering", () => {
         build={makeBuild({ phase: "plan", decisionInteraction: null })}
         action={implementationAction()}
         compact
-        custodianPrompt={{
+        custodianPrompt={custodianPrompt({
           dismissKey: "custodian-three",
           title: "I found the recovery path.",
           whyNow: "This stop has a guided repair.",
           recommendedAction: "Try the guided fix now.",
           primaryLabel: "Start Implementation",
           primaryAction: "workflow",
-          coworkerPrompt: "Act as the Build Studio custodian.",
           statusLabel: "Blocked",
           intent: "danger",
           details: ["Use the existing dispatch."],
-        }}
+        })}
       />,
     );
 

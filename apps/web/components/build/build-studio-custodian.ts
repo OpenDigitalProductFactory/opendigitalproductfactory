@@ -1,6 +1,8 @@
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { Intent } from "@/components/ui/report-kit";
+import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
+import type { ProactivityPlan, ProactivityResolverInput } from "@/lib/proactivity/proactivity-types";
 import {
   deriveBuildStudioOperatorGuidance,
   type BuildStudioWorkflowAction,
@@ -19,6 +21,7 @@ export type BuildStudioCustodianPrompt = {
   statusLabel: string;
   intent: Intent;
   details: string[];
+  proactivityPlan: ProactivityPlan;
 };
 
 type CustodianPromptInput = {
@@ -76,6 +79,22 @@ function isUxReviewGap(
   );
 }
 
+function resolveCustodianStatusSignal(input: {
+  uxReviewGap: boolean;
+  blockedByEvidence: boolean;
+  technicalRecovery: boolean;
+  isQuietReview: boolean;
+  isQuietBuild: boolean;
+}): NonNullable<ProactivityResolverInput["statusSignal"]> {
+  if (input.uxReviewGap || input.blockedByEvidence || input.technicalRecovery) {
+    return "blocked";
+  }
+  if (input.isQuietReview || input.isQuietBuild) {
+    return "stalled";
+  }
+  return "normal";
+}
+
 export function deriveBuildStudioCustodianPrompt({
   build,
   action,
@@ -112,6 +131,18 @@ export function deriveBuildStudioCustodianPrompt({
   }
 
   const dismissKey = buildDismissKey(build, action, progressVisibility);
+  const proactivityPlan = resolveProactivityPlan({
+    activityFamily: "build-studio-custodian",
+    agentId: build.claimedByAgentId,
+    routeContext: "/build",
+    statusSignal: resolveCustodianStatusSignal({
+      uxReviewGap,
+      blockedByEvidence,
+      technicalRecovery,
+      isQuietReview,
+      isQuietBuild,
+    }),
+  });
 
   if (uxReviewGap) {
     return {
@@ -133,6 +164,7 @@ export function deriveBuildStudioCustodianPrompt({
         "The review is not ready to release until UX evidence and acceptance evidence agree.",
         "If the retry already started work, wait for that evidence first. If it did not, use the existing Build Studio recovery path instead of asking the human to diagnose logs.",
       ],
+      proactivityPlan,
     };
   }
 
@@ -158,6 +190,7 @@ export function deriveBuildStudioCustodianPrompt({
         action.message,
         guidance.recoveryHint ?? "Use the in-place recovery first; escalate only if it cannot make progress.",
       ].filter(Boolean),
+      proactivityPlan,
     };
   }
 
@@ -179,6 +212,7 @@ export function deriveBuildStudioCustodianPrompt({
         action.disabledReason ?? "Required evidence is missing.",
         "The human should see the conclusion and one next action, not raw workflow internals.",
       ],
+      proactivityPlan,
     };
   }
 
@@ -199,5 +233,6 @@ export function deriveBuildStudioCustodianPrompt({
       "The surface should stay quiet while work progresses.",
       "A quiet build only interrupts when the next step is useful for keeping delivery moving.",
     ],
+    proactivityPlan,
   };
 }

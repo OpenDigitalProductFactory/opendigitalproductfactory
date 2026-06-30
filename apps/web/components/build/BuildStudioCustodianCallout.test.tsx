@@ -15,6 +15,19 @@ function prompt(overrides: Partial<BuildStudioCustodianPrompt> = {}): BuildStudi
     statusLabel: "Needs evidence",
     intent: "warning",
     details: ["UX evidence is missing.", "Acceptance evidence is missing."],
+    proactivityPlan: {
+      resolvedLevel: "assertive",
+      policyId: "proactivity:build-studio-custodian:assertive",
+      attentionWindowMinutes: 30,
+      followUpCadenceMinutes: [30, 60, 120],
+      maxAttempts: 3,
+      spendClass: "elevated",
+      channelPolicy: "urgent-channel",
+      escalationTarget: "platform-operator",
+      actionBoundary: "propose",
+      explanation: "Build Studio work is blocked or stalled.",
+      evidenceRefs: [{ kind: "activity-family", id: "build-studio-custodian" }],
+    },
     ...overrides,
   };
 }
