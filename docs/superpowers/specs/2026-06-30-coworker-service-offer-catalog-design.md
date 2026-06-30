@@ -172,7 +172,7 @@ Different callers need different catalog projections:
 - Cross-organization A2A/API: sales, marketing, procurement, supplier-facing, and customer-facing coworkers require partner/external availability, GAID-federated or GAID-public identity, provider organization, authenticated card variants where needed, explicit terms, data boundary, audit, and revocation posture.
 - Back-office specialist boundaries: legal, finance, security, and HR specialists can be invoked by internal coordinators, but their offers should stay narrow, approval-aware, and hidden from external discovery unless an explicitly reviewed partner-facing offer exists.
 
-The first implementation slice delivers the human portal, MCP request surface, Build Studio requirements broker, and a bounded Agent Card projection for selected coworker offers. It records enough cost, terms, availability, and data-boundary metadata to support later full A2A task exchange. It does not yet implement a live external A2A task endpoint or GAID authority verification service.
+The first implementation slice delivers the human portal, MCP request surface, Build Studio requirements broker, a bounded Agent Card projection for selected coworker offers, and a read-only Agent Card endpoint at `/api/a2a/coworkers/[agentId]/offers/[offerId]`. It records enough cost, terms, availability, and data-boundary metadata to support later full A2A task exchange. It does not yet implement a stateful A2A task lifecycle endpoint or GAID authority verification service.
 
 ## Build Studio Requirements Surface
 
