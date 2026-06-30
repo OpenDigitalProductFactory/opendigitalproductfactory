@@ -24,6 +24,8 @@ type DbClient = {
   coworkerEngagement: {
     create(args: unknown): Promise<{
       engagementId: string;
+      serviceId: string;
+      providerAgentId: string;
       status: string;
       workCapsuleId: string | null;
       approvalContext: unknown;
@@ -50,6 +52,8 @@ export type CreateCoworkerEngagementInput = {
 
 export type CoworkerEngagementResult = {
   engagementId: string;
+  serviceId: string;
+  providerAgentId: string;
   status: CoworkerEngagementStatus;
   workCapsuleId: string | null;
   approvalContext: {
@@ -99,6 +103,8 @@ export async function createCoworkerEngagement(
 
   return {
     engagementId: created.engagementId,
+    serviceId: created.serviceId,
+    providerAgentId: created.providerAgentId,
     status,
     workCapsuleId: created.workCapsuleId,
     approvalContext,
