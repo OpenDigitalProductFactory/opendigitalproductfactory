@@ -38,6 +38,23 @@ DPF treats IT4IT v3 as the operating-model substrate, with Digital Product as th
 
 This avoids treating portfolio structure as the request surface and avoids turning every service engagement into a backlog item.
 
+Agent interoperability standards split the consumption surface by caller:
+
+- MCP is the model-controlled discovery and request surface for external AI clients, coding agents, and humans using model-mediated tools. It should expose bounded, paginated, structured tools rather than dumping the entire coworker universe into model context.
+- A2A is the peer engagement surface when one agent needs to find, evaluate, and directly collaborate with another agent. A2A discovery centers on Agent Cards that advertise identity, endpoint, authentication, capabilities, and skills. DPF should project eligible catalog entries into internal/private Agent Cards and, where appropriate, partner/public Agent Cards.
+- GAID is the cross-boundary identity and governance layer. Internal-only coworkers can operate under private GAID. Any coworker exposed to customers, suppliers, partners, or public discovery needs a federated/public GAID posture, an AIDoc reference, revocation/status posture, and preserved delegation receipts.
+
+The catalog is therefore not one payload for every consumer. It is the governed source from which UI views, MCP discovery tools, A2A Agent Cards, direct HTTP/API profiles, and future directory/SCIM projections are derived.
+
+## Research & Benchmarking
+
+Primary references reviewed for this design extension:
+
+- A2A specification: Agent Cards are the discoverable metadata surface for agent identity, skills, endpoint, and security posture. Adopted: project selected catalog offers into Agent Cards for direct agent-to-agent engagement. Rejected: treating the full catalog as the A2A task protocol itself.
+- Model Context Protocol tool documentation: tools are model-callable functions exposed by an MCP server. Adopted: bounded list/detail/request tools for catalog discovery. Rejected: injecting every coworker and offer into every agent context.
+- DPF GAID architecture: GAID separates enduring identity, AIDoc, exposure state, protocol profiles, and delegation receipts. Adopted: private GAID for internal coworkers and federated/public posture for cross-organization exposure. Rejected: protocol-specific identifiers that fragment one agent identity across MCP, A2A, and HTTP.
+- ASQ DMAIC overview: define, measure, analyze, improve, control is a durable improvement loop. Adopted: emergent coworker engagements can be measured, codified into aggregate offers, and continuously refined. Rejected: one-time catalog publication with no performance feedback loop.
+
 ## Conceptual Model
 
 ### Coworker Service
@@ -142,6 +159,50 @@ Legal metadata includes jurisdiction, archetype, attorney-review, legal-risk, da
 6. Once approved/accepted, execution can create or link a `WorkCapsule` with a `service-request` outcome anchor.
 7. Tool executions and evidence remain linked to existing audit tables.
 
+## Access and Invocation Surfaces
+
+Different callers need different catalog projections:
+
+- Human portal: authenticated operators browse the catalog, compare offers, inspect authority/cost/terms, and request engagements. Legal Operations Counsel is internal-only by default and visible only to trusted authenticated humans and non-human actors with the right grants.
+- MCP: external AI agents and model-mediated clients use `list_coworker_services`, `list_coworker_offers`, `get_coworker_offer`, and `request_coworker_engagement`. List tools must remain capped and filter-first; detail is fetched only after a candidate offer is selected.
+- Internal A2A: trusted coworkers should engage peer coworkers through direct A2A task flows once a target has been selected. The catalog should supply the Agent Card projection and routing metadata, not replace A2A task exchange.
+- Cross-organization A2A/API: sales, marketing, procurement, supplier-facing, and customer-facing coworkers require partner/external availability, GAID-federated or GAID-public identity, provider organization, authenticated card variants where needed, explicit terms, data boundary, audit, and revocation posture.
+- Back-office specialist boundaries: legal, finance, security, and HR specialists can be invoked by internal coordinators, but their offers should stay narrow, approval-aware, and hidden from external discovery unless an explicitly reviewed partner-facing offer exists.
+
+The first implementation slice delivers the human portal and MCP request surface. It records enough cost, terms, availability, and data-boundary metadata to support later A2A/GAID projection, but it does not yet implement A2A Agent Card publication or GAID verification.
+
+## Catalog Context Budget and Delegation
+
+The catalog should encourage delegation without flooding every agent's context window:
+
+- Agents should receive a small role-local capability set plus a catalog-search/broker affordance, not the full catalog.
+- Catalog list responses should return summaries optimized for selection: offer id, provider, short outcome, availability, risk, authority, cost band, required inputs, and matching reasons.
+- Offer detail should be pulled on demand when an agent is deciding whether to delegate, requesting approval, or creating an engagement.
+- Coordinator agents should be prompted and instrumented to engage the right coworker when the requested work crosses their authority, skill, risk, jurisdiction, or cognitive-load boundary.
+- Engagement requests should capture routing rationale: why this coworker/offer was chosen, what alternatives were considered, and whether the request is emergent, repeatable, or part of a codified process.
+- The catalog broker/recommender should eventually use prior engagement outcomes, cost, latency, risk, and satisfaction signals to rank candidates, but ranking must remain explainable and overrideable.
+
+This keeps cognitive load distributed across the AI workforce and human workforce: coordinators frame and route; specialists execute within bounded authority; humans approve consequential transitions.
+
+## Aggregate Offers and Process Refinement
+
+Individual coworker offers are leaves in the catalog. Repeatable combinations should be promoted into aggregate offers or playbooks so requesters can consume a higher-level outcome without manually coordinating each specialist.
+
+Examples:
+
+- supplier onboarding package: procurement intake, contract review, security/vendor-risk assessment, finance setup, and supplier communications;
+- campaign launch package: marketing plan, sales enablement, legal claims review, analytics setup, and launch readiness;
+- customer enterprise deal desk: sales qualification, pricing analysis, procurement negotiation support, legal packet preparation, and approval routing.
+
+Aggregate offers should mature through explicit states:
+
+- emergent: ad hoc multi-coworker delegation captured in engagement evidence;
+- instrumented: repeated pattern has measurable handoffs, latency, rework, approval, cost, and defect data;
+- codified: pattern becomes a named aggregate offer/playbook with owner, inputs, outputs, routing rules, and approval rails;
+- optimized: process metrics are actively improved and controlled.
+
+DPF should use a DMAIC-style refinement loop for these aggregate offers: define the outcome and consumers, measure actual engagement performance, analyze bottlenecks and rework, improve routing/automation/approval design, and control the process with ongoing metrics. The catalog is therefore both a consumption surface and a process-learning substrate.
+
 ## UI / IA
 
 Route: `/platform/ai/catalog`
@@ -172,6 +233,13 @@ Add grant mappings:
 - `coworker_catalog_read` for read tools.
 - `coworker_engagement_write` for engagement request.
 
+Future A2A/GAID tools should not expand this first MCP list into a huge universal tool surface. Prefer a small broker-oriented shape:
+
+- search/select candidate offers with filters and explanation;
+- fetch one offer detail;
+- request an engagement;
+- resolve one selected offer into an A2A Agent Card or GAID/AIDoc reference when the caller has authority.
+
 ## Security and Governance
 
 - External providers require provider identity, provider organization, terms, data boundary, authority boundary, cost model, revocation/audit posture, and legal review metadata.
@@ -179,6 +247,10 @@ Add grant mappings:
 - Engagement creation is auditable even before execution.
 - Work Capsules are not created for every engagement automatically; they are created or linked only when accepted/executable.
 - Backlog remains for improving DPF, not for every service request.
+- Internal specialist offers, especially legal, default to trusted internal humans and trusted non-human principals only.
+- External/partner offers must be explicitly marked for that availability scope and must not inherit visibility from the provider coworker as a whole.
+- Cross-organization calls must preserve acting, delegating, and delegated agent identities, including GAID where applicable, so receipts can reconstruct the chain of custody.
+- Public or partner-facing Agent Cards must not disclose internal-only skills, prompts, tools, pricing details, or privileged data-boundary metadata unless a reviewed external offer requires that disclosure.
 
 ## Refactoring Allocation
 
@@ -201,4 +273,3 @@ Reserve roughly 20 percent of the implementation effort for targeted refactoring
 - Tests cover model boundaries, catalog projection, offer packaging, engagement creation, permissions/grants, and Legal Operations Counsel visibility.
 - UX verification is run on a governed running portal or shared local-integration lease.
 - Targeted tests and `pnpm --filter web build` are run before completion, with any pre-existing blocker clearly reported.
-

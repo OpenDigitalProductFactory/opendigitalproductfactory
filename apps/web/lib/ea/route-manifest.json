@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 527,
+  "routeCount": 528,
   "routes": [
     {
       "routePath": "/",
@@ -4600,6 +4600,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/platform/ai/capacity-continuity/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/catalog",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "catalog"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/catalog/page.tsx"
     },
     {
       "routePath": "/platform/ai/decisions/[interactionId]",

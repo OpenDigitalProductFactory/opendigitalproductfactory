@@ -6,6 +6,8 @@
 
 **Architecture:** Add a small catalog layer over the existing coworker substrate: provider capabilities (`CoworkerService`), consumable packages (`CoworkerOffer`), and actual demand (`CoworkerEngagement`). Keep projection, MCP handlers, and UI as thin layers over shared service functions.
 
+**Surface doctrine:** This first slice ships human portal discovery plus bounded MCP discovery/request tools. A2A direct engagement, GAID/AIDoc projection, catalog broker ranking, and aggregate/process-refinement offers are intentionally designed here but queued as follow-on slices so the first PR does not overload every agent with a universal catalog payload.
+
 **Tech Stack:** Next.js 16 app router, Prisma 7, pnpm workspaces, Vitest, React Testing Library, DPF MCP tool surface.
 
 ---
@@ -101,3 +103,34 @@
 - [ ] **Step 4: Exercise `/platform/ai/catalog` on the running portal and capture evidence.**
 - [ ] **Step 5: Record any blocked gate honestly; do not treat unrun gates as passed.**
 
+## Follow-On Chunk: A2A, GAID, and Catalog Broker
+
+### Task 8: Add access-profile projection
+
+**Files:**
+- Modify/create catalog projection modules under `apps/web/lib/coworker-service-catalog/`
+- Add tests near catalog projection tests.
+
+- [ ] **Step 1: Define projection profiles for human portal, MCP summary, MCP detail, internal A2A, partner A2A, and external/public discovery.**
+- [ ] **Step 2: Ensure internal-only specialists such as Legal Operations Counsel do not leak into partner/external projections unless a specific offer is marked for that availability scope.**
+- [ ] **Step 3: Add tests that list responses stay summary-sized and detail is retrieved by offer id.**
+
+### Task 9: Add A2A/GAID resolution
+
+**Files:**
+- Modify/create A2A/GAID adapter modules after the existing GAID architecture profile is wired into runtime identity.
+
+- [ ] **Step 1: Resolve selected offers to internal/private Agent Card metadata for trusted A2A callers.**
+- [ ] **Step 2: Resolve partner/external offers to GAID/AIDoc references and authenticated/public Agent Card variants.**
+- [ ] **Step 3: Preserve acting, delegating, and delegated identity in engagement/audit receipts.**
+- [ ] **Step 4: Reject cross-organization access when GAID, terms, data boundary, revocation, or authority metadata is missing.**
+
+### Task 10: Add aggregate offers and process refinement
+
+**Files:**
+- Extend the catalog schema/service in a separate PR after first-slice usage evidence exists.
+
+- [ ] **Step 1: Capture engagement routing rationale and mark requests as emergent, repeatable, or codified.**
+- [ ] **Step 2: Identify repeated multi-coworker patterns and promote them into aggregate offers/playbooks with owner, inputs, outputs, routing rules, and approval rails.**
+- [ ] **Step 3: Track DMAIC-style metrics: cycle time, handoffs, rework, approvals, cost variance, defect/escape rate, and requester satisfaction.**
+- [ ] **Step 4: Feed process metrics into catalog ranking without making ranking opaque or mandatory.**
