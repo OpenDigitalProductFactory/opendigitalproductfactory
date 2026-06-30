@@ -446,6 +446,8 @@ Accepted changes write an auditable policy override. Dismissed proposals should 
 5. Spend class remains bounded by Build Studio right-sizing and cost governance.
 6. Do not fork the shipped Build Studio custodian implementation from `BI-ACB04A21`; consume or expose the shared `ProactivityPlan` at existing Build Studio progress/stall/escalation seams.
 
+Implementation note: the Build Studio custodian prompt derivation consumes the shared `build-studio-custodian` proactivity resolver and attaches the resulting `ProactivityPlan` to the prompt object. The visible callout remains outcome-focused: one "why now" line, one recommended action, snooze/show-why alternatives, and no default exposure of internal build IDs or diagnostic queues.
+
 User-facing rule: Build Studio and every other consuming surface should remain quiet while work is progressing, then surface one recommended action with bounded alternatives such as snooze/show why. Internal IDs, queues, branches, and diagnostic jargon remain hidden by default and appear only in engineer-oriented disclosures.
 
 ## 11. Data Model Strategy

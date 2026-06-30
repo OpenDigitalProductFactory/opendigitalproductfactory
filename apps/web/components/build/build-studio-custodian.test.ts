@@ -115,6 +115,26 @@ describe("deriveBuildStudioCustodianPrompt", () => {
     expect(prompt?.coworkerPrompt).toContain("Act as the Build Studio custodian");
 });
 
+  it("resolves shared assertive proactivity for blocked or stalled custodian prompts", () => {
+    const build = makeBuild({ uxVerificationStatus: "failed" });
+    const action = deriveBuildStudioWorkflowAction({ build, governedBacklogEnabled: true });
+    const prompt = deriveBuildStudioCustodianPrompt({ build, action, progressVisibility: progress() });
+
+    expect(prompt?.proactivityPlan).toMatchObject({
+      resolvedLevel: "assertive",
+      policyId: "proactivity:build-studio-custodian:assertive",
+      escalationTarget: "platform-operator",
+      actionBoundary: "propose",
+    });
+    expect(prompt?.proactivityPlan.evidenceRefs).toEqual(
+      expect.arrayContaining([
+        { kind: "activity-family", id: "build-studio-custodian" },
+        { kind: "status-signal", id: "blocked" },
+        { kind: "route-context", id: "/build" },
+      ]),
+    );
+  });
+
   it("stays quiet while an execution step is actively working", () => {
     const build = makeBuild({
       phase: "build",
