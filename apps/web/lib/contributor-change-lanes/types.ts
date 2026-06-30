@@ -64,6 +64,11 @@ export type ContributorChangeLane = {
   runtimeUrl: string | null;
   workCapsuleId: string | null;
   backlogItemId: string | null;
+  decisionScope?: string | null;
+  portfolioRole?: string | null;
+  servedPersona?: string | null;
+  activityKind?: string | null;
+  outcomeAnchor?: unknown;
   expiresAt: Date | null;
   lastHeartbeatAt: Date | null;
   latestVerification: ContributorLaneVerification;
@@ -83,6 +88,11 @@ export type WorkCapsuleSnapshot = {
   pullRequestUrl: string | null;
   backlogItemId: string | null;
   featureBuildId: string | null;
+  decisionScope: string | null;
+  portfolioRole: string | null;
+  servedPersona: string | null;
+  activityKind: string | null;
+  outcomeAnchor: unknown;
   leaseHolderPrincipalId: string | null;
   leaseExpiresAt: Date | null;
   updatedAt: Date | null;

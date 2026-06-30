@@ -48,6 +48,11 @@ function capsule(overrides: Partial<WorkCapsuleSnapshot> = {}): WorkCapsuleSnaps
     updatedAt: FRESH,
     purpose: "Test purpose",
     nextAction: null,
+    decisionScope: null,
+    portfolioRole: null,
+    servedPersona: null,
+    activityKind: null,
+    outcomeAnchor: null,
     ...overrides,
   };
 }
@@ -156,8 +161,38 @@ describe("projectContributorChangeLanes", () => {
     expect(lane.servedCommitSha).toBe(wc.headSha);
     expect(lane.pullRequestUrl).toBe("https://example.com/pr/1234");
     expect(lane.workCapsuleId).toBe(wc.capsuleId);
+    expect(lane.decisionScope).toBeNull();
+    expect(lane.portfolioRole).toBeNull();
     expect(lane.blockers).toEqual([]);
     expect(lane.latestVerification.status).toBe("passed");
+  });
+
+  it("carries Work Capsule scope context into capsule-backed lanes without changing status", () => {
+    const wc = capsule({
+      decisionScope: "wwwd",
+      portfolioRole: "productsAndServicesSold",
+      servedPersona: "customer",
+      activityKind: "delivery",
+      outcomeAnchor: { kind: "work-case", id: "CASE-123", label: "Onboard Contoso" },
+    });
+
+    const result = projectContributorChangeLanes(
+      emptyInput({
+        workCapsules: [wc],
+        pullRequests: [pr({ headBranch: wc.headBranch! })],
+      }),
+    );
+
+    expect(result.lanes).toHaveLength(1);
+    expect(result.lanes[0]).toEqual(expect.objectContaining({
+      source: "work-capsule",
+      status: "ready-for-review",
+      decisionScope: "wwwd",
+      portfolioRole: "productsAndServicesSold",
+      servedPersona: "customer",
+      activityKind: "delivery",
+      outcomeAnchor: { kind: "work-case", id: "CASE-123", label: "Onboard Contoso" },
+    }));
   });
 
   it("flags a branch with an open PR but no work capsule with a missing-capsule blocker", () => {
