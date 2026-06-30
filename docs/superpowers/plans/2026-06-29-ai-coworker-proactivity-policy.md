@@ -16,6 +16,8 @@
 
 **Deferred backlog:** `BI-424CFE7A` covers delegated coworker posture propagation: carry advisory proactivity and golden-triangle context from an initiating task into child coworker subtasks, with the receiving coworker's local policy/risk/quality requirements able to override. This is not part of V1.
 
+**Current delivery state, 2026-06-30:** PR #2530 implements the user-aware runtime resolution slice for `BI-5B6F666F`. Approved proactivity changes are read from scoped `UserFact` preference records, dismissed changes are read from scoped cooldown facts, and scheduled task execution now records the effective user-aware `ProactivityPlan`. This composes with the shipped Build Studio pilot (`BI-ACB04A21`) by keeping the shared resolver as the primitive and avoiding a Build Studio-specific policy fork.
+
 ---
 
 ## File Structure
@@ -35,6 +37,7 @@
 - Modify `apps/web/lib/tak/autonomous-work-run.ts`: accept optional proactivity metadata and write it into `TaskRun.a2aMetadata.proactivity`.
 - Modify `apps/web/lib/tak/scheduled-task-runs.ts`: accept proactivity metadata for scheduled runs if this helper owns the actual `TaskRun` create path.
 - Modify `apps/web/lib/actions/agent-task-scheduler.ts`: resolve and pass scheduled-task proactivity plan without bypassing owner/tool/HITL checks.
+- Modify `apps/web/lib/proactivity/proactivity-resolver.server.ts`: read acknowledged `UserFact` override and cooldown facts without importing Prisma into client-safe resolver code.
 - Modify relevant Build Studio custodian/stall caller once identified in implementation: consume shared resolver, do not fork a Build Studio-only policy.
 - Modify field-dispatch runtime caller once identified in implementation: consume shared resolver around runtime behavior, not pure validator functions.
 - Optional migration: `packages/db/prisma/migrations/<timestamp>_proactivity_override/migration.sql` only if no existing preference/action-envelope substrate can store accepted overrides cleanly.

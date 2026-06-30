@@ -40,6 +40,11 @@ export type ProactivityPlan = {
   actionBoundary: ProactivityActionBoundary;
   explanation: string;
   evidenceRefs: Array<{ kind: string; id: string }>;
+  preferenceSource?: "rule" | "user-override";
+  userOverrideScopeKey?: string;
+  suggestionSuppressed?: boolean;
+  suggestionCooldownUntil?: string;
+  suggestionCooldownScopeKey?: string;
 };
 
 export type ProactivityResolverInput = {

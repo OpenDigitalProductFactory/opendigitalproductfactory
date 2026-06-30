@@ -459,6 +459,7 @@ V1 should avoid a broad schema migration until the policy matrix has evidence. I
 - `apps/web/lib/proactivity/proactivity-types.ts`
 - `apps/web/lib/proactivity/proactivity-policy.ts`
 - `apps/web/lib/proactivity/proactivity-resolver.ts`
+- `apps/web/lib/proactivity/proactivity-resolver.server.ts`
 - `apps/web/lib/proactivity/proactivity-copy.ts`
 - tests for archetype/coworker/activity fixtures
 
@@ -486,6 +487,8 @@ model ProactivityOverride {
 ```
 
 Do not add a large generic rules engine in V1.
+
+Implementation status, 2026-06-30: the implementation sweep found `UserFact` suitable for narrow user-scoped proactivity acknowledgements, so V1 does not add `ProactivityOverride`. Accepted coworker proposals persist `preference` facts keyed as `aiCoworkerProactivity:<scopeKey>`; dismissed proposals persist cooldown facts keyed as `aiCoworkerProactivityCooldown:<scopeKey>`. The pure resolver remains client-safe in `proactivity-resolver.ts`; the server-only resolver in `proactivity-resolver.server.ts` reads `UserFact`, applies the most-specific active acknowledgement by agent, route context, then activity family, and returns evidence refs plus cooldown suppression metadata. Scheduled task execution consumes the server resolver with `ownerUserId` so `TaskRun.a2aMetadata.proactivity` reflects the effective user-aware plan without bundling Prisma into client surfaces.
 
 ### V2: first-class policy rows
 
@@ -576,6 +579,8 @@ Acceptance:
 - failures and ignored attempts can escalate to Attention Surface according to plan.
 - no scheduled task bypasses existing owner/tool/HITL checks.
 
+Status, 2026-06-30: implemented for scheduled task execution with user-aware resolution. The shared pure resolver remains available for client and fixture callers; the server resolver applies acknowledged override/cooldown facts before scheduled work writes proactivity metadata. Remaining work in this slice is Attention Surface escalation projection for ignored/failing scheduled work.
+
 ### Slice 2A: Delegated coworker posture substrate
 
 Files:
@@ -622,6 +627,8 @@ Acceptance:
 - accepted proposal creates override or activity-scoped setting.
 - dismissed proposal cools down.
 - all changes audit who proposed, who acknowledged, scope, prior level, new level, and rationale.
+
+Status, 2026-06-30: implemented without a new table. Approved proactivity change proposals create scoped `UserFact` preference records; rejected proposals create scoped cooldown facts so the coworker does not immediately repeat the same suggestion. The runtime resolver now consumes those facts for scheduled work. Remaining work is to extend the same user-aware consumption into field-dispatch and Attention Surface projections.
 
 ### Slice 5: Field dispatch and Build Studio fixtures
 
