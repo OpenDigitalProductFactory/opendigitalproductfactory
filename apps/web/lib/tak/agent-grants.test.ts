@@ -772,21 +772,16 @@ describe("COWORKER_READ_BASELINE_GRANTS — page visibility + docs/source/code-g
 
   it("unlocks the page coordination, docs, source, and code-graph read tools", () => {
     const baseline = [...COWORKER_READ_BASELINE_GRANTS];
-    // The exact tools the operator's Dev Loop question needed:
     expect(isToolAllowedByGrants("get_runtime_coordination_map", baseline)).toBe(true);
     expect(isToolAllowedByGrants("list_nonprod_environment_leases", baseline)).toBe(true);
-    // Documentation:
     expect(isToolAllowedByGrants("doc_search", baseline)).toBe(true);
     expect(isToolAllowedByGrants("doc_load", baseline)).toBe(true);
-    // Source code:
     expect(isToolAllowedByGrants("read_project_file", baseline)).toBe(true);
     expect(isToolAllowedByGrants("search_project_files", baseline)).toBe(true);
     expect(isToolAllowedByGrants("read_source_at_version", baseline)).toBe(true);
-    // Code graph ("the code graph especially"):
     expect(isToolAllowedByGrants("search_code_graph", baseline)).toBe(true);
     expect(isToolAllowedByGrants("trace_code_surface", baseline)).toBe(true);
     expect(isToolAllowedByGrants("find_related_tests", baseline)).toBe(true);
-    // Knowledge / wiki:
     expect(isToolAllowedByGrants("search_knowledge", baseline)).toBe(true);
     expect(isToolAllowedByGrants("wiki_query", baseline)).toBe(true);
   });

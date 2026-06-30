@@ -1,8 +1,7 @@
 import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
 import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
-// Runtime kernel-commandment gate (BI-43F95F77). Static imports — executeTool
-// is a hot path; dynamic import per call would tank dispatcher throughput.
+// Static import: executeTool is a hot path; dynamic import per call would hurt throughput.
 import { evaluateExecution } from "@/lib/kernel/runtime-gate";
 import { loadEnforceablePrinciples } from "@/lib/kernel/load-enforceable-principles";
 import { detectSessionClass } from "@/lib/kernel/session-class";
