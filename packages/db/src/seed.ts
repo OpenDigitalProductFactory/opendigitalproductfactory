@@ -66,6 +66,7 @@ import { ensureAllBackupScheduledJobs } from "./seed-platform-backup.js";
 import { ensureDataRetentionScheduledJob } from "./seed-platform-retention.js";
 import { ensureContributorInventoryScheduledJob } from "./seed-contributor-inventory.js";
 import { seedAgentControlPlaneMaturity } from "./seed-agent-control-plane-maturity.js";
+import { seedCoworkerServiceCatalog } from "./coworker-service-catalog-seed.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
 import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
@@ -2368,6 +2369,7 @@ async function main(): Promise<void> {
   await step("eaSysmlAgentAuthority", () => seedEaSysmlAgentAuthority());
   await step("eaSysmlDataAuthority", () => seedEaSysmlDataAuthority());
   await step("dpfSelfRegistration", () => seedDpfSelfRegistration());
+  await step("coworkerServiceCatalog", () => seedCoworkerServiceCatalog(prisma));
   await step("platformCapabilityPortfolio", () => projectPlatformCapabilities());
   await step("defaultAdminUser", () => seedDefaultAdminUser());
   await step("discoveryTriageScheduledTask", () => ensureDiscoveryTriageScheduledTask(prisma));

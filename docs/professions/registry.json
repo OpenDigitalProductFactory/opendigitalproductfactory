@@ -336,7 +336,13 @@
     {
       "professionKey": "legal-compliance",
       "label": "Legal & Compliance",
-      "roles": ["compliance-officer", "licensing-specialist", "policy-specialist", "policy-enforcement-agent"],
+      "roles": [
+        "compliance-officer",
+        "legal-operations-counsel",
+        "licensing-specialist",
+        "policy-specialist",
+        "policy-enforcement-agent"
+      ],
       "contextSlugs": ["compliance"],
       "sources": [
         {
