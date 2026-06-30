@@ -26,6 +26,47 @@ export const WORK_CAPSULE_SOURCES = [
 
 export type WorkCapsuleSource = (typeof WORK_CAPSULE_SOURCES)[number];
 
+export const WORK_CAPSULE_DECISION_SCOPES = ["wwmd", "wwwd", "wsid"] as const;
+
+export type WorkCapsuleDecisionScope = (typeof WORK_CAPSULE_DECISION_SCOPES)[number];
+
+export const WORK_CAPSULE_PORTFOLIO_ROLES = [
+  "foundational",
+  "manufactureAndDeliver",
+  "forEmployees",
+  "productsAndServicesSold",
+] as const;
+
+export type WorkCapsulePortfolioRole = (typeof WORK_CAPSULE_PORTFOLIO_ROLES)[number];
+
+export const WORK_CAPSULE_SCOPE_ACTIVITY_KINDS = [
+  "delivery",
+  "support",
+  "improvement",
+  "governance",
+  "launch-readiness",
+  "craft-judgment",
+  "lifecycle",
+  "remediation",
+] as const;
+
+export type WorkCapsuleScopeActivityKind = (typeof WORK_CAPSULE_SCOPE_ACTIVITY_KINDS)[number];
+
+export const WORK_CAPSULE_OUTCOME_ANCHOR_KINDS = [
+  "backlog-item",
+  "epic",
+  "work-case",
+  "digital-product",
+  "service-request",
+  "customer-account",
+  "coworker",
+  "decision-interaction",
+  "document",
+  "external",
+] as const;
+
+export type WorkCapsuleOutcomeAnchorKind = (typeof WORK_CAPSULE_OUTCOME_ANCHOR_KINDS)[number];
+
 export const WORK_CAPSULE_EXECUTOR_KINDS = [
   "build-studio",
   "codex-desktop",
@@ -111,6 +152,10 @@ export type ScopeClaim = {
 
 const STATUS_SET = new Set<string>(WORK_CAPSULE_STATUSES);
 const SOURCE_SET = new Set<string>(WORK_CAPSULE_SOURCES);
+const DECISION_SCOPE_SET = new Set<string>(WORK_CAPSULE_DECISION_SCOPES);
+const PORTFOLIO_ROLE_SET = new Set<string>(WORK_CAPSULE_PORTFOLIO_ROLES);
+const SCOPE_ACTIVITY_KIND_SET = new Set<string>(WORK_CAPSULE_SCOPE_ACTIVITY_KINDS);
+const OUTCOME_ANCHOR_KIND_SET = new Set<string>(WORK_CAPSULE_OUTCOME_ANCHOR_KINDS);
 const EXECUTOR_SET = new Set<string>(WORK_CAPSULE_EXECUTOR_KINDS);
 const ACTIVITY_SET = new Set<string>(WORK_CAPSULE_ACTIVITY_KINDS);
 const TAXONOMY_SET = new Set<string>(WORK_CAPSULE_BRANCH_TAXONOMIES);
@@ -131,6 +176,22 @@ export function isWorkCapsuleStatus(value: unknown): value is WorkCapsuleStatus 
 
 export function isWorkCapsuleSource(value: unknown): value is WorkCapsuleSource {
   return typeof value === "string" && SOURCE_SET.has(value);
+}
+
+export function isWorkCapsuleDecisionScope(value: unknown): value is WorkCapsuleDecisionScope {
+  return typeof value === "string" && DECISION_SCOPE_SET.has(value);
+}
+
+export function isWorkCapsulePortfolioRole(value: unknown): value is WorkCapsulePortfolioRole {
+  return typeof value === "string" && PORTFOLIO_ROLE_SET.has(value);
+}
+
+export function isWorkCapsuleScopeActivityKind(value: unknown): value is WorkCapsuleScopeActivityKind {
+  return typeof value === "string" && SCOPE_ACTIVITY_KIND_SET.has(value);
+}
+
+export function isWorkCapsuleOutcomeAnchorKind(value: unknown): value is WorkCapsuleOutcomeAnchorKind {
+  return typeof value === "string" && OUTCOME_ANCHOR_KIND_SET.has(value);
 }
 
 export function isWorkCapsuleExecutorKind(value: unknown): value is WorkCapsuleExecutorKind {
@@ -239,4 +300,109 @@ export function parseScopeClaims(value: unknown): ScopeClaim[] {
       SCOPE_INTENT_SET.has(candidate.intent as ScopeClaim["intent"])
     );
   });
+}
+
+export type WorkCapsuleOutcomeAnchor = {
+  kind: WorkCapsuleOutcomeAnchorKind;
+  id?: string;
+  label?: string;
+  url?: string;
+  source?: string;
+};
+
+export type WorkCapsuleScopeInput = {
+  decisionScope?: unknown;
+  portfolioRole?: unknown;
+  servedPersona?: unknown;
+  activityKind?: unknown;
+  outcomeAnchor?: unknown;
+  servesPortfolioRoles?: unknown;
+  dependsOnPortfolioRoles?: unknown;
+};
+
+export type NormalizedWorkCapsuleScope = {
+  decisionScope: WorkCapsuleDecisionScope | null;
+  portfolioRole: WorkCapsulePortfolioRole | null;
+  servedPersona: string | null;
+  activityKind: WorkCapsuleScopeActivityKind | null;
+  outcomeAnchor: WorkCapsuleOutcomeAnchor | null;
+  servesPortfolioRoles: WorkCapsulePortfolioRole[];
+  dependsOnPortfolioRoles: WorkCapsulePortfolioRole[];
+};
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function normalizeDecisionScope(value: unknown): WorkCapsuleDecisionScope | null {
+  const trimmed = optionalString(value);
+  if (trimmed === null) return null;
+  if (!isWorkCapsuleDecisionScope(trimmed)) {
+    throw new Error(`Invalid decisionScope: ${trimmed}`);
+  }
+  return trimmed;
+}
+
+function normalizePortfolioRole(value: unknown, key: string): WorkCapsulePortfolioRole | null {
+  const trimmed = optionalString(value);
+  if (trimmed === null) return null;
+  if (!isWorkCapsulePortfolioRole(trimmed)) {
+    throw new Error(`Invalid ${key}: ${trimmed}`);
+  }
+  return trimmed;
+}
+
+function normalizeScopeActivityKind(value: unknown): WorkCapsuleScopeActivityKind | null {
+  const trimmed = optionalString(value);
+  if (trimmed === null) return null;
+  if (!isWorkCapsuleScopeActivityKind(trimmed)) {
+    throw new Error(`Invalid activityKind: ${trimmed}`);
+  }
+  return trimmed;
+}
+
+function normalizePortfolioRoleArray(value: unknown, key: string): WorkCapsulePortfolioRole[] {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new Error(`Invalid ${key}: expected array`);
+  return value.map((entry) => {
+    const role = normalizePortfolioRole(entry, key);
+    if (role === null) throw new Error(`Invalid ${key}: empty role`);
+    return role;
+  });
+}
+
+function normalizeOutcomeAnchor(value: unknown): WorkCapsuleOutcomeAnchor | null {
+  if (value == null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid outcomeAnchor: expected object");
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const kind = optionalString(candidate.kind);
+  if (!kind || !isWorkCapsuleOutcomeAnchorKind(kind)) {
+    throw new Error(`Invalid outcomeAnchor.kind: ${kind ?? ""}`);
+  }
+
+  const anchor: WorkCapsuleOutcomeAnchor = { kind };
+  const id = optionalString(candidate.id);
+  const label = optionalString(candidate.label);
+  const url = optionalString(candidate.url);
+  const source = optionalString(candidate.source);
+  if (id) anchor.id = id;
+  if (label) anchor.label = label;
+  if (url) anchor.url = url;
+  if (source) anchor.source = source;
+  return anchor;
+}
+
+export function normalizeWorkCapsuleScopeInput(input?: WorkCapsuleScopeInput | null): NormalizedWorkCapsuleScope {
+  return {
+    decisionScope: normalizeDecisionScope(input?.decisionScope),
+    portfolioRole: normalizePortfolioRole(input?.portfolioRole, "portfolioRole"),
+    servedPersona: optionalString(input?.servedPersona),
+    activityKind: normalizeScopeActivityKind(input?.activityKind),
+    outcomeAnchor: normalizeOutcomeAnchor(input?.outcomeAnchor),
+    servesPortfolioRoles: normalizePortfolioRoleArray(input?.servesPortfolioRoles, "servesPortfolioRoles"),
+    dependsOnPortfolioRoles: normalizePortfolioRoleArray(input?.dependsOnPortfolioRoles, "dependsOnPortfolioRoles"),
+  };
 }

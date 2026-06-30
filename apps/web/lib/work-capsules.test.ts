@@ -2,16 +2,25 @@ import { describe, expect, it } from "vitest";
 
 import {
   WORK_CAPSULE_ACTIVITY_KINDS,
+  WORK_CAPSULE_DECISION_SCOPES,
   WORK_CAPSULE_EVIDENCE_KINDS,
   WORK_CAPSULE_EXECUTOR_KINDS,
+  WORK_CAPSULE_OUTCOME_ANCHOR_KINDS,
+  WORK_CAPSULE_PORTFOLIO_ROLES,
+  WORK_CAPSULE_SCOPE_ACTIVITY_KINDS,
   WORK_CAPSULE_SOURCES,
   WORK_CAPSULE_STATUSES,
   RELEASE_WORKTREE_DEFAULTS,
   buildCapsuleBranchName,
   buildCapsuleSlug,
   buildCapsuleWorktreePath,
+  isWorkCapsuleDecisionScope,
+  isWorkCapsuleOutcomeAnchorKind,
+  isWorkCapsulePortfolioRole,
+  isWorkCapsuleScopeActivityKind,
   isWorkCapsuleStatus,
   isRootClonePath,
+  normalizeWorkCapsuleScopeInput,
   normalizeBranchTaxonomy,
   parseScopeClaims,
 } from "./work-capsules";
@@ -65,6 +74,88 @@ describe("scope claims", () => {
 
     expect(claims).toHaveLength(1);
     expect(claims[0]?.kind).toBe("path");
+  });
+});
+
+describe("layer-scoped capsule metadata", () => {
+  it("declares the closed layer, portfolio, activity, and anchor vocabularies", () => {
+    expect(WORK_CAPSULE_DECISION_SCOPES).toEqual(["wwmd", "wwwd", "wsid"]);
+    expect(WORK_CAPSULE_PORTFOLIO_ROLES).toEqual([
+      "foundational",
+      "manufactureAndDeliver",
+      "forEmployees",
+      "productsAndServicesSold",
+    ]);
+    expect(WORK_CAPSULE_SCOPE_ACTIVITY_KINDS).toContain("craft-judgment");
+    expect(WORK_CAPSULE_OUTCOME_ANCHOR_KINDS).toContain("work-case");
+    expect(WORK_CAPSULE_OUTCOME_ANCHOR_KINDS).toContain("digital-product");
+  });
+
+  it("recognizes valid scope values only", () => {
+    expect(isWorkCapsuleDecisionScope("wwwd")).toBe(true);
+    expect(isWorkCapsuleDecisionScope("business")).toBe(false);
+    expect(isWorkCapsulePortfolioRole("manufactureAndDeliver")).toBe(true);
+    expect(isWorkCapsulePortfolioRole("manufacture-and-deliver")).toBe(false);
+    expect(isWorkCapsuleScopeActivityKind("launch-readiness")).toBe(true);
+    expect(isWorkCapsuleScopeActivityKind("launch_readiness")).toBe(false);
+    expect(isWorkCapsuleOutcomeAnchorKind("coworker")).toBe(true);
+    expect(isWorkCapsuleOutcomeAnchorKind("agent")).toBe(false);
+  });
+
+  it("normalizes empty scope input to nullable fields and empty relationship arrays", () => {
+    expect(normalizeWorkCapsuleScopeInput(undefined)).toEqual({
+      decisionScope: null,
+      portfolioRole: null,
+      servedPersona: null,
+      activityKind: null,
+      outcomeAnchor: null,
+      servesPortfolioRoles: [],
+      dependsOnPortfolioRoles: [],
+    });
+  });
+
+  it("normalizes a scoped company/customer activity without requiring a backlog item", () => {
+    expect(normalizeWorkCapsuleScopeInput({
+      decisionScope: "wwwd",
+      portfolioRole: "productsAndServicesSold",
+      servedPersona: " customer ",
+      activityKind: "delivery",
+      outcomeAnchor: {
+        kind: "work-case",
+        id: "CASE-123",
+        label: " Onboard Contoso ",
+        url: " https://example.test/work-cases/CASE-123 ",
+        source: " customer-portal ",
+      },
+      servesPortfolioRoles: ["productsAndServicesSold", "manufactureAndDeliver"],
+      dependsOnPortfolioRoles: ["foundational"],
+    })).toEqual({
+      decisionScope: "wwwd",
+      portfolioRole: "productsAndServicesSold",
+      servedPersona: "customer",
+      activityKind: "delivery",
+      outcomeAnchor: {
+        kind: "work-case",
+        id: "CASE-123",
+        label: "Onboard Contoso",
+        url: "https://example.test/work-cases/CASE-123",
+        source: "customer-portal",
+      },
+      servesPortfolioRoles: ["productsAndServicesSold", "manufactureAndDeliver"],
+      dependsOnPortfolioRoles: ["foundational"],
+    });
+  });
+
+  it("rejects invalid scope metadata before persistence", () => {
+    expect(() => normalizeWorkCapsuleScopeInput({ decisionScope: "business" })).toThrow(/decisionScope/i);
+    expect(() => normalizeWorkCapsuleScopeInput({ portfolioRole: "sales" })).toThrow(/portfolioRole/i);
+    expect(() => normalizeWorkCapsuleScopeInput({ activityKind: "unknown" })).toThrow(/activityKind/i);
+    expect(() => normalizeWorkCapsuleScopeInput({
+      outcomeAnchor: { kind: "agent" },
+    })).toThrow(/outcomeAnchor/i);
+    expect(() => normalizeWorkCapsuleScopeInput({
+      servesPortfolioRoles: ["productsAndServicesSold", "sales"],
+    })).toThrow(/servesPortfolioRoles/i);
   });
 });
 
