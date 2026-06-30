@@ -3,6 +3,7 @@ import {
   parseProactivityChangeProposalParameters,
 } from "@/lib/proactivity/proactivity-change-proposal";
 import { getProactivityLevelCopy } from "@/lib/proactivity/proactivity-copy";
+import { FIELD_DISPATCH_CUSTOMER_NOTIFICATION_ACTION } from "@/lib/proactivity/field-dispatch-runtime";
 
 export type ActionProposalPresentationInput = {
   proposalId: string;
@@ -28,6 +29,25 @@ const ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION =
 export function projectActionProposalPresentation(
   input: ActionProposalPresentationInput,
 ): ActionProposalPresentation {
+  if (input.actionType === FIELD_DISPATCH_CUSTOMER_NOTIFICATION_ACTION) {
+    const parameters = asRecord(input.parameters);
+    const recommendedAction = readString(parameters?.recommendedAction);
+    const whyNow = readString(parameters?.whyNow);
+    const proactivity = asRecord(parameters?.proactivity);
+    const level = readString(proactivity?.resolvedLevel);
+    const boundary = readString(proactivity?.actionBoundary);
+
+    return {
+      title: recommendedAction ?? "Send customer update",
+      shortLabel: "Customer update",
+      summary: `Why now: ${whyNow ?? "A customer-visible dispatch commitment needs attention."}`,
+      details: [
+        { label: "Proactivity", value: level ? readableProactivityLevel(level) : "Balanced" },
+        { label: "Approval", value: readableActionBoundary(boundary) },
+      ],
+    };
+  }
+
   if (input.actionType === PROACTIVITY_CHANGE_ACTION) {
     const parameters = parseProactivityChangeProposalParameters(input.parameters);
     if (parameters) {
@@ -78,6 +98,19 @@ export function projectActionProposalPresentation(
     summary: `Proposed action ${input.actionType}.`,
     details: [],
   };
+}
+
+function readableProactivityLevel(level: string): string {
+  if (level === "quiet" || level === "balanced" || level === "assertive") {
+    return getProactivityLevelCopy(level).label;
+  }
+  return humanizeActionType(level);
+}
+
+function readableActionBoundary(boundary: string | null): string {
+  if (boundary === "advise") return "Advises only";
+  if (boundary === "preauthorized") return "Pre-approved actions";
+  return "Asks first";
 }
 
 function readableScope(scope: string, scopeRef?: string | null): string {
