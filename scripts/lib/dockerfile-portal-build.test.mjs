@@ -11,6 +11,10 @@ test("portal image build uses the default Next builder under Docker", () => {
   assert.doesNotMatch(dockerfile, /NEXT_TURBOPACK_USE_WORKER=0/);
 });
 
+test("portal image build reserves enough heap for Next production tracing", () => {
+  assert.match(dockerfile, /NODE_OPTIONS="--max-old-space-size=8192"/);
+});
+
 test("runner image carries profession corpus seed assets", () => {
   assert.match(
     dockerfile,
