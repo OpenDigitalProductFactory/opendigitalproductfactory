@@ -244,7 +244,9 @@ The resolver must also intersect with governance:
 - Cost/budget policy constrains `spendClass`.
 - Decision-routing governance constrains legal, tax, compliance, and business judgment responses.
 
-Delegated coworker work is a future resolution layer, not a V1 blocker. If a coworker delegates subtasks to other coworkers, the subtasks should still execute once legitimately delegated; proactivity does not decide whether the work exists. The initiating task may eventually pass advisory context posture, including its proactivity level and golden-triangle cost/quality/time intent. The receiving coworker must then resolve that advisory context against its own local policy, mission, risk, authority, and quality floor. A time-priority caller can bias subtasks toward time, but a receiving coworker responsible for regulated, high-risk, or quality-critical work can override toward higher quality. Track this as `BI-424CFE7A`; do not implement propagation in V1.
+Delegated coworker work is a separate resolution layer, not a V1 blocker. If a coworker delegates subtasks to other coworkers, the subtasks should still execute once legitimately delegated; proactivity does not decide whether the work exists. The initiating task may pass advisory context posture, including its proactivity level and golden-triangle cost/quality/time intent. The receiving coworker must then resolve that advisory context against its own local policy, mission, risk, authority, and quality floor. A time-priority caller can bias subtasks toward time, but a receiving coworker responsible for regulated, high-risk, or quality-critical work can override toward higher quality. `BI-424CFE7A` owns this propagation work.
+
+Implementation status: PR #2524 adds the first shared substrate for `BI-424CFE7A`: `apps/web/lib/proactivity/delegated-posture.ts` resolves advisory caller proactivity and golden-triangle posture against receiver local policy, and `createAutonomousWorkRun` can persist the resolved result to `TaskRun.a2aMetadata.delegatedPosture`. This does not yet wire automatic propagation into every coworker handoff path.
 
 ## 7. Defaults
 
@@ -507,7 +509,7 @@ Right-sizing controls process intensity for development work. Proactivity contro
 
 ### Proactivity vs delegated coworker execution
 
-Delegation decides which coworker owns a subtask. Proactivity decides how persistently that coworker should monitor, follow up, and escalate within its authority. In V1, subtasks execute according to the receiving coworker's local policy. Future work may pass an initiating context override for proactivity and golden-triangle posture, but the receiving coworker's local risk and quality requirements must remain able to override it.
+Delegation decides which coworker owns a subtask. Proactivity decides how persistently that coworker should monitor, follow up, and escalate within its authority. Subtasks execute according to the receiving coworker's local policy unless an initiating context supplies advisory posture that the receiver can safely honor. The receiving coworker's local risk and quality requirements must remain able to override caller proactivity and golden-triangle intent.
 
 ### Proactivity vs Attention Surface
 
@@ -571,6 +573,21 @@ Acceptance:
 - scheduled task runs write `a2aMetadata.proactivity`.
 - failures and ignored attempts can escalate to Attention Surface according to plan.
 - no scheduled task bypasses existing owner/tool/HITL checks.
+
+### Slice 2A: Delegated coworker posture substrate
+
+Files:
+
+- Create `apps/web/lib/proactivity/delegated-posture.ts`
+- Test `apps/web/lib/proactivity/delegated-posture.test.ts`
+- Modify `apps/web/lib/tak/autonomous-work-run.ts`
+
+Acceptance:
+
+- delegated coworker subtasks are never blocked solely because of the caller's proactivity setting.
+- caller proactivity and golden-triangle priority are inherited as advisory context.
+- receiver local policy can override caller posture for regulated, risk-sensitive, or quality-critical work.
+- `TaskRun.a2aMetadata.delegatedPosture` records the resolved posture after generic metadata is merged, so callers cannot accidentally clobber the governed result.
 
 ### Slice 3: Coworker panel/profile UX
 
