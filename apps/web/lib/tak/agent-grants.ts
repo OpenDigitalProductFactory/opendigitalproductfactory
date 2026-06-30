@@ -259,6 +259,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // model; the scope difference is "your needs" vs "everyone's needs", not
   // a privilege difference.
   list_all_capability_needs: ["registry_read"],
+  list_coworker_services: ["coworker_catalog_read"],
+  list_coworker_offers: ["coworker_catalog_read"],
+  get_coworker_offer: ["coworker_catalog_read"],
+  request_coworker_engagement: ["coworker_engagement_write"],
   search_knowledge: ["registry_read"],
   search_knowledge_base: ["registry_read"],
   create_knowledge_article: ["registry_write"],
