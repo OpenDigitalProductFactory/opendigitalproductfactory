@@ -427,12 +427,12 @@ MEMORY_SEEDED_AT=""
 case "$PLAN_CLAUDE_MODE" in
   create|update)
     if [ "$DRY_RUN" -eq 1 ]; then
-      info "DRY-RUN: claude plugin install dpf-platform@dpf-platform-local --scope local"
+      info "DRY-RUN: claude plugin install dpf-platform@dpf-platform-local --scope project"
     else
       (
         cd "$REPO_ROOT"
         "$CLAUDE_BIN" plugin marketplace add ./ --scope local >/dev/null 2>&1 || true
-        "$CLAUDE_BIN" plugin install dpf-platform@dpf-platform-local --scope local >/dev/null 2>&1 || true
+        "$CLAUDE_BIN" plugin install dpf-platform@dpf-platform-local --scope project >/dev/null 2>&1 || true
       ) && { ok "Claude Code plugin wired ($PLAN_CLAUDE_MODE)."; CLAUDE_WIRED=1; } \
         || warn "claude plugin install failed; toolchain remains partial."
     fi
@@ -614,7 +614,7 @@ fi
 
 if [ -z "$MCP_READINESS" ]; then
   if [ $HAS_TOKEN -eq 1 ]; then
-    MCP_READINESS='{"ok": false, "reason": "mcp-unavailable", "httpStatus": null}'
+    MCP_READINESS='{"ok": false, "reason": "endpoint_unreachable", "httpStatus": null}'
   else
     MCP_READINESS='{"ok": false, "reason": "no_token", "httpStatus": null}'
   fi
@@ -644,8 +644,6 @@ if [ "$CLAUDE_WIRED" -eq 0 ] && [ "$CODEX_WIRED" -eq 0 ] && [ "$GROK_WIRED" -eq 
 elif [ "$MCP_OK" != "True" ]; then
   case "$MCP_REASON" in
     no_token|scope_insufficient) FINAL_STATE="missing_token" ;;
-    portal-unavailable)          FINAL_STATE="portal-unavailable" ;;
-    mcp-unavailable)             FINAL_STATE="mcp-unavailable" ;;
     endpoint_unreachable|unexpected_shape) FINAL_STATE="needs_refresh" ;;
     *)                                     FINAL_STATE="needs_refresh" ;;
   esac
@@ -690,8 +688,6 @@ case "$FINAL_STATE" in
   missing_cli)   BANNER_MSG="Install the selected agent client to enable contributor sessions.";                 BANNER_ACTION="Open setup guide" ;;
   missing_token) BANNER_MSG="DPF MCP needs a development token before agents can use governed tools.";           BANNER_ACTION="Issue development token" ;;
   needs_refresh) BANNER_MSG="A token exists, but the running client has not picked it up yet.";                  BANNER_ACTION="Refresh client binding" ;;
-  portal-unavailable) BANNER_MSG="The portal is rebooting; I can still repair local agent tooling and will sync evidence when it comes back."; BANNER_ACTION="Continue local repair" ;;
-  mcp-unavailable) BANNER_MSG="DPF coordination is unavailable; I can still repair local agent tooling and will sync evidence when it returns."; BANNER_ACTION="Continue local repair" ;;
   failed_smoke)  BANNER_MSG="The agent is installed but did not apply a DPF kernel principle.";                  BANNER_ACTION="View evidence" ;;
 esac
 

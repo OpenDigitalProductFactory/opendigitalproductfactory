@@ -12,7 +12,7 @@
       "name": "dpf-platform",
       "source": "./packages/dpf-skill-pack",
       "description": "DPF-native agent plugin for contributor sessions and in-portal coworker seed source.",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "author": {
         "name": "Digital Product Factory"
       },

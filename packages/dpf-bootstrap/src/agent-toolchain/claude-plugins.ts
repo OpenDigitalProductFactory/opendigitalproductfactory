@@ -5,8 +5,10 @@
  * worktrees.
  *
  * Pure JSON arithmetic — no `claude plugin install` invocation. Shell adapter
- * applies the plan (or invokes `claude plugin install ... --scope local` if
- * the plan calls for it).
+ * applies the plan (or invokes `claude plugin install ... --scope project` if
+ * the plan calls for it). Scope is `project` to match the plugin enablement in
+ * the repo's committed `.claude/settings.json` (`enabledPlugins`); a mismatched
+ * `local`-scope install would create a redundant second entry for the same repo.
  */
 
 import { existsSync } from "node:fs";
@@ -116,7 +118,7 @@ export function planClaudePluginConfig(
   if (mode === "create" || mode === "update") {
     const now = new Date().toISOString();
     const nextEntry: InstalledPluginEntry = {
-      scope: "local",
+      scope: "project",
       projectPath: repoRoot,
       installPath: `<cache>/${MARKETPLACE}/dpf-platform/${expectedVersion}`,
       version: expectedVersion,
@@ -156,7 +158,7 @@ export function planClaudePluginConfig(
 
   let rationale: string;
   if (mode === "create") {
-    rationale = `Install dpf-platform@${expectedVersion} (scope=local) for ${repoRoot}.`;
+    rationale = `Install dpf-platform@${expectedVersion} (scope=project) for ${repoRoot}.`;
   } else {
     rationale = existingForRepo
       ? `Upgrade dpf-platform from ${existingForRepo.version} -> ${expectedVersion} for ${repoRoot}.`
