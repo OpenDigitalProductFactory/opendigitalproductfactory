@@ -93,7 +93,10 @@ export function BuildStudioConfigForm({
   // BI-E06BB38A: technical knobs (raw context window, manual model, Apply/Test)
   // live behind this disclosure so the default view never asks for a token count.
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const autoCheckedRef = useRef(false);
+  // Tracks the last opencode providerId we preflighted, so switching the
+  // selected local provider (e.g. local → Ollama) re-probes the new endpoint
+  // instead of showing the previous provider's stale readiness.
+  const autoCheckedRef = useRef<string | null>(null);
 
   const hasClaudeCreds = claudeProviders.some(p => isConfigured(p.status));
   const hasCodexCreds = codexProviders.some(p => isConfigured(p.status));
@@ -112,7 +115,7 @@ export function BuildStudioConfigForm({
     setContextResult(null);
     startTransition(async () => {
       try {
-        const result = await checkLocalEndpoint(opencodeModel);
+        const result = await checkLocalEndpoint(opencodeModel, opencodeProviderId);
         setEndpointCheck(result);
         // Prefill the context input with the real served size (or the floor) so
         // the operator edits from the truth, not a blank box.
@@ -171,16 +174,24 @@ export function BuildStudioConfigForm({
     });
   }
 
-  // BI-E06BB38A: auto-preflight the local endpoint once when OpenCode is the
+  // BI-E06BB38A: auto-preflight the local endpoint when OpenCode is the
   // selected engine, so the default view shows the auto-sized context + model
   // read-only — the operator never has to click "Test" or type a token count.
+  // Re-runs when the selected local provider changes so switching e.g. from the
+  // Docker Model Runner provider to a distinct "Ollama" provider probes the new
+  // endpoint rather than leaving the previous provider's readiness on screen.
   useEffect(() => {
-    if (provider === "opencode" && hasOpencodeProvider && openCodeDescription.isLocal && !autoCheckedRef.current) {
-      autoCheckedRef.current = true;
+    if (
+      provider === "opencode" &&
+      hasOpencodeProvider &&
+      openCodeDescription.isLocal &&
+      autoCheckedRef.current !== opencodeProviderId
+    ) {
+      autoCheckedRef.current = opencodeProviderId;
       runEndpointCheck();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider, openCodeDescription.isLocal]);
+  }, [provider, opencodeProviderId, openCodeDescription.isLocal]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>

@@ -3,7 +3,7 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
-import { getOllamaBaseUrl, getOllamaApiRoot } from "@/lib/inference/ollama-url";
+import { getOllamaBaseUrl, getOllamaApiRoot, resolveOpencodeProviderBaseUrl } from "@/lib/inference/ollama-url";
 import { preflightLocalEndpoint, OPENCODE_MIN_CONTEXT_TOKENS, type LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
 import { setServedContextTokens } from "@/lib/inference/dmr-runtime-config";
 import { getLocalOnlyInference, setLocalOnlyInference } from "@/lib/inference/local-only";
@@ -80,9 +80,20 @@ export async function saveBuildStudioConfig(
  */
 export async function checkLocalEndpoint(
   model: string,
+  opencodeProviderId?: string,
 ): Promise<LocalEndpointPreflight> {
   await requireManageProviders();
-  const portalBaseUrl = getOllamaBaseUrl().replace(/\/$/, "");
+  // Probe the endpoint of the SELECTED opencode provider — so picking a seeded
+  // "Ollama" provider hits its own baseUrl (localhost:11434) and honestly
+  // reports reachable/not, instead of silently borrowing the Docker Model
+  // Runner default and showing a green "Ready" that was really DMR's status.
+  const provider = opencodeProviderId
+    ? await prisma.modelProvider.findFirst({
+        where: { providerId: opencodeProviderId, cliEngine: "opencode" },
+        select: { providerId: true, endpoint: true, baseUrl: true },
+      })
+    : null;
+  const portalBaseUrl = resolveOpencodeProviderBaseUrl(provider).replace(/\/$/, "");
   // checkServedContext: read the authoritative runtime context window so the
   // UX shows the real served size (e.g. a 32768 override) and warns/blocks
   // below the agent floor — not the misleading /v1/models artifact default.
