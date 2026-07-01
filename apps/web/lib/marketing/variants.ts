@@ -159,15 +159,24 @@ export async function recordVariantResult(
   if (!existing) {
     return { error: "no-variant", message: `No variant ${input.variantId}.` };
   }
-  const data: Record<string, unknown> = {};
-  if (typeof input.impressions === "number") data["impressions"] = Math.max(0, Math.round(input.impressions));
-  if (typeof input.clicks === "number") data["clicks"] = Math.max(0, Math.round(input.clicks));
-  if (typeof input.conversions === "number") data["conversions"] = Math.max(0, Math.round(input.conversions));
-  if (typeof input.status === "string" && input.status.trim()) data["status"] = input.status.trim();
-  if (Object.keys(data).length === 0) {
+  const hasImpressions = typeof input.impressions === "number";
+  const hasClicks = typeof input.clicks === "number";
+  const hasConversions = typeof input.conversions === "number";
+  const hasStatus = typeof input.status === "string" && input.status.trim().length > 0;
+  if (!hasImpressions && !hasClicks && !hasConversions && !hasStatus) {
     return { error: "no-op", message: "Nothing to update — pass impressions, clicks, conversions, or status." };
   }
-  await prisma.marketingAssetVariant.update({ where: { variantId: input.variantId }, data });
+  // Inline conditional spreads (not a Record<string, unknown> intermediate) so
+  // Prisma's typed update input validates each field — see updateMarketingCampaign.
+  await prisma.marketingAssetVariant.update({
+    where: { variantId: input.variantId },
+    data: {
+      ...(hasImpressions ? { impressions: Math.max(0, Math.round(input.impressions!)) } : {}),
+      ...(hasClicks ? { clicks: Math.max(0, Math.round(input.clicks!)) } : {}),
+      ...(hasConversions ? { conversions: Math.max(0, Math.round(input.conversions!)) } : {}),
+      ...(hasStatus ? { status: input.status!.trim() } : {}),
+    },
+  });
   return { variantId: input.variantId, message: `Updated variant "${existing.label}".` };
 }
 
