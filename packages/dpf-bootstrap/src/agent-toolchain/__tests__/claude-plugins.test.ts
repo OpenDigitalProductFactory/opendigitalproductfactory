@@ -36,7 +36,7 @@ describe("planClaudePluginConfig", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0].projectPath).toBe(REPO_LIVE);
     expect(entries[0].version).toBe("0.1.0");
-    expect(entries[0].scope).toBe("local");
+    expect(entries[0].scope).toBe("project");
   });
 
   it("is a no-op when the plugin is already installed at the expected version", () => {
