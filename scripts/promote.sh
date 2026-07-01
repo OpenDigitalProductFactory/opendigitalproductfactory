@@ -295,5 +295,26 @@ if [[ $_dry_run -eq 0 ]]; then
       "${_running_hash:-unknown}" "$_built_hash" >&2
     exit 1
   }
+fi
+
+# --- Step 8: cleanup ---
+# A successful swap leaves the PREVIOUS portal image untagged (dangling) plus the
+# BuildKit cache layers from step 3's rebuild. Nothing else sweeps them, so across
+# upgrades they pile into tens of GB of dead disk (an operator hit ~57 GB of dangling
+# images + build cache before this step existed). Reclaim them now — but ONLY after
+# every verify above has passed (so a still-needed rollback image is never pruned) and
+# BEST-EFFORT (a cleanup hiccup must never fail an upgrade that already succeeded).
+# Scope is deliberately conservative: dangling images only (never `docker image prune -a`,
+# which would delete tagged images the compose stack still needs) and build cache.
+# Volumes are NEVER touched here — operator DB/state lives in volumes.
+emit_step cleanup
+if [[ $_dry_run -eq 0 ]]; then
+  docker image prune -f >/dev/null 2>&1 || true
+  docker builder prune -f >/dev/null 2>&1 || true
+fi
+
+# Terminal success marker — emitted only after every verify AND the cleanup sweep, so
+# `step=done` continues to mean "fully promoted" for the orchestrator.
+if [[ $_dry_run -eq 0 ]]; then
   printf 'step=done target=%s\n' "$_built_sha"
 fi
