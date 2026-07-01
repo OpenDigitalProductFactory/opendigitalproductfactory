@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { COWORKER_SERVICE_CATALOG_SERVICE_SEEDS } from "@dpf/db";
+// Import via the subpath (not bare "@dpf/db", which the apps/web vitest alias
+// maps to client.ts, exposing only the prisma client — not the seed barrel).
+import { COWORKER_SERVICE_CATALOG_SERVICE_SEEDS } from "@dpf/db/coworker-service-catalog-seed";
 import { marketingPack } from "./marketing-pack";
 
 // Drift guard (BI-4C5F7A2D): neither A2A nor the coworker service catalog

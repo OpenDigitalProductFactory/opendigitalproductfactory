@@ -398,10 +398,3 @@ export {
   CONTRIBUTOR_INVENTORY_JOB_NAME,
   CONTRIBUTOR_INVENTORY_SCHEDULE,
 } from "./seed-contributor-inventory";
-
-// Coworker service catalog seed data (exported so app-layer drift tests can
-// assert tool→service coverage). BI-4C5F7A2D.
-export {
-  COWORKER_SERVICE_CATALOG_SERVICE_SEEDS,
-  COWORKER_SERVICE_CATALOG_OFFER_SEEDS,
-} from "./coworker-service-catalog-seed";
