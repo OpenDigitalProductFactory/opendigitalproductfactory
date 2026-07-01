@@ -22,6 +22,7 @@ vi.mock("./kpi-pullback", () => ({ pullChannelKpis: vi.fn() }));
 
 import { prisma } from "@dpf/db";
 import {
+  parseDueWindowToDate,
   planUpcomingForAssetTasks,
   scheduleAction,
   tickScheduler,
@@ -168,5 +169,38 @@ describe("planUpcomingForAssetTasks", () => {
     const result = await planUpcomingForAssetTasks({ organizationId: "org-1" });
     expect(result.scheduled).toBe(0);
     expect(result.skipped).toBe(1);
+  });
+});
+
+describe("parseDueWindowToDate", () => {
+  const createdAt = new Date("2026-01-01T00:00:00.000Z");
+
+  it("resolves 1-based 'week N' relative to createdAt", () => {
+    expect(parseDueWindowToDate("week 1", createdAt)!.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+    expect(parseDueWindowToDate("week 5", createdAt)!.toISOString()).toBe("2026-01-29T00:00:00.000Z");
+  });
+
+  it("clamps 'week 0' to week 1 instead of going a week into the past", () => {
+    expect(parseDueWindowToDate("week 0", createdAt)!.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  it("returns null (never an Invalid Date) on an overflowing week/day count", () => {
+    // Regression: an Invalid Date is truthy and would crash get_content_calendar
+    // via toISOString(). Must be null so the task lands in `unscheduled`.
+    expect(parseDueWindowToDate("week 999999999999", createdAt)).toBeNull();
+    expect(parseDueWindowToDate("next 999999999999 days", createdAt)).toBeNull();
+  });
+
+  it("parses a leading YYYY-MM-DD as UTC midnight", () => {
+    expect(parseDueWindowToDate("2026-07-15", createdAt)!.toISOString()).toBe("2026-07-15T00:00:00.000Z");
+    expect(parseDueWindowToDate("2026-07-15T09:30:00Z", createdAt)!.toISOString()).toBe("2026-07-15T00:00:00.000Z");
+  });
+
+  it("rejects bare numbers and locale date strings (→ unscheduled) rather than misbucketing", () => {
+    // "2" → new Date("2") is Feb 2001; "July 15 2026" parses in server-local TZ.
+    // Both silently land tasks in the wrong week, so we return null instead.
+    expect(parseDueWindowToDate("2", createdAt)).toBeNull();
+    expect(parseDueWindowToDate("July 15 2026", createdAt)).toBeNull();
+    expect(parseDueWindowToDate("sometime soon", createdAt)).toBeNull();
   });
 });

@@ -195,9 +195,12 @@ export function summarizeCampaignPerformance(input: {
 /** Coerce a lastMetricsSnapshot JSON blob into a numeric metric row. Defensive:
  *  missing/non-numeric fields become 0 so a partially-populated snapshot still
  *  contributes what it has. */
-function metricRowFromSnapshot(channel: string, snapshot: unknown): PublicationMetricRow {
+export function metricRowFromSnapshot(channel: string, snapshot: unknown): PublicationMetricRow {
   const m = snapshot && typeof snapshot === "object" ? (snapshot as Record<string, unknown>) : {};
-  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  // Clamp to >= 0: a corrupt/adversarial snapshot with a negative count would
+  // otherwise flow into totals and produce a negative CTR/conversion rate in
+  // the rollup and headline. Mirrors recordVariantResult's clamping.
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, v) : 0);
   return {
     channel,
     impressions: num(m.impressions),

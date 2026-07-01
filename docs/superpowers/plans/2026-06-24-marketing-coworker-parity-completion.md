@@ -73,6 +73,30 @@ Each slice: vitest for the pure logic; CI Typecheck (vitest's esbuild path skips
 types — always confirm `tsc` on touched files, INCLUDING test files); Production
 Build; tool-registry no-drift. Merge queue lands each on `main`.
 
+## Post-merge hardening (follow-up branch feat/marketing-calendar-date-hardening)
+
+An adversarial correctness pass over the merged modules found robustness gaps
+before the first live run, fixed in a follow-up:
+
+- **HIGH — calendar crash.** `parseDueWindowToDate` (scheduler.ts) returned an
+  *Invalid Date* (not null) on an overflowing `"week N"` / `"next N days"`
+  string. An Invalid Date is truthy, so it slipped past the `!due` guard and
+  threw `RangeError` in `toISOString()` — crashing `get_content_calendar` for
+  the whole workspace on one bad task string. Fixed at source: every branch now
+  returns null on a non-finite date; `buildContentCalendar` also guards
+  defensively.
+- **MEDIUM — silent misbucketing.** The ISO fallback accepted bare numbers
+  (`"2"` → Feb 2001) and locale strings parsed in server-local time (wrong
+  Mon–Sun week). Now only a leading `YYYY-MM-DD` parsed as UTC is accepted;
+  anything ambiguous → `unscheduled` (honest, visible).
+- **LOW.** `"week 0"` clamped to week 1 (was 7 days early); negative snapshot
+  counts clamped to 0 in `metricRowFromSnapshot` so the rollup can't show a
+  negative CTR.
+
+New tests: parseDueWindowToDate (6 cases), calendar overflow→unscheduled,
+metricRowFromSnapshot coercion/clamp. Pure code hardening — no schema, no
+production changes.
+
 ## Out of scope
 
 Live external endpoint calls remain stubbed by design (per the operator directive).

@@ -104,6 +104,24 @@ describe("buildContentCalendar", () => {
     expect(channelTotal).toBe(cal.totalTasks);
   });
 
+  it("routes an overflowing 'week N' due window to unscheduled without throwing", () => {
+    // Regression: parseDueWindowToDate used to return an Invalid Date here, which
+    // is truthy and crashed the whole calendar via isoDate/toISOString.
+    expect(() =>
+      buildContentCalendar([
+        task({ taskId: "ok", dueWindow: "2026-07-15" }),
+        task({ taskId: "overflow", dueWindow: "week 999999999999" }),
+      ]),
+    ).not.toThrow();
+    const cal = buildContentCalendar([
+      task({ taskId: "ok", dueWindow: "2026-07-15" }),
+      task({ taskId: "overflow", dueWindow: "week 999999999999" }),
+    ]);
+    expect(cal.weeks).toHaveLength(1);
+    expect(cal.unscheduled.map((e) => e.taskId)).toEqual(["overflow"]);
+    expect(cal.totalTasks).toBe(2);
+  });
+
   it("returns an empty calendar for no tasks", () => {
     const cal = buildContentCalendar([]);
     expect(cal).toEqual({
