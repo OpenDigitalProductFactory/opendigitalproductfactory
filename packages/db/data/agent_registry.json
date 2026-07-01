@@ -3182,6 +3182,9 @@
           "consumer_read",
           "marketing_read",
           "marketing_write",
+          "work_engagement_read",
+          "work_engagement_write",
+          "work_engagement_transition",
           "registry_read"
         ]
       }
