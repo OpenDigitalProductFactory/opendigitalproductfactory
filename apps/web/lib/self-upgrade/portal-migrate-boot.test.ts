@@ -111,6 +111,28 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
     }
   }, TIMEOUT_MS);
 
+  it("DEGRADES OPEN — still starts the server when model-capability reconciliation fails", () => {
+    // Regression guard for the portal boot-loop: a stale/partial model catalog is a
+    // degraded state, not a correctness hazard, so reconcile-catalog-capabilities.ts
+    // failing (e.g. a new/renamed model the reconciler can't write) must NOT block boot.
+    const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
+    try {
+      const appDir = join(root, "app");
+      mkdirSync(appDir, { recursive: true });
+      const r = run({
+        appDir,
+        fakeBin: makeFakeBin(root),
+        pnpmExit: 0,
+        pnpmFailMatch: "scripts/reconcile-catalog-capabilities.ts",
+      });
+      expect(r.status).toBe(0); // boot still succeeds
+      expect(r.stderr).toContain("catalog capability reconciliation failed");
+      expect(r.stdout).toContain("BOOT_MARKER"); // server WAS started despite the failure
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, TIMEOUT_MS);
+
   it("FAILS CLOSED — does not start the server when migrations cannot apply", () => {
     const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
     try {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildCatalogHash, diffExcludingOverrides, catalogEntryToProfileFields, resolveKnownProviderModelsPath } from "./reconcile-catalog-capabilities";
 import type { KnownModel } from "../../../apps/web/lib/routing/known-provider-models";
+import { KNOWN_PROVIDER_MODELS } from "../../../apps/web/lib/routing/known-provider-models";
 import { EMPTY_CAPABILITIES } from "../../../apps/web/lib/routing/model-card-types";
 
 const sampleModel: KnownModel = {
@@ -124,5 +125,40 @@ describe("admin row-level protection", () => {
     const diff = diffExcludingOverrides(profile as any, entry as any, null);
     expect(diff).toEqual({ supportsToolUse: true, toolFidelity: 80 });
     // The reconcile loop (not this helper) is responsible for skipping admin+null rows.
+  });
+});
+
+// Catalog-integrity guard — the whole point of "bulletproof": every model that ships
+// in KNOWN_PROVIDER_MODELS must map to a create-ready ModelProfile shape. Adding a new
+// model (e.g. Sonnet 5), or editing one during a retire/deprecate, that omits a
+// required column or uses a bad status now fails CI with a per-model message, instead
+// of surfacing as a boot-time PrismaClientValidationError on the create path.
+describe("catalog integrity — every KNOWN_PROVIDER_MODELS entry is create-ready", () => {
+  const allEntries: Array<{ providerId: string; modelId: string; model: KnownModel }> =
+    Object.entries(KNOWN_PROVIDER_MODELS).flatMap(([providerId, models]) =>
+      (models as KnownModel[]).map((model) => ({ providerId, modelId: model.modelId, model })),
+    );
+
+  it("has at least one catalog model", () => {
+    expect(allEntries.length).toBeGreaterThan(0);
+  });
+
+  // Required, non-nullable ModelProfile columns that catalogEntryToProfileFields supplies.
+  const REQUIRED_STRING_COLUMNS = ["capabilityCategory", "costTier", "friendlyName", "summary", "modelClass"] as const;
+  const VALID_MODEL_STATUSES = ["active", "retired", "disabled"];
+
+  it.each(allEntries)("$providerId/$modelId maps to a valid profile shape", ({ providerId, modelId, model }) => {
+    const label = `${providerId}/${modelId}`;
+    const fields = catalogEntryToProfileFields(model) as Record<string, unknown>;
+
+    for (const col of REQUIRED_STRING_COLUMNS) {
+      const value = fields[col];
+      expect(typeof value, `${label} — column '${col}' must be a string`).toBe("string");
+      expect((value as string).length, `${label} — column '${col}' must be non-empty`).toBeGreaterThan(0);
+    }
+    // Retire/deprecate path: defaultStatus drives modelStatus; must land on a known value.
+    expect(VALID_MODEL_STATUSES, `${label} — modelStatus`).toContain(fields.modelStatus);
+    // Hashing must be deterministic and never throw (used for idempotent reconcile).
+    expect(() => buildCatalogHash(model)).not.toThrow();
   });
 });
