@@ -150,6 +150,38 @@ async function recordActivityTx(
   return { activityId: row.id, seq: row.seq };
 }
 
+/** Read a parent engagement's materialized instances (optionally by status window). */
+export async function getWorkEngagementInstances(
+  parentId: string,
+  opts?: { status?: WorkEngagementStatus },
+): Promise<
+  | { message: string; data: { parentId: string; instances: unknown[] } }
+  | { error: string; message: string }
+> {
+  const parent = await prisma.workEngagement.findUnique({
+    where: { id: parentId },
+    select: { id: true, title: true },
+  });
+  if (!parent) {
+    return { error: "not-found", message: `WorkEngagement ${parentId} does not exist.` };
+  }
+  const instances = await prisma.workEngagement.findMany({
+    where: {
+      parentWorkEngagementId: parentId,
+      ...(opts?.status ? { status: opts.status } : {}),
+    },
+    orderBy: { instanceNumber: "asc" },
+    select: {
+      id: true, instanceNumber: true, occurrenceAt: true, dueAt: true, status: true,
+      exceptionState: true, lastActivityAt: true,
+    },
+  });
+  return {
+    message: `"${parent.title}" — ${instances.length} instance(s)${opts?.status ? ` in status ${opts.status}` : ""}.`,
+    data: { parentId, instances },
+  };
+}
+
 export type CreateRecurringInput = {
   organizationId: string;
   title: string;
