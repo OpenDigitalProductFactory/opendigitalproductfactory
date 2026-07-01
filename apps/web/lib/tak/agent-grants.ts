@@ -482,6 +482,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_asset_variants:           ["marketing_read"],
   create_asset_variant:         ["marketing_write"],
   record_variant_result:        ["marketing_write"],
+  get_battlecards:              ["marketing_read"],
+  create_battlecard:            ["marketing_write"],
   create_marketing_campaign:    ["marketing_write"],
   update_marketing_campaign:    ["marketing_write"],
   attach_to_campaign:           ["marketing_write"],

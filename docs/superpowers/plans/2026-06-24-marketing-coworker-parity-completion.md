@@ -57,11 +57,15 @@ treatments per asset — the market-standard content-production differentiator.
 > CI's Typecheck (fresh client from the full schema) is the authoritative gate, as
 > it was for the merged slices. vitest (esbuild, no types) is green: 309 tests.
 
-### Slice C — Competitive battlecard (next)
-`MarketingBattlecard` durable artifact (competitor, positioning, strengths,
-weaknesses, differentiators, objection handling) + create/get tools, upgrading the
-existing conversational `competitive-analysis` skill from chat-only to a saved,
-reusable asset.
+### Slice C — Competitive battlecard (DONE, this branch)
+`MarketingBattlecard` durable artifact (competitor, positioning, their strengths/
+weaknesses, our differentiators, win themes, structured objection handling) +
+migration. Tools `create_battlecard` / `get_battlecards`; the latter projects a
+pure competitive matrix (`buildCompetitiveMatrix`: sorted competitors, de-duped
+differentiator union, per-competitor coverage) — 5 unit tests. Upgrades the
+conversational `competitive-analysis` skill from chat-only to a saved, reusable
+asset. Persona roster updated. Same worktree tsc caveat as Slice B — CI is
+authoritative; vitest green: 314 tests.
 
 ## Verification
 

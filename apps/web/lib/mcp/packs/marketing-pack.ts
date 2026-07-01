@@ -201,6 +201,47 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_marketing",
     sideEffect: false,
   },
+  {
+    name: "create_battlecard",
+    description:
+      "Create a durable competitive battlecard for one competitor: our positioning against them, their strengths and weaknesses, our differentiators, win themes, and structured objection handling. Use to turn competitive-analysis findings into a reusable asset the sales/marketing motion can lean on — not just chat. Read them back as a competitive matrix with get_battlecards.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        competitorName: { type: "string", description: "The competitor this card is about" },
+        positioning: { type: "string", description: "How we position against them in one or two sentences" },
+        theirStrengths: { type: "array", items: { type: "string" }, description: "What they do well (be honest)" },
+        theirWeaknesses: { type: "array", items: { type: "string" }, description: "Where they are weak / where we win" },
+        ourDifferentiators: { type: "array", items: { type: "string" }, description: "Our concrete differentiators vs them" },
+        winThemes: { type: "array", items: { type: "string" }, description: "The themes that win deals against them" },
+        objectionHandling: {
+          type: "array",
+          description: "Common objections and how to answer them",
+          items: {
+            type: "object",
+            properties: {
+              objection: { type: "string" },
+              response: { type: "string" },
+            },
+            required: ["objection", "response"],
+          },
+        },
+        notes: { type: "string", description: "Optional free-form notes" },
+      },
+      required: ["competitorName"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
+    name: "get_battlecards",
+    description:
+      "Read the org's competitive battlecards plus a projected competitive matrix: the sorted set of active competitors, the de-duplicated union of differentiators we claim, and per-competitor coverage. Use to see competitive positioning at a glance and spot competitors with thin differentiation.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    requiredCapability: "view_marketing",
+    sideEffect: false,
+  },
 ];
 
 async function buildTrackedLinksHandler(
@@ -356,6 +397,52 @@ async function getAssetVariantsHandler(params: Record<string, unknown>): Promise
   return { success: true, message: result.message, data: result.data };
 }
 
+async function createBattlecardHandler(
+  params: Record<string, unknown>,
+  _userId: string,
+  context?: { agentId?: string },
+): Promise<ToolResult> {
+  const { createBattlecard } = await import("@/lib/marketing/battlecards");
+  const asStrings = (v: unknown): string[] | undefined =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : undefined;
+  const objectionHandling = Array.isArray(params["objectionHandling"])
+    ? (params["objectionHandling"] as unknown[]).flatMap((e) =>
+        e && typeof e === "object" &&
+        typeof (e as Record<string, unknown>)["objection"] === "string" &&
+        typeof (e as Record<string, unknown>)["response"] === "string"
+          ? [{
+              objection: String((e as Record<string, unknown>)["objection"]),
+              response: String((e as Record<string, unknown>)["response"]),
+            }]
+          : [],
+      )
+    : undefined;
+  const result = await createBattlecard({
+    competitorName: String(params["competitorName"] ?? ""),
+    positioning: typeof params["positioning"] === "string" ? params["positioning"] : undefined,
+    theirStrengths: asStrings(params["theirStrengths"]),
+    theirWeaknesses: asStrings(params["theirWeaknesses"]),
+    ourDifferentiators: asStrings(params["ourDifferentiators"]),
+    winThemes: asStrings(params["winThemes"]),
+    objectionHandling,
+    notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
+    createdByAgentId: context?.agentId ?? null,
+  });
+  if ("error" in result) {
+    return { success: false, error: result.error, message: result.message };
+  }
+  return { success: true, entityId: result.battlecardId, message: result.message };
+}
+
+async function getBattlecardsHandler(): Promise<ToolResult> {
+  const { getBattlecards } = await import("@/lib/marketing/battlecards");
+  const result = await getBattlecards();
+  if ("error" in result) {
+    return { success: false, error: result.error, message: result.message };
+  }
+  return { success: true, message: result.message, data: result.data };
+}
+
 export const marketingPack: ToolPack = {
   packId: "marketing",
   definitions,
@@ -370,6 +457,8 @@ export const marketingPack: ToolPack = {
     create_asset_variant: (params, userId, context) => createAssetVariantHandler(params, userId, context),
     record_variant_result: (params) => recordVariantResultHandler(params),
     get_asset_variants: (params) => getAssetVariantsHandler(params),
+    create_battlecard: (params, userId, context) => createBattlecardHandler(params, userId, context),
+    get_battlecards: () => getBattlecardsHandler(),
   },
   grants: {
     build_tracked_links: ["marketing_read"],
@@ -382,5 +471,7 @@ export const marketingPack: ToolPack = {
     create_asset_variant: ["marketing_write"],
     record_variant_result: ["marketing_write"],
     get_asset_variants: ["marketing_read"],
+    create_battlecard: ["marketing_write"],
+    get_battlecards: ["marketing_read"],
   },
 };

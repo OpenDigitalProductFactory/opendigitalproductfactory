@@ -3083,6 +3083,7 @@ model Organization {
   marketingCampaignBriefs       MarketingCampaignBrief[]
   marketingAssetTasks           MarketingAssetTask[]
   marketingAssetVariants        MarketingAssetVariant[]
+  marketingBattlecards          MarketingBattlecard[]
   marketingKpiCheckpoints       MarketingKpiCheckpoint[]
   marketingAutomationCandidates MarketingAutomationCandidate[]
   taxProfile                    OrganizationTaxProfile?
@@ -7727,6 +7728,33 @@ model MarketingAssetVariant {
 
   @@index([organizationId, createdAt])
   @@index([taskId])
+  @@index([status])
+}
+
+// Competitive battlecard (EP-MARKETING-EXEC parity slice C). Upgrades the
+// competitive-analysis skill from chat-only advice to a durable, reusable
+// artifact: one card per competitor with positioning, their strengths/
+// weaknesses, our differentiators, win themes, and structured objection
+// handling. Multiple cards project into a competitive matrix for the coworker.
+model MarketingBattlecard {
+  battlecardId       String   @id @default(cuid())
+  organizationId     String
+  competitorName     String
+  positioning        String?
+  theirStrengths     String[] @default([])
+  theirWeaknesses    String[] @default([])
+  ourDifferentiators String[] @default([])
+  winThemes          String[] @default([])
+  objectionHandling  Json?
+  notes              String?
+  status             String   @default("active")
+  createdByAgentId   String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
   @@index([status])
 }
 
