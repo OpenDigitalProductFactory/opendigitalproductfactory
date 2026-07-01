@@ -77,3 +77,24 @@ Build; tool-registry no-drift. Merge queue lands each on `main`.
 
 Live external endpoint calls remain stubbed by design (per the operator directive).
 The value is the internal establish→execute→measure workflow reaching market parity.
+
+## Coworker-substrate integration (BI-4C5F7A2D, branch feat/marketing-coworker-catalog)
+
+A review (prompted by the operator) found the marketing coworker's tools were
+registered in the tool registry + grants but NOT integrated with three
+cross-cutting substrates — none of which auto-derive from the tool registry:
+
+- **A2A + service catalog (fixed here).** Coworker services are explicit seed
+  records in `packages/db/src/coworker-service-catalog-seed.ts`. There were zero
+  marketing-execution services, so the whole marketing coworker was invisible to
+  A2A discovery and `list_coworker_services`. Added 3 internal services
+  (campaign-execution, ab-testing, competitive-intelligence) + offers covering
+  all 12 marketing-pack tools, plus a drift-guard test
+  (`marketing-catalog-coverage.test.ts`) asserting every marketing tool has a
+  backing service so this can't silently recur. Internal scope → no GAID/AIDoc.
+- **Work-capture (deferred — design decision).** Marketing tools write only
+  their domain rows; they emit no `Activity` (CRM-centric) or `CoworkerEngagement`
+  record, while CRM and platform-dev work do. Which capture layer marketing
+  should use is a genuine design call (Activity vs. CoworkerEngagement vs.
+  MarketingReview-is-enough) — tracked in BI-4C5F7A2D for a kernel decision, not
+  guessed here.
