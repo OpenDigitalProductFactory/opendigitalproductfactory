@@ -23,6 +23,25 @@ export function getOllamaBaseUrl(provider?: ProviderUrlFields | null): string {
 }
 
 /**
+ * Resolve the endpoint to preflight for an explicitly-selected OpenCode
+ * provider. The default local provider (`local`, or none) keeps the env-first
+ * resolution of getOllamaBaseUrl — LLM_BASE_URL / OLLAMA_INTERNAL_URL govern
+ * the *default* local endpoint and must not regress. A distinct selected
+ * provider — e.g. `ollama` at http://localhost:11434 — uses its OWN
+ * endpoint/baseUrl, so a config-time preflight probes the box the operator
+ * actually picked instead of silently borrowing the Docker Model Runner
+ * default. Fixes the case where selecting a seeded "Ollama" provider reported a
+ * green "Ready" that was really Docker Model Runner's status.
+ */
+export function resolveOpencodeProviderBaseUrl(provider?: ProviderUrlFields | null): string {
+  const explicit = provider?.endpoint ?? provider?.baseUrl ?? null;
+  if (provider && provider.providerId !== "local" && explicit) {
+    return explicit;
+  }
+  return getOllamaBaseUrl(provider);
+}
+
+/**
  * Returns the root URL for the local provider's Ollama-native management API
  * (`/api/tags`, `/api/pull`, `/api/version`).
  *
