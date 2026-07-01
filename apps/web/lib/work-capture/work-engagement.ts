@@ -77,13 +77,23 @@ export async function transitionWorkEngagement(
 
   await prisma.$transaction(async (tx) => {
     await tx.workEngagement.update({ where: { id: input.engagementId }, data: { status: input.to } });
-    await recordActivityTx(tx, {
-      engagementId: input.engagementId,
-      kind: "status-change",
-      summary: input.summary ?? `Status ${from} → ${input.to}`,
-      payload: { from, to: input.to },
-      actor: input.actor,
+    const agg = await tx.workEngagementActivity.aggregate({
+      where: { workEngagementId: input.engagementId },
+      _max: { seq: true },
     });
+    await tx.workEngagementActivity.create({
+      data: activityCreateData(
+        {
+          engagementId: input.engagementId,
+          kind: "status-change",
+          summary: input.summary ?? `Status ${from} → ${input.to}`,
+          payload: { from, to: input.to },
+          actor: input.actor,
+        },
+        (agg._max.seq ?? 0) + 1,
+      ),
+    });
+    await tx.workEngagement.update({ where: { id: input.engagementId }, data: { lastActivityAt: new Date() } });
   });
   return { status: input.to, changed: true };
 }
@@ -97,6 +107,23 @@ export type RecordActivityInput = {
   toolExecutionId?: string | null;
 };
 
+// PURE: build the activity row's data for a given seq. Kept out of the DB glue so
+// the @@unique([weId, seq]) monotonic-seq shape is defined in one place. The seq
+// is allocated as (current max)+1 inside the caller's transaction; a racing
+// duplicate fails loudly on the unique index rather than silently reordering.
+function activityCreateData(input: RecordActivityInput, seq: number) {
+  return {
+    workEngagementId: input.engagementId,
+    seq,
+    kind: input.kind,
+    summary: input.summary,
+    payload: (input.payload ?? {}) as object,
+    recordedById: input.actor?.userId ?? null,
+    recordedByAgentId: input.actor?.agentId ?? null,
+    toolExecutionId: input.toolExecutionId ?? null,
+  };
+}
+
 /** Append an activity row with a monotonic per-engagement seq; bumps lastActivityAt. */
 export async function recordWorkEngagementActivity(
   input: RecordActivityInput,
@@ -108,46 +135,21 @@ export async function recordWorkEngagementActivity(
   if (!engagement) {
     return { error: "not-found", message: `WorkEngagement ${input.engagementId} does not exist.` };
   }
-  return prisma.$transaction((tx) => recordActivityTx(tx, input));
-}
-
-// Shared writer: allocate seq = (current max) + 1 inside the caller's transaction,
-// insert the row, and bump the parent's lastActivityAt. The @@unique([weId, seq])
-// makes a racing duplicate seq fail loudly rather than silently reorder.
-type TxLike = {
-  workEngagementActivity: {
-    aggregate: (args: unknown) => Promise<{ _max: { seq: number | null } }>;
-    create: (args: unknown) => Promise<{ id: string; seq: number }>;
-  };
-  workEngagement: { update: (args: unknown) => Promise<unknown> };
-};
-async function recordActivityTx(
-  tx: TxLike,
-  input: RecordActivityInput,
-): Promise<{ activityId: string; seq: number }> {
-  const agg = await tx.workEngagementActivity.aggregate({
-    where: { workEngagementId: input.engagementId },
-    _max: { seq: true },
+  return prisma.$transaction(async (tx) => {
+    const agg = await tx.workEngagementActivity.aggregate({
+      where: { workEngagementId: input.engagementId },
+      _max: { seq: true },
+    });
+    const row = await tx.workEngagementActivity.create({
+      data: activityCreateData(input, (agg._max.seq ?? 0) + 1),
+      select: { id: true, seq: true },
+    });
+    await tx.workEngagement.update({
+      where: { id: input.engagementId },
+      data: { lastActivityAt: new Date() },
+    });
+    return { activityId: row.id, seq: row.seq };
   });
-  const seq = (agg._max.seq ?? 0) + 1;
-  const row = await tx.workEngagementActivity.create({
-    data: {
-      workEngagementId: input.engagementId,
-      seq,
-      kind: input.kind,
-      summary: input.summary,
-      payload: (input.payload ?? {}) as object,
-      recordedById: input.actor?.userId ?? null,
-      recordedByAgentId: input.actor?.agentId ?? null,
-      toolExecutionId: input.toolExecutionId ?? null,
-    },
-    select: { id: true, seq: true },
-  });
-  await tx.workEngagement.update({
-    where: { id: input.engagementId },
-    data: { lastActivityAt: row.id ? new Date() : undefined },
-  });
-  return { activityId: row.id, seq: row.seq };
 }
 
 /** Read a parent engagement's materialized instances (optionally by status window). */
