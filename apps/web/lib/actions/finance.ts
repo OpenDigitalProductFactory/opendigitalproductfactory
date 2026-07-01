@@ -10,6 +10,7 @@ import type { INVOICE_STATUSES } from "@/lib/finance-validation";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { sendEmail, composeSignedConfirmationEmail, isEmailConfigured } from "@/lib/email";
+import { postInvoiceIssued } from "@/lib/finance/ledger-service";
 
 // ─── Auth guard ───────────────────────────────────────────────────────────────
 
@@ -414,6 +415,15 @@ export async function sendInvoice(invoiceId: string): Promise<{ payToken: string
     where: { id: invoiceId },
     data: { payToken, status: "sent", sentAt: new Date() },
   });
+
+  // Post the issued invoice to the general ledger. Best-effort by design: a ledger
+  // hiccup must never block sending the customer their invoice. The post is
+  // idempotent (one journal per source document), so a later retry is safe.
+  try {
+    await postInvoiceIssued(invoiceId);
+  } catch (err) {
+    console.error(`[ledger] failed to post invoice ${invoiceId} to the general ledger:`, err);
+  }
 
   revalidatePath("/finance");
   revalidatePath("/finance/invoices");
