@@ -15,7 +15,7 @@ const sampleModel: KnownModel = {
   outputModalities: ["text"],
   modelClass: "chat",
   modelFamily: "gpt-5",
-  capabilityTier: "tier-1",
+  capabilityCategory: "advanced",
   costTier: "premium",
   bestFor: ["tool-use"],
   avoidFor: [],
@@ -67,6 +67,16 @@ describe("catalogEntryToProfileFields", () => {
     expect(fields.toolFidelity).toBe(80);
     expect((fields.capabilities as any).toolUse).toBe(true);
     expect(fields.modelStatus).toBe("active");
+  });
+
+  // Regression: the create path requires the non-nullable ModelProfile.capabilityCategory
+  // column. A pre-#318 mapping emitted `capabilityTier` (renamed away) and omitted
+  // capabilityCategory, which Prisma rejects on create — crashing catalog reconciliation
+  // the first time a brand-new catalog model is seen (e.g. zai/glm-5.2).
+  it("emits capabilityCategory (not the renamed capabilityTier) so create() satisfies the schema", () => {
+    const fields = catalogEntryToProfileFields(sampleModel) as Record<string, unknown>;
+    expect(fields.capabilityCategory).toBe("advanced");
+    expect(fields).not.toHaveProperty("capabilityTier");
   });
 });
 
