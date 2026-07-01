@@ -16,6 +16,7 @@ import { existsSync } from "fs";
 import { dirname, posix, resolve as nativeResolve, win32 } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import { prisma } from "../src/client";
+import type { Prisma } from "../generated/client/client";
 import type { KnownModel } from "../../../apps/web/lib/routing/known-provider-models";
 
 type KnownProviderModelsByProvider = Record<string, KnownModel[]>;
@@ -51,6 +52,20 @@ export type ProfileUpdateShape = {
   metadataSource: string;
   metadataConfidence: string;
 };
+
+// Compile-time drift guard — this would have caught #318 (ModelProfile.capabilityTier
+// → capabilityCategory). Every key this mapping writes MUST be a real column on the
+// generated ModelProfile create input. A schema rename that leaves a stale key here (or
+// a typo'd column) makes this line fail `tsc`, so CI's typecheck gate blocks the merge —
+// instead of the reconciler throwing PrismaClientValidationError and crash-looping the
+// portal at boot the first time a brand-new catalog model reaches the create path.
+// NOTE: object-literal spreads (`...fields`) suppress TS's missing-required-property
+// check at the create call site, so relying on the create payload's type is NOT enough —
+// this explicit key assertion is the safeguard that actually bites.
+type _ProfileShapeKeysAreRealColumns =
+  keyof ProfileUpdateShape extends keyof Prisma.ModelProfileUncheckedCreateInput ? true : never;
+const _assertProfileShapeKeysAreRealColumns: _ProfileShapeKeysAreRealColumns = true;
+void _assertProfileShapeKeysAreRealColumns;
 
 function isWindowsAbsolutePath(value: string): boolean {
   return /^[a-zA-Z]:[\\/]/.test(value) || /^\\\\/.test(value);
@@ -149,7 +164,7 @@ export function catalogEntryToProfileFields(entry: KnownModel): ProfileUpdateSha
     structuredOutputScore: scores.structuredOutputScore,
     conversational: scores.conversational,
     contextRetention: scores.contextRetention,
-    capabilities: entry.capabilities as Record<string, unknown>,
+    capabilities: entry.capabilities as unknown as Record<string, unknown>,
     maxContextTokens: entry.maxContextTokens,
     maxOutputTokens: entry.maxOutputTokens,
     inputModalities: entry.inputModalities,
@@ -188,7 +203,9 @@ async function logChanges(
     source,
   }));
   if (entries.length > 0) {
-    await prisma.modelCapabilityChangeLog.createMany({ data: entries });
+    await prisma.modelCapabilityChangeLog.createMany({
+      data: entries as Prisma.ModelCapabilityChangeLogCreateManyInput[],
+    });
   }
 }
 
@@ -198,6 +215,7 @@ async function reconcile(): Promise<void> {
   let updated = 0;
   let skipped = 0;
   let noChange = 0;
+  let failed = 0;
 
   // Prune change log entries older than 90 days
   const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
@@ -209,6 +227,12 @@ async function reconcile(): Promise<void> {
   for (const [providerId, models] of Object.entries(KNOWN_PROVIDER_MODELS)) {
     for (const entry of models) {
       const { modelId } = entry;
+      // Per-model isolation: one bad model (e.g. a catalog/schema mismatch that
+      // makes the create payload invalid) must not abort the whole reconcile or
+      // crash the portal at boot. Log it loudly, count it, and move on — every
+      // other model still reconciles. The shell invocation is already non-fatal;
+      // this keeps a single failure from starving all models that follow it.
+      try {
       const hash = buildCatalogHash(entry);
 
       const profile = await prisma.modelProfile.findFirst({
@@ -247,7 +271,7 @@ async function reconcile(): Promise<void> {
             bestFor: entry.bestFor,
             avoidFor: entry.avoidFor,
             ...fields,
-          } as Parameters<typeof prisma.modelProfile.create>[0]["data"],
+          } as Prisma.ModelProfileUncheckedCreateInput,
         });
         console.log(`  CREATED  ${providerId}/${modelId}`);
         const newFieldsForLog = fields as unknown as Record<string, unknown>;
@@ -308,10 +332,18 @@ async function reconcile(): Promise<void> {
         "catalog",
       );
       updated++;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`  FAILED   ${providerId}/${modelId}: ${message}`);
+        failed++;
+      }
     }
   }
 
-  console.log(`\nCatalog reconciliation: ${created} created, ${updated} updated, ${skipped} skipped (discovery/admin-owned), ${noChange} unchanged.`);
+  console.log(`\nCatalog reconciliation: ${created} created, ${updated} updated, ${skipped} skipped (discovery/admin-owned), ${noChange} unchanged, ${failed} failed.`);
+  if (failed > 0) {
+    console.error(`  WARNING: ${failed} model(s) failed to reconcile (see FAILED lines above). Portal boot continues; affected models keep their prior profile, or none if brand-new.`);
+  }
 }
 
 // Only run reconcile() when invoked directly (e.g. `tsx scripts/reconcile-catalog-capabilities.ts`).

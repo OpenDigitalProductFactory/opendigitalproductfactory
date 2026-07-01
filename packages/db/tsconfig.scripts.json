@@ -1,0 +1,25 @@
+// Typecheck scope for boot-critical DB scripts that the main tsconfig
+// (include: ["src", "generated"]) does NOT cover.
+//
+// Why this exists: reconcile-catalog-capabilities.ts runs on every portal boot
+// (docker-entrypoint.sh step 3b) and writes ModelProfile rows. It was outside the
+// typecheck boundary, so the #318 capabilityTier -> capabilityCategory rename left a
+// stale field here that no `tsc` ever saw — surfacing only as a fatal
+// PrismaClientValidationError the first time a brand-new catalog model hit the create
+// path, crash-looping the portal. Bringing this file under `pnpm typecheck` (wired via
+// the package's typecheck script, so both the pre-commit hook and CI enforce it) makes
+// that class of schema/code drift a build failure instead of a boot failure.
+//
+// Scope is intentionally narrow (the boot-critical reconciler) so the gate stays green;
+// widen `include` as other scripts are made type-clean.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "scripts/reconcile-catalog-capabilities.ts",
+    "scripts/reconcile-catalog-capabilities.test.ts",
+    "generated"
+  ]
+}
