@@ -137,6 +137,28 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
 
+  it("sweeps dangling images and build cache after a successful promote", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, dockerLog });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("step=cleanup");
+      const dockerCalls = readFileSync(dockerLog, "utf8");
+      // Best-effort disk reclaim on the success path.
+      // Dangling images: removed outright (superseded previous portal version).
+      expect(dockerCalls).toContain("image prune -f");
+      // Build cache: BOUNDED, not wiped — kept as a rebuild-speed asset under a cap.
+      expect(dockerCalls).toContain("builder prune -f --keep-storage");
+      // Conservative scope: never the destructive `-a` (would delete in-use tagged images).
+      expect(dockerCalls).not.toContain("image prune -a");
+      // Volumes are operator state — cleanup must never touch them.
+      expect(dockerCalls).not.toContain("volume");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
   it("derives a -dirty stamp when the build source has uncommitted changes", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
     try {
