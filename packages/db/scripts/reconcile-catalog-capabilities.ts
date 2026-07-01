@@ -44,7 +44,7 @@ export type ProfileUpdateShape = {
   modelFamily: string | null;
   friendlyName: string;
   summary: string;
-  capabilityTier: string;
+  capabilityCategory: string;
   costTier: string;
   qualityTier: string;
   modelStatus: string;
@@ -158,7 +158,7 @@ export function catalogEntryToProfileFields(entry: KnownModel): ProfileUpdateSha
     modelFamily: entry.modelFamily ?? null,
     friendlyName: entry.friendlyName,
     summary: entry.summary,
-    capabilityTier: entry.capabilityTier,
+    capabilityCategory: entry.capabilityCategory,
     costTier: entry.costTier,
     qualityTier: entry.qualityTier,
     modelStatus: entry.defaultStatus === "active"
