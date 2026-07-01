@@ -214,7 +214,7 @@ export async function planUpcomingForAssetTasks(input: {
  *   - YYYY-MM-DD → that date
  * Returns null when the format isn't recognizable.
  */
-function parseDueWindowToDate(dueWindow: string, createdAt: Date): Date | null {
+export function parseDueWindowToDate(dueWindow: string, createdAt: Date): Date | null {
   const trimmed = dueWindow.trim().toLowerCase();
   const weekMatch = /^week\s+(\d+)/.exec(trimmed);
   if (weekMatch) {
