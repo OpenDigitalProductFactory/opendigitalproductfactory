@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { summarizeCampaignPerformance, type PublicationMetricRow } from "./campaign-performance";
+import {
+  metricRowFromSnapshot,
+  summarizeCampaignPerformance,
+  type PublicationMetricRow,
+} from "./campaign-performance";
 
 const rows: PublicationMetricRow[] = [
   { channel: "linkedin-personal-social", impressions: 10_000, clicks: 300, costInUsdCents: 0, conversions: 12 },
@@ -91,5 +95,28 @@ describe("summarizeCampaignPerformance", () => {
     const r = summarizeCampaignPerformance({ rows, budgetTotalCents: 100_000 });
     expect(r.headline).toMatch(/CTR/);
     expect(r.headline).toMatch(/40% of budget/);
+  });
+});
+
+describe("metricRowFromSnapshot", () => {
+  it("reads numeric fields from a well-formed snapshot", () => {
+    const row = metricRowFromSnapshot("linkedin", {
+      impressions: 100,
+      clicks: 10,
+      costInUsdCents: 500,
+      conversions: 2,
+    });
+    expect(row).toEqual({ channel: "linkedin", impressions: 100, clicks: 10, costInUsdCents: 500, conversions: 2 });
+  });
+
+  it("defaults missing / non-numeric / non-object snapshots to zero", () => {
+    expect(metricRowFromSnapshot("x", null)).toEqual({ channel: "x", impressions: 0, clicks: 0, costInUsdCents: 0, conversions: 0 });
+    expect(metricRowFromSnapshot("x", "not-an-object")).toEqual({ channel: "x", impressions: 0, clicks: 0, costInUsdCents: 0, conversions: 0 });
+    expect(metricRowFromSnapshot("x", { impressions: "50", clicks: NaN })).toEqual({ channel: "x", impressions: 0, clicks: 0, costInUsdCents: 0, conversions: 0 });
+  });
+
+  it("clamps negative counts to zero so the rollup can't show a negative CTR", () => {
+    const row = metricRowFromSnapshot("x", { impressions: 100, clicks: -100, conversions: -5, costInUsdCents: -1 });
+    expect(row).toEqual({ channel: "x", impressions: 100, clicks: 0, costInUsdCents: 0, conversions: 0 });
   });
 });

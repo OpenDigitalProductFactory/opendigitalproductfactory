@@ -215,20 +215,33 @@ export async function planUpcomingForAssetTasks(input: {
  * Returns null when the format isn't recognizable.
  */
 export function parseDueWindowToDate(dueWindow: string, createdAt: Date): Date | null {
+  // Never hand back an Invalid Date: a huge "week N"/"next N days" overflows the
+  // valid Date range, and an Invalid Date is truthy — it would slip past a
+  // `!due` guard in callers and later throw RangeError on toISOString() (which
+  // would crash get_content_calendar for the whole workspace). Return null so
+  // callers route the task to `unscheduled` instead.
+  const finiteOrNull = (d: Date): Date | null => (Number.isNaN(d.getTime()) ? null : d);
+
   const trimmed = dueWindow.trim().toLowerCase();
   const weekMatch = /^week\s+(\d+)/.exec(trimmed);
   if (weekMatch) {
-    const weeks = parseInt(weekMatch[1]!, 10);
-    return new Date(createdAt.getTime() + (weeks - 1) * 7 * 24 * 60 * 60 * 1000);
+    // Week numbering is 1-based ("week 1" → createdAt); clamp 0/overflow-parsed.
+    const weeks = Math.max(1, parseInt(weekMatch[1]!, 10));
+    return finiteOrNull(new Date(createdAt.getTime() + (weeks - 1) * 7 * 24 * 60 * 60 * 1000));
   }
   const daysMatch = /^next\s+(\d+)\s+days?/.exec(trimmed);
   if (daysMatch) {
     const days = parseInt(daysMatch[1]!, 10);
-    return new Date(createdAt.getTime() + days * 24 * 60 * 60 * 1000);
+    return finiteOrNull(new Date(createdAt.getTime() + days * 24 * 60 * 60 * 1000));
   }
-  const isoCandidate = new Date(dueWindow);
-  if (!Number.isNaN(isoCandidate.getTime())) {
-    return isoCandidate;
+  // Explicit calendar date: accept ONLY a leading YYYY-MM-DD and parse it as
+  // UTC. `new Date("2")` → year 2001 and `new Date("July 15 2026")` → server
+  // LOCAL time both silently misbucket a task; requiring an ISO date parsed as
+  // UTC keeps the calendar's all-UTC contract and sends anything ambiguous to
+  // `unscheduled` (the honest, visible outcome) rather than a wrong week.
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(dueWindow.trim());
+  if (isoMatch) {
+    return finiteOrNull(new Date(`${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}T00:00:00.000Z`));
   }
   return null;
 }

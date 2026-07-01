@@ -77,7 +77,10 @@ export function buildContentCalendar(tasks: CalendarTaskInput[]): ContentCalenda
     byChannel[channelKey] = (byChannel[channelKey] ?? 0) + 1;
     byStatus[t.status] = (byStatus[t.status] ?? 0) + 1;
 
-    const due = t.dueWindow ? parseDueWindowToDate(t.dueWindow, t.createdAt) : null;
+    const parsed = t.dueWindow ? parseDueWindowToDate(t.dueWindow, t.createdAt) : null;
+    // Defend against an Invalid Date even if a future parser regressed — an
+    // Invalid Date is truthy and would throw in isoDate/weekStartUtc below.
+    const due = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
     const entry: CalendarEntry = {
       taskId: t.taskId,
       title: t.title,
