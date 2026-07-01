@@ -53,4 +53,50 @@ describe("normalizeEdgeNodeScopeBinding", () => {
       normalizeEdgeNodeScopeBinding({ customerSiteId: "site_orphan" }),
     ).toThrow("customer-site scope requires customerAccountId");
   });
+
+  it("mints an explicit organization policy for internal-estate nodes", () => {
+    expect(
+      normalizeEdgeNodeScopeBinding({ organizationScoped: true }),
+    ).toEqual({
+      customerAccountId: null,
+      customerSiteId: null,
+      scopePolicy: {
+        ownershipScope: "organization",
+        enforcement: "organization-scope",
+        source: "bootstrap-token",
+        customerAccountId: null,
+        customerSiteId: null,
+      },
+    });
+  });
+
+  it("leaves enforcement columns null for an organization-scoped node", () => {
+    // The adapters route keys on customerAccountId/customerSiteId, so an
+    // internal-estate node must keep both null to retain the legacy
+    // all-null (organization) adapter path even though its policy is explicit.
+    const binding = normalizeEdgeNodeScopeBinding({ organizationScoped: true });
+    expect(binding.customerAccountId).toBeNull();
+    expect(binding.customerSiteId).toBeNull();
+  });
+
+  it("rejects mixing organization scope with a customer target", () => {
+    expect(() =>
+      normalizeEdgeNodeScopeBinding({
+        organizationScoped: true,
+        customerAccountId: "cust_acme",
+      }),
+    ).toThrow(
+      "organization scope cannot carry a customer-account or customer-site target",
+    );
+  });
+
+  it("still leaves a bare binding unbound (back-compat)", () => {
+    expect(normalizeEdgeNodeScopeBinding({ organizationScoped: false })).toEqual(
+      {
+        customerAccountId: null,
+        customerSiteId: null,
+        scopePolicy: null,
+      },
+    );
+  });
 });

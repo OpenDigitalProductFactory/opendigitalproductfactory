@@ -87,6 +87,13 @@ export type IssueBootstrapInput = {
   targetCustomerSiteId?: string | null;
   /** Optional policy metadata. Defaults from the customer/site target. */
   scopePolicy?: Record<string, unknown> | null;
+  /**
+   * Bind this token to the operator's own internal company-owned estate
+   * (`organization` ownership scope) rather than an MSP customer. Mutually
+   * exclusive with the customer-account/site targets. See the scope helper
+   * and the internal-estate substrate audit for the per-location roadmap.
+   */
+  organizationScoped?: boolean;
 };
 
 export type IssueBootstrapResult = {
@@ -114,6 +121,7 @@ export async function issueBootstrapToken(
     customerAccountId: input.targetCustomerAccountId,
     customerSiteId: input.targetCustomerSiteId,
     scopePolicy: input.scopePolicy,
+    organizationScoped: input.organizationScoped,
   });
 
   const row = await prisma.bootstrapToken.create({
