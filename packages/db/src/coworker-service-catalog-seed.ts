@@ -188,6 +188,74 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     dataBoundary: { sensitivity: "public-to-confidential", supplierData: true },
     metadata: { triggerFamilies: ["external-authority-data", "mcp-provider-adoption"] },
   }),
+  // Internal marketing-execution services (EP-MARKETING-EXEC, BI-4C5F7A2D):
+  // make the Marketing Strategist's execution capabilities discoverable in the
+  // coworker catalog and projectable to internal A2A agent cards, the same way
+  // build/compliance/legal specialists are registered. Internal scope → no
+  // GAID/AIDoc required. backingToolNames cover every marketing-pack tool (a
+  // drift-guard test asserts the union stays complete).
+  serviceSeed("svc-marketing-campaign-execution", "marketing-specialist", {
+    name: "Marketing campaign execution",
+    summary: "Establishes and runs a campaign end to end: plan, brief, tracked links, content calendar, and cross-channel performance.",
+    description:
+      "The Marketing Strategist's execution surface — create/update a campaign aggregate, attach briefs and asset tasks, mint UTM tracked links, read the editorial content calendar, and roll up measured cross-channel performance against budget and KPI targets.",
+    riskTier: "low",
+    authorityBoundary: "autonomous-allowed",
+    personas: ["marketing", "strategist", "operator"],
+    valueStreams: ["consume"],
+    requiredInputs: [{ key: "business-context" }, { key: "campaign-goal" }],
+    producedOutputs: [{ key: "campaign-plan" }, { key: "content-calendar" }, { key: "performance-rollup" }],
+    backingToolNames: [
+      "create_marketing_campaign",
+      "update_marketing_campaign",
+      "attach_to_campaign",
+      "get_campaign_plan",
+      "get_campaign_performance",
+      "get_content_calendar",
+      "build_tracked_links",
+    ],
+    backingGrantKeys: ["marketing_read", "marketing_write"],
+    costModel: { pricing: "internal", metering: "per-campaign" },
+    contractTerms: { posture: "internal", approvalGate: "human-approval-before-external-publish" },
+    dataBoundary: { sensitivity: "internal" },
+    metadata: { aggregate: true, family: "marketing-execution" },
+  }),
+  serviceSeed("svc-marketing-ab-testing", "marketing-specialist", {
+    name: "Marketing A/B variant testing",
+    summary: "Creates competing copy variants for an asset, records measured results, and recommends a statistically-guarded winner.",
+    description:
+      "Produce and compare multiple copy treatments per asset task; record impressions/clicks/conversions per variant; get a ranked winner recommendation by conversions-per-impression with a minimum-sample guard so noise is never crowned.",
+    riskTier: "low",
+    authorityBoundary: "autonomous-allowed",
+    personas: ["marketing", "strategist"],
+    valueStreams: ["consume"],
+    requiredInputs: [{ key: "asset-task" }],
+    producedOutputs: [{ key: "variant-set" }, { key: "winner-recommendation" }],
+    backingToolNames: ["create_asset_variant", "record_variant_result", "get_asset_variants"],
+    backingGrantKeys: ["marketing_read", "marketing_write"],
+    costModel: { pricing: "internal", metering: "per-variant" },
+    contractTerms: { posture: "internal" },
+    dataBoundary: { sensitivity: "internal" },
+    metadata: { family: "marketing-execution" },
+  }),
+  serviceSeed("svc-marketing-competitive-intelligence", "marketing-specialist", {
+    name: "Marketing competitive battlecards",
+    summary: "Maintains durable per-competitor battlecards and projects a competitive matrix across them.",
+    description:
+      "Turn competitive-analysis findings into durable, reusable battlecards (positioning, their strengths/weaknesses, our differentiators, win themes, objection handling) and read them back as a competitive matrix.",
+    riskTier: "low",
+    authorityBoundary: "autonomous-allowed",
+    personas: ["marketing", "strategist", "product-owner"],
+    valueStreams: ["consume"],
+    requiredInputs: [{ key: "competitor" }],
+    producedOutputs: [{ key: "battlecard" }, { key: "competitive-matrix" }],
+    backingToolNames: ["create_battlecard", "get_battlecards"],
+    backingGrantKeys: ["marketing_read", "marketing_write"],
+    costModel: { pricing: "internal", metering: "per-battlecard" },
+    contractTerms: { posture: "internal" },
+    dataBoundary: { sensitivity: "internal" },
+    metadata: { family: "marketing-execution" },
+  }),
 ];
 
 export const COWORKER_SERVICE_CATALOG_OFFER_SEEDS: readonly CoworkerOfferSeed[] = [
@@ -249,6 +317,28 @@ export const COWORKER_SERVICE_CATALOG_OFFER_SEEDS: readonly CoworkerOfferSeed[] 
     eligibleConsumers: ["operator", "builder", "procurement"],
     deliverables: ["Provider comparison", "Tool evaluation candidate", "Cost and contract risks"],
     filters: { domain: "external-provider-adoption" },
+  }),
+  // Internal marketing-execution offers (EP-MARKETING-EXEC, BI-4C5F7A2D).
+  offerSeed("offer-marketing-campaign-execution", "svc-marketing-campaign-execution", {
+    name: "Campaign execution and measurement",
+    summary: "Plan, produce, and measure a marketing campaign end to end — brief, tracked links, content calendar, and cross-channel performance.",
+    eligibleConsumers: ["marketing", "operator", "product"],
+    deliverables: ["Campaign plan", "Content calendar", "Cross-channel performance rollup"],
+    filters: { domain: "marketing-execution", family: "campaign" },
+  }),
+  offerSeed("offer-marketing-ab-testing", "svc-marketing-ab-testing", {
+    name: "A/B variant testing",
+    summary: "Create competing copy variants, record results, and get a guarded winner recommendation.",
+    eligibleConsumers: ["marketing", "product"],
+    deliverables: ["Variant set", "Per-variant performance", "Winner recommendation"],
+    filters: { domain: "marketing-execution", family: "experimentation" },
+  }),
+  offerSeed("offer-marketing-competitive-intelligence", "svc-marketing-competitive-intelligence", {
+    name: "Competitive battlecards",
+    summary: "Durable per-competitor battlecards and a competitive matrix for positioning.",
+    eligibleConsumers: ["marketing", "product", "operator"],
+    deliverables: ["Battlecard", "Competitive matrix"],
+    filters: { domain: "marketing-execution", family: "competitive" },
   }),
 ];
 
