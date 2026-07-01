@@ -69,6 +69,8 @@ model User {
   userSkills                    UserSkill[]                   @relation("UserSkillCreator")
   invoicesCreated               Invoice[]                     @relation("InvoiceCreations")
   paymentsCreated               Payment[]                     @relation("PaymentCreations")
+  journalEntriesCreated         JournalEntry[]                @relation("JournalEntryCreations")
+  journalEntriesPosted          JournalEntry[]                @relation("JournalEntryPostings")
   engagementAssignments         Engagement[]                  @relation("EngagementAssignments")
   opportunityAssignments        Opportunity[]                 @relation("OpportunityAssignments")
   activitiesCreated             Activity[]                    @relation("ActivityCreations")
@@ -3105,6 +3107,8 @@ model Organization {
   fundBudgetLines               FundBudgetLine[]
   memberEquityEntries           MemberEquityEntry[]
   mediaAssets                   MediaAsset[]
+  ledgerAccounts                LedgerAccount[]
+  journalEntries                JournalEntry[]
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
@@ -11849,4 +11853,98 @@ model MemberEquityEntry {
 
   @@index([organizationId, memberAccountId])
   @@index([organizationId, fiscalYear])
+}
+
+// ─── General Ledger — management single-source-of-truth (EP-SAP-PARITY) ────────
+// The double-entry posting layer the finance sub-ledgers (Invoice, Bill, Payment,
+// ExpenseClaim, FixedAsset depreciation) post to. Modelled on the S/4HANA
+// Universal Journal (ACDOCA) idea — one balanced line-item record of every
+// financial movement — but framed as a *management* ledger: the org's external
+// accounting/ERP system can remain the authoritative book of record and reconcile
+// via erpSyncStatus/erpRefId. Completes the chartOfAccountsSeed already carried by
+// @dpf/finance-templates, which sub-ledger line items already reference through
+// their optional accountCode. String-enum columns are registered (and the posting
+// invariants enforced) in apps/web/lib/finance/ledger.ts.
+
+model LedgerAccount {
+  id             String   @id @default(cuid())
+  organizationId String
+  code           String // chart-of-accounts code, e.g. "4000"
+  name           String
+  type           String // asset|liability|equity|revenue|expense
+  subtype        String? // optional finer classification
+  normalBalance  String // debit|credit — derived from type, stored for query/reporting
+  parentId       String? // hierarchical roll-up within the chart
+  isActive       Boolean  @default(true)
+  isControl      Boolean  @default(false) // control/reconciliation account (AR, AP, bank)
+  currency       String   @default("GBP")
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent       LedgerAccount?  @relation("LedgerAccountTree", fields: [parentId], references: [id])
+  children     LedgerAccount[] @relation("LedgerAccountTree")
+  journalLines JournalLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, type, isActive])
+  @@index([parentId])
+}
+
+model JournalEntry {
+  id             String    @id @default(cuid())
+  organizationId String
+  entryRef       String    @unique // human reference, e.g. "JE-000123"
+  entryDate      DateTime  @default(now()) // accounting / posting date
+  periodKey      String // "YYYY-MM" fiscal-period bucket, drives period close
+  status         String    @default("draft") // draft|posted|reversed
+  memo           String?
+  // Originating flow. manual|invoice|bill|payment|expense|depreciation|opening-balance|fx-revaluation
+  source         String    @default("manual")
+  sourceType     String? // originating sub-ledger model, e.g. "Invoice"
+  sourceId       String? // originating document id
+  currency       String    @default("GBP")
+  postedAt       DateTime?
+  postedById     String?
+  reversalOfId   String?   @unique // set when this entry reverses another
+  erpSyncStatus  String?   @default("pending")
+  erpRefId       String?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  postedBy     User?         @relation("JournalEntryPostings", fields: [postedById], references: [id])
+  createdBy    User?         @relation("JournalEntryCreations", fields: [createdById], references: [id])
+  reversalOf   JournalEntry? @relation("JournalReversal", fields: [reversalOfId], references: [id])
+  reversedBy   JournalEntry? @relation("JournalReversal")
+  lines        JournalLine[]
+
+  @@index([organizationId, status, entryDate])
+  @@index([organizationId, periodKey])
+  @@index([sourceType, sourceId])
+}
+
+model JournalLine {
+  id             String   @id @default(cuid())
+  journalEntryId String
+  accountId      String
+  // Exactly one of debit/credit is non-zero per line; both stored as non-negative
+  // Decimal. The posting service enforces sum(debit) == sum(credit) per entry.
+  debit          Decimal  @default(0)
+  credit         Decimal  @default(0)
+  currency       String   @default("GBP")
+  description    String?
+  // Optional analytical dimensions (ACDOCA-style rich line): who the posting relates to.
+  customerAccountId String?
+  contactId         String?
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  journalEntry JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account      LedgerAccount @relation(fields: [accountId], references: [id])
+
+  @@index([journalEntryId])
+  @@index([accountId])
 }
