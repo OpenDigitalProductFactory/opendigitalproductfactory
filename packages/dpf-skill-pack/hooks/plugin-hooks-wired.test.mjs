@@ -132,15 +132,18 @@ test("plugin hook commands reference the script via ${CLAUDE_PLUGIN_ROOT}, not a
   }
 });
 
-test("all three surface manifests declare the hooks file (all-3-surfaces wiring stays put)", () => {
-  // Each client resolves plugin-relative paths differently: Claude/Codex from the
-  // plugin root (./), Grok from the .grok-plugin dir (../). BI-CA0ED781.
-  const manifests = [
-    [".claude-plugin", "./hooks/hooks.json"],
+test("surface manifests wire the hooks file so guards ship on every surface", () => {
+  // Codex and Grok resolve the hooks manifest from an explicit plugin.json key
+  // (Grok from the .grok-plugin dir, hence ../). Claude Code 2.1.197+ AUTO-LOADS
+  // hooks/hooks.json by convention, and an explicit "hooks" key now raises
+  // "Duplicate hooks file detected" — failing the WHOLE plugin load — so the
+  // .claude-plugin manifest must NOT declare it (#2544). The guards still ship on
+  // Claude via the auto-loaded file, asserted present below. BI-CA0ED781.
+  const declaring = [
     [".codex-plugin", "./hooks/hooks.json"],
     [".grok-plugin", "../hooks/hooks.json"],
   ];
-  for (const [dir, expected] of manifests) {
+  for (const [dir, expected] of declaring) {
     const manifest = JSON.parse(readFileSync(join(here, "..", dir, "plugin.json"), "utf8"));
     assert.equal(
       manifest.hooks,
@@ -148,6 +151,21 @@ test("all three surface manifests declare the hooks file (all-3-surfaces wiring 
       `${dir}/plugin.json must declare "hooks": "${expected}" so the guards ship on this surface`,
     );
   }
+
+  // Claude: no explicit key (avoids the duplicate-hooks load failure), but the
+  // auto-loaded manifest must exist next to the plugin so the guards still ship.
+  const claudeManifest = JSON.parse(
+    readFileSync(join(here, "..", ".claude-plugin", "plugin.json"), "utf8"),
+  );
+  assert.equal(
+    claudeManifest.hooks,
+    undefined,
+    '.claude-plugin/plugin.json must NOT declare "hooks" — Claude Code auto-loads hooks/hooks.json and an explicit key triggers a duplicate-hooks load failure (#2544)',
+  );
+  assert.ok(
+    existsSync(join(here, "hooks.json")),
+    "hooks/hooks.json must exist so Claude auto-loads the guards",
+  );
 });
 
 test("repo .claude/settings.json does NOT also wire the plugin-owned guards (anti double-fire)", () => {
