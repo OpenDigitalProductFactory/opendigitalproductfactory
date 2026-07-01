@@ -298,19 +298,26 @@ if [[ $_dry_run -eq 0 ]]; then
 fi
 
 # --- Step 8: cleanup ---
-# A successful swap leaves the PREVIOUS portal image untagged (dangling) plus the
-# BuildKit cache layers from step 3's rebuild. Nothing else sweeps them, so across
-# upgrades they pile into tens of GB of dead disk (an operator hit ~57 GB of dangling
-# images + build cache before this step existed). Reclaim them now — but ONLY after
-# every verify above has passed (so a still-needed rollback image is never pruned) and
-# BEST-EFFORT (a cleanup hiccup must never fail an upgrade that already succeeded).
-# Scope is deliberately conservative: dangling images only (never `docker image prune -a`,
-# which would delete tagged images the compose stack still needs) and build cache.
+# A successful swap leaves the PREVIOUS portal image untagged (dangling) plus BuildKit
+# cache layers from step 3's rebuild. Nothing else sweeps them, so across upgrades they
+# pile into tens of GB of dead disk on Docker's fixed VM disk — and once it fills, the
+# NEXT `docker compose build` (step 3) fails with "no space left on device", i.e. the
+# accumulation eventually breaks the very upgrade that produced it. Reclaim it now, but
+# ONLY after every verify above has passed (so a still-needed rollback image is never
+# pruned) and BEST-EFFORT (a cleanup hiccup must never fail an upgrade that succeeded).
+#
+# The two piles are treated differently on purpose:
+#   * Dangling images — the superseded previous portal version, zero value once the tag
+#     moved to the new build. Removed outright (never `docker image prune -a`, which
+#     would delete tagged images the compose stack still needs).
+#   * Build cache — a PERFORMANCE asset: those layers make the next rebuild fast, so we
+#     BOUND it (keep ~10GB; Docker evicts the oldest beyond that) rather than wiping it.
+#     Capping reclaims runaway disk without making every future upgrade rebuild cold.
 # Volumes are NEVER touched here — operator DB/state lives in volumes.
 emit_step cleanup
 if [[ $_dry_run -eq 0 ]]; then
   docker image prune -f >/dev/null 2>&1 || true
-  docker builder prune -f >/dev/null 2>&1 || true
+  docker builder prune -f --keep-storage "${PROMOTE_BUILD_CACHE_KEEP:-10GB}" >/dev/null 2>&1 || true
 fi
 
 # Terminal success marker — emitted only after every verify AND the cleanup sweep, so

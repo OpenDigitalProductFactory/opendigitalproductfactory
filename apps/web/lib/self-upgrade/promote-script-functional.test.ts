@@ -145,9 +145,11 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       expect(r.status).toBe(0);
       expect(r.stdout).toContain("step=cleanup");
       const dockerCalls = readFileSync(dockerLog, "utf8");
-      // Best-effort disk reclaim on the success path — dangling images + build cache.
+      // Best-effort disk reclaim on the success path.
+      // Dangling images: removed outright (superseded previous portal version).
       expect(dockerCalls).toContain("image prune -f");
-      expect(dockerCalls).toContain("builder prune -f");
+      // Build cache: BOUNDED, not wiped — kept as a rebuild-speed asset under a cap.
+      expect(dockerCalls).toContain("builder prune -f --keep-storage");
       // Conservative scope: never the destructive `-a` (would delete in-use tagged images).
       expect(dockerCalls).not.toContain("image prune -a");
       // Volumes are operator state — cleanup must never touch them.
