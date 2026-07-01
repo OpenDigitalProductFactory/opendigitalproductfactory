@@ -42,10 +42,20 @@ if ! pnpm --filter @dpf/db exec tsx scripts/sync-provider-registry.ts; then
   exit 1
 fi
 
+# Model-capability reconciliation is NON-FATAL — unlike migrations (a drifted *schema*
+# is unsafe to serve) and the provider registry above (providers gate backend auth),
+# this step only refreshes advisory model-capability metadata (which model is good at
+# what). A stale, partial, or slightly-wrong model catalog is a DEGRADED state, not a
+# correctness hazard: the portal serves fine on the model catalog already in the DB.
+# Blocking boot on it is what crash-looped the portal when a single new or renamed
+# model made the reconciler throw (the #318 capabilityTier -> capabilityCategory drift;
+# a brand-new model hitting the create path). Models get added, retired, and deprecated
+# routinely, so this step degrades loudly and never fails the whole boot. Failures are
+# logged; the catalog keeps its prior state until the next successful reconcile, and
+# CI's typecheck + catalog-integrity tests catch bad catalog changes before they ship.
 if ! pnpm --filter @dpf/db exec tsx scripts/reconcile-catalog-capabilities.ts; then
-  echo "[portal-boot] FATAL: catalog capability reconciliation failed" >&2
-  exit 1
+  echo "[portal-boot] WARN: catalog capability reconciliation failed — starting with the existing model catalog (see error above)" >&2
 fi
 
-echo "[portal-boot] provider catalog reconciled; starting server"
+echo "[portal-boot] provider catalog reconciled (or degraded); starting server"
 exec "$@"
