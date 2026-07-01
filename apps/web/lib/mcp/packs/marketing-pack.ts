@@ -118,6 +118,37 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_marketing",
     sideEffect: false,
   },
+  {
+    name: "get_campaign_performance",
+    description:
+      "Read a campaign's measured cross-channel performance: per-channel and total impressions, clicks, spend, conversions, plus derived CTR / CPC / CPA / conversion rate, spend paced against budget, and attainment against the campaign's KPI targets. Use to report how a running campaign is actually performing and which channel is most efficient. Requires published assets whose channel KPIs have been pulled (refresh_channel_kpis).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        campaignId: { type: "string", description: "MarketingCampaign.campaignId" },
+      },
+      required: ["campaignId"],
+    },
+    requiredCapability: "view_marketing",
+    sideEffect: false,
+  },
+  {
+    name: "get_content_calendar",
+    description:
+      "Read the editorial content calendar: campaign asset tasks projected onto week buckets by their due window, with per-channel and per-status counts, plus a list of tasks that have no schedulable due date. Optionally scope to one campaign. Use to answer 'what's our content calendar / what's due when', to spot empty weeks or channel gaps, and to sequence production before a pipeline hole opens. Read-only; complements the auto-scheduler (plan_upcoming_marketing_drafts).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        campaignId: {
+          type: "string",
+          description: "Optional MarketingCampaign.campaignId to scope the calendar to one campaign; omit for the whole marketing workspace.",
+        },
+      },
+      required: [],
+    },
+    requiredCapability: "view_marketing",
+    sideEffect: false,
+  },
 ];
 
 async function buildTrackedLinksHandler(
@@ -209,6 +240,26 @@ async function getCampaignPlanHandler(params: Record<string, unknown>): Promise<
   return { success: true, message: result.message, data: result.data };
 }
 
+async function getCampaignPerformanceHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const { getCampaignPerformance } = await import("@/lib/marketing/campaign-performance");
+  const result = await getCampaignPerformance(String(params["campaignId"] ?? ""));
+  if ("error" in result) {
+    return { success: false, error: result.error, message: result.message };
+  }
+  return { success: true, message: result.message, data: result.data };
+}
+
+async function getContentCalendarHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const { getContentCalendar } = await import("@/lib/marketing/content-calendar");
+  const result = await getContentCalendar({
+    campaignId: typeof params["campaignId"] === "string" ? params["campaignId"] : undefined,
+  });
+  if ("error" in result) {
+    return { success: false, error: result.error, message: result.message };
+  }
+  return { success: true, message: result.message, data: result.data };
+}
+
 export const marketingPack: ToolPack = {
   packId: "marketing",
   definitions,
@@ -218,6 +269,8 @@ export const marketingPack: ToolPack = {
     update_marketing_campaign: (params) => updateCampaignHandler(params),
     attach_to_campaign: (params) => attachToCampaignHandler(params),
     get_campaign_plan: (params) => getCampaignPlanHandler(params),
+    get_campaign_performance: (params) => getCampaignPerformanceHandler(params),
+    get_content_calendar: (params) => getContentCalendarHandler(params),
   },
   grants: {
     build_tracked_links: ["marketing_read"],
@@ -225,5 +278,7 @@ export const marketingPack: ToolPack = {
     update_marketing_campaign: ["marketing_write"],
     attach_to_campaign: ["marketing_write"],
     get_campaign_plan: ["marketing_read"],
+    get_campaign_performance: ["marketing_read"],
+    get_content_calendar: ["marketing_read"],
   },
 };

@@ -477,6 +477,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   suggest_campaign_ideas:       ["marketing_read"],
   build_tracked_links:          ["marketing_read"],
   get_campaign_plan:            ["marketing_read"],
+  get_campaign_performance:     ["marketing_read"],
+  get_content_calendar:         ["marketing_read"],
   create_marketing_campaign:    ["marketing_write"],
   update_marketing_campaign:    ["marketing_write"],
   attach_to_campaign:           ["marketing_write"],
