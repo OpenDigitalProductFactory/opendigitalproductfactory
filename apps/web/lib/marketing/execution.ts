@@ -8,6 +8,8 @@
 // Reference spec:
 //   docs/superpowers/specs/2026-05-26-marketing-execution-loop-design.md §6.
 
+import { isAllowedTransition } from "../work-capture/transition-state-machine";
+
 export const OUTBOUND_DRAFT_STATUS = [
   "draft",
   "pending-review",
@@ -76,7 +78,10 @@ export function isAllowedScheduledTransition(
   from: ScheduledActionStatus,
   to: ScheduledActionStatus,
 ): boolean {
-  return SCHEDULED_TRANSITIONS[from].includes(to);
+  // Delegate to the shared work-capture guard (BI-4C5F7A2D §9.2). Same result;
+  // one transition implementation across scheduled actions, drafts, and
+  // WorkEngagement. Conformance asserted in transition-state-machine.test.ts.
+  return isAllowedTransition(SCHEDULED_TRANSITIONS, from, to);
 }
 
 // Channels that may be autopiloted. linkedin-ads is INTENTIONALLY excluded
@@ -113,7 +118,7 @@ const ALLOWED_TRANSITIONS: Readonly<Record<OutboundDraftStatus, ReadonlyArray<Ou
 };
 
 export function isAllowedDraftTransition(from: OutboundDraftStatus, to: OutboundDraftStatus): boolean {
-  return ALLOWED_TRANSITIONS[from].includes(to);
+  return isAllowedTransition(ALLOWED_TRANSITIONS, from, to);
 }
 
 export function assertDraftTransition(from: OutboundDraftStatus, to: OutboundDraftStatus): void {
