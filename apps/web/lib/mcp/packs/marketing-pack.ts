@@ -149,6 +149,58 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_marketing",
     sideEffect: false,
   },
+  {
+    name: "create_asset_variant",
+    description:
+      "Create an A/B copy variant of a marketing asset task — an alternative headline/body treatment to test against others for the same asset. Use when you want to compare two or more creative approaches (e.g. proof-led vs. urgency-led) before committing spend. The variant inherits the task's org; record measured results later with record_variant_result and read the ranked winner with get_asset_variants.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        taskId: { type: "string", description: "MarketingAssetTask.taskId this variant belongs to" },
+        label: { type: "string", description: "Short label, e.g. 'A' / 'B' or 'proof-led'" },
+        body: { type: "string", description: "The variant body copy" },
+        headline: { type: "string", description: "Optional headline/subject for this variant" },
+        hypothesis: { type: "string", description: "Optional — what this variant tests, e.g. 'urgency beats proof for this ICP'" },
+      },
+      required: ["taskId", "label", "body"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
+    name: "record_variant_result",
+    description:
+      "Record measured results (impressions, clicks, conversions) and/or set the status of an A/B variant. Metrics are set absolutely — pass the latest totals, not deltas. Set status to 'winner' to declare a variant the winner after get_asset_variants recommends one. Use as engagement data comes in so winner selection reflects real performance.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        variantId: { type: "string", description: "MarketingAssetVariant.variantId" },
+        impressions: { type: "number", description: "Total impressions to date" },
+        clicks: { type: "number", description: "Total clicks to date" },
+        conversions: { type: "number", description: "Total conversions to date" },
+        status: { type: "string", description: "Optional status, e.g. live | winner | archived" },
+      },
+      required: ["variantId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
+    name: "get_asset_variants",
+    description:
+      "Read an asset task's A/B variants as a ranked summary: per-variant CTR, conversion rate, and conversions-per-impression efficiency, plus a winner recommendation (or an honest 'not enough data / tied' verdict with a min-impressions guard so noise is never crowned). Use to decide which creative to scale.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        taskId: { type: "string", description: "MarketingAssetTask.taskId" },
+      },
+      required: ["taskId"],
+    },
+    requiredCapability: "view_marketing",
+    sideEffect: false,
+  },
 ];
 
 async function buildTrackedLinksHandler(
@@ -260,6 +312,50 @@ async function getContentCalendarHandler(params: Record<string, unknown>): Promi
   return { success: true, message: result.message, data: result.data };
 }
 
+async function createAssetVariantHandler(
+  params: Record<string, unknown>,
+  _userId: string,
+  context?: { agentId?: string },
+): Promise<ToolResult> {
+  const { createAssetVariant } = await import("@/lib/marketing/variants");
+  const result = await createAssetVariant({
+    taskId: String(params["taskId"] ?? ""),
+    label: String(params["label"] ?? ""),
+    body: String(params["body"] ?? ""),
+    headline: typeof params["headline"] === "string" ? params["headline"] : undefined,
+    hypothesis: typeof params["hypothesis"] === "string" ? params["hypothesis"] : undefined,
+    createdByAgentId: context?.agentId ?? null,
+  });
+  if ("error" in result) {
+    return { success: false, error: result.error, message: result.message };
+  }
+  return { success: true, entityId: result.variantId, message: result.message };
+}
+
+async function recordVariantResultHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const { recordVariantResult } = await import("@/lib/marketing/variants");
+  const result = await recordVariantResult({
+    variantId: String(params["variantId"] ?? ""),
+    impressions: typeof params["impressions"] === "number" ? params["impressions"] : undefined,
+    clicks: typeof params["clicks"] === "number" ? params["clicks"] : undefined,
+    conversions: typeof params["conversions"] === "number" ? params["conversions"] : undefined,
+    status: typeof params["status"] === "string" ? params["status"] : undefined,
+  });
+  if ("error" in result) {
+    return { success: false, error: result.error, message: result.message };
+  }
+  return { success: true, entityId: result.variantId, message: result.message };
+}
+
+async function getAssetVariantsHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const { getAssetVariants } = await import("@/lib/marketing/variants");
+  const result = await getAssetVariants(String(params["taskId"] ?? ""));
+  if ("error" in result) {
+    return { success: false, error: result.error, message: result.message };
+  }
+  return { success: true, message: result.message, data: result.data };
+}
+
 export const marketingPack: ToolPack = {
   packId: "marketing",
   definitions,
@@ -271,6 +367,9 @@ export const marketingPack: ToolPack = {
     get_campaign_plan: (params) => getCampaignPlanHandler(params),
     get_campaign_performance: (params) => getCampaignPerformanceHandler(params),
     get_content_calendar: (params) => getContentCalendarHandler(params),
+    create_asset_variant: (params, userId, context) => createAssetVariantHandler(params, userId, context),
+    record_variant_result: (params) => recordVariantResultHandler(params),
+    get_asset_variants: (params) => getAssetVariantsHandler(params),
   },
   grants: {
     build_tracked_links: ["marketing_read"],
@@ -280,5 +379,8 @@ export const marketingPack: ToolPack = {
     get_campaign_plan: ["marketing_read"],
     get_campaign_performance: ["marketing_read"],
     get_content_calendar: ["marketing_read"],
+    create_asset_variant: ["marketing_write"],
+    record_variant_result: ["marketing_write"],
+    get_asset_variants: ["marketing_read"],
   },
 };

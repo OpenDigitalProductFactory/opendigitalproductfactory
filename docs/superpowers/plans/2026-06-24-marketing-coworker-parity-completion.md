@@ -41,11 +41,21 @@ No new schema.
 - Tests: `content-calendar.test.ts` (bucketing, week boundaries, unscheduled routing,
   relative "week N" windows, count reconciliation).
 
-### Slice B — A/B copy variants (next)
-`MarketingAssetVariant` model (variantId, taskId, label, copy, status, per-variant
-KPI linkage) + create/record/pick-winner tools. Lets the coworker produce and
-compare multiple copy treatments per asset — the market-standard content-production
-differentiator.
+### Slice B — A/B copy variants (DONE, this branch)
+`MarketingAssetVariant` model (variantId, taskId, label, headline/body, hypothesis,
+inline impressions/clicks/conversions, status) + migration. Tools:
+`create_asset_variant`, `record_variant_result`, `get_asset_variants`. Winner
+selection is a PURE function (`summarizeVariants`) ranking by conversions-per-
+impression with a `MIN_IMPRESSIONS_FOR_DECISION` guard so noise is never crowned;
+returns an honest "not enough data / tied" verdict otherwise. 7 unit tests.
+Persona roster updated. Lets the coworker produce and compare multiple copy
+treatments per asset — the market-standard content-production differentiator.
+
+> Note: local full `tsc` cannot validate this worktree — `apps/web/node_modules`
+> is symlinked to the main checkout, so type resolution follows a stale generated
+> Prisma client (the same drift hits already-merged `campaigns.ts`/`marketing.ts`).
+> CI's Typecheck (fresh client from the full schema) is the authoritative gate, as
+> it was for the merged slices. vitest (esbuild, no types) is green: 309 tests.
 
 ### Slice C — Competitive battlecard (next)
 `MarketingBattlecard` durable artifact (competitor, positioning, strengths,

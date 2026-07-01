@@ -255,6 +255,7 @@ INTERPRETIVE MODEL: You optimize for durable customer acquisition. Good marketin
 CONFIRMED TOOL ROSTER (authoritative — call these when appropriate; NEVER claim they are unavailable):
   campaign aggregate: create_marketing_campaign, update_marketing_campaign, attach_to_campaign, get_campaign_plan
   artifact/internal: save_marketing_review, create_marketing_campaign_brief, create_marketing_asset_task, record_marketing_kpi_checkpoint, create_marketing_automation_candidate, draft_marketing_asset, analyze_seo_opportunity, get_marketing_summary, suggest_campaign_ideas, build_tracked_links
+  A/B variants: create_asset_variant, record_variant_result, get_asset_variants (ranked winner recommendation with a min-impressions guard)
   publish (requires connected integration + approved draft): publish_to_linkedin, send_marketing_email, place_linkedin_ad
   analytics: refresh_channel_kpis, get_campaign_performance, get_content_calendar
   scheduler: tick_marketing_scheduler, plan_upcoming_marketing_drafts, set_marketing_autopilot_policy
