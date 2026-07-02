@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "generated_at": "2026-04-28",
-  "notes": "Catalog of grant keys referenced by packages/db/data/agent_registry.json. honored_by_tools is empty when no tool in apps/web/lib/mcp-tools.ts (via apps/web/lib/tak/agent-grants.ts TOOL_TO_GRANTS) checks the grant — those are aspirational grants that do not yet authorize any platform action. The tool-grant audit's GRANT-002 surfaces them as findings; backfill PRs either implement the tool or remove the grant from the registry. Descriptions are heuristic placeholders generated from the grant key — refine by hand during reconciliation.",
+  "notes": "Catalog of grant keys referenced by packages/db/data/agent_registry.json. honored_by_tools is empty when no tool in apps/web/lib/mcp-tools.ts (via apps/web/lib/tak/agent-grants.ts TOOL_TO_GRANTS) checks the grant \u2014 those are aspirational grants that do not yet authorize any platform action. The tool-grant audit's GRANT-002 surfaces them as findings; backfill PRs either implement the tool or remove the grant from the registry. Descriptions are heuristic placeholders generated from the grant key \u2014 refine by hand during reconciliation.",
   "grants": [
     {
       "key": "acceptance_package_write",
@@ -218,7 +218,7 @@
     },
     {
       "key": "build_evidence",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5): record evidence against a FeatureBuild — execution outcome, notes, persisted artifacts. Finer-grained successor to the build-evidence-related slice of backlog_write; lets scoped coworker tokens record build progress without authority to mutate the broader backlog. Implied by backlog_write (one-way).",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5): record evidence against a FeatureBuild \u2014 execution outcome, notes, persisted artifacts. Finer-grained successor to the build-evidence-related slice of backlog_write; lets scoped coworker tokens record build progress without authority to mutate the broader backlog. Implied by backlog_write (one-way).",
       "category": "integrate",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -230,7 +230,7 @@
     },
     {
       "key": "build_lifecycle",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5): advance a FeatureBuild's lifecycle state — promote into Build Studio, process backlog batches into builds, and (when BI-0B3B0232 lands) reopen abandoned builds. Successor to build_promote; covers the full lifecycle surface required by the Pseudo-User Contract envelope flow. Implied by build_promote (one-way) for backwards compat.",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5): advance a FeatureBuild's lifecycle state \u2014 promote into Build Studio, process backlog batches into builds, and (when BI-0B3B0232 lands) reopen abandoned builds. Successor to build_promote; covers the full lifecycle surface required by the Pseudo-User Contract envelope flow. Implied by build_promote (one-way) for backwards compat.",
       "category": "integrate",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -241,7 +241,7 @@
     },
     {
       "key": "build_phase_advance",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5): advance a FeatureBuild's phase — approve or override a decomposition, propose a downstream decomposition. Finer-grained successor to the phase-advancing slice of backlog_write; gates the Ideate→Plan handoff. Implied by backlog_write (one-way).",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5): advance a FeatureBuild's phase \u2014 approve or override a decomposition, propose a downstream decomposition. Finer-grained successor to the phase-advancing slice of backlog_write; gates the Ideate\u2192Plan handoff. Implied by backlog_write (one-way).",
       "category": "integrate",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -502,7 +502,7 @@
     },
     {
       "key": "coworker_screen_drive",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): drive the screen the user is on — select entities, navigate routes, open/close panels, focus fields. Read-only for the user (the coworker drives).",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): drive the screen the user is on \u2014 select entities, navigate routes, open/close panels, focus fields. Read-only for the user (the coworker drives).",
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -518,7 +518,7 @@
     },
     {
       "key": "coworker_screen_fill",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): pre-fill form fields on behalf of the user. Higher tier than coworker_screen_drive — the user can still override before submit, but the coworker is setting input without explicit user keystrokes.",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): pre-fill form fields on behalf of the user. Higher tier than coworker_screen_drive \u2014 the user can still override before submit, but the coworker is setting input without explicit user keystrokes.",
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -528,7 +528,7 @@
     },
     {
       "key": "coworker_screen_read",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): read the current screen's state — selected entities, focused field, open panels, route, scroll anchor. Read-only side of the coworker view-command surface (POLA-aligned per chief-architect review of PR #1361 — screen_scroll_to is read-class).",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): read the current screen's state \u2014 selected entities, focused field, open panels, route, scroll anchor. Read-only side of the coworker view-command surface (POLA-aligned per chief-architect review of PR #1361 \u2014 screen_scroll_to is read-class).",
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -687,7 +687,7 @@
     },
     {
       "key": "email_config",
-      "description": "Configure the organization's OWN outbound email (SMTP) — detect provider, save settings, send a test. Operator-gated (manage_provider_connections); DPF never relays mail on the operator's behalf.",
+      "description": "Configure the organization's OWN outbound email (SMTP) \u2014 detect provider, save settings, send a test. Operator-gated (manage_provider_connections); DPF never relays mail on the operator's behalf.",
       "category": "integrate",
       "sensitivity": "confidential",
       "honored_by_tools": [
@@ -1425,6 +1425,37 @@
       "honored_by_tools": [
         "workbook_create_row",
         "workbook_update_cells"
+      ],
+      "implies": []
+    },
+    {
+      "key": "work_engagement_read",
+      "description": "Read work engagements and their materialized recurring instances.",
+      "category": "work_engagement",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "get_work_engagement_instances"
+      ],
+      "implies": []
+    },
+    {
+      "key": "work_engagement_write",
+      "description": "Create work engagements (including recurring) and append activity-timeline entries.",
+      "category": "work_engagement",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "create_recurring_work_engagement",
+        "record_work_engagement_activity"
+      ],
+      "implies": []
+    },
+    {
+      "key": "work_engagement_transition",
+      "description": "Advance a work engagement's status lifecycle including cancel and complete; higher-privilege than create.",
+      "category": "work_engagement",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "transition_work_engagement"
       ],
       "implies": []
     }

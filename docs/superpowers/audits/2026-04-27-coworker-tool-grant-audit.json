@@ -588,6 +588,38 @@
       "file": "packages/db/data/grant_catalog.json",
       "summary": "Catalog grant 'build_promote' has no honored_by_tools",
       "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-008",
+      "severity": "warn",
+      "agentId": "AGT-SOC-HUNTER",
+      "file": null,
+      "summary": "Specialist AGT-SOC-HUNTER has no write/execute grants",
+      "detail": "Specialists are expected to perform actions. AGT-SOC-HUNTER has only read-class grants: siem_read, siem_tune, registry_read. Possibly mis-tiered as specialist when it should be a read-only advisor role, or missing the grants its job requires."
+    },
+    {
+      "invariantId": "GRANT-008",
+      "severity": "warn",
+      "agentId": "AGT-SOC-INVESTIGATOR",
+      "file": null,
+      "summary": "Specialist AGT-SOC-INVESTIGATOR has no write/execute grants",
+      "detail": "Specialists are expected to perform actions. AGT-SOC-INVESTIGATOR has only read-class grants: siem_read, siem_investigate, siem_tune, registry_read. Possibly mis-tiered as specialist when it should be a read-only advisor role, or missing the grants its job requires."
+    },
+    {
+      "invariantId": "GRANT-008",
+      "severity": "warn",
+      "agentId": "AGT-SOC-IR-LEAD",
+      "file": null,
+      "summary": "Specialist AGT-SOC-IR-LEAD has no write/execute grants",
+      "detail": "Specialists are expected to perform actions. AGT-SOC-IR-LEAD has only read-class grants: siem_read, siem_investigate, incident_respond, registry_read. Possibly mis-tiered as specialist when it should be a read-only advisor role, or missing the grants its job requires."
+    },
+    {
+      "invariantId": "GRANT-008",
+      "severity": "warn",
+      "agentId": "AGT-SOC-TRIAGE",
+      "file": null,
+      "summary": "Specialist AGT-SOC-TRIAGE has no write/execute grants",
+      "detail": "Specialists are expected to perform actions. AGT-SOC-TRIAGE has only read-class grants: siem_read, siem_investigate, registry_read. Possibly mis-tiered as specialist when it should be a read-only advisor role, or missing the grants its job requires."
     }
   ]
 }
