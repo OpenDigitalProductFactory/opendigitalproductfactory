@@ -86,6 +86,11 @@ jobs:
 
       - name: Typecheck all workspaces
         if: needs.changes.outputs.heavy == 'true'
+        # Raise the V8 heap: tsc over the whole (large, growing) workspace OOMs on
+        # the default limit (exit 134, "JavaScript heap out of memory") — a
+        # threshold the codebase recently crossed, breaking Typecheck for every PR.
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm typecheck
 
   stall-detection-write-guard:
