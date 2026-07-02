@@ -10,6 +10,12 @@ import {
   hasUnitConflict,
   type AgreementPeriod,
 } from "@/lib/storefront/rental";
+import { isExclusionViolation } from "@/lib/db/exclusion-violation";
+
+/** Sentinel: the pre-check found an overlapping agreement for this unit.
+ *  Thrown to abort the reservation transaction with a friendly message before
+ *  the DB-level `RentalAgreement_no_overlap` constraint would reject it anyway. */
+class UnitConflictError extends Error {}
 
 // EP-ARCH-8D4F2A · BI-EEA24A34/BI-D7FCD029 Phase 4 — rental reservation→return
 // lifecycle. Conventions mirror lib/actions/civic-governance.ts: auth via the
@@ -108,50 +114,60 @@ export async function createReservation(input: {
     }
     const sf = await getStorefront();
 
-    // Durable double-booking guard for serialized units.
-    if (input.rentableUnitId) {
-      const existing = await prisma.rentalAgreement.findMany({
-        where: { storefrontId: sf.id, rentableUnitId: input.rentableUnitId },
-        select: { status: true, periodStart: true, periodEnd: true, rentableUnitId: true },
-      });
-      const conflict = hasUnitConflict({
-        rentableUnitId: input.rentableUnitId,
-        agreements: existing as AgreementPeriod[],
-        windowStart: periodStart,
-        windowEnd: periodEnd,
-      });
-      if (conflict) {
-        return { ok: false, message: "That unit is already booked for the selected dates" };
+    // The application-level overlap check is a fast, friendly pre-check; the
+    // authoritative guard is the `RentalAgreement_no_overlap` gist EXCLUDE
+    // constraint (EP-056D2A5E, kernel D2). Both the check and the create run in
+    // ONE transaction so a concurrent reservation that slips past the check is
+    // still rejected by the DB (SQLSTATE 23P01) instead of double-booking the unit.
+    const agreement = await prisma.$transaction(async (tx) => {
+      if (input.rentableUnitId) {
+        const existing = await tx.rentalAgreement.findMany({
+          where: { storefrontId: sf.id, rentableUnitId: input.rentableUnitId },
+          select: { status: true, periodStart: true, periodEnd: true, rentableUnitId: true },
+        });
+        const conflict = hasUnitConflict({
+          rentableUnitId: input.rentableUnitId,
+          agreements: existing as AgreementPeriod[],
+          windowStart: periodStart,
+          windowEnd: periodEnd,
+        });
+        if (conflict) {
+          throw new UnitConflictError();
+        }
       }
-    }
 
-    const agreement = await prisma.rentalAgreement.create({
-      data: {
-        agreementRef: makeRef("RA"),
-        storefrontId: sf.id,
-        storefrontItemId: input.storefrontItemId,
-        rentableUnitId: input.rentableUnitId || null,
-        customerEmail: input.customerEmail.trim(),
-        customerName: input.customerName.trim(),
-        customerPhone: input.customerPhone?.trim() || null,
-        periodStart,
-        periodEnd,
-        pricingModel: input.pricingModel || "per-day",
-        rateAmount: input.rateAmount ?? null,
-        depositAmount: input.depositAmount ?? null,
-        status: "reserved",
-        verificationStatus: input.depositAmount && input.depositAmount > 0 ? "pending" : "not-required",
-      },
-    });
-    if (input.rentableUnitId) {
-      await prisma.rentableUnit.update({
-        where: { id: input.rentableUnitId },
-        data: { status: "reserved" },
+      const ag = await tx.rentalAgreement.create({
+        data: {
+          agreementRef: makeRef("RA"),
+          storefrontId: sf.id,
+          storefrontItemId: input.storefrontItemId,
+          rentableUnitId: input.rentableUnitId || null,
+          customerEmail: input.customerEmail.trim(),
+          customerName: input.customerName.trim(),
+          customerPhone: input.customerPhone?.trim() || null,
+          periodStart,
+          periodEnd,
+          pricingModel: input.pricingModel || "per-day",
+          rateAmount: input.rateAmount ?? null,
+          depositAmount: input.depositAmount ?? null,
+          status: "reserved",
+          verificationStatus: input.depositAmount && input.depositAmount > 0 ? "pending" : "not-required",
+        },
       });
-    }
+      if (input.rentableUnitId) {
+        await tx.rentableUnit.update({
+          where: { id: input.rentableUnitId },
+          data: { status: "reserved" },
+        });
+      }
+      return ag;
+    });
     revalidatePath("/rental");
     return { ok: true, message: `Reservation ${agreement.agreementRef} created`, id: agreement.id };
   } catch (err) {
+    if (err instanceof UnitConflictError || isExclusionViolation(err)) {
+      return { ok: false, message: "That unit is already booked for the selected dates" };
+    }
     return { ok: false, message: err instanceof Error ? err.message : "Failed to create reservation" };
   }
 }
