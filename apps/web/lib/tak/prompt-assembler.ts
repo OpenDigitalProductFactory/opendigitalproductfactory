@@ -11,6 +11,8 @@ import {
 import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
 import { DECISION_ROUTING_BLOCK } from "./decision-routing-block";
 import { LIMITATION_RESPONSE_BLOCK } from "./limitation-response-block";
+import { buildInitiativeBlock } from "./initiative-block";
+import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import { readingLevelDirective, type ReadingLevel } from "@dpf/validators";
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "./prompt-boundary";
 
@@ -61,6 +63,15 @@ export type PromptInput = {
    * surfaces where the constraint does not apply.
    */
   readingLevel?: ReadingLevel | null;
+  /**
+   * BI-E35A8AA4: the coworker's Proactivity level (quiet | balanced | assertive),
+   * resolved by the caller from getCoworkerProactivityPreference(agentId). Drives
+   * an Initiative block that scales in-task effort — how hard the coworker works
+   * to close a gap with its own tools before handing back. Null/undefined maps to
+   * `balanced` (the dock's effective default). Effort only: it never widens
+   * authority, mode, or the no-fabrication rule.
+   */
+  proactivityLevel?: ProactivityLevel | null;
 };
 
 // ─── Block 1: Identity (static) ─────────────────────────────────────────────
@@ -173,6 +184,11 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
   dynamicBlocks.push(
     `The employee you're working with holds role ${input.hrRole}. They are authorized to: ${granted}. They are NOT authorized to: ${denied}. All actions you take execute under their authority. Never exceed it.`
   );
+
+  // Block 2b: Initiative (dynamic — the employee's Proactivity choice for this
+  // coworker). Scales in-task effort by level; sits after the cache boundary
+  // because it varies per user/session. BI-E35A8AA4.
+  dynamicBlocks.push(buildInitiativeBlock(input.proactivityLevel));
 
   // Block 4: Sensitivity
   const level = input.sensitivity.toUpperCase();
