@@ -846,23 +846,14 @@ const DEAD_PHASE_LIVENESS_MS = 15 * 60 * 1000;
 
 /**
  * Liveness threshold for dead-COWORKER-LOOP reaping (BI-1C4179D0), the A-class
- * sibling of DEAD_PHASE_LIVENESS_MS. A working/active TaskRun with no heartbeat
- * inside this window is a crashed reasoning loop, not live work, and must not
- * hold the self-upgrade drain open.
- *
- * The A-class TaskRun blocker never had the liveness check the BuildPhaseRun
- * path has had since the FB-69231490 fix. The leak surfaced live (2026-07-03):
- * 12 proactive "Discovery Taxonomy Gap Triage" loops (agent inventory-specialist)
- * wedged in `working` with their last heartbeat ~60h stale held every
- * self-upgrade attempt (manual AND scheduled) open, and the operator could only
- * see "an AI coworker working was in flight" with no way to tell it was dead.
- *
- * Same 15-min window as the phase path: far longer than the worst-case coworker
- * heartbeat interval (~3 min per the estimatedWaitMs note below), so a merely
- * busy loop is never reaped, and strictly more conservative than the stall
- * watchdog's own heartbeat timeout — a reaped loop is by construction one the
- * watchdog already considers stalled. Always-on (no flag): the flag-gated
- * watchdog defaulting off was half of why the corpses were never cleared.
+ * sibling of DEAD_PHASE_LIVENESS_MS. The A-class TaskRun blocker never had the
+ * liveness check the BuildPhaseRun path has had since the FB-69231490 fix, so a
+ * crashed loop held the drain open forever — surfaced live 2026-07-03 (12 loops,
+ * ~60h stale, blocking every manual AND scheduled upgrade). Same 15-min window
+ * as the phase path: far longer than the worst-case ~3-min heartbeat interval,
+ * and strictly more conservative than the stall watchdog's own heartbeat timeout.
+ * Always-on (no flag): the flag-gated watchdog defaulting off was half of why the
+ * corpses were never cleared.
  */
 const DEAD_COWORKER_LOOP_LIVENESS_MS = 15 * 60 * 1000;
 
