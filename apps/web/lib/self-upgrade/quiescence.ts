@@ -972,6 +972,7 @@ export async function captureActiveSessionBlockers(opts?: {
       status: true,
       lastHeartbeatAt: true,
       startedAt: true,
+      currentAgentId: true,
     },
     take: 25,
   });
@@ -1009,6 +1010,7 @@ export async function captureActiveSessionBlockers(opts?: {
         status: row.status,
         startedAt: row.startedAt.toISOString(),
         lastHeartbeatAt: row.lastHeartbeatAt?.toISOString() ?? null,
+        agentId: row.currentAgentId ?? null,
       },
     });
   }
@@ -1219,7 +1221,63 @@ export type QuiescenceBlockerLine = {
   kind: "hard" | "soft";
   count: number;
   estimatedWaitMs: number | null;
+  /**
+   * Operator-facing identity of a representative in-flight item on this surface
+   * (BI-D0F4C6FB): the coworker/agent and its task title, so the panel can say
+   * WHICH coworker is blocking instead of a bare "AI coworker working". Null for
+   * surfaces without a per-item identity (e.g. recent-tool-execution).
+   */
+  sampleAgent?: string | null;
+  sampleTitle?: string | null;
+  /** Oldest last-signal (heartbeat, or start if newer) across the collapsed
+   *  group, ISO — drives the panel's "last active …" staleness line. */
+  oldestSignalAt?: string | null;
+  /** True when that oldest signal was already stale past the coworker liveness
+   *  window at capture — a corpse the drain auto-reaps (BI-1C4179D0), shown to
+   *  the operator as "unresponsive — clears automatically". */
+  stale?: boolean;
 };
+
+/**
+ * Extract a representative operator identity + liveness signal from one raw
+ * surface blocker's evidence (BI-D0F4C6FB). Surface-shaped: coworker loops carry
+ * agent + title + heartbeat/start; build phases carry a phase name + start;
+ * other surfaces have no per-item identity.
+ */
+function blockerIdentity(s: SurfaceBlocker): {
+  agent: string | null;
+  title: string | null;
+  signalAt: string | null;
+} {
+  const ev = (s.evidence ?? {}) as Record<string, unknown>;
+  const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+  if (s.surface === "coworker.reasoning-loop") {
+    return {
+      agent: str(ev.agentId),
+      title: str(ev.title),
+      signalAt: newestIso(str(ev.lastHeartbeatAt), str(ev.startedAt)),
+    };
+  }
+  if (s.surface.startsWith("build-studio.phase.")) {
+    const phase = str(ev.phase);
+    return { agent: null, title: phase ? `${phase} phase` : null, signalAt: str(ev.startedAt) };
+  }
+  return { agent: null, title: null, signalAt: null };
+}
+
+/** The later of two ISO instants (either may be null). */
+function newestIso(a: string | null, b: string | null): string | null {
+  if (!a) return b;
+  if (!b) return a;
+  return new Date(a).getTime() >= new Date(b).getTime() ? a : b;
+}
+
+/** The earlier of two ISO instants (either may be null). */
+function oldestIso(a: string | null, b: string | null): string | null {
+  if (!a) return b;
+  if (!b) return a;
+  return new Date(a).getTime() <= new Date(b).getTime() ? a : b;
+}
 
 /**
  * Everything the Self-Upgrade page needs to explain "what's happening" during a
@@ -1264,12 +1322,19 @@ export function summarizeBlockers(
   snapshot: ActiveSessionBlockers | null,
 ): QuiescenceBlockerLine[] {
   if (!snapshot || !Array.isArray(snapshot.surfaces)) return [];
+  const capturedAt = typeof snapshot.capturedAt === "string" ? snapshot.capturedAt : null;
   const bySurface = new Map<string, QuiescenceBlockerLine>();
   for (const s of snapshot.surfaces) {
+    const id = blockerIdentity(s);
     const existing = bySurface.get(s.surface);
     if (existing) {
       existing.count += 1;
       existing.estimatedWaitMs = maxWait(existing.estimatedWaitMs, s.estimatedWaitMs);
+      // Keep the first identity seen; track the OLDEST (most-stale) signal so the
+      // panel surfaces the worst laggard in a collapsed group.
+      existing.sampleAgent = existing.sampleAgent ?? id.agent;
+      existing.sampleTitle = existing.sampleTitle ?? id.title;
+      existing.oldestSignalAt = oldestIso(existing.oldestSignalAt ?? null, id.signalAt);
     } else {
       bySurface.set(s.surface, {
         surface: s.surface,
@@ -1277,8 +1342,19 @@ export function summarizeBlockers(
         kind: s.kind,
         count: 1,
         estimatedWaitMs: s.estimatedWaitMs,
+        sampleAgent: id.agent,
+        sampleTitle: id.title,
+        oldestSignalAt: id.signalAt,
       });
     }
+  }
+  // Flag a coworker line as stale when its oldest signal was already past the
+  // liveness window at capture — a corpse the drain auto-reaps (BI-1C4179D0).
+  for (const line of bySurface.values()) {
+    if (line.surface !== "coworker.reasoning-loop" || !line.oldestSignalAt || !capturedAt) continue;
+    line.stale =
+      new Date(capturedAt).getTime() - new Date(line.oldestSignalAt).getTime() >
+      DEAD_COWORKER_LOOP_LIVENESS_MS;
   }
   // Hard blockers first (they're what actually defer the drain), then by count.
   return [...bySurface.values()].sort(
