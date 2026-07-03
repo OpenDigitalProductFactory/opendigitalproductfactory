@@ -8171,6 +8171,13 @@ model StorefrontBooking {
   fromReschedule     String?
   cancellationReason String?
   cancelledAt        DateTime?
+  // EP-056D2A5E / BI-CC4659CB. Set by the booking-overlap-exclusion migration
+  // when a PRE-EXISTING overlap is found: the later row of the pair is parked
+  // here (not cancelled, not deleted) so the EXCLUDE constraint can land without
+  // destroying customer data (kernel decision B/D5, principle_decide 2026-07-03).
+  // Excluded from the constraint predicate; non-null rows are the operator review
+  // queue. New bookings never set this.
+  overlapQuarantinedAt DateTime?
   idempotencyKey     String?             @unique
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
@@ -8332,6 +8339,12 @@ model RentalAgreement {
   returnConditionId   String?   @unique
   cancellationReason  String?
   cancelledAt         DateTime?
+  // EP-056D2A5E / BI-CC4659CB. See StorefrontBooking.overlapQuarantinedAt — the
+  // later row of a pre-existing overlapping pair is parked here (not cancelled,
+  // not deleted) so the EXCLUDE constraint can land without destroying customer
+  // data. Excluded from the constraint predicate; non-null rows are the operator
+  // review queue.
+  overlapQuarantinedAt DateTime?
   idempotencyKey      String?   @unique
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
