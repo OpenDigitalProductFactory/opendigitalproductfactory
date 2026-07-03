@@ -3,6 +3,10 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import {
+  buildNextRegulationVersion,
+  type RegulationVersionOverrides,
+} from "@/lib/compliance-regulation-version";
+import {
   type ComplianceActionResult,
   requireViewCompliance, requireManageCompliance,
   getSessionEmployeeId, logComplianceAction, ensureComplianceCalendarEvent,
@@ -106,6 +110,55 @@ export async function deactivateRegulation(id: string): Promise<ComplianceAction
   return { ok: true, message: "Regulation deactivated." };
 }
 
+// Phase 4 — iterate a regulation as a governed new version: create an immutable
+// next version linked to the prior row (previousVersionId), then retire the prior
+// version (status="superseded"). The field-copy logic is unit-tested in
+// buildNextRegulationVersion; this action only persists.
+export async function supersedeRegulation(
+  id: string,
+  overrides: RegulationVersionOverrides,
+): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  const employeeId = await getSessionEmployeeId();
+
+  const prev = await prisma.regulation.findUniqueOrThrow({
+    where: { id },
+    select: {
+      id: true, name: true, shortName: true, jurisdiction: true, industry: true,
+      applicability: true, sourceType: true, sourceUrl: true, notes: true, version: true,
+    },
+  });
+  const next = buildNextRegulationVersion(prev, overrides);
+
+  const record = await prisma.regulation.create({
+    data: {
+      regulationId: generateRegulationId(),
+      version: next.version,
+      previousVersionId: next.previousVersionId,
+      name: next.name,
+      shortName: next.shortName,
+      jurisdiction: next.jurisdiction,
+      industry: next.industry,
+      ...(next.applicability != null && {
+        applicability: next.applicability as Prisma.InputJsonValue,
+      }),
+      sourceType: next.sourceType,
+      sourceUrl: next.sourceUrl,
+      notes: next.notes,
+      effectiveDate: next.effectiveDate,
+      reviewDate: next.reviewDate,
+    },
+  });
+  await prisma.regulation.update({ where: { id }, data: { status: "superseded" } });
+
+  await logComplianceAction(
+    "regulation", record.id, "created", employeeId,
+    `superseded ${prev.shortName} v${prev.version}`,
+  );
+  revalidatePath("/compliance");
+  return { ok: true, message: `Created ${next.shortName} v${next.version}.`, id: record.id };
+}
+
 // ─── Obligation ─────────────────────────────────────────────────────────────
 
 export async function listObligations(filters?: { regulationId?: string; category?: string; ownerEmployeeId?: string; status?: string }) {
@@ -154,6 +207,7 @@ export async function createObligation(input: ObligationInput): Promise<Complian
       category: input.category ?? null,
       frequency: input.frequency ?? null,
       applicability: input.applicability ?? null,
+      deliverableType: input.deliverableType ?? null,
       penaltySummary: input.penaltySummary ?? null,
       ownerEmployeeId: input.ownerEmployeeId ?? null,
       reviewDate: input.reviewDate ?? null,
@@ -176,6 +230,7 @@ export async function updateObligation(id: string, input: Partial<ObligationInpu
     ...(input.category !== undefined && { category: input.category }),
     ...(input.frequency !== undefined && { frequency: input.frequency }),
     ...(input.applicability !== undefined && { applicability: input.applicability }),
+    ...(input.deliverableType !== undefined && { deliverableType: input.deliverableType }),
     ...(input.penaltySummary !== undefined && { penaltySummary: input.penaltySummary }),
     ...(input.ownerEmployeeId !== undefined && { ownerEmployeeId: input.ownerEmployeeId }),
     ...(input.reviewDate !== undefined && { reviewDate: input.reviewDate }),
@@ -212,7 +267,20 @@ export async function getControl(id: string) {
     where: { id },
     include: {
       ownerEmployee: { select: { id: true, displayName: true } },
-      obligations: { include: { obligation: { select: { id: true, title: true, obligationId: true } } } },
+      obligations: {
+        include: {
+          obligation: {
+            select: {
+              id: true,
+              title: true,
+              obligationId: true,
+              // Phase 2 — control consolidation: the obligation's regulation lets
+              // the detail page show "1 control → N obligations → M frameworks".
+              regulation: { select: { id: true, regulationId: true, shortName: true } },
+            },
+          },
+        },
+      },
       evidence: { where: { status: "active" }, orderBy: { collectedAt: "desc" } },
       riskAssessments: { include: { riskAssessment: { select: { id: true, title: true, assessmentId: true } } } },
     },
@@ -236,6 +304,7 @@ export async function createControl(input: ControlInput): Promise<ComplianceActi
       reviewFrequency: input.reviewFrequency ?? null,
       nextReviewDate: input.nextReviewDate ?? null,
       effectiveness: input.effectiveness ?? null,
+      catalogKey: input.catalogKey ?? null,
     },
   });
 
@@ -257,6 +326,7 @@ export async function updateControl(id: string, input: Partial<ControlInput>): P
     ...(input.reviewFrequency !== undefined && { reviewFrequency: input.reviewFrequency }),
     ...(input.nextReviewDate !== undefined && { nextReviewDate: input.nextReviewDate }),
     ...(input.effectiveness !== undefined && { effectiveness: input.effectiveness }),
+    ...(input.catalogKey !== undefined && { catalogKey: input.catalogKey }),
   }});
 
   await logComplianceAction("control", id, "updated", employeeId, null);

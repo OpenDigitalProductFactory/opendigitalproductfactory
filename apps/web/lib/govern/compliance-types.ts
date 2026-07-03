@@ -169,6 +169,22 @@ export const SUBMISSION_STATUSES = [
   "rejected",
 ] as const;
 
+// Phase 3 — the FORM of output an obligation requires. Lets the platform + the
+// compliance coworker know what artifact to produce/track for each obligation
+// (e.g. Provision 29 → a board declaration; a SAR → a regulatory filing).
+export const DELIVERABLE_TYPES = [
+  "board-declaration",
+  "regulatory-filing",
+  "attestation",
+  "evidence-pack",
+  "policy-acknowledgement",
+  "none",
+] as const;
+export type DeliverableType = (typeof DELIVERABLE_TYPES)[number];
+export function isDeliverableType(value: string | null | undefined): value is DeliverableType {
+  return typeof value === "string" && (DELIVERABLE_TYPES as readonly string[]).includes(value);
+}
+
 // ─── Input Types ──────────────────────────────────────────────────────────────
 
 export type RegulationInput = {
@@ -200,6 +216,8 @@ export type ObligationInput = {
   penaltySummary?: string | null;
   ownerEmployeeId?: string | null;
   reviewDate?: Date | null;
+  /** The form of output this obligation requires (DELIVERABLE_TYPES, Phase 3). */
+  deliverableType?: string | null;
 };
 
 export type ControlInput = {
@@ -211,6 +229,8 @@ export type ControlInput = {
   reviewFrequency?: string | null;
   nextReviewDate?: Date | null;
   effectiveness?: string | null;
+  /** Stable cross-framework catalog identity for consolidation (Phase 2). */
+  catalogKey?: string | null;
 };
 
 export type EvidenceInput = {

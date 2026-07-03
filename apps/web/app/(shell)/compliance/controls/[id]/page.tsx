@@ -6,6 +6,7 @@ import { UnlinkControlButton } from "@/components/compliance/UnlinkControlButton
 import { EditControlForm } from "@/components/compliance/EditControlForm";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { StatusBadge } from "@/components/ui/report-kit";
+import { computeControlCoverage, formatCoverage } from "@/lib/compliance-control-coverage";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -18,6 +19,7 @@ export default async function ControlDetailPage({ params }: Props) {
     notFound();
   }
 
+  const coverage = computeControlCoverage(control);
   const allObligations = await listObligations();
   const existingObligationIds = control.obligations.map((link) => link.obligation.id);
   const availableObligations = allObligations.map((o) => ({
@@ -104,22 +106,45 @@ export default async function ControlDetailPage({ params }: Props) {
       {control.obligations.length === 0 ? (
         <p className="text-sm text-[var(--dpf-muted)] mb-6">No obligations linked.</p>
       ) : (
-        <div className="space-y-2 mb-6">
-          {control.obligations.map((link) => (
-            <div key={link.obligation.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <Link
-                  href={`/compliance/obligations/${link.obligation.id}`}
-                  className="text-sm text-[var(--dpf-text)] hover:text-[var(--dpf-accent)] transition-colors"
-                >
-                  {link.obligation.title}
-                </Link>
-                <span className="text-[9px] text-[var(--dpf-muted)] ml-2">{link.obligation.obligationId}</span>
+        <>
+          {/* Consolidation coverage — one control across many frameworks (Phase 2). */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[var(--dpf-muted)]">{formatCoverage(coverage)}</span>
+            {coverage.isCrosswalk && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-accent)]">
+                Consolidated across {coverage.regulationCount} frameworks
+              </span>
+            )}
+            {coverage.regulations.map((r) => (
+              <Link
+                key={r.id}
+                href={`/compliance/regulations/${r.id}`}
+                className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+              >
+                {r.shortName}
+              </Link>
+            ))}
+          </div>
+          <div className="space-y-2 mb-6">
+            {control.obligations.map((link) => (
+              <div key={link.obligation.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Link
+                    href={`/compliance/obligations/${link.obligation.id}`}
+                    className="text-sm text-[var(--dpf-text)] hover:text-[var(--dpf-accent)] transition-colors"
+                  >
+                    {link.obligation.title}
+                  </Link>
+                  {link.obligation.regulation && (
+                    <span className="text-[9px] text-[var(--dpf-muted)] ml-2">{link.obligation.regulation.shortName}</span>
+                  )}
+                  <span className="text-[9px] text-[var(--dpf-muted)] ml-2">{link.obligation.obligationId}</span>
+                </div>
+                <UnlinkControlButton controlId={control.id} obligationId={link.obligation.id} />
               </div>
-              <UnlinkControlButton controlId={control.id} obligationId={link.obligation.id} />
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Linked Evidence */}

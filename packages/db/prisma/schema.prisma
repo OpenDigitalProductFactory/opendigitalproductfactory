@@ -6931,6 +6931,14 @@ model Regulation {
   changeDetected   Boolean                @default(false)
   lastKnownVersion String?
   sourceCheckDate  DateTime?
+  // Phase 4 — version lineage. `version` increments per governed iteration;
+  // `previousVersionId` links a new version to the one it supersedes, so
+  // "iterate an existing regulation" is an immutable new version, not a silent
+  // in-place mutation. The prior version is retired (status="superseded").
+  version           Int                   @default(1)
+  previousVersionId String?
+  previousVersion   Regulation?           @relation("RegulationVersions", fields: [previousVersionId], references: [id])
+  nextVersions      Regulation[]          @relation("RegulationVersions")
   obligations      Obligation[]
   alerts           RegulatoryAlert[]
   submissions      RegulatorySubmission[]
@@ -6938,6 +6946,7 @@ model Regulation {
   @@index([status])
   @@index([jurisdiction])
   @@index([sourceType])
+  @@index([previousVersionId])
 }
 
 model Obligation {
@@ -6950,6 +6959,11 @@ model Obligation {
   category        String?
   frequency       String?
   applicability   String?
+  // Phase 3 — typed output/deliverable form. Declares WHAT artifact satisfies
+  // this obligation (DELIVERABLE_TYPES: board-declaration | regulatory-filing |
+  // attestation | evidence-pack | policy-acknowledgement | none), so the platform
+  // and the compliance coworker know what to produce/track. Null = unspecified.
+  deliverableType String?
   penaltySummary  String?
   ownerEmployeeId String?
   reviewDate      DateTime?
@@ -6963,6 +6977,7 @@ model Obligation {
   regulation      Regulation              @relation(fields: [regulationId], references: [id])
   policies        Policy[]
   policyLinks     PolicyObligationLink[]
+  submissions     RegulatorySubmission[]
 
   @@index([regulationId])
   @@index([ownerEmployeeId])
@@ -6976,6 +6991,12 @@ model Control {
   title                String
   description          String?
   controlType          String
+  // Stable cross-framework identity (Phase 2 — control consolidation). A control
+  // with a catalogKey is the SAME control across every regulation whose
+  // obligations it satisfies, so one control answers many frameworks (a
+  // crosswalk) instead of being duplicated per framework. Dedup keys on this,
+  // not a fragile exact-title match. Null = a bespoke, un-cataloged control.
+  catalogKey           String?
   implementationStatus String                  @default("planned")
   ownerEmployeeId      String?
   reviewFrequency      String?
@@ -6996,6 +7017,7 @@ model Control {
   @@index([status])
   @@index([implementationStatus])
   @@index([controlType])
+  @@index([catalogKey])
 }
 
 model ControlObligationLink {
@@ -7010,6 +7032,31 @@ model ControlObligationLink {
   @@unique([controlId, obligationId])
   @@index([controlId])
   @@index([obligationId])
+}
+
+// Phase 5 — compliance-coworker write-WITH-APPROVAL. The coworker is accountable
+// for keeping the GRC register current, but authoritative writes stay
+// human-in-the-loop: the coworker PROPOSES a change (a control-obligation mapping,
+// a new regulation, …) into this staging row, and a human approves before it
+// commits via the existing create/link actions. `payload` holds the kind-specific
+// proposal; `kind` selects how approval commits it.
+model ComplianceProposal {
+  id                   String    @id @default(cuid())
+  proposalId           String    @unique
+  kind                 String // "control-mapping" | "regulation" | "obligation"
+  status               String    @default("pending") // pending | approved | rejected
+  payload              Json
+  rationale            String?
+  proposedByAgentId    String?
+  proposedByEmployeeId String?
+  reviewedByEmployeeId String?
+  reviewNotes          String?
+  committedEntityId    String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([status])
+  @@index([kind])
 }
 
 model ComplianceEvidence {
@@ -7199,6 +7246,9 @@ model RegulatorySubmission {
   submissionId          String           @unique
   title                 String
   regulationId          String?
+  // Phase 3 — a filing/deliverable can satisfy a specific obligation, not just a
+  // regulation, so an obligation's required output is tracked to its artifact.
+  obligationId          String?
   recipientBody         String
   submissionType        String
   submittedAt           DateTime?
@@ -7214,9 +7264,11 @@ model RegulatorySubmission {
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
   regulation            Regulation?      @relation(fields: [regulationId], references: [id])
+  obligation            Obligation?      @relation(fields: [obligationId], references: [id])
   submittedBy           EmployeeProfile? @relation("SubmissionSubmitter", fields: [submittedByEmployeeId], references: [id])
 
   @@index([regulationId])
+  @@index([obligationId])
   @@index([submittedByEmployeeId])
   @@index([status])
   @@index([dueDate])

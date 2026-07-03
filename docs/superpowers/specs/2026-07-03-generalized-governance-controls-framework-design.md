@@ -1,6 +1,6 @@
 # Generalized Governance-Controls Framework — Design
 
-- **Status:** proposed (phased; Phase 1 implemented alongside this spec)
+- **Status:** implemented (Phases 1–5). Phase 1 landed in #2562/#2570; Phases 2–5 land together in the follow-up PR. Phase 5 decision taken: **write-with-approval** (see §4 Phase 5 / §6).
 - **Date:** 2026-07-03
 - **Area:** compliance / GRC (customer-facing), compliance AI coworker, onboarding
 - **Supersedes framing of:** `2026-07-03-uk-corporate-governance-provision-29-design.md` (Provision 29 becomes the first *instance* of this general framework, not a special-case)
@@ -56,8 +56,8 @@ Most primitives exist; the gaps are additive.
 ### Phase 4 — Regulation version lineage
 - Add immutable version lineage (a `RegulationVersion` history / `supersedes` relation) so "iterate an existing regulation" is a governed new version, not a silent row mutation; wire `RegulatoryMonitorScan`/`RegulatoryAlert` to propose a version bump.
 
-### Phase 5 — Compliance coworker authoring authority (governance-gated — needs founder decision)
-- Give the compliance coworker real GRC-write MCP tools (`create_regulation`/`create_obligation`/`map_control`) **or** keep it staging-only via `prefill_onboarding_wizard` with human commit. This is a **governance decision** (§6): today the platform deliberately keeps compliance-register writes human-in-the-loop. Options: (a) staging-only (status quo, safest); (b) write-with-approval (coworker drafts, human one-click approves); (c) autonomous within a `RegulatoryAutonomyPolicy` ceiling. Recommend (b) as the balance, gated by the existing autonomy-ceiling machinery.
+### Phase 5 — Compliance coworker authoring authority (DECIDED: write-with-approval)
+- **Decision (2026-07-03): option (b) write-with-approval.** The coworker PROPOSES a GRC change into a `ComplianceProposal` staging row (a `control-mapping` crosswalk, a new regulation, an obligation) — proposing needs only *view* capability; a human APPROVES (needs *manage* capability), and approval commits via the existing create/link primitives. Implemented as `proposeComplianceChange` / `approveComplianceProposal` / `rejectComplianceProposal` (`apps/web/lib/actions/compliance-proposals.ts`) over the `ComplianceProposal` model, with a dependency-free validation core (`apps/web/lib/compliance-proposal.ts`). `control-mapping` commits end-to-end (creates a `ControlObligationLink`); `regulation`/`obligation` proposals stage for authoring and route their commit through the existing create form / onboarding wizard. This keeps authoritative writes human-in-the-loop (the platform's standing posture) while giving the coworker real, accountable authoring reach. Escalation to option (c) — autonomous within a `RegulatoryAutonomyPolicy` ceiling — remains a later, separately-governed step.
 
 ## 5. The two earlier follow-ups, folded in
 - *Autonomy-ceiling wiring for the board declaration* → generalized in Phase 5 (obligations/controls can require human sign-off via `RegulatoryAutonomyPolicy`).
