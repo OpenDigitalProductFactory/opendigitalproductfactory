@@ -489,4 +489,21 @@ describe("assembleSystemPrompt", () => {
     const uncapped = await assembleSystemPrompt({ ...minimalInput, readingLevel: "uncapped" });
     expect(uncapped).not.toContain("READING LEVEL");
   });
+
+  // BI-E35A8AA4: Proactivity → in-task initiative is threaded through PromptInput.
+  it("injects the initiative block matching the proactivity level, defaulting to balanced", async () => {
+    const assertive = await assembleSystemPrompt({ ...minimalInput, proactivityLevel: "assertive" });
+    expect(assertive).toContain("INITIATIVE — HIGH");
+
+    const quiet = await assembleSystemPrompt({ ...minimalInput, proactivityLevel: "quiet" });
+    expect(quiet).toContain("INITIATIVE — LOW");
+
+    // omitted → balanced (the dock's effective default)
+    const omitted = await assembleSystemPrompt(minimalInput);
+    expect(omitted).toContain("INITIATIVE — MEDIUM");
+
+    // initiative sits after authority and before the sensitivity block
+    expect(assertive.indexOf("INITIATIVE — HIGH")).toBeGreaterThan(assertive.indexOf("authorized to"));
+    expect(assertive.indexOf("INITIATIVE — HIGH")).toBeLessThan(assertive.indexOf("classified"));
+  });
 });

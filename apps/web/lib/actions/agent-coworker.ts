@@ -34,6 +34,8 @@ import { observeConversation } from "@/lib/process-observer-hook";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPrompt } from "@/lib/prompt-assembler";
+import { buildInitiativeBlock } from "@/lib/tak/initiative-block";
+import { getCoworkerProactivityPreference } from "@/lib/actions/proactivity";
 import { resolveReadingLevelForRoute } from "@/lib/readability/policy";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
@@ -700,6 +702,14 @@ export async function sendMessage(input: {
   // attributes each tool call to the active skill.
   let activeSkillId: string | null = null;
 
+  // BI-E35A8AA4: the employee's Proactivity choice for this coworker drives an
+  // Initiative block that scales in-task effort. Resolved once and injected into
+  // BOTH prompt paths so behavior is surface-uniform. Fail-open to null
+  // (→ balanced) so a preference-lookup hiccup never breaks the response.
+  const proactivityLevel = await getCoworkerProactivityPreference(agent.agentId).catch(
+    () => null,
+  );
+
   if (useUnified) {
     // ── Unified prompt path: composable blocks from route-context-map + prompt-assembler ──
     // EP-CTX-001: Context sources are submitted to the arbitrator, which enforces
@@ -898,6 +908,8 @@ export async function sendMessage(input: {
       // BI-8F8C5F28: on customer-copy surfaces, hold the coworker to the org's
       // reading level (high-school by default). Null on internal surfaces.
       readingLevel: await resolveReadingLevelForRoute(input.routeContext),
+      // BI-E35A8AA4: Proactivity → in-task initiative.
+      proactivityLevel,
     });
 
     if (eligibleSkillIds.length > 0) {
@@ -952,6 +964,10 @@ export async function sendMessage(input: {
       legacyDecisionRoutingBlock,
       "",
       legacyLimitationResponseBlock,
+      "",
+      // BI-E35A8AA4: Proactivity → in-task initiative — surface-uniform with the
+      // unified path, which injects the same block via assembleSystemPrompt.
+      buildInitiativeBlock(proactivityLevel),
       "",
       "Current context:",
       `- Route: ${input.routeContext}`,

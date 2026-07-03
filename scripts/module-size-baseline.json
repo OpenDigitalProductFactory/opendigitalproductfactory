@@ -17,7 +17,7 @@
   "apps/web/instrumentation.test.ts": 826,
   "apps/web/instrumentation.ts": 1311,
   "apps/web/lib/actions/agent-coworker-external.test.ts": 866,
-  "apps/web/lib/actions/agent-coworker.ts": 2539,
+  "apps/web/lib/actions/agent-coworker.ts": 2555,
   "apps/web/lib/actions/agent-task-scheduler.test.ts": 890,
   "apps/web/lib/actions/ai-providers.ts": 920,
   "apps/web/lib/actions/build-governed.test.ts": 1114,
