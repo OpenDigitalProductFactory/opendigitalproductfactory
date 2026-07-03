@@ -114,7 +114,7 @@ describe("compliance library applicability", () => {
     expect(result.reason).toContain("applicable state has not been captured");
   });
 
-  it("uses the shared CADA regional nexus rule", () => {
+  it("classifies a regulation from its data-driven applicability spec (CADA nexus rule)", () => {
     const cada = regulation({
       regulationId: "REG-CADA-2026",
       name: "Cloud and AI Development Act",
@@ -122,8 +122,10 @@ describe("compliance library applicability", () => {
       jurisdiction: "EU",
       industry: null,
       sourceUrl: "https://digital-strategy.ec.europa.eu/en/policies/cloud-and-ai-development-act",
+      applicability: { basis: ["operating", "selling"], jurisdictions: ["eu"] },
     });
 
+    // No footprint captured → the required signal is undeclared → review.
     expect(classifyRegulationForInstall(cada, softwareContext).scope).toBe("review");
 
     const euSupplier = {
@@ -179,7 +181,7 @@ describe("compliance library applicability", () => {
     expect(complianceLibraryContextLabel(softwareContext)).toBe("Software Platform (software-platform)");
   });
 
-  describe("UK Corporate Governance Code / Provision 29 (listing-gated)", () => {
+  describe("UK Corporate Governance Code / Provision 29 (listing-gated, data-driven)", () => {
     const ukCorpGov = regulation({
       regulationId: "REG-UK-CORP-GOV-CODE",
       name: "UK Corporate Governance Code (2024) — Provision 29",
@@ -187,6 +189,7 @@ describe("compliance library applicability", () => {
       jurisdiction: "UK",
       industry: null,
       sourceUrl: null,
+      applicability: { basis: ["operating"], jurisdictions: ["uk"], listingStatuses: ["premium-listed"] },
     });
 
     function ukContext(
@@ -201,7 +204,7 @@ describe("compliance library applicability", () => {
         ukContext({ operatesIn: ["uk"], listingStatus: "premium-listed" }),
       );
       expect(result.scope).toBe("applies");
-      expect(result.reason).toContain("premium-listed");
+      expect(result.reason).toContain("nexus");
     });
 
     it("needs review when no operating footprint is captured", () => {
@@ -211,7 +214,7 @@ describe("compliance library applicability", () => {
     it("needs review when UK-operating but listing status is undeclared", () => {
       const result = classifyRegulationForInstall(ukCorpGov, ukContext({ operatesIn: ["uk"] }));
       expect(result.scope).toBe("review");
-      expect(result.reason).toContain("market-listing status");
+      expect(result.reason).toContain("listing status");
     });
 
     it("is reference for a UK-operating private company", () => {
@@ -223,13 +226,19 @@ describe("compliance library applicability", () => {
       expect(result.reason).toContain("private");
     });
 
-    it("is reference when the business does not operate in the UK", () => {
+    it("is reference when the business operates elsewhere (declared non-UK footprint)", () => {
       const result = classifyRegulationForInstall(
         ukCorpGov,
         ukContext({ operatesIn: ["us"], listingStatus: "premium-listed" }),
       );
       expect(result.scope).toBe("reference");
-      expect(result.reason).toContain("does not operate in the UK");
+      expect(result.reason).toContain("out of scope");
+    });
+
+    it("falls back to the legacy industry matcher when no applicability spec is present", () => {
+      const legacyBanking = regulation({ industry: "financial" }); // no applicability
+      expect(classifyRegulationForInstall(legacyBanking, bankingContext).scope).toBe("applies");
+      expect(classifyRegulationForInstall(legacyBanking, softwareContext).scope).toBe("reference");
     });
   });
 });

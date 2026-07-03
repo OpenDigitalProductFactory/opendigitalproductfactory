@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   regulationApplies,
+  parseApplicability,
   CADA_APPLICABILITY,
   UK_CORP_GOV_CODE_APPLICABILITY,
   isListingStatus,
@@ -92,5 +93,72 @@ describe("regulationApplies — listing-status gate (UK Corporate Governance Cod
     expect(isListingStatus("premium-listed")).toBe(true);
     expect(isListingStatus("nasdaq")).toBe(false);
     expect(isListingStatus(null)).toBe(false);
+  });
+});
+
+describe("regulationApplies — undeclared vs declared-mismatch (tri-state signal)", () => {
+  it("flags undeclared when NOTHING is declared (reviewable)", () => {
+    const r = regulationApplies(CADA_APPLICABILITY, empty);
+    expect(r.applies).toBe(false);
+    expect(r.undeclared).toBe(true);
+  });
+
+  it("flags a DECLARED-but-mismatched footprint as a definitive miss (not undeclared)", () => {
+    const r = regulationApplies(CADA_APPLICABILITY, { ...empty, operatesIn: ["us"] });
+    expect(r.applies).toBe(false);
+    expect(r.undeclared).toBe(false);
+  });
+
+  it("undeclared is false when the regulation applies", () => {
+    const r = regulationApplies(CADA_APPLICABILITY, { ...empty, operatesIn: ["eu"] });
+    expect(r.applies).toBe(true);
+    expect(r.undeclared).toBe(false);
+  });
+
+  it("treats an undeclared listing status (UK nexus present) as reviewable, not a miss", () => {
+    const r = regulationApplies(UK_CORP_GOV_CODE_APPLICABILITY, { ...empty, operatesIn: ["uk"] });
+    expect(r.applies).toBe(false);
+    expect(r.undeclared).toBe(true);
+  });
+
+  it("treats a declared non-premium listing as a definitive miss", () => {
+    const r = regulationApplies(UK_CORP_GOV_CODE_APPLICABILITY, {
+      ...empty,
+      operatesIn: ["uk"],
+      listingStatus: "private",
+    });
+    expect(r.applies).toBe(false);
+    expect(r.undeclared).toBe(false);
+  });
+});
+
+describe("parseApplicability — tolerant parser for the stored JSON spec", () => {
+  it("parses a well-formed spec including optional gates", () => {
+    const spec = parseApplicability({
+      basis: ["operating"],
+      jurisdictions: ["uk"],
+      listingStatuses: ["premium-listed"],
+      archetypes: ["banking-financial-services"],
+    });
+    expect(spec).toEqual({
+      basis: ["operating"],
+      jurisdictions: ["uk"],
+      listingStatuses: ["premium-listed"],
+      archetypes: ["banking-financial-services"],
+    });
+  });
+
+  it("round-trips the canonical consts", () => {
+    expect(parseApplicability(CADA_APPLICABILITY)).toEqual(CADA_APPLICABILITY);
+    expect(parseApplicability(UK_CORP_GOV_CODE_APPLICABILITY)).toEqual(UK_CORP_GOV_CODE_APPLICABILITY);
+  });
+
+  it("returns null for absent or malformed data (→ legacy fallback)", () => {
+    expect(parseApplicability(null)).toBeNull();
+    expect(parseApplicability(undefined)).toBeNull();
+    expect(parseApplicability("nope")).toBeNull();
+    expect(parseApplicability([])).toBeNull();
+    expect(parseApplicability({ basis: "operating" })).toBeNull(); // basis not an array
+    expect(parseApplicability({ jurisdictions: ["uk"] })).toBeNull(); // missing basis
   });
 });

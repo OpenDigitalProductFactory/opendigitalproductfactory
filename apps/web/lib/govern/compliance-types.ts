@@ -1,5 +1,6 @@
 // Pure utility library — no server imports. Safe in tests and client components.
 import * as crypto from "crypto";
+import type { RegulationApplicability } from "@dpf/db/regulation-applicability";
 
 // ─── ID Generators ────────────────────────────────────────────────────────────
 
@@ -180,6 +181,12 @@ export type RegulationInput = {
   reviewDate?: Date | null;
   sourceUrl?: string | null;
   notes?: string | null;
+  /**
+   * Data-driven applicability spec. When set, the regulation is classified
+   * generically for each install (no per-regulation code). Distinct from
+   * ObligationInput.applicability, which is a human-readable per-obligation note.
+   */
+  applicability?: RegulationApplicability | null;
 };
 
 export type ObligationInput = {

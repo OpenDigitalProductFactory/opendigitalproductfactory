@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import {
   type ComplianceActionResult,
@@ -61,6 +61,9 @@ export async function createRegulation(input: RegulationInput): Promise<Complian
       reviewDate: input.reviewDate ?? null,
       sourceUrl: input.sourceUrl ?? null,
       notes: input.notes ?? null,
+      ...(input.applicability != null && {
+        applicability: input.applicability as unknown as Prisma.InputJsonValue,
+      }),
     },
   });
 
@@ -83,6 +86,9 @@ export async function updateRegulation(id: string, input: Partial<RegulationInpu
     ...(input.reviewDate !== undefined && { reviewDate: input.reviewDate }),
     ...(input.sourceUrl !== undefined && { sourceUrl: input.sourceUrl }),
     ...(input.notes !== undefined && { notes: input.notes }),
+    ...(input.applicability != null && {
+      applicability: input.applicability as unknown as Prisma.InputJsonValue,
+    }),
   }});
 
   await logComplianceAction("regulation", id, "updated", employeeId, null);
