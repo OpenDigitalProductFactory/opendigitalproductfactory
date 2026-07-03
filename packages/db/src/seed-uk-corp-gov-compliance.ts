@@ -1,13 +1,14 @@
-import type { PrismaClient } from "../generated/client/client";
+import type { PrismaClient, Prisma } from "../generated/client/client";
 import * as crypto from "crypto";
+import { UK_CORP_GOV_CODE_APPLICABILITY } from "./regulation-applicability";
 
 // UK Corporate Governance Code (FRC, 2024 edition) compliance pack, focused on
 // Provision 29 — the board internal-controls accountability declaration. This is
 // a cross-sector, listing-gated regime (any industry archetype can be a UK
 // premium-listed company), so it is NOT industry-seeded like the banking /
-// public-sector packs. Applicability is computed per-install by
-// classifyUkCorpGov (apps/web/lib/compliance-library.ts) from the org's UK
-// operating nexus + listing status, keyed on UK_CORP_GOV_CODE_APPLICABILITY.
+// public-sector packs. Applicability is stored as DATA on the regulation
+// (Regulation.applicability = UK_CORP_GOV_CODE_APPLICABILITY) and classified
+// generically per-install by classifyRegulationForInstall — no per-regulation code.
 //
 // The Code is "comply or explain" under the premium-listing regime, not statute.
 // Provision 29 first applies for accounting periods beginning on/after
@@ -150,6 +151,7 @@ export async function seedUkCorpGovCompliance(prisma: PrismaClient): Promise<voi
 
   for (const reg of UK_CORP_GOV_REGULATIONS) {
     const { obligations, ...regData } = reg;
+    const applicability = UK_CORP_GOV_CODE_APPLICABILITY as unknown as Prisma.InputJsonValue;
     const regulation = await prisma.regulation.upsert({
       where: { regulationId: regData.regulationId },
       update: {
@@ -160,8 +162,9 @@ export async function seedUkCorpGovCompliance(prisma: PrismaClient): Promise<voi
         sourceType: regData.sourceType,
         sourceUrl: regData.sourceUrl,
         notes: regData.notes,
+        applicability,
       },
-      create: regData,
+      create: { ...regData, applicability },
     });
     regUpserts++;
 

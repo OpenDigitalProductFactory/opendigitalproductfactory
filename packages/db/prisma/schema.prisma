@@ -6912,6 +6912,13 @@ model Regulation {
   shortName        String
   jurisdiction     String
   industry         String?
+  // Data-driven applicability spec (RegulationApplicability in
+  // regulation-applicability.ts): { basis[], jurisdictions[], archetypes?,
+  // listingStatuses? }. When set, the generic evaluator (regulationApplies)
+  // classifies this regulation for an install with no per-regulation code —
+  // adding a governance requirement is a data operation, not a code change.
+  // Null → fall back to the legacy jurisdiction/industry string matcher.
+  applicability    Json?
   sourceType       String                 @default("external")
   effectiveDate    DateTime?
   reviewDate       DateTime?

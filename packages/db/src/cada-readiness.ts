@@ -91,7 +91,7 @@ export function computeInstallCadaReadiness(
 ): InstallCadaReadiness {
   const applicability: ApplicabilityResult = regionProfile
     ? regulationApplies(CADA_APPLICABILITY, regionProfile)
-    : { applies: true, reason: "applicability not evaluated (no region profile supplied)", matchedBasis: [] };
+    : { applies: true, reason: "applicability not evaluated (no region profile supplied)", matchedBasis: [], undeclared: false };
   const input = buildInstallSovereigntyInput(declared, localOnly);
   const assessment = assessAssuranceLevel(input);
   const meetsTarget = target == null ? undefined : assessment.level >= target;

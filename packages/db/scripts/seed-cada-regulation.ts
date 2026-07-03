@@ -16,8 +16,9 @@
  *
  * Run: cd packages/db && npx tsx scripts/seed-cada-regulation.ts
  */
-import { PrismaClient } from "../generated/client/client";
+import { PrismaClient, type Prisma } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { CADA_APPLICABILITY } from "../src/regulation-applicability";
 import * as crypto from "crypto";
 import { loadDbEnv } from "../src/load-env";
 
@@ -325,6 +326,8 @@ async function main() {
     where: { regulationId: CADA_REG.regulationId },
   });
 
+  // Data-driven applicability: CADA gates on an EU operating/selling nexus.
+  const applicability = CADA_APPLICABILITY as unknown as Prisma.InputJsonValue;
   let regulation: { id: string; regulationId: string };
   if (existingReg) {
     console.log(`Regulation ${CADA_REG.regulationId} already exists — updating.`);
@@ -340,6 +343,7 @@ async function main() {
         reviewDate: CADA_REG.reviewDate,
         sourceUrl: CADA_REG.sourceUrl,
         notes: CADA_REG.notes,
+        applicability,
       },
     });
   } else {
@@ -347,6 +351,7 @@ async function main() {
       data: {
         regulationId: CADA_REG.regulationId,
         ...CADA_REG,
+        applicability,
       },
     });
     console.log(`Created regulation: ${CADA_REG.shortName} (${regulation.id})`);

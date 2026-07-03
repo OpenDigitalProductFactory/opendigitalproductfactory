@@ -42,6 +42,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
             industry: true,
             sourceType: true,
             sourceUrl: true,
+            applicability: true,
           },
         },
         ownerEmployee: { select: { id: true, displayName: true } },

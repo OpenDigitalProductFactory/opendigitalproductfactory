@@ -1,9 +1,9 @@
 import { prisma } from "@dpf/db";
 import {
-  CADA_APPLICABILITY,
-  UK_CORP_GOV_CODE_APPLICABILITY,
   regulationApplies,
+  parseApplicability,
   type RegionProfile,
+  type RegulationApplicability,
 } from "@dpf/db/regulation-applicability";
 
 export type ComplianceApplicabilityScope = "applies" | "review" | "reference";
@@ -45,9 +45,14 @@ export type ClassifiableRegulation = {
   industry: string | null;
   sourceType: string;
   sourceUrl: string | null;
+  /** Data-driven applicability spec (Regulation.applicability JSON), when set. */
+  applicability?: unknown;
 };
 
-export type RegulationWithApplicability<T extends ClassifiableRegulation> = T & {
+// Omit the raw applicability spec before adding the computed classification, so
+// the output's `applicability` is unambiguously the ComplianceApplicability
+// verdict (not an intersection with the stored JSON spec).
+export type RegulationWithApplicability<T extends ClassifiableRegulation> = Omit<T, "applicability"> & {
   applicability: ComplianceApplicability;
 };
 
@@ -117,15 +122,6 @@ const INDUSTRY_LABEL: Record<string, string> = {
 
 function normalize(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase();
-}
-
-function hasAnyRegionalDeclaration(profile: RegionProfile): boolean {
-  return (
-    profile.operatesIn.length > 0 ||
-    profile.sellsTo.length > 0 ||
-    profile.employsIn.length > 0 ||
-    profile.dataResidency.length > 0
-  );
 }
 
 function applicability(scope: ComplianceApplicabilityScope, reason: string): ComplianceApplicability {
@@ -200,86 +196,48 @@ function isStateLaw(regulation: ClassifiableRegulation): boolean {
   return normalize(regulation.jurisdiction) === "us-state";
 }
 
-function classifyCada(
+/**
+ * Generic, data-driven classification for any regulation carrying a persisted
+ * applicability spec (Regulation.applicability). One evaluator + one tri-state
+ * mapping replaces every per-regulation code branch:
+ *   applies    — in scope
+ *   review     — may apply, but a required signal (jurisdiction footprint,
+ *                listing status, archetype) hasn't been captured yet
+ *   reference  — declared out of scope
+ * Adding a governance requirement is now a data operation, not a code change.
+ */
+function classifyByApplicability(
   regulation: ClassifiableRegulation,
+  spec: RegulationApplicability,
   context: ComplianceLibraryContext,
 ): ComplianceApplicability {
-  const result = regulationApplies(CADA_APPLICABILITY, context.regional);
+  const label = regulation.shortName || regulation.name;
+  const result = regulationApplies(spec, context.regional);
   if (result.applies) {
-    return applicability("applies", `CADA is in scope because ${result.reason}.`);
+    return applicability("applies", `${label} applies: ${result.reason}.`);
   }
-  if (!hasAnyRegionalDeclaration(context.regional)) {
+  if (result.undeclared) {
     return applicability(
       "review",
-      "CADA is regional, but no operating/selling/employment/data-residency footprint has been captured yet.",
+      `${label} may apply, but a required detail hasn't been captured yet — ${result.reason}.`,
     );
   }
-  return applicability("reference", `CADA is out of scope for this install: ${result.reason}.`);
-}
-
-const LISTING_STATUS_LABEL: Record<string, string> = {
-  "premium-listed": "premium-listed",
-  "standard-listed": "standard-listed",
-  "aim-listed": "AIM-listed",
-  private: "private",
-  other: "another",
-};
-
-/**
- * The UK Corporate Governance Code / Provision 29 is listing-gated, not
- * industry-gated: it binds UK premium-listed companies regardless of archetype.
- * So it needs a bespoke classifier (like CADA) rather than the industry-match
- * fallback. Applies only when there is a UK OPERATING nexus AND the org has
- * declared a premium listing; the intermediate "review" states cover the two
- * undeclared-signal cases so an operator is prompted rather than silently
- * excluded.
- */
-function classifyUkCorpGov(context: ComplianceLibraryContext): ComplianceApplicability {
-  const result = regulationApplies(UK_CORP_GOV_CODE_APPLICABILITY, context.regional);
-  if (result.applies) {
-    return applicability(
-      "applies",
-      "The UK Corporate Governance Code Provision 29 applies: a UK-operating premium-listed company.",
-    );
-  }
-  const operatesInUk = context.regional.operatesIn.some((j) => j.toLowerCase() === "uk");
-  if (context.regional.operatesIn.length === 0) {
-    return applicability(
-      "review",
-      "Provision 29 binds UK premium-listed companies, but no operating footprint has been captured yet.",
-    );
-  }
-  if (!operatesInUk) {
-    return applicability(
-      "reference",
-      "Provision 29 is out of scope: the business does not operate in the UK.",
-    );
-  }
-  // UK operating nexus present — the remaining gate is listing status.
-  const listing = context.regional.listingStatus;
-  if (!listing) {
-    return applicability(
-      "review",
-      "The business operates in the UK, but its market-listing status hasn't been captured — Provision 29 applies only to premium-listed companies.",
-    );
-  }
-  return applicability(
-    "reference",
-    `Provision 29 is out of scope: it binds UK premium-listed companies, and this is ${LISTING_STATUS_LABEL[listing] ?? "a non-premium-listed"} company.`,
-  );
+  return applicability("reference", `${label} is out of scope for this install: ${result.reason}.`);
 }
 
 export function classifyRegulationForInstall(
   regulation: ClassifiableRegulation,
   context: ComplianceLibraryContext,
 ): ComplianceApplicability {
-  if (regulation.regulationId === "REG-CADA-2026") {
-    return classifyCada(regulation, context);
-  }
-  if (regulation.regulationId === "REG-UK-CORP-GOV-CODE") {
-    return classifyUkCorpGov(context);
+  // Data-driven path: any regulation carrying an applicability spec is classified
+  // generically, with no per-regulation code.
+  const spec = parseApplicability(regulation.applicability);
+  if (spec) {
+    return classifyByApplicability(regulation, spec, context);
   }
 
+  // Legacy fallback: regulations without a data-driven spec (the industry
+  // compliance packs) are matched by jurisdiction/industry string heuristics.
   const currentLabel = installedArchetypeLabel(context);
   const regIndustry = normalize(regulation.industry);
   if (!regIndustry) {

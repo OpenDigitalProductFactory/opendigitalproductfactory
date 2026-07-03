@@ -69,6 +69,14 @@ export interface ApplicabilityResult {
   applies: boolean;
   reason: string;
   matchedBasis: ProfessionJurisdictionBasis[];
+  /**
+   * When applies=false: true if the org is out of scope ONLY because a required
+   * signal is UNDECLARED (empty/null) rather than declared-and-mismatched. This
+   * lets a generic classifier map the result to "needs review" (could be in
+   * scope once the operator captures the signal) vs "reference" (known out of
+   * scope). Always false when applies=true.
+   */
+  undeclared: boolean;
 }
 
 function setForBasis(profile: RegionProfile, basis: ProfessionJurisdictionBasis): string[] {
@@ -86,56 +94,110 @@ function setForBasis(profile: RegionProfile, basis: ProfessionJurisdictionBasis)
   }
 }
 
-/** Decide whether a region/archetype-specific regulation applies to an org. */
+/** One gate's verdict: passing, or failing because a signal is undeclared vs declared-and-mismatched. */
+type GateResult =
+  | { pass: true; matchedBasis?: ProfessionJurisdictionBasis[] }
+  | { pass: false; undeclared: boolean; reason: string };
+
+function archetypeGate(spec: RegulationApplicability, profile: RegionProfile): GateResult {
+  if (!spec.archetypes || spec.archetypes.length === 0) return { pass: true };
+  const a = profile.archetype;
+  if (a && spec.archetypes.includes(a)) return { pass: true };
+  return {
+    pass: false,
+    undeclared: !a, // no archetype declared at all → reviewable, not a definitive miss
+    reason: `business archetype ${a ? `'${a}'` : "(undeclared)"} is out of scope (applies to: ${spec.archetypes.join(", ")})`,
+  };
+}
+
+function listingGate(spec: RegulationApplicability, profile: RegionProfile): GateResult {
+  if (!spec.listingStatuses || spec.listingStatuses.length === 0) return { pass: true };
+  const s = profile.listingStatus;
+  if (s && spec.listingStatuses.includes(s)) return { pass: true };
+  return {
+    pass: false,
+    undeclared: !s,
+    reason: `listing status ${s ? `'${s}'` : "(undeclared)"} is out of scope (applies to: ${spec.listingStatuses.join(", ")})`,
+  };
+}
+
+function nexusGate(spec: RegulationApplicability, profile: RegionProfile): GateResult {
+  // Global regulations apply wherever the relevant capability exists (e.g. PCI-DSS).
+  if (spec.basis.includes("global")) return { pass: true, matchedBasis: ["global"] };
+  const jset = new Set(spec.jurisdictions.map((j) => j.toLowerCase()));
+  const matched = spec.basis.filter((b) => setForBasis(profile, b).some((j) => jset.has(j.toLowerCase())));
+  if (matched.length > 0) return { pass: true, matchedBasis: matched };
+  // No nexus. If the org has declared NOTHING on any triggering dimension it's
+  // undeclared (reviewable); if it declared a footprint that simply doesn't
+  // intersect, it's a definitive miss (reference).
+  const anyDeclared = spec.basis.some((b) => setForBasis(profile, b).length > 0);
+  return {
+    pass: false,
+    undeclared: !anyDeclared,
+    reason: anyDeclared
+      ? `no ${spec.basis.join("/")} nexus in ${spec.jurisdictions.join("/")} — out of scope`
+      : `no ${spec.basis.join("/")} nexus in ${spec.jurisdictions.join("/")} declared — out of scope`,
+  };
+}
+
+/**
+ * Decide whether a region/archetype/listing-specific regulation applies to an
+ * org. Generic and data-driven: the spec fully parameterizes the decision, so
+ * one evaluator serves every governance requirement. Gates compose — a
+ * DECLARED-and-mismatched signal on any gate is a definitive out-of-scope
+ * (reference); otherwise an undeclared signal is reviewable.
+ */
 export function regulationApplies(
   spec: RegulationApplicability,
   profile: RegionProfile,
 ): ApplicabilityResult {
-  // Archetype gate — a regulation can be specific to a business archetype.
-  if (spec.archetypes && spec.archetypes.length > 0) {
-    const a = profile.archetype;
-    if (!a || !spec.archetypes.includes(a)) {
-      return {
-        applies: false,
-        reason: `business archetype ${a ? `'${a}'` : "(undeclared)"} is out of scope (applies to: ${spec.archetypes.join(", ")})`,
-        matchedBasis: [],
-      };
-    }
+  const gates = [archetypeGate(spec, profile), listingGate(spec, profile), nexusGate(spec, profile)];
+  const failed = gates.filter((g): g is Extract<GateResult, { pass: false }> => !g.pass);
+
+  if (failed.length === 0) {
+    const matchedBasis = gates.flatMap((g) => (g.pass ? (g.matchedBasis ?? []) : []));
+    const reason = matchedBasis.includes("global")
+      ? "applies globally — no regional nexus required"
+      : `regional nexus via ${matchedBasis.join("/")} in ${spec.jurisdictions.join("/")}`;
+    return { applies: true, reason, matchedBasis, undeclared: false };
   }
-  // Listing-status gate — a regulation can bind only certain legal forms (e.g.
-  // UK premium-listed companies). An undeclared status fails the gate here; the
-  // classifier decides whether that reads as "review" (unknown) vs "reference".
-  if (spec.listingStatuses && spec.listingStatuses.length > 0) {
-    const s = profile.listingStatus;
-    if (!s || !spec.listingStatuses.includes(s)) {
-      return {
-        applies: false,
-        reason: `listing status ${s ? `'${s}'` : "(undeclared)"} is out of scope (applies to: ${spec.listingStatuses.join(", ")})`,
-        matchedBasis: [],
-      };
-    }
-  }
-  // Global regulations apply wherever the relevant capability exists (e.g. PCI-DSS).
-  if (spec.basis.includes("global")) {
-    return { applies: true, reason: "applies globally — no regional nexus required", matchedBasis: ["global"] };
-  }
-  // Region-specific: in scope if any triggering dimension intersects the regulation's jurisdictions.
-  const jset = new Set(spec.jurisdictions.map((j) => j.toLowerCase()));
-  const matched = spec.basis.filter((b) =>
-    setForBasis(profile, b).some((j) => jset.has(j.toLowerCase())),
-  );
-  if (matched.length > 0) {
-    return {
-      applies: true,
-      reason: `regional nexus via ${matched.join("/")} in ${spec.jurisdictions.join("/")}`,
-      matchedBasis: matched,
-    };
-  }
+
+  // A declared mismatch is definitive (reference); pick it over an undeclared
+  // reason. Only when EVERY failing gate is undeclared is the whole result
+  // reviewable.
+  const declaredMiss = failed.find((g) => !g.undeclared);
+  const chosen = declaredMiss ?? failed[0];
   return {
     applies: false,
-    reason: `no ${spec.basis.join("/")} nexus in ${spec.jurisdictions.join("/")} declared — out of scope`,
+    reason: chosen.reason,
     matchedBasis: [],
+    undeclared: !declaredMiss,
   };
+}
+
+/**
+ * Safely parse a stored applicability spec (the `Regulation.applicability` JSON
+ * column) into a RegulationApplicability, or null when absent/malformed. A null
+ * result means "no data-driven spec" — the caller falls back to legacy matching.
+ */
+export function parseApplicability(value: unknown): RegulationApplicability | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  const basis = v.basis;
+  const jurisdictions = v.jurisdictions;
+  if (!Array.isArray(basis) || !basis.every((b) => typeof b === "string")) return null;
+  if (!Array.isArray(jurisdictions) || !jurisdictions.every((j) => typeof j === "string")) return null;
+  const spec: RegulationApplicability = {
+    basis: basis as ProfessionJurisdictionBasis[],
+    jurisdictions: jurisdictions as string[],
+  };
+  if (Array.isArray(v.archetypes) && v.archetypes.every((a) => typeof a === "string")) {
+    spec.archetypes = v.archetypes as string[];
+  }
+  if (Array.isArray(v.listingStatuses) && v.listingStatuses.every((s) => typeof s === "string")) {
+    spec.listingStatuses = v.listingStatuses as string[];
+  }
+  return spec;
 }
 
 /**
