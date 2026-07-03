@@ -28,6 +28,8 @@ const GUARD_SCRIPTS = [
   "lease-guard.mjs",
   "root-clone-guard.mjs",
   "compose-guard.mjs",
+  "lease-punt-guard.mjs",
+  "decision-routing-guard.mjs",
   "ux-fit-precheck.mjs",
   "spec-plan-doc-precheck.mjs",
   "tool-economy-precheck.mjs",
@@ -102,7 +104,7 @@ test("lease-guard + root-clone-guard ride a Bash matcher; the prechecks ride a w
 
   const bashEntry = pre.find((e) => String(e.matcher ?? "").split("|").map((s) => s.trim()).includes("Bash"));
   assert.ok(bashEntry, "expected a Bash PreToolUse matcher for the Bash guards");
-  for (const guard of ["lease-guard.mjs", "root-clone-guard.mjs", "compose-guard.mjs"]) {
+  for (const guard of ["lease-guard.mjs", "root-clone-guard.mjs", "compose-guard.mjs", "lease-punt-guard.mjs"]) {
     assert.ok(
       (bashEntry.hooks ?? []).some((h) => JSON.stringify(h).includes(guard)),
       `${guard} must ride the Bash matcher`,
@@ -120,6 +122,18 @@ test("lease-guard + root-clone-guard ride a Bash matcher; the prechecks ride a w
       `${s} must ride the write-tool matcher`,
     );
   }
+});
+
+test("decision-routing-guard rides an AskUserQuestion matcher (Gate A, BI-383668B9)", () => {
+  const pre = loadHooksJson().hooks.PreToolUse;
+  const askEntry = pre.find((e) =>
+    String(e.matcher ?? "").split("|").map((s) => s.trim()).includes("AskUserQuestion"),
+  );
+  assert.ok(askEntry, "expected an AskUserQuestion PreToolUse matcher for the decision-routing guard");
+  assert.ok(
+    (askEntry.hooks ?? []).some((h) => JSON.stringify(h).includes("decision-routing-guard.mjs")),
+    "decision-routing-guard.mjs must ride the AskUserQuestion matcher",
+  );
 });
 
 test("plugin hook commands reference the script via ${CLAUDE_PLUGIN_ROOT}, not a repo path", () => {
