@@ -755,7 +755,8 @@
           "tool_evaluation_read",
           "tool_verdict_create",
           "risk_score_create",
-          "spec_plan_read"
+          "spec_plan_read",
+          "web_search"
         ],
         "memory": {
           "type": "session",
@@ -803,7 +804,8 @@
           "gap_analysis_create",
           "external_registry_search",
           "tool_evaluation_create",
-          "spec_plan_read"
+          "spec_plan_read",
+          "web_search"
         ],
         "memory": {
           "type": "session",
@@ -899,7 +901,8 @@
           "dependency_audit",
           "supply_chain_verify",
           "finding_create",
-          "spec_plan_read"
+          "spec_plan_read",
+          "web_search"
         ],
         "memory": {
           "type": "persistent",
@@ -1141,7 +1144,8 @@
           "work_capsule_adopt",
           "tool_evaluation_read",
           "integration_test_create",
-          "spec_plan_read"
+          "spec_plan_read",
+          "web_search"
         ],
         "memory": {
           "type": "session",
@@ -2179,7 +2183,8 @@
           "work_capsule_adopt",
           "registry_read",
           "backlog_write",
-          "decision_record_create"
+          "decision_record_create",
+          "web_search"
         ],
         "memory": {
           "type": "none",
@@ -2364,7 +2369,8 @@
           "sandbox_execute",
           "work_capsule_read",
           "work_capsule_write",
-          "work_capsule_adopt"
+          "work_capsule_adopt",
+          "web_search"
         ]
       }
     },
@@ -2401,7 +2407,8 @@
           "sandbox_execute",
           "work_capsule_read",
           "work_capsule_write",
-          "work_capsule_adopt"
+          "work_capsule_adopt",
+          "web_search"
         ]
       }
     },
@@ -2438,7 +2445,8 @@
           "sandbox_execute",
           "work_capsule_read",
           "work_capsule_write",
-          "work_capsule_adopt"
+          "work_capsule_adopt",
+          "web_search"
         ]
       }
     },
@@ -2664,7 +2672,8 @@
           "architecture_read",
           "backlog_read",
           "decision_record_create",
-          "registry_read"
+          "registry_read",
+          "web_search"
         ]
       }
     },
@@ -2705,7 +2714,8 @@
           "backlog_read",
           "backlog_write",
           "consumer_read",
-          "registry_read"
+          "registry_read",
+          "web_search"
         ]
       }
     },
@@ -3045,7 +3055,8 @@
           "backlog_read",
           "backlog_write",
           "portfolio_read",
-          "registry_read"
+          "registry_read",
+          "web_search"
         ]
       }
     },
@@ -3091,7 +3102,8 @@
         "tool_grants": [
           "backlog_read",
           "backlog_write",
-          "registry_read"
+          "registry_read",
+          "web_search"
         ]
       }
     },
@@ -3141,7 +3153,8 @@
           "file_read",
           "portfolio_read",
           "registry_read",
-          "registry_write"
+          "registry_write",
+          "web_search"
         ]
       }
     },
@@ -3186,7 +3199,8 @@
           "work_engagement_read",
           "work_engagement_write",
           "work_engagement_transition",
-          "registry_read"
+          "registry_read",
+          "web_search"
         ]
       }
     }
