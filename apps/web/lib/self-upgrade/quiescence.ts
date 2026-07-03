@@ -845,6 +845,19 @@ const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
 const DEAD_PHASE_LIVENESS_MS = 15 * 60 * 1000;
 
 /**
+ * Liveness threshold for dead-COWORKER-LOOP reaping (BI-1C4179D0), the A-class
+ * sibling of DEAD_PHASE_LIVENESS_MS. The A-class TaskRun blocker never had the
+ * liveness check the BuildPhaseRun path has had since the FB-69231490 fix, so a
+ * crashed loop held the drain open forever — surfaced live 2026-07-03 (12 loops,
+ * ~60h stale, blocking every manual AND scheduled upgrade). Same 15-min window
+ * as the phase path: far longer than the worst-case ~3-min heartbeat interval,
+ * and strictly more conservative than the stall watchdog's own heartbeat timeout.
+ * Always-on (no flag): the flag-gated watchdog defaulting off was half of why the
+ * corpses were never cleared.
+ */
+const DEAD_COWORKER_LOOP_LIVENESS_MS = 15 * 60 * 1000;
+
+/**
  * True when an in-flight build phase is a corpse: the most recent observable
  * signal — the build's latest active-TaskRun heartbeat, or the phase's own
  * start if newer — is older than `thresholdMs`. Pure; unit-tested. A live
@@ -861,6 +874,27 @@ export function isBuildPhaseReapable(args: {
     buildLastHeartbeatAt && buildLastHeartbeatAt.getTime() > phaseStartedAt.getTime()
       ? buildLastHeartbeatAt
       : phaseStartedAt;
+  return now.getTime() - lastSignal.getTime() > thresholdMs;
+}
+
+/**
+ * True when a working/active coworker loop (A-class blocker) is provably dead:
+ * its newest signal — the last heartbeat, or its start if newer — predates the
+ * liveness window. Pure; unit-tested. Sibling to {@link isBuildPhaseReapable}
+ * (BI-1C4179D0). `startedAt` is always present on a TaskRun, so a freshly-started
+ * loop that has not heartbeated yet is never reaped (startup race protection).
+ */
+export function isTaskRunReapable(args: {
+  startedAt: Date;
+  lastHeartbeatAt: Date | null;
+  now: Date;
+  thresholdMs: number;
+}): boolean {
+  const { startedAt, lastHeartbeatAt, now, thresholdMs } = args;
+  const lastSignal =
+    lastHeartbeatAt && lastHeartbeatAt.getTime() > startedAt.getTime()
+      ? lastHeartbeatAt
+      : startedAt;
   return now.getTime() - lastSignal.getTime() > thresholdMs;
 }
 
@@ -938,10 +972,31 @@ export async function captureActiveSessionBlockers(opts?: {
       status: true,
       lastHeartbeatAt: true,
       startedAt: true,
+      currentAgentId: true,
     },
     take: 25,
   });
+  // Dead-loop reaping (always-on, BI-1C4179D0): a working/active TaskRun whose
+  // newest signal predates the liveness window is a corpse — a crashed coworker
+  // loop that will never heartbeat again — not live work. It must not hold the
+  // self-upgrade drain open. Mirrors the BuildPhaseRun corpse reaping below
+  // (isBuildPhaseReapable); the A-class path never had this check, so 12 dead
+  // loops (60h stale) blocked every drain on a live install (2026-07-03). A
+  // reaped row is settled to `stalled` (the watchdog's terminal-for-dead-work
+  // state) so the repair is permanent and the loop is surfaced as retryable.
+  const reapedTaskRuns: string[] = [];
   for (const row of activeTaskRuns) {
+    if (
+      isTaskRunReapable({
+        startedAt: row.startedAt,
+        lastHeartbeatAt: row.lastHeartbeatAt ?? null,
+        now,
+        thresholdMs: DEAD_COWORKER_LOOP_LIVENESS_MS,
+      })
+    ) {
+      reapedTaskRuns.push(row.taskRunId);
+      continue; // corpse — does not block the drain
+    }
     surfaces.push({
       surface: "coworker.reasoning-loop",
       detectionClass: "A",
@@ -955,8 +1010,27 @@ export async function captureActiveSessionBlockers(opts?: {
         status: row.status,
         startedAt: row.startedAt.toISOString(),
         lastHeartbeatAt: row.lastHeartbeatAt?.toISOString() ?? null,
+        agentId: row.currentAgentId ?? null,
       },
     });
+  }
+  if (reapedTaskRuns.length > 0) {
+    // Permanently settle the corpses so the same dead loops don't re-trip the
+    // blocker capture every tick. Best-effort: a failure here must never break
+    // capture (worst case the rows are re-evaluated — and re-excluded — next
+    // time). The status guard keeps it idempotent against a concurrent
+    // transition (e.g. the stall watchdog racing this capture).
+    try {
+      await prisma.taskRun.updateMany({
+        where: { taskRunId: { in: reapedTaskRuns }, status: { in: ["working", "active"] } },
+        data: { status: "stalled", completedAt: now },
+      });
+    } catch (err) {
+      console.warn("[quiescence] failed to settle reaped dead coworker loop(s):", err);
+    }
+    console.warn(
+      `[quiescence] reaped ${reapedTaskRuns.length} dead coworker loop(s) from the drain (no heartbeat, newest signal > ${DEAD_COWORKER_LOOP_LIVENESS_MS / 60000} min ago). (BI-1C4179D0)`,
+    );
   }
 
   // A-class: BuildPhaseRun in flight (phase mid-execution)
@@ -1147,7 +1221,63 @@ export type QuiescenceBlockerLine = {
   kind: "hard" | "soft";
   count: number;
   estimatedWaitMs: number | null;
+  /**
+   * Operator-facing identity of a representative in-flight item on this surface
+   * (BI-D0F4C6FB): the coworker/agent and its task title, so the panel can say
+   * WHICH coworker is blocking instead of a bare "AI coworker working". Null for
+   * surfaces without a per-item identity (e.g. recent-tool-execution).
+   */
+  sampleAgent?: string | null;
+  sampleTitle?: string | null;
+  /** Oldest last-signal (heartbeat, or start if newer) across the collapsed
+   *  group, ISO — drives the panel's "last active …" staleness line. */
+  oldestSignalAt?: string | null;
+  /** True when that oldest signal was already stale past the coworker liveness
+   *  window at capture — a corpse the drain auto-reaps (BI-1C4179D0), shown to
+   *  the operator as "unresponsive — clears automatically". */
+  stale?: boolean;
 };
+
+/**
+ * Extract a representative operator identity + liveness signal from one raw
+ * surface blocker's evidence (BI-D0F4C6FB). Surface-shaped: coworker loops carry
+ * agent + title + heartbeat/start; build phases carry a phase name + start;
+ * other surfaces have no per-item identity.
+ */
+function blockerIdentity(s: SurfaceBlocker): {
+  agent: string | null;
+  title: string | null;
+  signalAt: string | null;
+} {
+  const ev = (s.evidence ?? {}) as Record<string, unknown>;
+  const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+  if (s.surface === "coworker.reasoning-loop") {
+    return {
+      agent: str(ev.agentId),
+      title: str(ev.title),
+      signalAt: newestIso(str(ev.lastHeartbeatAt), str(ev.startedAt)),
+    };
+  }
+  if (s.surface.startsWith("build-studio.phase.")) {
+    const phase = str(ev.phase);
+    return { agent: null, title: phase ? `${phase} phase` : null, signalAt: str(ev.startedAt) };
+  }
+  return { agent: null, title: null, signalAt: null };
+}
+
+/** The later of two ISO instants (either may be null). */
+function newestIso(a: string | null, b: string | null): string | null {
+  if (!a) return b;
+  if (!b) return a;
+  return new Date(a).getTime() >= new Date(b).getTime() ? a : b;
+}
+
+/** The earlier of two ISO instants (either may be null). */
+function oldestIso(a: string | null, b: string | null): string | null {
+  if (!a) return b;
+  if (!b) return a;
+  return new Date(a).getTime() <= new Date(b).getTime() ? a : b;
+}
 
 /**
  * Everything the Self-Upgrade page needs to explain "what's happening" during a
@@ -1192,12 +1322,19 @@ export function summarizeBlockers(
   snapshot: ActiveSessionBlockers | null,
 ): QuiescenceBlockerLine[] {
   if (!snapshot || !Array.isArray(snapshot.surfaces)) return [];
+  const capturedAt = typeof snapshot.capturedAt === "string" ? snapshot.capturedAt : null;
   const bySurface = new Map<string, QuiescenceBlockerLine>();
   for (const s of snapshot.surfaces) {
+    const id = blockerIdentity(s);
     const existing = bySurface.get(s.surface);
     if (existing) {
       existing.count += 1;
       existing.estimatedWaitMs = maxWait(existing.estimatedWaitMs, s.estimatedWaitMs);
+      // Keep the first identity seen; track the OLDEST (most-stale) signal so the
+      // panel surfaces the worst laggard in a collapsed group.
+      existing.sampleAgent = existing.sampleAgent ?? id.agent;
+      existing.sampleTitle = existing.sampleTitle ?? id.title;
+      existing.oldestSignalAt = oldestIso(existing.oldestSignalAt ?? null, id.signalAt);
     } else {
       bySurface.set(s.surface, {
         surface: s.surface,
@@ -1205,8 +1342,19 @@ export function summarizeBlockers(
         kind: s.kind,
         count: 1,
         estimatedWaitMs: s.estimatedWaitMs,
+        sampleAgent: id.agent,
+        sampleTitle: id.title,
+        oldestSignalAt: id.signalAt,
       });
     }
+  }
+  // Flag a coworker line as stale when its oldest signal was already past the
+  // liveness window at capture — a corpse the drain auto-reaps (BI-1C4179D0).
+  for (const line of bySurface.values()) {
+    if (line.surface !== "coworker.reasoning-loop" || !line.oldestSignalAt || !capturedAt) continue;
+    line.stale =
+      new Date(capturedAt).getTime() - new Date(line.oldestSignalAt).getTime() >
+      DEAD_COWORKER_LOOP_LIVENESS_MS;
   }
   // Hard blockers first (they're what actually defer the drain), then by count.
   return [...bySurface.values()].sort(
