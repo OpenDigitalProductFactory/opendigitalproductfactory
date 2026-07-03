@@ -104,6 +104,26 @@ describe("assembleSystemPrompt", () => {
     expect(routingIdx).toBeLessThan(modeIdx);
   });
 
+  // Test 2b: The limitation-response contract sits between decision-routing and
+  // mode, and instructs the coworker to propose the enabler + ask one yes/no
+  // rather than dead-ending or deflecting. Regression guard for the "AI Ops
+  // Engineer could only summarize / punted to System Admin" failure mode.
+  it("injects the limitation-response contract between decision-routing and mode", async () => {
+    const prompt = await assembleSystemPrompt(fullInput);
+
+    expect(prompt).toContain("WHEN YOU HIT A LIMITATION — PROPOSE THE ENABLER, NEVER DEAD-END.");
+    // The anti-dead-end + anti-deflect stance must be explicit.
+    expect(prompt).toContain("ask an administrator");
+    expect(prompt).toContain("single yes/no go-ahead");
+
+    const routingIdx = indexOf(prompt, "DECISION ROUTING —");
+    const limitationIdx = indexOf(prompt, "WHEN YOU HIT A LIMITATION —");
+    const modeIdx = indexOf(prompt, "Mode: ACT");
+    expect(routingIdx).toBeGreaterThanOrEqual(0);
+    expect(routingIdx).toBeLessThan(limitationIdx);
+    expect(limitationIdx).toBeLessThan(modeIdx);
+  });
+
   // Test 3: Act mode text is injected correctly
   it("injects act mode text when mode is 'act'", async () => {
     const prompt = await assembleSystemPrompt(fullInput);
