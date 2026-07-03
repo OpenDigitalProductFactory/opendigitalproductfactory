@@ -4,6 +4,7 @@ import { prisma } from "@dpf/db";
 import { getFinancialProfile } from "@dpf/finance-templates";
 import { seedDefaultDunningSequence } from "@/lib/actions/dunning";
 import { resolveInvoiceDefaultTaxRate } from "@/lib/finance/invoice-default-tax";
+import { seedChartOfAccounts } from "@/lib/finance/ledger-service";
 
 // ─── applyFinancialProfile ────────────────────────────────────────────────────
 
@@ -53,6 +54,13 @@ export async function applyFinancialProfile(
   // Seed dunning sequence if the profile enables it
   if (profile.dunningEnabled) {
     await seedDefaultDunningSequence();
+  }
+
+  // Seed the chart of accounts so the general ledger is ready before any
+  // sub-ledger document posts. Idempotent — re-applying a profile fills in any
+  // missing spine accounts without disturbing existing ones or user edits.
+  if (org) {
+    await seedChartOfAccounts(org.id);
   }
 
   return { applied: true, profileName: profile.displayName };

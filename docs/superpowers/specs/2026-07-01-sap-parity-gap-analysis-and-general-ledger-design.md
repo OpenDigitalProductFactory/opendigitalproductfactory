@@ -174,8 +174,82 @@ internal trial balance, and it reconciles/syncs to an external accounting/ERP sy
 - `vitest run lib/finance/ledger.test.ts` — **19/19 pass**.
 - Standalone strict `tsc --noEmit` on `ledger.ts` — clean.
 
-## 7. Roadmap
+## 7. Design north star — more integrated & simpler than SAP (operator direction, 2026-07-01)
 
-Phase 1 (this PR) lands the ledger foundation. The remaining ranked gaps (§4) are
-filed as backlog items under **EP-SAP-PARITY** so SAP-parity is delivered as a
-governed program, not a single PR — the honest shape for ERP-scale scope.
+DPF is **not** trying to replicate SAP's module list. SAP's defining weakness for an
+SMB is that it is a **patchwork of separately-acquired products** (Ariba for
+procurement, Concur for expense, SuccessFactors for HCM, …) bolted onto a
+config-heavy core: many tools, many data models, constant sub-ledger↔GL
+reconciliation, painful account-determination setup (OBYC and friends), and limited
+flexibility. DPF's edge is the opposite:
+
+1. **One data spine.** A single ledger (the ACDOCA lesson) and a single identity
+   (`Organization`) that every module posts to — not N acquired databases stitched
+   together.
+2. **The AI coworker absorbs the complexity.** The SMB owner does normal business
+   actions (send an invoice, pay a bill); the ledger is a *byproduct*, posted and
+   determined automatically. No transaction codes, no account-determination config.
+3. **Flexibility by archetype.** The same spine reshapes to trades, healthcare,
+   municipal fund-accounting, cooperatives — via `@dpf/finance-templates`, not via a
+   consultant re-implementing modules.
+
+This scales up (larger, more complex orgs) by *deepening the same spine*, never by
+acquiring and bolting on another tool. **Target: small/mid-sized complexity now,
+architected to grow — with integration and simplicity as the moat.**
+
+## 8. Phase 2 — the automatic, integrated ledger (this PR, stacked on Phase 1 #2546)
+
+Phase 2 makes the Phase-1 ledger *automatic and invisible*, delivering point (2) above.
+
+### 8.1 Automatic chart of accounts + account determination (`chart-of-accounts.ts`, pure)
+
+- **`BASE_CONTROL_ACCOUNTS`** — the balance-sheet control spine (bank, AR, AP, sales
+  tax, retained earnings, opening-balance equity, a default sales account) every org
+  gets regardless of archetype. This is the piece the archetype `chartOfAccountsSeed`
+  omits (seeds carry only revenue/expense) and the piece SAP makes you configure.
+- **`buildOrgChartOfAccounts(profile)`** — merges the base spine with the archetype's
+  own accounts into the full chart to seed. Where an archetype defines a base code
+  with a domain meaning (a municipality's "General Fund Cash" at 1000), the archetype
+  **wins on name/type but inherits the base account's posting role** — so domain
+  flexibility and automatic determination coexist.
+- **`resolvePostingAccounts(accounts)`** — *account determination*: resolves each
+  posting **role** (receivables, salesRevenue, taxPayable, bank, …) to a concrete
+  account by explicit role tag first, then a documented per-role heuristic. Roles it
+  cannot resolve are **reported, never guessed**, so the books can't silently
+  misstate — the finance coworker can surface exactly what setup is missing.
+
+Posting builders ask for a *role*, never a code, so one builder works across every
+archetype and ledger model.
+
+### 8.2 Persistence + auto-posting (`ledger-service.ts`, Prisma) and its wiring
+
+- **`seedChartOfAccounts(orgId)`** — idempotently upserts the org's chart of accounts
+  from its applied profile. **Wired into `applyFinancialProfile`** (setup): applying a
+  financial profile now materialises a ready-to-post chart of accounts.
+- **`postInvoiceIssued(invoiceId)`** — posts an issued invoice (Dr AR / Cr Revenue /
+  Cr Tax) with automatic determination; idempotent (one journal per source document).
+  **Wired into `sendInvoice`** (the finalise seam every send path converges on), as a
+  **best-effort** call — a ledger hiccup never blocks sending the customer their
+  invoice, and the idempotent post retries cleanly.
+
+End-to-end result: *set up a profile → the chart of accounts exists; send an invoice →
+it is in the ledger* — with no journal-entry knowledge required of the user.
+
+### 8.3 Verification (Phase 2)
+
+- `vitest run lib/finance/ledger.test.ts lib/finance/chart-of-accounts.test.ts` —
+  **30/30 pass**.
+- Standalone strict `tsc --noEmit` on the pure modules (`ledger.ts`,
+  `chart-of-accounts.ts`) — clean.
+- The Prisma-typed service/wiring (`ledger-service.ts` and the two hooks) is written
+  field-exact to the schema; its typecheck + runtime are gated by CI and the shared
+  local-CI sandbox per AGENTS.md §5 (this worktree is source-only, no generated
+  client). Non-fatal wiring keeps invoice send resilient if the client is stale.
+
+## 9. Roadmap
+
+Phases 1–2 land the ledger foundation and make it automatic. Remaining ranked gaps
+(§4) — GL portal UI + trial-balance/balance-sheet reports, bill/payment/depreciation
+posting builders, procurement 3-way match (MM), inventory movements (WM) — are filed
+under **EP-SAP-PARITY** and delivered by deepening this one spine, not by bolting on
+separate tools.
