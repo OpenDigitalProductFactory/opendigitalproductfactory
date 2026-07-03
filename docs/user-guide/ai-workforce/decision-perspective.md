@@ -206,9 +206,12 @@ Tracked under EP-WWMD, EP-VOICE-LAYER, and EP-WSID:
 
 ## Related Routes
 
+- `/wiki` — **Decision governance** landing. Reframed (EP-0AF96937 Phase 1) around the three decision disciplines — WWMD (platform), WWWD (your business), WSID (each role's craft) — each card showing derived health (material counts, whether the org has its own stance, open review counts) and See / Manage / Review actions. The raw kernel material (principles, stances, heuristics) is retained below the hub as a "Governing material" drill-in rather than the front door. See `docs/superpowers/specs/2026-07-04-decision-governance-surface-redesign-design.md`.
+- `/wiki/perspectives` — manage the profiles behind each discipline; give any perspective a voice
 - Build Studio → **Decision Perspective Gate Panel** — primary surface for the gate
 - `/wiki/personas/[id]` — profile detail
 - `/wiki/personas/[id]/voice` — voice training and consent
+- `/platform/ai/founder-review` — the owner/founder review queue for `defer`/`escalate` outcomes (`?mode=wwmd` / `?mode=wwwd`)
 - `/platform/ai/operations` — Operations Map with decision-pressure overlays
 - MCP — the `decisionPerspective.invoke` tool exposes the gate to external clients under the same grant model
 

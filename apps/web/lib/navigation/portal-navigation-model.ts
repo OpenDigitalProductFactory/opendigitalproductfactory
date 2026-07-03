@@ -833,7 +833,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "wiki",
-    label: "Wiki",
+    label: "Decision governance",
     path: "/wiki",
     parentPath: "/wiki",
     domain: "knowledge",
@@ -842,7 +842,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     capabilityKey: null,
     shellNav: {
       sectionKey: "knowledge",
-      description: "Founder kernel and per-org overlay - stances, heuristics, decisions.",
+      description: "How your AI decides on your behalf - WWMD, WWWD, WSID - and where you shape it.",
     },
   },
   {
