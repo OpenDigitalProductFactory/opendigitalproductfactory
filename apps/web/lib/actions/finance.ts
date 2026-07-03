@@ -10,7 +10,7 @@ import type { INVOICE_STATUSES } from "@/lib/finance-validation";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { sendEmail, composeSignedConfirmationEmail, isEmailConfigured } from "@/lib/email";
-import { postInvoiceIssued } from "@/lib/finance/ledger-service";
+import { postInvoiceIssued, postPaymentRecorded } from "@/lib/finance/ledger-service";
 
 // ─── Auth guard ───────────────────────────────────────────────────────────────
 
@@ -247,6 +247,18 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{ id: st
         },
       });
     }
+  }
+
+  // Post the payment to the general ledger (settle AR/AP against bank). Best-effort
+  // by design: a ledger hiccup must never fail recording the payment. Idempotent,
+  // so a later retry is safe.
+  try {
+    await postPaymentRecorded(payment.id);
+  } catch (err) {
+    // Log only the error (which carries the paymentRef); no id is interpolated, so
+    // no user-controlled value can reach the log sink — consistent with the invoice
+    // post above and avoids a CodeQL js/log-injection false positive.
+    console.error("[ledger] failed to post a payment to the general ledger:", err);
   }
 
   revalidatePath("/finance");

@@ -40,6 +40,7 @@ exports[`finance barrel export > exports all public symbols 1`] = `
   "activateAiProviderContractSchema",
   "buildInvoicePostingLines",
   "buildOrgChartOfAccounts",
+  "buildPaymentPostingLines",
   "computeTrialBalance",
   "createAssetSchema",
   "createBankAccountSchema",

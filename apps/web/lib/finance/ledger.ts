@@ -311,3 +311,82 @@ export function buildInvoicePostingLines(
 
   return lines;
 }
+
+// ─── Payment settlement posting ──────────────────────────────────────────────
+
+export type PaymentPostingResolver = {
+  /** The cash/bank account the money moves through. */
+  bankAccountId: string;
+  /** Trade receivables — cleared when a customer pays (inbound). */
+  receivablesAccountId?: string;
+  /** Trade payables — cleared when we pay a supplier (outbound). */
+  payablesAccountId?: string;
+};
+
+export type PaymentPostingSource = {
+  /** "inbound" = customer receipt, "outbound" = supplier payment (PAYMENT_DIRECTIONS). */
+  direction: "inbound" | "outbound";
+  amount: number;
+  customerAccountId?: string | null;
+  contactId?: string | null;
+};
+
+/**
+ * Build the journal for a recorded payment — the settlement half of the cash
+ * cycle, so a payment lands on the same ledger the invoice/bill posted to:
+ *
+ *   inbound  (customer receipt):  Dr Bank  /  Cr Accounts Receivable
+ *   outbound (supplier payment):  Dr Accounts Payable  /  Cr Bank
+ *
+ * Balances by construction (one debit, one credit, equal amount). Throws if the
+ * control account the direction needs (receivables for inbound, payables for
+ * outbound) was not resolved, so a payment never posts to the wrong account.
+ */
+export function buildPaymentPostingLines(
+  payment: PaymentPostingSource,
+  accounts: PaymentPostingResolver,
+): JournalLineInput[] {
+  const amount = Math.max(payment.amount, 0);
+
+  if (payment.direction === "inbound") {
+    if (!accounts.receivablesAccountId) {
+      throw new Error(
+        "Inbound payment needs a receivablesAccountId to clear, but none was resolved.",
+      );
+    }
+    return [
+      {
+        accountId: accounts.bankAccountId,
+        debit: amount,
+        description: "Bank — customer receipt",
+        customerAccountId: payment.customerAccountId ?? null,
+        contactId: payment.contactId ?? null,
+      },
+      {
+        accountId: accounts.receivablesAccountId,
+        credit: amount,
+        description: "Accounts receivable settled",
+        customerAccountId: payment.customerAccountId ?? null,
+      },
+    ];
+  }
+
+  if (!accounts.payablesAccountId) {
+    throw new Error(
+      "Outbound payment needs a payablesAccountId to clear, but none was resolved.",
+    );
+  }
+  return [
+    {
+      accountId: accounts.payablesAccountId,
+      debit: amount,
+      description: "Accounts payable settled",
+      contactId: payment.contactId ?? null,
+    },
+    {
+      accountId: accounts.bankAccountId,
+      credit: amount,
+      description: "Bank — supplier payment",
+    },
+  ];
+}

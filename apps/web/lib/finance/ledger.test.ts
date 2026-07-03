@@ -5,6 +5,7 @@ import {
   validateJournalEntry,
   computeTrialBalance,
   buildInvoicePostingLines,
+  buildPaymentPostingLines,
   periodKeyOf,
   toMinorUnits,
   LEDGER_ACCOUNT_TYPES,
@@ -197,5 +198,49 @@ describe("toMinorUnits", () => {
   it("rounds to integer pence without float drift", () => {
     expect(toMinorUnits(0.1 + 0.2)).toBe(30);
     expect(toMinorUnits(19.99)).toBe(1999);
+  });
+});
+
+describe("buildPaymentPostingLines", () => {
+  const resolver = {
+    bankAccountId: "acc-bank",
+    receivablesAccountId: "acc-ar",
+    payablesAccountId: "acc-ap",
+  };
+
+  it("posts an inbound customer receipt Dr Bank / Cr AR and balances", () => {
+    const lines = buildPaymentPostingLines(
+      { direction: "inbound", amount: 250, customerAccountId: "cust-1" },
+      resolver,
+    );
+    expect(validateJournalEntry(lines).ok).toBe(true);
+    const bank = lines.find((l) => l.accountId === "acc-bank")!;
+    const ar = lines.find((l) => l.accountId === "acc-ar")!;
+    expect(bank.debit).toBe(250);
+    expect(ar.credit).toBe(250);
+    expect(bank.customerAccountId).toBe("cust-1");
+  });
+
+  it("posts an outbound supplier payment Dr AP / Cr Bank and balances", () => {
+    const lines = buildPaymentPostingLines({ direction: "outbound", amount: 400 }, resolver);
+    expect(validateJournalEntry(lines).ok).toBe(true);
+    const ap = lines.find((l) => l.accountId === "acc-ap")!;
+    const bank = lines.find((l) => l.accountId === "acc-bank")!;
+    expect(ap.debit).toBe(400);
+    expect(bank.credit).toBe(400);
+  });
+
+  it("throws if the control account the direction needs is unresolved", () => {
+    expect(() =>
+      buildPaymentPostingLines({ direction: "inbound", amount: 10 }, { bankAccountId: "acc-bank" }),
+    ).toThrow(/receivablesAccountId/);
+    expect(() =>
+      buildPaymentPostingLines({ direction: "outbound", amount: 10 }, { bankAccountId: "acc-bank" }),
+    ).toThrow(/payablesAccountId/);
+  });
+
+  it("never emits a negative amount", () => {
+    const lines = buildPaymentPostingLines({ direction: "inbound", amount: -5 }, resolver);
+    expect(lines.every((l) => (l.debit ?? 0) >= 0 && (l.credit ?? 0) >= 0)).toBe(true);
   });
 });
