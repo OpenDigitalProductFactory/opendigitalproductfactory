@@ -2619,7 +2619,8 @@
           "registry_read",
           "consumer_read",
           "crm_read",
-          "crm_write"
+          "crm_write",
+          "web_search"
         ]
       }
     },

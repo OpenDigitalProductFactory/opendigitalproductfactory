@@ -69,6 +69,34 @@ describe("CRM coworker tools", () => {
     expect(grants).toEqual(expect.arrayContaining(["crm_read", "crm_write", "backlog_read", "registry_read"]));
   });
 
+  // The Customer Success Manager researches prospects online, so it holds the
+  // web_search grant. Without it, flipping the "web access" toggle on was a
+  // no-op — the grant filter stripped search_public_web / fetch_public_website.
+  it("customer-advisor holds web_search so the web-access toggle is not a no-op", () => {
+    const grants = getAgentToolGrants("customer-advisor");
+    expect(grants).toContain("web_search");
+    expect(isToolAllowedByGrants("search_public_web", grants!)).toBe(true);
+    expect(isToolAllowedByGrants("fetch_public_website", grants!)).toBe(true);
+  });
+
+  it("exposes web research tools to customer-advisor only when external access is enabled", async () => {
+    const withWeb = (await getAvailableTools(adminUser, {
+      externalAccessEnabled: true,
+      agentId: "customer-advisor",
+    })).map((t) => t.name);
+    for (const t of ["search_public_web", "fetch_public_website"]) {
+      expect(withWeb, `expected ${t} when web access is on`).toContain(t);
+    }
+
+    const withoutWeb = (await getAvailableTools(adminUser, {
+      externalAccessEnabled: false,
+      agentId: "customer-advisor",
+    })).map((t) => t.name);
+    for (const t of ["search_public_web", "fetch_public_website"]) {
+      expect(withoutWeb, `${t} must stay gated behind the web-access toggle`).not.toContain(t);
+    }
+  });
+
   it("crm_write authorizes CRM writes and implies crm_read; backlog_write does not couple in", () => {
     expect(isToolAllowedByGrants("create_quote", ["crm_write"])).toBe(true);
     expect(isToolAllowedByGrants("create_opportunity", ["crm_write"])).toBe(true);
