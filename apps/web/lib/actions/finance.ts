@@ -422,13 +422,11 @@ export async function sendInvoice(invoiceId: string): Promise<{ payToken: string
   try {
     await postInvoiceIssued(invoiceId);
   } catch (err) {
-    // invoiceId is a route parameter (tainted). Keep it OUT of the format-string
-    // position (a constant literal, so no js/tainted-format-string) and strip line
-    // breaks (a CodeQL-recognized js/log-injection barrier) so a best-effort ledger
-    // log can never forge log entries. sanitizeForLog isn't used here because GitHub
-    // code scanning does not honour the JS model pack (see .github/codeql/dpf-sanitizers).
-    const safeInvoiceId = String(invoiceId).replace(/[\r\n]+/g, " ");
-    console.error("[ledger] failed to post invoice %s to the general ledger:", safeInvoiceId, err);
+    // The raw invoiceId is a route parameter (tainted), so it is intentionally NOT
+    // logged — no user-controlled value reaches the log sink at all (js/log-injection
+    // cannot arise). The thrown error carries the invoiceRef where it matters, and
+    // that is the debugging signal for this best-effort post.
+    console.error("[ledger] failed to post an issued invoice to the general ledger:", err);
   }
 
   revalidatePath("/finance");
