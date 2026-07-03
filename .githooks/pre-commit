@@ -177,6 +177,42 @@ if [ -n "$STAGED_PRINCIPLES" ] && [ "$DPF_SKIP_DECISION_BASELINE" != "1" ]; then
   fi
 fi
 
+# ─── Guard 7: migration safety (tightening DDL on data) ─────────────────────
+# When a NEW migration.sql is staged, run the same check CI uses
+# (.github/workflows/migration-safety-guard.yml →
+# packages/db/scripts/migration-safety-guard.mjs). Blocks a tightening
+# constraint (UNIQUE/EXCLUDE/CHECK/FK/PK/SET NOT NULL/ADD COLUMN NOT NULL
+# without DEFAULT) that lacks in-file remediation, a fresh-table context,
+# NOT VALID, or an `-- @migration-safety:` attestation — the class that
+# wedges forward-only self-upgrade on installs with pre-existing violating
+# rows (PR #2554). Covered by migration-safety-guard.test.ts.
+
+STAGED_MIGRATION=$(git diff --cached --name-only --diff-filter=A \
+  | grep -E '^packages/db/prisma/migrations/.*/migration\.sql$' || true)
+
+if [ -n "$STAGED_MIGRATION" ]; then
+  echo "[pre-commit] new migration staged — running migration safety guard..."
+  if git rev-parse --verify origin/main >/dev/null 2>&1; then
+    MIG_GUARD_BASE="origin/main"
+  elif git rev-parse --verify '@{u}' >/dev/null 2>&1; then
+    MIG_GUARD_BASE="@{u}"
+  else
+    MIG_GUARD_BASE=""
+  fi
+  if [ -n "$MIG_GUARD_BASE" ]; then
+    if ! node packages/db/scripts/migration-safety-guard.mjs "$MIG_GUARD_BASE"; then
+      echo ""
+      echo "Commit rejected. Remediate in-migration, split expand→contract, use"
+      echo "NOT VALID, or attest with '-- @migration-safety: data-safe: <reason>'"
+      echo "(AGENTS.md §11). CI will gate the merge either way."
+      echo ""
+      exit 1
+    fi
+  else
+    echo "[pre-commit] no usable base ref for migration safety guard — skipping (CI backstop)."
+  fi
+fi
+
 # ─── Guard 4: typecheck gate ────────────────────────────────────────────────
 
 if [ "$DPF_SKIP_TYPECHECK" = "1" ]; then

@@ -1,0 +1,46 @@
+name: Migration Safety Guard
+
+# Fail any PR whose NEW Prisma migration adds a "tightening" constraint
+# (UNIQUE / EXCLUDE / CHECK / FOREIGN KEY / PRIMARY KEY / SET NOT NULL /
+# ADD COLUMN NOT NULL without DEFAULT) on an existing table WITHOUT in-file
+# remediation, a fresh-table context, NOT VALID, or an explicit
+# `-- @migration-safety:` attestation.
+#
+# Why: migrations are forward-only and the self-upgrade promoter is fail-closed
+# (migrate runs pre-swap under `set -e`). A tightening migration that fails on
+# an install's existing data WEDGES its forward-only chain — the busiest installs
+# freeze on the old version and miss all future updates (PR #2554 shipped exactly
+# this). The schema-regression-guard only catches removals; this closes the
+# risky-additions gap. EP-056D2A5E / BI-5B3FA415.
+
+# CodeQL actions/missing-workflow-permissions: least-privilege default.
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "packages/db/prisma/migrations/**/migration.sql"
+      # Also trigger when the guard machinery itself changes so a guard
+      # regression can't slip through without exercising the CI path.
+      - "packages/db/scripts/migration-safety-guard.mjs"
+      - ".github/workflows/migration-safety-guard.yml"
+
+jobs:
+  migration-safety-guard:
+    name: Migration safety guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect unattested tightening migrations
+        # Scans each NEW migration.sql (absent at origin/main) for tightening
+        # DDL lacking remediation/attestation. Logic in
+        # packages/db/scripts/migration-safety-guard.mjs, reused by
+        # .githooks/pre-commit Guard 7; covered by
+        # packages/db/scripts/migration-safety-guard.test.ts.
+        run: |
+          git fetch origin main --depth=50
+          node packages/db/scripts/migration-safety-guard.mjs origin/main
