@@ -848,3 +848,55 @@ describe("knownGrantKeys — closed grant vocabulary for the per-coworker editor
     for (const k of keys) expect(authorizing.has(k)).toBe(true);
   });
 });
+
+describe("web_search roster — outward-facing roles hold it, internal/governance roles do not", () => {
+  // Roles whose expected outcome depends on public-internet information the
+  // platform does not already hold (market/competitor/vendor/standards/docs
+  // research). If any of these regresses, the coworker's web-access toggle
+  // silently becomes a no-op again.
+  const WEB_RESEARCH_ROLES = [
+    "marketing-specialist",
+    "external-catalog-scout",
+    "inventory-specialist",
+    "portfolio-advisor",
+    "gap-analysis-agent",
+    "security-auditor-agent",
+    "sbom-management-agent",
+    "build-software-engineer",
+    "build-frontend-engineer",
+    "build-data-architect",
+    "ea-architect",
+    "ux-accessibility-agent",
+    "investment-analysis-agent",
+    "hr-specialist",
+  ];
+
+  // Internal-only, governance, or egress-sensitive roles that must NOT reach the
+  // public web (privacy, security-estate, or pure internal coordination).
+  const NO_WEB_ROLES = [
+    "data-governance-agent",
+    "soc-triage-analyst",
+    "soc-investigator",
+    "soc-threat-hunter",
+    "soc-incident-commander",
+    "coo-orchestrator",
+    "governance-orchestrator",
+    "evidence-chain-agent",
+    "constraint-validation-agent",
+  ];
+
+  it.each(WEB_RESEARCH_ROLES)("%s holds web_search and can use public web tools", (role) => {
+    const grants = getAgentToolGrants(role);
+    expect(grants, `${role} not found in registry`).toBeTruthy();
+    expect(grants).toContain("web_search");
+    expect(isToolAllowedByGrants("search_public_web", grants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("fetch_public_website", grants ?? [])).toBe(true);
+  });
+
+  it.each(NO_WEB_ROLES)("%s does NOT hold web_search", (role) => {
+    const grants = getAgentToolGrants(role);
+    expect(grants, `${role} not found in registry`).toBeTruthy();
+    expect(grants).not.toContain("web_search");
+    expect(isToolAllowedByGrants("search_public_web", grants ?? [])).toBe(false);
+  });
+});
