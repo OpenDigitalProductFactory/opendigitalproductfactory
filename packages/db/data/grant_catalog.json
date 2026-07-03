@@ -85,6 +85,7 @@
         "configure_gateway_scan",
         "grok_signin_start",
         "grok_signin_status",
+        "manage_coworker_tool_grant",
         "run_endpoint_tests",
         "update_provider_category"
       ],

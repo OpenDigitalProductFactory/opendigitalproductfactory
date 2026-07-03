@@ -48,6 +48,7 @@ import { orgDecisionPack } from "@/lib/mcp/packs/org-decision-pack";
 import { activityRoutingPack } from "@/lib/mcp/packs/activity-routing-pack";
 import { selfUpgradePack } from "@/lib/mcp/packs/self-upgrade-pack";
 import { coworkerServiceCatalogPack } from "@/lib/mcp/packs/coworker-service-catalog-pack";
+import { coworkerToolGrantPack } from "@/lib/mcp/packs/coworker-tool-grant-pack";
 import { composeToolPacks } from "@/lib/mcp/tool-registry";
 import {
   createLicenseReadinessIssue,
@@ -437,7 +438,7 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 // ─── Tool Registry ───────────────────────────────────────────────────────────
 // Scoped tool packs compose into the registry; mcp-tools.ts is the thin layer
 // over them (definitions spread into PLATFORM_TOOLS below; dispatch in executeTool).
-const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack]);
+const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack, coworkerToolGrantPack]);
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,
