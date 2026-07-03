@@ -3016,6 +3016,28 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "manage_coworker_tool_grant",
+    description:
+      "Grant or revoke a single tool-authority grant key on another coworker. Use to provision a capability a coworker is missing (grant) or to trim an over-broad tool surface (revoke). The grant key must be one the platform recognises; a coworker cannot change its own authority.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        coworker: {
+          type: "string",
+          description: "The coworker to modify — its agentId, slug, or display name (e.g. 'external-catalog-scout').",
+        },
+        grantKey: {
+          type: "string",
+          description: "The tool-authority grant key to grant or revoke (e.g. 'backlog_write', 'registry_read').",
+        },
+        action: { type: "string", enum: ["grant", "revoke"], description: "Whether to grant or revoke the key." },
+      },
+      required: ["coworker", "grantKey", "action"],
+    },
+    requiredCapability: "manage_platform",
+    sideEffect: true,
+  },
+  {
     name: "update_provider_category",
     description: "Change the category of an existing AI provider (e.g. from 'direct' to 'local').",
     inputSchema: {
@@ -12454,6 +12476,29 @@ export async function executeTool(
         success: true,
         entityId: providerId,
         message: `Provider "${provider.name}" category updated to "${category}".`,
+      };
+    }
+
+    case "manage_coworker_tool_grant": {
+      const { manageCoworkerToolGrant } = await import("@/lib/tak/coworker-tool-grant-core");
+      const rawAction = String(params["action"] ?? "").trim();
+      const result = await manageCoworkerToolGrant({
+        coworkerRef: String(params["coworker"] ?? ""),
+        grantKey: String(params["grantKey"] ?? ""),
+        action: rawAction as "grant" | "revoke",
+        callerAgentId: context?.agentId ?? null,
+        grantedBy: userId,
+      });
+      if (!result.ok) {
+        return { success: false, error: result.code, message: result.message };
+      }
+      const verb = result.action === "grant" ? "Granted" : "Revoked";
+      const prep = result.action === "grant" ? "to" : "from";
+      return {
+        success: true,
+        entityId: result.coworker.agentId,
+        message: `${verb} "${result.grantKey}" ${prep} ${result.coworker.displayName} (${result.coworker.agentId}).`,
+        data: { coworker: result.coworker.agentId, grantKey: result.grantKey, action: result.action },
       };
     }
 

@@ -406,6 +406,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   update_provider_category: ["agent_control_read"],
   run_endpoint_tests: ["agent_control_read"],
   activity_harness_confidence_override: ["agent_control_read"],
+  // Provision a coworker's tool authority — grant/revoke one grant key. Same
+  // grant tier as the sibling AI-ops management tools; the real gates are the
+  // manage_platform capability + act mode + the self-target guard in the core.
+  manage_coworker_tool_grant: ["agent_control_read"],
   // Grok device-code sign-in (EP-GROK-001, #1624). The grant_catalog already
   // lists these under agent_control_read; #1624 added the catalog entries but
   // not the TOOL_TO_GRANTS mapping, so INV-1 flagged them as default-deny.

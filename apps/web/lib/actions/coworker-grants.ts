@@ -26,7 +26,10 @@ import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { knownGrantKeys } from "@/lib/tak/agent-grants";
+import {
+  applyCoworkerToolGrant,
+  removeCoworkerToolGrant,
+} from "@/lib/tak/coworker-tool-grant-core";
 
 /** Revalidate every path the coworker record renders under, after a mutation. */
 function revalidateRecord(agentBusinessId: string, slugId?: string | null): void {
@@ -58,15 +61,8 @@ export async function grantCoworkerTool(
 ): Promise<{ ok: boolean; error?: string }> {
   const { userId } = await requireCapability("manage_platform");
 
-  if (!knownGrantKeys().includes(grantKey)) {
-    return { ok: false, error: `Unknown grant key: ${grantKey}` };
-  }
-
-  await prisma.agentToolGrant.upsert({
-    where: { agentId_grantKey: { agentId: agentCuid, grantKey } },
-    update: {}, // already held — no-op (keep the original grantedBy/grantedAt)
-    create: { agentId: agentCuid, grantKey, grantedBy: userId },
-  });
+  const res = await applyCoworkerToolGrant(agentCuid, grantKey, userId);
+  if (!res.ok) return res;
 
   revalidateRecord(agentBusinessId, slugId);
   return { ok: true };
@@ -87,9 +83,7 @@ export async function revokeCoworkerTool(
 ): Promise<{ ok: boolean; error?: string }> {
   await requireCapability("manage_platform");
 
-  await prisma.agentToolGrant.deleteMany({
-    where: { agentId: agentCuid, grantKey },
-  });
+  await removeCoworkerToolGrant(agentCuid, grantKey);
 
   revalidateRecord(agentBusinessId, slugId);
   return { ok: true };
