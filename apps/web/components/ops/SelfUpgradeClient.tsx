@@ -43,6 +43,10 @@ type QuiescenceBlockerLine = {
   kind: "hard" | "soft";
   count: number;
   estimatedWaitMs: number | null;
+  sampleAgent?: string | null;
+  sampleTitle?: string | null;
+  oldestSignalAt?: string | null;
+  stale?: boolean;
 };
 
 type QuiescenceActivity = {
@@ -769,24 +773,56 @@ export default function SelfUpgradeClient({
                 {quiescence.blockers.map((b) => (
                   <li
                     key={b.surface}
-                    className="flex items-center gap-2"
+                    className="flex flex-col gap-0.5"
                     data-blocker-surface={b.surface}
+                    data-blocker-stale={b.stale ? "true" : undefined}
                   >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        b.kind === "hard"
-                          ? "bg-[var(--dpf-warning)]"
-                          : "bg-[var(--dpf-muted)]"
-                      }`}
-                    />
-                    <span className="text-[var(--dpf-text)]">{b.label}</span>
-                    {b.count > 1 && (
-                      <span className="text-[var(--dpf-muted)]">×{b.count}</span>
-                    )}
-                    {approxWait(b.estimatedWaitMs) && (
-                      <span className="text-[var(--dpf-muted)]">
-                        · {approxWait(b.estimatedWaitMs)}
-                      </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          b.kind === "hard"
+                            ? "bg-[var(--dpf-warning)]"
+                            : "bg-[var(--dpf-muted)]"
+                        }`}
+                      />
+                      <span className="text-[var(--dpf-text)]">{b.label}</span>
+                      {b.count > 1 && (
+                        <span className="text-[var(--dpf-muted)]">×{b.count}</span>
+                      )}
+                      {approxWait(b.estimatedWaitMs) && (
+                        <span className="text-[var(--dpf-muted)]">
+                          · {approxWait(b.estimatedWaitMs)}
+                        </span>
+                      )}
+                    </div>
+                    {(b.sampleTitle || b.sampleAgent || b.oldestSignalAt) && (
+                      <div className="pl-3.5 text-[var(--dpf-muted)] flex flex-wrap items-center gap-x-1.5">
+                        {(b.sampleAgent || b.sampleTitle) && (
+                          <span className="text-[var(--dpf-text)]">
+                            {[b.sampleAgent, b.sampleTitle].filter(Boolean).join(" · ")}
+                            {b.count > 1 && (
+                              <span className="text-[var(--dpf-muted)]">
+                                {" "}
+                                +{b.count - 1} more
+                              </span>
+                            )}
+                          </span>
+                        )}
+                        {b.oldestSignalAt && (
+                          <span>
+                            · last active{" "}
+                            <LocalTime className="font-mono" value={b.oldestSignalAt} />
+                          </span>
+                        )}
+                        {b.stale && (
+                          <span
+                            className="text-[var(--dpf-warning)]"
+                            data-blocker-stale-badge="true"
+                          >
+                            · unresponsive — clears automatically
+                          </span>
+                        )}
+                      </div>
                     )}
                   </li>
                 ))}

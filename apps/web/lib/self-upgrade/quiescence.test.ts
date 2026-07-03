@@ -72,6 +72,7 @@ import {
   reconcileQuiescenceOnBoot,
   reconcileTerminalBuildPhaseRuns,
   signalSwapComplete,
+  summarizeBlockers,
   TERMINAL_QUIESCENCE_STATUSES,
   type ActiveSessionBlockers,
   type SurfaceBlocker,
@@ -640,6 +641,80 @@ describe("captureActiveSessionBlockers", () => {
     expect(snapshot.surfaces.some((s) => s.surface === "coworker.reasoning-loop")).toBe(true);
     expect(snapshot.hardBlockers).toBe(1);
     expect(prismaMock.taskRunUpdateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("summarizeBlockers — identity + staleness (BI-D0F4C6FB)", () => {
+  function coworkerSurface(ev: {
+    agentId?: string | null;
+    title?: string | null;
+    startedAt: string;
+    lastHeartbeatAt?: string | null;
+  }): SurfaceBlocker {
+    return {
+      surface: "coworker.reasoning-loop",
+      detectionClass: "A",
+      kind: "hard",
+      blockerSignal: { class: "A", model: "TaskRun", rowId: "tr", status: "working" },
+      estimatedWaitMs: 30_000,
+      evidence: {
+        agentId: ev.agentId ?? null,
+        title: ev.title ?? null,
+        startedAt: ev.startedAt,
+        lastHeartbeatAt: ev.lastHeartbeatAt ?? null,
+      },
+    };
+  }
+  function snap(surfaces: SurfaceBlocker[], capturedAt: string): ActiveSessionBlockers {
+    return {
+      capturedAt,
+      thresholdMs: 300_000,
+      totalBlockers: surfaces.length,
+      hardBlockers: surfaces.filter((s) => s.kind === "hard").length,
+      softBlockers: surfaces.filter((s) => s.kind === "soft").length,
+      unobservableSurfaces: [],
+      surfaces,
+    };
+  }
+
+  it("carries the coworker agent + title + oldest signal onto the line", () => {
+    const capturedAt = "2026-07-03T21:39:00.000Z";
+    const started = "2026-07-03T21:20:00.000Z";
+    const hb = "2026-07-03T21:38:30.000Z"; // 30s before capture → live
+    const [line] = summarizeBlockers(
+      snap([coworkerSurface({ agentId: "inventory-specialist", title: "Discovery Taxonomy Gap Triage", startedAt: started, lastHeartbeatAt: hb })], capturedAt),
+    );
+    expect(line.sampleAgent).toBe("inventory-specialist");
+    expect(line.sampleTitle).toBe("Discovery Taxonomy Gap Triage");
+    expect(line.oldestSignalAt).toBe(hb); // heartbeat is newer than start
+    expect(line.stale).toBe(false);
+  });
+
+  it("flags a coworker line stale when its newest signal predates the liveness window", () => {
+    const capturedAt = "2026-07-03T21:39:00.000Z";
+    const stale = "2026-07-01T09:06:00.000Z"; // ~60h before capture
+    const [line] = summarizeBlockers(
+      snap([coworkerSurface({ agentId: "inventory-specialist", title: "Discovery Taxonomy Gap Triage", startedAt: stale, lastHeartbeatAt: stale })], capturedAt),
+    );
+    expect(line.stale).toBe(true);
+  });
+
+  it("collapses multiple coworker items: count, first identity kept, OLDEST signal tracked", () => {
+    const capturedAt = "2026-07-03T21:39:00.000Z";
+    const older = "2026-07-03T21:10:00.000Z";
+    const newer = "2026-07-03T21:38:00.000Z";
+    const [line] = summarizeBlockers(
+      snap(
+        [
+          coworkerSurface({ agentId: "agent-a", title: "first", startedAt: newer, lastHeartbeatAt: newer }),
+          coworkerSurface({ agentId: "agent-b", title: "second", startedAt: older, lastHeartbeatAt: older }),
+        ],
+        capturedAt,
+      ),
+    );
+    expect(line.count).toBe(2);
+    expect(line.sampleAgent).toBe("agent-a"); // first seen
+    expect(line.oldestSignalAt).toBe(older); // worst laggard
   });
 });
 
