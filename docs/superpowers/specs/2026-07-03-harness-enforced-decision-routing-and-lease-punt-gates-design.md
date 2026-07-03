@@ -89,3 +89,21 @@ This scoping decision — how far to take the findings — was itself routed thr
 - **Sibling surface:** BI-3E71E016 fixes decision-routing on the *coworker prompt* path; Gate A is the *Claude Code / external-agent hook* path.
 - **Sibling hook:** BI-38578194 (uncommitted-work guard) is the same class of pre-action guard.
 - **Not a duplicate of** EP-056D2A5E (resource contention) — that epic governs concurrent *execution* races; this governs *discipline enforcement*.
+
+---
+
+## 7. Surface coverage map (which surfaces this enforces, and where the rest live)
+
+"Harness-enforced" is only as wide as the plane the guard runs on. There are **two** hook planes, and this PR (BI-383668B9 / BI-2D167283) implements plane 1:
+
+| Surface | "Decide / ask a human" mechanism | Runtime gate mechanism | Enforced by |
+|---|---|---|---|
+| **Claude Code** | `AskUserQuestion` tool | `Bash` (`prisma migrate`, `next build`) | **Gate A + Gate B (this PR)** — plane 1, `dpf-skill-pack/hooks/hooks.json`, auto-loaded |
+| **Codex CLI** | interactive ask-tool (name ≠ AskUserQuestion) | `Bash` | **Gate B ✓** (Bash-parity with lease/root-clone guards, ships via `.codex-plugin` manifest); Gate A matcher does **not** fire on its ask-tool → BI-B22DE548 |
+| **Grok** | interactive ask-tool | `Bash` | same as Codex — Gate B ✓, Gate A residual → BI-B22DE548 |
+| **In-portal coworker** | `needs-human` / HITL escalation queue | runs against a live DB (no worktree-punt case) | **plane 2** — server-side `onPreToolUse` in `apps/web/lib/mcp-governed-execute.ts`; prompt contract = BI-3E71E016 (open), hard gate = **BI-B22DE548** |
+| **Build Studio (embedded)** | `needs-human` queue | live DB | plane 2 — **BI-B22DE548** |
+
+**Plane 1** (this PR) = the CLI PreToolUse hook plane shared by Claude / Codex / Grok. Gate B (matcher `Bash`) covers every surface that can hit a source-only worktree with no `DATABASE_URL`; the embedded surfaces run against a real DB and structurally cannot punt, so they need no Gate B. Gate A (matcher `AskUserQuestion`) covers Claude Code — the primary interactive decision surface — fully.
+
+**Plane 2** = the server-side governance hook (`onPreToolUse` → `{decision:"deny"}`) that fronts in-portal coworker and Build Studio tool calls, whose escalation is the `needs-human`/HITL queue rather than an `AskUserQuestion` tool. Per [2026-06-20-issue-report-surface-attendance-design.md §5.3](2026-06-20-issue-report-surface-attendance-design.md) ("the identical gate belongs in front of every AskUserQuestion / HITL surface"), the same consult-scopes check belongs there as a runtime pre-escalation guard. That work — plus resolving Codex/Grok's interactive ask-tool name — is **BI-B22DE548**, the plane-2 companion to this PR (hard gate) and to BI-3E71E016 (prompt contract). Together the three close the matrix.
