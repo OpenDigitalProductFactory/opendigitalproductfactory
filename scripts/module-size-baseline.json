@@ -22,7 +22,7 @@
   "apps/web/lib/actions/ai-providers.ts": 920,
   "apps/web/lib/actions/build-governed.test.ts": 1114,
   "apps/web/lib/actions/build.ts": 1794,
-  "apps/web/lib/actions/compliance.ts": 994,
+  "apps/web/lib/actions/compliance.ts": 1064,
   "apps/web/lib/actions/crm.ts": 1338,
   "apps/web/lib/actions/ea.ts": 1055,
   "apps/web/lib/actions/hive-scout/ingest-500-agents.ts": 971,

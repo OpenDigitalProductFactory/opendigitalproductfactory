@@ -27,6 +27,7 @@ type ObligationSeed = {
   frequency: string;
   applicability: string;
   penaltySummary: string | null;
+  deliverableType?: string;
 };
 
 type RegulationSeed = {
@@ -100,6 +101,7 @@ export const UK_CORP_GOV_REGULATIONS: RegulationSeed[] = [
         frequency: "annual",
         applicability: "UK premium-listed companies, for accounting periods beginning on/after 1 Jan 2026",
         penaltySummary: "Comply-or-explain: a missing or unexplained declaration is a governance-reporting failure under the listing regime.",
+        deliverableType: "board-declaration",
       },
       {
         title: "Disclose material weaknesses and remediation",
@@ -188,6 +190,7 @@ export async function seedUkCorpGovCompliance(prisma: PrismaClient): Promise<voi
           frequency: obl.frequency,
           applicability: obl.applicability,
           penaltySummary: obl.penaltySummary,
+          deliverableType: obl.deliverableType ?? null,
         },
       });
       oblIdByRef.set(obl.reference, created.id);
