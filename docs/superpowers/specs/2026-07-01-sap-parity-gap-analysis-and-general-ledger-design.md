@@ -246,7 +246,35 @@ it is in the ledger* — with no journal-entry knowledge required of the user.
   local-CI sandbox per AGENTS.md §5 (this worktree is source-only, no generated
   client). Non-fatal wiring keeps invoice send resilient if the client is stale.
 
-## 9. Roadmap
+## 9. Phase 3 — cash-cycle settlement (payment auto-posting, stacked on #2548)
+
+Phase 2 posts the *obligation* (invoice → Dr AR / Cr Revenue). Phase 3 closes the
+loop by posting the *settlement*, so a payment lands on the same ledger rather than
+in a parallel record:
+
+- **`buildPaymentPostingLines` (`ledger.ts`, pure, tested)** — direction-aware and
+  balanced by construction:
+  - `inbound` (customer receipt): **Dr Bank / Cr Accounts Receivable**
+  - `outbound` (supplier payment): **Dr Accounts Payable / Cr Bank**
+  Throws if the control account the direction needs (receivables for inbound,
+  payables for outbound) was not resolved — a payment never posts to the wrong side.
+- **`postPaymentRecorded` (`ledger-service.ts`, Prisma)** — resolves bank/AR/AP via
+  the same `resolvePostingAccounts` determination (all three are in
+  `BASE_CONTROL_ACCOUNTS`, so **no new accounts or roles are needed**), pulls the
+  customer/contact dimension from the payment's linked invoice, and posts an
+  idempotent `source: payment` journal. **Wired into `recordPayment`** as a
+  best-effort call (a ledger hiccup never fails recording the payment).
+
+Result: **invoice → AR posted; payment → AR cleared to Bank** — the receivable side
+of the cash cycle now lives entirely on one ledger, with the payable side (bills →
+AP, supplier payment → AP cleared) following the same builder shape next.
+
+Verification: `vitest run lib/finance/ledger.test.ts` — **23/23 pass** (4 new payment
+cases: inbound, outbound, unresolved-control guard, non-negative). Standalone strict
+`tsc` on `ledger.ts` clean. Prisma service/wiring is field-exact; typecheck + runtime
+gated by CI / the shared local-CI sandbox per §5.
+
+## 10. Roadmap
 
 Phases 1–2 land the ledger foundation and make it automatic. Remaining ranked gaps
 (§4) — GL portal UI + trial-balance/balance-sheet reports, bill/payment/depreciation

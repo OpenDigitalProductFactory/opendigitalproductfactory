@@ -18,6 +18,7 @@ import {
 } from "./chart-of-accounts";
 import {
   buildInvoicePostingLines,
+  buildPaymentPostingLines,
   validateJournalEntry,
   periodKeyOf,
   type LedgerAccountType,
@@ -168,6 +169,120 @@ export async function postInvoiceIssued(invoiceId: string): Promise<PostInvoiceR
           debit: l.debit ?? 0,
           credit: l.credit ?? 0,
           currency: invoice.currency,
+          description: l.description,
+          customerAccountId: l.customerAccountId ?? null,
+          contactId: l.contactId ?? null,
+          sortOrder: i,
+        })),
+      },
+    },
+    select: { id: true, entryRef: true },
+  });
+
+  return { posted: true, journalEntryId: entry.id, entryRef: entry.entryRef };
+}
+
+// ─── Payment → GL auto-posting ───────────────────────────────────────────────
+
+export type PostPaymentResult =
+  | { posted: true; journalEntryId: string; entryRef: string }
+  | { posted: false; reason: "already-posted" | "no-organization" | "unresolved-accounts"; detail?: string };
+
+/**
+ * Post a recorded payment to the ledger — the settlement half of the cash cycle,
+ * so a receipt/payment lands on the same ledger the invoice/bill posted to:
+ *   inbound  (customer receipt):  Dr Bank / Cr Accounts Receivable
+ *   outbound (supplier payment):  Dr Accounts Payable / Cr Bank
+ *
+ * Idempotent (one journal per payment). Automatic account determination; if a
+ * required account can't be resolved the payment is NOT posted and the missing
+ * roles are reported rather than guessed.
+ */
+export async function postPaymentRecorded(paymentId: string): Promise<PostPaymentResult> {
+  const existing = await prisma.journalEntry.findFirst({
+    where: { sourceType: "Payment", sourceId: paymentId },
+    select: { id: true, entryRef: true },
+  });
+  if (existing) return { posted: false, reason: "already-posted", detail: existing.entryRef };
+
+  const org = await prisma.organization.findFirst({ select: { id: true } });
+  if (!org) return { posted: false, reason: "no-organization" };
+
+  const payment = await prisma.payment.findUniqueOrThrow({
+    where: { id: paymentId },
+    select: {
+      paymentRef: true,
+      direction: true,
+      amount: true,
+      currency: true,
+      receivedAt: true,
+      allocations: {
+        where: { invoiceId: { not: null } },
+        take: 1,
+        select: { invoice: { select: { accountId: true, contactId: true } } },
+      },
+    },
+  });
+
+  const direction = payment.direction === "outbound" ? "outbound" : "inbound";
+  const linkedInvoice = payment.allocations[0]?.invoice ?? null;
+
+  const accounts = await prisma.ledgerAccount.findMany({
+    where: { organizationId: org.id, isActive: true },
+    orderBy: { code: "asc" },
+    select: { id: true, code: true, name: true, type: true },
+  });
+  const { resolved } = resolvePostingAccounts(
+    accounts.map((a) => ({ id: a.id, code: a.code, name: a.name, type: a.type as LedgerAccountType })),
+  );
+
+  const missing: string[] = [];
+  if (!resolved.bank) missing.push("bank");
+  if (direction === "inbound" && !resolved.receivables) missing.push("receivables");
+  if (direction === "outbound" && !resolved.payables) missing.push("payables");
+  if (missing.length > 0) {
+    return { posted: false, reason: "unresolved-accounts", detail: missing.join(", ") };
+  }
+
+  const lines = buildPaymentPostingLines(
+    {
+      direction,
+      amount: Number(payment.amount),
+      customerAccountId: linkedInvoice?.accountId ?? null,
+      contactId: linkedInvoice?.contactId ?? null,
+    },
+    {
+      bankAccountId: resolved.bank!.id!,
+      receivablesAccountId: resolved.receivables?.id,
+      payablesAccountId: resolved.payables?.id,
+    },
+  );
+
+  const check = validateJournalEntry(lines);
+  if (!check.ok) {
+    throw new Error(`Payment ${payment.paymentRef} posting is unbalanced: ${check.errors.join("; ")}`);
+  }
+
+  const when = payment.receivedAt ?? new Date();
+  const entry = await prisma.journalEntry.create({
+    data: {
+      organizationId: org.id,
+      entryRef: `JE-${payment.paymentRef}`,
+      entryDate: when,
+      periodKey: periodKeyOf(when),
+      status: "posted",
+      source: "payment",
+      sourceType: "Payment",
+      sourceId: paymentId,
+      currency: payment.currency,
+      postedAt: new Date(),
+      memo: `Payment ${payment.paymentRef}`,
+      lines: {
+        create: lines.map((l, i) => ({
+          accountId: l.accountId,
+          debit: l.debit ?? 0,
+          credit: l.credit ?? 0,
+          currency: payment.currency,
           description: l.description,
           customerAccountId: l.customerAccountId ?? null,
           contactId: l.contactId ?? null,
