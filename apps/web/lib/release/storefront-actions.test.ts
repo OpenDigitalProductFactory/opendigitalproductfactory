@@ -4,16 +4,24 @@ vi.mock("nanoid", () => ({ nanoid: vi.fn(() => "TESTREF") }));
 vi.mock("@/lib/actions/finance", () => ({
   generateInvoiceFromStorefrontOrder: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@dpf/db", () => ({
-  prisma: {
+vi.mock("@dpf/db", () => {
+  const prisma = {
     storefrontConfig: { findFirst: vi.fn() },
     storefrontInquiry: { create: vi.fn() },
     storefrontBooking: { create: vi.fn() },
     storefrontOrder: { create: vi.fn() },
     storefrontDonation: { create: vi.fn() },
     bookingHold: { findFirst: vi.fn(), delete: vi.fn() },
-  },
-}));
+    // Interactive-transaction shim: run the callback against the same mock so
+    // per-model create/findFirst/delete assertions still observe the calls.
+    $transaction: vi.fn(async (arg: unknown) =>
+      typeof arg === "function"
+        ? await (arg as (tx: unknown) => Promise<unknown>)(prisma)
+        : Promise.all(arg as Promise<unknown>[])
+    ),
+  };
+  return { prisma };
+});
 
 import { submitInquiry, submitDonation, submitBooking } from "./storefront-actions";
 import { prisma } from "@dpf/db";
@@ -119,6 +127,35 @@ describe("submitBooking (enhanced)", () => {
     });
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error).toMatch(/duplicate/i);
+  });
+
+  it("runs booking creation inside a transaction", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({ id: "sf-1" } as never);
+    vi.mocked(prisma.storefrontBooking.create).mockResolvedValue({ id: "bk-1", bookingRef: "BK-TESTREF" } as never);
+
+    await submitBooking("acme", {
+      itemId: "itm-1", customerEmail: "a@b.com", customerName: "Alice",
+      scheduledAt: new Date("2026-03-23T09:00:00Z"), durationMinutes: 45,
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an overlapping slot on an exclusion-constraint violation (23P01)", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({ id: "sf-1" } as never);
+    // Simulate Postgres 23P01 surfaced through Prisma on the create.
+    const exclusionError = new Error(
+      'conflicting key value violates exclusion constraint "StorefrontBooking_no_overlap"'
+    ) as Error & { meta?: { code: string } };
+    exclusionError.meta = { code: "23P01" };
+    vi.mocked(prisma.storefrontBooking.create).mockRejectedValue(exclusionError);
+
+    const result = await submitBooking("acme", {
+      itemId: "itm-1", customerEmail: "a@b.com", customerName: "Alice",
+      scheduledAt: new Date("2026-03-23T09:00:00Z"), durationMinutes: 45,
+      providerId: "prov-1",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toMatch(/no longer available/i);
   });
 });
 

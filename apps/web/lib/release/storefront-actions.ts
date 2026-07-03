@@ -3,6 +3,12 @@
 import { prisma } from "@dpf/db";
 import { nanoid } from "nanoid";
 import { generateInvoiceFromStorefrontOrder } from "@/lib/actions/finance";
+import { isExclusionViolation } from "@/lib/db/exclusion-violation";
+
+/** Sentinel: the hold token was missing/expired when re-checked inside the
+ *  booking transaction. Thrown to abort the transaction and surface a clean
+ *  message without leaking a partial write. */
+class BookingHoldInvalidError extends Error {}
 
 async function getPublishedStorefront(slug: string) {
   const config = await prisma.storefrontConfig.findFirst({
@@ -115,74 +121,90 @@ export async function submitBooking(
   const storefront = await getPublishedStorefront(slug);
   if (!storefront) return { success: false, error: "Storefront not found or not published" };
 
-  // Hold validation
-  let holdId: string | undefined;
-  if (data.holderToken) {
-    const hold = await prisma.bookingHold.findFirst({
-      where: { holderToken: data.holderToken, expiresAt: { gt: new Date() } },
-    });
-    if (!hold) return { success: false, error: "Invalid or expired hold" };
-    holdId = hold.id;
-  }
-
+  // Hold validation, booking creation, hold release, and recurrence expansion
+  // run in ONE transaction so the validate→book→release sequence is atomic and
+  // the `StorefrontBooking_no_overlap` gist EXCLUDE constraint is the single
+  // authoritative arbiter of slot contention (EP-056D2A5E, kernel D2). Two
+  // concurrent requests that pass the hold check both attempt the insert; the
+  // DB rejects the loser with SQLSTATE 23P01 rather than double-booking.
   const ref = makeRef("BK");
   let created: { id: string; bookingRef: string };
   try {
-    created = await prisma.storefrontBooking.create({
-      data: {
-        bookingRef: ref,
-        storefrontId: storefront.id,
-        itemId: data.itemId,
-        customerEmail: data.customerEmail,
-        customerName: data.customerName,
-        customerPhone: data.customerPhone,
-        scheduledAt: data.scheduledAt,
-        durationMinutes: data.durationMinutes,
-        notes: data.notes,
-        providerId: data.providerId,
-        assignmentMode: data.assignmentMode,
-        idempotencyKey: data.idempotencyKey,
-        recurrenceRule: data.recurrenceRule,
-      },
-      select: { id: true, bookingRef: true },
-    });
-  } catch (err) {
-    const prismaError = err as Error & { code?: string };
-    if (prismaError.code === "P2002") {
-      return { success: false, error: "Duplicate submission" };
-    }
-    throw err;
-  }
+    created = await prisma.$transaction(async (tx) => {
+      let holdId: string | undefined;
+      if (data.holderToken) {
+        const hold = await tx.bookingHold.findFirst({
+          where: { holderToken: data.holderToken, expiresAt: { gt: new Date() } },
+        });
+        if (!hold) throw new BookingHoldInvalidError();
+        holdId = hold.id;
+      }
 
-  // Release hold after successful booking
-  if (holdId) {
-    await prisma.bookingHold.delete({ where: { id: holdId } });
-  }
-
-  // Create child bookings for recurrence
-  if (data.recurrenceRule && data.recurrenceEndDate) {
-    const futureDates = projectRecurrenceDates(data.scheduledAt, data.recurrenceRule, data.recurrenceEndDate);
-    for (const futureDate of futureDates) {
-      const futureScheduledAt = new Date(futureDate);
-      futureScheduledAt.setHours(data.scheduledAt.getHours(), data.scheduledAt.getMinutes());
-      await prisma.storefrontBooking.create({
+      const booking = await tx.storefrontBooking.create({
         data: {
-          bookingRef: makeRef("BK"),
+          bookingRef: ref,
           storefrontId: storefront.id,
           itemId: data.itemId,
           customerEmail: data.customerEmail,
           customerName: data.customerName,
           customerPhone: data.customerPhone,
-          scheduledAt: futureScheduledAt,
+          scheduledAt: data.scheduledAt,
           durationMinutes: data.durationMinutes,
           notes: data.notes,
           providerId: data.providerId,
           assignmentMode: data.assignmentMode,
+          idempotencyKey: data.idempotencyKey,
           recurrenceRule: data.recurrenceRule,
-          parentBookingId: created.id,
         },
+        select: { id: true, bookingRef: true },
       });
+
+      // Release hold only after the booking commits within this transaction.
+      if (holdId) {
+        await tx.bookingHold.delete({ where: { id: holdId } });
+      }
+
+      // Create child bookings for recurrence in the same transaction so a
+      // failed child rolls the whole tree back instead of leaving a partial series.
+      if (data.recurrenceRule && data.recurrenceEndDate) {
+        const futureDates = projectRecurrenceDates(data.scheduledAt, data.recurrenceRule, data.recurrenceEndDate);
+        for (const futureDate of futureDates) {
+          const futureScheduledAt = new Date(futureDate);
+          futureScheduledAt.setHours(data.scheduledAt.getHours(), data.scheduledAt.getMinutes());
+          await tx.storefrontBooking.create({
+            data: {
+              bookingRef: makeRef("BK"),
+              storefrontId: storefront.id,
+              itemId: data.itemId,
+              customerEmail: data.customerEmail,
+              customerName: data.customerName,
+              customerPhone: data.customerPhone,
+              scheduledAt: futureScheduledAt,
+              durationMinutes: data.durationMinutes,
+              notes: data.notes,
+              providerId: data.providerId,
+              assignmentMode: data.assignmentMode,
+              recurrenceRule: data.recurrenceRule,
+              parentBookingId: booking.id,
+            },
+          });
+        }
+      }
+
+      return booking;
+    });
+  } catch (err) {
+    if (err instanceof BookingHoldInvalidError) {
+      return { success: false, error: "Invalid or expired hold" };
     }
+    if (isExclusionViolation(err)) {
+      return { success: false, error: "That time slot is no longer available" };
+    }
+    const prismaError = err as Error & { code?: string };
+    if (prismaError.code === "P2002") {
+      return { success: false, error: "Duplicate submission" };
+    }
+    throw err;
   }
 
   return { success: true, ref: created.bookingRef, type: "booking" };
