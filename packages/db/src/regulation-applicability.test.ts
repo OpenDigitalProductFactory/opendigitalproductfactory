@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   regulationApplies,
   CADA_APPLICABILITY,
+  UK_CORP_GOV_CODE_APPLICABILITY,
+  isListingStatus,
   type RegionProfile,
   type RegulationApplicability,
 } from "./regulation-applicability";
@@ -47,5 +49,48 @@ describe("regulationApplies — global + archetype", () => {
     const spec: RegulationApplicability = { basis: ["operating"], jurisdictions: ["eu"], archetypes: ["healthcare-provider"] };
     expect(regulationApplies(spec, { ...empty, operatesIn: ["eu"], archetype: "retailer" }).applies).toBe(false);
     expect(regulationApplies(spec, { ...empty, operatesIn: ["eu"], archetype: "healthcare-provider" }).applies).toBe(true);
+  });
+});
+
+describe("regulationApplies — listing-status gate (UK Corporate Governance Code / Provision 29)", () => {
+  it("applies to a UK-operating PREMIUM-LISTED company", () => {
+    const r = regulationApplies(UK_CORP_GOV_CODE_APPLICABILITY, {
+      ...empty,
+      operatesIn: ["uk"],
+      listingStatus: "premium-listed",
+    });
+    expect(r.applies).toBe(true);
+    expect(r.matchedBasis).toContain("operating");
+  });
+
+  it("does NOT apply to a UK-operating PRIVATE company (listing gate)", () => {
+    const r = regulationApplies(UK_CORP_GOV_CODE_APPLICABILITY, {
+      ...empty,
+      operatesIn: ["uk"],
+      listingStatus: "private",
+    });
+    expect(r.applies).toBe(false);
+    expect(r.reason).toMatch(/listing status/);
+  });
+
+  it("does NOT apply to a UK-operating company with UNDECLARED listing status", () => {
+    const r = regulationApplies(UK_CORP_GOV_CODE_APPLICABILITY, { ...empty, operatesIn: ["uk"] });
+    expect(r.applies).toBe(false);
+    expect(r.reason).toMatch(/undeclared/);
+  });
+
+  it("does NOT apply to a premium-listed company with no UK operating nexus", () => {
+    const r = regulationApplies(UK_CORP_GOV_CODE_APPLICABILITY, {
+      ...empty,
+      operatesIn: ["us"],
+      listingStatus: "premium-listed",
+    });
+    expect(r.applies).toBe(false);
+  });
+
+  it("isListingStatus validates the canonical set", () => {
+    expect(isListingStatus("premium-listed")).toBe(true);
+    expect(isListingStatus("nasdaq")).toBe(false);
+    expect(isListingStatus(null)).toBe(false);
   });
 });

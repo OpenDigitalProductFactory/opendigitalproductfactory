@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 import {
   CADA_APPLICABILITY,
+  UK_CORP_GOV_CODE_APPLICABILITY,
   regulationApplies,
   type RegionProfile,
 } from "@dpf/db/regulation-applicability";
@@ -86,6 +87,7 @@ export type ComplianceLibraryClient = {
         employsIn: true;
         dataResidency: true;
         handlesCardPayments: true;
+        listingStatus: true;
       };
     }): Promise<{
       industry: string | null;
@@ -95,6 +97,7 @@ export type ComplianceLibraryClient = {
       employsIn: string[];
       dataResidency: string[];
       handlesCardPayments: boolean;
+      listingStatus: string | null;
     } | null>;
   };
 };
@@ -214,12 +217,67 @@ function classifyCada(
   return applicability("reference", `CADA is out of scope for this install: ${result.reason}.`);
 }
 
+const LISTING_STATUS_LABEL: Record<string, string> = {
+  "premium-listed": "premium-listed",
+  "standard-listed": "standard-listed",
+  "aim-listed": "AIM-listed",
+  private: "private",
+  other: "another",
+};
+
+/**
+ * The UK Corporate Governance Code / Provision 29 is listing-gated, not
+ * industry-gated: it binds UK premium-listed companies regardless of archetype.
+ * So it needs a bespoke classifier (like CADA) rather than the industry-match
+ * fallback. Applies only when there is a UK OPERATING nexus AND the org has
+ * declared a premium listing; the intermediate "review" states cover the two
+ * undeclared-signal cases so an operator is prompted rather than silently
+ * excluded.
+ */
+function classifyUkCorpGov(context: ComplianceLibraryContext): ComplianceApplicability {
+  const result = regulationApplies(UK_CORP_GOV_CODE_APPLICABILITY, context.regional);
+  if (result.applies) {
+    return applicability(
+      "applies",
+      "The UK Corporate Governance Code Provision 29 applies: a UK-operating premium-listed company.",
+    );
+  }
+  const operatesInUk = context.regional.operatesIn.some((j) => j.toLowerCase() === "uk");
+  if (context.regional.operatesIn.length === 0) {
+    return applicability(
+      "review",
+      "Provision 29 binds UK premium-listed companies, but no operating footprint has been captured yet.",
+    );
+  }
+  if (!operatesInUk) {
+    return applicability(
+      "reference",
+      "Provision 29 is out of scope: the business does not operate in the UK.",
+    );
+  }
+  // UK operating nexus present — the remaining gate is listing status.
+  const listing = context.regional.listingStatus;
+  if (!listing) {
+    return applicability(
+      "review",
+      "The business operates in the UK, but its market-listing status hasn't been captured — Provision 29 applies only to premium-listed companies.",
+    );
+  }
+  return applicability(
+    "reference",
+    `Provision 29 is out of scope: it binds UK premium-listed companies, and this is ${LISTING_STATUS_LABEL[listing] ?? "a non-premium-listed"} company.`,
+  );
+}
+
 export function classifyRegulationForInstall(
   regulation: ClassifiableRegulation,
   context: ComplianceLibraryContext,
 ): ComplianceApplicability {
   if (regulation.regulationId === "REG-CADA-2026") {
     return classifyCada(regulation, context);
+  }
+  if (regulation.regulationId === "REG-UK-CORP-GOV-CODE") {
+    return classifyUkCorpGov(context);
   }
 
   const currentLabel = installedArchetypeLabel(context);
@@ -339,6 +397,7 @@ export async function resolveComplianceLibraryContext(
         employsIn: true,
         dataResidency: true,
         handlesCardPayments: true,
+        listingStatus: true,
       },
     }),
   ]);
@@ -356,6 +415,7 @@ export async function resolveComplianceLibraryContext(
       sellsTo: businessContext?.sellsTo ?? [],
       employsIn: businessContext?.employsIn ?? [],
       dataResidency: businessContext?.dataResidency ?? [],
+      listingStatus: businessContext?.listingStatus ?? undefined,
     },
   };
 }

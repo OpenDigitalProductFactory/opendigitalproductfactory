@@ -178,4 +178,58 @@ describe("compliance library applicability", () => {
     expect(parseComplianceLibraryScope("unexpected")).toBe("applies");
     expect(complianceLibraryContextLabel(softwareContext)).toBe("Software Platform (software-platform)");
   });
+
+  describe("UK Corporate Governance Code / Provision 29 (listing-gated)", () => {
+    const ukCorpGov = regulation({
+      regulationId: "REG-UK-CORP-GOV-CODE",
+      name: "UK Corporate Governance Code (2024) — Provision 29",
+      shortName: "UK Corp Gov Code / Provision 29",
+      jurisdiction: "UK",
+      industry: null,
+      sourceUrl: null,
+    });
+
+    function ukContext(
+      overrides: Partial<ComplianceLibraryContext["regional"]>,
+    ): ComplianceLibraryContext {
+      return { ...softwareContext, regional: { ...softwareContext.regional, ...overrides } };
+    }
+
+    it("applies to a UK-operating premium-listed company", () => {
+      const result = classifyRegulationForInstall(
+        ukCorpGov,
+        ukContext({ operatesIn: ["uk"], listingStatus: "premium-listed" }),
+      );
+      expect(result.scope).toBe("applies");
+      expect(result.reason).toContain("premium-listed");
+    });
+
+    it("needs review when no operating footprint is captured", () => {
+      expect(classifyRegulationForInstall(ukCorpGov, softwareContext).scope).toBe("review");
+    });
+
+    it("needs review when UK-operating but listing status is undeclared", () => {
+      const result = classifyRegulationForInstall(ukCorpGov, ukContext({ operatesIn: ["uk"] }));
+      expect(result.scope).toBe("review");
+      expect(result.reason).toContain("market-listing status");
+    });
+
+    it("is reference for a UK-operating private company", () => {
+      const result = classifyRegulationForInstall(
+        ukCorpGov,
+        ukContext({ operatesIn: ["uk"], listingStatus: "private" }),
+      );
+      expect(result.scope).toBe("reference");
+      expect(result.reason).toContain("private");
+    });
+
+    it("is reference when the business does not operate in the UK", () => {
+      const result = classifyRegulationForInstall(
+        ukCorpGov,
+        ukContext({ operatesIn: ["us"], listingStatus: "premium-listed" }),
+      );
+      expect(result.scope).toBe("reference");
+      expect(result.reason).toContain("does not operate in the UK");
+    });
+  });
 });

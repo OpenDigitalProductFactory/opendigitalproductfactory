@@ -62,6 +62,19 @@ const COMPLIANCE_SCOPE_DIMENSIONS = [
   { field: "dataResidency", label: "Where data must stay (data residency)" },
 ] as const;
 
+// Market-listing status. Values match the LISTING_STATUSES enum in
+// regulation-applicability.ts so listing-gated regimes (e.g. UK Corporate
+// Governance Code Provision 29) can match them. Only surfaced when the business
+// operates in the UK — a listed-vs-private distinction only changes what applies
+// for UK-operating companies, so a non-UK layman never sees it.
+const LISTING_STATUS_OPTIONS = [
+  { value: "private", label: "Private (not listed)" },
+  { value: "premium-listed", label: "Premium listing (LSE Main Market / FTSE 350)" },
+  { value: "standard-listed", label: "Standard listing" },
+  { value: "aim-listed", label: "AIM-listed" },
+  { value: "other", label: "Other / not sure" },
+];
+
 type JurisdictionScopeField = (typeof COMPLIANCE_SCOPE_DIMENSIONS)[number]["field"];
 
 type BusinessContextData = {
@@ -78,6 +91,7 @@ type BusinessContextData = {
   employsIn: string[];
   dataResidency: string[];
   handlesCardPayments: boolean;
+  listingStatus: string | null;
   riskPosture: string | null;
   address: OrgAddress;
 };
@@ -595,6 +609,42 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
             />
             We accept card payments (PCI-DSS applies wherever you handle cards)
           </label>
+
+          {/* Listing status — only relevant for UK-operating companies, where the
+              listed-vs-private distinction decides whether governance rules like
+              the UK Corporate Governance Code (Provision 29) apply. Hidden
+              otherwise to keep the default to a couple of plain choices. */}
+          {data.operatesIn.includes("uk") && (
+            <label style={{ display: "block", marginTop: 12, fontSize: 13 }}>
+              <div style={{ marginBottom: 4 }}>Is the company listed on a stock exchange?</div>
+              <select
+                value={data.listingStatus ?? ""}
+                onChange={(e) => update("listingStatus", e.target.value || null)}
+                style={{
+                  ...inputStyle,
+                  background: "var(--dpf-surface-2)",
+                  color: "var(--dpf-text)",
+                }}
+              >
+                <option value="" style={{ background: "var(--dpf-surface-2)", color: "var(--dpf-text)" }}>
+                  Select…
+                </option>
+                {LISTING_STATUS_OPTIONS.map((o) => (
+                  <option
+                    key={o.value}
+                    value={o.value}
+                    style={{ background: "var(--dpf-surface-2)", color: "var(--dpf-text)" }}
+                  >
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <div style={hintStyle}>
+                UK premium-listed companies must report on board internal-controls effectiveness
+                (Corporate Governance Code, Provision 29).
+              </div>
+            </label>
+          )}
 
           {showCrossBorder ? (
             <div style={{ marginTop: 12, paddingLeft: 12, borderLeft: "2px solid var(--dpf-border)" }}>

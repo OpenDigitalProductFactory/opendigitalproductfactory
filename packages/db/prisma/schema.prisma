@@ -3265,6 +3265,14 @@ model BusinessContext {
   dataResidency             String[]  @default([])
   // Whether the business handles card payments (PCI-DSS, a global-basis obligation).
   handlesCardPayments       Boolean   @default(false)
+  // Corporate-law legal form / market-listing status, orthogonal to industry
+  // archetype: any archetype can be a listed or private company. Gates
+  // listing-specific governance regimes (e.g. UK Corporate Governance Code
+  // Provision 29, which applies to UK premium-listed companies). Values are the
+  // LISTING_STATUSES enum in regulation-applicability.ts (premium-listed |
+  // standard-listed | aim-listed | private | other). Null = undeclared → a
+  // listing-gated regulation is surfaced as "review", never silently applied.
+  listingStatus             String?
   // When the operator last confirmed the compliance scope at setup.
   complianceScopeCapturedAt DateTime?
 
