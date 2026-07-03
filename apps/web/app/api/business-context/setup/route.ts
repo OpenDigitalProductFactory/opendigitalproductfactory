@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     employsIn,
     dataResidency,
     handlesCardPayments,
+    listingStatus,
     riskPosture,
     address,
   } = (await req.json()) as {
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
     employsIn?: string[];
     dataResidency?: string[];
     handlesCardPayments?: boolean;
+    listingStatus?: string | null;
     riskPosture?: string;
     address?: unknown;
   };
@@ -51,12 +53,25 @@ export async function POST(req: NextRequest) {
   const ALLOWED_JURISDICTIONS = new Set(["us", "eu", "uk", "global"]);
   const sanitizeJurisdictions = (v: unknown): string[] =>
     Array.isArray(v) ? v.filter((j): j is string => typeof j === "string" && ALLOWED_JURISDICTIONS.has(j)) : [];
+  // Market-listing status gates listing-specific governance regimes (e.g. UK
+  // Corporate Governance Code Provision 29). Sanitize to the LISTING_STATUSES
+  // enum; an unknown/empty value clears it (null = undeclared → "review").
+  const ALLOWED_LISTING_STATUSES = new Set([
+    "premium-listed",
+    "standard-listed",
+    "aim-listed",
+    "private",
+    "other",
+  ]);
+  const sanitizeListingStatus = (v: unknown): string | null =>
+    typeof v === "string" && ALLOWED_LISTING_STATUSES.has(v) ? v : null;
   const complianceScopeProvided =
     operatesIn !== undefined ||
     sellsTo !== undefined ||
     employsIn !== undefined ||
     dataResidency !== undefined ||
-    handlesCardPayments !== undefined;
+    handlesCardPayments !== undefined ||
+    listingStatus !== undefined;
   const complianceScope = complianceScopeProvided
     ? {
         operatesIn: sanitizeJurisdictions(operatesIn),
@@ -64,6 +79,7 @@ export async function POST(req: NextRequest) {
         employsIn: sanitizeJurisdictions(employsIn),
         dataResidency: sanitizeJurisdictions(dataResidency),
         handlesCardPayments: handlesCardPayments === true,
+        listingStatus: sanitizeListingStatus(listingStatus),
         complianceScopeCapturedAt: new Date(),
       }
     : {};

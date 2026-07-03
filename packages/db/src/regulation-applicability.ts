@@ -16,6 +16,26 @@
  */
 import { type ProfessionJurisdictionBasis } from "./wiki-taxonomy";
 
+/**
+ * Corporate-law legal form / market-listing status — orthogonal to the industry
+ * archetype (any archetype can be a listed or private company). Some governance
+ * regimes gate on this dimension rather than industry: the UK Corporate
+ * Governance Code applies to UK premium-listed companies, not to a "banking" or
+ * "retail" archetype per se. `undefined` on a profile means undeclared.
+ */
+export const LISTING_STATUSES = [
+  "premium-listed",
+  "standard-listed",
+  "aim-listed",
+  "private",
+  "other",
+] as const;
+export type ListingStatus = (typeof LISTING_STATUSES)[number];
+
+export function isListingStatus(value: string | null | undefined): value is ListingStatus {
+  return typeof value === "string" && (LISTING_STATUSES as readonly string[]).includes(value);
+}
+
 /** An org's regional footprint + archetype. Jurisdiction values are bloc slugs (e.g. "eu", "us", "uk"). */
 export interface RegionProfile {
   operatesIn: string[];
@@ -24,6 +44,8 @@ export interface RegionProfile {
   dataResidency: string[];
   /** Business archetype slug (storefront/archetype), when known. */
   archetype?: string;
+  /** Market-listing / legal-form status (LISTING_STATUSES), when declared. */
+  listingStatus?: string;
 }
 
 export interface RegulationApplicability {
@@ -33,6 +55,14 @@ export interface RegulationApplicability {
   jurisdictions: string[];
   /** If set, only these business archetypes are in scope; otherwise archetype-agnostic. */
   archetypes?: string[];
+  /**
+   * If set, only these listing statuses are in scope (e.g. `["premium-listed"]`
+   * for a rule that binds only UK premium-listed companies). An undeclared
+   * listing status is treated as NOT-in-scope by {@link regulationApplies} — the
+   * classifier layer decides whether that surfaces as "review" (unknown) rather
+   * than "reference" (known out-of-scope). Omitted = listing-status-agnostic.
+   */
+  listingStatuses?: string[];
 }
 
 export interface ApplicabilityResult {
@@ -72,6 +102,19 @@ export function regulationApplies(
       };
     }
   }
+  // Listing-status gate — a regulation can bind only certain legal forms (e.g.
+  // UK premium-listed companies). An undeclared status fails the gate here; the
+  // classifier decides whether that reads as "review" (unknown) vs "reference".
+  if (spec.listingStatuses && spec.listingStatuses.length > 0) {
+    const s = profile.listingStatus;
+    if (!s || !spec.listingStatuses.includes(s)) {
+      return {
+        applies: false,
+        reason: `listing status ${s ? `'${s}'` : "(undeclared)"} is out of scope (applies to: ${spec.listingStatuses.join(", ")})`,
+        matchedBasis: [],
+      };
+    }
+  }
   // Global regulations apply wherever the relevant capability exists (e.g. PCI-DSS).
   if (spec.basis.includes("global")) {
     return { applies: true, reason: "applies globally — no regional nexus required", matchedBasis: ["global"] };
@@ -105,4 +148,20 @@ export function regulationApplies(
 export const CADA_APPLICABILITY: RegulationApplicability = {
   basis: ["operating", "selling"],
   jurisdictions: ["eu"],
+};
+
+/**
+ * The UK Corporate Governance Code (FRC, 2024 edition) — and specifically its
+ * Provision 29 board internal-controls accountability declaration — applies to
+ * companies with a UK premium listing (in practice the FTSE 350 and other
+ * premium-listed companies). It binds on the OPERATING basis (a UK-incorporated /
+ * UK-listed company), and gates on listing status: standard-listed, AIM-listed,
+ * and private companies are out of scope (the Code is "comply or explain" under
+ * the premium-listing regime, not statute). Provision 29 first bites for
+ * accounting periods beginning on or after 1 January 2026.
+ */
+export const UK_CORP_GOV_CODE_APPLICABILITY: RegulationApplicability = {
+  basis: ["operating"],
+  jurisdictions: ["uk"],
+  listingStatuses: ["premium-listed"],
 };

@@ -43,6 +43,7 @@ export default async function StorefrontBusinessSettingsPage() {
     employsIn: businessContext?.employsIn ?? [],
     dataResidency: businessContext?.dataResidency ?? [],
     handlesCardPayments: businessContext?.handlesCardPayments ?? false,
+    listingStatus: businessContext?.listingStatus ?? null,
     address: parseOrgAddress(org?.address),
     // Pre-set the risk posture from the stored value, else the industry default.
     // Inert in P0 — captured/seeded only; consumers are wired in P1.
