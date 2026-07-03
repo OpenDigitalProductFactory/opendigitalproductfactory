@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = vi.hoisted(() => ({
   taskRunFindMany: vi.fn(),
+  taskRunUpdateMany: vi.fn(),
   buildPhaseRunFindMany: vi.fn(),
   buildPhaseRunUpdateMany: vi.fn(),
   executeRaw: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     taskRun: {
       findMany: (...args: unknown[]) => prismaMock.taskRunFindMany(...args),
+      updateMany: (...args: unknown[]) => prismaMock.taskRunUpdateMany(...args),
     },
     buildPhaseRun: {
       findMany: (...args: unknown[]) => prismaMock.buildPhaseRunFindMany(...args),
@@ -56,6 +58,7 @@ import {
   captureActiveSessionBlockers,
   escalateQuiescenceToForced,
   isBuildPhaseReapable,
+  isTaskRunReapable,
   isShipForceEscalated,
   getQuiescenceConfig,
   invalidateQuiescenceCache,
@@ -77,6 +80,7 @@ import {
 beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.taskRunFindMany.mockResolvedValue([]);
+  prismaMock.taskRunUpdateMany.mockResolvedValue({ count: 0 });
   prismaMock.buildPhaseRunFindMany.mockResolvedValue([]);
   prismaMock.buildPhaseRunUpdateMany.mockResolvedValue({ count: 0 });
   prismaMock.executeRaw.mockResolvedValue(0);
@@ -333,6 +337,30 @@ describe("isBuildPhaseReapable", () => {
   });
 });
 
+describe("isTaskRunReapable (BI-1C4179D0)", () => {
+  const now = new Date("2026-07-03T21:39:00Z");
+  const old = new Date(now.getTime() - 20 * 60 * 1000); // 20 min ago
+  const recent = new Date(now.getTime() - 2 * 60 * 1000); // 2 min ago
+  const thresholdMs = 15 * 60 * 1000;
+
+  it("reaps a loop whose start is old and has never heartbeated (a corpse)", () => {
+    expect(isTaskRunReapable({ startedAt: old, lastHeartbeatAt: null, now, thresholdMs })).toBe(true);
+  });
+
+  it("does NOT reap a loop with a recent heartbeat even if it started long ago (live work)", () => {
+    expect(isTaskRunReapable({ startedAt: old, lastHeartbeatAt: recent, now, thresholdMs })).toBe(false);
+  });
+
+  it("does NOT reap a freshly-started loop that has not heartbeated yet (startup race)", () => {
+    expect(isTaskRunReapable({ startedAt: recent, lastHeartbeatAt: null, now, thresholdMs })).toBe(false);
+  });
+
+  it("reaps the live-incident shape: 60h since the newest signal", () => {
+    const stale = new Date(now.getTime() - 60 * 60 * 60 * 1000); // 60h ago
+    expect(isTaskRunReapable({ startedAt: stale, lastHeartbeatAt: stale, now, thresholdMs })).toBe(true);
+  });
+});
+
 describe("parseQuiescenceConfig", () => {
   it("returns default config on null", () => {
     const c = parseQuiescenceConfig(null);
@@ -563,6 +591,55 @@ describe("captureActiveSessionBlockers", () => {
 
     expect(snapshot.surfaces.some((s) => s.surface === "build-studio.phase.build")).toBe(true);
     expect(prismaMock.buildPhaseRunUpdateMany).toHaveBeenCalledTimes(1); // no corpse close
+  });
+
+  it("reaps AND settles a dead coworker loop so it does not block the drain (BI-1C4179D0)", async () => {
+    // The live incident shape: a proactive loop wedged in `working` with its
+    // last heartbeat ~60h stale. It must not appear as a blocker, and the row
+    // must be settled to `stalled` so it never re-trips the next capture.
+    const now = new Date("2026-07-03T21:39:00.000Z");
+    const stale = new Date(now.getTime() - 60 * 60 * 60 * 1000); // 60h ago
+    prismaMock.taskRunFindMany.mockResolvedValue([
+      {
+        taskRunId: "TR-SCHED-DEAD",
+        title: "Discovery Taxonomy Gap Triage",
+        buildId: null,
+        status: "working",
+        lastHeartbeatAt: stale,
+        startedAt: stale,
+      },
+    ]);
+
+    const snapshot = await captureActiveSessionBlockers({ now });
+
+    expect(snapshot.surfaces.find((s) => s.surface === "coworker.reasoning-loop")).toBeUndefined();
+    expect(snapshot.hardBlockers).toBe(0);
+    expect(prismaMock.taskRunUpdateMany).toHaveBeenCalledWith({
+      where: { taskRunId: { in: ["TR-SCHED-DEAD"] }, status: { in: ["working", "active"] } },
+      data: { status: "stalled", completedAt: now },
+    });
+  });
+
+  it("keeps a live coworker loop as a blocker and does NOT settle it", async () => {
+    const now = new Date("2026-07-03T21:39:00.000Z");
+    const old = new Date(now.getTime() - 3 * 60 * 60 * 1000); // started 3h ago
+    const recent = new Date(now.getTime() - 30 * 1000); // heartbeat 30s ago
+    prismaMock.taskRunFindMany.mockResolvedValue([
+      {
+        taskRunId: "TR-LIVE",
+        title: "live reasoning",
+        buildId: null,
+        status: "working",
+        lastHeartbeatAt: recent,
+        startedAt: old,
+      },
+    ]);
+
+    const snapshot = await captureActiveSessionBlockers({ now });
+
+    expect(snapshot.surfaces.some((s) => s.surface === "coworker.reasoning-loop")).toBe(true);
+    expect(snapshot.hardBlockers).toBe(1);
+    expect(prismaMock.taskRunUpdateMany).not.toHaveBeenCalled();
   });
 });
 

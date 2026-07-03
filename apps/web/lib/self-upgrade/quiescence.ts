@@ -845,6 +845,28 @@ const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
 const DEAD_PHASE_LIVENESS_MS = 15 * 60 * 1000;
 
 /**
+ * Liveness threshold for dead-COWORKER-LOOP reaping (BI-1C4179D0), the A-class
+ * sibling of DEAD_PHASE_LIVENESS_MS. A working/active TaskRun with no heartbeat
+ * inside this window is a crashed reasoning loop, not live work, and must not
+ * hold the self-upgrade drain open.
+ *
+ * The A-class TaskRun blocker never had the liveness check the BuildPhaseRun
+ * path has had since the FB-69231490 fix. The leak surfaced live (2026-07-03):
+ * 12 proactive "Discovery Taxonomy Gap Triage" loops (agent inventory-specialist)
+ * wedged in `working` with their last heartbeat ~60h stale held every
+ * self-upgrade attempt (manual AND scheduled) open, and the operator could only
+ * see "an AI coworker working was in flight" with no way to tell it was dead.
+ *
+ * Same 15-min window as the phase path: far longer than the worst-case coworker
+ * heartbeat interval (~3 min per the estimatedWaitMs note below), so a merely
+ * busy loop is never reaped, and strictly more conservative than the stall
+ * watchdog's own heartbeat timeout — a reaped loop is by construction one the
+ * watchdog already considers stalled. Always-on (no flag): the flag-gated
+ * watchdog defaulting off was half of why the corpses were never cleared.
+ */
+const DEAD_COWORKER_LOOP_LIVENESS_MS = 15 * 60 * 1000;
+
+/**
  * True when an in-flight build phase is a corpse: the most recent observable
  * signal — the build's latest active-TaskRun heartbeat, or the phase's own
  * start if newer — is older than `thresholdMs`. Pure; unit-tested. A live
@@ -861,6 +883,27 @@ export function isBuildPhaseReapable(args: {
     buildLastHeartbeatAt && buildLastHeartbeatAt.getTime() > phaseStartedAt.getTime()
       ? buildLastHeartbeatAt
       : phaseStartedAt;
+  return now.getTime() - lastSignal.getTime() > thresholdMs;
+}
+
+/**
+ * True when a working/active coworker loop (A-class blocker) is provably dead:
+ * its newest signal — the last heartbeat, or its start if newer — predates the
+ * liveness window. Pure; unit-tested. Sibling to {@link isBuildPhaseReapable}
+ * (BI-1C4179D0). `startedAt` is always present on a TaskRun, so a freshly-started
+ * loop that has not heartbeated yet is never reaped (startup race protection).
+ */
+export function isTaskRunReapable(args: {
+  startedAt: Date;
+  lastHeartbeatAt: Date | null;
+  now: Date;
+  thresholdMs: number;
+}): boolean {
+  const { startedAt, lastHeartbeatAt, now, thresholdMs } = args;
+  const lastSignal =
+    lastHeartbeatAt && lastHeartbeatAt.getTime() > startedAt.getTime()
+      ? lastHeartbeatAt
+      : startedAt;
   return now.getTime() - lastSignal.getTime() > thresholdMs;
 }
 
@@ -941,7 +984,27 @@ export async function captureActiveSessionBlockers(opts?: {
     },
     take: 25,
   });
+  // Dead-loop reaping (always-on, BI-1C4179D0): a working/active TaskRun whose
+  // newest signal predates the liveness window is a corpse — a crashed coworker
+  // loop that will never heartbeat again — not live work. It must not hold the
+  // self-upgrade drain open. Mirrors the BuildPhaseRun corpse reaping below
+  // (isBuildPhaseReapable); the A-class path never had this check, so 12 dead
+  // loops (60h stale) blocked every drain on a live install (2026-07-03). A
+  // reaped row is settled to `stalled` (the watchdog's terminal-for-dead-work
+  // state) so the repair is permanent and the loop is surfaced as retryable.
+  const reapedTaskRuns: string[] = [];
   for (const row of activeTaskRuns) {
+    if (
+      isTaskRunReapable({
+        startedAt: row.startedAt,
+        lastHeartbeatAt: row.lastHeartbeatAt ?? null,
+        now,
+        thresholdMs: DEAD_COWORKER_LOOP_LIVENESS_MS,
+      })
+    ) {
+      reapedTaskRuns.push(row.taskRunId);
+      continue; // corpse — does not block the drain
+    }
     surfaces.push({
       surface: "coworker.reasoning-loop",
       detectionClass: "A",
@@ -957,6 +1020,24 @@ export async function captureActiveSessionBlockers(opts?: {
         lastHeartbeatAt: row.lastHeartbeatAt?.toISOString() ?? null,
       },
     });
+  }
+  if (reapedTaskRuns.length > 0) {
+    // Permanently settle the corpses so the same dead loops don't re-trip the
+    // blocker capture every tick. Best-effort: a failure here must never break
+    // capture (worst case the rows are re-evaluated — and re-excluded — next
+    // time). The status guard keeps it idempotent against a concurrent
+    // transition (e.g. the stall watchdog racing this capture).
+    try {
+      await prisma.taskRun.updateMany({
+        where: { taskRunId: { in: reapedTaskRuns }, status: { in: ["working", "active"] } },
+        data: { status: "stalled", completedAt: now },
+      });
+    } catch (err) {
+      console.warn("[quiescence] failed to settle reaped dead coworker loop(s):", err);
+    }
+    console.warn(
+      `[quiescence] reaped ${reapedTaskRuns.length} dead coworker loop(s) from the drain (no heartbeat, newest signal > ${DEAD_COWORKER_LOOP_LIVENESS_MS / 60000} min ago). (BI-1C4179D0)`,
+    );
   }
 
   // A-class: BuildPhaseRun in flight (phase mid-execution)
