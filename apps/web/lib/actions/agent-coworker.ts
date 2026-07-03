@@ -940,10 +940,18 @@ export async function sendMessage(input: {
     // proposing or asking, and never sees its decision skills at all.
     const { loadDecisionRoutingBlock } = await import("@/lib/tak/decision-routing-block");
     const legacyDecisionRoutingBlock = await loadDecisionRoutingBlock();
+    // Limitation-response contract — must be surface-uniform with the unified
+    // prompt-assembler path. Without this, a legacy-path coworker never sees the
+    // instruction to propose the one enabler + ask a single yes/no when blocked,
+    // and instead dead-ends or deflects to "ask an admin".
+    const { loadLimitationResponseBlock } = await import("@/lib/tak/limitation-response-block");
+    const legacyLimitationResponseBlock = await loadLimitationResponseBlock();
     const promptSections = [
       agent.systemPrompt,
       "",
       legacyDecisionRoutingBlock,
+      "",
+      legacyLimitationResponseBlock,
       "",
       "Current context:",
       `- Route: ${input.routeContext}`,

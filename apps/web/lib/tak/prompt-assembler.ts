@@ -10,6 +10,7 @@ import {
 } from "./question-packet";
 import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
 import { DECISION_ROUTING_BLOCK } from "./decision-routing-block";
+import { LIMITATION_RESPONSE_BLOCK } from "./limitation-response-block";
 import { readingLevelDirective, type ReadingLevel } from "@dpf/validators";
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "./prompt-boundary";
 
@@ -127,6 +128,7 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
   const loaded = await loadPrompts([
     { category: "platform-identity", slug: "identity-block", fallback: IDENTITY_BLOCK },
     { category: "platform-identity", slug: "decision-routing", fallback: DECISION_ROUTING_BLOCK },
+    { category: "platform-identity", slug: "limitation-response", fallback: LIMITATION_RESPONSE_BLOCK },
     { category: "platform-identity", slug: modeSlug, fallback: input.mode === "advise" ? ADVISE_MODE_BLOCK : ACT_MODE_BLOCK },
     { category: "platform-mission", slug: "company-mission", fallback: COMPANY_MISSION_FALLBACK },
   ]);
@@ -141,6 +143,11 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
   // WWMD/WWWD/WSID before proposing or asking. Surface-uniform with the legacy
   // path (apps/web/lib/actions/agent-coworker.ts).
   staticBlocks.push(loaded.get("platform-identity/decision-routing") ?? DECISION_ROUTING_BLOCK);
+
+  // Block 1c: Limitation response (static) — when blocked, propose the one
+  // enabler and ask a single yes/no; never dead-end or deflect to an admin.
+  // Surface-uniform with the legacy path (apps/web/lib/actions/agent-coworker.ts).
+  staticBlocks.push(loaded.get("platform-identity/limitation-response") ?? LIMITATION_RESPONSE_BLOCK);
 
   // Block 3: Mode (static per session — advise or act doesn't change mid-conversation)
   staticBlocks.push(loaded.get(`platform-identity/${modeSlug}`) ?? (input.mode === "advise" ? ADVISE_MODE_BLOCK : ACT_MODE_BLOCK));
