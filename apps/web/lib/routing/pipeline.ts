@@ -16,6 +16,8 @@ import type {
 } from "./types";
 import { computeFitness } from "./scoring";
 import { checkModelCapacity } from "./rate-tracker";
+import { cliSaturationPercent } from "./cli-concurrency";
+import { usesCodexCli, usesCliAdapter } from "./provider-utils";
 
 // ── Stage 0: Policy filter ────────────────────────────────────────────────────
 
@@ -376,11 +378,26 @@ export function routeEndpoint(
     return { ep, fitness, dimensionScores };
   });
 
-  // EP-INF-004: Apply capacity penalty after scoring, before ranking
+  // EP-INF-004: Apply capacity penalty after scoring, before ranking.
+  // BI-15068745: CLI-backed endpoints (codex-cli / claude-cli) share ONE
+  // sandbox with a bounded slot pool; their provider rate caps are invisible to
+  // the rate tracker (no rpm/tpm headers → utilizationPercent reads 0). Blend in
+  // live CLI slot saturation so the scorer proactively spreads concurrent load
+  // onto HTTP providers before the CLI pool 429s — the storm that starved the
+  // portal. Only engages under real contention (saturation is 0 while idle).
   for (const entry of scored) {
     const cap = checkModelCapacity(entry.ep.providerId, entry.ep.modelId);
-    if (cap.utilizationPercent > 80) {
-      const capacityFactor = 1.0 - ((cap.utilizationPercent - 80) / 100);
+    const cliBacked =
+      usesCodexCli(entry.ep.providerId) || usesCliAdapter(entry.ep.providerId);
+    const utilizationPercent = cliBacked
+      ? Math.max(cap.utilizationPercent, cliSaturationPercent())
+      : cap.utilizationPercent;
+    if (utilizationPercent > 80) {
+      let capacityFactor = 1.0 - (utilizationPercent - 80) / 100;
+      // Floor only the CLI path: a deeply-queued sandbox (saturation > 180%)
+      // would otherwise drive fitness negative. Strongly demote but keep it
+      // selectable as a last resort. Non-CLI behavior is unchanged.
+      if (cliBacked) capacityFactor = Math.max(0.05, capacityFactor);
       entry.fitness *= capacityFactor;
     }
   }

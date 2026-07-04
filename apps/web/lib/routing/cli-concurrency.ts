@@ -99,6 +99,26 @@ export function cliConcurrencyStats(): {
   return { inFlight, queued: waiters.length, max: maxConcurrency() };
 }
 
+/**
+ * Live saturation of the shared-sandbox CLI slot pool, as a percentage.
+ *
+ * Counts both in-flight holders AND queued waiters against the cap, so a
+ * backlog reads ABOVE 100% (e.g. 4 running + 4 queued at cap 4 → 200%). The
+ * routing scorer uses this as the utilization signal for CLI-backed providers
+ * (codex-cli / claude-cli), whose real provider rate caps are invisible to the
+ * rate tracker (no rpm/tpm headers → checkModelCapacity reads 0%). Feeding this
+ * into the capacity penalty lets the scorer proactively shift concurrent load
+ * onto HTTP providers before the CLI pool 429s. See BI-15068745.
+ *
+ * Returns 0 when nothing is using the pool, so it never penalizes CLI providers
+ * while the sandbox is idle — the penalty only engages under real contention.
+ */
+export function cliSaturationPercent(): number {
+  const max = maxConcurrency();
+  if (max <= 0) return 0;
+  return ((inFlight + waiters.length) / max) * 100;
+}
+
 /** Test-only: reset gate state between cases. */
 export function __resetCliConcurrencyForTest(): void {
   inFlight = 0;
