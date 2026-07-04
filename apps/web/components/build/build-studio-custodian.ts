@@ -32,6 +32,11 @@ type CustodianPromptInput = {
 
 const QUIET_REVIEW_THRESHOLD_MINUTES = 5;
 const QUIET_BUILD_THRESHOLD_MINUTES = 10;
+// Early phases (ideate / plan) had no quiet threshold at all, so a build that
+// died before producing a brief — the most common failure window — surfaced no
+// custodian nudge and read as "Needs you: 0". Give it the same 5-minute quiet
+// bar as review so a stalled ideate/plan build is not invisible.
+const QUIET_EARLY_PHASE_THRESHOLD_MINUTES = 5;
 
 function formatMinutes(minutes: number): string {
   if (minutes < 1) return "less than a minute";
@@ -85,11 +90,12 @@ function resolveCustodianStatusSignal(input: {
   technicalRecovery: boolean;
   isQuietReview: boolean;
   isQuietBuild: boolean;
+  isQuietEarlyPhase: boolean;
 }): NonNullable<ProactivityResolverInput["statusSignal"]> {
   if (input.uxReviewGap || input.blockedByEvidence || input.technicalRecovery) {
     return "blocked";
   }
-  if (input.isQuietReview || input.isQuietBuild) {
+  if (input.isQuietReview || input.isQuietBuild || input.isQuietEarlyPhase) {
     return "stalled";
   }
   return "normal";
@@ -118,6 +124,10 @@ export function deriveBuildStudioCustodianPrompt({
     build.phase === "build"
     && progressVisibility?.quietAgent.quiet === true
     && quietMinutes >= QUIET_BUILD_THRESHOLD_MINUTES;
+  const isQuietEarlyPhase =
+    (build.phase === "ideate" || build.phase === "plan")
+    && progressVisibility?.quietAgent.quiet === true
+    && quietMinutes >= QUIET_EARLY_PHASE_THRESHOLD_MINUTES;
   const blockedByEvidence = action.disabledReason != null;
   const technicalRecovery =
     action.kind === "resume-implementation"
@@ -126,7 +136,7 @@ export function deriveBuildStudioCustodianPrompt({
     || action.kind === "reset-build";
   const uxReviewGap = isUxReviewGap(build, action, progressVisibility);
 
-  if (!uxReviewGap && !blockedByEvidence && !technicalRecovery && !isQuietReview && !isQuietBuild) {
+  if (!uxReviewGap && !blockedByEvidence && !technicalRecovery && !isQuietReview && !isQuietBuild && !isQuietEarlyPhase) {
     return null;
   }
 
@@ -141,6 +151,7 @@ export function deriveBuildStudioCustodianPrompt({
       technicalRecovery,
       isQuietReview,
       isQuietBuild,
+      isQuietEarlyPhase,
     }),
   });
 
