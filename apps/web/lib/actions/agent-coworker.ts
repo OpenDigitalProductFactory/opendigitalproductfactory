@@ -84,7 +84,7 @@ import {
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
-import { filterToolsForCoworkerRuntime } from "./coworker-tool-filter";
+import { filterToolsForCoworkerRuntime, adviseHeldBackTools } from "./coworker-tool-filter";
 export { filterToolsForCoworkerRuntime };
 
 async function requireAuthUser() {
@@ -1456,6 +1456,30 @@ export async function sendMessage(input: {
       } catch (err) {
         console.warn("[ship] Failed to inject contribution mode context:", err);
       }
+    }
+  }
+
+  // Advise mode holds back the coworker's side-effecting tools. Tell it exactly
+  // which authority is being held back — this is NOT a missing permission — so it
+  // proposes switching to Act mode and names the specific capability per the
+  // limitation-response contract, instead of misdiagnosing a mode muzzle as a
+  // missing grant or deflecting the employee to an administrator. Mirrors the
+  // external-access block below. Covers both prompt paths (they converge here).
+  if (input.coworkerMode === "advise") {
+    const heldBack = adviseHeldBackTools(mergedTools);
+    if (heldBack.length > 0) {
+      const ADVISE_HELD_BACK_CAP = 10;
+      const shown = heldBack.slice(0, ADVISE_HELD_BACK_CAP);
+      const toolList = shown.map((t) => `- ${t.name}: ${t.description}`).join("\n");
+      const moreLine = heldBack.length > shown.length ? `- (+${heldBack.length - shown.length} more)` : "";
+      populatedPrompt += [
+        "",
+        "",
+        "ADVISE MODE — AUTHORITY HELD BACK (NOT A MISSING PERMISSION).",
+        "You already hold permission for the actions below; they are disabled ONLY because you are in Advise mode. Do not tell the employee you lack access to these, and do not send them to an administrator. When the request needs one, follow the limitation-response contract: say you can do it and ask to switch to Act mode.",
+        toolList,
+        moreLine,
+      ].filter(Boolean).join("\n");
     }
   }
 

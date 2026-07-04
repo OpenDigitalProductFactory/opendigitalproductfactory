@@ -52,3 +52,19 @@ export function filterToolsForCoworkerRuntime(
     return true;
   });
 }
+
+/**
+ * The tools that Advise mode holds back — the exact set `filterToolsForCoworkerRuntime`
+ * removes for its `coworkerMode === "advise"` rule (side-effecting, non-artifact).
+ * The coworker HOLDS authority for these (they passed grant + capability gating to
+ * reach the merged set); advise mode is disabling them, not a missing permission.
+ *
+ * Surfaced into the coworker's prompt so it can name the specific enabler ("switch
+ * me to Act mode and I can …") per the limitation-response contract, instead of
+ * misdiagnosing a mode muzzle as a missing permission or deflecting to an admin.
+ *
+ * Pass the FULL merged (authorized) tool set — not the already-filtered set.
+ */
+export function adviseHeldBackTools(mergedTools: ToolDefinition[]): ToolDefinition[] {
+  return mergedTools.filter((tool) => tool.sideEffect && !tool.coworkerArtifact);
+}
