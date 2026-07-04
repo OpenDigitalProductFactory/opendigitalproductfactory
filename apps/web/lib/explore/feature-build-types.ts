@@ -900,6 +900,26 @@ export function isHappyPathIntakeReady(state: HappyPathState | null | undefined)
   return Boolean(taxonomyNodeId && backlogItemId && epicId && constrainedGoal);
 }
 
+/**
+ * Provenance-tagged taxonomy anchor for a build whose ideate agent never ran
+ * confirm_taxonomy_placement. Returns null when an anchor already exists so
+ * callers never clobber an operator choice. Both shapes satisfy
+ * {@link isHappyPathIntakeReady} while staying traceable: `triaged-bi:<id>`
+ * (the BI's triage outcome IS the categorization) and `adhoc-build:<id>` (a
+ * free-text quick-box build with no originating BI, which otherwise gate-blocks
+ * on "Intake is incomplete" forever).
+ */
+export function deriveIntakeTaxonomyAnchor(args: {
+  taxonomyNodeId: string | null | undefined;
+  originatingBacklogItemId: string | null | undefined;
+  buildId: string;
+}): string | null {
+  if (args.taxonomyNodeId) return null;
+  return args.originatingBacklogItemId
+    ? `triaged-bi:${args.originatingBacklogItemId}`
+    : `adhoc-build:${args.buildId}`;
+}
+
 export function mergeHappyPathStateIntoPlan(
   plan: Record<string, unknown> | null | undefined,
   patch: HappyPathStatePatch,

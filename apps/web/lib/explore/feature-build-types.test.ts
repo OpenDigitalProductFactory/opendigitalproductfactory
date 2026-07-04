@@ -9,6 +9,7 @@ import {
   generatePackId,
   normalizeHappyPathState,
   isHappyPathIntakeReady,
+  deriveIntakeTaxonomyAnchor,
   normalizeIssueKey,
   computeReviewDelta,
   isOscillating,
@@ -344,6 +345,52 @@ describe("isHappyPathIntakeReady", () => {
 
   it("returns true when taxonomy, backlog, epic, and constrained goal are present", () => {
     expect(isHappyPathIntakeReady(readyHappyPath)).toBe(true);
+  });
+});
+
+describe("deriveIntakeTaxonomyAnchor", () => {
+  it("anchors an ad-hoc build (no originating BI) so ideate can advance instead of gate-blocking forever", () => {
+    // Regression: Work Control quick-box builds have no originatingBacklogItemId,
+    // so before the fix taxonomyNodeId stayed null, the intake gate blocked
+    // ideate→plan permanently, and the resume janitor re-ran review forever.
+    const anchor = deriveIntakeTaxonomyAnchor({
+      taxonomyNodeId: null,
+      originatingBacklogItemId: null,
+      buildId: "FB-A500CCE6",
+    });
+    expect(anchor).toBe("adhoc-build:FB-A500CCE6");
+
+    // The synthetic anchor must actually satisfy the intake-readiness gate.
+    const state = normalizeHappyPathState({
+      intake: {
+        status: "ready",
+        taxonomyNodeId: anchor,
+        backlogItemId: "BI-1",
+        epicId: "EP-1",
+        constrainedGoal: "Add a colored dot indicator",
+      },
+    });
+    expect(isHappyPathIntakeReady(state)).toBe(true);
+  });
+
+  it("uses the triaged-bi anchor when an originating BI is present", () => {
+    expect(
+      deriveIntakeTaxonomyAnchor({
+        taxonomyNodeId: null,
+        originatingBacklogItemId: "BI-DEADBEEF",
+        buildId: "FB-1",
+      }),
+    ).toBe("triaged-bi:BI-DEADBEEF");
+  });
+
+  it("returns null when a taxonomy anchor already exists (never clobbers operator choice)", () => {
+    expect(
+      deriveIntakeTaxonomyAnchor({
+        taxonomyNodeId: "tax-real-node",
+        originatingBacklogItemId: null,
+        buildId: "FB-1",
+      }),
+    ).toBeNull();
   });
 });
 
