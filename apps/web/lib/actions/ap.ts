@@ -9,6 +9,7 @@ import { getOrgIdentity } from "@/lib/org-identity";
 import { resolveAppBaseUrl } from "@/lib/app-url";
 import { recordPayment } from "@/lib/actions/finance";
 import { postBillFinalized } from "@/lib/finance/ledger-service";
+import { getBillPoMatch } from "@/lib/finance/po-match-service";
 import { PAYMENT_METHODS } from "@/lib/finance/finance-validation";
 import type { CreateSupplierInput, CreateBillInput, CreatePOInput, CreatePaymentRunInput } from "@/lib/ap-validation";
 
@@ -174,7 +175,7 @@ export async function createBill(input: CreateBillInput) {
 export async function getBill(id: string) {
   await requireManageFinance();
 
-  return prisma.bill.findUnique({
+  const bill = await prisma.bill.findUnique({
     where: { id },
     include: {
       lineItems: { orderBy: { sortOrder: "asc" } },
@@ -191,6 +192,10 @@ export async function getBill(id: string) {
       },
     },
   });
+  if (!bill) return null;
+  // Two-way match against the linked purchase order (SAP MM invoice verification).
+  const poMatch = await getBillPoMatch(id);
+  return { ...bill, poMatch };
 }
 
 // ─── recordBillPayment ──────────────────────────────────────────────────────────
@@ -296,6 +301,14 @@ export async function submitBillForApproval(billId: string): Promise<void> {
   });
 
   if (rules.length === 0) {
+    // AP integrity (MM two-way match): a bill that exceeds its purchase order beyond
+    // tolerance is flagged. Non-blocking for now — with no approval rule the bill
+    // still auto-approves — but the variance is surfaced on the bill (getBill.poMatch)
+    // and logged, so an over-order bill can't pass silently.
+    const poMatch = await getBillPoMatch(billId);
+    if (poMatch.hasPurchaseOrder && poMatch.match.status === "over") {
+      console.warn(`[ap] bill exceeds its purchase order beyond tolerance: ${poMatch.match.message}`);
+    }
     await prisma.bill.update({
       where: { id: billId },
       data: { status: "approved" },
