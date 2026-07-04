@@ -8389,7 +8389,7 @@ export async function executeTool(
       //   3. Pass happyPathState to checkPhaseGate so the full intake
       //      check actually runs.
       try {
-        const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
+        const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState, deriveIntakeTaxonomyAnchor } = await import("@/lib/feature-build-types");
         const updatedBuild = await prisma.featureBuild.findUnique({
           where: { buildId },
           select: {
@@ -8549,18 +8549,20 @@ export async function executeTool(
             }
           }
 
-          // Auto-derive taxonomyNodeId for triaged-BI builds. The BI's
-          // existence + triage outcome IS the categorization for governance
-          // purposes — we just need a stable, traceable anchor that
-          // satisfies isHappyPathIntakeReady. Use the originating BI id as
-          // a "triaged-bi:" prefixed anchor so downstream UI can recognize
-          // the difference between a real taxonomy node and a triaged-BI
-          // bypass. For ad-hoc builds without an originating BI, leave
-          // taxonomyNodeId null — the agent must call
-          // confirm_taxonomy_placement explicitly for those.
-          if (!happyPathState.intake.taxonomyNodeId && updatedBuild.originatingBacklogItemId) {
+          // Auto-derive taxonomyNodeId when the ideate agent never ran
+          // confirm_taxonomy_placement, so a design that PASSED review + sized
+          // "ok" can actually advance ideate → plan instead of gate-blocking on
+          // "Intake is incomplete" forever. constrainedGoal is already derived
+          // from the title above; this fills the last missing intake anchor. See
+          // deriveIntakeTaxonomyAnchor for the triaged-bi vs adhoc-build shapes.
+          const taxonomyAnchor = deriveIntakeTaxonomyAnchor({
+            taxonomyNodeId: happyPathState.intake.taxonomyNodeId,
+            originatingBacklogItemId: updatedBuild.originatingBacklogItemId,
+            buildId,
+          });
+          if (taxonomyAnchor) {
+            const anchor = taxonomyAnchor;
             try {
-              const anchor = `triaged-bi:${updatedBuild.originatingBacklogItemId}`;
               await updateBuildHappyPathState(userId, {
                 intake: { taxonomyNodeId: anchor },
               }, buildId);
