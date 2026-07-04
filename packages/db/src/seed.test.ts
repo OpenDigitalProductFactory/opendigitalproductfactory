@@ -63,8 +63,16 @@ describe("coworker seed invariants", () => {
     );
   });
 
-  it("extends customer-advisor with marketing_read", () => {
-    expect(HARDCODED_COWORKER_GRANTS["customer-advisor"]).toContain("marketing_read");
+  it("grants customer-advisor the CRM grants it operates with — not backlog_write", () => {
+    // The Customer Success Manager resolves its runtime grants from THIS map (the
+    // slug agent row), so the CRM grants must be here. Regression guard for the
+    // bug where it held backlog_write + marketing_read and NO crm_* grants, which
+    // stripped every CRM tool from its surface (it filed backlog items instead of
+    // creating accounts).
+    const grants = HARDCODED_COWORKER_GRANTS["customer-advisor"];
+    expect(grants).toEqual(expect.arrayContaining(["crm_read", "crm_write"]));
+    expect(grants).not.toContain("backlog_write");
+    expect(grants).not.toContain("marketing_read");
   });
 
   it("binds every hardcoded coworker seed to one profession family", () => {
