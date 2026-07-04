@@ -1,5 +1,11 @@
 import { STALE_CACHE_MS } from "@/lib/work-capsules";
 
+// A capsule that claims to be "working" but has not changed in this long is
+// almost certainly stalled (e.g. its build died in ideate). Surface that as a
+// degraded health signal instead of a misleading "ok" — Work Control must not
+// report a dead capsule as healthy.
+const WORKING_STALL_MS = 15 * 60 * 1000;
+
 type CapsuleRowInput = {
   capsuleId: string;
   title: string;
@@ -68,6 +74,8 @@ function outcomeAnchorLabel(value: unknown): string | null {
 export function presentCapsuleRow(row: CapsuleRowInput, now = new Date()) {
   const leaseExpired = row.leaseExpiresAt != null && row.leaseExpiresAt.getTime() < now.getTime();
   const staleCache = row.lastSyncedAt != null && now.getTime() - row.lastSyncedAt.getTime() > STALE_CACHE_MS;
+  const stalledWorking =
+    row.status === "working" && now.getTime() - row.updatedAt.getTime() > WORKING_STALL_MS;
 
   return {
     capsuleId: row.capsuleId,
@@ -90,7 +98,13 @@ export function presentCapsuleRow(row: CapsuleRowInput, now = new Date()) {
     },
     worktreePath: row.worktreePath,
     pullRequestUrl: row.pullRequestUrl,
-    health: leaseExpired ? "lease-expired" : staleCache ? "stale-cache" : "ok",
+    health: leaseExpired
+      ? "lease-expired"
+      : stalledWorking
+        ? "stalled"
+        : staleCache
+          ? "stale-cache"
+          : "ok",
     updatedAt: row.updatedAt.toISOString(),
   };
 }
