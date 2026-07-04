@@ -143,8 +143,27 @@ export default async function WikiBrowsePage({
 
       <DecisionDisciplineHub cards={disciplineCards} />
 
+      {/* Review & adjust — the findings workspace over the decision ledger */}
+      <Link
+        href="/wiki/review"
+        className="mt-6 block rounded-lg border border-[var(--dpf-border)] p-4 hover:bg-[var(--dpf-surface-2)] transition-colors"
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium text-sm text-[var(--dpf-text)]">
+              Review &amp; adjust
+            </p>
+            <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
+              As decisions accumulate, resolve clashing principles and cover the
+              gaps where your AI has no settled answer yet.
+            </p>
+          </div>
+          <span className="text-sm text-[var(--dpf-accent)] shrink-0 ml-4">Open →</span>
+        </div>
+      </Link>
+
       {/* Decision Perspectives — profile + voice admin entry point */}
-      <div className="mt-6 rounded-lg border border-[var(--dpf-border)] p-4 flex items-center justify-between">
+      <div className="mt-3 rounded-lg border border-[var(--dpf-border)] p-4 flex items-center justify-between">
         <div>
           <p className="font-medium text-sm text-[var(--dpf-text)]">
             Decision perspectives

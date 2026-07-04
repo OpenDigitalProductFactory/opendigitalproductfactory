@@ -207,6 +207,7 @@ Tracked under EP-WWMD, EP-VOICE-LAYER, and EP-WSID:
 ## Related Routes
 
 - `/wiki` — **Decision governance** landing. Reframed (EP-0AF96937 Phase 1) around the three decision disciplines — WWMD (platform), WWWD (your business), WSID (each role's craft) — each card showing derived health (material counts, whether the org has its own stance, open review counts) and See / Manage / Review actions. The raw kernel material (principles, stances, heuristics) is retained below the hub as a "Governing material" drill-in rather than the front door. See `docs/superpowers/specs/2026-07-04-decision-governance-surface-redesign-design.md`.
+- `/wiki/review` — **Review & adjust** workspace (EP-0AF96937 Phase 2). A findings surface over the accumulating decision ledger: `conflict` findings (decisions the gate flagged as `principleConflict`) and `gap` findings (clusters of `defer`/`escalate` outcomes in one decision domain where the doctrine has no settled answer yet), each with a plain-language action. Drift (golden-decision flips), stale-material review, and the principle-dimension matrix follow as later sub-slices.
 - `/wiki/perspectives` — manage the profiles behind each discipline; give any perspective a voice
 - Build Studio → **Decision Perspective Gate Panel** — primary surface for the gate
 - `/wiki/personas/[id]` — profile detail
