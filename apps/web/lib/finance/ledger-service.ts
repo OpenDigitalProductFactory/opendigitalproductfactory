@@ -20,6 +20,7 @@ import {
   buildInvoicePostingLines,
   buildPaymentPostingLines,
   buildBillPostingLines,
+  buildDepreciationPostingLines,
   validateJournalEntry,
   computeTrialBalance,
   deriveFinancialStatements,
@@ -472,4 +473,98 @@ export async function getGeneralLedgerReport(periodKey?: string): Promise<Genera
     statements,
     isEmpty: lineRows.length === 0,
   };
+}
+
+// ─── Fixed-asset depreciation → GL ───────────────────────────────────────────
+
+export type PostDepreciationResult = {
+  posted: boolean;
+  periodKey: string;
+  totalCharge: number;
+  journalEntryId?: string;
+  reason?: "already-posted" | "no-organization" | "unresolved-accounts" | "nothing-to-post";
+  detail?: string;
+};
+
+/**
+ * Post a period's total depreciation charge to the GL as one balanced journal:
+ *   Dr Depreciation Expense / Cr Accumulated Depreciation.
+ * Idempotent per period. Asset book-value updates are the caller's responsibility
+ * (runMonthlyDepreciation); this records only the ledger side. Automatic account
+ * determination — if the depreciation accounts can't be resolved nothing posts.
+ */
+export async function postDepreciationJournal(
+  periodKey: string,
+  totalCharge: number,
+): Promise<PostDepreciationResult> {
+  const charge = Math.round(Math.max(totalCharge, 0) * 100) / 100;
+  const zero = { posted: false as const, periodKey, totalCharge: charge };
+  if (charge <= 0) return { ...zero, reason: "nothing-to-post" };
+
+  const existing = await prisma.journalEntry.findFirst({
+    where: { sourceType: "Depreciation", sourceId: periodKey },
+    select: { id: true },
+  });
+  if (existing) return { ...zero, reason: "already-posted", detail: existing.id };
+
+  const org = await prisma.organization.findFirst({ select: { id: true } });
+  if (!org) return { ...zero, reason: "no-organization" };
+
+  const settings = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
+  const currency = settings?.baseCurrency ?? "GBP";
+
+  const accountRows = await prisma.ledgerAccount.findMany({
+    where: { organizationId: org.id, isActive: true },
+    orderBy: { code: "asc" },
+    select: { id: true, code: true, name: true, type: true },
+  });
+  const { resolved } = resolvePostingAccounts(
+    accountRows.map((a) => ({ id: a.id, code: a.code, name: a.name, type: a.type as LedgerAccountType })),
+  );
+  if (!resolved.depreciationExpense || !resolved.accumulatedDepreciation) {
+    const missing = [
+      resolved.depreciationExpense ? null : "depreciationExpense",
+      resolved.accumulatedDepreciation ? null : "accumulatedDepreciation",
+    ].filter(Boolean);
+    return { ...zero, reason: "unresolved-accounts", detail: missing.join(", ") };
+  }
+
+  const lines = buildDepreciationPostingLines(charge, {
+    depreciationExpenseAccountId: resolved.depreciationExpense.id!,
+    accumulatedDepreciationAccountId: resolved.accumulatedDepreciation.id!,
+  });
+  const check = validateJournalEntry(lines);
+  if (!check.ok) {
+    throw new Error(`Depreciation ${periodKey} posting is unbalanced: ${check.errors.join("; ")}`);
+  }
+
+  const [year, month] = periodKey.split("-").map((n) => Number(n));
+  const entryDate = new Date(Date.UTC(year, month, 0));
+  const entry = await prisma.journalEntry.create({
+    data: {
+      organizationId: org.id,
+      entryRef: `JE-DEP-${periodKey}`,
+      entryDate,
+      periodKey,
+      status: "posted",
+      source: "depreciation",
+      sourceType: "Depreciation",
+      sourceId: periodKey,
+      currency,
+      postedAt: new Date(),
+      memo: `Depreciation ${periodKey}`,
+      lines: {
+        create: lines.map((l, i) => ({
+          accountId: l.accountId,
+          debit: l.debit ?? 0,
+          credit: l.credit ?? 0,
+          currency,
+          description: l.description,
+          sortOrder: i,
+        })),
+      },
+    },
+    select: { id: true },
+  });
+  return { posted: true, periodKey, totalCharge: charge, journalEntryId: entry.id };
 }

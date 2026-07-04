@@ -520,3 +520,69 @@ export function deriveFinancialStatements(tb: TrialBalance): FinancialStatements
     balanceSheet: { assets, liabilities, equity, netIncome, balanced },
   };
 }
+
+// ─── Fixed-asset depreciation ────────────────────────────────────────────────
+
+export type DepreciationMethod = "straight_line" | "reducing_balance";
+
+export type DepreciableAsset = {
+  purchaseCost: number;
+  residualValue: number;
+  usefulLifeMonths: number;
+  depreciationMethod: DepreciationMethod;
+  /** Depreciation already booked against this asset. */
+  accumulatedDepreciation: number;
+};
+
+/**
+ * The depreciation charge for ONE period for an asset, given what has already been
+ * booked. Never takes accumulated depreciation past the depreciable base
+ * (cost − residual), so an asset stops at its residual value; returns 0 for a
+ * fully-depreciated or zero-life asset.
+ *   straight_line:    (cost − residual) / usefulLifeMonths, flat each period.
+ *   reducing_balance: bookValue × (2 / usefulLifeMonths) — double-declining —
+ *                     capped so book value never dips below the residual.
+ */
+export function computeMonthlyDepreciation(asset: DepreciableAsset): number {
+  const cost = Math.max(asset.purchaseCost, 0);
+  const residual = Math.max(asset.residualValue, 0);
+  const life = asset.usefulLifeMonths;
+  const accumulated = Math.max(asset.accumulatedDepreciation, 0);
+
+  const depreciableBase = Math.max(cost - residual, 0);
+  const remaining = Math.max(depreciableBase - accumulated, 0);
+  if (life <= 0 || remaining <= 0) return 0;
+
+  const charge =
+    asset.depreciationMethod === "reducing_balance"
+      ? (cost - accumulated) * (2 / life) // double-declining on book value
+      : depreciableBase / life; // straight line
+
+  const rounded = Math.round(Math.max(charge, 0) * 100) / 100;
+  return Math.min(rounded, remaining); // never over-depreciate past the residual
+}
+
+export type DepreciationPostingResolver = {
+  depreciationExpenseAccountId: string;
+  accumulatedDepreciationAccountId: string;
+};
+
+/**
+ * Build the journal for a period's depreciation charge:
+ *   Dr Depreciation Expense (P&L) / Cr Accumulated Depreciation (contra-asset).
+ * Balances by construction; `amount` is the total charge for the period.
+ */
+export function buildDepreciationPostingLines(
+  amount: number,
+  accounts: DepreciationPostingResolver,
+): JournalLineInput[] {
+  const charge = Math.max(amount, 0);
+  return [
+    { accountId: accounts.depreciationExpenseAccountId, debit: charge, description: "Depreciation" },
+    {
+      accountId: accounts.accumulatedDepreciationAccountId,
+      credit: charge,
+      description: "Accumulated depreciation",
+    },
+  ];
+}

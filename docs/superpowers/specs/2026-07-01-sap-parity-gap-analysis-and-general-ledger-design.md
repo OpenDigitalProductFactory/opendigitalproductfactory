@@ -334,10 +334,41 @@ they call is fully proven. Report-kit `DataTable` was intentionally not used for
 balance — it is a client component and all seven sibling finance reports hand-roll a
 themed table; converging finance reports onto report-kit is a separate follow-up.
 
-## 12. Roadmap
+## 12. Phase 6 — fixed-asset depreciation → GL (FI-AA, off main)
 
-Phases 1–5 land the ledger, make it automatic, post all three core sub-ledgers to it, and
-surface the derived books. Remaining ranked gaps (§4) — fixed-asset depreciation posting
-(FI-AA), procurement 3-way match (MM), inventory movements (WM), HCM payroll — are filed
-under **EP-SAP-PARITY** and delivered by deepening this one spine, not by bolting on
-separate tools.
+The asset register (`FixedAsset`) and a monthly-depreciation run (`runMonthlyDepreciation`)
+already existed but posted nowhere. Phase 6 makes the period's depreciation land on the
+ledger, closing the FI-AA gap:
+
+- **Pure primitives (`ledger.ts`, tested):** `computeMonthlyDepreciation` (straight-line
+  and double-declining, capped so an asset never depreciates below its residual) and
+  `buildDepreciationPostingLines` (**Dr Depreciation Expense / Cr Accumulated Depreciation**,
+  balanced by construction).
+- **Contra-asset done right:** `Accumulated Depreciation` (1900) is seeded as an **asset**
+  account that carries a *credit* balance, so its oriented balance is negative and correctly
+  reduces total assets to **net book value** in the Phase-5 balance-sheet rollup — no new
+  account *class* needed. Roles `depreciationExpense` (5900) + `accumulatedDepreciation` join
+  the automatic determination set.
+- **`postDepreciationJournal(periodKey, total)` (`ledger-service.ts`):** posts one balanced,
+  idempotent-per-period journal for the period's total charge. It records only the ledger
+  side — asset book-value updates stay with `runMonthlyDepreciation`, so there is no double
+  update and the existing depreciation formula (kept consistent with the `calculateDepreciation`
+  schedule preview) is unchanged.
+- **Wiring:** `runMonthlyDepreciation` accumulates the period's charge and calls
+  `postDepreciationJournal` best-effort (a ledger hiccup never fails the asset run; idempotent
+  so a retry is safe).
+
+Verification: `vitest run lib/finance/ledger.test.ts lib/finance/chart-of-accounts.test.ts` —
+**46/46 pass** (new: straight-line/reducing-balance/residual-cap/zero-life depreciation +
+balanced posting). Standalone strict `tsc` on the pure modules clean. The Prisma service +
+`assets.ts` wiring are field-exact and CI/sandbox-gated per §5. Follow-up: converge
+`calculateDepreciation` / `runMonthlyDepreciation` / `computeMonthlyDepreciation` onto one
+formula (they compute depreciation three ways today; unifying touches tested behaviour, so
+it is deferred).
+
+## 13. Roadmap
+
+Phases 1–6 land the ledger, make it automatic, post all three core sub-ledgers **plus
+fixed-asset depreciation** to it, and surface the derived books. Remaining ranked gaps (§4) —
+procurement 3-way match (MM), inventory movements (WM), HCM payroll — are filed under
+**EP-SAP-PARITY** and delivered by deepening this one spine, not by bolting on separate tools.
