@@ -22,6 +22,7 @@ import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { extractToolCalls as sharedExtractToolCalls } from "./extract-tool-calls";
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
+import { withCliSlot } from "./cli-concurrency";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
@@ -302,7 +303,12 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
         { timeout: 5_000 },
       ).catch(() => {});
 
-      const { stdout } = await new Promise<{ stdout: string }>((resolve, reject) => {
+      // Acquire a global CLI slot around the heavy spawn-and-wait: this bounds
+      // how many `docker exec <sandbox> codex` children run at once across ALL
+      // callers (Build Studio + coworkers), so a fan-out can't starve the
+      // shared sandbox / portal. Auth + file writes above are cheap and stay
+      // outside the slot so slots turn over on real inference, not prep.
+      const { stdout } = await withCliSlot(() => new Promise<{ stdout: string }>((resolve, reject) => {
         const proc = spawnCb("docker", [
           "exec", SANDBOX_CONTAINER, runnerScript,
         ]);
@@ -379,7 +385,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
             providerId,
           ));
         });
-      });
+      }));
 
       // 6. Parse output — codex exec returns plain text (no structured JSON)
       const text = stdout.trim();

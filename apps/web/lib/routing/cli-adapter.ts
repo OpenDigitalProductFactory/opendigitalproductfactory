@@ -25,6 +25,7 @@ import { extractToolCalls as extractToolCallsFromText } from "./extract-tool-cal
 import { createMcpSessionToken } from "@/lib/mcp/session-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
+import { withCliSlot } from "./cli-concurrency";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
@@ -546,7 +547,12 @@ export const cliAdapter: ExecutionAdapterHandler = {
         (mcpJwt ? `, scopes=${scopesForJwt.length}, capability=${capabilityForJwt}` : ""),
       );
 
-      const { stdout } = await new Promise<{ stdout: string }>((resolve, reject) => {
+      // Acquire a global CLI slot around the heavy spawn-and-wait: bounds how
+      // many `docker exec <sandbox> claude` children run at once across ALL
+      // callers (Build Studio + coworkers), so a fan-out can't starve the
+      // shared sandbox / portal. Prep (auth, file writes) stays outside the
+      // slot so slots turn over on real inference, not setup.
+      const { stdout } = await withCliSlot(() => new Promise<{ stdout: string }>((resolve, reject) => {
         const proc = spawnCb("docker", [
           "exec", "--user", "node", SANDBOX_CONTAINER, runnerScript,
         ]);
@@ -625,7 +631,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
             providerId,
           ));
         });
-      });
+      }));
 
       // 7. Parse the output
       const parsed = parseCliJsonOutput(stdout);
