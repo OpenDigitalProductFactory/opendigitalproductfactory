@@ -26,6 +26,8 @@ export const POSTING_ACCOUNT_ROLES = [
   "payables", // trade creditors (AP control)
   "taxPayable", // output sales tax / VAT owed
   "salesRevenue", // default sales/income account
+  "operatingExpense", // default expense account (supplier bills post here)
+  "inputTaxRecoverable", // recoverable input VAT/GST on purchases (an asset)
   "retainedEarnings", // accumulated result
   "openingBalanceEquity", // opening-balance counterweight
 ] as const;
@@ -58,6 +60,7 @@ export type ResolvedChartAccount = ChartAccountSeed & { normalBalance: NormalBal
 export const BASE_CONTROL_ACCOUNTS: readonly ChartAccountSeed[] = [
   { code: "1000", name: "Cash at Bank", type: "asset", role: "bank", isControl: true },
   { code: "1100", name: "Accounts Receivable", type: "asset", role: "receivables", isControl: true },
+  { code: "1200", name: "Input Tax Recoverable", type: "asset", role: "inputTaxRecoverable", isControl: true },
   { code: "2000", name: "Accounts Payable", type: "liability", role: "payables", isControl: true },
   { code: "2200", name: "Sales Tax Payable", type: "liability", role: "taxPayable", isControl: true },
   { code: "3000", name: "Retained Earnings", type: "equity", role: "retainedEarnings" },
@@ -66,6 +69,10 @@ export const BASE_CONTROL_ACCOUNTS: readonly ChartAccountSeed[] = [
   // almost always override 4000 with a domain-specific revenue line, inheriting
   // this role.
   { code: "4000", name: "Sales", type: "revenue", role: "salesRevenue" },
+  // A generic expense account so operatingExpense always resolves; archetype seeds
+  // almost always override 5000 with a domain-specific expense line, inheriting
+  // this role.
+  { code: "5000", name: "Operating Expenses", type: "expense", role: "operatingExpense" },
 ] as const;
 
 // ─── Build the full org chart of accounts ────────────────────────────────────
@@ -131,6 +138,9 @@ const HEURISTICS: Record<PostingAccountRole, (a: DeterminableAccount) => boolean
     a.type === "liability" && (a.code === "2000" || /payable|creditor/i.test(a.name)),
   taxPayable: (a) => a.type === "liability" && /\b(tax|vat|gst)\b/i.test(a.name),
   salesRevenue: (a) => a.type === "revenue",
+  operatingExpense: (a) => a.type === "expense",
+  inputTaxRecoverable: (a) =>
+    a.type === "asset" && (a.code === "1200" || /input\s*(tax|vat)|recoverable|reclaim/i.test(a.name)),
   retainedEarnings: (a) => a.type === "equity" && /retained|undivided|fund balance/i.test(a.name),
   openingBalanceEquity: (a) => a.type === "equity" && /opening/i.test(a.name),
 };

@@ -6,6 +6,7 @@ import {
   computeTrialBalance,
   buildInvoicePostingLines,
   buildPaymentPostingLines,
+  buildBillPostingLines,
   periodKeyOf,
   toMinorUnits,
   LEDGER_ACCOUNT_TYPES,
@@ -242,5 +243,40 @@ describe("buildPaymentPostingLines", () => {
   it("never emits a negative amount", () => {
     const lines = buildPaymentPostingLines({ direction: "inbound", amount: -5 }, resolver);
     expect(lines.every((l) => (l.debit ?? 0) >= 0 && (l.credit ?? 0) >= 0)).toBe(true);
+  });
+});
+
+describe("buildBillPostingLines", () => {
+  const resolver = {
+    payablesAccountId: "acc-ap",
+    expenseAccountId: "acc-exp",
+    inputTaxAccountId: "acc-input-tax",
+  };
+
+  it("splits Dr Expense (net) + Dr Input Tax / Cr AP (gross) when tax + input-tax account", () => {
+    const lines = buildBillPostingLines({ subtotal: 1000, taxAmount: 200 }, resolver);
+    expect(validateJournalEntry(lines).ok).toBe(true);
+    expect(lines.find((l) => l.accountId === "acc-exp")!.debit).toBe(1000);
+    expect(lines.find((l) => l.accountId === "acc-input-tax")!.debit).toBe(200);
+    expect(lines.find((l) => l.accountId === "acc-ap")!.credit).toBe(1200);
+  });
+
+  it("folds tax into the expense (tax-inclusive) when no input-tax account, still balancing", () => {
+    const lines = buildBillPostingLines(
+      { subtotal: 1000, taxAmount: 200 },
+      { payablesAccountId: "acc-ap", expenseAccountId: "acc-exp" },
+    );
+    expect(validateJournalEntry(lines).ok).toBe(true);
+    expect(lines.find((l) => l.accountId === "acc-exp")!.debit).toBe(1200);
+    expect(lines.find((l) => l.accountId === "acc-input-tax")).toBeUndefined();
+    expect(lines.find((l) => l.accountId === "acc-ap")!.credit).toBe(1200);
+  });
+
+  it("handles a zero-tax bill (Dr Expense / Cr AP only)", () => {
+    const lines = buildBillPostingLines({ subtotal: 500, taxAmount: 0 }, resolver);
+    expect(validateJournalEntry(lines).ok).toBe(true);
+    expect(lines).toHaveLength(2);
+    expect(lines.find((l) => l.accountId === "acc-exp")!.debit).toBe(500);
+    expect(lines.find((l) => l.accountId === "acc-ap")!.credit).toBe(500);
   });
 });

@@ -8,6 +8,7 @@ import { sendEmail, composeApprovalEmail } from "@/lib/email";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { resolveAppBaseUrl } from "@/lib/app-url";
 import { recordPayment } from "@/lib/actions/finance";
+import { postBillFinalized } from "@/lib/finance/ledger-service";
 import { PAYMENT_METHODS } from "@/lib/finance/finance-validation";
 import type { CreateSupplierInput, CreateBillInput, CreatePOInput, CreatePaymentRunInput } from "@/lib/ap-validation";
 
@@ -300,6 +301,15 @@ export async function submitBillForApproval(billId: string): Promise<void> {
       data: { status: "approved" },
     });
 
+    // Approved with no approval rule required — recognise AP in the ledger now.
+    // Best-effort: a ledger hiccup must not fail approving the bill (idempotent).
+    // billId is a route param (tainted), so it is not logged — the error is the signal.
+    try {
+      await postBillFinalized(billId);
+    } catch (err) {
+      console.error("[ledger] failed to post an approved bill to the general ledger:", err);
+    }
+
     revalidatePath("/finance/ap");
     revalidatePath("/finance/ap/bills");
     revalidatePath("/finance/bills");
@@ -392,6 +402,14 @@ export async function respondToBillApproval(
       where: { id: approval.billId },
       data: { status: "approved" },
     });
+
+    // All approvals collected — recognise AP in the ledger now. Best-effort +
+    // idempotent; the id is not logged (tainted), the error is the signal.
+    try {
+      await postBillFinalized(approval.billId);
+    } catch (err) {
+      console.error("[ledger] failed to post an approved bill to the general ledger:", err);
+    }
   }
 }
 

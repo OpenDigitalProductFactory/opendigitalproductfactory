@@ -6,7 +6,12 @@ import {
   resolvePostingAccounts,
   type DeterminableAccount,
 } from "./chart-of-accounts";
-import { buildInvoicePostingLines, validateJournalEntry, normalBalanceForType } from "./ledger";
+import {
+  buildInvoicePostingLines,
+  buildBillPostingLines,
+  validateJournalEntry,
+  normalBalanceForType,
+} from "./ledger";
 
 // A commercial/trades-style archetype seed: revenue + expense only, no
 // balance-sheet control accounts — the common SMB case.
@@ -99,6 +104,27 @@ describe("resolvePostingAccounts", () => {
         receivablesAccountId: resolved.receivables!.id!,
         revenueAccountId: resolved.salesRevenue!.id!,
         taxPayableAccountId: resolved.taxPayable!.id!,
+      },
+    );
+    expect(validateJournalEntry(lines).ok).toBe(true);
+  });
+
+  it("resolves bill-posting roles and feeds buildBillPostingLines end-to-end", () => {
+    const coa = buildOrgChartOfAccounts(tradesProfile).map((a, i) => ({ ...a, id: `acc-${i}` }));
+    const { resolved, unresolved } = resolvePostingAccounts(coa);
+
+    // operatingExpense resolves to the archetype's first expense (5000), inputTax to 1200
+    expect(resolved.operatingExpense?.code).toBe("5000");
+    expect(resolved.inputTaxRecoverable?.code).toBe("1200");
+    expect(resolved.payables?.code).toBe("2000");
+    expect(unresolved).not.toContain("operatingExpense");
+
+    const lines = buildBillPostingLines(
+      { subtotal: 800, taxAmount: 160 },
+      {
+        payablesAccountId: resolved.payables!.id!,
+        expenseAccountId: resolved.operatingExpense!.id!,
+        inputTaxAccountId: resolved.inputTaxRecoverable!.id!,
       },
     );
     expect(validateJournalEntry(lines).ok).toBe(true);
