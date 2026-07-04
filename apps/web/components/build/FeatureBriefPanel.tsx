@@ -251,13 +251,21 @@ function HappyPathStatusCard({ build }: { build: FeatureBuildRow }) {
     { label: "Epic", value: intake.epicId ?? "Missing", ok: Boolean(intake.epicId) },
     { label: "Goal", value: intake.constrainedGoal ?? "Missing", ok: Boolean(intake.constrainedGoal) },
   ];
+  // A dispatch engine is only assigned when the build reaches the build phase.
+  // Before then (ideate/plan) `execution.engine` is null simply because nothing
+  // has been dispatched yet — NOT because the runtime is misconfigured. Showing
+  // "Not selected" there reads as a config error on a perfectly healthy build,
+  // so surface the honest "Pending dispatch" for the pre-build phases instead.
+  const engineLabel =
+    execution.engine ??
+    (build.phase === "ideate" || build.phase === "plan" ? "Pending dispatch" : "Not selected");
 
   return (
     <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs font-semibold text-[var(--dpf-text)]">Happy Path Status</span>
         <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-wider">
-          Engine: {execution.engine ?? "Not selected"}
+          Engine: {engineLabel}
         </span>
       </div>
       <div className="grid grid-cols-1 gap-1.5">
