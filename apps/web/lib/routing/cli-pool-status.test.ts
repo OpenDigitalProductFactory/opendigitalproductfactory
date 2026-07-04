@@ -60,6 +60,13 @@ describe("parseRetryAfterSeconds", () => {
     expect(parseRetryAfterSeconds("try again in 10 seconds")).toBe(10);
   });
 
+  it("parses hour/minute reset windows (ChatGPT/Codex subscription limits)", () => {
+    expect(parseRetryAfterSeconds("try again in 5 minutes")).toBe(300);
+    expect(parseRetryAfterSeconds("rate limit reached. try again in 2 hours")).toBe(7200);
+    expect(parseRetryAfterSeconds("reset in 2h 30m")).toBe(9000);
+    expect(parseRetryAfterSeconds("you've hit your limit — retry in 1h")).toBe(3600);
+  });
+
   it("returns null for unparseable input", () => {
     expect(parseRetryAfterSeconds("rate limited")).toBeNull();
     expect(parseRetryAfterSeconds("429 Too Many Requests")).toBeNull();
@@ -100,11 +107,29 @@ describe("recordCliRateLimit", () => {
     expect(status!.errorSnippet).toHaveLength(300);
   });
 
-  it("handles missing Retry-After gracefully (resetAt is null)", async () => {
-    await recordCliRateLimit("claude-cli", "anthropic-sub", "rate limit hit");
-    const status = await getCliPoolStatus("claude-cli");
-    expect(status!.resetAt).toBeNull();
-    expect(status!.isExhausted).toBe(false); // no reset time means we don't know — not blocking
+  it("backs off with a default cooldown when Retry-After is unparseable", async () => {
+    // Regression: codex CLI rate-limit output carries no parseable Retry-After
+    // ("Reading prompt from stdin... OpenAI Codex v0.137.0 ..."). Previously
+    // resetAt stayed null, isExhausted was never true, and the dispatch gate
+    // never tripped — so agents kept firing doomed children (the portal-
+    // starving retry-storm). We must still back off for a bounded window.
+    await recordCliRateLimit("codex-cli", "codex", "Reading prompt from stdin...\nOpenAI Codex v0.137.0");
+    const status = await getCliPoolStatus("codex-cli");
+    expect(status!.resetAt).not.toBeNull();
+    expect(status!.isExhausted).toBe(true);
+    // Default is 60s; allow a little slack for execution time.
+    expect(status!.secondsUntilReset).toBeGreaterThan(50);
+    expect(status!.secondsUntilReset).toBeLessThanOrEqual(60);
+    // retryAfterSeconds records only what was actually parsed (nothing here).
+    expect(status!.retryAfterSeconds).toBeNull();
+  });
+
+  it("caps the cooldown so a long/misparsed window can't wedge the provider", async () => {
+    await recordCliRateLimit("codex-cli", "codex", "rate limit reached. try again in 5 hours");
+    const status = await getCliPoolStatus("codex-cli");
+    // 5h would be 18000s; capped to MAX_CLI_COOLDOWN_SECONDS (3600).
+    expect(status!.secondsUntilReset).toBeGreaterThan(3500);
+    expect(status!.secondsUntilReset).toBeLessThanOrEqual(3600);
   });
 
   it("swallows db errors without throwing", async () => {
@@ -133,11 +158,11 @@ describe("getCliPoolStatus", () => {
     expect(status!.secondsUntilReset).toBeGreaterThan(290);
   });
 
-  it("computes isExhausted=false when resetAt is null", async () => {
+  it("computes isExhausted=true via the default cooldown even without Retry-After", async () => {
     await recordCliRateLimit("claude-cli", "anthropic-sub", "rate limited");
     const status = await getCliPoolStatus("claude-cli");
-    expect(status!.isExhausted).toBe(false);
-    expect(status!.secondsUntilReset).toBeNull();
+    expect(status!.isExhausted).toBe(true);
+    expect(status!.secondsUntilReset).toBeGreaterThan(0);
   });
 
   it("swallows db errors and returns null", async () => {

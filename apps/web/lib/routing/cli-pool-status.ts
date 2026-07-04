@@ -14,6 +14,28 @@ import { prisma } from "@dpf/db";
 
 export type CliAdapterType = "claude-cli" | "codex-cli";
 
+/**
+ * Fallback backoff window (seconds) applied when a CLI reports a rate limit but
+ * gives no parseable Retry-After. Without this the pool's `resetAt` stayed null,
+ * `isExhausted` was never true, and the dispatch gate in ai-inference.ts never
+ * tripped — so every Build Studio agent kept firing doomed CLI children into an
+ * already rate-limited pool (the codex `docker exec` retry-storm that starved
+ * the portal event loop / Docker daemon). A bounded default converts that storm
+ * into an orderly "back off, fall back, re-probe after the window" cycle. A
+ * successful call clears the row immediately via clearCliRateLimit, so the
+ * window is only ever an upper bound. Env-overridable for operators.
+ */
+const DEFAULT_CLI_COOLDOWN_SECONDS =
+  Number(process.env.DPF_CLI_RATELIMIT_DEFAULT_COOLDOWN_SECONDS) || 60;
+
+/**
+ * Upper bound (seconds) on any parsed/derived cooldown, so a misparsed provider
+ * message (or a genuinely multi-hour subscription reset) can never wedge a CLI
+ * provider off the fallback chain for longer than this. We re-probe at the cap
+ * and re-record if still limited. 1 hour.
+ */
+const MAX_CLI_COOLDOWN_SECONDS = 3_600;
+
 export interface CliPoolState {
   adapterType: CliAdapterType;
   providerId: string;
@@ -56,6 +78,18 @@ export function parseRetryAfterSeconds(stderr: string): number | null {
     return isNaN(s) ? null : s;
   }
 
+  // "try again in 2h 30m" / "2 hours 30 minutes" / "5 minutes" — ChatGPT/Codex
+  // subscription limits report reset windows in hours/minutes, not seconds, so
+  // the seconds-only patterns above miss them. Sum any hour + minute components.
+  const hourMatch = /(\d+)\s*h(?:ours?|r)?\b/i.exec(stderr);
+  const minMatch = /(\d+)\s*m(?:in(?:ute)?s?)?\b/i.exec(stderr);
+  if (hourMatch || minMatch) {
+    const hours = hourMatch ? parseInt(hourMatch[1]!, 10) : 0;
+    const mins = minMatch ? parseInt(minMatch[1]!, 10) : 0;
+    const total = hours * 3_600 + mins * 60;
+    if (total > 0) return total;
+  }
+
   return null;
 }
 
@@ -73,10 +107,17 @@ export async function recordCliRateLimit(
   try {
     const retryAfterSeconds = parseRetryAfterSeconds(errorText);
     const now = new Date();
-    const resetAt =
-      retryAfterSeconds != null
-        ? new Date(now.getTime() + retryAfterSeconds * 1_000)
-        : null;
+    // Always back off on a recorded rate limit: use the provider's Retry-After
+    // when it gave one, otherwise a bounded default window. Capping guards
+    // against a misparse (or a genuinely long subscription reset) pinning the
+    // provider off the fallback chain indefinitely. `retryAfterSeconds` still
+    // records only what was actually parsed (may be null) for observability;
+    // `resetAt` is what the dispatch gate reads.
+    const cooldownSeconds = Math.min(
+      retryAfterSeconds ?? DEFAULT_CLI_COOLDOWN_SECONDS,
+      MAX_CLI_COOLDOWN_SECONDS,
+    );
+    const resetAt = new Date(now.getTime() + cooldownSeconds * 1_000);
 
     await prisma.cliPoolStatus.upsert({
       where: { adapterType },
