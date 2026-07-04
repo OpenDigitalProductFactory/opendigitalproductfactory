@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 530,
+  "routeCount": 531,
   "routes": [
     {
       "routePath": "/",
@@ -6125,6 +6125,16 @@
         "profileId"
       ],
       "file": "apps/web/app/(shell)/wiki/perspectives/[profileId]/voice/page.tsx"
+    },
+    {
+      "routePath": "/wiki/review",
+      "kind": "page",
+      "segments": [
+        "wiki",
+        "review"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/wiki/review/page.tsx"
     },
     {
       "routePath": "/workbooks",
