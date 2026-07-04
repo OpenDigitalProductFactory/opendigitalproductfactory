@@ -20,6 +20,8 @@ import type { ActivityContract } from "./activity-contract";
 import type { ActivityHarnessConfidenceOverride } from "./activity-harness-governance";
 import { filterByPolicy } from "./pipeline";
 import { checkModelCapacity, getEndpointRuntimeState } from "./rate-tracker";
+import { cliSaturationPercent } from "./cli-concurrency";
+import { usesCodexCli, usesCliAdapter } from "./provider-utils";
 import { satisfiesMinimumCapabilities } from "./agent-capability-types";
 import {
   estimateSuccessProbability,
@@ -416,13 +418,26 @@ export async function routeEndpointV2(
   const ranked = rankByCostPerSuccess(candidates, contract);
 
   // ── Stage 5: Capacity penalty (EP-INF-004) ────────────────────────────
+  // BI-15068745: blend live CLI slot saturation into utilization for CLI-backed
+  // endpoints (their provider caps are invisible to the rate tracker), so the
+  // scorer spreads concurrent load onto HTTP providers before the shared
+  // sandbox jams. Only engages under real contention. See pipeline.ts + the
+  // matching note; cli-concurrency.ts owns the saturation signal.
   for (const entry of ranked) {
     const cap = checkModelCapacity(
       entry.endpoint.providerId,
       entry.endpoint.modelId,
     );
-    if (cap.utilizationPercent > 80) {
-      entry.rankScore *= 1.0 - (cap.utilizationPercent - 80) / 100;
+    const cliBacked =
+      usesCodexCli(entry.endpoint.providerId) ||
+      usesCliAdapter(entry.endpoint.providerId);
+    const utilizationPercent = cliBacked
+      ? Math.max(cap.utilizationPercent, cliSaturationPercent())
+      : cap.utilizationPercent;
+    if (utilizationPercent > 80) {
+      let factor = 1.0 - (utilizationPercent - 80) / 100;
+      if (cliBacked) factor = Math.max(0.05, factor);
+      entry.rankScore *= factor;
     }
   }
   ranked.sort((a, b) => b.rankScore - a.rankScore);
