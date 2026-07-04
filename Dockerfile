@@ -1,7 +1,7 @@
 # ─── Stage 1: base ────────────────────────────────────────────────────────────
 # Cache bust: 2026-04-09-ideate-dispatch
 FROM node:24-alpine AS base
-RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
 WORKDIR /app
 
 # ─── Dev stage (parallel branch — not part of production chain) ──────────────
