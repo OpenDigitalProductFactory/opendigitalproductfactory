@@ -78,7 +78,7 @@ export function buildDisciplineCards(
         : []),
     ],
     actions: [
-      { label: "Manage stance", href: "/wiki/perspectives", emphasis: true },
+      { label: "Manage stance", href: "/wiki/stance", emphasis: true },
       { label: "Review decisions", href: "/platform/ai/founder-review?mode=wwwd" },
     ],
   };
@@ -102,7 +102,7 @@ export function buildDisciplineCards(
         : []),
     ],
     actions: [
-      { label: "Role corpora", href: "/wiki/perspectives" },
+      { label: "Role craft", href: "/wiki/craft", emphasis: true },
       { label: "Review decisions", href: "/platform/ai/founder-review" },
     ],
   };
