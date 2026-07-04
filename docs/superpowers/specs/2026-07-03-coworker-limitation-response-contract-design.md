@@ -48,3 +48,11 @@ Explicit prohibitions: no open-ended "here's what's wrong" with no way forward; 
 
 ## UX-Fit
 This is a prompt-behavior change, not a new UI control — it *reduces* cognitive load (one yes/no vs an open-ended analysis). No new form, route, or operator-configurable field is introduced; the block is editable in the existing Admin > Prompts surface.
+
+## Follow-up shipped: runtime mode-awareness signal (BI-FE37B0A1 pinpoint half)
+
+The prompt contract above tells a coworker *how* to respond to a limitation, but for the advise-mode case it still had to guess *which* enabler applies — a stripped tool is invisible, so the coworker could not tell "held back by Advise mode" from "not granted." That is the misdiagnosis the AI Ops Engineer made ("backlog access rejected → go to System Admin") when it actually held the grant.
+
+Fix: surface the held-back set into the prompt. `adviseHeldBackTools(mergedTools)` (in `coworker-tool-filter.ts`) returns exactly the set the advise rule removes — side-effecting, non-`coworkerArtifact` tools the coworker already passed grant + capability gating to reach. When `coworkerMode === "advise"` and that set is non-empty, `agent-coworker.ts` appends a bounded block (mirroring the existing external-access block) to the system prompt: **"ADVISE MODE — AUTHORITY HELD BACK (NOT A MISSING PERMISSION)"** listing up to 10 of those actions, with the instruction not to claim missing access or deflect to an admin, and to propose switching to Act mode instead. The injection sits in the section both prompt paths converge on, so it covers unified and legacy in one place. Bounded at 10 (+N-more) to respect the local served-context budget.
+
+Net effect: the coworker now knows precisely which requested actions are mode-gated vs ungranted, so the limitation-response proposal names the right enabler with certainty.

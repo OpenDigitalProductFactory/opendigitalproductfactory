@@ -1,0 +1,55 @@
+import { describe, expect, it } from "vitest";
+
+import type { ToolDefinition } from "@/lib/mcp-tools";
+
+import { adviseHeldBackTools, filterToolsForCoworkerRuntime } from "./coworker-tool-filter";
+
+const tool = (over: Partial<ToolDefinition> & { name: string }): ToolDefinition =>
+  ({
+    description: `${over.name} description`,
+    inputSchema: { type: "object", properties: {}, required: [] },
+    ...over,
+  }) as ToolDefinition;
+
+const READ = tool({ name: "list_backlog_items" });
+const WRITE = tool({ name: "create_backlog_item", sideEffect: true });
+const PROVISION = tool({ name: "manage_coworker_tool_grant", sideEffect: true });
+const ARTIFACT = tool({ name: "save_marketing_review", sideEffect: true, coworkerArtifact: true });
+
+const MERGED = [READ, WRITE, PROVISION, ARTIFACT];
+
+describe("filterToolsForCoworkerRuntime — advise rule", () => {
+  it("strips side-effect tools but keeps reads and coworker artifacts in advise mode", () => {
+    const kept = filterToolsForCoworkerRuntime(MERGED, { coworkerMode: "advise", activeBuildPhase: null }).map((t) => t.name);
+    expect(kept).toEqual(["list_backlog_items", "save_marketing_review"]);
+  });
+
+  it("keeps everything in act mode", () => {
+    const kept = filterToolsForCoworkerRuntime(MERGED, { coworkerMode: "act", activeBuildPhase: null }).map((t) => t.name);
+    expect(kept).toEqual(["list_backlog_items", "create_backlog_item", "manage_coworker_tool_grant", "save_marketing_review"]);
+  });
+});
+
+describe("adviseHeldBackTools", () => {
+  it("returns exactly the side-effect, non-artifact tools the advise rule removes", () => {
+    const held = adviseHeldBackTools(MERGED).map((t) => t.name);
+    expect(held).toEqual(["create_backlog_item", "manage_coworker_tool_grant"]);
+  });
+
+  it("is the complement of the advise-filtered set (held-back = merged − kept, minus artifacts)", () => {
+    const kept = new Set(
+      filterToolsForCoworkerRuntime(MERGED, { coworkerMode: "advise", activeBuildPhase: null }).map((t) => t.name),
+    );
+    const held = adviseHeldBackTools(MERGED);
+    // Nothing held back is also kept, and every held-back tool is a stripped side-effect tool.
+    for (const t of held) {
+      expect(kept.has(t.name)).toBe(false);
+      expect(t.sideEffect).toBe(true);
+      expect(t.coworkerArtifact).toBeFalsy();
+    }
+  });
+
+  it("returns empty when the coworker holds no side-effecting authority", () => {
+    expect(adviseHeldBackTools([READ, ARTIFACT])).toEqual([]);
+  });
+});
