@@ -25,12 +25,14 @@ const UNRESOLVED = ["defer", "escalate"];
 const CLASS_LABEL: Record<ReviewFinding["findingClass"], string> = {
   conflict: "conflict",
   gap: "gap",
+  staleness: "stale",
 };
 
 // Semantic accent per finding class, via theme tokens (no hardcoded colors).
 const CLASS_ACCENT: Record<ReviewFinding["findingClass"], string> = {
   conflict: "var(--dpf-error)",
   gap: "var(--dpf-accent)",
+  staleness: "var(--dpf-warning)",
 };
 
 function toGapClusters(
@@ -53,7 +55,7 @@ function toGapClusters(
 }
 
 export default async function DecisionReviewPage() {
-  const [conflictRows, unresolvedRows] = await Promise.all([
+  const [conflictRows, unresolvedRows, staleCount] = await Promise.all([
     prisma.decisionInteraction.findMany({
       where: { principleConflict: true },
       orderBy: { createdAt: "desc" },
@@ -71,11 +73,13 @@ export default async function DecisionReviewPage() {
       take: 200,
       select: { domainClass: true, question: true },
     }),
+    prisma.perspectiveMaterial.count({ where: { freshness: "stale" } }),
   ]);
 
   const findings = buildReviewFindings({
     conflicts: conflictRows as ConflictRow[],
     gapClusters: toGapClusters(unresolvedRows),
+    staleMaterial: { count: staleCount },
   });
 
   return (
@@ -145,10 +149,27 @@ export default async function DecisionReviewPage() {
         </ul>
       )}
 
-      <p className="text-xs text-[var(--dpf-muted)] mt-8">
-        Coming next: golden-decision drift alerts, stale-material review, and the
-        principle-dimension matrix — see the{" "}
-        <span className="font-mono">decision-governance</span> design.
+      <div className="mt-8 flex items-center justify-between gap-3 rounded-lg border border-[var(--dpf-border)] p-4">
+        <div>
+          <p className="text-sm font-medium text-[var(--dpf-text)]">
+            The decision matrix
+          </p>
+          <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
+            The axes and tier weights every principle is scored on. Review them
+            when the criteria themselves need re-visiting or de-conflicting.
+          </p>
+        </div>
+        <Link
+          href="/wiki/matrix"
+          className="text-sm text-[var(--dpf-accent)] hover:underline shrink-0"
+        >
+          View the matrix →
+        </Link>
+      </div>
+
+      <p className="text-xs text-[var(--dpf-muted)] mt-4">
+        Coming next: golden-decision drift alerts — when a doctrine change flips a
+        canonical decision.
       </p>
     </div>
   );

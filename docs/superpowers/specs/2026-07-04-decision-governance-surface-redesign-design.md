@@ -220,24 +220,25 @@ table (data-model stewardship §11).
 Phased so each slice is independently shippable behind the UX-Fit gate; the operator can stop after
 any phase.
 
-- **Phase 0 (this pass):** this spec + epic + BIs + operator mockup. No code.
-- **Phase 1 — Reframe the landing (highest signal, lowest risk).** Replace the `/wiki` landing with
-  the three-discipline hub (derived health, links to existing ledger/review/material). Keep all
-  existing routes working. One UX-Fit-gated PR.
-- **Phase 2 — Decision Review & Adjust workspace.** The findings surface (conflict/drift/gap/
-  staleness/matrix) over the existing ledger + lint + golden-decision signals, with posture context.
-  Read + action-routing first; dismissal persistence only if reuse proves insufficient.
-- **Phase 3 — WWWD business-stance editor.** The authoring surface for the org's own "how we decide"
-  doctrine (overlay `WikiPage` → `PerspectiveMaterial`), progressive disclosure. Closes the confirmed
-  "no adjust UI" gap for the discipline a business most needs to own.
-- **Phase 4 — WSID per-role corpus view + org override.** Same authoring pattern, scoped per role
-  family; depends on the WSID pilot-three completion already in flight (EP-WSID).
-- **Phase 5 — Rename + nav + redirects + docs.** Flip the top-level label and nav description, alias
-  `/wiki`, update the user guide. Held to last so the reframe lands only once the destination exists.
+- **Phase 0** ✅ — this spec + epic + BIs + operator mockup. No code. (PR #2573)
+- **Phase 1 — Reframe the landing.** ✅ Three-discipline hub with derived health, nav renamed
+  "Wiki" → "Decision governance", raw material retained as a drill-in. (PR #2575)
+- **Phase 2 — Decision Review & Adjust workspace.** ✅ (conflict + gap, PR #2575) → completion:
+  `staleness` findings (stale-but-cited material) + the read-only decision **matrix** view
+  (`/wiki/matrix`). Drift (golden-decision flips) remains the one open sub-slice.
+- **Phase 3 — WWWD business-stance editor.** ✅ `/wiki/stance` — a plain-language draft authoring
+  form that writes an org-overlay `stance` page (the WWWD corpus the decision-routing block grounds
+  business calls in). Closes the confirmed "no adjust UI" gap. Draft by default.
+- **Phase 4 — WSID per-role craft view + org override.** ✅ `/wiki/craft` + `/wiki/craft/[key]` —
+  per-profession view with a draft org-overlay `heuristic` override form. Does **not** depend on the
+  WSID pilot-three corpus completion — it authors org overrides on top of whatever baseline exists.
+- **Phase 5 — Rename + nav + redirects + docs.** ◻ Nav label + on-page framing flipped in Phase 1;
+  the full route rename / `/wiki` alias awaits the operator's name choice (§8 Q1).
 
-Dependencies to respect: per-org WWWD routing / Gate re-scoring is still open (BI-E1FB2307 /
-BI-EF3F4A2D) — Phase 3's editor writes org material regardless, but the *gate consuming it as
-authority* lands with that routing work.
+Dependency note (corrected during build): the WWWD/WSID **authoring** surfaces write org-overlay
+material and are useful immediately — the org's WWWD answers are grounded in its own org-overlay
+WikiPages, retrieved by org. The still-open per-org WWWD Gate *re-scoring* work (BI-E1FB2307 /
+BI-EF3F4A2D) governs multi-tenant gate authority, not whether authoring works.
 
 ---
 

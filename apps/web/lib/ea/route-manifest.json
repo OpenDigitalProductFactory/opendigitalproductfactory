@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 531,
+  "routeCount": 535,
   "routes": [
     {
       "routePath": "/",
@@ -6090,6 +6090,29 @@
       "file": "apps/web/app/(shell)/wiki/[...slug]/page.tsx"
     },
     {
+      "routePath": "/wiki/craft",
+      "kind": "page",
+      "segments": [
+        "wiki",
+        "craft"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/wiki/craft/page.tsx"
+    },
+    {
+      "routePath": "/wiki/craft/[professionKey]",
+      "kind": "page",
+      "segments": [
+        "wiki",
+        "craft",
+        "[professionKey]"
+      ],
+      "dynamicParams": [
+        "professionKey"
+      ],
+      "file": "apps/web/app/(shell)/wiki/craft/[professionKey]/page.tsx"
+    },
+    {
       "routePath": "/wiki/edit/[...slug]",
       "kind": "page",
       "segments": [
@@ -6101,6 +6124,16 @@
         "slug"
       ],
       "file": "apps/web/app/(shell)/wiki/edit/[...slug]/page.tsx"
+    },
+    {
+      "routePath": "/wiki/matrix",
+      "kind": "page",
+      "segments": [
+        "wiki",
+        "matrix"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/wiki/matrix/page.tsx"
     },
     {
       "routePath": "/wiki/perspectives",
@@ -6135,6 +6168,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/wiki/review/page.tsx"
+    },
+    {
+      "routePath": "/wiki/stance",
+      "kind": "page",
+      "segments": [
+        "wiki",
+        "stance"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/wiki/stance/page.tsx"
     },
     {
       "routePath": "/workbooks",

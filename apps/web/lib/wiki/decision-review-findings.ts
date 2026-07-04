@@ -5,16 +5,16 @@
 // the page queries the `DecisionInteraction` ledger and passes already-shaped
 // rows/clusters in, so the builders are unit testable and do no DB work.
 //
-// v1 surfaces the two finding classes that are directly computable from
-// recorded fields today:
+// Finding classes computable from recorded fields today:
 //   - conflict — a decision the gate flagged as `principleConflict` (two
 //     principles/materials pulling opposite ways)
 //   - gap — a cluster of `defer`/`escalate` outcomes in one decision domain,
 //     i.e. the doctrine has no settled answer there yet
-// Drift (golden-decision flips) and staleness (stale-but-cited material) are
-// tracked as later sub-slices; see the spec.
+//   - staleness — decision material that has aged out of its freshness window
+//     (down-weighted in decisions) yet still governs, so it wants re-validation
+// Drift (golden-decision flips) is tracked as a later sub-slice; see the spec.
 
-export type FindingClass = "conflict" | "gap";
+export type FindingClass = "conflict" | "gap" | "staleness";
 
 export type ReviewFinding = {
   id: string;
@@ -47,6 +47,11 @@ export type GapCluster = {
   count: number;
   /** A representative question from the cluster, for human context. */
   sampleQuestion: string;
+};
+
+/** How much decision material has aged out of its freshness window but still governs. */
+export type StaleMaterialSummary = {
+  count: number;
 };
 
 function riskPosture(riskTier: string | null): string | null {
@@ -93,21 +98,49 @@ export function buildGapFindings(clusters: GapCluster[]): ReviewFinding[] {
       count: cluster.count,
       href: null,
       actionLabel: "Add a stance",
-      actionHref: "/wiki/perspectives",
+      actionHref: "/wiki/stance",
     }));
+}
+
+export function buildStalenessFindings(
+  summary: StaleMaterialSummary,
+): ReviewFinding[] {
+  if (summary.count <= 0) return [];
+  return [
+    {
+      id: "staleness:material",
+      findingClass: "staleness",
+      title:
+        summary.count === 1
+          ? "1 piece of decision material has gone stale"
+          : `${summary.count} pieces of decision material have gone stale`,
+      detail:
+        "Aged past its freshness window and down-weighted, but still cited when your AI decides. Re-validate or retire it.",
+      postureLabel: null,
+      count: summary.count,
+      href: null,
+      actionLabel: "Review material",
+      actionHref: "/wiki/perspectives",
+    },
+  ];
 }
 
 /**
  * Assemble the ordered findings list. Conflicts first (they actively misfire),
- * then gaps by descending cluster size (the biggest coverage holes first).
+ * then gaps by descending cluster size (the biggest coverage holes first),
+ * then staleness (housekeeping the doctrine).
  */
 export function buildReviewFindings(input: {
   conflicts: ConflictRow[];
   gapClusters: GapCluster[];
+  staleMaterial?: StaleMaterialSummary;
 }): ReviewFinding[] {
   const conflicts = buildConflictFindings(input.conflicts);
   const gaps = buildGapFindings(input.gapClusters).sort(
     (a, b) => b.count - a.count,
   );
-  return [...conflicts, ...gaps];
+  const staleness = input.staleMaterial
+    ? buildStalenessFindings(input.staleMaterial)
+    : [];
+  return [...conflicts, ...gaps, ...staleness];
 }

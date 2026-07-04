@@ -43,7 +43,7 @@ describe("buildGapFindings", () => {
     expect(f.title).toBe("No settled answer for vendor selection");
     expect(f.postureLabel).toBe("9 unresolved");
     expect(f.actionLabel).toBe("Add a stance");
-    expect(f.actionHref).toBe("/wiki/perspectives");
+    expect(f.actionHref).toBe("/wiki/stance");
   });
 
   it("drops empty clusters and singularizes a lone unresolved", () => {
