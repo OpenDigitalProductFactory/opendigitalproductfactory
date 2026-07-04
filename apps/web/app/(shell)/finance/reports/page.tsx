@@ -7,7 +7,7 @@ const REPORTS = [
     title: "General Ledger",
     description: "Trial balance, balance sheet & income statement",
     href: "/finance/reports/general-ledger",
-    accent: "#22d3ee",
+    accent: "var(--dpf-accent)",
   },
   {
     title: "Profit & Loss",

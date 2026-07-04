@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 535,
+  "routeCount": 536,
   "routes": [
     {
       "routePath": "/",
@@ -4150,6 +4150,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/finance/reports/cash-flow/page.tsx"
+    },
+    {
+      "routePath": "/finance/reports/general-ledger",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "reports",
+        "general-ledger"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/reports/general-ledger/page.tsx"
     },
     {
       "routePath": "/finance/reports/outstanding",
