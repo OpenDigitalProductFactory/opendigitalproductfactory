@@ -193,4 +193,44 @@ describe("deriveBuildStudioCustodianPrompt", () => {
     expect(prompt?.primaryAction).toBe("coworker");
     expect(prompt?.recommendedAction).toContain("collect the missing evidence");
   });
+
+  it("surfaces a 'gone quiet' nudge for a stalled ideate build (previously invisible)", () => {
+    const build = makeBuild({
+      phase: "ideate",
+      uxVerificationStatus: null,
+      designDoc: null,
+      designReview: null,
+      buildPlan: null,
+      planReview: null,
+      draftApprovedAt: null,
+    });
+    // A plain forward action with a null disabledReason — nothing else would
+    // trip the custodian, so the only reason to surface is the early-phase quiet
+    // bar. (blockedByEvidence keys off disabledReason != null, so it stays false.)
+    const action: BuildStudioWorkflowAction = {
+      kind: "advance-phase",
+      title: "Continue",
+      message: "Keep defining the feature.",
+      primaryLabel: "Continue",
+      targetPhase: "plan",
+      disabledReason: null,
+      coworkerLabel: "Continue with coworker",
+      coworkerPrompt: "Keep defining the feature.",
+    };
+
+    // Quiet 8 minutes in ideate → now surfaces the honest "gone quiet" prompt.
+    const quiet = deriveBuildStudioCustodianPrompt({ build, action, progressVisibility: progress() });
+    expect(quiet).not.toBeNull();
+    expect(quiet?.title).toBe("This build has gone quiet.");
+
+    // Actively working (not quiet) in ideate → stays silent, no false nudge.
+    const active = deriveBuildStudioCustodianPrompt({
+      build,
+      action,
+      progressVisibility: progress({
+        quietAgent: { quiet: false, minutesQuiet: 1, lastObservableSignalAt: "2026-06-29T12:19:00.000Z" },
+      }),
+    });
+    expect(active).toBeNull();
+  });
 });
