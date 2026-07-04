@@ -61,7 +61,7 @@ export default async function PerspectivesIndexPage() {
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
       <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/wiki" className="hover:text-foreground">Wiki</Link>
+        <Link href="/wiki" className="hover:text-foreground">Decision governance</Link>
         <span>/</span>
         <span className="text-foreground font-medium">Decision Perspectives</span>
       </nav>
@@ -71,8 +71,9 @@ export default async function PerspectivesIndexPage() {
           Decision Perspectives
         </h1>
         <p className="text-sm text-[var(--dpf-muted)]">
-          Active perspective profiles for WWMD/WWTD decision narration. Configure
-          a cloned voice for any profile to enable spoken decision rationale.
+          The profiles behind each decision discipline — platform (WWMD), your
+          business (WWWD), and each role&rsquo;s craft (WSID). Manage a profile,
+          or give it a cloned voice to narrate its decision rationale aloud.
         </p>
       </header>
 

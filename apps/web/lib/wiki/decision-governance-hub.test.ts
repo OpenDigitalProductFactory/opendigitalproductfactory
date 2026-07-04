@@ -1,0 +1,90 @@
+import { describe, it, expect } from "vitest";
+
+import { buildDisciplineCards } from "./decision-governance-hub";
+
+const base = {
+  kernelPrincipleCount: 157,
+  kernelHeuristicCount: 33,
+  orgHasOwnWwwdStance: false,
+  wwmdOpenReviews: 0,
+  wwwdOpenReviews: 0,
+  wsidFamilyCount: 23,
+  wsidActiveProfiles: 1,
+  wsidOpenReviews: 0,
+};
+
+describe("buildDisciplineCards", () => {
+  it("returns the three disciplines in WWMD → WWWD → WSID order", () => {
+    const cards = buildDisciplineCards(base);
+    expect(cards.map((c) => c.key)).toEqual(["wwmd", "wwwd", "wsid"]);
+  });
+
+  it("accents WWWD as the discipline the business owns", () => {
+    const cards = buildDisciplineCards(base);
+    const wwwd = cards.find((c) => c.key === "wwwd");
+    expect(wwwd?.featured).toBe(true);
+    // WWMD and WSID are not accented.
+    expect(cards.find((c) => c.key === "wwmd")?.featured).toBeFalsy();
+    expect(cards.find((c) => c.key === "wsid")?.featured).toBeFalsy();
+  });
+
+  it("surfaces the kernel material counts on the WWMD card", () => {
+    const cards = buildDisciplineCards(base);
+    const wwmd = cards.find((c) => c.key === "wwmd");
+    const labels = wwmd?.chips.map((c) => c.label) ?? [];
+    expect(labels).toContain("157 principles");
+    expect(labels).toContain("33 heuristics");
+  });
+
+  it("warns when the org has no WWWD stance of its own", () => {
+    const cards = buildDisciplineCards({ ...base, orgHasOwnWwwdStance: false });
+    const wwwd = cards.find((c) => c.key === "wwwd");
+    const stanceChip = wwwd?.chips.find((c) => c.label.includes("stance"));
+    expect(stanceChip?.label).toBe("no stance of your own yet");
+    expect(stanceChip?.tone).toBe("warning");
+  });
+
+  it("marks the WWWD stance healthy when the org has authored one", () => {
+    const cards = buildDisciplineCards({ ...base, orgHasOwnWwwdStance: true });
+    const wwwd = cards.find((c) => c.key === "wwwd");
+    const stanceChip = wwwd?.chips.find((c) => c.label.includes("stance"));
+    expect(stanceChip?.label).toBe("your own stance");
+    expect(stanceChip?.tone).toBe("success");
+  });
+
+  it("adds a warning review chip only when there are open reviews, pluralized", () => {
+    const none = buildDisciplineCards(base);
+    expect(
+      none.find((c) => c.key === "wwmd")?.chips.some((c) => c.label.includes("review")),
+    ).toBe(false);
+
+    const some = buildDisciplineCards({
+      ...base,
+      wwmdOpenReviews: 1,
+      wwwdOpenReviews: 4,
+    });
+    const wwmd = some.find((c) => c.key === "wwmd");
+    const wwwd = some.find((c) => c.key === "wwwd");
+    expect(wwmd?.chips.find((c) => c.label.includes("review"))?.label).toBe("1 open review");
+    expect(wwwd?.chips.find((c) => c.label.includes("review"))?.label).toBe("4 open reviews");
+    expect(wwmd?.chips.find((c) => c.label.includes("review"))?.tone).toBe("warning");
+  });
+
+  it("pluralizes the WSID corpus chip and links every card to its review queue", () => {
+    const cards = buildDisciplineCards({ ...base, wsidActiveProfiles: 3 });
+    const wsid = cards.find((c) => c.key === "wsid");
+    expect(wsid?.chips.map((c) => c.label)).toContain("3 corpora active");
+    for (const card of cards) {
+      expect(
+        card.actions.some((a) => a.href.startsWith("/platform/ai/founder-review")),
+      ).toBe(true);
+    }
+  });
+
+  it("gives WWWD a primary emphasized manage-stance action", () => {
+    const cards = buildDisciplineCards(base);
+    const wwwd = cards.find((c) => c.key === "wwwd");
+    const manage = wwwd?.actions.find((a) => a.emphasis);
+    expect(manage?.label).toBe("Manage stance");
+  });
+});
