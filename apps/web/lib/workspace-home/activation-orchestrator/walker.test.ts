@@ -48,6 +48,7 @@ function hvacContribution(
   return {
     id: "home-hvac-dispatch",
     label: "HVAC dispatcher home",
+    topConcerns: ["dispatch board", "urgent exceptions", "coworker handoffs"],
     semanticArchetypeIds: ["hvac-contractor"],
     archetypeCategories: ["trades-maintenance"],
     setupActivation: {

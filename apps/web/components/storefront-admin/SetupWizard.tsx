@@ -203,6 +203,7 @@ export function SetupWizard({
           status: "not-configured",
           sourceContributionId: null,
           primaryOperatingQuestion: null,
+          topConcerns: [],
           primitiveWidgets: [],
           requiredCanonicalData: [],
           requiredSignals: [],

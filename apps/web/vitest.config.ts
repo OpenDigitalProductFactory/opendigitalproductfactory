@@ -86,6 +86,10 @@ export default defineConfig({
         replacement: resolve(rootDir, "packages/finance-templates/src/index.ts"),
       },
       {
+        find: "@dpf/storefront-templates",
+        replacement: resolve(rootDir, "packages/storefront-templates/src/index.ts"),
+      },
+      {
         find: "@dpf/validators",
         replacement: resolve(rootDir, "packages/validators/src/index.ts"),
       },

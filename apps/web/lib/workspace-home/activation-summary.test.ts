@@ -12,6 +12,7 @@ function makeContribution(
   return {
     id: "home-hvac-dispatch",
     label: "HVAC dispatcher home",
+    topConcerns: ["dispatch board", "urgent exceptions", "coworker handoffs"],
     semanticArchetypeIds: ["hvac-contractor"],
     archetypeCategories: ["trades-maintenance"],
     setupActivation: {
@@ -74,6 +75,7 @@ describe("workspace home activation summaries", () => {
       label: "HVAC dispatcher home",
       status: "ready",
       sourceContributionId: "home-hvac-dispatch",
+      topConcerns: ["dispatch board", "urgent exceptions", "coworker handoffs"],
       primitiveWidgets: ["decision-queue", "geo-map", "handoff-queue"],
       requiredCanonicalData: ["customer-account", "service-location", "work-order"],
       requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
@@ -121,6 +123,7 @@ describe("workspace home activation summaries", () => {
       label: "Platform workspace view",
       status: "not-configured",
       sourceContributionId: null,
+      topConcerns: [],
       primitiveWidgets: [],
       requiredCanonicalData: [],
       requiredSignals: [],

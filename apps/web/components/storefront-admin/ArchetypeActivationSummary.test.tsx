@@ -81,6 +81,7 @@ describe("ArchetypeActivationSummary", () => {
           status: "ready",
           sourceContributionId: "home-hvac-dispatch",
           primaryOperatingQuestion: null,
+          topConcerns: ["dispatch board", "urgent exceptions", "coworker handoffs"],
           primitiveWidgets: ["decision-queue", "geo-map", "handoff-queue"],
           requiredCanonicalData: ["customer-account", "service-location", "work-order"],
           requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
@@ -94,6 +95,8 @@ describe("ArchetypeActivationSummary", () => {
     expect(html).toContain("Worker Home");
     expect(html).toContain("HVAC dispatcher home");
     expect(html).toContain("Ready");
+    expect(html).toContain("dispatch board");
+    expect(html).toContain("urgent exceptions");
     // Primitive widgets rendered as title-cased tokens (formatToken splits on `-`).
     expect(html).toContain("Decision Queue");
     expect(html).toContain("Geo Map");
@@ -121,6 +124,7 @@ describe("ArchetypeActivationSummary", () => {
           status: "ready",
           sourceContributionId: "home-hvac-dispatch",
           primaryOperatingQuestion: "what's on the board today?",
+          topConcerns: ["dispatch board", "urgent exceptions", "coworker handoffs"],
           primitiveWidgets: ["decision-queue", "geo-map", "handoff-queue"],
           requiredCanonicalData: ["customer-account", "service-location", "work-order"],
           requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
@@ -148,6 +152,7 @@ describe("ArchetypeActivationSummary", () => {
           status: "not-configured",
           sourceContributionId: null,
           primaryOperatingQuestion: null,
+          topConcerns: [],
           primitiveWidgets: [],
           requiredCanonicalData: [],
           requiredSignals: [],

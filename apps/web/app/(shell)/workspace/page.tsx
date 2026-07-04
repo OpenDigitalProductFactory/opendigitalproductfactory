@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { PlatformWorkspaceHome } from "@/components/workspace-home/PlatformWorkspaceHome";
+import { VerticalWorkspaceHome } from "@/components/workspace-home/VerticalWorkspaceHome";
 import { NeedsYouBand } from "@/components/attention/NeedsYouBand";
 import { LocalOnlyProviderNotice } from "@/components/workspace-home/LocalOnlyProviderNotice";
 import { UnconfiguredWorkspaceHomeNotice } from "@/components/workspace-home/UnconfiguredWorkspaceHomeNotice";
@@ -45,7 +46,14 @@ export default async function WorkspacePage() {
           now, separate from the work backlog (EP-ATTENTION-SURFACE). Renders nothing
           when the queue is empty. */}
       <NeedsYouBand userId={session.user.id} />
-      <PlatformWorkspaceHome data={platformHomeData} />
+      {workspaceHomeResolution.mode === "vertical" ? (
+        <VerticalWorkspaceHome
+          contribution={workspaceHomeResolution.contribution}
+          data={platformHomeData}
+        />
+      ) : (
+        <PlatformWorkspaceHome data={platformHomeData} />
+      )}
     </div>
   );
 }
