@@ -902,19 +902,12 @@ export function isHappyPathIntakeReady(state: HappyPathState | null | undefined)
 
 /**
  * Provenance-tagged taxonomy anchor for a build whose ideate agent never ran
- * confirm_taxonomy_placement. Returns null when the build already has an anchor
- * (real or synthetic) so callers never clobber an operator-chosen taxonomy.
- *
- * Two shapes, both of which satisfy {@link isHappyPathIntakeReady} (a truthiness
- * check) while staying traceable so downstream UI can tell them from a real node:
- *   - `triaged-bi:<id>`  — the originating BI's triage outcome IS the
- *     categorization for governance purposes.
- *   - `adhoc-build:<id>` — a free-text build (Work Control quick-box) with no
- *     originating BI. Without this these builds kept taxonomyNodeId=null and a
- *     design that PASSED review + sized "ok" gate-blocked on "Intake is
- *     incomplete" forever, so the stranded-build resume janitor re-ran the full
- *     review deliberation every cycle (burning cloud AI, leaking working
- *     TaskRuns that blocked self-upgrade).
+ * confirm_taxonomy_placement. Returns null when an anchor already exists so
+ * callers never clobber an operator choice. Both shapes satisfy
+ * {@link isHappyPathIntakeReady} while staying traceable: `triaged-bi:<id>`
+ * (the BI's triage outcome IS the categorization) and `adhoc-build:<id>` (a
+ * free-text quick-box build with no originating BI, which otherwise gate-blocks
+ * on "Intake is incomplete" forever).
  */
 export function deriveIntakeTaxonomyAnchor(args: {
   taxonomyNodeId: string | null | undefined;

@@ -8549,19 +8549,14 @@ export async function executeTool(
             }
           }
 
-          // Auto-derive taxonomyNodeId when the ideate agent never ran
-          // confirm_taxonomy_placement, so a design that PASSED review + sized
-          // "ok" can actually advance ideate → plan instead of gate-blocking on
-          // "Intake is incomplete" forever. constrainedGoal is already derived
-          // from the title above; this fills the last missing intake anchor. See
-          // deriveIntakeTaxonomyAnchor for the triaged-bi vs adhoc-build shapes.
-          const taxonomyAnchor = deriveIntakeTaxonomyAnchor({
+          // Auto-derive taxonomyNodeId (ad-hoc builds otherwise gate-block on
+          // "Intake is incomplete" forever — see deriveIntakeTaxonomyAnchor).
+          const anchor = deriveIntakeTaxonomyAnchor({
             taxonomyNodeId: happyPathState.intake.taxonomyNodeId,
             originatingBacklogItemId: updatedBuild.originatingBacklogItemId,
             buildId,
           });
-          if (taxonomyAnchor) {
-            const anchor = taxonomyAnchor;
+          if (anchor) {
             try {
               await updateBuildHappyPathState(userId, {
                 intake: { taxonomyNodeId: anchor },
