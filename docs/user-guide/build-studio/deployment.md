@@ -59,8 +59,9 @@ When your feature is ready to ship, the AI Coworker runs through these steps in 
 2. **Register product** — Creates a digital product record in the inventory and sets up change tracking
 3. **Create backlog epic** — Adds the feature to the operations backlog for visibility
 4. **Contribution assessment** — If sharing is enabled, evaluates whether the feature could benefit the wider community. You choose whether to share.
-5. **Pull request and security gates** — Creates a pull request on the codebase with automated security checks: secret detection, backdoor scanning, architecture compliance, dependency audit, and destructive operation scanning. If all checks pass and the build is fully verified, the PR auto-merges. If any check fails, the PR is flagged for human review with details of what needs attention.
-6. **Deploy** — Checks the deployment window and triggers the governed deployment pipeline described above where promotion is enabled
+5. **Documentation evidence** — Confirms that affected user guide, public site, architecture, install/ops, prompt, or contributor docs were updated, or that the build recorded a concrete no-docs-needed reason.
+6. **Pull request and security gates** — Creates a pull request on the codebase with automated security checks: secret detection, backdoor scanning, architecture compliance, dependency audit, and destructive operation scanning. If all checks pass and the build is fully verified, the PR auto-merges. If any check fails, the PR is flagged for human review with details of what needs attention.
+7. **Deploy** — Checks the deployment window and triggers the governed deployment pipeline described above where promotion is enabled
 
 ## Database Backups
 
@@ -111,5 +112,6 @@ Then restart the platform: `docker compose restart portal-init portal`
 - No deployment completes without passing the health check
 - All deployments are time-limited (10 minutes maximum)
 - All deployments are logged with full audit trail
+- Documentation impact is resolved or explicitly attested before release acceptance
 - Failed deployments roll back automatically — no manual intervention needed
 - All code changes pass automated security gates before merging

@@ -139,6 +139,63 @@ describe("buildDependencyGraph", () => {
     expect(phases[phases.length - 1]?.tasks[0]?.specialist).toBe("qa-engineer");
   });
 
+  it("routes documentation path work to the documentation specialist before QA", () => {
+    const files: PlanFileEntry[] = [
+      { path: "docs/user-guide/build-studio/index.md", action: "modify", purpose: "Update Build Studio user guide" },
+    ];
+    const tasks: PlanTask[] = [
+      {
+        title: "Update user guide documentation",
+        testFirst: "link check the edited page",
+        implement: "Edit docs/user-guide/build-studio/index.md to document the new workflow",
+        verify: "links resolve",
+      },
+    ];
+
+    const phases = buildDependencyGraph(files, tasks);
+
+    expect(phases[0]?.tasks[0]?.specialist).toBe("documentation-specialist");
+    expect(phases[0]?.tasks[0]?.files[0]?.path).toBe("docs/user-guide/build-studio/index.md");
+    expect(phases[phases.length - 1]?.tasks[0]?.specialist).toBe("qa-engineer");
+  });
+
+  it("routes explicit docs-impact tasks to the documentation specialist", () => {
+    const files: PlanFileEntry[] = [
+      { path: "apps/web/lib/actions/orders.ts", action: "modify", purpose: "Order workflow behavior" },
+    ];
+    const tasks: PlanTask[] = [
+      {
+        title: "Write docs impact attestation",
+        testFirst: "review the changed workflow against the user guide",
+        implement: "Update documentation or record a no-docs-needed attestation for the order workflow change",
+        verify: "docs impact is explicit",
+      },
+    ];
+
+    const phases = buildDependencyGraph(files, tasks);
+
+    expect(phases[0]?.tasks[0]?.specialist).toBe("documentation-specialist");
+  });
+
+  it("routes prompt and agent registry docs work to the documentation specialist", () => {
+    const files: PlanFileEntry[] = [
+      { path: "prompts/build-phase/plan.prompt.md", action: "modify", purpose: "Add documentation impact planning guidance" },
+      { path: "packages/db/data/agent_registry.json", action: "modify", purpose: "Update documentation specialist capability wording" },
+    ];
+    const tasks: PlanTask[] = [
+      {
+        title: "Update Build Studio prompt documentation guidance",
+        testFirst: "Review prompt wording against the definition of done",
+        implement: "Edit prompts/build-phase/plan.prompt.md and packages/db/data/agent_registry.json",
+        verify: "Build Studio coworkers receive docs-impact guidance",
+      },
+    ];
+
+    const phases = buildDependencyGraph(files, tasks);
+
+    expect(phases[0]?.tasks[0]?.specialist).toBe("documentation-specialist");
+  });
+
   it("handles empty plan gracefully", () => {
     const phases = buildDependencyGraph([], []);
     expect(phases).toHaveLength(1); // QA only

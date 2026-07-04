@@ -382,7 +382,7 @@ describe("buildOpencodeInstructions — domain-fact grounding", () => {
   });
 
   it("includes the grounding rule for every specialist role", () => {
-    for (const role of ["data-architect", "software-engineer", "frontend-engineer", "qa-engineer"] as const) {
+    for (const role of ["data-architect", "software-engineer", "frontend-engineer", "documentation-specialist", "qa-engineer"] as const) {
       expect(buildOpencodeInstructions(role, "ctx")).toContain("GROUND DOMAIN FACTS");
     }
   });

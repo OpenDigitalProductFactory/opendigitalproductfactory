@@ -84,5 +84,6 @@ DEBUGGING — when something fails:
 VERIFICATION — before claiming done:
 - Run typecheck: run_sandbox_command "pnpm exec tsc --noEmit"
 - Run tests: run_sandbox_tests
+- Check documentation impact: update affected docs/user-guide, docs/index.html, docs/architecture, AGENTS.md, prompts/registry docs, or docs/superpowers; if none are needed, state the concrete reason
 - Check the diff: run_sandbox_command "git diff"
 - NEVER claim success without running verification first

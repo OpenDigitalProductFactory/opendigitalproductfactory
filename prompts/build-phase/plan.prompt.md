@@ -66,6 +66,7 @@ PLAN QUALITY STANDARD — meet this bar BEFORE you call reviewBuildPlan. The rev
   - EXPLICIT DEPENDENCIES: state task ordering dependencies (e.g. "needs the type from Task 2").
   - VERIFIED REFERENCES: only reference functions/patterns you actually confirmed exist in STEP 1 research.
   - SCALE TO SCOPE: match ceremony to the change. A one-file presentational tweak needs one small interaction test; a feature touching a server action + API + UI needs a test for EACH of those surfaces. Do not pad a trivial change, and never ship a logic change with no real test.
+  - DOCUMENTATION IMPACT: every plan MUST include either (a) a documentation-specialist task that updates the affected docs surface (`docs/user-guide`, `docs/index.html`, `docs/architecture`, `AGENTS.md`, prompt/registry docs, or `docs/superpowers` as appropriate) OR (b) an explicit task titled "Record no-docs-needed attestation" with the reason this change has no user-facing, coworker-facing, public-site, install/ops, architecture/contributor, route-map, or external-agent impact. Documentation tasks run after implementation and before final QA.
 
 STEP 3: Call reviewBuildPlan to review it.
   - If the review PASSES: proceed to step 4.

@@ -16,9 +16,9 @@ This guide is for contributors who want to develop the platform with a **dedicat
 
 Whether you run the **desktop app** or the **CLI**, the DPF setup is the same: connect the **DPF MCP server**, load the **`dpf-platform` skill pack** and the **AGENTS.md** operating doctrine, and adjust a few **local client settings** so the agent follows the portal's processes. These agents are the more advanced surface — they let an experienced contributor run **multiple concurrent threads of work** (one branch and one git worktree per thread) while still adhering to every process the portal establishes.
 
-If you only want the guided experience, use [Build Studio](build-studio/index) and stop here. If you want to drive the platform from a full agent client, read on.
+If you only want the guided experience, use [Build Studio](../build-studio/) and stop here. If you want to drive the platform from a full agent client, read on.
 
-> **One process, three surfaces.** Claude, Codex, and Build Studio are interchangeable adapters behind one contract: the evidence-gated lifecycle (`ideate → plan → build → review → ship`), the DPF MCP coordination plane, and the worktree/lease isolation model. Governance reads the *evidence*, never *which surface produced it*. See the [Unified Delivery Surfaces spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md).
+> **One process, four surfaces.** Build Studio, Claude, Codex, and Grok are interchangeable adapters behind one contract: the evidence-gated lifecycle (`ideate → plan → build → review → ship`), the DPF MCP coordination plane, documentation impact checks, and the worktree/lease isolation model. Governance reads the *evidence*, never *which surface produced it*. See the [Unified Delivery Surfaces spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md).
 
 ---
 
@@ -201,6 +201,7 @@ The agent surfaces are powerful precisely because they don't get a governance di
 - **MCP is the coordination plane.** Work tracking, capsule claims, and gate evidence live in the DPF MCP substrate. **If it isn't in the MCP plane, it didn't happen** — a thread that runs without claiming a capsule and recording evidence is invisible to coordination and cannot advance a gate.
 - **All changes land via PR against `main`, DCO-signed.** One concern per branch, one concern per PR. **Open the PR only when it's green and ready to merge — no draft PRs**, no parking-place PRs.
 - **The build gate is mandatory** (unit tests, production build, UX verification, migration apply) and runtime-bound gates run on the canonical install or the leased sandbox — never a worktree-local harness. "Tests passed" is incomplete without naming **where** it ran.
+- **Documentation impact is mandatory.** If a change affects user workflows, AI coworkers, public positioning, setup/install, operations, architecture, prompts, route maps, or external-agent behavior, update the matching docs surface in the same branch. If no docs are needed, record the concrete reason in the plan, PR body, or evidence.
 - **The live install advances only via the self-upgrade pipeline.** No surface hand-advances the root clone HEAD or rebuilds the portal to "update."
 - **Shared singletons are lease-gated.** No ad-hoc `docker run` / `compose up` against shared runtimes from any surface; claim the lease, heartbeat, release on exit.
 - **CI gates are surface-agnostic.** The UX-Fit Gate, Native Dialog Guard, secret scan, and typecheck read the *evidence in the PR*, not which agent produced it.
@@ -221,7 +222,7 @@ The full operating contract is [AGENTS.md](https://github.com/OpenDigitalProduct
 | Tool returns `insufficient_token_scope` | Issue a scoped token, refresh, retry — do **not** bypass with direct DB edits |
 | New worktree has no `dpf` connector | Run `scripts/dpf-bootstrap-agent-toolchain.sh` inside the worktree, then restart |
 | Dev-server launch refused (Claude Code) | Use a lease for the shared runtime, or run in an isolated worktree compose stack |
-| Codex/Grok missing the lease guard | Expected — comply by construction: claim the lease before launching |
+| Codex/Grok missing the lease guard | Re-run the bootstrap and restart the client. Regardless of hook status, comply by construction: claim the lease before launching |
 
 ---
 

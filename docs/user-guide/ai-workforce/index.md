@@ -10,7 +10,7 @@ The AI Workforce area is where platform administrators configure the AI infrastr
 
 ## Key Concepts
 
-- **Provider Registry** — The list of AI providers connected to the platform (e.g., Anthropic, OpenAI, Docker Model Runner for local models). Each provider has its own API key, status, and set of available models.
+- **Provider Registry** — The list of AI providers connected to the platform (e.g., Anthropic/Claude, OpenAI/Codex, xAI/Grok, Docker Model Runner for local models). Each provider has its own credential path, status, sensitivity clearance, and set of available models.
 - **Model Profiles** — Per-model configuration that controls routing behaviour: capability tier, cost sensitivity, latency requirements, and which task types the model is suitable for.
 - **Routing** — The logic that selects which model handles a given request. Routing considers the task type, required capability level, current provider availability, and cost constraints.
 - **Failover Chain** — The ordered sequence of fallback models to use if the primary model is unavailable or returns an error. Failover is automatic and transparent to users.
@@ -32,6 +32,7 @@ The AI Workforce area is where platform administrators configure the AI infrastr
 - Review the **Action History** to see all agent proposals and their approval status
 - Inspect the **Tool Execution Log** to audit every tool call made by any agent (who, what, when, result)
 - Evaluate external tools via the **Tool Evaluation Pipeline** before adding them to the platform
+- Connect external coding surfaces such as Claude, Codex, and Grok while keeping the same MCP, evidence, documentation, and PR gates as Build Studio
 
 ## Related Routes
 
@@ -82,3 +83,9 @@ External tools must be evaluated before adoption (EP-GOVERN-002). The pipeline r
 | AGT-111 (Investment Analysis) | Risk Adjudicator | Final GO/CONDITIONAL/REJECT verdict |
 
 Approved tools are version-pinned with conditions and scheduled for periodic re-evaluation.
+
+## Development Surfaces
+
+Build Studio is the guided in-product development surface. Claude, Codex, and Grok are first-class external agent surfaces for contributors who need direct source access. All of them use the same DPF MCP coordination plane, branch/worktree isolation, evidence gates, documentation impact check, DCO-signed PR process, and release-readiness rules.
+
+Use [Agent Development Environments](../getting-started/agent-dev-environments) to set up those external clients, and [Build Studio](../build-studio/) for the guided operator workflow.

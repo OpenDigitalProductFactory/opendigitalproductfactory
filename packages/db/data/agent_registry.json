@@ -181,7 +181,7 @@
       "agent_name": "integrate-orchestrator",
       "tier": "orchestrator",
       "value_stream": "integrate",
-      "capability_domain": "Build coordination, release planning, SBOM management, release acceptance gate; Integrate Value Stream \u00c2\u00a75.3 stages 5.3.1-5.3.5",
+      "capability_domain": "Build coordination, release planning, SBOM management, documentation freshness, release acceptance gate; Integrate Value Stream \u00c2\u00a75.3 stages 5.3.1-5.3.5",
       "human_supervisor_id": "HR-200",
       "hitl_tier_default": 1,
       "delegates_to": [
@@ -191,7 +191,8 @@
         "AGT-BUILD-DA",
         "AGT-BUILD-SE",
         "AGT-BUILD-FE",
-        "AGT-BUILD-QA"
+        "AGT-BUILD-QA",
+        "AGT-904"
       ],
       "escalates_to": "HR-200",
       "it4it_sections": [
@@ -2291,7 +2292,7 @@
       "agent_name": "documentation-specialist",
       "tier": "cross-cutting",
       "value_stream": "cross-cutting",
-      "capability_domain": "Creates, regenerates, and validates Mermaid diagrams across all documentation. Enforces documentation structure and consistency standards. Maintains awareness of Mermaid rendering tool limitations (GitHub vs VS Code vs GitBook). Reviews spec and architecture documents for completeness, cross-reference integrity, and IT4IT alignment. Cross-cutting: touches documentation across all value streams.",
+      "capability_domain": "Maintains user-facing, public-site, AI-coworker, architecture/contributor, and implementation-history documentation as part of the Build Studio definition of done. Updates docs/user-guide, docs/index.html, docs/README.md, AGENTS.md, docs/architecture, docs/superpowers, prompts, and registry text when product behavior changes; validates cross-reference integrity; records concrete no-docs-needed attestations or follow-up documentation backlog when a sweep is larger than the active build.",
       "human_supervisor_id": "HR-300",
       "hitl_tier_default": 3,
       "delegates_to": [],
@@ -2536,14 +2537,15 @@
       "agent_name": "build-specialist",
       "tier": "specialist",
       "value_stream": "integrate",
-      "capability_domain": "User-facing build coworker for the /build route. Guides through five build phases \u00e2\u20ac\u201d Ideate > Plan > Build > Review > Ship. Decomposition, test-driven thinking, pattern reuse, codebase awareness. Distinct from AGT-BUILD-DA/SE/FE/QA which are sub-agents inside Build Studio.",
+      "capability_domain": "User-facing build coworker for the /build route. Guides through five build phases \u00e2\u20ac\u201d Ideate > Plan > Build > Review > Ship. Decomposition, test-driven thinking, pattern reuse, codebase awareness, and documentation impact. Distinct from the AGT-BUILD implementation specialists and AGT-904 documentation specialist participation inside Build Studio.",
       "human_supervisor_id": "HR-200",
       "hitl_tier_default": 1,
       "delegates_to": [
         "AGT-BUILD-DA",
         "AGT-BUILD-SE",
         "AGT-BUILD-FE",
-        "AGT-BUILD-QA"
+        "AGT-BUILD-QA",
+        "AGT-904"
       ],
       "escalates_to": "AGT-ORCH-300",
       "it4it_sections": [

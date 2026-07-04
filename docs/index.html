@@ -775,7 +775,7 @@ bash install-dpf.sh</code></pre>
       <div class="card"><h3>coo</h3><p>Ongoing operational partner once onboarding completes. Cross-functional: pulls from any value stream when the question doesn&rsquo;t fit a single specialist.</p></div>
       <div class="card"><h3>portfolio-advisor</h3><p>Digital products and portfolios &mdash; health, investment, lifecycle.</p></div>
       <div class="card"><h3>ea-architect</h3><p>Enterprise architecture &mdash; ArchiMate views, capability maps, dependencies.</p></div>
-      <div class="card"><h3>build-specialist</h3><p>Drives Build Studio: design docs, sandbox builds, code intelligence, test-first decomposition, code review.</p></div>
+      <div class="card"><h3>build-specialist</h3><p>Drives Build Studio: design docs, sandbox builds, code intelligence, test-first decomposition, docs impact, and code review.</p></div>
       <div class="card"><h3>licensing-specialist</h3><p>Archetype-aware licensing and permit readiness, control mapping, evidence collection, posture tracking. (aka compliance-licensing-specialist.)</p></div>
       <div class="card"><h3>hr-specialist</h3><p>Workforce, roles, reviews, timesheets, organizational structure.</p></div>
       <div class="card"><h3>customer-advisor</h3><p>Customer accounts, sales pipeline, engagement history.</p></div>
@@ -784,18 +784,18 @@ bash install-dpf.sh</code></pre>
       <div class="card"><h3>marketing-specialist</h3><p>Brand voice, content, campaigns, storefront sections &mdash; reads from the same archetype that seeded the storefront.</p></div>
       <div class="card"><h3>ops-coordinator</h3><p>Operations and backlog: epics, items, priorities, status, scheduling (Scrum Master for delivery flow and WIP limits).</p></div>
       <div class="card"><h3>platform-engineer</h3><p>Platform health: providers, model routing, agent registry, infrastructure observability.</p></div>
-      <div class="card"><h3>documentation-specialist</h3><p>Documentation upkeep and validated diagrams &mdash; architecture, user guide, in-product help.</p></div>
+      <div class="card"><h3>documentation-specialist</h3><p>Keeps user guides, public docs, architecture docs, prompt/registry text, and cross-references current as platform behavior changes.</p></div>
       <div class="card"><h3>external-catalog-scout</h3><p>Scouts external coworker and archetype patterns from the hive mind. (aka hive-scout.)</p></div>
       <div class="card"><h3>admin-assistant</h3><p>Cross-cutting administrative work: scheduling, reminders, filing, follow-ups.</p></div>
     </div>
 
     <h3 style="margin-top:24px; font-size:16px;">Behind the personas: value-stream orchestrators and build sub-agents</h3>
     <p class="sub" style="margin-top:0;">
-      The personas above front a deeper bench. Nine <strong>value-stream orchestrators</strong> (one per IT4IT value stream plus a coordinating COO orchestrator) sequence specialist work, and Build Studio fans a feature out to four <strong>build sub-agents</strong> who each own a slice of the implementation.
+      The personas above front a deeper bench. Nine <strong>value-stream orchestrators</strong> (one per IT4IT value stream plus a coordinating COO orchestrator) sequence specialist work, and Build Studio fans a feature out to implementation, verification, and documentation specialists who each own a slice of the release evidence.
     </p>
     <div class="grid">
       <div class="card"><h3>Value-stream orchestrators</h3><p>coo-orchestrator (Jiminy), then evaluate-, explore-, integrate-, deploy-, release-, consume-, operate-, and governance-orchestrator &mdash; each owns flow, prioritization, and gate enforcement within its value stream.</p></div>
-      <div class="card"><h3>Build sub-agents</h3><p>build-data-architect (schema, migrations), build-software-engineer (APIs, server actions), build-frontend-engineer (pages, components, WCAG), and build-qa-engineer (tests, typecheck) &mdash; the team a single build is decomposed across.</p></div>
+      <div class="card"><h3>Build specialists</h3><p>build-data-architect (schema, migrations), build-software-engineer (APIs, server actions), build-frontend-engineer (pages, components, WCAG), build-qa-engineer (tests, typecheck), and documentation-specialist (user guide, public docs, architecture docs) &mdash; the team a single build is decomposed across.</p></div>
       <div class="card"><h3>WSID professional grounding</h3><p>Each coworker role now resolves against a profession corpus (WSID, in the Autonomy section below) so its craft judgment &mdash; data-architecture, finance, marketing &mdash; is sourced and audited, not LLM folklore.</p></div>
     </div>
   </section>
@@ -803,7 +803,7 @@ bash install-dpf.sh</code></pre>
   <section id="build-studio">
     <h2>Build Studio: the five-phase pipeline</h2>
     <p class="sub">
-      Build Studio is how the platform extends itself. A user (or a coworker on a user&rsquo;s behalf) proposes a feature, and the request flows through five governed phases. Each phase has its own gate &mdash; nothing advances until the previous gate&rsquo;s artifacts are present and acceptable. Phase-to-phase dispatch is now automatic: once a build is approved to start, Ideate &rarr; Plan &rarr; Build &rarr; Review run without an operator clicking between them, and the deliberate human gate is the final diff review before anything ships. The lifecycle is also right-sized by work type and size, so a bug fix or doc change carries lighter ceremony than a net-new feature. End-to-end reliability hardening continues, so treat Build Studio as the governed evidence and development surface rather than a guarantee that every complex source change lands untouched. <strong>Detailed guide:</strong> <a href="/user-guide/build-studio/">user-guide/build-studio</a> (with <a href="/user-guide/build-studio/sandbox">sandbox</a> and <a href="/user-guide/build-studio/deployment">deployment</a> notes).
+      Build Studio is how the platform extends itself. A user (or a coworker on a user&rsquo;s behalf) proposes a feature, and the request flows through five governed phases. Each phase has its own gate &mdash; nothing advances until the previous gate&rsquo;s artifacts are present and acceptable. Phase-to-phase dispatch is now automatic: once a build is approved to start, Ideate &rarr; Plan &rarr; Build &rarr; Review run without an operator clicking between them, and the deliberate human gate is the final diff review before anything ships. The lifecycle is also right-sized by work type and size, so a bug fix or doc change carries lighter ceremony than a net-new feature. Documentation impact is part of done: a build updates user-facing, coworker-facing, public, architecture, or contributor docs when it changes those surfaces, or records why no docs changed. End-to-end reliability hardening continues, so treat Build Studio as the governed evidence and development surface rather than a guarantee that every complex source change lands untouched. <strong>Detailed guide:</strong> <a href="/user-guide/build-studio/">user-guide/build-studio</a> (with <a href="/user-guide/build-studio/sandbox">sandbox</a> and <a href="/user-guide/build-studio/deployment">deployment</a> notes).
     </p>
     <table class="guide">
       <thead>

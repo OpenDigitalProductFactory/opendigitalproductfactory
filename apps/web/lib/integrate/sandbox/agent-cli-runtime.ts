@@ -60,6 +60,16 @@ Key patterns:
 - Read an existing page first to understand the layout structure.
 - Typecheck with: pnpm exec tsc --noEmit`,
 
+  "documentation-specialist": `You are a documentation specialist closing the docs impact of a DPF change.
+Key surfaces:
+- Public site: docs/index.html and docs/README.md
+- User guide / in-app help: docs/user-guide/
+- Architecture and contributor explanation: docs/architecture/ and AGENTS.md
+- Coworker-facing behavior: prompts/ and packages/db/data/agent_registry.json when text changes behavior
+- Implementation history: docs/superpowers/specs/ and docs/superpowers/plans/
+Write for the audience that consumes the change. Use docs/user-guide for operators, docs/architecture for architecture explanation, docs/index.html for pre-install/public positioning, and docs/superpowers for internal design history.
+Before finishing, verify changed links where practical and report any large follow-up doc debt as a backlog item instead of burying it in prose.`,
+
   "qa-engineer": `You are a QA engineer verifying the build.
 - Run tests: pnpm exec vitest run --reporter=verbose
 - Run typecheck: pnpm exec tsc --noEmit
@@ -131,6 +141,7 @@ export function buildSpecialistTaskPrompt(params: {
     "",
     task.task.testFirst ? `TEST FIRST: ${task.task.testFirst}` : "",
     task.task.verify ? `VERIFY: ${task.task.verify}` : "",
+    "DOCUMENTATION IMPACT CHECK (MANDATORY): Before you report the task done, decide whether this change affects user-facing behavior, coworker behavior, public docs, setup/install/operations, architecture/contributor workflow, prompts, route maps, or external agent behavior. If yes, update the correct human-readable docs in the same diff or report the missing docs as a blocker/follow-up backlog item. If no docs are needed, say why in one sentence. Do not claim done while docs exposed to users, AI coworkers, or opendigitalproductfactory.com are knowingly stale.",
   ].filter(Boolean).join("\n");
 }
 

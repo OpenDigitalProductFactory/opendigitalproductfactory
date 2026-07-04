@@ -21,8 +21,8 @@ Each of these is the operating manual for one part of the platform. The pages ar
 
 | Section | What it covers |
 |---------|----------------|
-| [AI Workforce](ai-workforce/) | Provider configuration, model routing lifecycle, per-provider notes (Anthropic, Codex, Ollama). |
-| [Build Studio](build-studio/) | The guided five-phase pipeline (intake, design, build, review, ship), sandbox, and deployment. |
+| [AI Workforce](ai-workforce/) | Provider configuration, model routing lifecycle, decision perspective, cost governance, and per-provider notes (Anthropic, Codex/OpenAI, xAI/Grok, local models). |
+| [Build Studio](build-studio/) | The guided five-phase pipeline (intake, design, build, review, ship), Build runtime, documentation impact, and deployment. |
 | [Compliance](compliance/) | Regulations, controls, evidence, audits, incidents, regulatory submissions. |
 | [Customers](customers/) | Customer accounts, sales pipeline, marketing. |
 | [Finance](finance/) | Invoicing, AP/AR, banking and reconciliation, AI spend, controls and automation, reporting. |
@@ -44,3 +44,7 @@ The runtime architecture, the Trusted AI Kernel (TAK), the Global AI Agent Ident
 ## Specifications and plans
 
 Long-form design specs, audits, and implementation plans are kept in the source repository under [`docs/superpowers/`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/superpowers). They are historical records of how each capability was built, not onboarding material - useful if you want to understand a design decision but not necessary to use the platform.
+
+## Documentation freshness
+
+Documentation is part of DPF's delivery definition of done. Build Studio and external Claude, Codex, and Grok implementation threads update the user guide, public site, architecture docs, `AGENTS.md`, or implementation history when a change affects those audiences. If a change does not need docs, the build or PR records a concrete no-docs-needed reason.
