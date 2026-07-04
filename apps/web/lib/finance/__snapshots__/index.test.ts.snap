@@ -57,6 +57,7 @@ exports[`finance barrel export > exports all public symbols 1`] = `
   "createPaymentRunSchema",
   "createRecurringScheduleSchema",
   "createSupplierSchema",
+  "deriveFinancialStatements",
   "disposeAssetSchema",
   "ensureFinanceCommitment",
   "evaluateAiProviderUtilization",

@@ -21,8 +21,13 @@ import {
   buildPaymentPostingLines,
   buildBillPostingLines,
   validateJournalEntry,
+  computeTrialBalance,
+  deriveFinancialStatements,
   periodKeyOf,
   type LedgerAccountType,
+  type TrialBalanceAccount,
+  type TrialBalance,
+  type FinancialStatements,
 } from "./ledger";
 
 // ─── Chart-of-accounts seeding ───────────────────────────────────────────────
@@ -390,4 +395,81 @@ export async function postBillFinalized(billId: string): Promise<PostBillResult>
   });
 
   return { posted: true, journalEntryId: entry.id, entryRef: entry.entryRef };
+}
+
+// ─── General-ledger report (read model) ──────────────────────────────────────
+
+export type GeneralLedgerReport = {
+  /** The period this report covers ("YYYY-MM"), or null for all-time. */
+  periodKey: string | null;
+  currency: string;
+  trialBalance: TrialBalance;
+  statements: FinancialStatements;
+  /** True when the org has no posted journal entries yet (empty-state signal). */
+  isEmpty: boolean;
+};
+
+/**
+ * Build the general-ledger report — a trial balance and the balance sheet + income
+ * statement derived from it — from posted journal lines. This is the *read* side of
+ * the ledger: the books are derived from the one journal, never recomputed ad hoc
+ * from sub-ledger documents. Pass a `periodKey` ("YYYY-MM") to scope to a fiscal
+ * period, or omit for all-time.
+ */
+export async function getGeneralLedgerReport(periodKey?: string): Promise<GeneralLedgerReport> {
+  const org = await prisma.organization.findFirst({ select: { id: true } });
+  const settings = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
+  const currency = settings?.baseCurrency ?? "GBP";
+
+  const emptyReport: GeneralLedgerReport = {
+    periodKey: periodKey ?? null,
+    currency,
+    trialBalance: { rows: [], totalDebit: 0, totalCredit: 0, balanced: true },
+    statements: {
+      incomeStatement: { revenue: 0, expenses: 0, netIncome: 0 },
+      balanceSheet: { assets: 0, liabilities: 0, equity: 0, netIncome: 0, balanced: true },
+    },
+    isEmpty: true,
+  };
+  if (!org) return emptyReport;
+
+  const accountRows = await prisma.ledgerAccount.findMany({
+    where: { organizationId: org.id },
+    orderBy: { code: "asc" },
+    select: { id: true, code: true, name: true, type: true },
+  });
+
+  const lineRows = await prisma.journalLine.findMany({
+    where: {
+      journalEntry: {
+        organizationId: org.id,
+        status: "posted",
+        ...(periodKey ? { periodKey } : {}),
+      },
+    },
+    select: { accountId: true, debit: true, credit: true },
+  });
+
+  const accounts: TrialBalanceAccount[] = accountRows.map((a) => ({
+    accountId: a.id,
+    code: a.code,
+    name: a.name,
+    type: a.type as LedgerAccountType,
+  }));
+  const lines = lineRows.map((l) => ({
+    accountId: l.accountId,
+    debit: Number(l.debit),
+    credit: Number(l.credit),
+  }));
+
+  const trialBalance = computeTrialBalance(accounts, lines);
+  const statements = deriveFinancialStatements(trialBalance);
+
+  return {
+    periodKey: periodKey ?? null,
+    currency,
+    trialBalance,
+    statements,
+    isEmpty: lineRows.length === 0,
+  };
 }

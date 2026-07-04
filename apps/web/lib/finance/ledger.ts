@@ -452,3 +452,71 @@ export function buildBillPostingLines(
 
   return lines;
 }
+
+// ─── Financial statements (derived from the trial balance) ───────────────────
+
+export type IncomeStatement = {
+  revenue: number;
+  expenses: number;
+  netIncome: number; // revenue − expenses
+};
+
+export type BalanceSheet = {
+  assets: number;
+  liabilities: number;
+  equity: number;
+  /** Current-period result, not yet closed to retained earnings. */
+  netIncome: number;
+  /** Assets = Liabilities + Equity + net income (the accounting equation holds). */
+  balanced: boolean;
+};
+
+export type FinancialStatements = {
+  incomeStatement: IncomeStatement;
+  balanceSheet: BalanceSheet;
+};
+
+/**
+ * Roll a trial balance up into an income statement and a balance sheet by account
+ * class. Each row's `balance` is already oriented to its normal side, so summing by
+ * type gives the natural positive totals. A ledger whose trial balance balances
+ * satisfies the accounting equation Assets = Liabilities + Equity + (Revenue −
+ * Expenses); `balanced` re-checks that in integer minor units so display rounding
+ * can never make a consistent book look inconsistent.
+ */
+export function deriveFinancialStatements(tb: TrialBalance): FinancialStatements {
+  let assets = 0;
+  let liabilities = 0;
+  let equity = 0;
+  let revenue = 0;
+  let expenses = 0;
+
+  for (const row of tb.rows) {
+    switch (row.type) {
+      case "asset":
+        assets += row.balance;
+        break;
+      case "liability":
+        liabilities += row.balance;
+        break;
+      case "equity":
+        equity += row.balance;
+        break;
+      case "revenue":
+        revenue += row.balance;
+        break;
+      case "expense":
+        expenses += row.balance;
+        break;
+    }
+  }
+
+  const netIncome = (toMinorUnits(revenue) - toMinorUnits(expenses)) / 100;
+  const balanced =
+    toMinorUnits(assets) === toMinorUnits(liabilities) + toMinorUnits(equity) + toMinorUnits(netIncome);
+
+  return {
+    incomeStatement: { revenue, expenses, netIncome },
+    balanceSheet: { assets, liabilities, equity, netIncome, balanced },
+  };
+}

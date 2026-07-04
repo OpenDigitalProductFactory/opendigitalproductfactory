@@ -4,6 +4,12 @@ import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 
 const REPORTS = [
   {
+    title: "General Ledger",
+    description: "Trial balance, balance sheet & income statement",
+    href: "/finance/reports/general-ledger",
+    accent: "var(--dpf-accent)",
+  },
+  {
     title: "Profit & Loss",
     description: "See your revenue, costs, and profit",
     href: "/finance/reports/profit-loss",

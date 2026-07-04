@@ -300,10 +300,44 @@ Verification: `vitest run lib/finance/ledger.test.ts lib/finance/chart-of-accoun
 — **38/38 pass** (3 new bill cases + 1 determination case). Standalone strict `tsc` on the
 pure modules clean. Prisma service/wiring field-exact; CI/sandbox-gated per §5.
 
-## 11. Roadmap
+## 11. Phase 5 — the General Ledger report (see the books, off main)
 
-Phases 1–4 land the ledger, make it automatic, and post all three core sub-ledgers to it.
-Remaining ranked gaps (§4) — **GL portal UI + trial-balance/balance-sheet report** (the
-next slice, so the owner can *see* the books), fixed-asset depreciation posting (FI-AA),
-procurement 3-way match (MM), inventory movements (WM), HCM payroll — are filed under
-**EP-SAP-PARITY** and delivered by deepening this one spine, not by bolting on separate tools.
+Phases 1–4 write to the ledger; Phase 5 lets the owner **read** it. The books are
+*derived* from the one journal, never recomputed ad hoc from documents:
+
+- **`deriveFinancialStatements(trialBalance)` (`ledger.ts`, pure, tested)** — rolls the
+  trial balance up by account class into an **income statement** (revenue − expenses =
+  net income) and a **balance sheet** (assets / liabilities / equity). Because the trial
+  balance balances, the accounting equation Assets = Liabilities + Equity + net income
+  holds; `balanced` re-checks it in integer minor units.
+- **`getGeneralLedgerReport(periodKey?)` (`ledger-service.ts`)** — the read model:
+  aggregates posted `JournalLine`s (optionally scoped to a `YYYY-MM` period) through the
+  pure `computeTrialBalance` + `deriveFinancialStatements`, returning the trial balance,
+  both statements, currency, and an `isEmpty` empty-state signal.
+- **`/finance/reports/general-ledger` page** — a themed, read-only report: six KPI tiles
+  (revenue/expenses/net income; assets/liabilities/equity) via report-kit `StatCard`, a
+  trial-balance table matching the existing finance-report pages, a "books balance ✓"
+  indicator, and an empty state that points the owner at the actions that populate it.
+  Added to the reports index for discovery.
+
+**UX-Fit decision (progressive disclosure):** the default view is six plain-language
+headline numbers a layman reads at a glance; the trial-balance detail sits below for
+those who want it. Everything is *derived* — the only optional input is a period. No
+token-count-style control a non-technical user can't answer. Scored on
+`human_cognitive_load`; attested with a `UX-Fit-Decision` trailer.
+
+Verification: `vitest run lib/finance/ledger.test.ts` — **29/29 pass** (3 new statement
+cases: balanced book, net loss, empty ledger). Standalone strict `tsc` on `ledger.ts`
+clean. The Prisma read service + the server-component page are field-exact and
+CI/sandbox-gated per §5 (a worktree cannot host the Next runtime); the pure derivation
+they call is fully proven. Report-kit `DataTable` was intentionally not used for the trial
+balance — it is a client component and all seven sibling finance reports hand-roll a
+themed table; converging finance reports onto report-kit is a separate follow-up.
+
+## 12. Roadmap
+
+Phases 1–5 land the ledger, make it automatic, post all three core sub-ledgers to it, and
+surface the derived books. Remaining ranked gaps (§4) — fixed-asset depreciation posting
+(FI-AA), procurement 3-way match (MM), inventory movements (WM), HCM payroll — are filed
+under **EP-SAP-PARITY** and delivered by deepening this one spine, not by bolting on
+separate tools.
