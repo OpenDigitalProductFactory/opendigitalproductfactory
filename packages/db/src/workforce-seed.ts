@@ -234,7 +234,13 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   ],
   "ea-architect": ["ea_graph_read", "ea_graph_write", "architecture_read", "file_read", "registry_read"],
   "hr-specialist": ["registry_read", "consumer_read", "consumer_write"],
-  "customer-advisor": ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read"],
+  // The Customer Success Manager operates the CRM (accounts, pipeline, quotes),
+  // so it needs crm_read/crm_write — NOT backlog_write (which let it retire live
+  // backlog items while flailing) or marketing_read (wrong domain). Its runtime
+  // grants resolve from THIS map (the slug agent row the coworker queries by
+  // agentId "customer-advisor"), not from agent_registry.json — so the CRM
+  // grants must live here to actually reach the coworker's tool surface.
+  "customer-advisor": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search"],
   "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read"],
   "storefront-advisor": [
     "consumer_read",
