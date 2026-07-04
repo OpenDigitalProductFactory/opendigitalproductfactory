@@ -37,6 +37,7 @@ export const PORTFOLIO_SOURCE_KINDS = [
   "ai_provider", // ModelProvider / providers-registry.json
   "sbom", // BomComponent (CycloneDX)
   "archetype", // archetype-seeded offers / suppliers / goods
+  "coworker_service", // Agent / CoworkerService — AI coworkers as Workforce products (BI-8F9EDD6C)
 ] as const;
 export type PortfolioSourceKind = (typeof PORTFOLIO_SOURCE_KINDS)[number];
 
@@ -60,6 +61,14 @@ export interface ProjectedPortfolioEntry {
   taxonomyNodeId: string | null;
   coverageStatus: PortfolioCoverageStatus;
   sourceKind: PortfolioSourceKind;
+  /**
+   * Extra string markers merged into DigitalProduct.observationConfig alongside
+   * the coverage/source/projectedBy markers. Used by projectors that carry
+   * projector-specific facts on the row — e.g. the coworker projector stamps the
+   * AI coworker's agentId, human-role parity anchor, and approval/interface owner
+   * (BI-8F9EDD6C / DOC-7693D528). Optional; omitted for projectors that don't.
+   */
+  observationExtras?: Record<string, string>;
 }
 
 /**
