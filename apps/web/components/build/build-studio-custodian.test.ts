@@ -233,4 +233,35 @@ describe("deriveBuildStudioCustodianPrompt", () => {
     });
     expect(active).toBeNull();
   });
+
+  it("shows a 'getting started' state (not 'Waiting on evidence') for a pre-brief ideate build", () => {
+    const build = makeBuild({
+      phase: "ideate",
+      brief: null,
+      uxVerificationStatus: null,
+      designDoc: null,
+      designReview: null,
+      buildPlan: null,
+      planReview: null,
+      draftApprovedAt: null,
+    });
+    // disabledReason is set → this would normally hit the "Waiting on evidence"
+    // branch; the pre-brief guard must intercept it.
+    const action: BuildStudioWorkflowAction = {
+      kind: "advance-phase",
+      title: "Define the feature",
+      message: "The feature brief is not ready yet.",
+      primaryLabel: "Continue",
+      targetPhase: "plan",
+      disabledReason: "Feature brief not created yet.",
+      coworkerLabel: "Continue with coworker",
+      coworkerPrompt: "Draft the feature brief.",
+    };
+    const prompt = deriveBuildStudioCustodianPrompt({ build, action, progressVisibility: progress() });
+
+    expect(prompt?.statusLabel).toBe("Getting started");
+    expect(prompt?.title).toBe("Let's get this build started.");
+    expect(prompt?.intent).toBe("info");
+    expect(prompt?.whyNow).not.toContain("required evidence is missing");
+  });
 });
