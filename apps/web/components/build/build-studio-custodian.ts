@@ -206,6 +206,32 @@ export function deriveBuildStudioCustodianPrompt({
   }
 
   if (blockedByEvidence) {
+    // A brand-new build in ideate that has not produced its Feature Brief yet is
+    // not "missing evidence" — it is simply still being defined. Reusing the
+    // alarming "required evidence is missing" copy here reads as an error on the
+    // normal first step (and contradicts the panel telling the user to describe
+    // the feature). Surface an honest "getting started" state instead.
+    if (build.phase === "ideate" && build.brief == null) {
+      return {
+        dismissKey,
+        title: "Let's get this build started.",
+        whyNow: "This build is still being defined — the coworker is drafting your Feature Brief from your description. Nothing is wrong.",
+        recommendedAction: "Add any detail in the conversation panel, or let the coworker keep drafting the brief.",
+        primaryLabel: action.coworkerLabel,
+        primaryAction: "coworker",
+        coworkerPrompt: appendCustodianInstruction(
+          action,
+          "Act as the Build Studio custodian. Draft the Feature Brief from the user's description and return one next action.",
+        ),
+        statusLabel: "Getting started",
+        intent: "info",
+        details: [
+          "The build is being defined from your description; no evidence is missing yet.",
+          "The human should see the conclusion and one next action, not raw workflow internals.",
+        ],
+        proactivityPlan,
+      };
+    }
     return {
       dismissKey,
       title: "I can collect what is missing.",
