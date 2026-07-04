@@ -4,6 +4,7 @@ import {
   isLedgerAccountType,
   validateJournalEntry,
   computeTrialBalance,
+  deriveFinancialStatements,
   buildInvoicePostingLines,
   buildPaymentPostingLines,
   buildBillPostingLines,
@@ -278,5 +279,60 @@ describe("buildBillPostingLines", () => {
     expect(lines).toHaveLength(2);
     expect(lines.find((l) => l.accountId === "acc-exp")!.debit).toBe(500);
     expect(lines.find((l) => l.accountId === "acc-ap")!.credit).toBe(500);
+  });
+});
+
+describe("deriveFinancialStatements", () => {
+  const accounts: TrialBalanceAccount[] = [
+    { accountId: "1000", code: "1000", name: "Bank", type: "asset" },
+    { accountId: "1100", code: "1100", name: "Accounts Receivable", type: "asset" },
+    { accountId: "2000", code: "2000", name: "Accounts Payable", type: "liability" },
+    { accountId: "3000", code: "3000", name: "Retained Earnings", type: "equity" },
+    { accountId: "4000", code: "4000", name: "Sales", type: "revenue" },
+    { accountId: "5000", code: "5000", name: "Expenses", type: "expense" },
+  ];
+
+  it("derives a balanced income statement + balance sheet from a balanced ledger", () => {
+    // Sell 1000 on credit, pay 400 of expenses from the bank, open with 500 equity.
+    const tb = computeTrialBalance(accounts, [
+      { accountId: "1000", debit: 500 }, // opening equity injection
+      { accountId: "3000", credit: 500 },
+      { accountId: "1100", debit: 1000 }, // AR from a sale
+      { accountId: "4000", credit: 1000 }, // revenue
+      { accountId: "5000", debit: 400 }, // expense
+      { accountId: "1000", credit: 400 }, // paid from bank
+    ]);
+    expect(tb.balanced).toBe(true);
+
+    const { incomeStatement: is, balanceSheet: bs } = deriveFinancialStatements(tb);
+    expect(is.revenue).toBe(1000);
+    expect(is.expenses).toBe(400);
+    expect(is.netIncome).toBe(600);
+
+    expect(bs.assets).toBe(1100); // bank 100 + AR 1000
+    expect(bs.liabilities).toBe(0);
+    expect(bs.equity).toBe(500);
+    expect(bs.netIncome).toBe(600);
+    // Assets 1100 = Liabilities 0 + Equity 500 + NetIncome 600
+    expect(bs.balanced).toBe(true);
+  });
+
+  it("reports a net loss when expenses exceed revenue", () => {
+    const tb = computeTrialBalance(accounts, [
+      { accountId: "4000", credit: 100 },
+      { accountId: "1100", debit: 100 },
+      { accountId: "5000", debit: 300 },
+      { accountId: "2000", credit: 300 },
+    ]);
+    const { incomeStatement: is } = deriveFinancialStatements(tb);
+    expect(is.netIncome).toBe(-200);
+  });
+
+  it("an empty ledger yields all-zero, balanced statements", () => {
+    const { incomeStatement: is, balanceSheet: bs } = deriveFinancialStatements(
+      computeTrialBalance(accounts, []),
+    );
+    expect(is.netIncome).toBe(0);
+    expect(bs.balanced).toBe(true);
   });
 });
