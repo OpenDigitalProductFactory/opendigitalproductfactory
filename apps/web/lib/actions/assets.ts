@@ -4,6 +4,8 @@ import { nanoid } from "nanoid";
 import { prisma } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import type { CreateAssetInput, DisposeAssetInput } from "@/lib/asset-validation";
+import { periodKeyOf } from "@/lib/finance/ledger";
+import { postDepreciationJournal } from "@/lib/finance/ledger-service";
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────────
 
@@ -140,6 +142,7 @@ export async function runMonthlyDepreciation() {
 
   const assets = await prisma.fixedAsset.findMany({ where: { status: "active" } });
   const updates: Promise<unknown>[] = [];
+  let totalCharge = 0;
 
   for (const asset of assets) {
     const purchaseCost = Number(asset.purchaseCost);
@@ -163,6 +166,7 @@ export async function runMonthlyDepreciation() {
     const newBookValue = Math.max(currentBookValue - monthlyAmount, residualValue);
     const actualDepreciation = currentBookValue - newBookValue;
     const newAccumulated = accumulatedDepreciation + actualDepreciation;
+    totalCharge += actualDepreciation;
 
     updates.push(
       prisma.fixedAsset.update({
@@ -176,7 +180,25 @@ export async function runMonthlyDepreciation() {
   }
 
   await Promise.all(updates);
-  return { processed: updates.length };
+
+  // Record the period's depreciation on the general ledger (Dr Depreciation /
+  // Cr Accumulated Depreciation). Best-effort: a ledger hiccup must not fail the
+  // asset run, and the post is idempotent per period so a retry is safe.
+  let glPosted = false;
+  if (totalCharge > 0) {
+    try {
+      const result = await postDepreciationJournal(periodKeyOf(new Date()), totalCharge);
+      glPosted = result.posted;
+    } catch (err) {
+      console.error("[ledger] failed to post depreciation to the general ledger:", err);
+    }
+  }
+
+  return {
+    processed: updates.length,
+    totalCharge: Math.round(totalCharge * 100) / 100,
+    glPosted,
+  };
 }
 
 // ─── disposeAsset ─────────────────────────────────────────────────────────────

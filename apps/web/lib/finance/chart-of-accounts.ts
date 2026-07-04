@@ -28,6 +28,8 @@ export const POSTING_ACCOUNT_ROLES = [
   "salesRevenue", // default sales/income account
   "operatingExpense", // default expense account (supplier bills post here)
   "inputTaxRecoverable", // recoverable input VAT/GST on purchases (an asset)
+  "depreciationExpense", // periodic depreciation charge (P&L)
+  "accumulatedDepreciation", // contra-asset: total depreciation booked against fixed assets
   "retainedEarnings", // accumulated result
   "openingBalanceEquity", // opening-balance counterweight
 ] as const;
@@ -61,6 +63,10 @@ export const BASE_CONTROL_ACCOUNTS: readonly ChartAccountSeed[] = [
   { code: "1000", name: "Cash at Bank", type: "asset", role: "bank", isControl: true },
   { code: "1100", name: "Accounts Receivable", type: "asset", role: "receivables", isControl: true },
   { code: "1200", name: "Input Tax Recoverable", type: "asset", role: "inputTaxRecoverable", isControl: true },
+  // Contra-asset: an asset-class account that carries a *credit* balance, so its
+  // oriented balance is negative and correctly reduces total assets to net book
+  // value in the balance-sheet rollup (deriveFinancialStatements).
+  { code: "1900", name: "Accumulated Depreciation", type: "asset", role: "accumulatedDepreciation", isControl: true },
   { code: "2000", name: "Accounts Payable", type: "liability", role: "payables", isControl: true },
   { code: "2200", name: "Sales Tax Payable", type: "liability", role: "taxPayable", isControl: true },
   { code: "3000", name: "Retained Earnings", type: "equity", role: "retainedEarnings" },
@@ -73,6 +79,7 @@ export const BASE_CONTROL_ACCOUNTS: readonly ChartAccountSeed[] = [
   // almost always override 5000 with a domain-specific expense line, inheriting
   // this role.
   { code: "5000", name: "Operating Expenses", type: "expense", role: "operatingExpense" },
+  { code: "5900", name: "Depreciation", type: "expense", role: "depreciationExpense" },
 ] as const;
 
 // ─── Build the full org chart of accounts ────────────────────────────────────
@@ -141,6 +148,9 @@ const HEURISTICS: Record<PostingAccountRole, (a: DeterminableAccount) => boolean
   operatingExpense: (a) => a.type === "expense",
   inputTaxRecoverable: (a) =>
     a.type === "asset" && (a.code === "1200" || /input\s*(tax|vat)|recoverable|reclaim/i.test(a.name)),
+  depreciationExpense: (a) => a.type === "expense" && (a.code === "5900" || /deprecia/i.test(a.name)),
+  accumulatedDepreciation: (a) =>
+    a.type === "asset" && (a.code === "1900" || /accumulated\s*deprecia/i.test(a.name)),
   retainedEarnings: (a) => a.type === "equity" && /retained|undivided|fund balance/i.test(a.name),
   openingBalanceEquity: (a) => a.type === "equity" && /opening/i.test(a.name),
 };

@@ -8,6 +8,8 @@ import {
   buildInvoicePostingLines,
   buildPaymentPostingLines,
   buildBillPostingLines,
+  computeMonthlyDepreciation,
+  buildDepreciationPostingLines,
   periodKeyOf,
   toMinorUnits,
   LEDGER_ACCOUNT_TYPES,
@@ -334,5 +336,50 @@ describe("deriveFinancialStatements", () => {
     );
     expect(is.netIncome).toBe(0);
     expect(bs.balanced).toBe(true);
+  });
+});
+
+describe("computeMonthlyDepreciation", () => {
+  const base = {
+    purchaseCost: 12000,
+    residualValue: 0,
+    usefulLifeMonths: 12,
+    depreciationMethod: "straight_line" as const,
+    accumulatedDepreciation: 0,
+  };
+
+  it("straight-line spreads (cost − residual) evenly", () => {
+    expect(computeMonthlyDepreciation(base)).toBe(1000);
+    expect(computeMonthlyDepreciation({ ...base, residualValue: 1200 })).toBe(900);
+  });
+
+  it("stops at the residual — never over-depreciates", () => {
+    // 11 months booked (11000); only 1000 of the 12000 base remains.
+    expect(computeMonthlyDepreciation({ ...base, accumulatedDepreciation: 11500 })).toBe(500);
+    expect(computeMonthlyDepreciation({ ...base, accumulatedDepreciation: 12000 })).toBe(0);
+  });
+
+  it("reducing-balance charges more early, on book value", () => {
+    // double-declining rate = 2/12; first period = 12000 × 2/12 = 2000.
+    const rb = { ...base, depreciationMethod: "reducing_balance" as const };
+    expect(computeMonthlyDepreciation(rb)).toBe(2000);
+    // after 2000 booked, next = (12000−2000) × 2/12 = 1666.67
+    expect(computeMonthlyDepreciation({ ...rb, accumulatedDepreciation: 2000 })).toBeCloseTo(1666.67, 2);
+  });
+
+  it("returns 0 for a zero-life asset", () => {
+    expect(computeMonthlyDepreciation({ ...base, usefulLifeMonths: 0 })).toBe(0);
+  });
+});
+
+describe("buildDepreciationPostingLines", () => {
+  it("posts a balanced Dr Depreciation / Cr Accumulated Depreciation entry", () => {
+    const lines = buildDepreciationPostingLines(1000, {
+      depreciationExpenseAccountId: "acc-dep-exp",
+      accumulatedDepreciationAccountId: "acc-accum-dep",
+    });
+    expect(validateJournalEntry(lines).ok).toBe(true);
+    expect(lines.find((l) => l.accountId === "acc-dep-exp")!.debit).toBe(1000);
+    expect(lines.find((l) => l.accountId === "acc-accum-dep")!.credit).toBe(1000);
   });
 });
