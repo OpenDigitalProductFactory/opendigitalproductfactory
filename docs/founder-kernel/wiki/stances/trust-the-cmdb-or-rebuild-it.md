@@ -27,6 +27,8 @@ The technical-debt use case was where this lesson originally landed. The early S
 
 The ROI conversation that lands with executives is tool consolidation: organisations routinely have 300+ tools doing the same IT function (monitoring is the canonical example). You can&#39;t rationalise that without a trusted CMDB to tell you which tool does what. Build the three pillars; the rationalisation funds itself.
 
+The lesson generalises past the CMDB. "CMDB" is the ITSM name for *the record of what you run*; DPF has the same record in its own canonical data model, and its coworkers reason off it. The three pillars are the acceptance test for any such record: if DPF&#39;s model isn&#39;t auto-populated (Ingestion), actually used by the coworkers making calls (Insight), and owned and pruned (Governance), then every WWMD/WWWD/WSID recommendation grounded in it inherits the same lie. A decision surface is only as trustworthy as the record beneath it.
+
 ## When this applies
 
 - Standing up a new CMDB.

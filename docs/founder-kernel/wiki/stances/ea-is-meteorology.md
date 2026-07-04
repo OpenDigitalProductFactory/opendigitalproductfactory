@@ -1,50 +1,46 @@
 ---
-title: EA is meteorology — provide forecasts, not raw models
+title: Deliver forecasts, not raw models
 pageKind: stance
 status: published
-abstract: Architects should be like meteorologists — produce forecasts and recommended actions, not exposed models. The deliverable to leadership is the guidance, not the diagram.
+abstract: The deliverable to a decision-maker is a forecast — a recommendation, a confidence level, and the trade-offs being accepted — not the raw model behind it. This began as a stance about enterprise architects reporting to leadership; in DPF it is how every coworker reports to an operator, and it is the founding shape of the decision-governance surface itself.
 sources:
   - articles/possible-futures-enterprise-architecture
 ---
 
 ## The position
 
-Enterprise Architecture&#39;s job is to be a **judgment surface on top of the models**, not the model exhibit. Architects should function like meteorologists: collect the inputs, run the models internally, and produce a forecast that drives the decision. The deliverable to leadership is the recommendation, not the diagram.
+Anyone who holds a model on someone else&#39;s behalf — an enterprise architect, a data team, or a DPF coworker — should be a **judgment surface on top of the model, not the model exhibit**. Function like a meteorologist: collect the inputs, run the model internally, and produce a **forecast** that drives the decision. The deliverable is the recommendation, the confidence, and the trade-offs — not the diagram.
 
-Most IT organisations have little to no business architecture in play, effectively making most current and future technology investment impossible to trace to business outcomes. The fix for that isn&#39;t more diagrams — it&#39;s a *guidance layer* on top of whatever model you have.
+I first made this argument about enterprise architecture: most IT organisations have little to no business architecture in play, which makes technology investment impossible to trace to business outcomes. The fix was never more diagrams — it was a *guidance layer* on top of whatever model you already have. That conviction is why DPF exists in the shape it does.
 
 ## Why
 
-Showing leadership the raw architecture model is showing them the radar imagery instead of the weather forecast. They are not radar specialists. They are decision-makers. They need to know whether to invest, retire, consolidate, hire, or wait — not which functional component sits behind which API in the application portfolio.
+Showing a decision-maker the raw model is showing them the radar imagery instead of the weather forecast. They aren&#39;t radar specialists — they are deciding whether to invest, retire, consolidate, hire, or wait. A weather forecast has four properties, and a good decision output should have all four:
 
-The meteorology analogy carries further. Weather forecasts:
+- It uses a model the consumer doesn&#39;t have to see.
+- It states its confidence explicitly.
+- It updates as conditions change.
+- It is useful even when it turns out wrong, because it made the unknowns legible.
 
-- Use a model the consumer doesn&#39;t see.
-- State confidence levels explicitly.
-- Update as conditions change.
-- Are useful even when they&#39;re wrong, because they made the unknowns legible.
-
-EA should produce outputs with the same properties.
-
-This is also the philosophical frame behind DPF&#39;s wiki kernel. The platform exists to be the guidance layer, not the model exhibit — "what would Mark do?" is a forecast question, not a diagram question.
+This is the founding shape of DPF&#39;s decision governance, not a metaphor bolted on afterward. "What would Mark do?" (WWMD), "what would *we* do?" (WWWD), and "what would someone in this role do?" (WSID) are all **forecast questions**. When a coworker faces a call, the platform surfaces a recommendation with its confidence and the principles that pulled for and against it — the kernel as a forecast engine — rather than handing the operator the raw principle corpus to reason out. An architect who can&#39;t say "I&#39;m 70% confident option B is right, because of X, Y, Z" isn&#39;t forecasting; a coworker that dumps the model instead of the call has made the same mistake.
 
 ## When this applies
 
-- Executive-level architecture reviews.
-- Investment decisions on portfolios or platforms.
-- Any time an architect is asked to "show the model" by someone who isn&#39;t an architect.
+- Any point where a coworker reports a judgment to an operator — the WWMD/WWWD/WSID decision surfaces, a recommended action, a build gate.
+- Executive-level reviews and investment decisions — the original enterprise-architecture setting.
+- Any time someone who isn&#39;t a modeller asks "what should we do?" rather than "what does the model say?"
 
 ## When it doesn&#39;t
 
-- Peer-to-peer architecture discussions where the model *is* the medium.
+- Peer-to-peer review where the model *is* the medium — two architects, or two agents exchanging a structured handoff, need the model itself.
 - Compliance / audit contexts that require the model on record.
-- Engineering hand-off where the next team needs the model to build against.
+- Engineering hand-off where the next team (or the next agent) needs the model to build against.
 
 ## Heuristics derived from this stance
 
-- `[[heuristics/be-a-meteorologist]]`
+- `[[heuristics/be-a-meteorologist]]` — the operational rule.
 
 ## See also
 
-- Parent context: `[[entities/it4it]]` provides the substrate; this stance is about how to deploy the substrate to leadership.
+- Substrate: `[[entities/it4it]]` provides the model; this stance is about how to deliver from it.
 - Raw source: `[raw-sources/articles/possible-futures-enterprise-architecture](../../raw-sources/articles/possible-futures-enterprise-architecture.md)`

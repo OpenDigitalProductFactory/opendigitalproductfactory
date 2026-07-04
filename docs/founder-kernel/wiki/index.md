@@ -46,10 +46,10 @@ The judgment kernel. Cite these when grounding an answer in his thinking.
 - `[[stances/digital-product-is-the-unit-of-organization]]` — Digital Product is the right primitive for portfolio, team, funding, lifecycle, governance.
 - `[[stances/persistent-product-teams-over-projects]]` — Replace project teams with persistent teams; annual budgets with rolling investment.
 - `[[stances/it4it-is-substrate]]` — IT4IT integrates ITIL, COBIT, TOGAF, DevOps, SAFe at the operating-model layer. It does not compete.
-- `[[stances/dont-integrate-ea-platform]]` — Consolidate on one data model (CSDM); don&#39;t integrate a third-party EA tool with ServiceNow. The integration goes through Independent → Honeymoon → Ugly Reckoning.
+- `[[stances/dont-integrate-ea-platform]]` — Consolidate on one canonical data model; don&#39;t integrate two systems of record for the same entities. The integration goes through Independent → Honeymoon → Ugly Reckoning. This is why DPF is one platform, not a hub.
 - `[[stances/trust-the-cmdb-or-rebuild-it]]` — Most organisations have a CMDB; very few trust it. Trust requires three pillars: Ingestion, Insight, Governance.
-- `[[stances/ea-is-meteorology]]` — Architects produce forecasts and guidance, not raw model exhibits.
-- `[[stances/contextualize-dont-transform]]` — When introducing a standard, map first. Adoption follows mapping; transformation follows adoption.
+- `[[stances/ea-is-meteorology]]` — Deliver forecasts, not raw models. A coworker reports a recommendation with confidence and trade-offs; WWMD/WWWD/WSID are forecast questions.
+- `[[stances/contextualize-dont-transform]]` — When introducing a standard or onboarding a company onto DPF, map the current operating model first. Adoption follows mapping; the map becomes the org&#39;s WWWD overlay.
 
 ## Heuristics — operational rules
 
