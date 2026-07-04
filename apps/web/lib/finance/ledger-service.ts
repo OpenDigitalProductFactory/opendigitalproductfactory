@@ -19,6 +19,7 @@ import {
 import {
   buildInvoicePostingLines,
   buildPaymentPostingLines,
+  buildBillPostingLines,
   validateJournalEntry,
   periodKeyOf,
   type LedgerAccountType,
@@ -283,6 +284,101 @@ export async function postPaymentRecorded(paymentId: string): Promise<PostPaymen
           debit: l.debit ?? 0,
           credit: l.credit ?? 0,
           currency: payment.currency,
+          description: l.description,
+          customerAccountId: l.customerAccountId ?? null,
+          contactId: l.contactId ?? null,
+          sortOrder: i,
+        })),
+      },
+    },
+    select: { id: true, entryRef: true },
+  });
+
+  return { posted: true, journalEntryId: entry.id, entryRef: entry.entryRef };
+}
+
+// ─── Bill → GL auto-posting (AP recognition) ─────────────────────────────────
+
+export type PostBillResult =
+  | { posted: true; journalEntryId: string; entryRef: string }
+  | { posted: false; reason: "already-posted" | "no-organization" | "unresolved-accounts"; detail?: string };
+
+/**
+ * Post a finalised (approved) supplier bill to the ledger:
+ *   Dr Expense (net) [+ Dr Input Tax (tax)] / Cr Accounts Payable (gross).
+ *
+ * Idempotent (one journal per bill). Automatic account determination via
+ * resolvePostingAccounts; if the expense or payables account can't be resolved the
+ * bill is not posted and the missing roles are reported rather than guessed.
+ */
+export async function postBillFinalized(billId: string): Promise<PostBillResult> {
+  const existing = await prisma.journalEntry.findFirst({
+    where: { sourceType: "Bill", sourceId: billId },
+    select: { id: true, entryRef: true },
+  });
+  if (existing) return { posted: false, reason: "already-posted", detail: existing.entryRef };
+
+  const org = await prisma.organization.findFirst({ select: { id: true } });
+  if (!org) return { posted: false, reason: "no-organization" };
+
+  const bill = await prisma.bill.findUniqueOrThrow({
+    where: { id: billId },
+    select: { billRef: true, currency: true, issueDate: true, subtotal: true, taxAmount: true },
+  });
+
+  const accounts = await prisma.ledgerAccount.findMany({
+    where: { organizationId: org.id, isActive: true },
+    orderBy: { code: "asc" },
+    select: { id: true, code: true, name: true, type: true },
+  });
+  const determinable: DeterminableAccount[] = accounts.map((a) => ({
+    id: a.id,
+    code: a.code,
+    name: a.name,
+    type: a.type as LedgerAccountType,
+  }));
+  const { resolved } = resolvePostingAccounts(determinable);
+
+  const missing: string[] = [];
+  if (!resolved.payables) missing.push("payables");
+  if (!resolved.operatingExpense) missing.push("operatingExpense");
+  if (missing.length > 0) {
+    return { posted: false, reason: "unresolved-accounts", detail: missing.join(", ") };
+  }
+
+  const lines = buildBillPostingLines(
+    { subtotal: Number(bill.subtotal), taxAmount: Number(bill.taxAmount) },
+    {
+      payablesAccountId: resolved.payables!.id!,
+      expenseAccountId: resolved.operatingExpense!.id!,
+      inputTaxAccountId: resolved.inputTaxRecoverable?.id,
+    },
+  );
+
+  const check = validateJournalEntry(lines);
+  if (!check.ok) {
+    throw new Error(`Bill ${bill.billRef} posting is unbalanced: ${check.errors.join("; ")}`);
+  }
+
+  const entry = await prisma.journalEntry.create({
+    data: {
+      organizationId: org.id,
+      entryRef: `JE-${bill.billRef}`,
+      entryDate: bill.issueDate,
+      periodKey: periodKeyOf(bill.issueDate),
+      status: "posted",
+      source: "bill",
+      sourceType: "Bill",
+      sourceId: billId,
+      currency: bill.currency,
+      postedAt: new Date(),
+      memo: `Supplier bill ${bill.billRef}`,
+      lines: {
+        create: lines.map((l, i) => ({
+          accountId: l.accountId,
+          debit: l.debit ?? 0,
+          credit: l.credit ?? 0,
+          currency: bill.currency,
           description: l.description,
           customerAccountId: l.customerAccountId ?? null,
           contactId: l.contactId ?? null,

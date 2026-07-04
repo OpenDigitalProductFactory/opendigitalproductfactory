@@ -390,3 +390,65 @@ export function buildPaymentPostingLines(
     },
   ];
 }
+
+// ─── Supplier-bill posting (AP recognition) ──────────────────────────────────
+
+export type BillPostingResolver = {
+  /** Trade payables control — what we now owe the supplier. */
+  payablesAccountId: string;
+  /** The expense account the bill's cost lands in. */
+  expenseAccountId: string;
+  /** Recoverable input VAT/GST (an asset), if tax applies and an account exists. */
+  inputTaxAccountId?: string;
+};
+
+export type BillPostingSource = {
+  subtotal: number; // net of tax
+  taxAmount: number;
+  contactId?: string | null;
+};
+
+/**
+ * Build the journal for finalising a supplier bill (SAP MM → FI vendor invoice):
+ *   Dr  Expense              net
+ *   Dr  Input Tax Recoverable tax   (only when tax applies AND an input-tax account exists)
+ *     Cr  Accounts Payable        net + tax   (the gross we now owe)
+ *
+ * Balances by construction. When no input-tax account is resolved the tax is folded
+ * into the expense (tax-inclusive cost) so the entry still balances — the common
+ * case for a non-VAT-registered SMB.
+ */
+export function buildBillPostingLines(
+  bill: BillPostingSource,
+  accounts: BillPostingResolver,
+): JournalLineInput[] {
+  const net = Math.max(bill.subtotal, 0);
+  const tax = Math.max(bill.taxAmount, 0);
+  const gross = net + tax;
+  const splitTax = tax > 0 && !!accounts.inputTaxAccountId;
+
+  const lines: JournalLineInput[] = [
+    {
+      accountId: accounts.expenseAccountId,
+      debit: splitTax ? net : gross,
+      description: "Operating expense",
+      contactId: bill.contactId ?? null,
+    },
+  ];
+
+  if (splitTax) {
+    lines.push({
+      accountId: accounts.inputTaxAccountId!,
+      debit: tax,
+      description: "Input tax recoverable",
+    });
+  }
+
+  lines.push({
+    accountId: accounts.payablesAccountId,
+    credit: gross,
+    description: "Accounts payable",
+  });
+
+  return lines;
+}

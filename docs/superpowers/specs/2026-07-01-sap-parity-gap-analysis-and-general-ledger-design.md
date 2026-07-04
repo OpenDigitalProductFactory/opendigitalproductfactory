@@ -274,10 +274,36 @@ cases: inbound, outbound, unresolved-control guard, non-negative). Standalone st
 `tsc` on `ledger.ts` clean. Prisma service/wiring is field-exact; typecheck + runtime
 gated by CI / the shared local-CI sandbox per §5.
 
-## 10. Roadmap
+## 10. Phase 4 — supplier-bill posting (AP recognition, off main)
 
-Phases 1–2 land the ledger foundation and make it automatic. Remaining ranked gaps
-(§4) — GL portal UI + trial-balance/balance-sheet reports, bill/payment/depreciation
-posting builders, procurement 3-way match (MM), inventory movements (WM) — are filed
-under **EP-SAP-PARITY** and delivered by deepening this one spine, not by bolting on
-separate tools.
+Phase 2 recognised revenue+AR (invoice), Phase 3 settled it (payment). Phase 4 closes
+the **payable** side so procurement rides the same ledger:
+
+- **`buildBillPostingLines` (`ledger.ts`, pure, tested)** — Dr Expense (net) [+ Dr Input
+  Tax (tax)] / Cr Accounts Payable (gross). Balances by construction; when no input-tax
+  account is resolved the tax folds into the expense (tax-inclusive cost) — the common
+  non-VAT SMB case.
+- **Chart-of-accounts extension (`chart-of-accounts.ts`)** — two new roles/base accounts:
+  `operatingExpense` (5000, the default expense supplier bills post to; archetype seeds
+  override 5000 and inherit the role) and `inputTaxRecoverable` (1200, an asset —
+  recoverable input VAT/GST, distinct from 2200 output tax payable). Determination stays
+  automatic; unresolved roles are reported, never guessed.
+- **`postBillFinalized` (`ledger-service.ts`)** — idempotent `source: bill` journal,
+  **wired into `ap.ts`** at both `"approved"` transitions (`submitBillForApproval` when no
+  approval rule matches, and `respondToBillApproval` when all approvals are collected),
+  best-effort so a ledger hiccup never fails approving the bill.
+
+Result: **all three core sub-ledgers now post to one ledger** — invoice→AR, payment→
+settlement, bill→AP — so the trial balance (next) reflects a complete book.
+
+Verification: `vitest run lib/finance/ledger.test.ts lib/finance/chart-of-accounts.test.ts`
+— **38/38 pass** (3 new bill cases + 1 determination case). Standalone strict `tsc` on the
+pure modules clean. Prisma service/wiring field-exact; CI/sandbox-gated per §5.
+
+## 11. Roadmap
+
+Phases 1–4 land the ledger, make it automatic, and post all three core sub-ledgers to it.
+Remaining ranked gaps (§4) — **GL portal UI + trial-balance/balance-sheet report** (the
+next slice, so the owner can *see* the books), fixed-asset depreciation posting (FI-AA),
+procurement 3-way match (MM), inventory movements (WM), HCM payroll — are filed under
+**EP-SAP-PARITY** and delivered by deepening this one spine, not by bolting on separate tools.
