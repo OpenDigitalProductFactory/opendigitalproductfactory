@@ -16,9 +16,12 @@ const brief: FeatureBrief = {
   acceptanceCriteria: ["Shows spend by feature build"],
 };
 
-function makeBuild(): FeatureBuildRow {
+function makeBuild(
+  overrides: { phase?: FeatureBuildRow["phase"]; engine?: string | null } = {},
+): FeatureBuildRow {
   return {
     buildId: "FB-1",
+    phase: overrides.phase ?? "ideate",
     happyPathState: {
       intake: {
         status: "pending",
@@ -28,7 +31,12 @@ function makeBuild(): FeatureBuildRow {
         constrainedGoal: null,
         failureReason: null,
       },
-      execution: { engine: null, source: null, status: "pending", failureStage: null },
+      execution: {
+        engine: overrides.engine ?? null,
+        source: null,
+        status: "pending",
+        failureStage: null,
+      },
       verification: { status: "pending", checks: [] },
     },
     deliberationSummary: null,
@@ -67,5 +75,36 @@ describe("FeatureBriefPanel taxonomy placement", () => {
     expect(screen.getByText("39%")).toBeInTheDocument();
     expect(screen.getAllByText("Test & Validate").length).toBeGreaterThan(0);
     expect(screen.getByText("matched: test, validate")).toBeInTheDocument();
+  });
+});
+
+describe("HappyPathStatusCard engine label", () => {
+  it("shows 'Pending dispatch' (not 'Not selected') pre-dispatch in ideate", () => {
+    render(
+      <FeatureBriefPanel brief={brief} phase="ideate" diffSummary={null} build={makeBuild({ phase: "ideate", engine: null })} />,
+    );
+    expect(screen.getAllByText(/Engine: Pending dispatch/).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/Engine: Not selected/)).toHaveLength(0);
+  });
+
+  it("shows 'Pending dispatch' pre-dispatch in plan", () => {
+    render(
+      <FeatureBriefPanel brief={brief} phase="plan" diffSummary={null} build={makeBuild({ phase: "plan", engine: null })} />,
+    );
+    expect(screen.getAllByText(/Engine: Pending dispatch/).length).toBeGreaterThan(0);
+  });
+
+  it("shows the dispatched engine once one is assigned", () => {
+    render(
+      <FeatureBriefPanel brief={brief} phase="build" diffSummary={null} build={makeBuild({ phase: "build", engine: "claude" })} />,
+    );
+    expect(screen.getAllByText(/Engine: claude/).length).toBeGreaterThan(0);
+  });
+
+  it("keeps 'Not selected' at build phase when no engine is set (genuine gap)", () => {
+    render(
+      <FeatureBriefPanel brief={brief} phase="build" diffSummary={null} build={makeBuild({ phase: "build", engine: null })} />,
+    );
+    expect(screen.getAllByText(/Engine: Not selected/).length).toBeGreaterThan(0);
   });
 });
