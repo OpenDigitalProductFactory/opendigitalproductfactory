@@ -198,6 +198,27 @@ export function ArchetypeActivationSummary({
               The worker arrives asking: {workspaceHomeActivation.primaryOperatingQuestion}
             </p>
           )}
+          {workspaceHomeActivation.topConcerns.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+              {workspaceHomeActivation.topConcerns.slice(0, 5).map((concern) => (
+                <span
+                  key={concern}
+                  className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    minHeight: 24,
+                    padding: "3px 8px",
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 500,
+                  }}
+                >
+                  {concern}
+                </span>
+              ))}
+            </div>
+          )}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
             {workspaceHomeActivation.primitiveWidgets.length > 0 ? (
               workspaceHomeActivation.primitiveWidgets.map((primitive) => (

@@ -6,7 +6,7 @@ const turbopackRoot = fileURLToPath(new URL("../..", import.meta.url));
 const config = {
   output: "standalone",
   reactStrictMode: true,
-  transpilePackages: ["@dpf/db", "@dpf/validators"],
+  transpilePackages: ["@dpf/db", "@dpf/storefront-templates", "@dpf/validators"],
   // Server-only document parsers loaded via dynamic `import()` in the upload
   // route (lib/shared/file-parsers.ts). They MUST stay external (not bundled)
   // so Next's standalone output traces them into the shipped node_modules —

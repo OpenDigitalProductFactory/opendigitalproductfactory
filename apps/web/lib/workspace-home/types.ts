@@ -148,6 +148,15 @@ export type WorkspaceHomeContribution = {
    * vertical home commits to. Optional and additive; absent on substrate-only delivery.
    */
   primaryOperatingQuestion?: string;
+  /**
+   * Ranked worker/operator concerns this home must make visible first.
+   *
+   * This is the archetype-profile guardrail from the configurable Workspace
+   * design: every production profile must name the concrete worries it is
+   * designed around so future archetypes cannot silently inherit a generic
+   * dashboard with no operating-model fit.
+   */
+  topConcerns: string[];
   semanticArchetypeIds: string[];
   archetypeCategories: string[];
   setupActivation: WorkspaceHomeSetupActivation;
@@ -203,6 +212,7 @@ export type WorkspaceHomeSetupActivationSummary = {
    * matched (mode `unconfigured`). Honest absence — setup never invents a question.
    */
   primaryOperatingQuestion: string | null;
+  topConcerns: string[];
   primitiveWidgets: WorkspaceHomePrimitiveKey[];
   requiredCanonicalData: string[];
   requiredSignals: string[];

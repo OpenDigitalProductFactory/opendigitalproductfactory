@@ -16,6 +16,7 @@ function makeContribution(
   return {
     id: "home-trades-maintenance",
     label: "Trades maintenance home",
+    topConcerns: ["unassigned work", "customer callbacks", "coworker handoffs"],
     semanticArchetypeIds: ["hvac-contractor"],
     archetypeCategories: ["trades-maintenance"],
     setupActivation: {
@@ -254,5 +255,16 @@ describe("workspace home contribution registry", () => {
     expect(validateWorkspaceHomeContribution(withQuestion).ok).toBe(true);
     expect(without.primaryOperatingQuestion).toBeUndefined();
     expect(withQuestion.primaryOperatingQuestion).toBe("what's red on the estate?");
+  });
+
+  it("requires ranked topConcerns so new profiles state their operating worries", () => {
+    const validation = validateWorkspaceHomeContribution(
+      makeContribution({ topConcerns: [] }),
+    );
+
+    expect(validation.ok).toBe(false);
+    expect(validation.errors).toContain(
+      "contribution home-trades-maintenance must declare ranked topConcerns",
+    );
   });
 });

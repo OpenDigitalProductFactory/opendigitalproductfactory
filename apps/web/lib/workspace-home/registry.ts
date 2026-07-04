@@ -7,6 +7,7 @@ import {
   type WorkspaceHomeStorefrontConfigRef,
   type WorkspaceHomeValidationResult,
 } from "./types";
+import { DEFAULT_WORKSPACE_HOME_CONTRIBUTIONS } from "./profiles";
 
 export { BASELINE_WORKSPACE_HOME_SLOT_IDS };
 export type {
@@ -56,7 +57,9 @@ export function createWorkspaceHomeRegistry(
   return registry;
 }
 
-export const defaultWorkspaceHomeRegistry = createWorkspaceHomeRegistry();
+export const defaultWorkspaceHomeRegistry = createWorkspaceHomeRegistry(
+  DEFAULT_WORKSPACE_HOME_CONTRIBUTIONS,
+);
 
 export function registerWorkspaceHomeContribution(
   registry: WorkspaceHomeRegistry,
@@ -76,6 +79,10 @@ export function validateWorkspaceHomeContribution(
 ): WorkspaceHomeValidationResult {
   const errors: string[] = [];
   const slotIds = new Set(contribution.slots.map((slot) => slot.id));
+
+  if (!Array.isArray(contribution.topConcerns) || contribution.topConcerns.length === 0) {
+    errors.push(`contribution ${contribution.id} must declare ranked topConcerns`);
+  }
 
   for (const baselineSlotId of BASELINE_WORKSPACE_HOME_SLOT_IDS) {
     if (!slotIds.has(baselineSlotId)) {

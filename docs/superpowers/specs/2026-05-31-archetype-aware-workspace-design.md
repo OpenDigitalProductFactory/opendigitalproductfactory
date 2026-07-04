@@ -309,6 +309,50 @@ The view is rendered server-side per page load against the envelope rows scoped 
 
 ## Configurability Rules
 
+### V1 implementation note — 2026-07-04
+
+The first production delivery of this design is code-owned rather than
+database-owned:
+
+- `apps/web/lib/workspace-home/profiles.ts` is the roster of exact and category
+  `WorkspaceHomeContribution` profiles.
+- Every profile must declare `primaryOperatingQuestion`, ranked `topConcerns`,
+  baseline slots, primitive widgets, required canonical data, and required
+  signals. `validateWorkspaceHomeContribution` rejects profiles without
+  `topConcerns`.
+- `defaultWorkspaceHomeRegistry` is populated from that roster; exact semantic
+  archetype IDs still win before category fallbacks.
+- `apps/web/lib/workspace-home/profiles.test.ts` imports the canonical
+  `ARCHETYPE_SEED_DATA` and proves every seeded archetype resolves to a vertical
+  home by exact or category profile. Adding a new seeded category without a
+  Workspace profile now breaks this test instead of silently inheriting the
+  generic platform home.
+- Named examples from the design review are first-class exact profiles:
+  `home-waste-management` covers waste / junk-removal route operations, and
+  `home-fractional-cxo` covers fractional executive portfolio work.
+- `/workspace` renders `VerticalWorkspaceHome` for resolved profiles and keeps
+  the existing `PlatformWorkspaceHome` below it as supporting platform context.
+  This preserves current platform affordances while making the first viewport
+  archetype-specific.
+
+**UX fit review — archetype-aware Workspace V1**
+
+- Decision: fits-with-guardrails.
+- Owning area: Workspace.
+- Route family: `/workspace`; setup preview appears in storefront/business setup.
+- Primary persona: worker/operator arriving to decide what needs attention now.
+- Navigation layer touched: page home only; no global nav or new tab family.
+- Reuse/convergence: extends the existing workspace-home contribution substrate
+  and uses theme-token panels; no arbitrary custom block runtime.
+- Source truth: `StorefrontConfig.archetype → StorefrontArchetype` plus code-owned
+  `WorkspaceHomeContribution` profiles.
+- Empty/failure behavior: unresolved archetype remains the honest platform
+  fallback; resolved profiles show their missing-data behavior and setup
+  activation data.
+- AI boundary: profile display only; no coworker prompt is sent from the cards.
+- Evidence before merge: targeted Vitest for registry, profile coverage,
+  activation summaries, activation card, and vertical renderer.
+
 ### Configurable by DPF seed/archetype definition
 
 - Which block kinds are available for an archetype/category.

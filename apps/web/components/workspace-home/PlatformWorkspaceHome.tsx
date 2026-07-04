@@ -6,9 +6,10 @@ import type { PlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-lo
 
 type PlatformWorkspaceHomeProps = {
   data: Omit<PlatformWorkspaceHomeData, "storefrontConfig">;
+  heading?: string;
 };
 
-export function PlatformWorkspaceHome({ data }: PlatformWorkspaceHomeProps) {
+export function PlatformWorkspaceHome({ data, heading = "Workspace" }: PlatformWorkspaceHomeProps) {
   const {
     workspaceSections,
     workspaceCommandCenter,
@@ -19,7 +20,7 @@ export function PlatformWorkspaceHome({ data }: PlatformWorkspaceHomeProps) {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-[var(--dpf-text)]">Workspace</h1>
+        <h1 className="text-2xl font-bold text-[var(--dpf-text)]">{heading}</h1>
         <p className="mt-1 text-sm text-[var(--dpf-muted)]">
           Your day at a glance — what needs doing now and next.
         </p>
