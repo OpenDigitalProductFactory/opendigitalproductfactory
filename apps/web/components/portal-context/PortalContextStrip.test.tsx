@@ -10,25 +10,28 @@ describe("PortalContextStrip", () => {
 
     expect(html).toContain("Portal context");
     expect(html).toContain("Build Studio");
-    expect(html).toContain("No active build");
+    // BI-AC156613: the null-state label states SELECTION, not activity, so the
+    // strip cannot falsely contradict a page that lists active work below it.
+    expect(html).toContain("No build selected");
+    expect(html).not.toContain("No active build");
     expect(html).toContain("Select build");
     expect(html).toContain("text-[var(--dpf-text)]");
     expect(html).toContain("border-[var(--dpf-border)]");
     expect(html).not.toMatch(/text-gray|bg-white|#[0-9a-fA-F]{3,6}/);
   });
 
-  it("D11 (2026-05-23): does NOT render the no_active_build AttentionChip when the buildLabel chip already says 'No active build' (dedupe)", () => {
-    // Repro: PortalContextStrip used to render "No active build" twice when
-    // the user was on /build with no featureBuild anchor — once as the
+  it("D11 (2026-05-23): does NOT render the no_active_build AttentionChip when the buildLabel chip already says 'No build selected' (dedupe)", () => {
+    // Repro: PortalContextStrip used to render the no-build null-state twice
+    // when the user was on /build with no featureBuild anchor — once as the
     // buildLabel chip (left of strip) and again as a yellow warning
     // AttentionChip (right of it). Looked like the strip was broken /
     // double-announcing the same state. The fix suppresses only the
     // AttentionChip rendering (the right-side action button stays — it
     // is genuinely useful).
     const html = renderToStaticMarkup(<PortalContextStrip envelope={makeEnvelope()} />);
-    // The buildLabel chip says "No active build" exactly once.
-    const noActiveMatches = html.match(/No active build/g) ?? [];
-    expect(noActiveMatches.length).toBe(1);
+    // The buildLabel chip says "No build selected" exactly once (BI-AC156613).
+    const noBuildMatches = html.match(/No build selected/g) ?? [];
+    expect(noBuildMatches.length).toBe(1);
     // The "Select build" action button is preserved — it is the actionable
     // affordance the user needs to recover from the no-build state.
     expect(html).toContain("Select build");

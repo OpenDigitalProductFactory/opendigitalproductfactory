@@ -64,7 +64,11 @@ describe("WorkControlPanel", () => {
     );
 
     expect(html).toContain("Portal context");
-    expect(html).toContain("No active build");
+    // BI-AC156613: on /build/work nothing is anchored, so the strip shows a
+    // selection null-state ("No build selected"), never a false activity claim
+    // that would clash with the "Active capsules: N" card on the same page.
+    expect(html).toContain("No build selected");
+    expect(html).not.toContain("No active build");
   });
 
   it("renders adoptable worktree rows surfaced by the scanner", () => {
