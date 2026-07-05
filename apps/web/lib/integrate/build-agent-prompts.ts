@@ -226,7 +226,7 @@ STEP 1 — SAVE THE PLAN:
   - If the format is wrong, saveBuildEvidence will REJECT it and tell you to fix the format.
   - Each task's "implement" field MUST use full monorepo-relative paths (e.g. "apps/web/lib/..." not "lib/...", "packages/db/prisma/..." not "prisma/..."). The working directory is the monorepo root — shortened paths will create files in the wrong location.
   - Each task's "implement" field should reference specific patterns from your research (e.g. "use auth() like invoices route").
-  - DOCUMENTATION IMPACT: every plan MUST include either (a) a documentation-specialist task that updates the affected docs surface (docs/user-guide, docs/index.html, docs/architecture, AGENTS.md, prompt/registry docs, or docs/superpowers as appropriate) OR (b) an explicit task titled "Record no-docs-needed attestation" with the reason this change has no user-facing, coworker-facing, public-site, install/ops, architecture/contributor, route-map, or external-agent impact. Documentation tasks run after implementation and before final QA.
+  - DOCUMENTATION IMPACT: every plan MUST include either a documentation-specialist task for the affected docs surface (docs/user-guide, docs/index.html, docs/architecture, AGENTS.md, prompt/registry docs, or docs/superpowers) OR a task titled "Record no-docs-needed attestation" with the reason this change has no user-facing, coworker-facing, public-site, install/ops, architecture/contributor, route-map, or external-agent impact. Documentation tasks run after implementation and before final QA.
 
 STEP 2: Call reviewBuildPlan to review it.
   - If the review PASSES: proceed to step 3.
@@ -337,9 +337,9 @@ CONTEXT GATHERING (before writing any code):
 After ALL tasks complete:
 1. Run full verification (run_sandbox_tests + typecheck).
 2. Run run_sandbox_command with "git diff" to see all changes.
-3. Confirm documentation impact was handled: either the planned documentation-specialist task updated the correct docs surface, or the diff/notes include a concrete no-docs-needed reason. If docs are stale, update them or report that blocker before saying the build is ready.
+3. Confirm documentation impact was handled: docs updated, or diff/notes include a concrete no-docs-needed reason; if docs are stale, update them or report that blocker before saying the build is ready.
 4. Save verification output via saveBuildEvidence field "verificationOut".
-5. If verification passes and documentation impact is handled, tell the user the build is complete and ready for review.
+5. If verification passes and docs impact is handled, tell the user the build is complete and ready for review.
 
 FALLBACK: ONLY use propose_file_change if launch_sandbox explicitly returns "Docker unavailable" or "sandbox failed to start". Command errors inside the sandbox (failed migrations, compilation errors, test failures) are NORMAL build problems — fix them in the sandbox using sandbox_exec and run_sandbox_command. A command returning an error does NOT mean the sandbox is unavailable.
 
@@ -385,13 +385,12 @@ RELEASE GATE CHECKS (all must pass before shipping):
 
 1. Run the sandbox verification check: call run_sandbox_tests. Typecheck MUST be clean before ship. The wider unit-test surface is currently informational — summarize likely build-specific failures if they appear, but do NOT block ship solely because unrelated suite failures still exist while typecheck is clean.
 2. Confirm live UX verification status from the build record. If UX verification has not run yet or failed, direct the user to use the Studio Control action in Build Studio to run it, then wait for that evidence before shipping. If uxVerificationStatus is "complete" or "skipped", reuse that evidence.
-3. Check documentation evidence. The build must include either updated docs for user-facing/coworker-facing/public/install/ops/architecture/external-agent impact OR a concrete no-docs-needed attestation. If neither exists, return to build to add it before shipping.
+3. Check documentation evidence: updated docs for user-facing/coworker-facing/public/install/ops/architecture/external-agent impact OR a concrete no-docs-needed attestation. If neither exists, return to build before shipping.
 4. Evaluate each acceptance criterion from the design document. Call saveBuildEvidence with field "acceptanceMet" containing an array of {criterion, met: true/false, evidence: "explanation"}.
 5. Check deployment readiness: call check_deployment_windows to see if a deployment window is available.
 6. Present a PLAIN LANGUAGE summary to the user:
    - "Release gate checks complete: typecheck is clean, UX verification is complete, and all acceptance criteria are met."
-   - Include documentation status: "Documentation updated" or "No documentation update needed: [reason]".
-   - Include deployment window status: "A deployment window is available now" or "Next window: [time]".
+   - Include documentation status ("Documentation updated" or "No documentation update needed: [reason]") and deployment window status ("A deployment window is available now" or "Next window: [time]").
    - If UX verification failed: "I found [N] UX or accessibility issues that need fixing. Going back to build to address them."
 7. If everything passes, ask: "Ready to ship?"
    - If ship → advance to ship phase
@@ -623,9 +622,8 @@ Do NOT generate acceptance-criteria evaluation entries — chores don't have use
 Keep responses short.`,
 };
 
-// Doc prompts — content edits. No sandbox boot in spirit; the verification
-// still typechecks anything that imports embedded code samples, but UX
-// verification and acceptance-criteria evaluation are skipped.
+// Doc prompts — content edits. No sandbox boot in spirit; verification still typechecks
+// embedded code samples, but UX verification and acceptance-criteria evaluation are skipped.
 const PHASE_PROMPTS_DOC: Record<string, string> = {
   ideate: `This build is a DOC gap. There is no feature to design — advance to plan immediately.
 
@@ -678,8 +676,8 @@ const PHASE_PROMPTS_BY_VARIANT: Record<string, Record<string, string>> = {
 };
 
 /**
- * Resolve the phase prompt for a build. Generalizes the previous
- * (phase, kind) selector to consult the right-sizing matrix:
+ * Resolve the phase prompt for a build. Generalizes the previous (phase, kind)
+ * selector to consult the right-sizing matrix:
  *
  *   1. getProcessPolicy(kind, size) yields a LifecyclePolicy.
  *   2. If `phase` is not in policy.phases, the prompt is empty
@@ -703,9 +701,8 @@ export async function getBuildPhasePrompt(
   const { getProcessPolicy, normalizeType, normalizeSize } = await import("@/lib/explore/build-process-matrix");
   const policy = getProcessPolicy(normalizeType(kind), normalizeSize(size));
 
-  // Phase not in this policy's visible set → empty prompt (skip). Terminal
-  // phases ("complete", "failed") were always empty; this keeps them so for
-  // every variant.
+  // Phase not in this policy's visible set → empty prompt (skip). Terminal phases
+  // ("complete", "failed") were always empty; this keeps them so for every variant.
   if (!policy.phases.includes(phase)) return "";
 
   const variant = policy.promptVariant;
@@ -732,10 +729,9 @@ export type BuildContext = {
   phase: BuildPhase;
   /** Work kind. Absent/null is treated as "feature". */
   kind?: FeatureBuildKind | null;
-  /** Right-sizing process size, drawn from the originating BI's effortSize
-   *  and persisted at promote time in plan.processSize. Absent/null is
-   *  treated as "medium" — the default policy cell, byte-identical to
-   *  pre-matrix behavior. */
+  /** Right-sizing process size from the originating BI effortSize, persisted at
+   *  promote time in plan.processSize. Absent/null is treated as "medium" — the
+   *  default policy cell, byte-identical to pre-matrix behavior. */
   size?: import("@/lib/feature-build-types").BuildProcessSize | null;
   title: string;
   brief: FeatureBrief | null;
@@ -974,7 +970,6 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
     lines.push(JSON.stringify(ctx.plan, null, 2).slice(0, 4000));
   }
 
-  // Design intelligence: inject pre-generated design system if available.
   // This is a pure-data recommendation (no LLM call) — works at any model tier.
   if (ctx.designSystem) {
     lines.push("");
@@ -1033,7 +1028,7 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
   lines.push("");
   lines.push(await getBuildPhasePrompt(ctx.phase, ctx.kind ?? "feature", ctx.size ?? "medium"));
 
-  // Contribution mode awareness for all phases — agent should know this for design decisions
+  // Contribution mode awareness for all phases.
   if (ctx.contributionMode) {
     lines.push("");
     if (ctx.phase === "ideate" || ctx.phase === "plan") {
@@ -1049,7 +1044,6 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
     }
   }
 
-  // Inject IT4IT value stream context for governance alignment
   const it4itContext = getIT4ITContext(ctx.phase);
   if (it4itContext) {
     lines.push(it4itContext);
