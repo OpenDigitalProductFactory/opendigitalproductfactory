@@ -3,7 +3,7 @@
 Backlog item: BI-E99E15E1
 Epic: EP-5560770F
 Date: 2026-07-04
-Status: implemented pending full gate
+Status: implemented; PR blocked by baseline production-build failure
 
 ## Context
 
@@ -93,16 +93,29 @@ Verification:
 
 ## Current Verification Evidence
 
-- Passed: `apps/web/lib/integrate/task-dependency-graph.test.ts` via Vitest,
-  14 tests passed. The source-only worktree reused the root clone's already
-  installed dependency tree because worktree dependency convergence is blocked.
+- Passed in governed `local-integration-ci` sandbox lease `NPEL-0D72412D7B`:
+  `pnpm --filter web exec vitest run lib/integrate/task-dependency-graph.test.ts
+  lib/integrate/opencode-dispatch.test.ts
+  lib/integrate/build-agent-prompts.test.ts`, 3 test files and 84 tests passed
+  on branch head `3bd51ca`.
 - Passed: `git diff --check`.
 - Passed: stale Build Studio wording sweep; the only remaining "one of four"
   hit is the unrelated Decision Perspective outcomes page.
-- Blocked: `pnpm --filter web exec vitest run ...` and `pnpm --filter web
-  build` fail before test/build execution because pnpm rejects the current
-  lockfile under the minimum-release-age policy. Filed `BI-C98D003B` for the
-  dependency/bootstrap blocker.
+- Sandbox dependency convergence: the shared sandbox virtual store was stale
+  (`node_modules/.pnpm/lock.yaml` still referenced Expo 55.0.26 while the
+  checked-in lockfile references 55.0.27). The stale generated virtual-store
+  lock was moved aside inside the sandbox only, then `pnpm install
+  --frozen-lockfile` completed from the checked-in lockfile. No source worktree
+  dependency install was performed.
+- Production build evidence: `pnpm --filter web build` on this branch passed
+  compilation and TypeScript, then failed during static generation of
+  `/_global-error` with `TypeError: Cannot read properties of null (reading
+  'useContext')`, digest `4258984587`.
+- Baseline comparison: the same sandbox was switched to `origin/main` at
+  `505a716`; `pnpm --filter web build` produced the same `/_global-error`
+  prerender failure after TypeScript completed. Filed `BI-830C24B6` for the
+  mainline build blocker. This branch is pushed but not PR-ready until that
+  baseline gate is green or merge policy explicitly allows the blocker.
 
 ## Risks
 
