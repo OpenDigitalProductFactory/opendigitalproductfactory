@@ -110,3 +110,106 @@ test("enumerates ALL blockers at once (no early-out)", () => {
   assert.equal(r.ready, false);
   assert.equal(r.blockers.length, 4); // conflict + failing + pending + unresolved
 });
+
+// ── Local-CI sandbox evidence guard (BI-C74F4DE9) ────────────────────────────
+
+import { evaluatePrHealth as evalPr, parseLocalCiAttestation, isDocsOnlyFileSet } from "./pr-health.mjs";
+
+const HEAD = "abc123def456abc123def456abc123def456abc1";
+
+test("parseLocalCiAttestation matches Evidence and Override trailers", () => {
+  assert.deepEqual(parseLocalCiAttestation("Body\n\nLocal-CI-Evidence: EXT-42 (feat/x@abc)"), {
+    kind: "evidence",
+    value: "EXT-42 (feat/x@abc)",
+  });
+  assert.deepEqual(parseLocalCiAttestation("Local-CI-Override: docs-adjacent config only"), {
+    kind: "override",
+    value: "docs-adjacent config only",
+  });
+  assert.equal(parseLocalCiAttestation("No trailer here"), null);
+  assert.equal(parseLocalCiAttestation(""), null);
+  assert.equal(parseLocalCiAttestation(null), null);
+});
+
+test("isDocsOnlyFileSet — docs/memory/*.md only counts, empty set does not", () => {
+  assert.equal(isDocsOnlyFileSet([{ path: "docs/a.md" }, { path: "AGENTS.md" }, { path: "memory/x.md" }]), true);
+  assert.equal(isDocsOnlyFileSet([{ path: "docs/a.md" }, { path: "apps/web/lib/x.ts" }]), false);
+  assert.equal(isDocsOnlyFileSet([]), false);
+  assert.equal(isDocsOnlyFileSet(undefined), false);
+});
+
+test("localCi: passing gate record for the head SHA is a note, ready", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: { headSha: HEAD, docsOnly: false, attestation: null, stateRecord: { branch: "feat/x", sha: HEAD, gatePassed: true } },
+  });
+  assert.equal(r.ready, true);
+  assert.match(r.notes.join("\n"), /local-CI sandbox gate passed/);
+});
+
+test("localCi: no evidence and no attestation blocks", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: { headSha: HEAD, docsOnly: false, attestation: null, stateRecord: null },
+  });
+  assert.equal(r.ready, false);
+  assert.match(r.blockers.join("\n"), /no local-CI sandbox evidence/);
+});
+
+test("localCi: stale gate record (different SHA) without attestation blocks", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: { headSha: HEAD, docsOnly: false, attestation: null, stateRecord: { branch: "feat/x", sha: "older000", gatePassed: true } },
+  });
+  assert.equal(r.ready, false);
+  assert.match(r.blockers.join("\n"), /no local-CI sandbox evidence/);
+});
+
+test("localCi: recorded push-time override (skip + reason) is an attested note, ready", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD,
+      docsOnly: false,
+      attestation: null,
+      stateRecord: { branch: "feat/x", sha: HEAD, gatePassed: false, skipped: true, skipReason: "verified-clean revert" },
+    },
+  });
+  assert.equal(r.ready, true);
+  assert.match(r.notes.join("\n"), /overridden at push time.*verified-clean revert/);
+});
+
+test("localCi: PR-body attestation carries the verdict for remote PRs, ready", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: { headSha: HEAD, docsOnly: false, attestation: { kind: "override", value: "hotfix, operator-approved" }, stateRecord: null },
+  });
+  assert.equal(r.ready, true);
+  assert.match(r.notes.join("\n"), /attestation in PR body/);
+});
+
+test("localCi: docs-only PR needs no gate, ready", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: { headSha: HEAD, docsOnly: true, attestation: null, stateRecord: null },
+  });
+  assert.equal(r.ready, true);
+  assert.match(r.notes.join("\n"), /docs-only/);
+});
+
+test("localCi omitted (null) leaves legacy behavior untouched", () => {
+  const r = evalPr({ meta: okMeta, checks: [pass("Typecheck")], threads: [], localCi: null });
+  assert.equal(r.ready, true);
+});

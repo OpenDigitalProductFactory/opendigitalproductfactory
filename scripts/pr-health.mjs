@@ -30,12 +30,32 @@
 // scripts/pr-health.test.mjs); the rest is GitHub I/O via the `gh` CLI.
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // `gh pr checks --json` normalizes every check into a `bucket`:
 //   pass | fail | pending | skipping | cancel
 const FAILING_BUCKETS = new Set(["fail", "cancel"]);
 const PENDING_BUCKETS = new Set(["pending"]);
+
+// PR-body attestation trailers for the local-CI sandbox gate (BI-C74F4DE9).
+// `Local-CI-Evidence:` carries an evidence record id from a passing
+// `pnpm run pregate` run; `Local-CI-Override:` is an explicit operator
+// attestation that the sandbox gate was consciously skipped and why.
+const LOCAL_CI_TRAILER_RE = /^\s*Local-CI-(Evidence|Override):\s*(\S.*)$/m;
+
+export function parseLocalCiAttestation(prBody) {
+  const match = LOCAL_CI_TRAILER_RE.exec(prBody || "");
+  if (!match) return null;
+  return { kind: match[1].toLowerCase(), value: match[2].trim() };
+}
+
+const DOCS_ONLY_RE = /^docs\/|^memory\/|\.md$/;
+
+export function isDocsOnlyFileSet(files) {
+  if (!Array.isArray(files) || files.length === 0) return false;
+  return files.every((f) => DOCS_ONLY_RE.test(typeof f === "string" ? f : f?.path ?? ""));
+}
 
 /**
  * Decide whether a PR is merge-ready from its raw GitHub state. Pure + total.
@@ -45,11 +65,18 @@ const PENDING_BUCKETS = new Set(["pending"]);
  *           mergeStateStatus?: string, isDraft?: boolean },
  *   checks: Array<{ name: string, bucket?: string, state?: string }>,
  *   threads: Array<{ isResolved: boolean, path?: string, line?: number }>,
+ *   localCi?: {
+ *     headSha?: string,
+ *     docsOnly?: boolean,
+ *     attestation?: { kind: string, value: string } | null,
+ *     stateRecord?: { branch?: string, sha?: string, gatePassed?: boolean,
+ *                     skipped?: boolean, skipReason?: string } | null,
+ *   } | null,
  * }} input
  * @returns {{ ready: boolean, blockers: string[], notes: string[],
  *             counts: { checksTotal: number, failing: number, pending: number, unresolvedThreads: number } }}
  */
-export function evaluatePrHealth({ meta = {}, checks = [], threads = [] } = {}) {
+export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi = null } = {}) {
   const blockers = [];
   const notes = [];
 
@@ -84,6 +111,31 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [] } = {}) 
         `${unresolved.map((t) => `${t.path ?? "?"}:${t.line ?? "?"}`).join(", ")} — ` +
         "address and resolve each conversation (the repo requires conversation resolution)",
     );
+  }
+
+  // Local-CI sandbox evidence (BI-C74F4DE9): a runtime-code PR must carry a
+  // passing local-integration-ci gate for its head SHA, a recorded pre-push
+  // override, or an explicit PR-body attestation. "No evidence and no
+  // attestation" is the exact state that shipped unverified branches.
+  if (localCi) {
+    const rec = localCi.stateRecord;
+    const recMatchesHead = rec && localCi.headSha && rec.sha === localCi.headSha;
+    if (localCi.docsOnly) {
+      notes.push("local-CI gate not required — docs-only change set");
+    } else if (recMatchesHead && rec.gatePassed === true) {
+      notes.push(`local-CI sandbox gate passed for head ${localCi.headSha.slice(0, 12)}`);
+    } else if (recMatchesHead && rec.skipped && rec.skipReason) {
+      notes.push(`local-CI gate overridden at push time (recorded): ${rec.skipReason}`);
+    } else if (localCi.attestation) {
+      notes.push(`local-CI ${localCi.attestation.kind} attestation in PR body: ${localCi.attestation.value}`);
+    } else {
+      blockers.push(
+        "no local-CI sandbox evidence for the PR head SHA — run `pnpm run pregate` from the " +
+          "branch worktree (claims the local-integration-ci lease, runs the checked-in runner, " +
+          "records evidence), or add an explicit `Local-CI-Override: <reason>` / " +
+          "`Local-CI-Evidence: <record-id>` trailer to the PR body",
+      );
+    }
   }
 
   // mergeStateStatus is context, not a hard blocker on its own — the concrete
@@ -135,7 +187,7 @@ function fetchPrState(prArg) {
   }
 
   const meta = JSON.parse(
-    gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft"]),
+    gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft,headRefOid,body,files"]),
   );
 
   let checks = [];
@@ -174,7 +226,26 @@ function fetchPrState(prArg) {
     /* threads unavailable (permissions / API) — report what we can */
   }
 
-  return { meta, checks, threads };
+  // Local-CI sandbox evidence inputs (BI-C74F4DE9). The git-local gate record
+  // only proves anything when pr:health runs from the branch's own worktree;
+  // for remote PRs the PR-body attestation trailer is the portable signal.
+  let stateRecord = null;
+  try {
+    const stateFile = execFileSync("git", ["rev-parse", "--git-path", "dpf-local-ci-gate.json"], {
+      encoding: "utf8",
+    }).trim();
+    stateRecord = JSON.parse(readFileSync(stateFile, "utf8"));
+  } catch {
+    /* no local gate record — attestation/docs-only carry the verdict */
+  }
+  const localCi = {
+    headSha: meta.headRefOid,
+    docsOnly: isDocsOnlyFileSet(meta.files),
+    attestation: parseLocalCiAttestation(meta.body),
+    stateRecord,
+  };
+
+  return { meta, checks, threads, localCi };
 }
 
 function main() {
