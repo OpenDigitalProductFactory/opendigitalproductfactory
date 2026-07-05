@@ -10,7 +10,10 @@ export type LocalIntegrationResultInput = {
   taskRunId?: string;
   candidateBranch: string;
   mode: "single-branch" | "sibling-set" | "post-merge-main";
-  status: "passed" | "failed" | "conflict";
+  // "blocked_sandbox_drift": the shared sandbox's installed dependency graph
+  // did not match the lockfile (or was mid-install), so the gate refused to
+  // produce product evidence. A sandbox defect, not a product failure (BI-ECDF9520).
+  status: "passed" | "failed" | "conflict" | "blocked_sandbox_drift";
   summary: string;
   evidence: Prisma.InputJsonValue;
 };

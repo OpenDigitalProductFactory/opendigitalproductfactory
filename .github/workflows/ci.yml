@@ -477,7 +477,10 @@ jobs:
     runs-on: ubuntu-latest
     # BI-DBF3F426. Gates the runtime-artifact janitor's pure decision library +
     # CLI flag contract: the staleness threshold, the never-touch-root /
-    # never-touch-live-worktree safety guards, and dry-run-vs-apply. These node
+    # never-touch-live-worktree safety guards, and dry-run-vs-apply. Also gates
+    # the sandbox-freshness drift detector + gate-worktree contract
+    # (BI-ECDF9520): a stale shared-sandbox install must classify as
+    # SANDBOX_DRIFT, never as product build evidence. These node
     # --test files have no daemon/docker dependency (pure logic), so they run on
     # a bare runner. See scripts/lib/runtime-artifact-janitor.mjs.
     steps:
@@ -492,7 +495,10 @@ jobs:
             scripts/lib/runtime-artifact-janitor.test.mjs \
             scripts/runtime-artifact-janitor.cli.test.mjs \
             scripts/lib/junction-safe-worktree-remove.test.mjs \
-            scripts/lib/compose-safety.test.mjs
+            scripts/lib/compose-safety.test.mjs \
+            scripts/lib/sandbox-freshness.test.mjs \
+            scripts/sandbox-freshness-preflight.test.mjs \
+            tests/release/local-ci-gate-contract.test.mjs
       - name: Smoke --help (must exit 0, no docker required)
         run: node scripts/runtime-artifact-janitor.mjs --help > /dev/null
 

@@ -1,0 +1,266 @@
+// Sandbox dependency-freshness detector (BI-ECDF9520).
+//
+// The shared local-integration-ci sandbox runs `git checkout/merge` and then
+// builds — but nothing guaranteed that node_modules matched the merged
+// pnpm-lock.yaml. A stale workspace link (apps/web/node_modules/next ->
+// .pnpm/next@16.2.7/... while the lockfile required 16.2.9) produced a false
+// "main is red" production-build failure and blocked unrelated branches.
+//
+// This module is the pure decision core: parse locked versions out of a pnpm
+// lockfile, compare them against what the workspace links actually resolve to
+// on disk, detect concurrent/hung installs, and classify the gate outcome so
+// a red sandbox is reported as SANDBOX_DRIFT — never as product evidence.
+// Filesystem/process collection lives in scripts/sandbox-freshness-preflight.mjs.
+
+/**
+ * Packages whose on-disk resolution must match the lockfile before any build
+ * evidence is trustworthy. `importers` lists the workspace dirs (relative to
+ * repo root) whose node_modules link is checked, in priority order; the locked
+ * version comes from the same importer section of pnpm-lock.yaml. "." is the
+ * repo root importer.
+ */
+export const CRITICAL_PACKAGES = [
+  { name: "next", importers: ["apps/web"] },
+  { name: "react", importers: ["apps/web"] },
+  { name: "react-dom", importers: ["apps/web"] },
+  { name: "typescript", importers: ["apps/web", "."] },
+  { name: "prisma", importers: ["packages/db", "."] },
+];
+
+/** Strip a pnpm peer-dependency suffix: "16.2.9(@babel/core@7.29.7)(...)" -> "16.2.9". */
+export function baseVersion(lockVersion) {
+  if (typeof lockVersion !== "string") return "";
+  const parenIndex = lockVersion.indexOf("(");
+  return (parenIndex >= 0 ? lockVersion.slice(0, parenIndex) : lockVersion).trim();
+}
+
+/**
+ * Parse the resolved version of `packageName` for one importer out of a pnpm
+ * v9 lockfile's `importers:` section. Returns "" when not found. Pure text
+ * parsing on purpose: no YAML dependency, and the two lockfiles we compare
+ * (checked-in pnpm-lock.yaml and node_modules/.pnpm/lock.yaml) share this shape.
+ */
+export function parseLockedVersion(lockfileText, importerPath, packageName) {
+  if (!lockfileText) return "";
+  const lines = lockfileText.split("\n");
+  let inImporters = false;
+  let inTargetImporter = false;
+  let packageIndent = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (/^importers:\s*$/.test(line)) {
+      inImporters = true;
+      continue;
+    }
+    if (inImporters && /^\S/.test(line)) {
+      // Left the importers block (e.g. hit top-level `packages:`).
+      break;
+    }
+    if (!inImporters) continue;
+    const importerMatch = line.match(/^  (\S[^:]*):\s*$/);
+    if (importerMatch) {
+      inTargetImporter = importerMatch[1] === importerPath;
+      continue;
+    }
+    if (!inTargetImporter) continue;
+    // Package entries sit under dependencies:/devDependencies: at a deeper
+    // indent than the importer header; match by name then read `version:`.
+    const packageMatch = line.match(/^(\s+)(\S[^:]*):\s*$/);
+    if (packageMatch && packageMatch[2] === packageName && packageMatch[1].length >= 4) {
+      packageIndent = packageMatch[1].length;
+      continue;
+    }
+    if (packageIndent >= 0) {
+      const versionMatch = line.match(/^(\s+)version:\s*(.+?)\s*$/);
+      if (versionMatch && versionMatch[1].length > packageIndent) {
+        return baseVersion(versionMatch[2].replace(/^['"]|['"]$/g, ""));
+      }
+      // Any line at or above the package's indent means we left its block.
+      const indent = (line.match(/^(\s*)/)[1] || "").length;
+      if (line.trim() && indent <= packageIndent) packageIndent = -1;
+    }
+  }
+  return "";
+}
+
+/**
+ * Parse `ps -axo pid=,etime=,command=` style lines and return pnpm install
+ * processes. `selfPids` excludes this process tree (a preflight-owned
+ * convergence install must not flag itself).
+ */
+export function detectInstallProcesses(psText, { selfPids = [] } = {}) {
+  const excluded = new Set(selfPids.map(Number));
+  const processes = [];
+  for (const raw of String(psText ?? "").split("\n")) {
+    const line = raw.trim();
+    const match = line.match(/^(\d+)\s+(\S+)\s+(.*)$/);
+    if (!match) continue;
+    const [, pidText, etime, command] = match;
+    const pid = Number(pidText);
+    if (excluded.has(pid)) continue;
+    if (!isPnpmInstallCommand(command)) continue;
+    processes.push({ pid, etime, etimeMinutes: parseEtimeMinutes(etime), command });
+  }
+  return processes;
+}
+
+/**
+ * True when a ps command line is a pnpm install (or `pnpm i` alias). Matching
+ * is token-based so `pnpm exec vitest run -i` or paths containing "install"
+ * do not false-positive.
+ */
+export function isPnpmInstallCommand(command) {
+  const tokens = String(command ?? "").split(/\s+/).filter(Boolean);
+  const pnpmIndex = tokens.findIndex((token) => /(^|\/)pnpm(\.c?js)?$/.test(token));
+  if (pnpmIndex < 0) return false;
+  const rest = tokens.slice(pnpmIndex + 1);
+  if (rest[0] === "i") return true;
+  // `install` as its own token anywhere after pnpm covers `pnpm install`,
+  // `pnpm --filter web install`, `pnpm -r install` — but not `run install:x`
+  // or `exec something install` (subcommand context changes at exec/run/dlx).
+  for (const token of rest) {
+    if (token === "exec" || token === "run" || token === "dlx") return false;
+    if (token === "install") return true;
+  }
+  return false;
+}
+
+/** "[[dd-]hh:]mm:ss" -> whole minutes (best effort; unknown -> 0). */
+export function parseEtimeMinutes(etime) {
+  if (typeof etime !== "string") return 0;
+  const dayMatch = etime.match(/^(\d+)-(.+)$/);
+  let days = 0;
+  let rest = etime;
+  if (dayMatch) {
+    days = Number(dayMatch[1]);
+    rest = dayMatch[2];
+  }
+  const parts = rest.split(":").map(Number);
+  if (parts.some(Number.isNaN)) return 0;
+  let minutes = 0;
+  if (parts.length === 3) minutes = parts[0] * 60 + parts[1];
+  else if (parts.length === 2) minutes = parts[0];
+  return days * 24 * 60 + minutes;
+}
+
+/**
+ * Evaluate a collected sandbox state into a freshness verdict.
+ *
+ * state = {
+ *   requestedBranch?, actualBranch?, requestedSha?, actualSha?,
+ *   nodeModulesPresent: boolean,
+ *   installedLockPresent: boolean,
+ *   packages: [{ name, importer, lockedVersion, installedLockVersion, resolvedVersion, linkTarget, missing }],
+ *   installProcesses: [{ pid, etime, etimeMinutes, command }],
+ * }
+ *
+ * Verdicts:
+ *  - "green": build evidence from this sandbox is trustworthy.
+ *  - "sandbox_drift": on-disk dependency state contradicts the lockfile.
+ *  - "sandbox_not_ready": no install yet / an install is still running —
+ *    the sandbox cannot produce evidence either way.
+ */
+export function evaluateFreshness(state) {
+  const failures = [];
+
+  if (state.requestedBranch && state.actualBranch && state.actualBranch !== state.requestedBranch) {
+    failures.push({
+      kind: "checkout_mismatch",
+      message: `checkout is on '${state.actualBranch}' but the gate requested '${state.requestedBranch}'`,
+    });
+  }
+  if (state.requestedSha && state.actualSha && !state.actualSha.startsWith(state.requestedSha) && !state.requestedSha.startsWith(state.actualSha)) {
+    failures.push({
+      kind: "checkout_mismatch",
+      message: `checkout is at ${state.actualSha} but the gate requested ${state.requestedSha}`,
+    });
+  }
+
+  if (Array.isArray(state.installProcesses) && state.installProcesses.length > 0) {
+    for (const proc of state.installProcesses) {
+      failures.push({
+        kind: "install_in_progress",
+        message: `pnpm install already running (pid ${proc.pid}, elapsed ${proc.etime}); refusing to build or start a duplicate install`,
+      });
+    }
+  }
+
+  if (!state.nodeModulesPresent) {
+    failures.push({ kind: "not_installed", message: "node_modules is missing; sandbox has no installed dependency graph" });
+  } else if (!state.installedLockPresent) {
+    failures.push({ kind: "not_installed", message: "node_modules/.pnpm/lock.yaml is missing; cannot prove the installed graph matches pnpm-lock.yaml" });
+  }
+
+  for (const pkg of state.packages ?? []) {
+    if (!pkg.lockedVersion) {
+      failures.push({ kind: "lockfile_unparseable", package: pkg.name, message: `could not determine locked version for ${pkg.name} (importer ${pkg.importer}) from pnpm-lock.yaml` });
+      continue;
+    }
+    if (pkg.missing) {
+      failures.push({ kind: "package_missing", package: pkg.name, message: `${pkg.importer}/node_modules/${pkg.name} does not resolve; lockfile requires ${pkg.lockedVersion}` });
+      continue;
+    }
+    if (pkg.installedLockVersion && pkg.installedLockVersion !== pkg.lockedVersion) {
+      failures.push({
+        kind: "installed_lock_stale",
+        package: pkg.name,
+        message: `node_modules/.pnpm/lock.yaml resolved ${pkg.name}@${pkg.installedLockVersion} but pnpm-lock.yaml requires ${pkg.lockedVersion} (install ran against an older lockfile)`,
+      });
+    }
+    if (pkg.resolvedVersion && pkg.resolvedVersion !== pkg.lockedVersion) {
+      failures.push({
+        kind: "version_drift",
+        package: pkg.name,
+        message: `${pkg.importer}/node_modules/${pkg.name} resolves to ${pkg.resolvedVersion}${pkg.linkTarget ? ` (link -> ${pkg.linkTarget})` : ""} but pnpm-lock.yaml requires ${pkg.lockedVersion}`,
+      });
+    }
+  }
+
+  let verdict = "green";
+  if (failures.some((f) => f.kind === "install_in_progress" || f.kind === "not_installed")) {
+    verdict = "sandbox_not_ready";
+  } else if (failures.length > 0) {
+    verdict = "sandbox_drift";
+  }
+  return { verdict, failures };
+}
+
+/** Exit codes for the preflight CLI — deliberately distinct from a product build failure (1). */
+export const EXIT_GREEN = 0;
+export const EXIT_USAGE = 2;
+export const EXIT_SANDBOX_DRIFT = 3;
+export const EXIT_SANDBOX_NOT_READY = 4;
+
+export function exitCodeForVerdict(verdict) {
+  if (verdict === "green") return EXIT_GREEN;
+  if (verdict === "sandbox_not_ready") return EXIT_SANDBOX_NOT_READY;
+  return EXIT_SANDBOX_DRIFT;
+}
+
+/**
+ * Classify a gate run so a red sandbox can never be recorded as product
+ * evidence. `freshnessVerdict` is the verdict that applied when the product
+ * command ran (or the preflight verdict when the product command never ran).
+ */
+export function classifyGateOutcome({ freshnessVerdict, gateExitCode }) {
+  if (freshnessVerdict && freshnessVerdict !== "green") {
+    return {
+      status: "blocked_sandbox_drift",
+      gatePassed: false,
+      productEvidence: false,
+      summary: "local-CI gate blocked: sandbox dependency state is stale or not ready. This is a sandbox defect, NOT product build evidence. Run the governed convergence path and re-gate.",
+    };
+  }
+  if (gateExitCode === EXIT_SANDBOX_DRIFT || gateExitCode === EXIT_SANDBOX_NOT_READY) {
+    return {
+      status: "blocked_sandbox_drift",
+      gatePassed: false,
+      productEvidence: false,
+      summary: "local-CI gate blocked: freshness preflight reported sandbox drift. This is a sandbox defect, NOT product build evidence.",
+    };
+  }
+  if (gateExitCode === 0) {
+    return { status: "passed", gatePassed: true, productEvidence: true, summary: "local-CI lease gate passed." };
+  }
+  return { status: "failed", gatePassed: false, productEvidence: true, summary: "local-CI lease gate failed." };
+}

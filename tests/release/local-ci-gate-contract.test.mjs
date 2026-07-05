@@ -79,6 +79,85 @@ test("gate-worktree.sh refuses to record passing stub evidence by default", () =
   assert.match(result.stderr, /refusing to record passing stub evidence/);
 });
 
+test("gate-worktree.sh records blocked_sandbox_drift (exit 3), not a product failure, when the freshness report is red", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-gate-"));
+  const callsFile = join(temp, "calls.ndjson");
+  const gitStub = join(temp, "git");
+  const curlStub = join(temp, "curl");
+
+  // Per-name --git-path so the freshness report and the gate state file get
+  // distinct paths, like real git.
+  writeFileSync(gitStub, `#!/bin/sh
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
+  echo "${temp}/$3"
+  exit 0
+fi
+if [ "$1" = "push" ]; then
+  exit 0
+fi
+echo "unexpected git call: $*" >&2
+exit 1
+`);
+  writeFileSync(curlStub, `#!/bin/sh
+data=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --data) data="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%s\\n' "$data" >> "${callsFile}"
+printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"STUB\\"}"}]}}'
+`);
+  chmodSync(gitStub, 0o755);
+  chmodSync(curlStub, 0o755);
+
+  // A drift report as the preflight would leave it: stale next link vs lockfile.
+  writeFileSync(join(temp, "dpf-sandbox-freshness.json"), JSON.stringify({
+    schema: "dpf-sandbox-freshness/v1",
+    verdict: "sandbox_drift",
+    failures: [{ kind: "version_drift", message: "apps/web/node_modules/next resolves to 16.2.7 but pnpm-lock.yaml requires 16.2.9" }],
+    packages: [{ name: "next", lockedVersion: "16.2.9", resolvedVersion: "16.2.7" }],
+    convergence: { attempted: true, command: "pnpm install --frozen-lockfile", exitCode: 1 },
+  }));
+
+  const result = runGate([
+    "--branch",
+    "feat/local-ci-sandbox",
+    "--sha",
+    "abc123",
+    "--worktree",
+    temp,
+    "--no-push",
+  ], {
+    env: {
+      ...process.env,
+      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_LOCAL_CI_COMMAND: "exit 3",
+      DPF_GATE_GIT_BIN: gitStub,
+      DPF_GATE_CURL_BIN: curlStub,
+    },
+  });
+
+  assert.equal(result.status, 3, `expected sandbox-drift exit 3, got ${result.status}\n${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /BLOCKED \(sandbox drift\)/);
+  assert.match(result.stderr, /not product build evidence/);
+
+  const calls = readFileSync(callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+  const evidenceCall = calls.find((call) => call.params.name === "record_local_integration_result");
+  assert.ok(evidenceCall, "expected evidence to be recorded");
+  assert.equal(evidenceCall.params.arguments.status, "blocked_sandbox_drift");
+  assert.match(evidenceCall.params.arguments.summary, /NOT product build evidence/);
+  assert.equal(evidenceCall.params.arguments.evidence.freshness.verdict, "sandbox_drift");
+  assert.equal(evidenceCall.params.arguments.evidence.gatePassed, false);
+  const nextEntry = evidenceCall.params.arguments.evidence.freshness.packages.find((p) => p.name === "next");
+  assert.deepEqual(nextEntry, { name: "next", locked: "16.2.9", resolved: "16.2.7" });
+
+  const state = JSON.parse(readFileSync(join(temp, "dpf-local-ci-gate.json"), "utf8"));
+  assert.equal(state.gatePassed, false);
+  assert.equal(state.status, "blocked_sandbox_drift");
+});
+
 test("gate-worktree.sh calls claim_nonprod_environment_lease before recording evidence when stub is explicitly allowed", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-gate-"));
   const callsFile = join(temp, "calls.ndjson");

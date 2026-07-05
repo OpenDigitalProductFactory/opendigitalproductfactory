@@ -43,4 +43,30 @@ describe("recordLocalIntegrationResult", () => {
       },
     });
   });
+
+  it("records blocked_sandbox_drift with freshness evidence (a sandbox defect, not a product failure)", async () => {
+    await recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "claude",
+      externalSessionId: "gate-42",
+      routeContext: "/build",
+      candidateBranch: "doc/some-branch",
+      mode: "single-branch",
+      status: "blocked_sandbox_drift",
+      summary: "local-CI gate blocked: sandbox dependency state is stale. NOT product build evidence.",
+      evidence: {
+        freshness: {
+          verdict: "sandbox_drift",
+          packages: [{ name: "next", locked: "16.2.9", resolved: "16.2.7" }],
+        },
+      },
+    });
+
+    expect(mockRecordExternalEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationType: "local_integration_ci",
+        details: expect.objectContaining({ status: "blocked_sandbox_drift" }),
+      }),
+    );
+  });
 });
