@@ -19,6 +19,20 @@ COPY packages/db/package.json ./packages/db/
 COPY packages/db/prisma/schema.prisma ./packages/db/prisma/
 COPY packages/db/prisma.config.ts ./packages/db/
 COPY packages/db/src/load-env.ts ./packages/db/src/
+# EVERY workspace importer that later stages COPY into the image must have its
+# manifest here, so this cached layer fetches its deps into the pnpm store.
+# Otherwise the stage-3/4 `pnpm install` (re-run on every source change) fetches
+# the missing packages from the registry on EVERY build, and a single transient
+# registry failure fails the whole self-upgrade (SUR-73668D5C: 6-minute retry
+# on smol-toml, the one dep unique to packages/dpf-bootstrap).
+COPY packages/api-client/package.json ./packages/api-client/
+COPY packages/coworker-sim-harness/package.json ./packages/coworker-sim-harness/
+COPY packages/dpf-bootstrap/package.json ./packages/dpf-bootstrap/
+COPY packages/finance-templates/package.json ./packages/finance-templates/
+COPY packages/integration-shared/package.json ./packages/integration-shared/
+COPY packages/storefront-templates/package.json ./packages/storefront-templates/
+COPY packages/types/package.json ./packages/types/
+COPY packages/validators/package.json ./packages/validators/
 RUN pnpm install --frozen-lockfile
 
 # ─── Stage 3: build ───────────────────────────────────────────────────────────

@@ -27,6 +27,14 @@ export type BuildFailureClass =
   // server bundle and colliding chunks. The specific cause behind many of the
   // duplicate-asset symptoms; fixed by a lazy import boundary (see PR #1555).
   | "bundle-boundary-static-import"
+  // `pnpm install --frozen-lockfile` failed inside the Docker build. Two
+  // sub-causes with opposite ownership: a lockfile/manifest mismatch
+  // (ERR_PNPM_OUTDATED_LOCKFILE) is a main defect; a registry fetch error
+  // (ECONNREFUSED/ETIMEDOUT/ERR_PNPM_FETCH, or the bare non-zero RUN line when
+  // pnpm's output was lost) is a transient environment failure — retry the
+  // upgrade before diagnosing anything (SUR-73668D5C, 2026-07-05: one flaky
+  // smol-toml fetch failed the upgrade; the identical tree built clean on retry).
+  | "pnpm-install-failure"
   | "unknown";
 
 export type BuildFailureClassification = {
@@ -62,6 +70,17 @@ const HOIST_PLAYBOOK = "docs/triage/2026-05-24-portal-prisma-generate-rebuild-fa
 const HOST_ONLY_MODULE = /(promoter|self-upgrade|child_process|node:child_process|dockerode|\/queue\/functions\/|api\/inngest)/i;
 const DUPLICATE_ASSET = /(duplicate\s+emitted\s+asset|multiple\s+assets\s+emit|conflict:.*emit|emit[^\n]*to the same (file|filename))/i;
 const MODULE_NOT_FOUND = /(cannot find module ['"]([^'"]+)['"]|module not found:\s*can't resolve ['"]([^'"]+)['"])/i;
+
+// The Dockerfile RUN line for a dependency install that exited non-zero —
+// present even when the builder's step output (pnpm's own error text) was lost.
+const PNPM_INSTALL_FAILED = /command ['"][^'"]*pnpm (install|fetch)[^'"]*['"] (returned a non-zero code|did not complete successfully)/i;
+// Lockfile/manifest mismatch — deterministic, a defect on main.
+const PNPM_OUTDATED_LOCKFILE = /ERR_PNPM_(OUTDATED_)?LOCKFILE|specifiers in the lockfile don't match|cannot install with "frozen-lockfile"/i;
+// Registry fetch errors — transient environment. Deliberately ONLY pnpm's own
+// error codes: bare network errnos (ECONNREFUSED etc.) appear in unrelated
+// failures (e.g. prisma migrate unable to reach postgres) and must stay
+// unclassified rather than misdiagnosed as a dependency fetch.
+const PNPM_FETCH_ERROR = /ERR_PNPM_FETCH|ERR_PNPM_META_FETCH_FAIL|GET https:\/\/registry\.npmjs\.org\/[^\s]+: (?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|socket hang up)/i;
 
 /** Up to ~6 lines around the first matching line, capped, for the agent. */
 function traceAround(log: string, re: RegExp): string {
@@ -101,6 +120,18 @@ export function classifyBuildFailure(
     };
   }
 
+  // Dependency-install failures before build-output analysis: a failed
+  // `pnpm install` step produces no build output, so nothing below can match.
+  if (PNPM_OUTDATED_LOCKFILE.test(log)) {
+    return {
+      class: "pnpm-install-failure",
+      summary:
+        "pnpm refused --frozen-lockfile: pnpm-lock.yaml does not match the package manifests at the target SHA. A manifest changed without regenerating the lockfile — fix on main (pnpm install, commit the lockfile).",
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, PNPM_OUTDATED_LOCKFILE),
+      isMainDefectVsEnvironment: "main-defect",
+    };
+  }
   const moduleMiss = log.match(MODULE_NOT_FOUND);
   if (moduleMiss) {
     const missing = moduleMiss[2] || moduleMiss[3] || "an undeclared module";
@@ -114,6 +145,20 @@ export function classifyBuildFailure(
       playbookLink: HOIST_PLAYBOOK,
       failingTrace: traceAround(log, MODULE_NOT_FOUND),
       isMainDefectVsEnvironment: "main-defect",
+    };
+  }
+
+  // After the more specific build-output classes: a failed install RUN line, or
+  // registry/network errnos in a log that ran a pnpm install step.
+  if (PNPM_INSTALL_FAILED.test(log) || PNPM_FETCH_ERROR.test(log)) {
+    const matched = PNPM_FETCH_ERROR.test(log) ? PNPM_FETCH_ERROR : PNPM_INSTALL_FAILED;
+    return {
+      class: "pnpm-install-failure",
+      summary:
+        "pnpm install failed inside the Docker build — most likely a transient registry fetch failure (SUR-73668D5C: one flaky package fetch, identical tree built clean on retry). Retry the upgrade first; only diagnose further if it fails the same way twice.",
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, matched),
+      isMainDefectVsEnvironment: "environment",
     };
   }
 

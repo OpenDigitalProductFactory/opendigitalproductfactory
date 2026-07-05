@@ -27,6 +27,23 @@ Error: duplicate emitted asset static/chunks/self-upgrade.js (conflict)`;
 const UNKNOWN_LOG = `error: connect ECONNREFUSED 127.0.0.1:5432
 prisma migrate failed`;
 
+// Verbatim from SUR-73668D5C (2026-07-05): the classic builder's step output
+// (pnpm's own error) was lost — only compose stderr survived, ending in the
+// bare non-zero RUN line. Must still classify as a retryable install failure.
+const PNPM_INSTALL_RUNLINE_LOG = `time="2026-07-05T11:34:45Z" level=warning msg="Docker Compose requires buildx plugin to be installed"
+ Image dpf-portal Building
+ Image dpf-portal Building
+The command '/bin/sh -c pnpm install --frozen-lockfile' returned a non-zero code: 1`;
+
+const PNPM_FETCH_LOG = `#12 [build 4/8] RUN pnpm install --frozen-lockfile
+#12 371.2 WARN GET https://registry.npmjs.org/smol-toml/-/smol-toml-1.7.0.tgz: ETIMEDOUT (retrying, attempt 2)
+#12 402.9  ERR_PNPM_FETCH_404 or network failure
+The command '/bin/sh -c pnpm install --frozen-lockfile' returned a non-zero code: 1`;
+
+const PNPM_LOCKFILE_DRIFT_LOG = `#12 [deps 9/9] RUN pnpm install --frozen-lockfile
+#12 2.1 ERR_PNPM_OUTDATED_LOCKFILE  Cannot install with "frozen-lockfile" because pnpm-lock.yaml is not up to date with apps/web/package.json
+The command '/bin/sh -c pnpm install --frozen-lockfile' returned a non-zero code: 1`;
+
 describe("classifyBuildFailure", () => {
   it("classifies the real @opentelemetry host-vs-Docker hoist divergence", () => {
     const c = classifyBuildFailure({ log: HOIST_LOG, hostBuildPassed: true });
@@ -49,6 +66,33 @@ describe("classifyBuildFailure", () => {
     expect(c.class).toBe("bundle-boundary-static-import");
     expect(c.summary).toContain("#1555");
     expect(c.isMainDefectVsEnvironment).toBe("main-defect");
+  });
+
+  it("classifies the SUR-73668D5C bare RUN-line install failure as retryable environment", () => {
+    const c = classifyBuildFailure({ log: PNPM_INSTALL_RUNLINE_LOG });
+    expect(c.class).toBe("pnpm-install-failure");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.summary).toContain("Retry the upgrade first");
+    expect(c.failingTrace).toContain("returned a non-zero code");
+  });
+
+  it("classifies a registry fetch error as retryable environment", () => {
+    const c = classifyBuildFailure({ log: PNPM_FETCH_LOG });
+    expect(c.class).toBe("pnpm-install-failure");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.failingTrace).toContain("registry.npmjs.org");
+  });
+
+  it("classifies a frozen-lockfile drift as a main defect, not environment", () => {
+    const c = classifyBuildFailure({ log: PNPM_LOCKFILE_DRIFT_LOG });
+    expect(c.class).toBe("pnpm-install-failure");
+    expect(c.isMainDefectVsEnvironment).toBe("main-defect");
+    expect(c.summary).toContain("lockfile");
+  });
+
+  it("keeps a non-pnpm ECONNREFUSED (e.g. prisma → postgres) unclassified", () => {
+    const c = classifyBuildFailure({ log: UNKNOWN_LOG });
+    expect(c.class).toBe("unknown");
   });
 
   it("falls back to unknown with a null defect/environment verdict", () => {
