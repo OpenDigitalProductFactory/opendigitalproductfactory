@@ -124,7 +124,6 @@ function classifyFromTask(task: PlanTask): SpecialistRole {
     || lower.includes("docs")
     || lower.includes("user guide")
     || lower.includes("public site")
-    || lower.includes("opendigitalproductfactory.com")
     || lower.includes("readme")
     || lower.includes("release note")
     || lower.includes("operator guide")
