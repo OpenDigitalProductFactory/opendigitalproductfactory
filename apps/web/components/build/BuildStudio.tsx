@@ -77,6 +77,12 @@ type Props = {
   epicRollups?: EpicRollupView[];
   portfolios: PortfolioForSelect[];
   governedBacklogEnabled: boolean;
+  /**
+   * BI-E167A8A6: whether the operator holds manage_backlog. Gates door 2 —
+   * the "Work Control / Plan governed work" intake — so a non-technical
+   * operator only ever sees the plain-English "Start a new build" door.
+   */
+  canManageGovernedWork?: boolean;
   dpfEnvironment?: string;
   projectBranch?: string | null;
   submissionBranchShortId?: string | null;
@@ -149,6 +155,7 @@ export function BuildStudio({
   epicRollups = [],
   portfolios,
   governedBacklogEnabled,
+  canManageGovernedWork = false,
   dpfEnvironment,
   projectBranch,
   submissionBranchShortId,
@@ -645,15 +652,28 @@ export function BuildStudio({
 
         {/* Left: Build List */}
         <div className={getBuildStudioSidebarClassName(sidebarOpen)}>
-          <div className="border-b border-[var(--dpf-border)] p-3">
-            <Link
-              href="/build/work"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
-            >
-              <GitBranch className="h-4 w-4" aria-hidden="true" />
-              <span>Work Control</span>
-            </Link>
-          </div>
+          {/* BI-E167A8A6: door 2 (Work Control / governed engineering work) is
+              only surfaced to operators who can actually create it
+              (manage_backlog). Non-technical operators see just the
+              plain-English "Start a new build" door below — no second intake to
+              guess between. Where both are shown, the subtitle states the
+              relationship so it is clear which door does what. */}
+          {canManageGovernedWork && (
+            <div className="border-b border-[var(--dpf-border)] p-3">
+              <Link
+                href="/build/work"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+              >
+                <GitBranch className="h-4 w-4" aria-hidden="true" />
+                <span>Work Control</span>
+              </Link>
+              <p className="mt-1.5 text-[10px] leading-snug text-[var(--dpf-muted)]">
+                Governed engineering work — git branches &amp; worktrees. To
+                describe a feature in plain English instead, use{" "}
+                <span className="font-medium text-[var(--dpf-text)]">Start a new build</span> below.
+              </p>
+            </div>
+          )}
           {isDevEnvironment ? (
             <div className="p-3 border-b border-[var(--dpf-border)]">
               <div className="px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-muted)]">
@@ -669,6 +689,15 @@ export function BuildStudio({
             // a newline (multiline field), Cmd/Ctrl+Enter submits to preserve
             // keyboard flow without losing the multiline capability.
             <div className="p-3 border-b border-[var(--dpf-border)]">
+              {/* BI-E167A8A6: name door 1 and state its purpose so it reads as
+                  the primary, plain-English intake — distinct from governed
+                  Work Control above. */}
+              <div className="mb-2">
+                <p className="text-xs font-semibold text-[var(--dpf-text)]">Start a new build</p>
+                <p className="mt-0.5 text-[10px] leading-snug text-[var(--dpf-muted)]">
+                  Describe a feature in plain English — your AI Coworker designs, builds, and ships it for you.
+                </p>
+              </div>
               <textarea
                 placeholder="Describe a new feature in plain English — say what you want to do, who it's for, and any details that matter."
                 value={newTitle}

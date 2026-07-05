@@ -247,6 +247,17 @@ export default async function BuildPage({ searchParams }: PageProps) {
     ? devConfig.clientId.replace(/-/g, "").slice(0, 8)
     : null;
 
+  // BI-E167A8A6: Build Studio has two work-intake doors. Door 2 — "Work Control /
+  // Plan governed work" — creates a git-governed work capsule and needs
+  // manage_backlog (createGovernedWorkAction enforces it server-side). Only
+  // surface that door to operators who can actually use it; everyone else sees
+  // the single plain-English "Start a new build" door, removing the "which one
+  // is correct?" confusion.
+  const canManageGovernedWork = can(
+    { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
+    "manage_backlog",
+  );
+
   return (
     <section className="min-h-full">
       <BuildStudio
@@ -254,6 +265,7 @@ export default async function BuildPage({ searchParams }: PageProps) {
         epicRollups={epicRollups}
         portfolios={portfolios}
         governedBacklogEnabled={devConfig.governedBacklogEnabled}
+        canManageGovernedWork={canManageGovernedWork}
         dpfEnvironment={process.env.DPF_ENVIRONMENT ?? "production"}
         projectBranch={projectBranch}
         submissionBranchShortId={submissionBranchShortId}
