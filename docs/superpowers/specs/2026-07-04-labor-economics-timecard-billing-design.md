@@ -86,3 +86,35 @@ entry references a rate (or carries an override) and a customer; revenue = `bill
 **Non-negotiables:** cost rate vs bill rate stay distinct; salaried pay never varies with hours;
 billable is off entirely for non-labor archetypes; every downstream money movement rides the
 ledger/invoicing/payroll engines already merged — no parallel record.
+
+## 6. Phase 3 — the wiring, as built (delivered 2026-07-05)
+
+Phases 1 (#2598) and 2 (#2621) are merged. Phase 3 connects them:
+
+- **`lib/hr/labor-billing.ts` (pure, tested).**
+  - `payrollEarningsFromTimesheet(comp, approvedTotals, opts)` → the earnings side of a
+    `PayrollInput`: salary → fixed `baseSalary` (hours ignored); hourly → regular hours
+    (`totalHours − overtimeHours`, so overtime is never double-paid) at `hourlyRate` plus
+    overtime at `hourlyRate × multiplier` (default 1.5).
+  - `buildBillableInvoiceLines(entries, rateCard)` → one draft invoice line per rate-card
+    service (hours aggregated, date range in the description). Entries with no resolvable
+    rate or zero hours are **skipped and reported — never billed at £0**. Returns the
+    priced entry ids so the caller stamps exactly what was billed.
+- **`lib/hr/labor-service.ts` (Prisma).**
+  - `getEmployeePayrollEarnings(employeeId, from, to)` — compensation from
+    `EmployeeProfile` + **approved-only** `TimesheetPeriod` totals → payroll earnings;
+    feeds `computePayslip` with the org's statutory function.
+  - `generateInvoiceFromBillableTime(customerAccountId)` — **archetype-gated**
+    (`billableTimeEnabled` on the applied financial profile; disabled installs get a
+    typed refusal, not a hidden failure). Collects **approved, un-invoiced** billable
+    entries for the customer, prices them from the active `BillableRate` card, creates a
+    **draft invoice** via `createInvoice` (`sourceType: "billable-time"`; posts to the GL
+    through the existing invoice→GL path when sent), then stamps entries
+    `invoiceId`/`invoicedAt` guarded on `invoiceId IS NULL` — hours can never be billed
+    twice, even concurrently.
+- **Migration `20260705100000_billable_time_invoice_link`** — `TimesheetEntry.invoiceId`
+  / `invoicedAt` + index: the idempotency link between billed hours and their invoice.
+
+**Approval is the money gate on both flows:** unapproved time is neither payable nor
+billable. Phase 4 (UX: compensation on the employee record, rate-card admin, billable
+timesheet columns, generate-invoice action, margin view) remains.
