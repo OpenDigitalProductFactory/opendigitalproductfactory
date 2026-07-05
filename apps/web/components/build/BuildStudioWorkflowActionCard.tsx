@@ -150,6 +150,8 @@ export function BuildStudioWorkflowActionCard({
         return "Opening release decisions...";
       case "retry-build":
         return "Retrying build...";
+      case "retry-inference":
+        return "Retrying the AI call...";
       case "reset-build":
         return "Resetting build...";
       case "resume-implementation":
@@ -181,6 +183,12 @@ export function BuildStudioWorkflowActionCard({
         await runBuildReviewVerification(build.buildId);
       } else if (action.kind === "advance-phase" && action.targetPhase) {
         await advanceBuildPhase(build.buildId, action.targetPhase);
+      } else if (action.kind === "retry-inference") {
+        // BI-F0005EB0 — the AI call errored. Re-drive the failed coworker turn
+        // (the same recovery the user does by re-prompting today) by opening the
+        // coworker panel with a retry message. The server-side bounded auto-retry
+        // handles transient failures before we ever get here.
+        openCoworkerPanel(action.coworkerPrompt);
       } else if (action.kind === "retry-build") {
         await retryBuildExecution(build.buildId);
       } else if (action.kind === "reset-build") {

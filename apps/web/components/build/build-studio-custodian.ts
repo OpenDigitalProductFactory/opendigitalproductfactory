@@ -88,11 +88,12 @@ function resolveCustodianStatusSignal(input: {
   uxReviewGap: boolean;
   blockedByEvidence: boolean;
   technicalRecovery: boolean;
+  failedInference: boolean;
   isQuietReview: boolean;
   isQuietBuild: boolean;
   isQuietEarlyPhase: boolean;
 }): NonNullable<ProactivityResolverInput["statusSignal"]> {
-  if (input.uxReviewGap || input.blockedByEvidence || input.technicalRecovery) {
+  if (input.uxReviewGap || input.blockedByEvidence || input.technicalRecovery || input.failedInference) {
     return "blocked";
   }
   if (input.isQuietReview || input.isQuietBuild || input.isQuietEarlyPhase) {
@@ -139,9 +140,20 @@ export function deriveBuildStudioCustodianPrompt({
     || action.kind === "rerun-plan-review"
     || action.kind === "retry-build"
     || action.kind === "reset-build";
+  // BI-F0005EB0 — the AI call itself errored (failed ideate/scout inference).
+  // This is a distinct danger state, NOT the benign "Waiting on evidence".
+  const failedInference = action.kind === "retry-inference";
   const uxReviewGap = isUxReviewGap(build, action, progressVisibility);
 
-  if (!uxReviewGap && !blockedByEvidence && !technicalRecovery && !isQuietReview && !isQuietBuild && !isQuietEarlyPhase) {
+  if (
+    !uxReviewGap
+    && !blockedByEvidence
+    && !technicalRecovery
+    && !failedInference
+    && !isQuietReview
+    && !isQuietBuild
+    && !isQuietEarlyPhase
+  ) {
     return null;
   }
 
@@ -154,6 +166,7 @@ export function deriveBuildStudioCustodianPrompt({
       uxReviewGap,
       blockedByEvidence,
       technicalRecovery,
+      failedInference,
       isQuietReview,
       isQuietBuild,
       isQuietEarlyPhase,
@@ -180,6 +193,34 @@ export function deriveBuildStudioCustodianPrompt({
         "The review is not ready to release until UX evidence and acceptance evidence agree.",
         "If the retry already started work, wait for that evidence first. If it did not, use the existing Build Studio recovery path instead of asking the human to diagnose logs.",
       ],
+      proactivityPlan,
+    };
+  }
+
+  if (failedInference) {
+    // BI-F0005EB0 — the AI call errored (e.g. ideate/scout inference failed to
+    // connect). Present it honestly as a failed call the AI must retry, NOT as
+    // the human owing evidence. Details use provider-detail-free copy carried on
+    // the action; the raw provider error never reaches the user here.
+    return {
+      dismissKey,
+      title: "The AI call failed.",
+      whyNow:
+        "The last AI response could not complete — the request errored, so this build is waiting on a retry, not on you.",
+      recommendedAction:
+        "Retry the AI call. I will keep watching and pick it up automatically if it fails again.",
+      primaryLabel: action.primaryLabel ?? "Retry the AI call",
+      primaryAction: "workflow",
+      coworkerPrompt: appendCustodianInstruction(
+        action,
+        "Act as the Build Studio custodian. The AI call failed to complete. Retry it, and if it keeps failing explain the likely cause in plain English and give the human exactly one next action.",
+      ),
+      statusLabel: "AI call failed",
+      intent: "danger",
+      details: [
+        action.message,
+        "This is a failed AI call, not a missing input from you. Retrying re-runs the same request.",
+      ].filter(Boolean),
       proactivityPlan,
     };
   }

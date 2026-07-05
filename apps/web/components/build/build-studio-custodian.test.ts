@@ -264,6 +264,33 @@ describe("deriveBuildStudioCustodianPrompt", () => {
     expect(prompt?.intent).toBe("info");
     expect(prompt?.whyNow).not.toContain("required evidence is missing");
   });
+
+  it("surfaces a danger 'AI call failed' prompt (not 'Waiting on evidence') for a failed ideate inference (BI-F0005EB0)", () => {
+    const build = makeBuild({
+      phase: "ideate",
+      uxVerificationStatus: null,
+      // designDoc null => the advance gate would otherwise fire a disabledReason
+      // and the custodian would say "Waiting on evidence".
+      designDoc: null,
+      designReview: null,
+    });
+    const progressVisibility = progress({
+      quietAgent: { quiet: false, minutesQuiet: 0, lastObservableSignalAt: "2026-06-29T12:19:00.000Z" },
+      inferenceFailure: { failed: true, kind: "connection", observedAt: "2026-06-29T12:19:00.000Z" },
+    });
+    const action = deriveBuildStudioWorkflowAction({ build, governedBacklogEnabled: true, progressVisibility });
+    const prompt = deriveBuildStudioCustodianPrompt({ build, action, progressVisibility });
+
+    expect(action.kind).toBe("retry-inference");
+    expect(prompt).not.toBeNull();
+    expect(prompt?.title).toBe("The AI call failed.");
+    expect(prompt?.statusLabel).toBe("AI call failed");
+    expect(prompt?.intent).toBe("danger");
+    expect(prompt?.primaryAction).toBe("workflow");
+    expect(prompt?.primaryLabel).toBe("Retry the AI call");
+    // The raw provider error must never reach the user via the custodian.
+    expect(JSON.stringify(prompt)).not.toMatch(/ECONNREFUSED|ConnectionRefused|API Error:/);
+  });
 });
 
 // BI-A2F3FA9D — "abandoned" is a terminal escalate-to-human handoff. The

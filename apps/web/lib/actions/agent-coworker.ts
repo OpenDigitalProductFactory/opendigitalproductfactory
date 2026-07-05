@@ -1766,31 +1766,46 @@ export async function sendMessage(input: {
       select: { id: true, phase: true },
     }).catch(() => null);
 
-    const agenticResult = await executeAutonomousAgenticLoop({
-      chatHistory,
-      systemPrompt: populatedPrompt,
-      sensitivity: agent.sensitivity,
-      tools: attachedTools,
-      toolsForProvider,
-      deferredTools,
-      userId: user.id!,
-      routeContext: input.routeContext,
-      agentId: agent.agentId,
-      threadId: input.threadId,
-      taskType: taskTypeId,
-      agentDisplayName: agent.agentName,
-      buildPhase: activeBuild?.phase ?? null,
-      featureBuildId: activeBuild?.id ?? null,
-      activeSkillId,
-      agentMessageId: pendingAgentMessageId,
-      // sendMessage is the user-typed-a-question path. Chat mode disables the
-      // Operator Contract zero-tool-call / unsaved-evidence guards so a
-      // conversational reply ("yes do the truck list first") does not
-      // false-positive into a PlatformIssueReport.
-      interactionMode: "chat",
-      ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
-      onProgress: (event) => agentEventBus.emit(input.threadId, event),
-    });
+    // BI-F0005EB0 — auto-retry a TRANSIENT ideate inference failure (connection
+    // hiccup / short rate-limit) with backoff before it reaches the user. The
+    // ideate first turn is the reported dead-end: without this, a single
+    // ConnectionRefused stalls the whole build. Non-ideate turns run once
+    // (enabled:false), so behavior elsewhere is unchanged. A failure that
+    // survives all retries falls through to the persist-time sanitizer below and
+    // the "Retry the AI call" affordance.
+    const { runWithTransientInferenceRetry } = await import("@/lib/build/inference-retry");
+    const agenticResult = await runWithTransientInferenceRetry(
+      () => executeAutonomousAgenticLoop({
+        chatHistory,
+        systemPrompt: populatedPrompt,
+        sensitivity: agent.sensitivity,
+        tools: attachedTools,
+        toolsForProvider,
+        deferredTools,
+        userId: user.id!,
+        routeContext: input.routeContext,
+        agentId: agent.agentId,
+        threadId: input.threadId,
+        taskType: taskTypeId,
+        agentDisplayName: agent.agentName,
+        buildPhase: activeBuild?.phase ?? null,
+        featureBuildId: activeBuild?.id ?? null,
+        activeSkillId,
+        agentMessageId: pendingAgentMessageId,
+        // sendMessage is the user-typed-a-question path. Chat mode disables the
+        // Operator Contract zero-tool-call / unsaved-evidence guards so a
+        // conversational reply ("yes do the truck list first") does not
+        // false-positive into a PlatformIssueReport.
+        interactionMode: "chat",
+        ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
+        onProgress: (event) => agentEventBus.emit(input.threadId, event),
+      }),
+      {
+        enabled: activeBuildPhase === "ideate",
+        onRetry: (attempt, kind) =>
+          console.warn(`[coworker] ideate inference ${kind} failure — auto-retry attempt ${attempt}`),
+      },
+    );
 
     // EP-ASYNC-COWORKER-001: done event moved to caller (API route) so it fires
     // AFTER message persistence, enabling SSE-driven async completion.
@@ -2180,6 +2195,24 @@ export async function sendMessage(input: {
       ? `Provider ${responseProviderId}/${responseModelId} returned an empty response.`
       : "No AI provider was matched by the routing pipeline.";
     responseContent = `**Unable to process this request.** ${providerHint} Check AI Workforce settings (Platform > AI) to verify provider configuration.`;
+  }
+
+  // BI-F0005EB0 — never persist a raw provider/CLI error string as a
+  // user-visible assistant message. When the loop smuggled a raw error into
+  // `content` (e.g. `API Error: Unable to connect to API (ConnectionRefused)`),
+  // replace it with provider-detail-free copy; the raw string stays in server
+  // logs for engineers. The sanitized copy is still classifiable, so the
+  // progress-visibility signal + "Retry the AI call" affordance still fire.
+  {
+    const { isRawProviderError, classifyInferenceFailure, friendlyInferenceFailureMessage } =
+      await import("@/lib/build/inference-failure");
+    if (isRawProviderError(responseContent)) {
+      const kind = classifyInferenceFailure(responseContent) ?? "provider-unavailable";
+      console.warn(
+        `[coworker] raw inference error hidden from user (kind=${kind}, route=${JSON.stringify(input.routeContext)}): ${JSON.stringify(responseContent.slice(0, 300))}`,
+      );
+      responseContent = friendlyInferenceFailureMessage(kind);
+    }
   }
 
   // Persist agent response
