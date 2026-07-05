@@ -51,6 +51,8 @@ export type FinancialProfile = {
   invoiceTemplateStyle: "professional" | "trade" | "creative" | "nonprofit" | "minimal";
   expenseCategories: string[];
   purchaseOrdersEnabled: boolean;
+  /** Sell employee labour as billable services (PSA). Archetype-gated. */
+  billableTimeEnabled?: boolean;
   chartOfAccountsSeed: Array<{
     code: string;
     name: string;

@@ -113,6 +113,7 @@ const LEDGER_FRAGMENTS_INTERNAL: Record<Exclude<LedgerModel, "commercial">, Char
 
 const PROFILES: Record<string, FinancialProfileSeed> = {
   healthcare_wellness: {
+    billableTimeEnabled: true,
     archetypeCategory: "healthcare-wellness",
     displayName: "Healthcare & Wellness",
     defaultPaymentTerms: "Due on receipt",
@@ -144,6 +145,7 @@ const PROFILES: Record<string, FinancialProfileSeed> = {
   },
 
   trades_construction: {
+    billableTimeEnabled: true,
     archetypeCategory: "trades-maintenance",
     displayName: "Trades & Construction",
     defaultPaymentTerms: "Net 14",
@@ -176,6 +178,7 @@ const PROFILES: Record<string, FinancialProfileSeed> = {
   },
 
   professional_services: {
+    billableTimeEnabled: true,
     archetypeCategory: "professional-services",
     displayName: "Professional Services",
     defaultPaymentTerms: "Net 30",
@@ -329,6 +332,7 @@ const PROFILES: Record<string, FinancialProfileSeed> = {
   },
 
   fitness_recreation: {
+    billableTimeEnabled: true,
     archetypeCategory: "fitness-recreation",
     displayName: "Fitness & Recreation",
     defaultPaymentTerms: "Monthly direct debit",
@@ -359,6 +363,7 @@ const PROFILES: Record<string, FinancialProfileSeed> = {
   },
 
   beauty_personal: {
+    billableTimeEnabled: true,
     archetypeCategory: "beauty-personal-care",
     displayName: "Beauty & Personal Care",
     defaultPaymentTerms: "Due on receipt",
@@ -427,6 +432,7 @@ const PROFILES: Record<string, FinancialProfileSeed> = {
   },
 
   pet_services: {
+    billableTimeEnabled: true,
     archetypeCategory: "pet-services",
     displayName: "Pet Services",
     defaultPaymentTerms: "Due on receipt",
