@@ -1659,11 +1659,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       properties: {
         title: { type: "string", description: "Feature title" },
         description: { type: "string", description: "Plain-language feature description" },
-        portfolioContext: { type: "string", description: "Portfolio slug that owns this feature" },
-        targetRoles: { type: "array", items: { type: "string" }, description: "Roles that will use this feature" },
+        portfolioContext: { type: "string", description: "Portfolio slug that owns this feature. For internal platform/meta work (a change to Build Studio, the portal, or platform tooling itself) pass an empty string rather than forcing a customer-facing portfolio." },
+        targetRoles: { type: "array", items: { type: "string" }, description: "Roles that will use this feature. For internal platform/meta work use internal operator roles (e.g. platform operator, admin) — never customer." },
         inputs: { type: "array", items: { type: "string" }, description: "User inputs the feature accepts" },
         dataNeeds: { type: "string", description: "What data the feature stores" },
-        acceptanceCriteria: { type: "array", items: { type: "string" }, description: "What done looks like" },
+        acceptanceCriteria: { type: "array", items: { type: "string" }, description: "What done looks like. Every requirement the user stated explicitly (exact formats, examples, behaviors) MUST appear as its own criterion, preserved faithfully — never substitute a different format or behavior for one the user specified." },
         fixContext: {
           type: "object",
           description: "For fix builds (kind=fix): the defect diagnosis. reproSteps, rootCause, and fixApproach are all required before a fix build can advance to plan. Merged into any existing fixContext, so partial updates accumulate.",
@@ -8082,21 +8082,14 @@ export async function executeTool(
 
       // Auto-populate brief from designDoc when saving during ideate phase.
       // The generate_code tool requires brief to build codegen prompts.
+      // Derivation is honest-by-default (no fabricated portfolio/roles/ACs) —
+      // see deriveAutoBriefFromDesignDoc.
       if (field === "designDoc") {
         const currentBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { brief: true, title: true, phase: true } });
         if (currentBuild && !currentBuild.brief) {
           const doc = normalizedValue as Record<string, unknown> | null;
-          updateData.brief = {
-            title: currentBuild.title,
-            description: (doc?.problemStatement as string) ?? currentBuild.title,
-            portfolioContext: "manufacturing_and_delivery",
-            targetRoles: ["admin", "customer"],
-            inputs: [],
-            dataNeeds: (doc?.proposedApproach as string) ?? "",
-            acceptanceCriteria: Array.isArray(doc?.acceptanceCriteria)
-              ? (doc.acceptanceCriteria as string[])
-              : ["Feature works as described", "Meets accessibility standards"],
-          };
+          const { deriveAutoBriefFromDesignDoc } = await import("@/lib/build/derive-auto-brief");
+          updateData.brief = deriveAutoBriefFromDesignDoc(doc, currentBuild.title);
         }
       }
 
