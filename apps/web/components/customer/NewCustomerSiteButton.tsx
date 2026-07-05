@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createCustomerSite } from "@/lib/actions/crm";
+import type { DedupCandidate } from "@/lib/mdm/dedup-gate";
 
 const inputClasses =
   "w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
@@ -19,6 +20,8 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
   const [accessInstructions, setAccessInstructions] = useState("");
   const [hoursNotes, setHoursNotes] = useState("");
   const [serviceNotes, setServiceNotes] = useState("");
+  // MDM dedup gate: similar existing sites for this account, shown inline.
+  const [duplicates, setDuplicates] = useState<DedupCandidate[] | null>(null);
   const router = useRouter();
 
   function resetForm() {
@@ -29,6 +32,7 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
     setAccessInstructions("");
     setHoursNotes("");
     setServiceNotes("");
+    setDuplicates(null);
     setError(null);
   }
 
@@ -47,16 +51,25 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
     setError(null);
     startTransition(async () => {
       try {
-        await createCustomerSite({
-          accountId,
-          name,
-          siteType,
-          status,
-          timezone,
-          accessInstructions,
-          hoursNotes,
-          serviceNotes,
-        });
+        const result = await createCustomerSite(
+          {
+            accountId,
+            name,
+            siteType,
+            status,
+            timezone,
+            accessInstructions,
+            hoursNotes,
+            serviceNotes,
+          },
+          // Second submit after the duplicate notice = explicit confirm-new.
+          duplicates ? { kind: "confirm-new", reason: "confirmed distinct site in + New Site" } : undefined,
+        );
+        if (result.outcome === "duplicates-found") {
+          setDuplicates(result.check.candidates);
+          setError(null);
+          return;
+        }
         closeModal();
         router.refresh();
       } catch (submitError) {
@@ -182,6 +195,16 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
           </div>
 
           {error ? <p className="text-xs text-[var(--dpf-text)]">{error}</p> : null}
+
+          {duplicates ? (
+            <div className="rounded border border-[var(--dpf-border)] px-3 py-2">
+              <p className="text-xs text-[var(--dpf-text)]">
+                This account already has {duplicates.length === 1 ? "a site" : "sites"} with a similar
+                name: {duplicates.slice(0, 3).map((d) => d.label).join(", ")}. Submit again to create
+                it anyway.
+              </p>
+            </div>
+          ) : null}
 
           <div className="flex justify-end gap-2">
             <button

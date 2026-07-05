@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { hashPassword } from "@/lib/password";
 import { nanoid } from "nanoid";
+import {
+  customerAccountNormalizedColumns,
+  customerContactNormalizedColumns,
+} from "@/lib/mdm/dedup-gate";
 
 export async function POST(req: NextRequest) {
   const body = await req.json() as { name?: string; email?: string; password?: string; orgSlug?: string };
@@ -29,6 +33,7 @@ export async function POST(req: NextRequest) {
       data: {
         accountId: `CA-${nanoid(10)}`,
         name: name ?? email,
+        ...customerAccountNormalizedColumns({ name: name ?? email }),
         status: "prospect",
       },
     });
@@ -37,6 +42,7 @@ export async function POST(req: NextRequest) {
       data: {
         email,
         name: name ?? null,
+        ...customerContactNormalizedColumns({ name: name ?? null }),
         passwordHash,
         accountId: account.id,
         isActive: true,

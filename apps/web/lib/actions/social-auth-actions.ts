@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { customerAccountNormalizedColumns, customerContactNormalizedColumns } from "@/lib/mdm/dedup-gate";
 import * as crypto from "crypto";
 import { verifyPassword, hashPassword } from "@/lib/password";
 import { verifyTempToken, type SocialProfile } from "@/lib/social-auth";
@@ -80,10 +81,10 @@ export async function completeProfileWithSocial(
     const result = await prisma.$transaction(async (tx) => {
       const businessId = `CUST-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       const account = await tx.customerAccount.create({
-        data: { accountId: businessId, name: input.companyName.trim(), status: "active" },
+        data: { accountId: businessId, name: input.companyName.trim(), ...customerAccountNormalizedColumns({ name: input.companyName }), status: "active" },
       });
       const contact = await tx.customerContact.create({
-        data: { email: profile.email.toLowerCase(), name: profile.name, accountId: account.id },
+        data: { email: profile.email.toLowerCase(), name: profile.name, ...customerContactNormalizedColumns({ name: profile.name }), accountId: account.id },
       });
       await tx.socialIdentity.create({
         data: { provider: profile.provider, providerAccountId: profile.providerAccountId, email: profile.email, contactId: contact.id },
@@ -104,7 +105,7 @@ export async function completeProfileWithSocial(
 
   const result = await prisma.$transaction(async (tx) => {
     const contact = await tx.customerContact.create({
-      data: { email: profile.email.toLowerCase(), name: profile.name, accountId: validation.account!.id },
+      data: { email: profile.email.toLowerCase(), name: profile.name, ...customerContactNormalizedColumns({ name: profile.name }), accountId: validation.account!.id },
     });
     await tx.socialIdentity.create({
       data: { provider: profile.provider, providerAccountId: profile.providerAccountId, email: profile.email, contactId: contact.id },
