@@ -1,6 +1,6 @@
 import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
-import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
+import { DISCOVERY_TRIAGE_AGENT_ID, attributeBacklogPortfolio, prisma } from "@dpf/db";
 // Static import: executeTool is a hot path; dynamic import per call would hurt throughput.
 import { evaluateExecution } from "@/lib/kernel/runtime-gate";
 import { loadEnforceablePrinciples } from "@/lib/kernel/load-enforceable-principles";
@@ -627,6 +627,9 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Reclassify what kind of work this is (closed enum)." },
         source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Reclassify the intake origin." },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory recommendation; non-binding on triage" },
+        digitalProductId: { type: "string", description: "Associate this item with a DigitalProduct by its productId (e.g. 'coworker-AGT-X'). The item's portfolio is then re-derived from the product (product first, then taxonomy node, then epic)." },
+        taxonomyNodeId: { type: "string", description: "Associate this item with a portfolio taxonomy node by its nodeId (e.g. 'for_employees/financial_management'). Used to derive the portfolio when no product link exists." },
+        portfolioSlug: { type: "string", description: "Directly pin the item's portfolio by root slug (e.g. 'for_employees'). Prefer digitalProductId/taxonomyNodeId so the link is structural; use this only for a deliberate override." },
       },
       required: ["itemId"],
     },
@@ -5796,8 +5799,58 @@ export async function executeTool(
       if (typeof params["workType"] === "string") data["workType"] = params["workType"];
       if (typeof params["source"] === "string") data["source"] = params["source"];
       if (typeof params["proposedOutcome"] === "string") data["proposedOutcome"] = params["proposedOutcome"];
+
+      // Structural portfolio association (closes the DOC-1996319D "Open Gap":
+      // governed write paths for BacklogItem.digitalProductId / taxonomyNodeId /
+      // portfolioId). Accept the stable human ids and resolve to the FK ids.
+      let explicitPortfolio = false;
+      let touchedLinks = false;
+      if (typeof params["digitalProductId"] === "string") {
+        const prod = await prisma.digitalProduct.findUnique({
+          where: { productId: params["digitalProductId"] },
+          select: { id: true },
+        });
+        if (!prod) return { success: false, error: "digital_product_not_found", message: `DigitalProduct ${params["digitalProductId"]} not found` };
+        data["digitalProductId"] = prod.id;
+        touchedLinks = true;
+      }
+      if (typeof params["taxonomyNodeId"] === "string") {
+        const node = await prisma.taxonomyNode.findUnique({
+          where: { nodeId: params["taxonomyNodeId"] },
+          select: { id: true },
+        });
+        if (!node) return { success: false, error: "taxonomy_node_not_found", message: `TaxonomyNode ${params["taxonomyNodeId"]} not found` };
+        data["taxonomyNodeId"] = node.id;
+        touchedLinks = true;
+      }
+      if (typeof params["portfolioSlug"] === "string") {
+        const portfolio = await prisma.portfolio.findUnique({
+          where: { slug: params["portfolioSlug"] },
+          select: { id: true },
+        });
+        if (!portfolio) return { success: false, error: "portfolio_not_found", message: `Portfolio ${params["portfolioSlug"]} not found` };
+        data["portfolioId"] = portfolio.id;
+        explicitPortfolio = true;
+      }
+
       await prisma.backlogItem.update({ where: { itemId: String(params["itemId"]) }, data });
-      return { success: true, entityId: String(params["itemId"]), message: `Updated ${String(params["itemId"])}` };
+
+      // When links changed and the portfolio wasn't explicitly pinned, re-derive
+      // the denormalized portfolioId cache from the links (product → taxonomy →
+      // epic), reusing the canonical resolver.
+      let resolvedPortfolioId: string | null = null;
+      if (touchedLinks && !explicitPortfolio) {
+        resolvedPortfolioId = await attributeBacklogPortfolio(existing.id);
+      } else if (explicitPortfolio) {
+        resolvedPortfolioId = String(data["portfolioId"]);
+      }
+
+      return {
+        success: true,
+        entityId: String(params["itemId"]),
+        message: `Updated ${String(params["itemId"])}`,
+        ...(resolvedPortfolioId !== null ? { portfolioId: resolvedPortfolioId } : {}),
+      };
     }
 
     case "create_digital_product": {
