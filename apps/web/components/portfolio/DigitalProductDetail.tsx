@@ -21,6 +21,7 @@ export function DigitalProductDetail({ vm }: Props): ReactElement {
     <div>
       <Header vm={vm} />
       <DescriptionSection description={vm.description} />
+      <CoworkerSection vm={vm} />
       <IdentitySection vm={vm} />
       <TaxonomySection lineage={vm.taxonomyLineage} />
       <LinkedEntitiesSection vm={vm} />
@@ -65,6 +66,35 @@ function DescriptionSection({ description }: { description: string | null }): Re
     <section className="mt-6 pt-6 border-t border-[var(--dpf-border)]">
       <h2 className="text-base font-semibold text-[var(--dpf-text)] mb-2">Description</h2>
       <p className="text-sm text-[var(--dpf-text)]">{description}</p>
+    </section>
+  );
+}
+
+// --- AI coworker (role-shaped Workforce product; BI-8F9EDD6C) ----------
+
+function CoworkerSection({ vm }: { vm: DigitalProductView }): ReactElement | null {
+  const coworker = vm.coworker;
+  if (coworker === null) return null;
+  // DOC-7693D528: a coworker product preserves the coworker's identity, its
+  // human-role parity anchor, and its approval/interface owner.
+  const fields = [
+    { label: "Coworker", value: coworker.agentId },
+    { label: "Human-role parity", value: coworker.humanRoleParity },
+    { label: "Approval / interface owner", value: coworker.approvalInterfaceOwner ?? "broad (unassigned)" },
+  ];
+  return (
+    <section className="mt-6 pt-6 border-t border-[var(--dpf-border)]">
+      <h2 className="text-base font-semibold text-[var(--dpf-text)] mb-2">AI Coworker</h2>
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+        {fields.map((f) => (
+          <div key={f.label} className="flex flex-col">
+            <dt className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest">
+              {f.label}
+            </dt>
+            <dd className="text-[var(--dpf-text)]">{f.value ?? "—"}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }

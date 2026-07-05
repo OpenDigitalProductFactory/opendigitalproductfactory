@@ -20,6 +20,20 @@
 export type FreshnessValue = "fresh" | "stale" | "retired";
 export type EnrichmentStatusValue = "pending" | "enriched" | "partial" | "failed";
 
+/**
+ * Present only for products projected from an AI coworker (sourceKind
+ * "coworker_service", BI-8F9EDD6C). Carries the DOC-7693D528 relationship the
+ * product must preserve: the coworker's identity, its human-role parity anchor,
+ * and its approval/interface owner. Sourced from DigitalProduct.observationConfig.
+ */
+export interface CoworkerProductSummary {
+  agentId: string | null;
+  /** The equivalent/adjacent human role (HR role id) the coworker is patterned against. */
+  humanRoleParity: string | null;
+  /** The responsible human approval/interface owner (HR role id). */
+  approvalInterfaceOwner: string | null;
+}
+
 export interface DigitalProductView {
   id: string;
   productId: string;
@@ -29,6 +43,9 @@ export interface DigitalProductView {
   lifecycleStage: string;
   lifecycleStatus: string;
   observationConfig: { classifyAs?: string } | null;
+
+  /** Present only for AI-coworker-sourced products (BI-8F9EDD6C); null otherwise. */
+  coworker: CoworkerProductSummary | null;
 
   taxonomyLineage: Array<{ nodeId: string; name: string }>; // breadcrumb root -> leaf
   portfolio: { id: string; slug: string; name: string } | null;
@@ -142,6 +159,27 @@ function projectObservationConfig(value: unknown): { classifyAs?: string } | nul
   return out;
 }
 
+/** Non-empty string, else null — coworker markers are stored as "" when absent. */
+function nonEmpty(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/**
+ * Project the AI-coworker markers the coworker projector stamps into
+ * observationConfig (sourceKind "coworker_service", agentId, humanRoleParity,
+ * approvalInterfaceOwnerRole). Returns null for any non-coworker product, so the
+ * detail page renders the coworker section only when it applies (BI-8F9EDD6C).
+ */
+function projectCoworker(value: unknown): CoworkerProductSummary | null {
+  if (!isPlainObject(value)) return null;
+  if (value.sourceKind !== "coworker_service") return null;
+  return {
+    agentId: nonEmpty(value.agentId),
+    humanRoleParity: nonEmpty(value.humanRoleParity),
+    approvalInterfaceOwner: nonEmpty(value.approvalInterfaceOwnerRole),
+  };
+}
+
 function projectTaxonomyLineage(
   ancestors: Array<{ nodeId: string; name: string }>,
   leaf: { nodeId: string; name: string } | null,
@@ -206,6 +244,7 @@ export function toDigitalProductViewModel(
     lifecycleStage: product.lifecycleStage,
     lifecycleStatus: product.lifecycleStatus,
     observationConfig: projectObservationConfig(product.observationConfig),
+    coworker: projectCoworker(product.observationConfig),
     taxonomyLineage: projectTaxonomyLineage(taxonomyAncestors, product.taxonomyNode),
     portfolio: product.portfolio,
     primaryEntity: projectLinkedEntities(inventoryEntities)[0] ?? null,
@@ -217,4 +256,3 @@ export function toDigitalProductViewModel(
     openQualityIssues: projectOpenQualityIssues(qualityIssues),
   };
 }
-
