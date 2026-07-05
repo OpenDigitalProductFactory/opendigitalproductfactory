@@ -88,6 +88,12 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
    ```
    For UX changes: drive the change against the running app (`/run` or `/verify` skill) and capture dynamic-analysis evidence.
 
+3b. **Local-CI sandbox gate (default-on pre-push, BI-C74F4DE9).** For runtime-code branches, run `pnpm run pregate` before the push — the chained pre-push hook refuses an ungated push otherwise. Carry the evidence into the PR body as a trailer so `pnpm pr:health` reads the branch as merge-ready even when checked from another machine:
+   ```
+   Local-CI-Evidence: <evidence-record-id> (<branch>@<sha>)
+   ```
+   If the gate was consciously skipped (docs-adjacent config, verified-clean revert), attest explicitly instead: `Local-CI-Override: <reason>`. A runtime-code PR with neither is a pr:health blocker.
+
 4. **DCO check.** Every commit on your branch must have `Signed-off-by:`:
    ```
    git log origin/main..HEAD --pretty=format:'%h %s%n%(trailers:only,unfold)' | grep -B1 Signed-off-by || echo "MISSING DCO"
