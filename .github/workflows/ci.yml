@@ -505,6 +505,7 @@ jobs:
             scripts/lib/sandbox-freshness.test.mjs \
             scripts/sandbox-freshness-preflight.test.mjs \
             scripts/release/re-resolve-stt-digest.test.mjs \
+            scripts/lib/ensure-pre-push-hook.test.mjs \
             tests/release/local-ci-gate-contract.test.mjs
       - name: Smoke --help (must exit 0, no docker required)
         run: node scripts/runtime-artifact-janitor.mjs --help > /dev/null
