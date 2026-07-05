@@ -2,6 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
+import { CUSTOMER_TOMBSTONE_STATUSES } from "@dpf/db/customer-lifecycle";
 import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
@@ -23,6 +24,9 @@ export async function GET(request: Request) {
     }
     if (status) {
       where.status = status;
+    } else {
+      // Default reads exclude merge tombstones (superseded rows).
+      where.status = { notIn: [...CUSTOMER_TOMBSTONE_STATUSES] };
     }
     if (search) {
       // Use full-text search if available, fall back to ILIKE

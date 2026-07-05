@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
+import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
 import { hasActiveOrgCapability } from "@/lib/storefront/civic-surfaces.server";
 import {
   MemberEquityPanel,
@@ -14,6 +15,7 @@ export default async function MemberEquityPage() {
 
   const [accounts, entries] = await Promise.all([
     prisma.customerAccount.findMany({
+      where: EXCLUDE_TOMBSTONED,
       orderBy: { name: "asc" },
       take: 200,
       select: { id: true, accountId: true, name: true, status: true },

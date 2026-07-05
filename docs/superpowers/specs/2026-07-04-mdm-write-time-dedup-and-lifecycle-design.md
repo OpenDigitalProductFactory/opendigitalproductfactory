@@ -185,6 +185,9 @@ checkDuplicates(domain, subject): Promise<DedupCheckResult>
 Reuse the existing string-union pattern (AGENTS.md §3), extending
 `CustomerAccount.status` with two values: `superseded` (merged away — always
 paired with `mergedIntoId`) and `archived` (operator retired; no survivor).
+The canonical unions live in `packages/db/src/customer-lifecycle.ts`
+(`CUSTOMER_ACCOUNT_STATUSES`, `CUSTOMER_SITE_STATUSES`), alongside the
+`EXCLUDE_TOMBSTONED` where-fragment default reads spread into their queries.
 Existing values keep their meaning; `closed` remains the business-relationship
 end-state, distinct from data-lifecycle archival. `CustomerSite.status` gains
 the same two values. `CustomerContact` keeps `isActive` for auth; a contact
@@ -227,6 +230,19 @@ First adapter: `customer-account` (the Emma3D case). `customer-site` follows
 in the same slice (small relation set). `customer-contact` merge is
 **deferred**: contacts are identity-bearing (PrincipalAlias territory, spec
 §6.2) — a contact merge is a Principal convergence operation, not a row merge.
+
+As built: orchestrator + adapters in `apps/web/lib/mdm/merge.ts`
+(completeness guard `merge-adapters-completeness.test.ts`); admin surface in
+`apps/web/lib/actions/customer-merge.ts` + the account-detail "Merge into…"
+control with usage-impact preview; coworker door `merge_customer_accounts`
+(crm_write grant, registered in the `mdm-stewardship` tool pack —
+`apps/web/lib/mcp/packs/mdm-stewardship-pack.ts` — per the frozen inline
+dispatcher ratchet). The account-merge collision planners are per-account site
+names (nested site merge) and duplicate contact-role rows (drop the loser
+copy). The v1 steward gate reuses the admin capability boundary
+(`view_admin` server-side, `operate_customer` at the tool layer); the
+dedicated `mdm-steward` PlatformCapability lands with the steward queue
+(refiled MDM-3).
 
 ### 5.5 Surfaces
 

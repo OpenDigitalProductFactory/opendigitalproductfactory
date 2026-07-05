@@ -15,6 +15,7 @@
     "./discovery-attribution": "./src/discovery-attribution.ts",
     "./estate-scope": "./src/estate-scope.ts",
     "./service-ticket-types": "./src/service-ticket-types.ts",
+    "./customer-lifecycle": "./src/customer-lifecycle.ts",
     "./trust-link-lifecycle": "./src/trust-link-lifecycle.ts",
     "./federation-link-types": "./src/federation-link-types.ts",
     "./projection-serialization": "./src/projection-serialization.ts",

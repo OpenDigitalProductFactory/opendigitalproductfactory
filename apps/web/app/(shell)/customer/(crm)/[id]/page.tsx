@@ -9,6 +9,7 @@ import { CustomerLifecycleReviewQueues } from "@/components/customer/CustomerLif
 import { CustomerSiteTree } from "@/components/customer/CustomerSiteTree";
 import { NewCustomerSiteButton } from "@/components/customer/NewCustomerSiteButton";
 import { AccountLifecycleActions } from "@/components/customer/AccountLifecycleActions";
+import { MergeCustomerAccountButton } from "@/components/customer/MergeCustomerAccountButton";
 import { loadCustomerEstateSummary } from "@/lib/customer-estate/account-estate-summary";
 import type { TechnologySourceType } from "@/lib/customer-estate/lifecycle-evaluation";
 import {
@@ -229,11 +230,29 @@ export default async function AccountDetailPage({
         <span className="text-xs text-[var(--dpf-text)]">{account.name}</span>
       </div>
 
+      {/* Merge tombstone banner */}
+      {account.status === "superseded" && account.mergedIntoId && (
+        <div className="mb-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3">
+          <p className="text-sm text-[var(--dpf-text)]">
+            This account was merged into another record.{" "}
+            <Link href={`/customer/${account.mergedIntoId}`} className="text-[var(--dpf-accent)] hover:underline">
+              View the current account
+            </Link>
+            . It is kept for history and is excluded from account lists.
+          </p>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6">
-        <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{account.name}</h1>
-          <CustomerStatusBadge label={statusMeta.label} tone={statusMeta.tone} />
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-[var(--dpf-text)]">{account.name}</h1>
+            <CustomerStatusBadge label={statusMeta.label} tone={statusMeta.tone} />
+          </div>
+          {account.status !== "superseded" && (
+            <MergeCustomerAccountButton accountId={account.id} accountName={account.name} />
+          )}
         </div>
         <p className="text-[10px] font-mono text-[var(--dpf-muted)]">
           {account.accountId}

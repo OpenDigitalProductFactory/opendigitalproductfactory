@@ -2,6 +2,7 @@ import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
 import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
 import { handleUpdateBacklogItem } from "./mcp-handlers/update-backlog-item";
+import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
 // Static import: executeTool is a hot path; dynamic import per call would hurt throughput.
 import { evaluateExecution } from "@/lib/kernel/runtime-gate";
 import { loadEnforceablePrinciples } from "@/lib/kernel/load-enforceable-principles";
@@ -47,6 +48,7 @@ import { marketingPack } from "@/lib/mcp/packs/marketing-pack";
 import { workCapturePack } from "@/lib/mcp/packs/work-capture-pack";
 import { orgDecisionPack } from "@/lib/mcp/packs/org-decision-pack";
 import { activityRoutingPack } from "@/lib/mcp/packs/activity-routing-pack";
+import { mdmStewardshipPack } from "@/lib/mcp/packs/mdm-stewardship-pack";
 import { selfUpgradePack } from "@/lib/mcp/packs/self-upgrade-pack";
 import { coworkerServiceCatalogPack } from "@/lib/mcp/packs/coworker-service-catalog-pack";
 import { coworkerToolGrantPack } from "@/lib/mcp/packs/coworker-tool-grant-pack";
@@ -439,7 +441,7 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 // ─── Tool Registry ───────────────────────────────────────────────────────────
 // Scoped tool packs compose into the registry; mcp-tools.ts is the thin layer
 // over them (definitions spread into PLATFORM_TOOLS below; dispatch in executeTool).
-const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack, coworkerToolGrantPack]);
+const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack, coworkerToolGrantPack, mdmStewardshipPack]);
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,
@@ -14815,7 +14817,8 @@ export async function executeTool(
       const status = typeof params["status"] === "string" ? params["status"].trim() : undefined;
       const take = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 100) : 25;
       const accounts = await prisma.customerAccount.findMany({
-        where: status ? { status } : undefined,
+        // Default reads exclude merge tombstones (superseded rows).
+        where: status ? { status } : EXCLUDE_TOMBSTONED,
         orderBy: { createdAt: "desc" },
         take,
         select: {

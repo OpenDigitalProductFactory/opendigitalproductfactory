@@ -16,6 +16,7 @@
 import { redirect } from "next/navigation";
 
 import { prisma } from "@dpf/db";
+import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -156,6 +157,7 @@ export default async function EdgeNodesAdminPage() {
   });
 
   const customerAccounts = await prisma.customerAccount.findMany({
+    where: EXCLUDE_TOMBSTONED,
     orderBy: { name: "asc" },
     select: {
       id: true,
