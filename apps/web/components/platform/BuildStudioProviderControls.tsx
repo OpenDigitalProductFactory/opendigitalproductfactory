@@ -15,6 +15,10 @@ export type EngineReadinessBadge = {
   present: boolean | null;
   version: string | null;
   lastProbedAt: string | null;
+  /** Live-probe failure reason (only when present === false). */
+  error?: string | null;
+  /** A live probe for this engine is in flight. */
+  probing?: boolean;
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -44,22 +48,33 @@ export function isConfigured(status: string): boolean {
 }
 
 function EngineReadinessBadgeView({ readiness }: { readiness: EngineReadinessBadge }) {
-  const { icon, text, tone } = engineReadinessBadgeContent(readiness.present, readiness.version);
+  const { icon, text, tone } = engineReadinessBadgeContent(readiness.present, readiness.version, {
+    probing: readiness.probing,
+  });
+  // Show the live-probe failure reason so "not installed" says WHY (missing
+  // binary vs docker error) — the operator can act instead of guessing.
+  const showReason = !readiness.probing && readiness.present === false && !!readiness.error;
   return (
-    <div
-      role="status"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        marginTop: 3,
-        fontSize: 10,
-        fontWeight: 600,
-        color: ENGINE_READINESS_TONE_COLOR[tone],
-      }}
-    >
-      <span aria-hidden="true">{icon}</span>
-      <span>{text}</span>
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 3 }}>
+      <div
+        role="status"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          fontSize: 10,
+          fontWeight: 600,
+          color: ENGINE_READINESS_TONE_COLOR[tone],
+        }}
+      >
+        <span aria-hidden="true">{icon}</span>
+        <span>{text}</span>
+      </div>
+      {showReason && (
+        <div style={{ fontSize: 10, color: "var(--dpf-muted)", maxWidth: "22rem", lineHeight: 1.4 }}>
+          {readiness.error}
+        </div>
+      )}
     </div>
   );
 }
@@ -93,7 +108,7 @@ export function ProviderRadio({ name, value, checked, onChange, disabled, label,
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-text)" }}>{label}</div>
         <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>{desc}</div>
         {readiness && <EngineReadinessBadgeView readiness={readiness} />}
-        {canProvision && readiness?.present === false && (
+        {canProvision && !readiness?.probing && readiness?.present === false && (
           <ProvisionEngineButton engineId={value} label={value.charAt(0).toUpperCase() + value.slice(1)} />
         )}
         {unconfiguredMsg && (

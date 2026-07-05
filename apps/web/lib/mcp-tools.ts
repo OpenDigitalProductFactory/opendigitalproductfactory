@@ -9101,61 +9101,15 @@ export async function executeTool(
 
     case "get_build_engine_readiness": {
       const refresh = params["refresh"] === true;
-      const engines = await prisma.buildEngine.findMany({
-        select: {
-          engineId: true,
-          binary: true,
-          verifyCommand: true,
-          versionRegex: true,
-          bakeInDefault: true,
-          state: { select: { present: true, version: true, lastProbedAt: true } },
-        },
-        orderBy: { engineId: "asc" },
-      });
-
-      type EngineReadinessRow = {
-        engineId: string;
-        binary: string;
-        bakeInDefault: boolean;
-        present: boolean | null;
-        version: string | null;
-        lastProbedAt: string | null;
-      };
-
-      let readiness: EngineReadinessRow[] = engines.map((e) => ({
-        engineId: e.engineId,
-        binary: e.binary,
-        bakeInDefault: e.bakeInDefault,
-        present: e.state?.present ?? null,
-        version: e.state?.version ?? null,
-        lastProbedAt: e.state?.lastProbedAt ? e.state.lastProbedAt.toISOString() : null,
-      }));
-
-      if (refresh) {
-        const { probeEngineReadiness } = await import(
-          "@/lib/routing/capability-probes/probe-engine-readiness"
-        );
-        const { persistEngineReadiness } = await import("@/lib/routing/persist-engine-readiness");
-        readiness = await Promise.all(
-          engines.map(async (e): Promise<EngineReadinessRow> => {
-            const r = await probeEngineReadiness({
-              engineId: e.engineId,
-              binary: e.binary,
-              verifyCommand: e.verifyCommand,
-              versionRegex: e.versionRegex,
-            });
-            await persistEngineReadiness(r).catch(() => undefined);
-            return {
-              engineId: e.engineId,
-              binary: e.binary,
-              bakeInDefault: e.bakeInDefault,
-              present: r.present,
-              version: r.version,
-              lastProbedAt: r.probedAt,
-            };
-          }),
-        );
-      }
+      // Shared with the /platform/ai/build-studio config page's proactive probe
+      // + "Probe all engines" action (BI-805D01E4): one implementation of
+      // load-vs-live-probe. Live rows carry the per-engine failure reason.
+      const { loadBuildEngineReadiness, probeBuildEngineReadiness } = await import(
+        "@/lib/integrate/build-engine-readiness"
+      );
+      const readiness = refresh
+        ? await probeBuildEngineReadiness()
+        : await loadBuildEngineReadiness();
 
       const present = readiness.filter((r) => r.present === true).map((r) => r.engineId);
       const absent = readiness.filter((r) => r.present === false).map((r) => r.engineId);
@@ -9164,7 +9118,7 @@ export async function executeTool(
       return {
         success: true,
         message:
-          engines.length === 0
+          readiness.length === 0
             ? "No build engines registered yet. Run sync-engine-registry to populate the BuildEngine catalog from build-engines.json."
             : `Build engines — present: ${present.join(", ") || "none"}; not installed: ${absent.join(", ") || "none"}; never probed: ${unknown.join(", ") || "none"}.${refresh ? " (live re-probe)" : " (last known state — pass refresh:true to re-probe)"}`,
         data: { engines: readiness, refreshed: refresh },

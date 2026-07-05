@@ -8,14 +8,20 @@ export type EngineReadinessTone = "success" | "warning" | "muted";
 
 /**
  * Map a probed engine's `present` state (+ optional version) to the badge's
- * icon, text, and tone. `present === null` means "never probed".
+ * icon, text, and tone. `present === null` means "never probed"; pass
+ * `opts.probing` while a live probe is in flight so the badge reads
+ * "Probing sandbox…" instead of a stale/never-probed state.
  *
  * State is conveyed by text + icon, never by color alone (accessibility).
  */
 export function engineReadinessBadgeContent(
   present: boolean | null,
   version: string | null,
+  opts: { probing?: boolean } = {},
 ): { icon: string; text: string; tone: EngineReadinessTone } {
+  if (opts.probing) {
+    return { icon: "⟳", text: "Probing sandbox…", tone: "muted" };
+  }
   if (present === true) {
     return {
       icon: "✓",
