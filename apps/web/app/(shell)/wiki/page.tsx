@@ -16,6 +16,7 @@ import {
   WWMD_PLATFORM_PROFILE_ID,
   WWWD_ORGANIZATION_PROFILE_ID,
 } from "@/lib/decision/caller-context";
+import { resolveOrgProfileId } from "@/lib/decision-perspective/material";
 import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +60,17 @@ export default async function WikiBrowsePage({
     where.pageKind = sp.kind;
   }
 
+  // WWWD health must be read off the org's OWN profile (org-perspective-<orgId>,
+  // seeded at onboarding — BI-230C9EF7/BI-44526F3E), not just the platform
+  // fallback id: counting only the fallback made the hub show "no stance of
+  // your own yet" even after the onboarding seed succeeded.
+  const orgProfileId = organizationId
+    ? await resolveOrgProfileId({ db: prisma, organizationId })
+    : null;
+  const wwwdProfileIds = orgProfileId
+    ? [orgProfileId, WWWD_ORGANIZATION_PROFILE_ID]
+    : [WWWD_ORGANIZATION_PROFILE_ID];
+
   // Derive discipline health + fetch the retained material list in parallel.
   const [
     pages,
@@ -97,17 +109,17 @@ export default async function WikiBrowsePage({
     prisma.wikiPage.count({
       where: { organizationId: null, pageKind: "heuristic", status: "published" },
     }),
-    // The org has "its own stance" when the WWWD organization profile carries
-    // its own material rows. In a single-tenant install where WWWD has not yet
-    // been seeded with distinct material this is 0 → "no stance of your own yet".
+    // The org has "its own stance" when its own WWWD profile (or, for
+    // installs without one, the platform organization fallback) carries
+    // material rows. 0 → "no stance of your own yet".
     prisma.perspectiveMaterial.count({
-      where: { profileId: WWWD_ORGANIZATION_PROFILE_ID },
+      where: { profileId: { in: wwwdProfileIds } },
     }),
     prisma.decisionInteraction.count({
       where: { outcomeType: { in: UNRESOLVED }, profileId: WWMD_PLATFORM_PROFILE_ID },
     }),
     prisma.decisionInteraction.count({
-      where: { outcomeType: { in: UNRESOLVED }, profileId: WWWD_ORGANIZATION_PROFILE_ID },
+      where: { outcomeType: { in: UNRESOLVED }, profileId: { in: wwwdProfileIds } },
     }),
     prisma.decisionPerspectiveProfile.count({
       where: { kind: "profession", status: "active" },
