@@ -565,7 +565,18 @@ export async function runSelfUpgrade(
     return { ok: true, status: "succeeded", runId: run.runId, quiescenceRunId, deployed };
   }
 
-  const rawExcerpt = result.stderr || result.stdout || "unknown error";
+  // Persist a tail of BOTH streams: with the classic builder the failing RUN
+  // step's output (e.g. pnpm's actual fetch error) is on stdout while compose
+  // writes only progress lines to stderr — `stderr || stdout` threw the real
+  // error away (SUR-73668D5C persisted no pnpm output at all).
+  const streamTail = (s: string) => (s.length > 4000 ? `…${s.slice(-4000)}` : s);
+  const rawExcerpt =
+    [
+      result.stderr && `--- stderr (tail) ---\n${streamTail(result.stderr)}`,
+      result.stdout && `--- stdout (tail) ---\n${streamTail(result.stdout)}`,
+    ]
+      .filter(Boolean)
+      .join("\n") || "unknown error";
   // Classify the build-gate failure into a known recurring class so the
   // persisted failure — and the BLOCKED reason an agent reads downstream —
   // leads with an actionable diagnosis instead of a raw log to reproduce from
