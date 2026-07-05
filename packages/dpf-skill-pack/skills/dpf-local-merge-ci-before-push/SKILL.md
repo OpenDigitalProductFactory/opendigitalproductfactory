@@ -51,13 +51,16 @@ If a gate cannot run in the worktree because pnpm/corepack is missing, workspace
 1. Confirm the branch is not `main` and is not detached.
 2. Fetch current `origin/main`.
 3. Run the local integration CI script or its current equivalent in an isolated merge path.
-4. Run the affected unit tests, typecheck, build, UX, and migration gates required by the changed files.
-5. Record the local integration result through MCP.
-6. Push only when the merged-code gate is green. If it is red, report the failure and next fix.
+4. **Step-zero freshness gate (BI-ECDF9520):** after the merge and before any test/build, the sandbox must prove its installed dependency graph matches the merged `pnpm-lock.yaml` — `node scripts/sandbox-freshness-preflight.mjs --converge` (already part of the local-integration plan). Exit 3/4 means SANDBOX DRIFT / NOT READY: the sandbox is stale, the run is NOT product evidence, and the only repair is the preflight's own single governed `pnpm install --frozen-lockfile` convergence — never a manual or per-worktree install.
+5. Run the affected unit tests, typecheck, build, UX, and migration gates required by the changed files.
+6. Record the local integration result through MCP — `passed`, `failed`, `conflict`, or `blocked_sandbox_drift` (stale sandbox; carries the freshness verdict and resolved `next`/`react`/`react-dom` versions in evidence).
+7. Push only when the merged-code gate is green. If it is red, report the failure and next fix; if it is blocked on sandbox drift, converge and re-run — do not report a product failure.
 
 ## Guardrails
 
 - Do not treat "passed in my worktree" as merge readiness.
+- A stale sandbox is not a product failure. Never record a red build as product evidence while the freshness preflight is red or unrun — classify it `blocked_sandbox_drift` and converge first.
+- Never start a second dependency install while one is running, and never "fix" a stale sandbox by installing dependencies inside a topic worktree.
 - Do not run destructive Compose cleanup against the root `dpf` project.
 - Do not push or open a PR while the local integration gate is red unless the operator explicitly reclassifies the branch as a blocked handoff.
 - A gate that did not run is an unrun gate, not a red gate; re-run it against the canonical install and record the result there.

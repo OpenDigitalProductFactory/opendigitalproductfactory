@@ -978,7 +978,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "record_local_integration_result",
-    description: "Record the result of a local merged-code integration gate before push or PR. Captures candidate branch, mode, pass/fail/conflict status, and evidence.",
+    description: "Record the result of a local merged-code integration gate before push or PR. Captures candidate branch, mode, status (passed | failed | conflict | blocked_sandbox_drift — the latter means the shared sandbox was stale/not-ready and the run is NOT product evidence), and evidence including dependency-freshness verdict.",
     inputSchema: {
       type: "object",
       properties: {
@@ -989,7 +989,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         taskRunId: { type: "string" },
         candidateBranch: { type: "string" },
         mode: { type: "string", enum: ["single-branch", "sibling-set", "post-merge-main"] },
-        status: { type: "string", enum: ["passed", "failed", "conflict"] },
+        status: { type: "string", enum: ["passed", "failed", "conflict", "blocked_sandbox_drift"] },
         summary: { type: "string" },
         evidence: { type: "object" },
       },
@@ -6728,7 +6728,7 @@ export async function executeTool(
       if (!["single-branch", "sibling-set", "post-merge-main"].includes(mode)) {
         return { success: false, error: "invalid_mode", message: `Unsupported local integration mode: ${mode}` };
       }
-      if (!["passed", "failed", "conflict"].includes(status)) {
+      if (!["passed", "failed", "conflict", "blocked_sandbox_drift"].includes(status)) {
         return { success: false, error: "invalid_status", message: `Unsupported local integration status: ${status}` };
       }
 
@@ -6741,7 +6741,7 @@ export async function executeTool(
         taskRunId: stringValue("taskRunId") || undefined,
         candidateBranch,
         mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
-        status: status as "passed" | "failed" | "conflict",
+        status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift",
         summary,
         evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
       });

@@ -26,6 +26,11 @@ export function createLocalIntegrationPlan(input) {
     ["git", "checkout", "-B", branch, "origin/main"],
     ["git", "merge", "--no-ff", "--no-edit", input.candidateBranch],
     ...input.siblingBranches.map((sibling) => ["git", "merge", "--no-ff", "--no-edit", sibling]),
+    // Step-zero sandbox freshness gate (BI-ECDF9520): after the merge changes
+    // pnpm-lock.yaml, node_modules must be proven to match it before any
+    // test/build result counts as product evidence. Exits 3/4 (sandbox drift /
+    // not ready) instead of letting a stale install masquerade as a red build.
+    ["node", "scripts/sandbox-freshness-preflight.mjs", "--converge", "--branch", branch],
     ["pnpm", "--filter", "web", "exec", "vitest", "run"],
     ["pnpm", "--filter", "web", "typecheck"],
     productionBuildCommand,

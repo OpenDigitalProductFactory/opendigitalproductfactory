@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 MCP_URL="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
 REMOTE="origin"
 BRANCH=""
@@ -231,22 +232,54 @@ cat "$gate_output_file"
 gate_output="$(tail -c 12000 "$gate_output_file" 2>/dev/null || cat "$gate_output_file")"
 rm -f "$gate_output_file"
 
-if [ "$gate_status" -eq 0 ]; then
-  gate_passed=true
-  status="passed"
-fi
+# Sandbox freshness classification (BI-ECDF9520): the preflight (run inside the
+# gate command) writes a report next to the git dir. A red/missing-freshness
+# sandbox must surface as blocked_sandbox_drift — never as product build
+# evidence — and exit codes 3/4 from the preflight are reserved for that.
+freshness_report_file="$("$GIT_BIN" rev-parse --git-path dpf-sandbox-freshness.json 2>/dev/null || true)"
+outcome_json="$(node -e '
+const fs = require("node:fs");
+const { pathToFileURL } = require("node:url");
+const reportPath = process.argv[1];
+const gateExitCode = Number(process.argv[2]);
+const libPath = process.argv[3];
+let report = null;
+try { report = JSON.parse(fs.readFileSync(reportPath, "utf8")); } catch {}
+import(pathToFileURL(libPath).href).then(({ classifyGateOutcome }) => {
+  const outcome = classifyGateOutcome({
+    freshnessVerdict: report ? report.verdict : "",
+    gateExitCode,
+  });
+  const freshness = report
+    ? {
+        verdict: report.verdict,
+        failures: report.failures,
+        packages: (report.packages || []).map((p) => ({ name: p.name, locked: p.lockedVersion, resolved: p.resolvedVersion })),
+        convergence: report.convergence,
+        generatedAt: report.generatedAt,
+      }
+    : { verdict: "unknown", reason: "no freshness report was produced by the gate command" };
+  process.stdout.write(JSON.stringify({ ...outcome, freshness }));
+});
+' "$freshness_report_file" "$gate_status" "$SCRIPT_DIR/lib/sandbox-freshness.mjs")"
+status="$(printf '%s' "$outcome_json" | field status)"
+gate_passed="$(printf '%s' "$outcome_json" | field gatePassed)"
+gate_summary="$(printf '%s' "$outcome_json" | field summary)"
 
 evidence_args="$(node -e '
-const status = process.argv[1];
-const gatePassed = process.argv[2] === "true";
+const outcome = JSON.parse(process.argv[11]);
 const evidence = {
   bi: "BI-166C59F3",
+  freshnessBi: "BI-ECDF9520",
   phase: 1,
   leaseId: process.argv[3],
   branch: process.argv[4],
   sha: process.argv[5],
-  gatePassed,
+  gatePassed: outcome.gatePassed,
+  freshness: outcome.freshness,
   commands: [process.argv[7]],
+  buildCommand: process.argv[7],
+  buildExitCode: Number(process.argv[12]),
   output: process.argv[8],
   url: process.argv[6]
 };
@@ -256,13 +289,31 @@ process.stdout.write(JSON.stringify({
   routeContext: "/build",
   candidateBranch: process.argv[4],
   mode: "single-branch",
-  status,
-  summary: gatePassed ? "local-CI lease gate passed." : "local-CI lease gate failed.",
+  status: outcome.status,
+  summary: outcome.summary,
   evidence
 }));
-' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID")"
+' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status")"
 evidence_response="$(mcp_call record_local_integration_result "$evidence_args" | extract_tool_result)"
 evidence_success="$(printf '%s' "$evidence_response" | field success)"
+if [ "$evidence_success" != "true" ] && [ "$status" = "blocked_sandbox_drift" ]; then
+  evidence_error="$(printf '%s' "$evidence_response" | field error)"
+  if [ "$evidence_error" = "invalid_status" ]; then
+    # Portal predates blocked_sandbox_drift (BI-ECDF9520). Downgrade the status
+    # field only — the summary and evidence.freshness still say sandbox drift,
+    # so the record cannot be misread as product build evidence.
+    printf '%s\n' "gate-worktree: portal does not know blocked_sandbox_drift yet; recording as failed with sandbox-drift evidence"
+    evidence_args="$(printf '%s' "$evidence_args" | node -e '
+const fs = require("node:fs");
+const payload = JSON.parse(fs.readFileSync(0, "utf8"));
+payload.status = "failed";
+payload.summary = `[SANDBOX_DRIFT — not product evidence] ${payload.summary}`;
+process.stdout.write(JSON.stringify(payload));
+')"
+    evidence_response="$(mcp_call record_local_integration_result "$evidence_args" | extract_tool_result)"
+    evidence_success="$(printf '%s' "$evidence_response" | field success)"
+  fi
+fi
 if [ "$evidence_success" = "true" ]; then
   evidence_id="$(printf '%s' "$evidence_response" | field entityId)"
 else
@@ -280,6 +331,12 @@ write_state "$gate_passed" "$lease_id" "$evidence_id" "$status"
 if [ "$gate_passed" = "true" ]; then
   printf '%s\n' "gate passed"
   exit 0
+fi
+
+if [ "$status" = "blocked_sandbox_drift" ]; then
+  printf '%s\n' "gate-worktree: BLOCKED (sandbox drift): $gate_summary" >&2
+  printf '%s\n' "gate-worktree: this is a sandbox defect, not product build evidence; converge the sandbox and re-run the gate" >&2
+  exit 3
 fi
 
 die "gate failed"
