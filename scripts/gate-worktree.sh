@@ -43,6 +43,8 @@ Options:
 
 Environment:
   DPF_LOCAL_CI_COMMAND        Command to run while holding the local-CI lease.
+                              Default: scripts/local-ci-runner.sh --candidate <branch>
+                              (the checked-in non-mutating merge-workspace runner).
   DPF_ALLOW_LOCAL_CI_STUB=1   Test-only escape hatch for the Phase 1 stub.
 EOF
 }
@@ -146,6 +148,13 @@ done
 [ -n "$OWNER_SESSION_ID" ] || OWNER_SESSION_ID="gate-$$"
 STATE_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-gate.json)"
 
+# Checked-in default (BI-157DC9B2): when no DPF_LOCAL_CI_COMMAND is supplied and
+# the stub is not explicitly allowed, run the non-mutating merge-workspace
+# runner. Agents get a working `pnpm run pregate` with zero configuration.
+if [ -z "$LOCAL_CI_COMMAND" ] && [ "$ALLOW_STUB" != "1" ] && [ -f "$SCRIPT_DIR/local-ci-runner.sh" ]; then
+  LOCAL_CI_COMMAND="sh '$SCRIPT_DIR/local-ci-runner.sh' --candidate '$BRANCH'"
+fi
+
 if [ "$DRY_RUN" = "1" ]; then
   printf 'gate-worktree dry-run\n'
   printf 'branch=%s\nsha=%s\nworktree=%s\nremote=%s\nmcpUrl=%s\n' "$BRANCH" "$SHA" "$WORKTREE_PATH" "$REMOTE" "$MCP_URL"
@@ -160,12 +169,14 @@ if [ "$DRY_RUN" = "1" ]; then
   exit 0
 fi
 
-[ -n "$LOCAL_CI_COMMAND" ] || [ "$ALLOW_STUB" = "1" ] || die "local-CI gate runner is not wired; refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests."
+[ -n "$LOCAL_CI_COMMAND" ] || [ "$ALLOW_STUB" = "1" ] || die "local-CI gate runner is not wired (scripts/local-ci-runner.sh is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests."
 
 [ -n "${DPF_MCP_BEARER_TOKEN:-}" ] || die "DPF_MCP_BEARER_TOKEN is required to claim the local-CI lease"
 
 if [ "$PUSH_BRANCH" = "1" ]; then
-  "$GIT_BIN" push "$REMOTE" "$BRANCH"
+  # DPF_PREPUSH_GATE_INFLIGHT: this push is part of the gate run itself — the
+  # chained pre-push-gate must not demand the record we are about to produce.
+  DPF_PREPUSH_GATE_INFLIGHT=1 "$GIT_BIN" push "$REMOTE" "$BRANCH"
 fi
 
 expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
