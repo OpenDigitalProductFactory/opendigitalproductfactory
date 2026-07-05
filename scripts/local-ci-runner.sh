@@ -95,9 +95,52 @@ git -C "$WORKSPACE" reset --hard --quiet
 # its convergence); drop everything else untracked.
 git -C "$WORKSPACE" clean -fd --quiet -e node_modules -e .env || true
 
+# CI parity: the Unit Tests job provisions Postgres and applies migrations
+# before the suite (a handful of web tests exercise real Prisma reads).
+# Resolution order: explicit env → dev data plane on :5433 → a self-provisioned
+# sandbox container on :54329. No DB at all → run without the migrate step and
+# say so; DB-touching tests will then fail loud rather than silently vanish.
+resolve_database_url() {
+  if [ -n "${DATABASE_URL:-}" ]; then printf '%s' "$DATABASE_URL"; return; fi
+  if [ -n "${DPF_LOCAL_CI_TEST_DATABASE_URL:-}" ]; then printf '%s' "$DPF_LOCAL_CI_TEST_DATABASE_URL"; return; fi
+  if nc -z 127.0.0.1 5433 >/dev/null 2>&1; then
+    printf '%s' "postgresql://dpf:dpf_dev@127.0.0.1:5433/dpf"
+    return
+  fi
+  if command -v docker >/dev/null 2>&1; then
+    if ! docker inspect dpf-local-ci-postgres >/dev/null 2>&1; then
+      docker run -d --name dpf-local-ci-postgres -p 54329:5432 \
+        -e POSTGRES_USER=dpf -e POSTGRES_PASSWORD=dpf_dev -e POSTGRES_DB=dpf \
+        postgres:16-alpine >/dev/null 2>&1 || return 0
+    else
+      docker start dpf-local-ci-postgres >/dev/null 2>&1 || true
+    fi
+    tries=0
+    while [ "$tries" -lt 30 ]; do
+      if docker exec dpf-local-ci-postgres pg_isready -U dpf >/dev/null 2>&1; then
+        printf '%s' "postgresql://dpf:dpf_dev@127.0.0.1:54329/dpf"
+        return
+      fi
+      tries=$((tries + 1))
+      sleep 1
+    done
+  fi
+}
+
+TEST_DATABASE_URL="$(resolve_database_url || true)"
+MIGRATE_FLAG=""
+if [ -n "$TEST_DATABASE_URL" ]; then
+  MIGRATE_FLAG="--migrate-deploy"
+  export DATABASE_URL="$TEST_DATABASE_URL"
+  printf 'local-ci-runner: test database %s\n' "$(printf '%s' "$TEST_DATABASE_URL" | sed 's#//.*@#//***@#')"
+else
+  printf 'local-ci-runner: WARNING no test database resolved — running without migrate deploy; Prisma-touching tests will fail loud\n' >&2
+fi
+
 # Run the CALLER's copy of the plan entrypoint (the version under review) with
 # the scratch workspace as cwd — a stale scratch checkout must never supply the
 # plan itself. The plan's own first steps fetch origin/main and re-checkout the
 # integration branch, so every command after that runs against merged bytes.
 cd "$WORKSPACE"
-exec node "$repo_top/scripts/local-integration-ci.mjs" --candidate "$CANDIDATE"
+# shellcheck disable=SC2086 — MIGRATE_FLAG is a single optional token
+exec node "$repo_top/scripts/local-integration-ci.mjs" --candidate "$CANDIDATE" $MIGRATE_FLAG

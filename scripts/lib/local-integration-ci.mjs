@@ -41,6 +41,12 @@ export function createLocalIntegrationPlan(input) {
     // test/build result counts as product evidence. Exits 3/4 (sandbox drift /
     // not ready) instead of letting a stale install masquerade as a red build.
     ["node", "scripts/sandbox-freshness-preflight.mjs", "--converge", "--branch", branch],
+    // CI parity (BI-157DC9B2): the Unit Tests job applies migrations before the
+    // suite — a handful of web tests exercise real Prisma reads. Callers that
+    // resolved a test DATABASE_URL opt in via includeMigrateDeploy.
+    ...(input.includeMigrateDeploy
+      ? [["pnpm", "--filter", "@dpf/db", "exec", "prisma", "migrate", "deploy"]]
+      : []),
     ["pnpm", "--filter", "web", "exec", "vitest", "run"],
     ["pnpm", "--filter", "web", "typecheck"],
     productionBuildCommand,

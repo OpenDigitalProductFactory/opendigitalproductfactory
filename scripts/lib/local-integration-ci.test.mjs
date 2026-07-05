@@ -72,3 +72,31 @@ describe("createLocalIntegrationPlan", () => {
     ));
   });
 });
+
+describe("createLocalIntegrationPlan migrate-deploy opt-in (BI-157DC9B2)", () => {
+  it("inserts prisma migrate deploy after freshness and before vitest when includeMigrateDeploy is set", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/x",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "linux",
+      includeMigrateDeploy: true,
+    });
+    const commands = plan.commands.map((command) => command.join(" "));
+    const migrateIndex = commands.indexOf("pnpm --filter @dpf/db exec prisma migrate deploy");
+    const freshnessIndex = commands.findIndex((c) => c.includes("sandbox-freshness-preflight.mjs"));
+    const vitestIndex = commands.findIndex((c) => c.includes("vitest run"));
+    assert.ok(migrateIndex > freshnessIndex, "migrate deploy must run after deps convergence");
+    assert.ok(migrateIndex < vitestIndex, "migrate deploy must run before the suite");
+  });
+
+  it("omits migrate deploy by default (no DB resolved)", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/x",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "linux",
+    });
+    assert.ok(!plan.commands.map((command) => command.join(" ")).some((c) => c.includes("migrate deploy")));
+  });
+});
