@@ -9,6 +9,7 @@ import { CustomerLifecycleReviewQueues } from "@/components/customer/CustomerLif
 import { CustomerSiteTree } from "@/components/customer/CustomerSiteTree";
 import { NewCustomerSiteButton } from "@/components/customer/NewCustomerSiteButton";
 import { AccountLifecycleActions } from "@/components/customer/AccountLifecycleActions";
+import { AddContactButton } from "@/components/customer/AddContactButton";
 import { MergeCustomerAccountButton } from "@/components/customer/MergeCustomerAccountButton";
 import { UnmergeCustomerAccountButton } from "@/components/customer/UnmergeCustomerAccountButton";
 import { loadCustomerEstateSummary } from "@/lib/customer-estate/account-estate-summary";
@@ -357,10 +358,13 @@ export default async function AccountDetailPage({
         <div className="space-y-6">
           {/* Contacts */}
           <div>
-            <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-3">
-              Contacts
-              <span className="ml-2 normal-case font-normal">{account.contacts.length}</span>
-            </h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest">
+                Contacts
+                <span className="ml-2 normal-case font-normal">{account.contacts.length}</span>
+              </h2>
+              <AddContactButton accountId={account.id} />
+            </div>
             <div className="space-y-2">
               {account.contacts.map((c) => (
                 <div

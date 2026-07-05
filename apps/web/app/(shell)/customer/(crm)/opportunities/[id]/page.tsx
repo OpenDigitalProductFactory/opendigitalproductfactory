@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
+import { DraftQuoteButton } from "@/components/customer/DraftQuoteButton";
 import { PipelineStageInspector } from "@/components/customer/PipelineStageInspector";
 import { updateOpportunityStageFromForm } from "@/lib/actions/crm";
 import { getPipelineInspectorView } from "@/lib/crm/pipeline-inspector-data";
@@ -73,6 +74,16 @@ export default async function OpportunityDetailPage({
         <p className="text-[10px] font-mono text-[var(--dpf-muted)]">
           {opportunity.opportunityId}
         </p>
+        {!isClosed && (
+          <div className="mt-3">
+            <DraftQuoteButton
+              opportunityId={opportunity.id}
+              defaultDescription={opportunity.title}
+              defaultAmount={opportunity.expectedValue ? Number(opportunity.expectedValue) : null}
+              currency={opportunity.currency}
+            />
+          </div>
+        )}
       </div>
 
       <PipelineStageInspector

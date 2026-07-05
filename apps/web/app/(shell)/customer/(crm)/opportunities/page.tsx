@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
 import { EmptyPipelineGuidance } from "@/components/customer/EmptyPipelineGuidance";
+import { NewOpportunityButton } from "@/components/customer/NewOpportunityButton";
 import { PipelineStageInspector } from "@/components/customer/PipelineStageInspector";
 import { updateOpportunityStageFromForm } from "@/lib/actions/crm";
 import {
@@ -24,7 +25,7 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
   const sp = await searchParams;
   const requestedOpportunityId = sp?.opportunity;
   const view = parseSurfaceView(sp?.view);
-  const [opportunities, orgSettings] = await Promise.all([
+  const [opportunities, orgSettings, accounts] = await Promise.all([
     prisma.opportunity.findMany({
     orderBy: { createdAt: "desc" },
     include: {
@@ -34,6 +35,10 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
       },
     }),
     getOrgSettings(),
+    prisma.customerAccount.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
   const baseCurrency = orgSettings?.baseCurrency ?? "USD";
 
@@ -66,7 +71,8 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Pipeline</h1>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[10px]">
           <span className="text-[var(--dpf-muted)]">
@@ -84,6 +90,8 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
             </span>
           )}
         </div>
+        </div>
+        <NewOpportunityButton accounts={accounts} />
       </div>
 
       <PlatformGridSection entityType="opportunity" view={view} />
