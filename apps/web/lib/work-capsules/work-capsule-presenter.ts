@@ -38,7 +38,7 @@ const DECISION_SCOPE_LABELS: Record<string, string> = {
 const PORTFOLIO_ROLE_LABELS: Record<string, string> = {
   foundational: "Foundational",
   manufactureAndDeliver: "Manufacture & Deliver",
-  forEmployees: "For Employees",
+  forEmployees: "Workforce / For Employees",
   productsAndServicesSold: "Products & Services Sold",
 };
 

@@ -11,6 +11,7 @@ import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { sendEmail, composeSignedConfirmationEmail, isEmailConfigured } from "@/lib/email";
 import { postInvoiceIssued, postPaymentRecorded } from "@/lib/finance/ledger-service";
+import { customerAccountNormalizedColumns } from "@/lib/mdm/dedup-gate";
 
 // ─── Auth guard ───────────────────────────────────────────────────────────────
 
@@ -375,10 +376,12 @@ export async function generateInvoiceFromStorefrontOrder(orderId: string) {
     include: { account: true },
   });
   if (!contact) {
+    const accountName = order.customerEmail.split("@")[0] ?? "Customer";
     const account = await prisma.customerAccount.create({
       data: {
         accountId: `CA-${nanoid(8)}`,
-        name: order.customerEmail.split("@")[0] ?? "Customer",
+        name: accountName,
+        ...customerAccountNormalizedColumns({ name: accountName }),
         status: "prospect",
       },
     });

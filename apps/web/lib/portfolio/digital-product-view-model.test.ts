@@ -69,6 +69,62 @@ describe("toDigitalProductViewModel", () => {
     expect(vm.observationConfig).toEqual({ classifyAs: "infrastructure_endpoint" });
   });
 
+  it("projects the coworker summary from coworker_service observationConfig markers", () => {
+    const vm = toDigitalProductViewModel({
+      product: {
+        ...baseProduct,
+        productId: "coworker-AGT-COO",
+        observationConfig: {
+          sourceKind: "coworker_service",
+          projectedBy: "portfolio-source-projector",
+          agentId: "AGT-COO",
+          humanRoleParity: "HR-000",
+          approvalInterfaceOwnerRole: "HR-000",
+        },
+      },
+      taxonomyAncestors: [],
+      inventoryEntities: [],
+      qualityIssues: [],
+    });
+    expect(vm.coworker).toEqual({
+      agentId: "AGT-COO",
+      humanRoleParity: "HR-000",
+      approvalInterfaceOwner: "HR-000",
+    });
+  });
+
+  it("coworker is null for non-coworker products, and empty markers become null", () => {
+    // Non-coworker product.
+    expect(
+      toDigitalProductViewModel({
+        product: baseProduct,
+        taxonomyAncestors: [],
+        inventoryEntities: [],
+        qualityIssues: [],
+      }).coworker,
+    ).toBeNull();
+    // Coworker product with an unassigned owner (empty-string markers).
+    const vm = toDigitalProductViewModel({
+      product: {
+        ...baseProduct,
+        observationConfig: {
+          sourceKind: "coworker_service",
+          agentId: "AGT-X",
+          humanRoleParity: "",
+          approvalInterfaceOwnerRole: "",
+        },
+      },
+      taxonomyAncestors: [],
+      inventoryEntities: [],
+      qualityIssues: [],
+    });
+    expect(vm.coworker).toEqual({
+      agentId: "AGT-X",
+      humanRoleParity: null,
+      approvalInterfaceOwner: null,
+    });
+  });
+
   it("returns null observationConfig when absent or malformed", () => {
     const vm1 = toDigitalProductViewModel({
       product: { ...baseProduct, observationConfig: null },

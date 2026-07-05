@@ -30,7 +30,7 @@ export function PortalContextStrip({
   const buildLabel = formatBuildLabel(envelope.work.featureBuild ?? null, showInternalIds);
   const capsuleLabel = formatCapsuleLabel(envelope.work.capsule ?? null, showInternalIds);
   // D11 (2026-05-23): suppress the AttentionChip rendering when it would
-  // duplicate the "No active build" text already shown in the buildLabel
+  // duplicate the "No build selected" text already shown in the buildLabel
   // chip to its left. The chip's job is to carry build identity; when
   // there is no build, the chip says so — adding a yellow warning chip
   // with the same text was straight duplication that made the strip
@@ -101,13 +101,18 @@ export function PortalContextStrip({
 }
 
 function formatBuildLabel(build: FeatureBuildAnchor | null, showInternalIds: boolean): string {
-  if (!build) return "No active build";
+  // BI-AC156613: the strip reflects the work object ANCHORED in the URL, not
+  // system-wide activity. On list/control routes (e.g. /build/work) nothing is
+  // anchored, so this renders. "No active build" read as an activity claim and
+  // contradicted the page's own "Active capsules: N" count directly below it —
+  // "No build selected" states the true (selection) meaning without the clash.
+  if (!build) return "No build selected";
   if (showInternalIds) return build.buildId;
   return build.title || "Active build";
 }
 
 function formatCapsuleLabel(capsule: WorkCapsuleAnchor | null, showInternalIds: boolean): string {
-  if (!capsule) return "No capsule";
+  if (!capsule) return "No capsule selected";
   if (showInternalIds) return capsule.capsuleId;
   return capsule.title || "Work capsule";
 }
@@ -149,7 +154,7 @@ function severityClassName(severity: AttentionSignal["severity"]): string {
 }
 
 function signalLabel(signal: AttentionSignal, showInternalIds: boolean): string {
-  if (signal.kind === "no_active_build") return "No active build";
+  if (signal.kind === "no_active_build") return "No build selected";
   if (signal.kind === "capsule_not_linked") return "Capsule not linked";
   if (signal.kind === "missing_evidence") return showInternalIds ? "Missing evidence" : "Waiting on you";
   if (signal.kind === "lease_expired") return "Lease expired";

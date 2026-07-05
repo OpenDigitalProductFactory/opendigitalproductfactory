@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { loadWorkforceRoster } from "./workforce-roster";
 
-function makeDb(opts: { employees?: unknown[]; agents?: unknown[] }) {
+function makeDb(opts: { employees?: unknown[]; agents?: unknown[]; roles?: unknown[] }) {
   return {
     employeeProfile: { findMany: vi.fn().mockResolvedValue(opts.employees ?? []) },
     agent: { findMany: vi.fn().mockResolvedValue(opts.agents ?? []) },
+    platformRole: { findMany: vi.fn().mockResolvedValue(opts.roles ?? []) },
   };
 }
 
@@ -35,7 +36,16 @@ const AGENT = {
   coworkerNeeds: [{ status: "submitted" }, { status: "resolved" }, { status: "in-progress" }],
 };
 
-describe("loadWorkforceRoster (BI-554E1A14)", () => {
+/** A supervising HR role with exactly one active employee holding it. */
+const ROLE_SINGLE_HOLDER = {
+  roleId: "HR-000",
+  name: "Chief Executive Officer",
+  users: [
+    { user: { isActive: true, employeeProfile: { displayName: "Grace Hopper", status: "active" } } },
+  ],
+};
+
+describe("loadWorkforceRoster (BI-554E1A14, BI-9A5F0EA3)", () => {
   it("unifies humans and agents into one roster", async () => {
     const db = makeDb({ employees: [HUMAN], agents: [AGENT] });
 
@@ -67,7 +77,8 @@ describe("loadWorkforceRoster (BI-554E1A14)", () => {
     });
   });
 
-  it("surfaces the agent-needs lens (tools/tokens/skills/supervision)", async () => {
+  it("surfaces the agent-needs lens (tools/tokens/skills/supervision + parity/owner)", async () => {
+    // No platformRole rows returned → owner stays BROAD (the role itself).
     const db = makeDb({ employees: [], agents: [AGENT] });
 
     const { members } = await loadWorkforceRoster({ db: db as never });
@@ -79,6 +90,8 @@ describe("loadWorkforceRoster (BI-554E1A14)", () => {
     expect(agent.agentNeeds).toEqual({
       valueStream: "evaluate",
       supervisorId: "HR-000",
+      humanRoleParity: { roleId: "HR-000", roleName: "HR-000" },
+      approvalInterfaceOwner: { scope: "role", label: "HR-000", roleId: "HR-000" },
       hitlTier: 2,
       lifecycleStage: "production",
       model: "claude-sonnet-4-6",
@@ -88,6 +101,64 @@ describe("loadWorkforceRoster (BI-554E1A14)", () => {
       skillCount: 3,
       // 2 of 3 needs are not resolved (submitted + in-progress)
       unmetNeedCount: 2,
+    });
+  });
+
+  it("resolves the human-role parity anchor from the supervising role's name", async () => {
+    const db = makeDb({ employees: [], agents: [AGENT], roles: [ROLE_SINGLE_HOLDER] });
+
+    const { members } = await loadWorkforceRoster({ db: db as never });
+
+    expect(members[0].agentNeeds?.humanRoleParity).toEqual({
+      roleId: "HR-000",
+      roleName: "Chief Executive Officer",
+    });
+  });
+
+  it("narrows the approval owner to a specific employee when exactly one active person holds the role", async () => {
+    const db = makeDb({ employees: [], agents: [AGENT], roles: [ROLE_SINGLE_HOLDER] });
+
+    const { members } = await loadWorkforceRoster({ db: db as never });
+
+    // DOC-7693D528: broad role owner becomes a specific employee as headcount converges.
+    expect(members[0].agentNeeds?.approvalInterfaceOwner).toEqual({
+      scope: "employee",
+      label: "Grace Hopper",
+      roleId: "HR-000",
+    });
+  });
+
+  it("keeps the approval owner BROAD (the role) when zero or many employees hold it", async () => {
+    const twoHolders = {
+      ...ROLE_SINGLE_HOLDER,
+      name: "Approver Pool",
+      users: [
+        { user: { isActive: true, employeeProfile: { displayName: "A", status: "active" } } },
+        { user: { isActive: true, employeeProfile: { displayName: "B", status: "active" } } },
+      ],
+    };
+    const db = makeDb({ employees: [], agents: [AGENT], roles: [twoHolders] });
+
+    const { members } = await loadWorkforceRoster({ db: db as never });
+
+    expect(members[0].agentNeeds?.approvalInterfaceOwner).toEqual({
+      scope: "role",
+      label: "Approver Pool",
+      roleId: "HR-000",
+    });
+  });
+
+  it("marks the owner unassigned when the coworker has no supervising role", async () => {
+    const noSupervisor = { ...AGENT, humanSupervisorId: null };
+    const db = makeDb({ employees: [], agents: [noSupervisor] });
+
+    const { members } = await loadWorkforceRoster({ db: db as never });
+
+    expect(members[0].agentNeeds?.humanRoleParity).toBeNull();
+    expect(members[0].agentNeeds?.approvalInterfaceOwner).toEqual({
+      scope: "unassigned",
+      label: null,
+      roleId: null,
     });
   });
 

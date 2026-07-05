@@ -11,6 +11,10 @@ import {
   parsePagination,
   buildPaginatedResponse,
 } from "@/lib/api/pagination";
+import {
+  checkCustomerContactDuplicates,
+  customerContactNormalizedColumns,
+} from "@/lib/mdm/dedup-gate";
 
 function contactInclude() {
   return {
@@ -64,72 +68,35 @@ export async function GET(request: Request) {
   }
 }
 
-/** Find similar contacts for duplicate prevention */
+/**
+ * Find similar contacts for duplicate prevention. Thin adapter over the shared
+ * MDM dedup gate (normalized + trigram matching) preserving this route's
+ * response contract (confidence 0-100 + matchedOn).
+ */
 async function findSimilarContacts(
   email: string,
   firstName?: string,
   lastName?: string,
   phone?: string,
 ) {
-  const similar: { id: string; email: string; firstName: string | null; lastName: string | null; confidence: number; matchedOn: string }[] = [];
-
-  // Exact email match — highest confidence
-  const emailMatch = await prisma.customerContact.findUnique({
-    where: { email },
-    select: { id: true, email: true, firstName: true, lastName: true },
+  const check = await checkCustomerContactDuplicates({
+    email,
+    firstName,
+    lastName,
+    phone,
   });
-  if (emailMatch) {
-    similar.push({ ...emailMatch, confidence: 100, matchedOn: "email" });
-    return similar; // Exact email = definitive duplicate
-  }
-
-  // Name match — fuzzy
-  if (firstName && lastName) {
-    const nameMatches = await prisma.customerContact.findMany({
-      where: {
-        firstName: { equals: firstName, mode: "insensitive" },
-        lastName: { equals: lastName, mode: "insensitive" },
-      },
-      select: { id: true, email: true, firstName: true, lastName: true },
-      take: 5,
-    });
-    for (const m of nameMatches) {
-      similar.push({ ...m, confidence: 70, matchedOn: "name" });
-    }
-  }
-
-  // Phone match — digit comparison
-  if (phone) {
-    const digitsOnly = phone.replace(/\D/g, "");
-    if (digitsOnly.length >= 7) {
-      const phoneMatches = await prisma.customerContact.findMany({
-        where: {
-          phone: { not: null },
-        },
-        select: { id: true, email: true, firstName: true, lastName: true, phone: true },
-        take: 100, // scan for digit match
-      });
-      for (const m of phoneMatches) {
-        if (m.phone && m.phone.replace(/\D/g, "").includes(digitsOnly)) {
-          similar.push({
-            id: m.id,
-            email: m.email,
-            firstName: m.firstName,
-            lastName: m.lastName,
-            confidence: 60,
-            matchedOn: "phone",
-          });
-        }
-      }
-    }
-  }
-
-  // Deduplicate by id
-  const seen = new Set<string>();
-  return similar.filter((s) => {
-    if (seen.has(s.id)) return false;
-    seen.add(s.id);
-    return true;
+  const normalizedEmail = email.trim().toLowerCase();
+  return check.candidates.map((candidate) => {
+    const emailExact = candidate.reasons.some(
+      (r) => r.attribute === "email" && r.detail === normalizedEmail,
+    );
+    return {
+      id: candidate.id,
+      email: candidate.detail ?? "",
+      name: candidate.label,
+      confidence: emailExact ? 100 : Math.round(candidate.score * 100),
+      matchedOn: candidate.reasons.map((r) => r.attribute).join("+") || "name",
+    };
   });
 }
 
@@ -196,6 +163,7 @@ export async function POST(request: Request) {
             firstName || lastName
               ? [firstName, lastName].filter(Boolean).join(" ").trim()
               : null,
+          ...customerContactNormalizedColumns({ firstName, lastName }),
           phone: phone?.trim() || null,
           accountId,
           ...rest,

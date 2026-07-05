@@ -25,6 +25,8 @@ const roster: WorkforceRoster = {
       agentNeeds: {
         valueStream: "evaluate",
         supervisorId: "HR-000",
+        humanRoleParity: { roleId: "HR-000", roleName: "Chief Executive Officer" },
+        approvalInterfaceOwner: { scope: "role", label: "Chief Executive Officer", roleId: "HR-000" },
         hitlTier: 2,
         lifecycleStage: "production",
         model: "claude-sonnet-4-6",
@@ -47,10 +49,13 @@ describe("WorkforceRosterPanel", () => {
     expect(html).toContain("Ada Lovelace");
     expect(html).toContain("human");
     expect(html).toContain("Chief of Staff");
-    expect(html).toContain("AI agent");
+    expect(html).toContain("AI coworker");
 
-    // agent-needs lens surfaced
-    expect(html).toContain("HR-000"); // supervisor
+    // agent-needs lens surfaced — incl. human-role parity + approval/interface owner
+    expect(html).toContain("role parity");
+    expect(html).toContain("approval owner");
+    expect(html).toContain("Chief Executive Officer"); // resolved parity/owner role
+    expect(html).toContain("(role)"); // broad-owner scope hint
     expect(html).toContain("T2"); // HITL tier
     expect(html).toContain("claude-sonnet-4-6"); // model
     expect(html).toContain("200k/day"); // token budget

@@ -114,6 +114,10 @@ STEP 0 — INTENT GATE (do this FIRST, before any tools):
 
   CHECK the Business Context section in the Build Studio Context below — it tells you industry, target market, CTA type, revenue model. Use this to fill in gaps rather than asking.
 
+  INTERNAL META-FEATURE CHECK: if the request changes the platform itself (Build Studio, the portal, admin/ops tooling, platform infrastructure) rather than the org's product for its customers, the audience is INTERNAL. Do NOT apply the org's customer-facing Business Context to target roles or portfolio: target roles are internal operator roles (e.g. platform operator, admin) — never "customer" — and the portfolio should be left empty rather than forced to a customer-facing one.
+
+  EXPLICIT REQUIREMENTS ARE HARD CONSTRAINTS: anything the user explicitly specified (an exact format, an example like "3m ago", a specific behavior) must survive verbatim into the design and its acceptance criteria. Never quietly substitute a different choice for one the user made.
+
   IF the request is VAGUE (shorter than one sentence or completely opaque):
     Ask ONE question: "What should this feature do — who uses it and what does it help them accomplish?"
     Wait for an answer.
@@ -160,7 +164,7 @@ STEP 1 — EFFORT SIZING & EPIC ASSESSMENT:
 STEP 2 — START DESIGN RESEARCH:
   Call start_ideate_research with:
   - reusabilityScope: from step 1b ("one_off", "parameterizable", or "already_generic")
-  - userContext: a 2-3 sentence summary including: what user wants, answers to step 1 questions, org context (e.g. "This is an HOA — no lead capture, uses central calendar")
+  - userContext: a 2-3 sentence summary including: what user wants, answers to step 1 questions, org context (e.g. "This is an HOA — no lead capture, uses central calendar"). QUOTE the user's explicit requirements VERBATIM (exact formats, examples like "relative timestamp, e.g. 3m ago", specific behaviors) — do not paraphrase them away; the design researcher only sees what you pass here. If this is an internal platform/meta-feature, say so explicitly (e.g. "internal Build Studio tooling change — audience is the platform operator, not customers").
 
   Say: "Designing the architecture — this takes about a minute."
 

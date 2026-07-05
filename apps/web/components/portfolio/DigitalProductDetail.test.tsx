@@ -12,6 +12,7 @@ const emptyVm: DigitalProductView = {
   lifecycleStage: "plan",
   lifecycleStatus: "draft",
   observationConfig: null,
+  coworker: null,
   taxonomyLineage: [],
   portfolio: null,
   primaryEntity: null,
@@ -32,6 +33,7 @@ const fullVm: DigitalProductView = {
   lifecycleStage: "production",
   lifecycleStatus: "active",
   observationConfig: { classifyAs: "infrastructure_endpoint" },
+  coworker: null,
   taxonomyLineage: [
     { nodeId: "foundational", name: "Foundational" },
     { nodeId: "foundational/data_and_storage_management", name: "Data and Storage Management" },
@@ -219,6 +221,43 @@ describe("DigitalProductDetail", () => {
       // No bare JSON-looking blobs (e.g. the entire stringified entity).
       expect(html).not.toContain("entityKey:");
       expect(html).not.toContain('"manufacturer"');
+    });
+  });
+
+  describe("AI coworker product (BI-8F9EDD6C)", () => {
+    const coworkerVm: DigitalProductView = {
+      ...emptyVm,
+      id: "dp_coworker",
+      productId: "coworker-AGT-COO",
+      name: "Chief of Staff",
+      coworker: {
+        agentId: "AGT-COO",
+        humanRoleParity: "HR-000",
+        approvalInterfaceOwner: "HR-000",
+      },
+    };
+
+    it("renders the AI Coworker section with parity anchor + approval owner", () => {
+      const html = renderToStaticMarkup(<DigitalProductDetail vm={coworkerVm} />);
+      expect(html).toContain(">AI Coworker<");
+      expect(html).toContain("Human-role parity");
+      expect(html).toContain("Approval / interface owner");
+      expect(html).toContain("AGT-COO");
+      expect(html).toContain("HR-000");
+    });
+
+    it("shows a broad-unassigned owner when no owner role is set", () => {
+      const vm: DigitalProductView = {
+        ...coworkerVm,
+        coworker: { agentId: "AGT-X", humanRoleParity: null, approvalInterfaceOwner: null },
+      };
+      const html = renderToStaticMarkup(<DigitalProductDetail vm={vm} />);
+      expect(html).toContain("broad (unassigned)");
+    });
+
+    it("does not render the AI Coworker section for a non-coworker product", () => {
+      const html = renderToStaticMarkup(<DigitalProductDetail vm={fullVm} />);
+      expect(html).not.toMatch(/>AI Coworker</);
     });
   });
 

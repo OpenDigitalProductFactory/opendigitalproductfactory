@@ -21,6 +21,7 @@ import { projectPlatformCapabilities } from "./portfolio-sources/project-portfol
 import { projectAiProviders, projectIntegrations } from "./portfolio-sources/project-external-supply.js";
 import { projectSupplyChain } from "./portfolio-sources/project-sbom.js";
 import { projectProductDependencyGraph } from "./portfolio-sources/product-dependency.js";
+import { projectCoworkerWorkforce } from "./portfolio-sources/project-coworker-workforce.js";
 import { backfillBacklogPortfolios } from "./backlog-portfolio.js";
 import {
   seedViewpointsForNotation,
@@ -2372,6 +2373,10 @@ async function main(): Promise<void> {
   await step("dpfSelfRegistration", () => seedDpfSelfRegistration());
   await step("coworkerServiceCatalog", () => seedCoworkerServiceCatalog(prisma));
   await step("platformCapabilityPortfolio", () => projectPlatformCapabilities());
+  // BI-8F9EDD6C: project AI coworkers as Workforce DigitalProducts under
+  // for_employees and back-link Agent.portfolioId + CoworkerService.digitalProductId.
+  // Runs after coworkerServiceCatalog so services exist to link.
+  await step("coworkerWorkforcePortfolio", () => projectCoworkerWorkforce());
   await step("defaultAdminUser", () => seedDefaultAdminUser());
   await step("discoveryTriageScheduledTask", () => ensureDiscoveryTriageScheduledTask(prisma));
   await step("dataModelMirrorScheduledTask", () => ensureDataModelMirrorScheduledTask(prisma));
