@@ -11852,8 +11852,12 @@ export async function executeTool(
 
       // BI-F4A30FCB (Dale dogfood 2026-05-24): resolve the target build
       // from agent context first; see start_ideate_research comment above.
+      // BI-7FEAFD9A (2026-07-05): prefer the FB- hint from params.buildId
+      // (set by the executeTool preamble from the context cuid) — passing the
+      // raw context.featureBuildId cuid here made the resolver's
+      // where:{buildId} lookup a guaranteed miss, so scout always refused.
       const resolved = await resolveIdeateBuildForTool({
-        contextBuildId: context?.featureBuildId,
+        contextBuildId: extractBuildIdHint(params) ?? context?.featureBuildId,
         toolName: "start_scout_research",
       });
       if (!resolved.build) {

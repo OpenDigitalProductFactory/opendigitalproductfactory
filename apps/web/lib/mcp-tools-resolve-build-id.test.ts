@@ -228,3 +228,59 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
   // without thinking about callers.
   void buildSelectShape;
 });
+
+describe("start_scout_research build resolution (BI-7FEAFD9A regression)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.featureBuild.update.mockResolvedValue({});
+    mockPrisma.buildActivity.create.mockResolvedValue({});
+  });
+
+  it("resolves a cuid-shaped context.featureBuildId via the preamble-mapped params.buildId hint", async () => {
+    // Observed live 2026-07-05 on FB-F4BE093E: the agentic loop plumbs
+    // context.featureBuildId as a FeatureBuild.id cuid. The executeTool
+    // preamble maps it to params.buildId (the FB- form), but the scout
+    // handler passed the raw cuid to resolveIdeateBuildForTool, whose
+    // findUniqueBuild queries where:{buildId} — a guaranteed miss, so the
+    // tool always refused with "Couldn't find that build".
+    const contextCuid = "cmcpqr7xk0001v8m3h2j9d4ta";
+    const fbId = "FB-F4BE093E";
+
+    mockPrisma.featureBuild.findUnique.mockImplementation(
+      ({ where, select }: { where: { id?: string; buildId?: string }; select: Record<string, boolean> }) => {
+        // executeTool preamble: cuid → FB- buildId mapping.
+        if (where.id === contextCuid) return Promise.resolve({ buildId: fbId });
+        // Ideate resolver lookup (select: { buildId, phase }).
+        if (where.buildId === fbId && select.phase) {
+          return Promise.resolve({ buildId: fbId, phase: "ideate" });
+        }
+        // Scout handler re-read (select: { buildId, buildExecState, scoutFindings }).
+        if (where.buildId === fbId) {
+          return Promise.resolve({ buildId: fbId, buildExecState: null, scoutFindings: null });
+        }
+        // Anything else — including the pre-fix where:{buildId:<cuid>} — misses.
+        return Promise.resolve(null);
+      },
+    );
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "start_scout_research",
+      {},
+      "user-1",
+      { threadId: "thread-1", routeContext: "/build", featureBuildId: contextCuid },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("Scout started");
+    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { buildId: fbId } }),
+    );
+    // The resolver must never be asked to look up the raw cuid as a buildId —
+    // that query is the bug (it can never match an FB- keyed row).
+    const cuidAsBuildIdLookups = mockPrisma.featureBuild.findUnique.mock.calls.filter(
+      (call) => (call[0] as { where?: { buildId?: string } }).where?.buildId === contextCuid,
+    );
+    expect(cuidAsBuildIdLookups).toHaveLength(0);
+  });
+});
