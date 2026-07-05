@@ -608,7 +608,10 @@ export const PHASE_COLOURS: Record<BuildPhase, string> = {
   ship:     "#4ade80",
   complete: "#4ade80",
   failed:   "#f87171",
-  abandoned: "#9ca3af",
+  // Terminal/parked handoff — a muted token (consumers already render
+  // var(--dpf-muted) for inactive phases, e.g. PhaseIndicator), keeping the
+  // style-drift discipline instead of adding a fresh hardcoded hex.
+  abandoned: "var(--dpf-muted)",
 };
 
 export const CODING_CAPABILITY_COLOURS: Record<CodingCapability, string> = {
