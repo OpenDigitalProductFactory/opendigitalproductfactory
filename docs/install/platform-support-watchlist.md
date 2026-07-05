@@ -57,13 +57,16 @@ roadmap before touching any host exporter.
 ## 2. Shell scripts (BSD vs GNU coreutils)
 
 macOS ships BSD userland; Linux ships GNU. The installer targets **bash 3.2**
-(stock macOS) — no associative arrays, `mapfile`, or `${var^^}`.
+and **python3 3.9** (stock macOS) — no associative arrays, `mapfile`, or
+`${var^^}` in bash; no Python-3.10+-only stdlib kwargs or syntax in scripts the
+bootstrap runs with the system interpreter.
 
 | # | Trap | Platforms | Status | Watch for |
 |---|---|---|---|---|
 | S1 | `sed -i` differs (BSD requires a backup-suffix arg) | macOS | ✅ Use `dpf_sed_inplace()` in [`scripts/installer/lib/platform.sh`](../../scripts/installer/lib/platform.sh) — never raw `sed -i`. | New scripts calling `sed -i` directly. |
 | S2 | `netstat -anP tcp` (`-P` is GNU-only) | macOS | 📌 Works today only because `preflight.sh` tries `lsof` → `ss` → `netstat` and macOS always has `lsof`. | Don't reorder the fallback chain or hardcode `netstat -anP`. |
 | S3 | `readlink -f`, `stat -c`, `date -d`, `find -printf`, `grep -P` | macOS | ⚠️ watch | These GNU-isms have no BSD equivalent. Prefer POSIX forms; `shellcheck --shell=bash` runs in CI. |
+| S4 | `Path.write_text(newline="\n")` raises `TypeError: unexpected keyword argument` — the kwarg was added in Python 3.10 | macOS (system python3 can be 3.9) | ✅ `packages/dpf-skill-pack/scripts/update_agent_toolchain.py` writes bytes (`write_bytes(content.encode("utf-8"))`) to keep LF endings; crashed `dpf-bootstrap-agent-toolchain.sh` during `ensure_codex_marketplace`. Locked by `update_agent_toolchain_test.py`. | Any Python invoked via bare `python3` from installer/bootstrap scripts must run on 3.9: no `match`, no `tomllib` (3.11+, test-only), no 3.10+ stdlib kwargs. CI runs 3.11+, so a 3.9 break won't show there — check `docs.python.org` "Changed in version" notes when touching these scripts. |
 
 ## 3. Docker / Compose
 

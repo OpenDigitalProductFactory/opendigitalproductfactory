@@ -22,6 +22,7 @@ on:
     branches: [main]
     paths:
       - "packages/dpf-bootstrap/**"
+      - "packages/dpf-skill-pack/scripts/**"
       - "scripts/dpf-bootstrap-agent-toolchain.sh"
       - "scripts/ensure-dpf-skill-pack.sh"
       - "scripts/installer/lib/state.sh"
@@ -31,6 +32,7 @@ on:
     branches: [main]
     paths:
       - "packages/dpf-bootstrap/**"
+      - "packages/dpf-skill-pack/scripts/**"
       - "scripts/dpf-bootstrap-agent-toolchain.sh"
       - "scripts/ensure-dpf-skill-pack.sh"
       - "scripts/installer/lib/state.sh"
@@ -68,6 +70,11 @@ jobs:
 
       - name: Vitest (planning library + bridge + probes)
         run: pnpm --filter @dpf/bootstrap test
+
+      - name: Standalone skill-pack updater tests (fallback path)
+        # The runner's python3 is 3.12+, so the tomllib-gated suites run here;
+        # the Python-3.9 compatibility locks are version-independent.
+        run: python3 -m unittest discover -s packages/dpf-skill-pack/scripts -p "*_test.py" -v
 
       - name: Typecheck planning library
         run: pnpm --filter @dpf/bootstrap typecheck
