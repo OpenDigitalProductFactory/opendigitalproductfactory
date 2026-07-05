@@ -44,6 +44,7 @@ function makeNode(overrides: Partial<EdgeNode> = {}): EdgeNode {
     metadata: null,
     customerAccountId: null,
     customerSiteId: null,
+    subscriptionId: null,
     scopePolicy: null,
     tokenHash: null,
     tokenPrefix: null,

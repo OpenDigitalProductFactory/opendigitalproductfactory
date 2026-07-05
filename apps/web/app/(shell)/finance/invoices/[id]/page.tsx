@@ -5,6 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InvoiceSendButton } from "@/components/finance/InvoiceSendButton";
 import { InvoiceDownloadButton } from "@/components/finance/InvoiceDownloadButton";
+import { RecordInvoicePaymentButton } from "@/components/finance/RecordInvoicePaymentButton";
 import { InvoiceSignatureToggle } from "@/components/finance/InvoiceSignatureToggle";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -91,6 +92,12 @@ export default async function InvoiceDetailPage({ params }: Props) {
           <div className="flex gap-2 mt-3">
             <InvoiceDownloadButton invoiceId={invoice.id} />
             <InvoiceSendButton invoiceId={invoice.id} status={invoice.status} customerAccountId={invoice.account.id} />
+            <RecordInvoicePaymentButton
+              invoiceId={invoice.id}
+              outstanding={amountDue}
+              currency={invoice.currency}
+              status={invoice.status}
+            />
           </div>
         </div>
         <div className="text-right">

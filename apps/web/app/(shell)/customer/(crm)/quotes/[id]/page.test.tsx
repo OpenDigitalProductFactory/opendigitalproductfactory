@@ -18,6 +18,8 @@ vi.mock("@dpf/db", () => ({
 
 vi.mock("next/navigation", () => ({
   notFound,
+  // QuoteLifecycleActions (client component on this page) calls useRouter().
+  useRouter: () => ({ refresh: vi.fn() }),
 }));
 
 import QuoteDetailPage from "./page";

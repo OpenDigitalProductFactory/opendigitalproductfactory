@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
+import { QuoteLifecycleActions } from "@/components/customer/QuoteLifecycleActions";
 import { LocalTime } from "@/components/ui/LocalTime";
 import {
   CRM_TONE_CLASSES,
@@ -84,6 +85,9 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
           <p className="mt-1 text-sm text-[var(--dpf-muted)]">
             {quote.account.name} / {quote.opportunity.title}
           </p>
+          <div className="mt-3">
+            <QuoteLifecycleActions quoteId={quote.id} status={quote.status} />
+          </div>
         </div>
         <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3 md:text-right">
           <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
