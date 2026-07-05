@@ -8,6 +8,7 @@ import { NewCustomerConfigurationItemButton } from "@/components/customer/NewCus
 import { CustomerLifecycleReviewQueues } from "@/components/customer/CustomerLifecycleReviewQueues";
 import { CustomerSiteTree } from "@/components/customer/CustomerSiteTree";
 import { NewCustomerSiteButton } from "@/components/customer/NewCustomerSiteButton";
+import { AccountLifecycleActions } from "@/components/customer/AccountLifecycleActions";
 import { loadCustomerEstateSummary } from "@/lib/customer-estate/account-estate-summary";
 import type { TechnologySourceType } from "@/lib/customer-estate/lifecycle-evaluation";
 import {
@@ -166,6 +167,38 @@ export default async function AccountDetailPage({
 
   if (!account) notFound();
 
+  // Engagement-lifecycle context (BI: prospect → active customer → support
+  // contract). The active support contract (if any) and the most recent accepted
+  // order not yet under a contract, so the account surface can drive the two
+  // post-order transitions the CRM had no UI for.
+  const [contractRow, contractableOrderRow] = await Promise.all([
+    prisma.subscription.findFirst({
+      where: { accountId: id, status: { not: "cancelled" } },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.salesOrder.findFirst({
+      where: { accountId: id, subscription: null },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, orderRef: true },
+    }),
+  ]);
+  const lifecycleContext = {
+    accountId: account.id,
+    status: account.status,
+    contractableOrder: contractableOrderRow,
+    contract: contractRow
+      ? {
+          subscriptionRef: contractRow.subscriptionRef,
+          planName: contractRow.planName,
+          status: contractRow.status,
+          currency: contractRow.currency,
+          totalValue: String(contractRow.totalValue),
+          billingCadence: contractRow.billingCadence,
+          renewalDate: contractRow.renewalDate ? contractRow.renewalDate.toISOString() : null,
+        }
+      : null,
+  };
+
   const statusMeta = getAccountStatusMeta(account.status);
   const managedItemDefaults = deriveCustomerConfigurationItemDefaults(
     readActivationProfile(storefrontConfig?.archetype?.activationProfile),
@@ -206,6 +239,8 @@ export default async function AccountDetailPage({
           {account.accountId}
         </p>
       </div>
+
+      <AccountLifecycleActions {...lifecycleContext} />
 
       {/* Metadata grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">

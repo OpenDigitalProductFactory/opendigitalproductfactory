@@ -1104,6 +1104,15 @@ async function seedCoworkerAgents(): Promise<void> {
         });
         grantCount++;
       }
+      // Reconcile, don't just add: remove grant rows no longer in the desired
+      // set. The pure-upsert loop above left stale grants behind forever — e.g.
+      // customer-advisor kept backlog_write/marketing_read after its grants were
+      // corrected, and those stale tier-1 tools crowded the per-turn tool budget
+      // and pushed the CRM tools (create_quote) past the cap. A coworker's live
+      // grants must equal its declared set.
+      await prisma.agentToolGrant.deleteMany({
+        where: { agentId: agent.id, grantKey: { notIn: [...grants] } },
+      });
     }
   }
 

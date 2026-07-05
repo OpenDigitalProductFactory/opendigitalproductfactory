@@ -2590,6 +2590,7 @@ model CustomerAccount {
   activities             Activity[]
   quotes                 Quote[]
   salesOrders            SalesOrder[]
+  subscriptions          Subscription[]
   recurringSchedules     RecurringSchedule[]
   inventoryEntities      InventoryEntity[]           @relation("InventoryEntityCustomerAccount")
   inventoryRelationships InventoryRelationship[]     @relation("InventoryRelationshipCustomerAccount")
@@ -3124,9 +3125,44 @@ model SalesOrder {
 
   quote   Quote           @relation(fields: [quoteId], references: [id])
   account CustomerAccount @relation(fields: [accountId], references: [id])
+  subscription Subscription?
 
   @@index([accountId])
   @@index([status])
+}
+
+// A support/service subscription — the "contract for supporting a customer's own
+// instance of DPF". Created from an accepted SalesOrder (convertOrderToSubscription),
+// scoped to a CustomerAccount, and optionally covering one or more EdgeNodes (the
+// customer's provisioned DPF instances). Closes the post-order gap: an order alone
+// says "they bought once"; a Subscription says "they are under an active support
+// contract with a renewal date". Recurring-billing materialization is a later slice.
+model Subscription {
+  id              String    @id @default(cuid())
+  subscriptionRef String    @unique // SUB-2026-0001 (sequential)
+  status          String    @default("active")
+  // active | suspended | expired | cancelled
+  accountId       String
+  salesOrderId    String?   @unique // the accepted order that created this contract
+  planName        String // e.g. "DPF Managed Instance — Support & Hosting"
+  billingCadence  String    @default("annual") // monthly | quarterly | annual
+  totalValue      Decimal
+  currency        String    @default("GBP")
+  startDate       DateTime  @default(now())
+  renewalDate     DateTime
+  endDate         DateTime?
+  autoRenew       Boolean   @default(true)
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  account    CustomerAccount @relation(fields: [accountId], references: [id])
+  salesOrder SalesOrder?     @relation(fields: [salesOrderId], references: [id])
+  edgeNodes  EdgeNode[]
+
+  @@index([accountId])
+  @@index([status])
+  @@index([renewalDate])
 }
 
 model Activity {
@@ -10786,6 +10822,8 @@ model EdgeNode {
   metadata          Json?
   customerAccountId String?
   customerSiteId    String?
+  // The support contract (Subscription) this instance is covered by, if any.
+  subscriptionId    String?
   scopePolicy       Json?
 
   // ── Auth (per spec § Token namespaces and lifecycle) ─────────────
@@ -10822,6 +10860,7 @@ model EdgeNode {
   approvedBy                   Principal?            @relation("EdgeNodeApprover", fields: [approvedByPrincipalId], references: [id])
   customerAccount              CustomerAccount?      @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
   customerSite                 CustomerSite?         @relation(fields: [customerSiteId], references: [id], onDelete: SetNull)
+  subscription                 Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   capabilityRows               EdgeNodeCapability[]
   discoveryRuns                DiscoveryRun[]        @relation("EdgeNodeDiscoveryRuns")
   targetedDiscoveryConnections DiscoveryConnection[] @relation("EdgeNodeTargetedDiscoveryConnections")
