@@ -37,6 +37,7 @@ export const ROLE_COLOURS: Record<SpecialistRole, string> = {
   "data-architect": "var(--pg-role-data-architect)",
   "software-engineer": "var(--pg-role-software-engineer)",
   "frontend-engineer": "var(--pg-role-frontend-engineer)",
+  "documentation-specialist": "var(--pg-role-documentation-specialist, var(--dpf-accent))",
   "qa-engineer": "var(--pg-role-qa-engineer)",
 };
 
@@ -45,6 +46,7 @@ export const ROLE_ICONS: Record<SpecialistRole, string> = {
   "data-architect":    "◈",
   "software-engineer": "⌨",
   "frontend-engineer": "◻",
+  "documentation-specialist": "▤",
   "qa-engineer":       "✓",
 };
 

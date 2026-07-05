@@ -8,6 +8,8 @@ This directory holds the long-form documentation that accompanies the Open Digit
 - **User-facing** docs live under [user-guide/](user-guide/) and are also bundled into the portal's in-app help pages at runtime.
 - **Architecture and contributor** docs live under [architecture/](architecture/) and (for internal development tracking) [superpowers/](superpowers/).
 
+Documentation freshness is part of the delivery definition of done. Build Studio and external Claude, Codex, and Grok implementation threads update the relevant human-readable docs surface when they change user workflows, AI coworker behavior, public positioning, setup/install, operations, architecture, prompts, route maps, or contributor workflow. If no docs are needed, the build or PR records the concrete reason.
+
 If you're looking for the one-page project overview, start at the repo-root [README.md](../README.md).
 
 ## User guide
@@ -38,6 +40,7 @@ Domain-specific operating guides (admin, AI workforce, build studio, compliance,
 - [user-guide/](user-guide/) is operational product help and contextual in-app documentation.
 - [architecture/](architecture/) is current architecture, standards, and conformance context.
 - [superpowers/](superpowers/) is design history, audits, and implementation planning. It can support decisions, but it is not onboarding copy.
+- [AGENTS.md](../AGENTS.md) is the canonical operating contract for Build Studio-adjacent and external agent development work.
 
 ## Architecture
 

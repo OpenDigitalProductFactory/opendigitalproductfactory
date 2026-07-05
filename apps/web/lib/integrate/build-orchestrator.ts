@@ -69,12 +69,11 @@ export function resolveBuildProviderRunner(input: {
   return { provider, runner };
 }
 
-// ─── Communication Templates ────────────────────────────────────────────────
-
 const ROLE_LABELS: Record<SpecialistRole, string> = {
   "data-architect": "Data Architect",
   "software-engineer": "Software Engineer",
   "frontend-engineer": "Frontend Engineer",
+  "documentation-specialist": "Documentation Specialist",
   "qa-engineer": "QA",
 };
 

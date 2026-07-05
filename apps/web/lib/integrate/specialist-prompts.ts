@@ -182,6 +182,26 @@ Your final message MUST include:
 - Tests: N passed, N failed
 - If failures: the test name and a one-line description of each failure`;
 
+const DOCUMENTATION_SPECIALIST_PROMPT = `${SHARED_IDENTITY}
+
+You are the Documentation Specialist. Your domain: user-facing docs, public docs, in-app help, architecture/contributor docs, prompt-facing coworker documentation, cross-reference integrity, and documentation debt capture.
+
+WORKFLOW:
+1. Read the changed implementation files or prompt/registry files that created the docs impact.
+2. Identify the audience that needs the update:
+   - operators and end users: docs/user-guide/
+   - pre-install evaluators and the internet: docs/index.html and docs/README.md
+   - contributors and architects: docs/architecture/ or AGENTS.md
+   - implementation history: docs/superpowers/specs/ or docs/superpowers/plans/
+3. Edit the smallest correct documentation surface. Do not duplicate the same rule in multiple places; add links when one source of truth already exists.
+4. Check internal links you touched where practical.
+5. If the required sweep is larger than this task, file or name the follow-up backlog item clearly instead of leaving a prose TODO.
+
+Your final message MUST include:
+- Docs updated: paths changed, or "none"
+- Docs impact: why the change needed docs or why no docs were needed
+- Follow-up doc debt: backlog item or "none"`;
+
 // UX_ACCESSIBILITY_PROMPT removed 2026-04-20. AGT-903 / autoA11yAudit
 // was superseded by the Inngest-driven build/review.verify handler
 // which runs browser-use against the live sandbox rather than inspecting
@@ -193,6 +213,7 @@ const SPECIALIST_PROMPTS: Record<SpecialistRole, string> = {
   "data-architect": DATA_ARCHITECT_PROMPT,
   "software-engineer": SOFTWARE_ENGINEER_PROMPT,
   "frontend-engineer": FRONTEND_ENGINEER_PROMPT,
+  "documentation-specialist": DOCUMENTATION_SPECIALIST_PROMPT,
   "qa-engineer": QA_ENGINEER_PROMPT,
 };
 
@@ -201,6 +222,7 @@ export const SPECIALIST_AGENT_IDS: Record<SpecialistRole, string> = {
   "data-architect": "AGT-BUILD-DA",
   "software-engineer": "AGT-BUILD-SE",
   "frontend-engineer": "AGT-BUILD-FE",
+  "documentation-specialist": "AGT-904",
   "qa-engineer": "AGT-BUILD-QA",
 };
 
@@ -209,6 +231,7 @@ export const SPECIALIST_MODEL_REQS: Record<SpecialistRole, { defaultMinimumTier:
   "data-architect": { defaultMinimumTier: "frontier", defaultBudgetClass: "quality_first" },
   "software-engineer": { defaultMinimumTier: "frontier", defaultBudgetClass: "quality_first" },
   "frontend-engineer": { defaultMinimumTier: "frontier", defaultBudgetClass: "quality_first" },
+  "documentation-specialist": { defaultMinimumTier: "strong", defaultBudgetClass: "balanced" },
   "qa-engineer": { defaultMinimumTier: "strong", defaultBudgetClass: "balanced" },
 };
 
@@ -231,6 +254,10 @@ export const SPECIALIST_TOOLS: Record<SpecialistRole, string[]> = {
     "search_sandbox", "list_sandbox_files", "run_sandbox_command",
     "generate_code",
     "search_design_intelligence", "generate_design_system",
+  ],
+  "documentation-specialist": [
+    "read_sandbox_file", "edit_sandbox_file", "write_sandbox_file",
+    "search_sandbox", "list_sandbox_files", "run_sandbox_command",
   ],
   "qa-engineer": [
     "read_sandbox_file", "search_sandbox", "list_sandbox_files",
