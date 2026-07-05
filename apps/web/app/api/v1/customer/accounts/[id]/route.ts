@@ -7,6 +7,12 @@ import { updateCustomerSchema } from "@dpf/validators";
 import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError, apiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
+import {
+  checkCustomerAccountDuplicates,
+  customerAccountNormalizedColumns,
+  parseDedupResolution,
+  resolveDedupDecision,
+} from "@/lib/mdm/dedup-gate";
 
 export async function GET(
   request: Request,
@@ -103,7 +109,7 @@ export async function PATCH(
 
     const existing = await prisma.customerAccount.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, name: true, website: true },
     });
     if (!existing) {
       throw apiError("NOT_FOUND", "Customer account not found", 404);
@@ -114,11 +120,43 @@ export async function PATCH(
       Object.entries(rest).filter(([, v]) => v !== undefined),
     );
 
+    // Update-path dedup (BI-AEA97829): a rename or domain change can converge
+    // two identities exactly like a create — gate it with the same contract,
+    // and keep the normalized columns fresh (they back candidate generation).
+    const identityUpdate: Record<string, unknown> = {};
+    const nextName = name !== undefined ? name.trim() : existing.name;
+    const nextWebsite =
+      "website" in defined ? ((defined["website"] as string | null) ?? null) : existing.website;
+    if (name !== undefined || "website" in defined) {
+      Object.assign(
+        identityUpdate,
+        customerAccountNormalizedColumns({ name: nextName, website: nextWebsite }),
+      );
+      const check = await checkCustomerAccountDuplicates({
+        name: nextName,
+        website: nextWebsite,
+        excludeId: id,
+      });
+      const decision = resolveDedupDecision(check, parseDedupResolution(body));
+      if (decision.action === "needs-resolution" && check.verdict === "likely-duplicate") {
+        return NextResponse.json(
+          {
+            code: "DUPLICATE_SUSPECTED",
+            message:
+              "The new name/website matches an existing account. Pass duplicateResolution \"confirm-new\" with duplicateReason to proceed, or consider merging into that account instead.",
+            candidates: check.candidates,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     const updated = await prisma.customerAccount.update({
       where: { id },
       data: {
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...defined,
+        ...identityUpdate,
       },
       include: { contacts: true },
     });

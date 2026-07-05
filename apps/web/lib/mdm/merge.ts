@@ -123,11 +123,21 @@ export type MergeResult = {
   survivorId: string;
   /** Rows repointed per model.field step. */
   repointed: Record<string, number>;
+  /**
+   * Ids of the repointed rows per step (capped at UNMERGE_ID_CAP each) — the
+   * lineage unmerge needs to restore exactly what moved (BI-F7B6D55E).
+   */
+  repointedIds: Record<string, string[]>;
+  /** Steps whose id list hit the cap; unmerge refuses these (lossy lineage). */
+  repointedIdsTruncated: string[];
   /** Loser sites merged into same-named survivor sites (account merges). */
-  nestedSiteMerges: Array<{ loserSiteId: string; survivorSiteId: string }>;
+  nestedSiteMerges: Array<{ loserSiteId: string; survivorSiteId: string; priorStatus: string }>;
   /** Pre-merge snapshot of the loser row (tombstone keeps it too). */
   loserSnapshot: Record<string, unknown>;
 };
+
+/** Per-step lineage cap: above this an unmerge would be lossy, so we refuse. */
+const UNMERGE_ID_CAP = 1000;
 
 export type MergeError =
   | "not-found"
@@ -181,7 +191,21 @@ export async function mergeRecords(
     }
 
     const repointed: Record<string, number> = {};
+    const repointedIds: Record<string, string[]> = {};
+    const repointedIdsTruncated: string[] = [];
     const nestedSiteMerges: MergeResult["nestedSiteMerges"] = [];
+
+    const recordIds = (stepKey: string, ids: string[]) => {
+      if (ids.length === 0) return;
+      const existing = repointedIds[stepKey] ?? [];
+      const merged = existing.concat(ids);
+      if (merged.length > UNMERGE_ID_CAP) {
+        repointedIds[stepKey] = merged.slice(0, UNMERGE_ID_CAP);
+        if (!repointedIdsTruncated.includes(stepKey)) repointedIdsTruncated.push(stepKey);
+      } else {
+        repointedIds[stepKey] = merged;
+      }
+    };
 
     if (domain === "customer-account") {
       // Survivor must not end up its own ancestor via the loser.
@@ -200,7 +224,7 @@ export async function mergeRecords(
       const [loserSites, survivorSites] = await Promise.all([
         siteDelegate.findMany({
           where: { accountId: loserId, status: { not: TOMBSTONE } },
-          select: { id: true, nameNormalized: true },
+          select: { id: true, nameNormalized: true, status: true },
         }),
         siteDelegate.findMany({
           where: { accountId: survivorId, status: { not: TOMBSTONE } },
@@ -215,10 +239,11 @@ export async function mergeRecords(
       for (const site of loserSites) {
         const collision = survivorByName.get(site["nameNormalized"] as string);
         if (collision) {
-          await mergeSiteWithinTx(tx, site["id"] as string, collision, repointed);
+          await mergeSiteWithinTx(tx, site["id"] as string, collision, repointed, recordIds);
           nestedSiteMerges.push({
             loserSiteId: site["id"] as string,
             survivorSiteId: collision,
+            priorStatus: (site["status"] as string | undefined) ?? "active",
           });
         }
       }
@@ -253,19 +278,25 @@ export async function mergeRecords(
       }
     }
 
-    // Repoint every declared hard relation and soft reference.
+    // Repoint every declared hard relation and soft reference, recording the
+    // moved row ids so unmerge can restore exactly this set.
     for (const step of [...adapter.hardRelations, ...adapter.softReferences]) {
       // Skip the self-referencing tombstone pointer on the canonical model
       // itself for the loser row (set below), but DO repoint other rows.
       const where: Record<string, unknown> = { [step.field]: loserId };
       if (step.model === adapter.model) where["id"] = { not: loserId };
+      const stepKey = `${step.model}.${step.field}`;
+      const moving = await delegate(tx, step.model).findMany({
+        where,
+        select: { id: true },
+      });
       const result = await delegate(tx, step.model).updateMany({
         where,
         data: { [step.field]: survivorId, ...(step.alsoSet?.(survivorId) ?? {}) },
       });
       if (result.count > 0) {
-        repointed[`${step.model}.${step.field}`] =
-          (repointed[`${step.model}.${step.field}`] ?? 0) + result.count;
+        repointed[stepKey] = (repointed[stepKey] ?? 0) + result.count;
+        recordIds(stepKey, moving.map((r) => r["id"] as string));
       }
     }
 
@@ -280,6 +311,8 @@ export async function mergeRecords(
       loserId,
       survivorId,
       repointed,
+      repointedIds,
+      repointedIdsTruncated,
       nestedSiteMerges,
       loserSnapshot: loser,
     };
@@ -292,9 +325,15 @@ async function mergeSiteWithinTx(
   loserSiteId: string,
   survivorSiteId: string,
   repointed: Record<string, number>,
+  recordIds: (stepKey: string, ids: string[]) => void,
 ): Promise<void> {
   const adapter = CUSTOMER_SITE_ADAPTER;
   for (const step of [...adapter.hardRelations, ...adapter.softReferences]) {
+    const stepKey = `site:${loserSiteId}:${step.model}.${step.field}`;
+    const moving = await delegate(tx, step.model).findMany({
+      where: { [step.field]: loserSiteId },
+      select: { id: true },
+    });
     const result = await delegate(tx, step.model).updateMany({
       where: { [step.field]: loserSiteId },
       data: { [step.field]: survivorSiteId, ...(step.alsoSet?.(survivorSiteId) ?? {}) },
@@ -302,10 +341,117 @@ async function mergeSiteWithinTx(
     if (result.count > 0) {
       repointed[`${step.model}.${step.field}`] =
         (repointed[`${step.model}.${step.field}`] ?? 0) + result.count;
+      recordIds(stepKey, moving.map((r) => r["id"] as string));
     }
   }
   await delegate(tx, "customerSite").update({
     where: { id: loserSiteId },
     data: { status: TOMBSTONE, mergedIntoId: survivorSiteId },
+  });
+}
+
+export type UnmergeError =
+  | "not-merged"
+  | "no-audit"
+  | "lossy-lineage"
+  | "survivor-mismatch";
+
+export class UnmergeValidationFailure extends Error {
+  constructor(public readonly reason: UnmergeError) {
+    super(`unmerge validation failed: ${reason}`);
+  }
+}
+
+export type UnmergeResult = {
+  loserId: string;
+  survivorId: string;
+  restored: Record<string, number>;
+  restoredStatus: string;
+};
+
+/**
+ * Reverse an account merge using the recorded lineage (BI-F7B6D55E).
+ *
+ * Restores exactly the rows the merge moved (by recorded id); rows attached
+ * to the survivor AFTER the merge stay with the survivor — that is the
+ * correct semantic, not a limitation. Refuses when lineage was truncated
+ * (UNMERGE_ID_CAP) or no audit activity exists. customer-account only: the
+ * audit Activity row is the lineage store, and only account merges write one.
+ */
+export async function unmergeRecords(loserId: string): Promise<UnmergeResult> {
+  const loser = await prisma.customerAccount.findUnique({
+    where: { id: loserId },
+    select: { id: true, status: true, mergedIntoId: true },
+  });
+  if (!loser || loser.status !== TOMBSTONE || !loser.mergedIntoId) {
+    throw new UnmergeValidationFailure("not-merged");
+  }
+  const survivorId = loser.mergedIntoId;
+
+  // The merge audit is the lineage store: latest account_merged activity on
+  // the survivor whose payload names this loser.
+  const audits = await prisma.activity.findMany({
+    where: { type: "account_merged", accountId: survivorId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, body: true },
+    take: 25,
+  });
+  let lineage: MergeResult | null = null;
+  for (const audit of audits) {
+    try {
+      const parsed = JSON.parse(audit.body ?? "") as MergeResult;
+      if (parsed.loserId === loserId && parsed.survivorId === survivorId) {
+        lineage = parsed;
+        break;
+      }
+    } catch {
+      // Non-JSON or legacy audit body — keep scanning.
+    }
+  }
+  if (!lineage) throw new UnmergeValidationFailure("no-audit");
+  if ((lineage.repointedIdsTruncated ?? []).length > 0) {
+    throw new UnmergeValidationFailure("lossy-lineage");
+  }
+
+  const restoredStatus =
+    typeof lineage.loserSnapshot?.["status"] === "string"
+      ? (lineage.loserSnapshot["status"] as string)
+      : "prospect";
+
+  return prisma.$transaction(async (tx) => {
+    const restored: Record<string, number> = {};
+
+    // Un-tombstone the loser FIRST so restored FKs point at a live row.
+    await delegate(tx, "customerAccount").update({
+      where: { id: loserId },
+      data: { status: restoredStatus, mergedIntoId: null },
+    });
+
+    for (const [stepKey, ids] of Object.entries(lineage.repointedIds ?? {})) {
+      if (ids.length === 0) continue;
+      const isNestedSite = stepKey.startsWith("site:");
+      const [model, field] = (isNestedSite ? stepKey.split(":")[2]! : stepKey).split(".");
+      if (!model || !field) continue;
+      const backTo = isNestedSite ? stepKey.split(":")[1]! : loserId;
+      const isCrosswalk = model === "masterDataSourceRef";
+      const result = await delegate(tx, model).updateMany({
+        where: { id: { in: ids } },
+        data: { [field]: backTo, ...(isCrosswalk ? { canonicalId: backTo } : {}) },
+      });
+      if (result.count > 0) {
+        restored[stepKey] = result.count;
+      }
+    }
+
+    // Restore nested-merged sites to their prior status.
+    for (const nested of lineage.nestedSiteMerges ?? []) {
+      await delegate(tx, "customerSite").update({
+        where: { id: nested.loserSiteId },
+        data: { status: nested.priorStatus, mergedIntoId: null },
+      });
+      restored[`site-restored:${nested.loserSiteId}`] = 1;
+    }
+
+    return { loserId, survivorId, restored, restoredStatus };
   });
 }

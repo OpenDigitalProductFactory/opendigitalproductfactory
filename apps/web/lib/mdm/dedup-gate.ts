@@ -65,6 +65,7 @@ export const GATED_CREATE_PATHS: Readonly<Record<DedupGatedDomain, readonly stri
   "customer-account": [
     "apps/web/lib/actions/crm.ts#createCustomerAccount",
     "apps/web/lib/mcp-tools.ts#create_customer_account",
+    "apps/web/app/api/v1/customer/accounts/[id]/route.ts#PATCH",
   ],
   "customer-site": ["apps/web/lib/actions/crm.ts#createCustomerSite"],
   "customer-contact": [
@@ -72,6 +73,7 @@ export const GATED_CREATE_PATHS: Readonly<Record<DedupGatedDomain, readonly stri
     "apps/web/lib/actions/finance.ts#generateInvoiceFromStorefrontOrder",
     "apps/web/lib/actions/social-auth-actions.ts#signUpWithSocialProfile",
     "apps/web/app/api/storefront/sign-up/route.ts#POST",
+    "apps/web/app/api/v1/customer/contacts/[id]/route.ts#PATCH",
   ],
 };
 
@@ -80,6 +82,8 @@ export type CustomerAccountDedupSubject = {
   website?: string | null;
   email?: string | null;
   phone?: string | null;
+  /** Update-path checks pass the record's own id so it never matches itself. */
+  excludeId?: string | null;
 };
 
 type AccountCandidateRow = {
@@ -100,12 +104,14 @@ export async function checkCustomerAccountDuplicates(
 ): Promise<DedupCheckResult> {
   const nameNormalized = standardizeName(subject.name);
   const domainNormalized = standardizeDomain(subject.website);
+  const excludeId = subject.excludeId ?? "";
   if (!nameNormalized && !domainNormalized) return { verdict: "clear", candidates: [] };
 
   const rows = await prisma.$queryRaw<AccountCandidateRow[]>`
     SELECT "id", "name", "status", "website", "nameNormalized", "domainNormalized"
     FROM "CustomerAccount"
     WHERE "status" <> 'superseded'
+      AND (${excludeId} = '' OR "id" <> ${excludeId})
       AND (
         ("nameNormalized" <> '' AND "nameNormalized" = ${nameNormalized})
         OR (${domainNormalized} <> '' AND "domainNormalized" <> '' AND "domainNormalized" = ${domainNormalized})
@@ -141,6 +147,8 @@ export type CustomerContactDedupSubject = {
   email?: string | null;
   phone?: string | null;
   accountId?: string | null;
+  /** Update-path checks pass the record's own id so it never matches itself. */
+  excludeId?: string | null;
 };
 
 type ContactCandidateRow = {
@@ -170,16 +178,18 @@ export async function checkCustomerContactDuplicates(
   if (!nameNormalized && !email && !phone) return { verdict: "clear", candidates: [] };
 
   const accountId = subject.accountId ?? "";
+  const excludeId = subject.excludeId ?? "";
   const rows = await prisma.$queryRaw<ContactCandidateRow[]>`
     SELECT "id", "email", "firstName", "lastName", "name", "phone", "accountId"
     FROM "CustomerContact"
-    WHERE (${email} <> '' AND lower("email") = ${email})
+    WHERE (${excludeId} = '' OR "id" <> ${excludeId})
+      AND ((${email} <> '' AND lower("email") = ${email})
        OR (${phone} <> '' AND "phone" IS NOT NULL AND regexp_replace("phone", '[^0-9+]', '', 'g') = ${phone})
        OR (
             ${nameNormalized} <> '' AND "nameNormalized" <> ''
             AND (${accountId} = '' OR "accountId" = ${accountId})
             AND similarity("nameNormalized", ${nameNormalized}) > ${TRGM_SIMILARITY_FLOOR}
-          )
+          ))
     ORDER BY similarity("nameNormalized", ${nameNormalized}) DESC NULLS LAST
     LIMIT ${CANDIDATE_LIMIT}
   `;
@@ -206,7 +216,12 @@ export async function checkCustomerContactDuplicates(
   );
 }
 
-export type CustomerSiteDedupSubject = { accountId: string; name: string };
+export type CustomerSiteDedupSubject = {
+  accountId: string;
+  name: string;
+  /** Update-path checks pass the record's own id so it never matches itself. */
+  excludeId?: string | null;
+};
 
 type SiteCandidateRow = { id: string; name: string; status: string; nameNormalized: string };
 
@@ -215,6 +230,7 @@ export async function checkCustomerSiteDuplicates(
   subject: CustomerSiteDedupSubject,
 ): Promise<DedupCheckResult> {
   const nameNormalized = standardizeName(subject.name);
+  const excludeId = subject.excludeId ?? "";
   if (!nameNormalized) return { verdict: "clear", candidates: [] };
 
   const rows = await prisma.$queryRaw<SiteCandidateRow[]>`
@@ -222,6 +238,7 @@ export async function checkCustomerSiteDuplicates(
     FROM "CustomerSite"
     WHERE "accountId" = ${subject.accountId}
       AND "status" <> 'superseded'
+      AND (${excludeId} = '' OR "id" <> ${excludeId})
       AND (
         "nameNormalized" = ${nameNormalized}
         OR similarity("nameNormalized", ${nameNormalized}) > ${TRGM_SIMILARITY_FLOOR}
@@ -240,6 +257,26 @@ export async function checkCustomerSiteDuplicates(
     })),
     subjectMatch,
   );
+}
+
+/**
+ * Parse the wire form of a dedup resolution from an API/tool payload:
+ * `duplicateResolution`: "use-existing:<id>" | "confirm-new" (+ optional
+ * `duplicateReason`). Returns undefined when absent or malformed.
+ */
+export function parseDedupResolution(body: unknown): DedupResolution | undefined {
+  if (typeof body !== "object" || body === null) return undefined;
+  const raw = (body as Record<string, unknown>)["duplicateResolution"];
+  if (typeof raw !== "string") return undefined;
+  if (raw.startsWith("use-existing:")) {
+    const existingId = raw.slice("use-existing:".length).trim();
+    return existingId ? { kind: "use-existing", existingId } : undefined;
+  }
+  if (raw === "confirm-new") {
+    const reason = (body as Record<string, unknown>)["duplicateReason"];
+    return { kind: "confirm-new", reason: typeof reason === "string" ? reason : undefined };
+  }
+  return undefined;
 }
 
 /**

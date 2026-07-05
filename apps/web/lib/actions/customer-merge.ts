@@ -16,8 +16,11 @@ import { can } from "@/lib/permissions";
 import {
   MERGE_ADAPTERS,
   MergeValidationFailure,
+  UnmergeValidationFailure,
   mergeRecords,
+  unmergeRecords,
   type MergeResult,
+  type UnmergeResult,
 } from "@/lib/mdm/merge";
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; message: string };
@@ -120,5 +123,45 @@ export async function mergeCustomerAccounts(
 
   revalidatePath("/customer");
   revalidatePath(`/customer/${survivorId}`);
+  return { ok: true, data: result };
+}
+
+/** Reverse a merge from the tombstone (admin; lineage-based, BI-F7B6D55E). */
+export async function unmergeCustomerAccounts(
+  loserId: string,
+): Promise<ActionResult<UnmergeResult>> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+
+  let result: UnmergeResult;
+  try {
+    result = await unmergeRecords(loserId);
+  } catch (err) {
+    if (err instanceof UnmergeValidationFailure) {
+      const why: Record<string, string> = {
+        "not-merged": "This account is not a merge tombstone.",
+        "no-audit": "No merge audit record found — cannot restore safely.",
+        "lossy-lineage": "The merge moved more rows than the lineage cap records — manual restore required.",
+        "survivor-mismatch": "The tombstone does not match the audit record.",
+      };
+      return { ok: false, message: why[err.reason] ?? `Unmerge rejected: ${err.reason}.` };
+    }
+    throw err;
+  }
+
+  await prisma.activity.create({
+    data: {
+      activityId: `ACT-${crypto.randomUUID()}`,
+      type: "account_unmerged",
+      subject: `Merge reversed — account ${loserId} restored from ${result.survivorId}`,
+      body: JSON.stringify(result),
+      accountId: loserId,
+      createdById: null,
+    },
+  });
+
+  revalidatePath("/customer");
+  revalidatePath(`/customer/${loserId}`);
+  revalidatePath(`/customer/${result.survivorId}`);
   return { ok: true, data: result };
 }

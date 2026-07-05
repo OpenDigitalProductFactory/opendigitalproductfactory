@@ -7,6 +7,12 @@ import { updateContactSchema } from "@dpf/validators";
 import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError, apiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
+import {
+  checkCustomerContactDuplicates,
+  customerContactNormalizedColumns,
+  parseDedupResolution,
+  resolveDedupDecision,
+} from "@/lib/mdm/dedup-gate";
 
 function contactInclude() {
   return {
@@ -78,7 +84,7 @@ export async function PATCH(
 
     const { firstName, lastName, ...rest } = parsed.data;
 
-    // Keep legacy `name` field in sync
+    // Keep legacy `name` field in sync + refresh the MDM normalized column
     const nameUpdate: Record<string, unknown> = {};
     if (firstName !== undefined || lastName !== undefined) {
       const contact = await prisma.customerContact.findUniqueOrThrow({
@@ -89,6 +95,32 @@ export async function PATCH(
       const ln = lastName !== undefined ? lastName : contact.lastName;
       nameUpdate.name =
         fn || ln ? [fn, ln].filter(Boolean).join(" ").trim() : null;
+      Object.assign(
+        nameUpdate,
+        customerContactNormalizedColumns({ firstName: fn, lastName: ln }),
+      );
+
+      // Update-path dedup (BI-AEA97829): a rename can converge two identities
+      // just like a create. Same contract as POST — 409 with candidates
+      // unless the caller resolves with confirm-new + reason.
+      const check = await checkCustomerContactDuplicates({
+        firstName: fn,
+        lastName: ln,
+        excludeId: id,
+      });
+      const resolution = parseDedupResolution(body);
+      const decision = resolveDedupDecision(check, resolution);
+      if (decision.action === "needs-resolution" && check.verdict === "likely-duplicate") {
+        return NextResponse.json(
+          {
+            code: "DUPLICATE_SUSPECTED",
+            message:
+              "This name matches an existing contact. Pass duplicateResolution \"confirm-new\" with duplicateReason to proceed, or update that contact instead.",
+            candidates: check.candidates,
+          },
+          { status: 409 },
+        );
+      }
     }
 
     const updated = await prisma.customerContact.update({

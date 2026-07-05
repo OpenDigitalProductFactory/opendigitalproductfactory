@@ -304,3 +304,42 @@ dedicated `mdm-steward` PlatformCapability lands with the steward queue
   the activity log.
 - No survivorship rules in this pass (MDM-4, refiled).
 - No new candidate-persistence table; write-time candidates stay ephemeral.
+
+## 8. Market-gap slice 2 (2026-07-05, BI-AEA97829 / BI-7BF995B9 / BI-F7B6D55E)
+
+Post-ship gap analysis against Informatica MDM / Collibra / Reltio / Salesforce
+Duplicate Management surfaced eight functional gaps (all filed on the epic);
+this slice closes the three that protect data already in the system:
+
+**Update-path dedup (BI-AEA97829).** The gate now also guards the identity
+attributes on update: `PATCH /api/v1/customer/accounts/:id` (name/website) and
+`PATCH /api/v1/customer/contacts/:id` (name) run the same check with
+`excludeId` (a record never matches itself), return 409 `DUPLICATE_SUSPECTED`
+with candidates on a likely-duplicate, honour the same
+`duplicateResolution`/`duplicateReason` wire contract (canonical parser:
+`parseDedupResolution` in dedup-gate.ts), and keep the normalized columns
+fresh — the PATCH route previously left `nameNormalized` stale on rename.
+Both PATCH routes are registered in `GATED_CREATE_PATHS` under the coverage
+guard.
+
+**Batch retroactive scan (BI-7BF995B9).** `lib/mdm/batch-scan.ts` self-joins
+the normalized columns + pg_trgm (same blocking, same `scoreMatchCandidate`,
+same surface-over-miss upgrade as the gate) to find duplicate pairs already in
+the data. Surfaces: `DuplicateAccountsPanel` on /customer (renders nothing
+when clean; resolution happens via the detail page's "Merge into…" so it stays
+a pointer, not a second merge surface) and the read-only
+`find_duplicate_customer_accounts` coworker tool (crm_read). On-demand
+compute; persistence belongs to the steward queue (BI-FEA49EC1).
+
+**Unmerge (BI-F7B6D55E).** `MergeResult` now records the repointed row IDS per
+step (cap 1000/step; a capped step marks the lineage lossy and unmerge
+refuses). `unmergeRecords(loserId)` reads the latest `account_merged` audit
+Activity naming that loser, restores the tombstone to its snapshot status,
+moves back exactly the recorded rows (crosswalk canonicalId restored in the
+same write), and restores nested-merged sites to their recorded prior status.
+Rows attached to the survivor after the merge stay with the survivor — correct
+semantics, not a limitation. Known limitation: contact-role rows dropped by
+the merge collision plan (exact duplicates of survivor rows) are not
+recreated. Surfaces: "Undo merge" on the tombstone banner (admin) and the
+`unmerge_customer_accounts` coworker tool (crm_write). customer-account only:
+the audit Activity is the lineage store, and only account merges write one.
