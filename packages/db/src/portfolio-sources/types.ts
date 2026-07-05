@@ -38,6 +38,7 @@ export const PORTFOLIO_SOURCE_KINDS = [
   "sbom", // BomComponent (CycloneDX)
   "archetype", // archetype-seeded offers / suppliers / goods
   "coworker_service", // Agent / CoworkerService — AI coworkers as Workforce products (BI-8F9EDD6C)
+  "bom_surface", // DOC-1996319D Workforce surfaces (AI Workforce Ops, roster, finance/tax) (BI-D5C9C3F7)
 ] as const;
 export type PortfolioSourceKind = (typeof PORTFOLIO_SOURCE_KINDS)[number];
 

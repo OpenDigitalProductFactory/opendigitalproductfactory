@@ -13,3 +13,5 @@ export * from "./licensed-dependencies-manifest";
 export * from "./project-sbom";
 export * from "./product-dependency";
 export * from "./project-coworker-workforce";
+export * from "./bom-workforce-surface-manifest";
+export * from "./project-bom-workforce-surfaces";

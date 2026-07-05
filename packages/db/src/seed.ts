@@ -22,6 +22,7 @@ import { projectAiProviders, projectIntegrations } from "./portfolio-sources/pro
 import { projectSupplyChain } from "./portfolio-sources/project-sbom.js";
 import { projectProductDependencyGraph } from "./portfolio-sources/product-dependency.js";
 import { projectCoworkerWorkforce } from "./portfolio-sources/project-coworker-workforce.js";
+import { projectBomWorkforceSurfaces } from "./portfolio-sources/project-bom-workforce-surfaces.js";
 import { backfillBacklogPortfolios } from "./backlog-portfolio.js";
 import {
   seedViewpointsForNotation,
@@ -2377,6 +2378,10 @@ async function main(): Promise<void> {
   // for_employees and back-link Agent.portfolioId + CoworkerService.digitalProductId.
   // Runs after coworkerServiceCatalog so services exist to link.
   await step("coworkerWorkforcePortfolio", () => projectCoworkerWorkforce());
+  // BI-D5C9C3F7: project the DOC-1996319D Workforce surfaces (AI Workforce Ops,
+  // roster, finance/tax) as for_employees DigitalProducts so surface-to-product
+  // mappings are structural, not just documented.
+  await step("bomWorkforceSurfaces", () => projectBomWorkforceSurfaces());
   await step("defaultAdminUser", () => seedDefaultAdminUser());
   await step("discoveryTriageScheduledTask", () => ensureDiscoveryTriageScheduledTask(prisma));
   await step("dataModelMirrorScheduledTask", () => ensureDataModelMirrorScheduledTask(prisma));
