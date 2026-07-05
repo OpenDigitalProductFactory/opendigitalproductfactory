@@ -181,9 +181,12 @@ export type BuildStudioWorkflowAction =
     kind: "escalated-to-human";
     title: string;
     message: string;
-    primaryLabel: null;
+    // Structurally uniform with the sibling variants (string | null) rather than
+    // literal `null`, so union-spread-and-override patterns still typecheck; it is
+    // always constructed as null (terminal — no in-place server action).
+    primaryLabel: string | null;
     targetPhase: null;
-    disabledReason: null;
+    disabledReason: string | null;
     coworkerLabel: string;
     coworkerPrompt: string;
     /** Originating BacklogItem.itemId (BI-XXXX) parked as deferred, if any. */
