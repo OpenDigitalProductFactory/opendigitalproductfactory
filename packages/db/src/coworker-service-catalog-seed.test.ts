@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   COWORKER_SERVICE_CATALOG_OFFER_SEEDS,
   COWORKER_SERVICE_CATALOG_SERVICE_SEEDS,
+  seedCoworkerServiceCatalog,
 } from "./coworker-service-catalog-seed";
 import { COWORKER_AGENT_SEEDS } from "./workforce-seed";
 
@@ -40,6 +41,7 @@ describe("coworker service catalog seed data", () => {
 
     for (const service of COWORKER_SERVICE_CATALOG_SERVICE_SEEDS) {
       expect(seededAgents.has(service.providerAgentId), service.serviceId).toBe(true);
+      expect(service.portfolioRoles, service.serviceId).toEqual(expect.arrayContaining(["workforce"]));
     }
     for (const offer of COWORKER_SERVICE_CATALOG_OFFER_SEEDS) {
       expect(serviceIds.includes(offer.serviceId), offer.offerId).toBe(true);
@@ -67,5 +69,61 @@ describe("coworker service catalog seed data", () => {
       expect(Object.keys(record(offer.legalTerms)).length, offer.offerId).toBeGreaterThan(0);
       expect(Object.keys(record(offer.dataBoundary)).length, offer.offerId).toBeGreaterThan(0);
     }
+  });
+
+  it("leaves services projectable per coworker and associates offers to the AI Workforce product", async () => {
+    const serviceUpserts: Array<Record<string, unknown>> = [];
+    const serviceUpdates: Array<Record<string, unknown>> = [];
+    const offerUpserts: Array<Record<string, unknown>> = [];
+    const offerUpdates: Array<Record<string, unknown>> = [];
+    const prisma = {
+      coworkerService: {
+        upsert: async (args: Record<string, unknown>) => {
+          serviceUpserts.push(args);
+          return {};
+        },
+        updateMany: async (args: Record<string, unknown>) => {
+          serviceUpdates.push(args);
+          return { count: 0 };
+        },
+      },
+      coworkerOffer: {
+        upsert: async (args: Record<string, unknown>) => {
+          offerUpserts.push(args);
+          return {};
+        },
+        updateMany: async (args: Record<string, unknown>) => {
+          offerUpdates.push(args);
+          return { count: 0 };
+        },
+      },
+    };
+
+    await seedCoworkerServiceCatalog(prisma as never);
+
+    expect(serviceUpserts).toHaveLength(COWORKER_SERVICE_CATALOG_SERVICE_SEEDS.length);
+    expect(offerUpserts).toHaveLength(COWORKER_SERVICE_CATALOG_OFFER_SEEDS.length);
+    for (const args of serviceUpserts) {
+      expect(args["create"]).not.toHaveProperty("digitalProductId");
+      expect(args["update"]).not.toHaveProperty("digitalProductId");
+    }
+    expect(serviceUpdates).toEqual([
+      expect.objectContaining({
+        where: expect.objectContaining({ digitalProductId: "dpf-portal" }),
+        data: { digitalProductId: null },
+      }),
+    ]);
+    for (const args of offerUpserts) {
+      expect(args).toMatchObject({
+        create: expect.objectContaining({ digitalProductId: "dpf-ai-workforce" }),
+      });
+      expect(args["update"]).not.toHaveProperty("digitalProductId");
+    }
+    expect(offerUpdates).toEqual([
+      expect.objectContaining({
+        where: expect.objectContaining({ digitalProductId: "dpf-portal" }),
+        data: { digitalProductId: "dpf-ai-workforce" },
+      }),
+    ]);
   });
 });

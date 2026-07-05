@@ -3,6 +3,10 @@ import {
   type QuickBooksReadinessConnection,
 } from "@/lib/integrate/quickbooks/readiness";
 import { loadQuickBooksReadinessConnection } from "@/lib/integrate/quickbooks/connection-state";
+import {
+  TAX_REMITTANCE_PRODUCT_ID,
+  TAX_REMITTANCE_TAXONOMY_NODE_ID,
+} from "@dpf/db/workforce-portfolio";
 
 type LaneRoute = {
   label: string;
@@ -13,6 +17,8 @@ export type AccountantWorkstream = {
   key: string;
   label: string;
   dailyWork: string;
+  digitalProductId?: string;
+  taxonomyNodeId?: string;
   routes: LaneRoute[];
   handoffRule: string;
 };
@@ -112,10 +118,13 @@ export function buildBookkeeperAccountantWorkLane(
       key: "banking-close",
       label: "Banking, reports, tax, and close",
       dailyWork: "Check cash position, bank imports, reconciliation candidates, reports, tax exposure, and close tasks.",
+      digitalProductId: TAX_REMITTANCE_PRODUCT_ID,
+      taxonomyNodeId: TAX_REMITTANCE_TAXONOMY_NODE_ID,
       routes: [
         { label: "Banking", href: "/finance/banking" },
         { label: "Bank rules", href: "/finance/banking/rules" },
         { label: "Reports", href: "/finance/reports" },
+        { label: "Tax settings", href: "/finance/settings/tax" },
         { label: "VAT summary", href: "/finance/reports/vat-summary" },
         { label: "Close hub", href: "/finance/close" },
       ],

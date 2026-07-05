@@ -152,9 +152,9 @@ export function platformCapabilityDependencyEdges(
  * Cross-portfolio DPPM line-of-sight edges (BI-PORTPRIO-5) so the cascade reaches
  * beyond Foundational. A Products & Services Sold offering is DELIVERED BY the
  * Manufacturing & Delivery pipeline; integrations (For Employees + others) RUN ON
- * the foundational MCP plane. The sold→workforce edge into For Employees waits on
- * Facet B (BI-554E1A14) — the workforce is not a portfolio entry yet, so there is
- * nothing to depend on there beyond the integration tools.
+ * the foundational MCP plane. The sold→AI Workforce edge now lives in
+ * digital_product_registry.json (`dpf-platform-standard` → `dpf-ai-workforce`)
+ * because AI Workforce is a first-class For Employees DigitalProduct.
  */
 export function crossPortfolioDependencyEdges(): ProductDependencyEdge[] {
   const edges: ProductDependencyEdge[] = [];

@@ -196,6 +196,12 @@ describe("runHiveScoutIngest ambiguity review", () => {
           sourceKey: where.sourceKey,
         }),
       },
+      digitalProduct: {
+        findUnique: async () => ({ id: "dp-ai-workforce" }),
+      },
+      taxonomyNode: {
+        findUnique: async () => ({ id: "tn-workforce-services" }),
+      },
     };
   }
 
@@ -294,6 +300,49 @@ describe("runHiveScoutIngest ambiguity review", () => {
         valueStream: null,
       },
     });
+  });
+
+  it("associates created archetype suggestions to the AI Workforce product and taxonomy", async () => {
+    const created: Array<Record<string, unknown>> = [];
+    const prisma = makePrisma();
+    prisma.backlogItem.create = async ({ data }) => {
+      created.push(data as Record<string, unknown>);
+      return { id: `row-${data.itemId}`, itemId: data.itemId, status: data.status };
+    };
+
+    await runHiveScoutIngest({
+      fetcher: async () => REVIEW_SAMPLE_README,
+      prisma: prisma as never,
+      loadPrompt: async () => "{{NAME}}",
+      notifyAdmins: async () => undefined,
+      ambiguityReviewer: async () => [
+        {
+          sourceUrl: "https://github.com/example/threat-hunter",
+          classification: "new_archetype",
+          novelty: "high",
+          valueStream: "Operate",
+          valueStreamConfidence: "high",
+          rationale: "Distinct security operations archetype.",
+        },
+        {
+          sourceUrl: "https://github.com/example/meeting-notes",
+          classification: "existing_skill_gap",
+          novelty: "medium",
+          valueStream: "Explore",
+          valueStreamConfidence: "medium",
+          rationale: "Fits an existing coworker with missing skills.",
+        },
+      ],
+    });
+
+    expect(created).toHaveLength(2);
+    for (const item of created) {
+      expect(item).toMatchObject({
+        type: "portfolio",
+        digitalProductId: "dp-ai-workforce",
+        taxonomyNodeId: "tn-workforce-services",
+      });
+    }
   });
 
   it("honors the runtime review kill switch without blocking deterministic ingest", async () => {

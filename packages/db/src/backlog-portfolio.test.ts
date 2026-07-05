@@ -15,6 +15,7 @@ type Item = {
   effortSize?: string | null;
   digitalProduct?: { portfolioId: string | null } | null;
   taxonomyNode?: { portfolioId: string | null } | null;
+  coworkerNeeds?: Array<{ agent?: { portfolioId: string | null } | null }> | null;
   epic?: { portfolios?: Array<{ portfolioId: string }> } | null;
 };
 
@@ -58,6 +59,15 @@ describe("resolveBacklogPortfolio", () => {
     ).toBe("p-tax");
     expect(resolveBacklogPortfolio({ epic: { portfolios: [{ portfolioId: "p-epic" }] } })).toBe("p-epic");
     expect(resolveBacklogPortfolio({})).toBeNull();
+  });
+
+  it("uses linked AI coworker capability needs before a broad epic fallback", () => {
+    expect(
+      resolveBacklogPortfolio({
+        coworkerNeeds: [{ agent: { portfolioId: "for_employees" } }],
+        epic: { portfolios: [{ portfolioId: "foundational" }] },
+      }),
+    ).toBe("for_employees");
   });
 });
 

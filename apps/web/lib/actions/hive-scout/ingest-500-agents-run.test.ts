@@ -24,6 +24,12 @@ const mocks = vi.hoisted(() => ({
     rawSource: {
       upsert: vi.fn(),
     },
+    digitalProduct: {
+      findUnique: vi.fn(),
+    },
+    taxonomyNode: {
+      findUnique: vi.fn(),
+    },
   },
   loadPrompt: vi.fn(),
   sendQueueNotification: vi.fn(),
@@ -57,6 +63,8 @@ describe("runHiveScoutIngest", () => {
     mocks.prisma.backlogItemActivity.create.mockResolvedValue({ id: "activity-1" });
     mocks.prisma.user.findMany.mockResolvedValue([]);
     mocks.prisma.rawSource.upsert.mockResolvedValue({ id: "raw-fixed-id" });
+    mocks.prisma.digitalProduct.findUnique.mockResolvedValue({ id: "dp-ai-workforce" });
+    mocks.prisma.taxonomyNode.findUnique.mockResolvedValue({ id: "tn-workforce-services" });
     mocks.loadPrompt.mockResolvedValue("{{NAME}} {{SOURCE_URL}}");
   });
 
@@ -68,6 +76,12 @@ describe("runHiveScoutIngest", () => {
     } as never);
 
     expect(mocks.prisma.backlogItem.create).toHaveBeenCalledOnce();
+    expect(mocks.prisma.backlogItem.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        digitalProductId: "dp-ai-workforce",
+        taxonomyNodeId: "tn-workforce-services",
+      }),
+    });
     expect(mocks.prisma.backlogItemActivity.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         backlogItemId: "backlog-row-1",
@@ -94,6 +108,8 @@ describe("runHiveScoutIngest — RawSource upsert", () => {
     mocks.prisma.backlogItemActivity.create.mockResolvedValue({ id: "activity-1" });
     mocks.prisma.user.findMany.mockResolvedValue([]);
     mocks.prisma.rawSource.upsert.mockResolvedValue({ id: "raw-fixed-id" });
+    mocks.prisma.digitalProduct.findUnique.mockResolvedValue({ id: "dp-ai-workforce" });
+    mocks.prisma.taxonomyNode.findUnique.mockResolvedValue({ id: "tn-workforce-services" });
     mocks.loadPrompt.mockResolvedValue("{{NAME}} {{SOURCE_URL}}");
   });
 

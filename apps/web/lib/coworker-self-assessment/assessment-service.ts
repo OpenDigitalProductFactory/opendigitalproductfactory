@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
-import { ingestBacklogItem } from "@/lib/operate/backlog-ingest";
+import {
+  AI_WORKFORCE_PRODUCT_ID,
+  AI_WORKFORCE_TAXONOMY_NODE_ID,
+} from "@dpf/db/workforce-portfolio";
+import {
+  ingestBacklogItem,
+  type BacklogIngestInput,
+  type BacklogIngestResult,
+} from "@/lib/operate/backlog-ingest";
 import type { BacklogWorkType } from "@/lib/explore/backlog";
 import type {
   CoworkerCapabilityNeedInput,
@@ -63,6 +71,25 @@ type FileCapabilityNeedFn = (input: {
   blocks: string;
 }) => Promise<{ itemId: string } | null>;
 
+type WorkforceBacklogLinks = {
+  digitalProductId: string | null;
+  taxonomyNodeId: string | null;
+};
+
+type WorkforceBacklogLinkClient = {
+  digitalProduct: {
+    findUnique(args: unknown): Promise<{ id: string } | null>;
+  };
+  taxonomyNode: {
+    findUnique(args: unknown): Promise<{ id: string } | null>;
+  };
+};
+
+type FileCapabilityNeedToBacklogDeps = {
+  resolveWorkforceLinks?: () => Promise<WorkforceBacklogLinks>;
+  ingest?: (input: BacklogIngestInput) => Promise<BacklogIngestResult>;
+};
+
 export type CoworkerSelfAssessmentDeps = {
   now: () => Date;
   createId: (prefix: "CWSA" | "CWN") => string;
@@ -107,36 +134,81 @@ export function capabilityNeedOriginId(agentId: string, kind: string, need: stri
   return `${agentId}:${kind}:${slug}`;
 }
 
+export async function resolveAiWorkforceBacklogLinks(input?: {
+  db?: WorkforceBacklogLinkClient;
+}): Promise<WorkforceBacklogLinks> {
+  const db = input?.db ?? (prisma as unknown as WorkforceBacklogLinkClient);
+  const [product, taxonomyNode] = await Promise.all([
+    db.digitalProduct.findUnique({
+      where: { productId: AI_WORKFORCE_PRODUCT_ID },
+      select: { id: true },
+    }),
+    db.taxonomyNode.findUnique({
+      where: { nodeId: AI_WORKFORCE_TAXONOMY_NODE_ID },
+      select: { id: true },
+    }),
+  ]);
+
+  return {
+    digitalProductId: product?.id ?? null,
+    taxonomyNodeId: taxonomyNode?.id ?? null,
+  };
+}
+
+export function buildCapabilityNeedBacklogInput(
+  n: {
+    needId: string;
+    agentId: string;
+    kind: string;
+    severity: string;
+    need: string;
+    blocks: string;
+  },
+  links: WorkforceBacklogLinks,
+): BacklogIngestInput {
+  return {
+    title: `[${n.kind}] ${n.need}`.replace(/\s+/g, " ").trim().slice(0, 200),
+    body: [
+      n.need,
+      `Blocks: ${n.blocks}`,
+      `Kind: ${n.kind} | Severity: ${n.severity}`,
+      `Coworker: ${n.agentId}`,
+      `From capability need ${n.needId}`,
+    ].join("\n"),
+    type: links.digitalProductId ? "product" : "portfolio",
+    workType: capabilityNeedToWorkType(n.kind),
+    source: "automated-detection",
+    itemIdPrefix: "CAP",
+    agentId: n.agentId,
+    digitalProductId: links.digitalProductId,
+    taxonomyNodeId: links.taxonomyNodeId,
+    origin: { kind: "capability-need", id: capabilityNeedOriginId(n.agentId, n.kind, n.need) },
+  };
+}
+
 /**
  * File one capability need into the backlog through the shared front door.
  * Exported so the submit path AND the orphan-reconcile (BI-8CE36E65 Phase 6)
  * share ONE filing behaviour — same origin dedup key + body — and never drift.
  * Non-fatal: returns null on failure (the need is still recorded as evidence).
  */
-export async function fileCapabilityNeedToBacklog(n: {
-  needId: string;
-  agentId: string;
-  kind: string;
-  severity: string;
-  need: string;
-  blocks: string;
-}): Promise<{ itemId: string } | null> {
+export async function fileCapabilityNeedToBacklog(
+  n: {
+    needId: string;
+    agentId: string;
+    kind: string;
+    severity: string;
+    need: string;
+    blocks: string;
+  },
+  deps: FileCapabilityNeedToBacklogDeps = {},
+): Promise<{ itemId: string } | null> {
   try {
-    const res = await ingestBacklogItem({
-      title: `[${n.kind}] ${n.need}`.replace(/\s+/g, " ").trim().slice(0, 200),
-      body: [
-        n.need,
-        `Blocks: ${n.blocks}`,
-        `Kind: ${n.kind} | Severity: ${n.severity}`,
-        `Coworker: ${n.agentId}`,
-        `From capability need ${n.needId}`,
-      ].join("\n"),
-      workType: capabilityNeedToWorkType(n.kind),
-      source: "automated-detection",
-      itemIdPrefix: "CAP",
-      agentId: n.agentId,
-      origin: { kind: "capability-need", id: capabilityNeedOriginId(n.agentId, n.kind, n.need) },
-    });
+    const links = deps.resolveWorkforceLinks
+      ? await deps.resolveWorkforceLinks()
+      : await resolveAiWorkforceBacklogLinks();
+    const ingest = deps.ingest ?? ingestBacklogItem;
+    const res = await ingest(buildCapabilityNeedBacklogInput(n, links));
     return { itemId: res.itemId };
   } catch (err) {
     // Non-fatal: the need is still recorded even if the backlog projection fails.

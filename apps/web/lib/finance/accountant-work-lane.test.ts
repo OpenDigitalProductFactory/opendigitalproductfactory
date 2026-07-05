@@ -45,6 +45,17 @@ describe("bookkeeper accountant work lane", () => {
     );
   });
 
+  it("maps the tax remittance surface to its Workforce digital product", () => {
+    const lane = buildBookkeeperAccountantWorkLane(CONNECTED);
+    const taxStream = lane.workstreams.find((stream) => stream.key === "banking-close");
+
+    expect(taxStream).toMatchObject({
+      digitalProductId: "dpf-tax-remittance",
+      taxonomyNodeId: "for_employees/financial_management/manage_taxes",
+    });
+    expect(taxStream?.routes.map((route) => route.href)).toContain("/finance/settings/tax");
+  });
+
   it("keeps AI coworker responsibilities explicit without misclassifying employee approvals", () => {
     const lane = buildBookkeeperAccountantWorkLane(CONNECTED);
 
