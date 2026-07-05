@@ -21,8 +21,8 @@
     {
       "id": "for_employees",
       "portfolio_id": "for_employees",
-      "name": "For Employees",
-      "description": "Digital products and services consumed internally by employees: productivity tools, ITSM, HR systems, and internal portals.",
+      "name": "Workforce / For Employees",
+      "description": "The workforce and the internal digital products it consumes. Members are BOTH human employees AND AI coworkers (role-shaped non-human peers per DOC-7693D528, each with a human-role parity anchor and an approval/interface owner). Products include productivity tools, ITSM, HR systems, internal portals, and the AI coworker services/offers the workforce runs on. Canonical key stays `for_employees`.",
       "owner_role": "HR-200",
       "it4it_reference": "IT4IT §6.3 For Employees Portfolio"
     },

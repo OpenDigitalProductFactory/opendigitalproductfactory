@@ -1,29 +1,64 @@
-// Unified Workforce roster (BI-554E1A14, EP-BOM-WIRING Phase 2).
+// Unified Workforce roster (BI-554E1A14 + BI-9A5F0EA3, EP-BOM-WIRING).
 //
 // The "For Employees" portfolio is too narrow when it means only humans: the AI
-// agent workforce (non-human identities) is workforce too. This projection
+// coworker workforce (non-human identities) is workforce too. This projection
 // returns ONE roster spanning both populations — human EmployeeProfiles and AI
 // Agents — so the Workforce portfolio can manage them together.
 //
-// For AI agents it surfaces the "needs lens": what a non-human identity needs to
-// be successful and contribute — its value-stream role, supervising human, HITL
-// tier, assigned model + token budget (the agent's cost-to-employ), tool and
-// skill counts (its equipment), and unmet capability needs (the gap signal). The
-// underlying Agent substrate already carries all of this; this module surfaces it
-// under the workforce lens rather than the platform-internals lens.
+// For AI coworkers it surfaces the "needs lens": what a non-human identity needs
+// to be successful and contribute — its value-stream role, supervising human,
+// HITL tier, assigned model + token budget (the coworker's cost-to-employ), tool
+// and skill counts (its equipment), and unmet capability needs (the gap signal).
 //
-// Pure projection: no schema change, no mutation. The persisted portfolio link
-// and the operator UI are separate follow-on slices.
+// Per the founder-reviewed invariant DOC-7693D528, each AI coworker is a
+// role-shaped non-human peer: it also exposes its human-role parity anchor (the
+// equivalent/adjacent human role it is patterned against) and its current
+// approval/interface owner (the responsible human). That ownership starts BROAD
+// (an HR role) in a small org and becomes SPECIFIC (a named employee) as headcount
+// grows and exactly one person holds the supervising role — resolved live here,
+// with no parallel identity substrate.
+//
+// Pure projection: no schema change, no mutation.
 
 import { prisma } from "@dpf/db";
 
 export type WorkforceMemberKind = "human" | "agent";
 
-/** What an AI agent needs to be successful and contribute. Null for humans. */
+/**
+ * The equivalent/adjacent human role an AI coworker is patterned against
+ * (DOC-7693D528). Null when the coworker has no supervising human role set.
+ */
+export type HumanRoleParity = {
+  /** HR role id, e.g. "HR-100". */
+  roleId: string;
+  /** Human-readable role name, e.g. "Chief Revenue Officer" (falls back to roleId). */
+  roleName: string;
+} | null;
+
+/**
+ * The responsible human for an AI coworker's approval, supervision, escalation,
+ * and day-to-day interface. Scope widens/narrows with headcount:
+ *  - "employee"   — exactly one active employee holds the supervising role (specific)
+ *  - "role"       — the supervising HR role, held by zero or many (broad)
+ *  - "unassigned" — no supervising role is set
+ */
+export type ApprovalInterfaceOwner = {
+  scope: "employee" | "role" | "unassigned";
+  /** Employee display name (employee), role name (role), or null (unassigned). */
+  label: string | null;
+  /** The supervising HR role id, when one is set. */
+  roleId: string | null;
+};
+
+/** What an AI coworker needs to be successful and contribute. Null for humans. */
 export type AgentNeeds = {
   valueStream: string | null;
   /** Supervising human (HR role id), e.g. "HR-000". */
   supervisorId: string | null;
+  /** The equivalent/adjacent human role this coworker is patterned against. */
+  humanRoleParity: HumanRoleParity;
+  /** The responsible human owner for approval/interface (broad → specific). */
+  approvalInterfaceOwner: ApprovalInterfaceOwner;
   /** 0=human-only, 1=approve, 2=review, 3=autonomous. */
   hitlTier: number;
   lifecycleStage: string;
@@ -49,7 +84,7 @@ export type WorkforceMember = {
   role: string | null;
   /** Human: department name. Agent: portfolio id the agent's work serves. */
   group: string | null;
-  /** Present only for AI agents. */
+  /** Present only for AI coworkers. */
   agentNeeds: AgentNeeds | null;
 };
 
@@ -70,6 +105,8 @@ export type WorkforceRoster = {
 export type WorkforceRosterClient = {
   employeeProfile: { findMany: (args: unknown) => Promise<unknown> };
   agent: { findMany: (args: unknown) => Promise<unknown> };
+  /** Optional — resolves the specific/broad approval owner for supervising roles. */
+  platformRole?: { findMany: (args: unknown) => Promise<unknown> };
 };
 
 /**
@@ -105,6 +142,20 @@ type AgentRow = {
   coworkerNeeds: Array<{ status: string }>;
 };
 
+type PlatformRoleRow = {
+  roleId: string;
+  name: string;
+  users: Array<{
+    user: {
+      isActive: boolean;
+      employeeProfile: { displayName: string; status: string } | null;
+    } | null;
+  }>;
+};
+
+/** Resolution for one supervising HR role: its name + the active employees holding it. */
+type RoleResolution = { roleName: string; activeHolderNames: string[] };
+
 function humanToMember(row: EmployeeRow): WorkforceMember {
   return {
     kind: "human",
@@ -117,10 +168,53 @@ function humanToMember(row: EmployeeRow): WorkforceMember {
   };
 }
 
-function agentToMember(row: AgentRow): WorkforceMember {
+/**
+ * Derive an AI coworker's human-role parity anchor and current approval/interface
+ * owner from its supervising HR role. Ownership is BROAD (the role) until exactly
+ * one active employee holds that role, at which point it becomes SPECIFIC (that
+ * employee) — the DOC-7693D528 scale-with-headcount invariant.
+ */
+function resolveParityAndOwner(
+  supervisorId: string | null,
+  roles: Map<string, RoleResolution>,
+): { humanRoleParity: HumanRoleParity; approvalInterfaceOwner: ApprovalInterfaceOwner } {
+  if (!supervisorId) {
+    return {
+      humanRoleParity: null,
+      approvalInterfaceOwner: { scope: "unassigned", label: null, roleId: null },
+    };
+  }
+
+  const resolved = roles.get(supervisorId);
+  const roleName = resolved?.roleName ?? supervisorId;
+  const humanRoleParity: HumanRoleParity = { roleId: supervisorId, roleName };
+
+  if (resolved && resolved.activeHolderNames.length === 1) {
+    return {
+      humanRoleParity,
+      approvalInterfaceOwner: {
+        scope: "employee",
+        label: resolved.activeHolderNames[0],
+        roleId: supervisorId,
+      },
+    };
+  }
+
+  return {
+    humanRoleParity,
+    approvalInterfaceOwner: { scope: "role", label: roleName, roleId: supervisorId },
+  };
+}
+
+function agentToMember(row: AgentRow, roles: Map<string, RoleResolution>): WorkforceMember {
   const unmetNeedCount = row.coworkerNeeds.filter(
     (n) => !RESOLVED_NEED_STATUSES.has(n.status),
   ).length;
+
+  const { humanRoleParity, approvalInterfaceOwner } = resolveParityAndOwner(
+    row.humanSupervisorId,
+    roles,
+  );
 
   return {
     kind: "agent",
@@ -132,6 +226,8 @@ function agentToMember(row: AgentRow): WorkforceMember {
     agentNeeds: {
       valueStream: row.valueStream,
       supervisorId: row.humanSupervisorId,
+      humanRoleParity,
+      approvalInterfaceOwner,
       hitlTier: row.hitlTierDefault,
       lifecycleStage: row.lifecycleStage,
       model: row.executionConfig?.defaultModelId ?? null,
@@ -145,8 +241,50 @@ function agentToMember(row: AgentRow): WorkforceMember {
 }
 
 /**
- * Load the unified Workforce roster: human employees + AI agents, with the
- * agent-needs lens. Deterministic ordering (humans then agents, each by name).
+ * Resolve the supervising HR roles referenced by the agents into {roleName,
+ * activeHolderNames}. Only the roles actually referenced are queried. Degrades to
+ * an empty map when the client exposes no platformRole reader (owner stays broad).
+ */
+async function resolveSupervisingRoles(
+  db: WorkforceRosterClient,
+  supervisorIds: string[],
+): Promise<Map<string, RoleResolution>> {
+  const map = new Map<string, RoleResolution>();
+  if (supervisorIds.length === 0 || !db.platformRole) return map;
+
+  const rows = (await db.platformRole.findMany({
+    where: { roleId: { in: supervisorIds } },
+    select: {
+      roleId: true,
+      name: true,
+      users: {
+        select: {
+          user: {
+            select: {
+              isActive: true,
+              employeeProfile: { select: { displayName: true, status: true } },
+            },
+          },
+        },
+      },
+    },
+  })) as PlatformRoleRow[];
+
+  for (const row of rows) {
+    const activeHolderNames = row.users
+      .map((u) => u.user)
+      .filter((u): u is NonNullable<typeof u> => !!u && u.isActive && !!u.employeeProfile)
+      .map((u) => u.employeeProfile!.displayName);
+    map.set(row.roleId, { roleName: row.name, activeHolderNames });
+  }
+
+  return map;
+}
+
+/**
+ * Load the unified Workforce roster: human employees + AI coworkers, with the
+ * agent-needs lens plus human-role parity + approval/interface owner. Deterministic
+ * ordering (humans then agents, each by name).
  */
 export async function loadWorkforceRoster(input?: {
   db?: WorkforceRosterClient;
@@ -188,8 +326,17 @@ export async function loadWorkforceRoster(input?: {
     }) as Promise<AgentRow[]>,
   ]);
 
+  const supervisorIds = [
+    ...new Set(
+      agents
+        .map((a) => a.humanSupervisorId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+  const roles = await resolveSupervisingRoles(db, supervisorIds);
+
   const humanMembers = employees.map(humanToMember);
-  const agentMembers = agents.map(agentToMember);
+  const agentMembers = agents.map((a) => agentToMember(a, roles));
   const members = [...humanMembers, ...agentMembers];
 
   return {

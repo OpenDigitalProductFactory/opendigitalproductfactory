@@ -108,6 +108,7 @@ export async function projectPortfolioEntries(
       [PORTFOLIO_PROJECTION_KEYS.coverageStatus]: entry.coverageStatus,
       [PORTFOLIO_PROJECTION_KEYS.sourceKind]: entry.sourceKind,
       [PORTFOLIO_PROJECTION_KEYS.projectedBy]: PROJECTED_BY,
+      ...(entry.observationExtras ?? {}),
     };
     const { lifecycleStage, lifecycleStatus } = lifecycleFromCoverage(entry.coverageStatus);
 

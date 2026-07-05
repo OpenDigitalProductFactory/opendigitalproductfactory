@@ -1,9 +1,12 @@
-// Unified Workforce roster panel (BI-554E1A14, EP-BOM-WIRING Phase 2).
+// Unified Workforce roster panel (BI-554E1A14 + BI-9A5F0EA3, EP-BOM-WIRING).
 //
 // Renders the org's workforce as ONE roster spanning human employees and AI
-// agents. For agents it shows the "needs lens" — what the non-human identity
-// needs to contribute: value-stream role, supervising human, HITL tier, model +
-// token budget, tool/skill counts, and unmet capability needs (the gap signal).
+// coworkers. For coworkers it shows the "needs lens" — what the non-human peer
+// needs to contribute: value-stream role, HITL tier, model + token budget,
+// tool/skill counts, and unmet capability needs (the gap signal) — plus, per the
+// founder invariant DOC-7693D528, its human-role parity anchor (the equivalent
+// human role it is patterned against) and its approval/interface owner (broad
+// role → specific employee as headcount grows).
 //
 // Presentational and theme-aware (DPF CSS custom properties, dense layout, no
 // hardcoded colors, no nested cards). Server component — no client state.
@@ -25,10 +28,19 @@ function AgentNeeds({ member }: { member: WorkforceMember }) {
   const tokenBudget =
     needs.dailyTokenLimit != null ? `${(needs.dailyTokenLimit / 1000).toFixed(0)}k/day` : "—";
 
+  // DOC-7693D528: each AI coworker is a role-shaped peer — show the equivalent
+  // human role it is patterned against and the responsible approval/interface
+  // owner, whose specificity (a named employee vs the broad role) scales with
+  // headcount.
+  const owner = needs.approvalInterfaceOwner;
+  const ownerValue =
+    owner.scope === "unassigned" ? "unassigned" : `${owner.label ?? "—"} (${owner.scope})`;
+
   return (
     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
       <StatPill label="stream" value={needs.valueStream ?? "—"} />
-      <StatPill label="supervisor" value={needs.supervisorId ?? "unassigned"} />
+      <StatPill label="role parity" value={needs.humanRoleParity?.roleName ?? "—"} />
+      <StatPill label="approval owner" value={ownerValue} />
       <StatPill label="HITL" value={`T${needs.hitlTier}`} />
       <StatPill label="model" value={needs.model ?? "unset"} />
       <StatPill label="budget" value={tokenBudget} />
@@ -61,7 +73,7 @@ function MemberRow({ member }: { member: WorkforceMember }) {
           </p>
         </div>
         <span className="text-[9px] font-mono uppercase tracking-wide text-[var(--dpf-muted)] shrink-0">
-          {isAgent ? "AI agent" : "human"}
+          {isAgent ? "AI coworker" : "human"}
         </span>
       </div>
       {isAgent && <AgentNeeds member={member} />}
@@ -78,13 +90,13 @@ export function WorkforceRosterPanel({ roster }: { roster: WorkforceRoster }) {
         <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Workforce</h2>
         <StatPill label="total" value={summary.total} />
         <StatPill label="people" value={summary.humans} />
-        <StatPill label="AI agents" value={summary.agents} />
-        <StatPill label="agents w/ unmet needs" value={summary.agentsWithUnmetNeeds} />
+        <StatPill label="AI coworkers" value={summary.agents} />
+        <StatPill label="coworkers w/ unmet needs" value={summary.agentsWithUnmetNeeds} />
       </div>
 
       {members.length === 0 ? (
         <p className="text-sm text-[var(--dpf-muted)] py-8 text-center">
-          No workforce members yet. Humans and AI agents will appear here as they are onboarded.
+          No workforce members yet. Humans and AI coworkers will appear here as they are onboarded.
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

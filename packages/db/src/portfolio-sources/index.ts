@@ -12,3 +12,4 @@ export * from "./project-external-supply";
 export * from "./licensed-dependencies-manifest";
 export * from "./project-sbom";
 export * from "./product-dependency";
+export * from "./project-coworker-workforce";
