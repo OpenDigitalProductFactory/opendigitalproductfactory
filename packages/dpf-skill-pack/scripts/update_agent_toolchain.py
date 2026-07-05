@@ -54,7 +54,10 @@ def write_text_if_changed(path: Path, content: str) -> bool:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and path.read_text(encoding="utf-8") == content:
         return False
-    path.write_text(content, encoding="utf-8", newline="\n")
+    # Path.write_text() only grew its newline= kwarg in Python 3.10; the
+    # bootstrap runs this script with the system python3, which is 3.9 on
+    # stock macOS. Write bytes so LF endings survive on every platform.
+    path.write_bytes(content.encode("utf-8"))
     return True
 
 
