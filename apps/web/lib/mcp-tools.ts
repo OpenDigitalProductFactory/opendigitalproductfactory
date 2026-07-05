@@ -92,9 +92,7 @@ import {
   type CoworkerCapabilityNeedStatus,
 } from "@/lib/coworker-self-assessment/types";
 import { ROUTE_AGENT_MAP_ENTRIES } from "@/lib/tak/agent-routing";
-
 // ─── Types ───────────────────────────────────────────────────────────────────
-
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
 type ToolExecutionContext = {
   routeContext?: string;
@@ -111,7 +109,6 @@ type ToolExecutionContext = {
    */
   featureBuildId?: string;
 };
-
 /** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
  *  These let the agent router and governance layer make safety decisions
  *  without parsing the tool description text.
