@@ -1,12 +1,8 @@
 import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
-<<<<<<< HEAD
 import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
 import { handleUpdateBacklogItem } from "./mcp-handlers/update-backlog-item";
-=======
-import { DISCOVERY_TRIAGE_AGENT_ID, attributeBacklogPortfolio, prisma } from "@dpf/db";
 import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
->>>>>>> a6f402426 (feat(mdm): customer merge lifecycle — orchestrator, adapters, tombstones, steward surfaces (EP-4A12A7CB WG-4))
 // Static import: executeTool is a hot path; dynamic import per call would hurt throughput.
 import { evaluateExecution } from "@/lib/kernel/runtime-gate";
 import { loadEnforceablePrinciples } from "@/lib/kernel/load-enforceable-principles";
@@ -52,6 +48,7 @@ import { marketingPack } from "@/lib/mcp/packs/marketing-pack";
 import { workCapturePack } from "@/lib/mcp/packs/work-capture-pack";
 import { orgDecisionPack } from "@/lib/mcp/packs/org-decision-pack";
 import { activityRoutingPack } from "@/lib/mcp/packs/activity-routing-pack";
+import { mdmStewardshipPack } from "@/lib/mcp/packs/mdm-stewardship-pack";
 import { selfUpgradePack } from "@/lib/mcp/packs/self-upgrade-pack";
 import { coworkerServiceCatalogPack } from "@/lib/mcp/packs/coworker-service-catalog-pack";
 import { coworkerToolGrantPack } from "@/lib/mcp/packs/coworker-tool-grant-pack";
@@ -444,7 +441,7 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 // ─── Tool Registry ───────────────────────────────────────────────────────────
 // Scoped tool packs compose into the registry; mcp-tools.ts is the thin layer
 // over them (definitions spread into PLATFORM_TOOLS below; dispatch in executeTool).
-const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack, coworkerToolGrantPack]);
+const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack, coworkerToolGrantPack, mdmStewardshipPack]);
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,
@@ -1137,20 +1134,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "operate_customer",
     sideEffect: true,
     coworkerArtifact: true,
-  },
-  {
-    name: "merge_customer_accounts",
-    description: "Merge a duplicate customer account into the one to keep. Use when two accounts are confirmed to be the same real company (e.g. created under slightly different spellings). All related records (contacts, sites, opportunities, quotes, invoices, tickets, etc.) move to the surviving account; the duplicate is kept as a superseded tombstone pointing at the survivor — nothing is deleted. Not reversible from this tool, so confirm with the user which account survives before calling. Pass the account to KEEP as survivorAccountId and the duplicate as loserAccountId (CustomerAccount.id values from list_customer_accounts or a duplicates_found response).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        survivorAccountId: { type: "string", description: "CustomerAccount.id of the account to KEEP." },
-        loserAccountId: { type: "string", description: "CustomerAccount.id of the duplicate to merge away (tombstoned, not deleted)." },
-      },
-      required: ["survivorAccountId", "loserAccountId"],
-    },
-    requiredCapability: "operate_customer",
-    sideEffect: true,
   },
   {
     name: "create_opportunity",
@@ -14963,36 +14946,6 @@ export async function executeTool(
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return { success: false, error: "create_failed", message: `create_customer_account failed: ${msg}` };
-      }
-    }
-
-    case "merge_customer_accounts": {
-      const survivorId = typeof params["survivorAccountId"] === "string" ? params["survivorAccountId"].trim() : "";
-      const loserId = typeof params["loserAccountId"] === "string" ? params["loserAccountId"].trim() : "";
-      if (!survivorId || !loserId) {
-        return { success: false, error: "missing_fields", message: "survivorAccountId and loserAccountId are both required (CustomerAccount.id values)." };
-      }
-      const { mergeRecords, MergeValidationFailure } = await import("@/lib/mdm/merge");
-      try {
-        const result = await mergeRecords("customer-account", loserId, survivorId);
-        await prisma.activity.create({
-          data: {
-            activityId: `ACT-${crypto.randomUUID()}`,
-            type: "account_merged",
-            subject: `Account merged into survivor ${survivorId}`,
-            body: JSON.stringify(result),
-            accountId: survivorId,
-            createdById: null,
-          },
-        });
-        const moved = Object.entries(result.repointed).map(([step, count]) => `${step}: ${count}`).join(", ") || "no related rows";
-        return { success: true, message: `Merged duplicate account ${loserId} into ${survivorId}. Moved ${moved}. The duplicate is kept as a superseded record pointing at the survivor.`, data: { survivorId, loserId, repointed: result.repointed, nestedSiteMerges: result.nestedSiteMerges } };
-      } catch (err) {
-        if (err instanceof MergeValidationFailure) {
-          return { success: false, error: "merge_rejected", message: `Merge rejected: ${err.reason}. Check both ids exist, differ, and neither is already superseded.` };
-        }
-        const msg = err instanceof Error ? err.message : String(err);
-        return { success: false, error: "merge_failed", message: `merge_customer_accounts failed: ${msg}` };
       }
     }
 

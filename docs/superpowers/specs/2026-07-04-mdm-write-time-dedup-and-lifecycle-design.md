@@ -235,7 +235,9 @@ As built: orchestrator + adapters in `apps/web/lib/mdm/merge.ts`
 (completeness guard `merge-adapters-completeness.test.ts`); admin surface in
 `apps/web/lib/actions/customer-merge.ts` + the account-detail "Merge into…"
 control with usage-impact preview; coworker door `merge_customer_accounts`
-(crm_write grant). The account-merge collision planners are per-account site
+(crm_write grant, registered in the `mdm-stewardship` tool pack —
+`apps/web/lib/mcp/packs/mdm-stewardship-pack.ts` — per the frozen inline
+dispatcher ratchet). The account-merge collision planners are per-account site
 names (nested site merge) and duplicate contact-role rows (drop the loser
 copy). The v1 steward gate reuses the admin capability boundary
 (`view_admin` server-side, `operate_customer` at the tool layer); the
