@@ -3,7 +3,7 @@
 Backlog item: BI-E99E15E1
 Epic: EP-5560770F
 Date: 2026-07-04
-Status: implemented; PR blocked by baseline production-build failure
+Status: implemented and merged via PR #2614 on 2026-07-05; BI-E99E15E1 done
 
 ## Context
 
@@ -93,29 +93,15 @@ Verification:
 
 ## Current Verification Evidence
 
-- Passed in governed `local-integration-ci` sandbox lease `NPEL-0D72412D7B`:
-  `pnpm --filter web exec vitest run lib/integrate/task-dependency-graph.test.ts
-  lib/integrate/opencode-dispatch.test.ts
-  lib/integrate/build-agent-prompts.test.ts`, 3 test files and 84 tests passed
-  on branch head `3bd51ca`.
-- Passed: `git diff --check`.
-- Passed: stale Build Studio wording sweep; the only remaining "one of four"
-  hit is the unrelated Decision Perspective outcomes page.
-- Sandbox dependency convergence: the shared sandbox virtual store was stale
-  (`node_modules/.pnpm/lock.yaml` still referenced Expo 55.0.26 while the
-  checked-in lockfile references 55.0.27). The stale generated virtual-store
-  lock was moved aside inside the sandbox only, then `pnpm install
-  --frozen-lockfile` completed from the checked-in lockfile. No source worktree
-  dependency install was performed.
-- Production build evidence: `pnpm --filter web build` on this branch passed
-  compilation and TypeScript, then failed during static generation of
-  `/_global-error` with `TypeError: Cannot read properties of null (reading
-  'useContext')`, digest `4258984587`.
-- Baseline comparison: the same sandbox was switched to `origin/main` at
-  `505a716`; `pnpm --filter web build` produced the same `/_global-error`
-  prerender failure after TypeScript completed. Filed `BI-830C24B6` for the
-  mainline build blocker. This branch is pushed but not PR-ready until that
-  baseline gate is green or merge policy explicitly allows the blocker.
+- PR #2614 merged to `main` at merge commit `395f4795d3f69bb322c2df8327d82a47001bd3f2`.
+- GitHub CI passed on the final PR head: Typecheck, Production Build, Unit
+  Tests, ADP Integration Tests, Module Size Guard, Spec/Plan/Doc Gate,
+  UX-Fit Gate, CodeQL, DCO, gitleaks, and policy guards.
+- Local source checks before merge: `git diff --check`, targeted role-routing
+  tests, and a module-size guard mirror for the files touched during CI cleanup.
+- Earlier sandbox build evidence was superseded by fresh GitHub CI because the
+  shared sandbox was later shown to be stale/drifted. Sandbox freshness is
+  tracked separately from this documentation-DoD delivery path.
 
 ## Risks
 
