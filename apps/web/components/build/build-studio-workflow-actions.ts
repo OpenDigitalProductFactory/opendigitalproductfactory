@@ -28,11 +28,11 @@ type BuildStudioWorkflowActionMetadata = {
   resumeMode?: ResumeImplementationModeDetail;
 };
 
-export type BuildOperatorStatusKind = "waiting-on-you" | "working" | "blocked-technical";
+export type BuildOperatorStatusKind = "waiting-on-you" | "working" | "blocked-technical" | "escalated";
 
 export type BuildOperatorStatus = {
   kind: BuildOperatorStatusKind;
-  label: "Waiting on you" | "Working" | "Blocked (technical)";
+  label: "Waiting on you" | "Working" | "Blocked (technical)" | "Escalated to you";
   intent: "accent" | "info" | "danger";
 };
 
@@ -171,6 +171,27 @@ export type BuildStudioWorkflowAction =
     disabledReason: string | null;
     coworkerLabel: string;
     coworkerPrompt: string;
+  } & BuildStudioWorkflowActionMetadata)
+  | ({
+    // BI-A2F3FA9D — a build escalated to a human (phase="abandoned"). Terminal:
+    // WIP is already freed and the originating BI parked as "deferred", so there
+    // is no in-place server action — primaryLabel is null and the operator's
+    // resume path is the parked backlog item (resumeHref). Rendered at danger
+    // intent so the handoff is unmistakable instead of the old stale "Working".
+    kind: "escalated-to-human";
+    title: string;
+    message: string;
+    primaryLabel: null;
+    targetPhase: null;
+    disabledReason: null;
+    coworkerLabel: string;
+    coworkerPrompt: string;
+    /** Originating BacklogItem.itemId (BI-XXXX) parked as deferred, if any. */
+    parkedBacklogItemId: string | null;
+    /** Human-readable escalation reason (FeatureBuild.abandonReason). */
+    abandonReason: string | null;
+    /** Where the operator resumes the work — the Delivery/Backlog surface. */
+    resumeHref: string;
   } & BuildStudioWorkflowActionMetadata);
 
 export type WorkflowStageGuidance = {
@@ -351,6 +372,15 @@ function statusForAction(
   action: BuildStudioWorkflowAction,
   build?: OperatorGuidanceBuildContext,
 ): BuildOperatorStatus {
+  // BI-A2F3FA9D — terminal handoff: the build is a human's now, not "Working".
+  if (action.kind === "escalated-to-human") {
+    return {
+      kind: "escalated",
+      label: "Escalated to you",
+      intent: "danger",
+    };
+  }
+
   if (
     action.kind === "retry-build"
     || action.kind === "reset-build"
@@ -425,6 +455,10 @@ function nextSentenceForAction(action: BuildStudioWorkflowAction): string {
       return "Next: try to fix the plan review here.";
     case "review-only":
       return "Next: I am watching this stage. Ask if anything looks stuck.";
+    case "escalated-to-human":
+      return action.parkedBacklogItemId
+        ? `Next: pick up ${action.parkedBacklogItemId} in Delivery when you are ready.`
+        : "Next: pick up the parked item in Delivery when you are ready.";
   }
 }
 
@@ -573,6 +607,37 @@ export function deriveBuildStudioWorkflowAction({
   governedBacklogEnabled,
   progressVisibility,
 }: ActionInput): BuildStudioWorkflowAction {
+  // BI-A2F3FA9D — terminal escalate-to-human handoff. Must be FIRST: an abandoned
+  // build has been handed to a human (WIP freed, BI parked as "deferred"), so
+  // none of the phase-progression branches apply. Before this branch existed the
+  // abandoned phase fell through to "review-only", which renders a stale
+  // "Working — watching this stage". Now the operator sees the handoff, the
+  // parked backlog item, the reason, and a resume path at danger intent.
+  if (build.phase === "abandoned") {
+    const parkedBacklogItemId = build.originator?.itemId ?? null;
+    const abandonReason = build.abandonReason?.trim() || null;
+    const parkedClause = parkedBacklogItemId
+      ? `It is parked as ${parkedBacklogItemId}, waiting for you.`
+      : "It is waiting for you in Delivery.";
+    return {
+      kind: "escalated-to-human",
+      title: "Escalated to you",
+      message:
+        `Build Studio could not finish this build on its own and handed it to you. ` +
+        parkedClause +
+        (abandonReason ? ` Reason: ${abandonReason}` : ""),
+      primaryLabel: null,
+      targetPhase: null,
+      disabledReason: null,
+      coworkerLabel: "Ask coworker to summarize",
+      coworkerPrompt:
+        "This build was escalated to a human and abandoned. Summarize in plain language why it could not be completed automatically, what the parked backlog item now needs, and the safest next step for me to take.",
+      parkedBacklogItemId,
+      abandonReason,
+      resumeHref: "/ops",
+    };
+  }
+
   const requiresApproval =
     isApprovalManagedBacklogBuild(build, governedBacklogEnabled)
     && build.draftApprovedAt == null

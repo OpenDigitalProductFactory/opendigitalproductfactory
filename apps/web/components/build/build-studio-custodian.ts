@@ -106,7 +106,12 @@ export function deriveBuildStudioCustodianPrompt({
   action,
   progressVisibility,
 }: CustodianPromptInput): BuildStudioCustodianPrompt | null {
-  if (build.phase === "complete" || build.phase === "ship") {
+  // Terminal phases the custodian must never nudge on. "abandoned" (BI-A2F3FA9D)
+  // is an escalate-to-human handoff: WIP is freed and the originating BI parked
+  // as "deferred", so there is nothing to keep moving here — a nudge would be
+  // noise. "failed" is intentionally NOT excluded: it retains a live retry-build
+  // recovery path the custodian's technicalRecovery branch surfaces on purpose.
+  if (build.phase === "complete" || build.phase === "ship" || build.phase === "abandoned") {
     return null;
   }
 

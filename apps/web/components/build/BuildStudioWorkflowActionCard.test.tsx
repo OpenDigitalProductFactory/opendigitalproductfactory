@@ -8,7 +8,10 @@ import {
   BuildStudioWorkflowActionCard,
   deriveActionBannerState,
 } from "./BuildStudioWorkflowActionCard";
-import type { BuildStudioWorkflowAction } from "./build-studio-workflow-actions";
+import {
+  deriveBuildStudioWorkflowAction,
+  type BuildStudioWorkflowAction,
+} from "./build-studio-workflow-actions";
 import {
   normalizeHappyPathState,
   type FeatureBuildRow,
@@ -22,9 +25,11 @@ const { mockAdvanceBuildPhase, mockCaptureDecisionInteraction, mockRerunPlanRevi
   mockResumeBuildImplementation: vi.fn(),
 }));
 
+const mockRouterPush = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     refresh: vi.fn(),
+    push: mockRouterPush,
   }),
 }));
 
@@ -451,6 +456,13 @@ describe("deriveActionBannerState", () => {
     // see 'blocked' (action needs them) before 'review_failed' (status info).
     expect(deriveActionBannerState({ phase: "failed" }, { disabledReason: "Resolve upstream first" })).toBe("blocked");
   });
+
+  // BI-A2F3FA9D — an abandoned (escalated-to-human) build is terminal and maps
+  // to the danger 'escalated' banner, taking precedence over any disabledReason.
+  it("returns 'escalated' when phase is abandoned", () => {
+    expect(deriveActionBannerState({ phase: "abandoned" }, { disabledReason: null })).toBe("escalated");
+    expect(deriveActionBannerState({ phase: "abandoned" }, { disabledReason: "anything" })).toBe("escalated");
+  });
 });
 
 describe("BuildStudioWorkflowActionCard compact rendering", () => {
@@ -486,6 +498,44 @@ describe("BuildStudioWorkflowActionCard compact rendering", () => {
     expect(banner).toHaveTextContent("Next: start implementation. I will track the checks.");
     expect(screen.queryByText("Build Status")).not.toBeInTheDocument();
     expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
+  });
+
+  // BI-A2F3FA9D — a build escalated to a human must show the terminal handoff,
+  // never the old stale "Working — watching this stage".
+  it("compact=true renders the escalate-to-human handoff for an abandoned build (not 'Working')", async () => {
+    const build = makeBuild({
+      phase: "abandoned",
+      decisionInteraction: null,
+      abandonReason:
+        "Escalated to human after 2 self-repair round(s) at plan review (needs-human).",
+      abandonedAt: new Date("2026-07-04T18:00:00Z"),
+      originator: {
+        id: "backlog-row-1",
+        itemId: "BI-DEADBEEF",
+        title: "Some parked work",
+        status: "deferred",
+        triageOutcome: "build",
+        effortSize: "large",
+        proposedOutcome: null,
+        activeBuildId: null,
+        resolution: null,
+        abandonReason: null,
+      },
+    });
+    const action = deriveBuildStudioWorkflowAction({ build, governedBacklogEnabled: true });
+    render(
+      <BuildStudioWorkflowActionCard build={build} action={action} compact />,
+    );
+
+    const banner = screen.getByRole("region", { name: "Current build action" });
+    expect(banner).toHaveTextContent("Escalated to you");
+    expect(banner).toHaveTextContent("BI-DEADBEEF");
+    expect(banner).not.toHaveTextContent("Working");
+
+    // The primary affordance is the resume path to the parked item.
+    const openParked = screen.getByRole("button", { name: "Open parked item" });
+    fireEvent.click(openParked);
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalledWith("/ops"));
   });
 
   it("compact=true exposes a primary action wired to handlePrimaryAction (delegation, not new dispatch)", async () => {

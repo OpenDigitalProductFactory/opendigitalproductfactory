@@ -119,6 +119,28 @@ describe("ActionBanner", () => {
     expect(html).toContain("Fix the dependency ordering.");
   });
 
+  // BI-A2F3FA9D — terminal escalate-to-human handoff state.
+  it("renders detail when state is 'escalated'", () => {
+    const html = renderToStaticMarkup(
+      <ActionBanner
+        state="escalated"
+        sentence="Escalated to you — parked as BI-123."
+        detail="Escalated to human after 2 self-repair rounds."
+      />,
+    );
+    expect(html).toContain('data-testid="action-banner-detail"');
+    expect(html).toContain("Escalated to human after 2 self-repair rounds.");
+  });
+
+  it("uses the danger error tokens for the 'escalated' state", () => {
+    const html = renderToStaticMarkup(
+      <ActionBanner state="escalated" sentence="Escalated to you." />,
+    );
+    expect(html).toContain("bg-[var(--dpf-state-error)]");
+    expect(html).toContain("border-[var(--dpf-error)]");
+    expect(html).toContain('data-state="escalated"');
+  });
+
   it("renders primary action right-aligned with min-width", () => {
     const html = renderToStaticMarkup(
       <ActionBanner

@@ -29,6 +29,7 @@ export const PHASE_ICONS: Record<BuildPhase, string> = {
   ship:     "▶",
   complete: "✓",
   failed:   "✗",
+  abandoned: "⚑",
 };
 
 /** CSS variable colours for specialist roles (used in task nodes) */

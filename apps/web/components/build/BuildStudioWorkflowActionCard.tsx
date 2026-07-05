@@ -55,6 +55,9 @@ export function deriveActionBannerState(
   build: Pick<FeatureBuildRow, "phase">,
   action: Pick<BuildStudioWorkflowAction, "disabledReason">,
 ): ActionBannerState {
+  // BI-A2F3FA9D — terminal escalate-to-human handoff. Checked before
+  // disabledReason so it always wins (an abandoned build carries none anyway).
+  if (build.phase === "abandoned") return "escalated";
   if (action.disabledReason) return "blocked";
   if (build.phase === "failed") return "review_failed";
   if (build.phase === "complete") return "complete";
@@ -297,13 +300,21 @@ export function BuildStudioWorkflowActionCard({
     }
 
     const bannerState = deriveActionBannerState(build, action);
-    const bannerPrimaryAction = operatorGuidance.nextLabel
+    // BI-A2F3FA9D — terminal escalate-to-human handoff. The build is a human's
+    // now: the primary affordance is a link to the parked backlog item (resume
+    // path), and the detail line carries the human-readable escalation reason.
+    const bannerPrimaryAction = action.kind === "escalated-to-human"
+      ? { label: "Open parked item", onClick: () => router.push(action.resumeHref) }
+      : operatorGuidance.nextLabel
       ? {
         label: operatorGuidance.useCoworkerForNext ? operatorGuidance.nextLabel : (primaryLabel ?? operatorGuidance.nextLabel),
         onClick: operatorGuidance.useCoworkerForNext ? handleCoworkerAction : handlePrimaryAction,
         disabled: operatorGuidance.useCoworkerForNext ? false : (!primaryEnabled || pending),
       }
       : undefined;
+    const bannerDetail = action.kind === "escalated-to-human"
+      ? (action.abandonReason ?? undefined)
+      : (action.disabledReason ?? undefined);
     return (
       <div data-testid="build-studio-workflow-action-card">
         <ActionBanner
@@ -311,7 +322,7 @@ export function BuildStudioWorkflowActionCard({
           operatorStatus={operatorGuidance.status}
           sentence={operatorGuidance.nextSentence}
           primaryAction={bannerPrimaryAction}
-          detail={action.disabledReason ?? undefined}
+          detail={bannerDetail}
         />
         {error && (
           <div
@@ -392,6 +403,30 @@ export function BuildStudioWorkflowActionCard({
           <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs leading-relaxed">
             <div className="font-semibold text-[var(--dpf-text)]">{action.resumeMode.label}</div>
             <div className="mt-1 text-[var(--dpf-muted)]">{action.resumeMode.reason}</div>
+          </div>
+        )}
+
+        {action.kind === "escalated-to-human" && (
+          <div
+            data-testid="build-escalated-handoff"
+            className="rounded-lg border border-[var(--dpf-error)] bg-[color-mix(in_srgb,var(--dpf-error)_8%,var(--dpf-surface-1))] px-3 py-2 text-xs leading-relaxed"
+          >
+            {action.parkedBacklogItemId && (
+              <div className="text-[var(--dpf-text)]">
+                Parked as{" "}
+                <span className="font-mono font-semibold">{action.parkedBacklogItemId}</span>
+              </div>
+            )}
+            {action.abandonReason && (
+              <div className="mt-1 text-[var(--dpf-muted)]">{action.abandonReason}</div>
+            )}
+            <button
+              type="button"
+              onClick={() => router.push(action.resumeHref)}
+              className="mt-2 inline-flex items-center rounded-md border border-[var(--dpf-error)] bg-[var(--dpf-surface-1)] px-3 py-1.5 text-xs font-semibold text-[var(--dpf-error)] transition-opacity hover:opacity-90"
+            >
+              Open parked item
+            </button>
           </div>
         )}
 

@@ -265,3 +265,24 @@ describe("deriveBuildStudioCustodianPrompt", () => {
     expect(prompt?.whyNow).not.toContain("required evidence is missing");
   });
 });
+
+// BI-A2F3FA9D — "abandoned" is a terminal escalate-to-human handoff. The
+// custodian must never nudge on it (nothing to keep moving), even when the
+// build looks quiet — mirroring the existing complete/ship suppression.
+describe("deriveBuildStudioCustodianPrompt — terminal abandoned (BI-A2F3FA9D)", () => {
+  it("returns null for an abandoned build even when quiet", () => {
+    const build = makeBuild({
+      phase: "abandoned",
+      abandonReason: "Escalated to human after 2 self-repair round(s) at plan review (needs-human).",
+      abandonedAt: new Date("2026-07-04T18:00:00Z"),
+    });
+    const action = deriveBuildStudioWorkflowAction({ build, governedBacklogEnabled: true });
+
+    // progress() defaults to quiet=true, minutesQuiet=8 — the pre-fix path would
+    // otherwise fall through to a "gone quiet" nudge.
+    const prompt = deriveBuildStudioCustodianPrompt({ build, action, progressVisibility: progress() });
+
+    expect(action.kind).toBe("escalated-to-human");
+    expect(prompt).toBeNull();
+  });
+});
