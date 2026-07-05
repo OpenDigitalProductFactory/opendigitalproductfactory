@@ -9,6 +9,7 @@ vi.mock("@dpf/db", () => ({
 import { prisma } from "@dpf/db";
 import {
   GATED_CREATE_PATHS,
+  parseDedupResolution,
   checkCustomerAccountDuplicates,
   checkCustomerContactDuplicates,
   checkCustomerSiteDuplicates,
@@ -203,5 +204,25 @@ describe("GATED_CREATE_PATHS registry", () => {
     for (const paths of Object.values(GATED_CREATE_PATHS)) {
       expect(paths.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("parseDedupResolution", () => {
+  it("parses use-existing with id", () => {
+    expect(parseDedupResolution({ duplicateResolution: "use-existing:abc" })).toEqual({
+      kind: "use-existing",
+      existingId: "abc",
+    });
+  });
+  it("parses confirm-new with reason", () => {
+    expect(
+      parseDedupResolution({ duplicateResolution: "confirm-new", duplicateReason: "different co" }),
+    ).toEqual({ kind: "confirm-new", reason: "different co" });
+  });
+  it("returns undefined for absent or malformed input", () => {
+    expect(parseDedupResolution({})).toBeUndefined();
+    expect(parseDedupResolution(null)).toBeUndefined();
+    expect(parseDedupResolution({ duplicateResolution: "use-existing:" })).toBeUndefined();
+    expect(parseDedupResolution({ duplicateResolution: "bogus" })).toBeUndefined();
   });
 });

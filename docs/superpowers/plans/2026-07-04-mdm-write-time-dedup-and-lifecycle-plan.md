@@ -127,3 +127,15 @@ Two PRs, each independently green and shippable:
   declared in adapters and reviewed in PR — a soft ref added later without
   adapter registration is the residual risk, mitigated by the schema comment
   convention and the conformance sweep.
+
+## Slice 2 (2026-07-05): market-gap closure — update-dedup, batch scan, unmerge
+
+Filed from the post-ship market-gap analysis (8 BIs on EP-4A12A7CB); built in
+PR feat/mdm-gaps-update-batch-unmerge: BI-AEA97829 (update-path gate w/
+excludeId + parseDedupResolution + PATCH coverage registration), BI-7BF995B9
+(batch-scan.ts + DuplicateAccountsPanel + find_duplicate_customer_accounts),
+BI-F7B6D55E (repointedIds lineage in MergeResult + unmergeRecords +
+UnmergeCustomerAccountButton + unmerge_customer_accounts). Remaining filed,
+not built: BI-130EF887 (attribute history), BI-37F52B70 (match tuning),
+BI-A4B73F87 (multi-source), BI-77489158 (DQ scorecard), BI-2D435AFC
+(enrichment).

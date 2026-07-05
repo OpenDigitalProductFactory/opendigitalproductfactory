@@ -126,7 +126,7 @@ describe("mergeRecords customer-account", () => {
     tx["customerSite"]!.findMany.mockImplementation(
       async (args: { where: { accountId: string } }) =>
         args.where.accountId === "a1"
-          ? [{ id: "s-loser", nameNormalized: "head office" }]
+          ? [{ id: "s-loser", nameNormalized: "head office", status: "active" }]
           : [{ id: "s-survivor", nameNormalized: "head office" }],
     );
     wireTransaction(tx);
@@ -134,7 +134,7 @@ describe("mergeRecords customer-account", () => {
     const result = await mergeRecords("customer-account", "a1", "a2");
 
     expect(result.nestedSiteMerges).toEqual([
-      { loserSiteId: "s-loser", survivorSiteId: "s-survivor" },
+      { loserSiteId: "s-loser", survivorSiteId: "s-survivor", priorStatus: "active" },
     ]);
     // The colliding site was tombstoned into the survivor site.
     expect(tx["customerSite"]!.update).toHaveBeenCalledWith({

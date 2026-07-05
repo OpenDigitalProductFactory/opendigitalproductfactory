@@ -10,6 +10,7 @@ import { CustomerSiteTree } from "@/components/customer/CustomerSiteTree";
 import { NewCustomerSiteButton } from "@/components/customer/NewCustomerSiteButton";
 import { AccountLifecycleActions } from "@/components/customer/AccountLifecycleActions";
 import { MergeCustomerAccountButton } from "@/components/customer/MergeCustomerAccountButton";
+import { UnmergeCustomerAccountButton } from "@/components/customer/UnmergeCustomerAccountButton";
 import { loadCustomerEstateSummary } from "@/lib/customer-estate/account-estate-summary";
 import type { TechnologySourceType } from "@/lib/customer-estate/lifecycle-evaluation";
 import {
@@ -232,7 +233,7 @@ export default async function AccountDetailPage({
 
       {/* Merge tombstone banner */}
       {account.status === "superseded" && account.mergedIntoId && (
-        <div className="mb-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3">
+        <div className="mb-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3 flex items-center justify-between gap-3">
           <p className="text-sm text-[var(--dpf-text)]">
             This account was merged into another record.{" "}
             <Link href={`/customer/${account.mergedIntoId}`} className="text-[var(--dpf-accent)] hover:underline">
@@ -240,6 +241,7 @@ export default async function AccountDetailPage({
             </Link>
             . It is kept for history and is excluded from account lists.
           </p>
+          <UnmergeCustomerAccountButton accountId={account.id} />
         </div>
       )}
 

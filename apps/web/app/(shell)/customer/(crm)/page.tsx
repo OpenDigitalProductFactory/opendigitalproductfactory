@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
 import { NewCustomerButton } from "@/components/customer/NewCustomerButton";
+import { DuplicateAccountsPanel } from "@/components/customer/DuplicateAccountsPanel";
 import { RevenueCockpit } from "@/components/customer/RevenueCockpit";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
 import { buildRevenueCockpitSummary } from "@/lib/crm/revenue-cockpit";
@@ -114,6 +115,8 @@ export default async function CustomerPage({
       </div>
 
       <RevenueCockpit summary={revenueSummary} />
+
+      <DuplicateAccountsPanel />
 
       <PlatformGridSection entityType="customer_account" view={view} />
 

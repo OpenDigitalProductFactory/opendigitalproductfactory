@@ -465,6 +465,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Merging duplicates is customer-data stewardship: heavier than drafting,
   // still inside the CRM-write trust envelope (tombstone, never delete).
   merge_customer_accounts: ["crm_write"],
+  find_duplicate_customer_accounts: ["crm_read"],
+  unmerge_customer_accounts: ["crm_write"],
 
   // Security Operations / SIEM (EP-SOVEREIGN-SOC). Writes are propose-only +
   // coworkerArtifact; siem_investigate/siem_tune/incident_respond imply siem_read.
