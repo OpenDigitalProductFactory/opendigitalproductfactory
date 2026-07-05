@@ -6894,11 +6894,14 @@ model TimesheetEntry {
   billableRateId    String?
   billable          Boolean         @default(false)
   billableHours     Float           @default(0)
+  invoiceId         String?
+  invoicedAt        DateTime?
   timesheetPeriod   TimesheetPeriod @relation(fields: [timesheetPeriodId], references: [id], onDelete: Cascade)
 
   @@unique([timesheetPeriodId, dayOfWeek])
   @@index([timesheetPeriodId])
   @@index([customerAccountId])
+  @@index([invoiceId])
 }
 
 model BillableRate {
