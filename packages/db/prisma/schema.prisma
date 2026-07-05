@@ -127,6 +127,10 @@ model CustomerContact {
   name             String? // Legacy — use firstName+lastName for new code
   firstName        String?
   lastName         String?
+  // MDM write-time dedup (EP-4A12A7CB WG-1): standardizeName of the display
+  // name (firstName+lastName, falling back to legacy name). Fuzzy-alert only —
+  // email stays the unique identity key.
+  nameNormalized   String  @default("")
   phone            String?
   jobTitle         String?
   linkedinUrl      String?
@@ -145,6 +149,7 @@ model CustomerContact {
 
   @@index([lastName])
   @@index([phone])
+  @@index([nameNormalized])
 }
 
 model SocialIdentity {
@@ -2549,6 +2554,12 @@ model CustomerAccount {
   id                     String                      @id @default(cuid())
   accountId              String                      @unique
   name                   String
+  // MDM write-time dedup (EP-4A12A7CB WG-1): standardizeName(name) /
+  // standardizeDomain(website), maintained by the dedup gate + reconcile
+  // sweep. Backfilled in-migration with a SQL approximation; the TS
+  // standardize.ts form is canonical.
+  nameNormalized         String                      @default("")
+  domainNormalized       String                      @default("")
   status                 String                      @default("prospect")
   // prospect | qualified | onboarding | active | at_risk | suspended | closed
   website                String?
@@ -2589,6 +2600,8 @@ model CustomerAccount {
 
   @@index([status])
   @@index([parentAccountId])
+  @@index([nameNormalized])
+  @@index([domainNormalized])
 }
 
 model CustomerSite {
@@ -2596,6 +2609,10 @@ model CustomerSite {
   siteId                 String                      @unique
   accountId              String
   name                   String
+  // MDM write-time dedup (EP-4A12A7CB WG-1). The partial unique index
+  // CustomerSite_accountId_nameNormalized_active (raw SQL in the migration)
+  // enforces per-account uniqueness for non-superseded rows.
+  nameNormalized         String                      @default("")
   siteType               String                      @default("office")
   status                 String                      @default("active")
   primaryAddressId       String?

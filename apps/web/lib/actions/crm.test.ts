@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@dpf/db", () => ({
   prisma: {
     $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
     country: {
       findFirst: vi.fn(),
     },
@@ -78,6 +79,8 @@ import {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Dedup gate candidate fetch: default to "no similar rows".
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([]);
 });
 
 describe("searchCustomerSiteAddresses", () => {
@@ -198,7 +201,7 @@ describe("createCustomerSite", () => {
       return callback(tx);
     });
 
-    const site = await createCustomerSite({
+    const result = await createCustomerSite({
       accountId: "acct-1",
       name: " Dallas HQ ",
       validatedAddressRef: "provider-ref-1",
@@ -210,7 +213,9 @@ describe("createCustomerSite", () => {
       serviceNotes: "Primary MSP site",
     });
 
-    expect(site.name).toBe("Dallas HQ");
+    if (result.outcome === "duplicates-found") throw new Error("unexpected duplicates");
+    expect(result.outcome).toBe("created");
+    expect(result.site.name).toBe("Dallas HQ");
     expect(resolveValidatedSiteAddress).toHaveBeenCalledWith("provider-ref-1");
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(revalidatePath).toHaveBeenCalledWith("/customer");

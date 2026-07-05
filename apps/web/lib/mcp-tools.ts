@@ -1111,15 +1111,17 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "create_customer_account",
-    description: "Create a customer account (a company or prospect) in the CRM. This is the first step when the CRM is empty — an account is required before an opportunity or quote can exist. Creates an internal record only; nothing is sent to the customer.",
+    description: "Create a customer account (a company or prospect) in the CRM. ONLY `name` is required — do not ask the user for website/industry/notes; include them only when already known. The tool checks for duplicates before creating (normalized + fuzzy name, web domain): when likely matches exist it returns error `duplicates_found` with scored candidates instead of creating. Then either reuse the existing account (its id is in the candidates — just use it as accountId downstream, or pass duplicateResolution `use-existing:<id>`), or — only when the user confirms it is genuinely a different company — retry with duplicateResolution `confirm-new` plus a short duplicateReason. Never create a second account for a company that already exists under a slightly different spelling. Creates an internal record only; nothing is sent to the customer.",
     inputSchema: {
       type: "object",
       properties: {
-        name: { type: "string", description: "Company / account name." },
-        website: { type: "string", description: "Optional website URL." },
+        name: { type: "string", description: "Company / account name. The ONLY required field." },
+        website: { type: "string", description: "Optional website URL — include when known; it strengthens duplicate detection." },
         industry: { type: "string", description: "Optional industry." },
-        status: { type: "string", description: "prospect (default) | active | at_risk | closed." },
+        status: { type: "string", description: "Optional: prospect (default) | active | at_risk | closed." },
         notes: { type: "string", description: "Optional free-text notes." },
+        duplicateResolution: { type: "string", description: "Optional duplicate decision after a duplicates_found response: `use-existing:<accountId>` to reuse that account, or `confirm-new` to create anyway once the user confirms it is a different company." },
+        duplicateReason: { type: "string", description: "Required with duplicateResolution `confirm-new`: one line on why this is not a duplicate (audited)." },
       },
       required: ["name"],
     },
@@ -14980,14 +14982,44 @@ export async function executeTool(
       const name = typeof params["name"] === "string" ? params["name"].trim() : "";
       if (!name) return { success: false, error: "missing_name", message: "name is required to create a customer account." };
       const { createCustomerAccount } = await import("@/lib/actions/crm");
+      const rawResolution = typeof params["duplicateResolution"] === "string" ? params["duplicateResolution"].trim() : "";
+      const duplicateReason = typeof params["duplicateReason"] === "string" ? params["duplicateReason"].trim() : "";
+      let dedup: import("@/lib/mdm/dedup-gate").DedupResolution | undefined;
+      if (rawResolution.startsWith("use-existing:")) {
+        dedup = { kind: "use-existing", existingId: rawResolution.slice("use-existing:".length).trim() };
+      } else if (rawResolution === "confirm-new") {
+        if (!duplicateReason) {
+          return { success: false, error: "missing_duplicate_reason", message: "duplicateReason is required with duplicateResolution 'confirm-new' — state in one line why this is a different company." };
+        }
+        dedup = { kind: "confirm-new", reason: duplicateReason };
+      }
       try {
-        const account = await createCustomerAccount({
+        const result = await createCustomerAccount({
           name,
           website: typeof params["website"] === "string" ? params["website"] : undefined,
           industry: typeof params["industry"] === "string" ? params["industry"] : undefined,
           status: typeof params["status"] === "string" ? params["status"] : undefined,
           notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
-        });
+        }, dedup);
+        if (result.outcome === "duplicates-found") {
+          const candidates = result.check.candidates.slice(0, 5).map((c) => ({
+            accountId: c.id,
+            name: c.label,
+            status: c.detail,
+            score: c.score,
+            matchedOn: c.reasons.map((r) => r.attribute).join("+"),
+          }));
+          return {
+            success: false,
+            error: "duplicates_found",
+            message: `Not created — ${candidates.length} existing account(s) look like "${name}": ${candidates.map((c) => `${c.name} (${c.accountId}, score ${c.score}, ${c.matchedOn})`).join("; ")}. If one of these is the same company, use its accountId directly (or pass duplicateResolution "use-existing:<accountId>"). Only pass duplicateResolution "confirm-new" + duplicateReason if the user confirms it is a different company.`,
+            data: { candidates },
+          };
+        }
+        const account = result.account;
+        if (result.outcome === "existing") {
+          return { success: true, message: `Reused existing customer account "${account.name}" (${account.accountId}) instead of creating a duplicate. Use its id ${account.id} as accountId downstream.`, data: { accountId: account.id, accountRef: account.accountId, reusedExisting: true } };
+        }
         return { success: true, message: `Created customer account "${account.name}" (${account.accountId}). Use its id ${account.id} as accountId when creating an opportunity.`, data: { accountId: account.id, accountRef: account.accountId } };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

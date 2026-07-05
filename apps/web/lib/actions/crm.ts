@@ -10,6 +10,15 @@ import {
   resolveValidatedSiteAddress,
   searchValidatedSiteAddresses,
 } from "@/lib/shared/site-address-validation";
+import {
+  checkCustomerAccountDuplicates,
+  checkCustomerSiteDuplicates,
+  customerAccountNormalizedColumns,
+  customerSiteNormalizedColumns,
+  resolveDedupDecision,
+  type DedupCheckResult,
+  type DedupResolution,
+} from "@/lib/mdm/dedup-gate";
 import { evaluateTechnologyLifecycle } from "@/lib/customer-estate/lifecycle-evaluation";
 
 // ─── Activity Logging (used by all other actions) ───────────────────────────
@@ -65,18 +74,51 @@ async function logSystemActivity(
 
 // ─── Customer Account Actions ───────────────────────────────────────────────
 
-export async function createCustomerAccount(input: {
-  name: string;
-  website?: string;
-  industry?: string;
-  notes?: string;
-  status?: string;
-}) {
+export type CreateCustomerAccountResult =
+  | { outcome: "created"; account: Awaited<ReturnType<typeof prisma.customerAccount.create>> }
+  | { outcome: "existing"; account: Awaited<ReturnType<typeof prisma.customerAccount.create>> }
+  | { outcome: "duplicates-found"; check: DedupCheckResult };
+
+/**
+ * Gated create (MDM write-time dedup, EP-4A12A7CB WG-2): checks for likely /
+ * possible duplicates BEFORE insert and forces a use-existing / confirm-new
+ * decision instead of silently creating. Registered in GATED_CREATE_PATHS.
+ */
+export async function createCustomerAccount(
+  input: {
+    name: string;
+    website?: string;
+    industry?: string;
+    notes?: string;
+    status?: string;
+  },
+  dedup?: DedupResolution,
+): Promise<CreateCustomerAccountResult> {
+  const check = await checkCustomerAccountDuplicates({
+    name: input.name,
+    website: input.website,
+  });
+  const decision = resolveDedupDecision(check, dedup);
+  if (decision.action === "use-existing") {
+    const existing = await prisma.customerAccount.findUniqueOrThrow({
+      where: { id: decision.existingId },
+    });
+    await logSystemActivity(
+      `Duplicate account creation avoided — using existing "${existing.name}"`,
+      { type: "account_dedup_use_existing", accountId: existing.id },
+    );
+    return { outcome: "existing", account: existing };
+  }
+  if (decision.action === "needs-resolution") {
+    return { outcome: "duplicates-found", check };
+  }
+
   const accountId = `ACCT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   const account = await prisma.customerAccount.create({
     data: {
       accountId,
       name: input.name,
+      ...customerAccountNormalizedColumns({ name: input.name, website: input.website }),
       status: input.status || "prospect",
       website: input.website || null,
       industry: input.industry || null,
@@ -84,34 +126,61 @@ export async function createCustomerAccount(input: {
       currency: "USD",
     },
   });
-  await logSystemActivity(`Customer account "${account.name}" created`, {
-    type: "account_created",
-    accountId: account.id,
-  });
+  await logSystemActivity(
+    decision.overrideReason
+      ? `Customer account "${account.name}" created (duplicate override: ${decision.overrideReason})`
+      : `Customer account "${account.name}" created`,
+    {
+      type: "account_created",
+      accountId: account.id,
+    },
+  );
   revalidatePath("/customer");
-  return account;
+  return { outcome: "created", account };
 }
 
 export async function searchCustomerSiteAddresses(query: string) {
   return searchValidatedSiteAddresses(query);
 }
 
-export async function createCustomerSite(input: {
-  accountId: string;
-  name: string;
-  validatedAddressRef?: string;
-  siteType?: string;
-  status?: string;
-  timezone?: string;
-  accessInstructions?: string;
-  hoursNotes?: string;
-  serviceNotes?: string;
-  primaryAddressId?: string;
-}) {
+export type CreateCustomerSiteResult =
+  | { outcome: "created"; site: Awaited<ReturnType<typeof prisma.customerSite.create>> }
+  | { outcome: "existing"; site: Awaited<ReturnType<typeof prisma.customerSite.create>> }
+  | { outcome: "duplicates-found"; check: DedupCheckResult };
+
+/** Gated create (EP-4A12A7CB WG-2) — see createCustomerAccount. */
+export async function createCustomerSite(
+  input: {
+    accountId: string;
+    name: string;
+    validatedAddressRef?: string;
+    siteType?: string;
+    status?: string;
+    timezone?: string;
+    accessInstructions?: string;
+    hoursNotes?: string;
+    serviceNotes?: string;
+    primaryAddressId?: string;
+  },
+  dedup?: DedupResolution,
+): Promise<CreateCustomerSiteResult> {
   const name = input.name.trim();
   if (!name) {
     throw new Error("Site name is required");
   }
+
+  const check = await checkCustomerSiteDuplicates({ accountId: input.accountId, name });
+  const decision = resolveDedupDecision(check, dedup);
+  if (decision.action === "use-existing") {
+    const existing = await prisma.customerSite.findUniqueOrThrow({
+      where: { id: decision.existingId },
+    });
+    return { outcome: "existing", site: existing };
+  }
+  if (decision.action === "needs-resolution") {
+    return { outcome: "duplicates-found", check };
+  }
+
   if (!input.validatedAddressRef?.trim()) {
     throw new Error("A validated address selection is required");
   }
@@ -208,6 +277,7 @@ export async function createCustomerSite(input: {
         siteId: `SITE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
         accountId: input.accountId,
         name,
+        ...customerSiteNormalizedColumns({ name }),
         siteType: input.siteType?.trim() || "office",
         status: input.status?.trim() || "active",
         timezone: input.timezone?.trim() || null,
@@ -226,7 +296,7 @@ export async function createCustomerSite(input: {
 
   revalidatePath("/customer");
   revalidatePath(`/customer/${input.accountId}`);
-  return site;
+  return { outcome: "created", site };
 }
 
 export async function createCustomerSiteNode(input: {
