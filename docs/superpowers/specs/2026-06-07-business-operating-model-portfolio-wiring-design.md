@@ -2,13 +2,28 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft — founder review before fan-out |
-| **Date** | 2026-06-07 |
+| **Status** | Draft — founder review before fan-out. **Architect re-review 2026-07-04: current-state refreshed against origin/main — two Phase-0 preconditions (portfolio-decomposition persistence, BI-230C9EF7 org resolver) and the Decision Governance surfaces (EP-0AF96937) have LANDED since this spec's original pin. The design thesis is unchanged; see §0 Update Log.** |
+| **Date** | 2026-06-07 (authored) · 2026-07-04 (architect current-state refresh) |
 | **Author** | Claude (Opus 4.8) with founder (Mark Bodman) |
 | **Primary Objective** | Wire each customer company's **top-down business direction** into the two business-critical portfolios — **Products & Services Sold** and **For Employees (→ Workforce)** — so they become populated, operational, and backlog-generating, and so they **ground the immature WWWD decision layer** the way founder principles ground the mature WWMD layer. |
 | **Scope** | The "missing middle" between the decision layer (WWMD/WWWD) and the capability-maturity layer: a structured per-company **Business Operating Model** seeded from archetype, refined by the operator + continuous corpus enrichment, consumed by WWWD decisions, and fanned out into the backlog. |
 | **Non-Goals** | Does not implement schema, routes, or migrations. Does not re-architect WWMD. Does not duplicate the agent-control-plane maturity model. Does not replace external systems of record (QuickBooks, HRIS, ERP) — those remain `boundary_adapter` conduits. |
+| **Original pin / current pin** | Authored against `1470ea1c`; refreshed against `origin/main` at `bebeb339c` (≈900 commits later). §3 reflects the current pin. |
 | **Primary Inputs** | `docs/Reference/digital_product_portfolio_mgmt.txt` (Open Group G252, DPPM), `docs/founder-kernel/wiki/entities/it4it.md`, `packages/db/data/portfolio_registry.json`, `apps/web/lib/onboarding/seed-org-wwwd-corpus.ts`, `apps/web/lib/onboarding/archetype-business-context.ts`, `docs/superpowers/specs/2026-05-21-four-portfolio-agent-control-plane-maturity-design.md`, `docs/superpowers/specs/2026-05-31-continuous-corpus-enrichment-design.md`, `docs/superpowers/specs/2026-05-31-archetype-aware-workspace-design.md`, `docs/superpowers/plans/2026-05-30-decision-surface-consolidation.md`, EP-AI-WORKFORCE-001 (`docs/superpowers/specs/2026-04-02-ai-workforce-consolidation-design.md`) |
+
+---
+
+## 0. Update Log
+
+**2026-07-04 — architect current-state refresh (against `origin/main` `bebeb339c`).** Verified every §3 claim against the live worktree. Three items the spec listed as "not yet built" have since **landed**; the design thesis (a structured operating model grounding WWWD and populating the two business portfolios) is **unchanged and still largely un-built** — what shipped are its *preconditions and surfaces*, not the BOM itself.
+
+| Since original pin | Status | Evidence | Effect on this spec |
+|---|---|---|---|
+| **Persist the archetype `PortfolioDecomposition`** (was "computed but never persisted", §3/§8 Phase 0) | **LANDED** (BI-2D452667) | `BusinessContext.portfolioDecomposition Json?` (schema); `apps/web/lib/onboarding/seed-portfolio-decomposition.ts` seeds once from archetype then operator-refinable; `resolvePortfolioDecomposition()` prefers persisted value | Phase 0 item DONE — strike from the plan; the refinable portfolio shape now exists to build on |
+| **Org-profile resolver — BI-230C9EF7** (the WWWD precondition, §3/§5/§8 Phase 0) | **LANDED** (EP-8AF1C996) | `resolveProfileMaterialForOrg()` + `resolveOrgProfileId()` (`apps/web/lib/decision-perspective/material.ts`); `evaluateOrgBusinessDecisionGate()` (`org-business-gate.ts`); `evaluate_org_business_decision` MCP tool (`org-decision-pack.ts`), recording to the `DecisionInteraction` ledger | §5 step 1 precondition DONE — business decisions now resolve by `ownerOrganizationId`, not fall back to `mark-dpf-platform` |
+| **Decision Governance surfaces — EP-0AF96937 Phases 1–4** | **SHIPPED** | `/wiki` (governance hub: WWMD/WWWD/WSID cards + live counts), `/wiki/review` (Review & Adjust over the decision ledger), `/wiki/stance` (operator-authored WWWD stance editor → org-overlay `stance` WikiPages), `/wiki/craft`, `/wiki/matrix` | WWWD now has an operator-authored **stance corpus** and actively routes business decisions — but it is still **stance narrative, not a structured operating model**. That grounding (Facets A/B → `PerspectiveMaterial`, §5 step 2) is exactly what this spec still adds. |
+
+**Also confirmed by audit (answers §11 open decisions):** `DigitalProduct.lifecycleStage` exists (default `"plan"`) and `DigitalProduct.bomDocuments` relation exists (§11-Q1 partially answered — reuse, don't add a lifecycle field). `ServiceOffering` exists with `digitalProductId` FK, SLA/OLA refs, and `consumers`. **Still open (unchanged):** `EmployeeProfile` has **no** `portfolioId` FK (Facet B wiring, §4.2), and `Agent` still carries the full workforce field set (§3).
 
 ---
 
@@ -16,7 +31,7 @@
 
 The platform has matured two layers in parallel:
 
-1. **The decision layer.** **WWMD** ("What Would Mark Do" — the founder/platform kernel) is shipped and live at `apps/web/lib/decision-perspective/build-studio-gate.ts`. It is evidence-gated, ledgered, and actively gating Build Studio plan advancement. It is mature; the work remaining is fine-tuning. **WWWD** ("What Would We Do" — the customer organization's kernel) is *not* mature. It exists as a container (`DecisionPerspectiveProfile kind=organization`) plus four archetype-templated org-overlay WikiPages (`org-mission`, `org-who-we-serve`, `org-how-we-decide`, `org-supply-chain`) seeded by `seedOrgWwwdCorpus`. No decision path resolves a decision by `ownerOrganizationId` yet (blocked on BI-230C9EF7); `resolveProfileMaterial` always enters at `mark-dpf-platform`.
+1. **The decision layer.** **WWMD** ("What Would Mark Do" — the founder/platform kernel) is shipped and live at `apps/web/lib/decision-perspective/build-studio-gate.ts`. It is evidence-gated, ledgered, and actively gating Build Studio plan advancement. It is mature; the work remaining is fine-tuning. **WWWD** ("What Would We Do" — the customer organization's kernel) is **maturing but not yet grounded**. It exists as a container (`DecisionPerspectiveProfile kind=organization`) plus four archetype-templated org-overlay WikiPages (`org-mission`, `org-who-we-serve`, `org-how-we-decide`, `org-supply-chain`) seeded by `seedOrgWwwdCorpus`. **Since this spec was authored** it now resolves and governs: BI-230C9EF7 landed, so business decisions resolve by `ownerOrganizationId` through `evaluateOrgBusinessDecisionGate` instead of falling back to `mark-dpf-platform`, and the Decision Governance surfaces (EP-0AF96937) let the operator author org stance (`/wiki/stance`) and adjust the decision ledger (`/wiki/review`). **What it still lacks is what this spec supplies:** its corpus is *stance narrative*, not a structured model of what the company sells and who/what does its work.
 
 2. **The capability-maturity layer.** The [Four-Portfolio Agent Control Plane Maturity](2026-05-21-four-portfolio-agent-control-plane-maturity-design.md) spec turns the four-portfolio taxonomy into an investment/operations/productization surface — but explicitly for **DPF's own agent control plane** (`installScope = dpf_dogfood`/`canonical`, the recursion). Its design intent table reads the four portfolios as *DPF's* substrate, factory, internal workspace, and market offer.
 
@@ -25,7 +40,7 @@ The platform has matured two layers in parallel:
 - **WWWD reasons over nothing concrete.** The four WWWD pages are *stance narrative* ("we decide for patient safety first"). They are not grounded in a structured model of the company's actual offerings, workforce, or goals. WWMD matured because it cites concrete, evidence-gated principles; WWWD cannot mature the same way until it has concrete operating-model nouns to reason over.
 - **Products & Services Sold is wired to DPF's products, not the customer's offer.** `DigitalProduct.portfolioId` and the `/portfolio/products/[id]` routes exist, but for a real customer (a clinic, a retailer, an MSP) nothing seeds *their* market offer (appointments/treatments, SKUs, service catalog) into this portfolio from their archetype/business context.
 - **"For Employees" is too narrow and is not wired to the portfolio.** `EmployeeProfile` exists with a full HR surface at `/employee`, but it has **no FK to a portfolio**. The portfolio meaning excludes the AI agent workforce, even though `Agent` already carries `portfolioId`, `valueStream`, `humanSupervisorId`, `toolGrants`, `executionConfig` (token budgets), and `skills` — i.e. the substrate to model what a non-human identity *needs to contribute* already exists, unconnected to the portfolio lens.
-- **Archetype portfolio decomposition is computed but never persisted.** `readActivationProfile()` validates a `foundational | manufactureAndDeliver | forEmployees | productsAndServicesSold` decomposition (absent/minimal/standard/primary) at runtime, but the result is never written to the DB, so the company's own portfolio shape cannot be refined or driven from.
+- **Archetype portfolio decomposition — was computed-but-never-persisted; now persisted (LANDED, BI-2D452667).** `readActivationProfile()` validates a `foundational | manufactureAndDeliver | forEmployees | productsAndServicesSold` decomposition (absent/minimal/standard/primary) at runtime. This spec's Phase 0 asked to persist it; that shipped — `BusinessContext.portfolioDecomposition` stores the per-org shape, seeded once from the archetype (`seed-portfolio-decomposition.ts`) then operator-refinable, with `resolvePortfolioDecomposition()` preferring the persisted value. The refinable portfolio shape now exists to drive from; the remaining gap is *populating* the two business portfolios beneath it (Facets A/B).
 - **The backlog is not business-driven.** `BacklogItem`/`Epic` are manually authored or sourced from storefront inquiries. Nothing converts business direction → portfolio gaps → backlog. This is precisely Mark's observation: **Build Studio is nearly autonomous on the engineering side; the business side is not, because no signal generates business backlog.**
 
 This is the classic top-down disconnect named in the DPPM paper (Open Group G252 §1.3): *leadership defines the business direction while IT manages infrastructure without line of sight to customers.* The four-portfolio model is the canonical fix — but only if the two business-facing portfolios are actually populated from leadership's direction and made load-bearing.
@@ -65,16 +80,16 @@ The maturity spec measures DPF's portfolios; this spec **populates every custome
 
 ## 3. Current-State Verification
 
-Grounded by direct read of the worktree at `1470ea1c` (origin/main, 0 behind):
+Originally grounded at `1470ea1c`; **refreshed 2026-07-04 against `origin/main` `bebeb339c`** (≈900 commits later). Verdicts below carry a `[LANDED]` / `[unchanged]` tag where the state moved since authoring (see §0 Update Log for the landed items).
 
-- **Portfolios:** `packages/db/data/portfolio_registry.json` defines exactly four roots: `foundational`, `manufacturing_and_delivery`, `for_employees`, `products_and_services_sold`. Confirmed anchored to IT4IT §6.1–6.4 and DPPM.
-- **Archetype decomposition:** `packages/storefront-templates/src/activation-profile.ts` `readActivationProfile()` normalizes a `PortfolioDecomposition` with roles `foundational | manufactureAndDeliver | forEmployees | productsAndServicesSold`, scope `absent | minimal | standard | primary`. **Computed at runtime, not persisted.**
-- **Products portfolio:** `DigitalProduct.portfolioId` FK; routes `/portfolio/products/[productId]`; API `apps/web/app/api/v1/portfolio/[id]/products`. `ServiceOffering` relation exists. No archetype→offer seeding for customer offers.
-- **Employees:** `EmployeeProfile` (schema ~269–356) with department/position/manager; `/employee` route. **No portfolio FK.**
-- **AI agents:** `Agent` (schema ~1918–1961) already carries `portfolioId`, `valueStream`, `it4itSections`, `humanSupervisorId`, `hitlTierDefault`, `escalatesTo`, `delegatesTo`, `lifecycleStage`; relations `governanceProfile`, `executionConfig` (model, `dailyTokenLimit`, `perTaskTokenLimit`, memory), `toolGrants` (`AgentToolGrant`), `skills`, `coworkerNeeds` (`CoworkerCapabilityNeed`). Baseline reads via `COWORKER_READ_BASELINE_GRANTS` (`apps/web/lib/tak/agent-grants.ts`).
-- **Identity convergence:** `Principal` + `PrincipalAlias` (schema ~226–267) is the convergence target (`docs/founder-kernel/wiki/principles/principal-convergence.md`). `User` and `Agent` are pre-2026-05-09 parallel tables not yet converged.
-- **WWWD:** `seedOrgWwwdCorpus` seeds 4 pages + an org `DecisionPerspectiveProfile`. Resolver entry blocked on **BI-230C9EF7**. Active enrichment direction: **EP-CORPUS-BOOTSTRAP** (continuous corpus enrichment) and the decision-surface consolidation plan (2026-05-30) which makes the Gate the single door selecting WWWD for business decisions, WWMD for platform decisions.
-- **Backlog:** `BacklogItem` (FKs: `digitalProductId`, `taxonomyNodeId`, `epicId`), `Epic`, `EpicPortfolio` junction. No archetype/business-context generation path.
+- **Portfolios:** `packages/db/data/portfolio_registry.json` defines exactly four roots: `foundational`, `manufacturing_and_delivery`, `for_employees`, `products_and_services_sold` (registry schema `2.2.0`). Confirmed anchored to IT4IT §6.1–6.4 and DPPM. `[unchanged]`
+- **Archetype decomposition:** `packages/storefront-templates/src/activation-profile.ts` `readActivationProfile()` normalizes a `PortfolioDecomposition` (roles `foundational | manufactureAndDeliver | forEmployees | productsAndServicesSold`, scope `absent | minimal | standard | primary`). **Now persisted** to `BusinessContext.portfolioDecomposition`, seeded once from the archetype by `apps/web/lib/onboarding/seed-portfolio-decomposition.ts` then operator-refinable; `resolvePortfolioDecomposition()` prefers the persisted value. `[LANDED — BI-2D452667]`
+- **Products portfolio:** `DigitalProduct.portfolioId` FK; `DigitalProduct.lifecycleStage` (default `"plan"`) and `DigitalProduct.bomDocuments` relation exist; routes `/portfolio/products/[productId]`; API `apps/web/app/api/v1/portfolio/[id]/products`. `ServiceOffering` model exists (`digitalProductId` FK, SLA/OLA refs, `consumers`). Still **no archetype→offer seeding for customer offers.** `[partly-landed: lifecycle field now exists → §4.1 / §11-Q1]`
+- **Employees:** `EmployeeProfile` (schema ~284–371) with department/position/manager; `/employee` route. **Still no portfolio FK.** `[unchanged — Facet B gap, §4.2]`
+- **AI agents:** `Agent` (schema ~2196–2243) already carries `portfolioId`, `valueStream`, `it4itSections`, `humanSupervisorId`, `hitlTierDefault`, `escalatesTo`, `delegatesTo`, `lifecycleStage`; relations `governanceProfile`, `executionConfig` (model, `dailyTokenLimit`, `perTaskTokenLimit`, memory), `toolGrants` (`AgentToolGrant`), `skills`, `coworkerNeeds` (`CoworkerCapabilityNeed`). Baseline reads via `COWORKER_READ_BASELINE_GRANTS` (`apps/web/lib/tak/agent-grants.ts`). `[unchanged]`
+- **Identity convergence:** `Principal` + `PrincipalAlias` is the convergence target (`docs/founder-kernel/wiki/principles/principal-convergence.md`). `User` and `Agent` are pre-2026-05-09 parallel tables not yet converged. `[unchanged]`
+- **WWWD:** `seedOrgWwwdCorpus` seeds 4 pages + an org `DecisionPerspectiveProfile`. **Resolver now landed:** `resolveProfileMaterialForOrg()` / `resolveOrgProfileId()` (`apps/web/lib/decision-perspective/material.ts`) resolve by `ownerOrganizationId`; `evaluateOrgBusinessDecisionGate()` (`org-business-gate.ts`) governs business decisions and records to the `DecisionInteraction` ledger; exposed as the `evaluate_org_business_decision` MCP tool (`org-decision-pack.ts`). Operator surfaces shipped (EP-0AF96937: `/wiki`, `/wiki/review`, `/wiki/stance`, `/wiki/matrix`). Active enrichment direction: **EP-CORPUS-BOOTSTRAP**. `[LANDED — BI-230C9EF7 / EP-8AF1C996 + EP-0AF96937]`
+- **Backlog:** `BacklogItem` (FKs: `digitalProductId`, `taxonomyNodeId`, `epicId`), `Epic`, `EpicPortfolio` junction. Still **no archetype/business-context generation path.** `[unchanged — the §7 fan-out gap]`
 
 **Live epic anchors to fan into (prefer over new epics):** `EP-CORPUS-BOOTSTRAP`, `EP-BIZ-CAP` (business capability map, taxonomy, employee work), `EP-WWMD-MCP` (decision-surface consolidation), `EP-AI-WORKFORCE-001` (AI workforce consolidation), plus the portfolio-ops epics.
 
@@ -88,7 +103,7 @@ The line-of-sight anchor. Everything else justifies its existence by tracing up 
 
 **What it contains, per company:** the company's actual revenue-generating offerings — for a clinic, appointment/treatment lines; for retail, product categories/SKU lines; for an MSP, the service catalog; for DPF itself (the recursion), the portal/agent control plane. Each offering is a `DigitalProduct` (or `ServiceOffering`) under `portfolioId = products_and_services_sold`, carrying:
 
-- **IT4IT lifecycle stage** (G252 §2.3): idea → designed → live → retiring → retired. Reuse `Agent.lifecycleStage`'s vocabulary pattern; add to the product record only if an audit shows no existing field carries it.
+- **IT4IT lifecycle stage** (G252 §2.3): idea → designed → live → retiring → retired. **Audit answered (2026-07-04): `DigitalProduct.lifecycleStage` already exists (default `"plan"`) — reuse it, do not add a field.** Reconcile its enum values against the IT4IT vocabulary rather than introducing a parallel one (`single-source-of-truth`).
 - **Consumer domain** (who buys it) — links to the WWWD `who-we-serve` corpus.
 - **Decomposition / SBOM links** (G252 §2.3 "product ontology and SBOM"): which Foundational and Manufacturing & Delivery elements this offer depends on, and which Workforce roles deliver it. This is the dependency edge that gives IT line of sight.
 
@@ -120,11 +135,11 @@ Out of primary scope for this spec, but named because the two business facets **
 
 ## 5. Grounding WWWD on the Operating Model
 
-This is how WWWD matures. Today WWWD recall (`recallWikiContext`) returns four narrative stance pages. The maturation path:
+This is how WWWD matures. Today WWWD recall (`recallWikiContext`) returns four narrative stance pages plus any operator-authored stance (`/wiki/stance`). The maturation path:
 
-1. **Land the org-profile resolver (BI-230C9EF7).** The Gate must resolve by `ownerOrganizationId` so business decisions actually run against the org profile, not fall back to `mark-dpf-platform`. This is the precondition; without it WWWD never governs anything. Aligns with the decision-surface consolidation plan (2026-05-30): one Gate, WWWD for business decisions, WWMD for platform decisions.
+1. **~~Land the org-profile resolver (BI-230C9EF7).~~ ✅ LANDED (EP-8AF1C996).** The Gate now resolves by `ownerOrganizationId` — `resolveProfileMaterialForOrg()` / `evaluateOrgBusinessDecisionGate()` run business decisions against the org profile instead of falling back to `mark-dpf-platform`, recording each to the `DecisionInteraction` ledger and exposed as the `evaluate_org_business_decision` MCP tool. The precondition is met: WWWD *governs*. **What remains is step 2 — giving it concrete operating-model facts to govern *with*.** Aligns with the decision-surface consolidation plan (2026-05-30): one Gate, WWWD for business decisions, WWMD for platform decisions.
 
-2. **Promote operating-model facts into the WWWD corpus as structured material.** Extend `seedOrgWwwdCorpus` / the EP-CORPUS-BOOTSTRAP `enrichOrgCorpus(input)` contract so the populated portfolios become `PerspectiveMaterial`:
+2. **Promote operating-model facts into the WWWD corpus as structured material. — the live frontier of this spec.** Extend `seedOrgWwwdCorpus` / the EP-CORPUS-BOOTSTRAP `enrichOrgCorpus(input)` contract so the populated portfolios become `PerspectiveMaterial`:
    - the market offer (Facet A) → "what we sell / our offerings" material
    - the workforce (Facet B) → "who does our work / our capacity & constraints" material
    - goals/OKRs (captured top-down) → "what we're trying to achieve" material
@@ -153,6 +168,8 @@ This is the payoff: the business backlog becomes a *generated* artifact, the way
 
 **The dispatcher is the Business Capability Map (§12.3, `EP-BIZ-CAP`).** Industry convergence (TOGAF, Gartner SPM, SAFe, OKR cascades) makes the capability map the bridge object between strategy and the two portfolios: heat-map each capability (target − current); a gap closeable by hiring/upskilling/configuring-an-agent routes to **Workforce** backlog, a gap closeable by building/buying routes to **Products & Services** backlog. Prioritization composites three top-down scorers — **WSJF** (cost-of-delay × theme-alignment ÷ size), **MoAR** (objective contribution ÷ effort), and **capability-gap magnitude** — drawing against **adaptive funding guardrails per theme/portfolio**, not annual budgets. Generated items are **problems/outcomes, not prescriptive features** (Build Studio owns solution discovery), and are **proposed, never auto-committed** (PAR gate; AI prioritization is 70–85% accurate, so governance-gated by design).
 
+**Substrate note (2026-07-04 audit — reuse, do not invent):** `BacklogItem` already carries the fields this fan-out needs — `status` (a `"proposed"` value, no new state table), `portfolioId` (the portfolio link), `source` (origin provenance), `proposedOutcome` (the problems/outcomes framing), and `digitalProductId` / `taxonomyNodeId` FKs for offering-origin items. The only residual gap is a *typed* originating-element reference for **non-offering** origins (a workforce gap on `Agent`/`EmployeeProfile`, a goal) — audit whether `source` string-encoding suffices or a polymorphic ref is warranted before adding a column (`schema-audit-before-features`).
+
 **Generation rules (each produces a *proposed* `BacklogItem` linked to its portfolio + the originating operating-model element):**
 
 | Operating-model condition | Generated backlog |
@@ -173,11 +190,12 @@ This reuses the maturity spec's §13 backlog fan-out model and the `propose-ackn
 
 Each phase is an umbrella for BIs filed via the governed path (`dpf-file-backlog-item` → size → triage → link epic). Phases are ordered by dependency; early phases unblock later ones.
 
-**Phase 0 — Foundations & decisions (no user-visible change).**
-- Persist the archetype `PortfolioDecomposition` to the DB (close the "computed but never persisted" gap) so a company's portfolio shape is refinable.
-- Land **BI-230C9EF7** (org-profile resolver) — the WWWD precondition.
-- Audit: does an existing field carry product `lifecycleStage`? Does `EaElement`/`DigitalProduct` carry offering decomposition edges? (verify-substrate-first; greenfield only on a written audit.)
+**Phase 0 — Foundations & decisions (no user-visible change). ✅ SUBSTANTIALLY COMPLETE (2026-07-04).**
+- ~~Persist the archetype `PortfolioDecomposition` to the DB~~ — **DONE (BI-2D452667):** `BusinessContext.portfolioDecomposition` + `seed-portfolio-decomposition.ts` + `resolvePortfolioDecomposition()`.
+- ~~Land **BI-230C9EF7** (org-profile resolver)~~ — **DONE (EP-8AF1C996):** `resolveProfileMaterialForOrg()` / `evaluateOrgBusinessDecisionGate()` / `evaluate_org_business_decision`.
+- Audit — **partly answered:** `DigitalProduct.lifecycleStage` exists (reuse it); `DigitalProduct.bomDocuments` relation exists. **Still open:** whether `bomDocuments` (or `EaElement`) carries the *typed offering→dependency edges* Facet A needs (`CONTAINS`/`DEPENDS_ON`, §12.1.2), or a minimal extension is required. Resolve in the Phase-1 audit (verify-substrate-first; greenfield only on a written audit).
 - Anchor epics: `EP-CORPUS-BOOTSTRAP`, `EP-WWMD-MCP`.
+- **Net:** Phase 0 no longer blocks — the fan-out now starts at Phase 1 (Facet A population) with the refinable decomposition and the governing org resolver already in place.
 
 **Phase 1 — Products & Services Sold population (Facet A).**
 - Archetype-seeded starter offerings (editable) under `products_and_services_sold`.
@@ -190,10 +208,10 @@ Each phase is an umbrella for BIs filed via the governed path (`dpf-file-backlog
 - Unified workforce roster (humans + NHIs) union projection; AI-agent "needs" lens surfacing tools/tokens/skills/supervision/unmet-needs.
 - Anchor: `EP-AI-WORKFORCE-001`, `EP-BIZ-CAP`.
 
-**Phase 3 — WWWD grounding (§5).**
-- Promote Facet A + Facet B + goals into the WWWD corpus as `PerspectiveMaterial` via `enrichOrgCorpus`.
-- Verify business decisions now resolve against the org profile and cite operating-model facts.
-- Anchor: `EP-CORPUS-BOOTSTRAP`, `EP-WWMD-MCP`.
+**Phase 3 — WWWD grounding (§5).** *(Resolver precondition already landed — this phase is now purely the grounding half.)*
+- Promote Facet A + Facet B + goals into the WWWD corpus as `PerspectiveMaterial` via `enrichOrgCorpus`, and surface them in the shipped `/wiki/stance` / `/wiki/review` governance surfaces rather than a new one.
+- Verify business decisions run through `evaluateOrgBusinessDecisionGate` now **cite operating-model facts** (offering lifecycle, workforce coverage), not only stance narrative.
+- Anchor: `EP-CORPUS-BOOTSTRAP`, `EP-WWMD-MCP`, `EP-0AF96937`.
 
 **Phase 4 — Business backlog fan-out (§7, §12.3).**
 - Business Capability Map as the dispatcher: heat-map capabilities (target − current); gaps route to the Workforce or Products & Services portfolio.
@@ -234,14 +252,14 @@ The design is successful when later implementation can prove:
 
 ## 11. Open Decisions for the Implementation Plan
 
-1. Does `DigitalProduct` (or `EaElement`/`ServiceOffering`) already carry offering **lifecycle stage** and **decomposition/SBOM edges**, or is a minimal extension required? (Phase 0 audit answers.)
+1. ~~Does `DigitalProduct` carry offering **lifecycle stage** and **decomposition/SBOM edges**?~~ **Partly answered (2026-07-04 audit):** `DigitalProduct.lifecycleStage` exists (reuse, don't add) and a `bomDocuments` relation exists. **Still open:** does `bomDocuments`/`EaElement` model the *typed* offering→dependency edges (`CONTAINS`/`DEPENDS_ON`/`BUILD_TOOL_OF`, §12.1.2), or is a minimal extension required?
 2. Is the unified workforce roster a DB view, a union projection in a loader, or does it wait for Principal convergence? (Recommend: union projection now, converge later.)
 3. Where do **company goals/OKRs** live — a new `WikiPage` pageKind (`goal`), `PerspectiveMaterial`, or an existing objectives model? (verify-substrate-first.)
 4. Does business-backlog fan-out reuse the maturity spec's gap→backlog mechanism directly, or need a business-specific generator? (Prefer reuse.)
 5. Which `/portfolio` sub-tab anchors the market-offer and workforce surfaces (maturity §12.4 layer-on-existing-nav requires re-use, not a new sub-route)?
-6. How is the persisted portfolio decomposition reconciled with `readActivationProfile()` on re-install/upgrade?
+6. ~~How is the persisted portfolio decomposition reconciled with `readActivationProfile()` on re-install/upgrade?~~ **Partly answered:** `resolvePortfolioDecomposition()` treats the persisted `BusinessContext.portfolioDecomposition` as source of truth and the archetype computation as first-install seed/fallback (seed-is-bootstrap, matching §10's mitigation). **Still open:** the upgrade path when the archetype template's default decomposition changes after an operator has refined theirs (merge vs. leave-refined-untouched).
 
-These resolve in the implementation plan after the Phase 0 schema/route audit.
+Q1, Q6 are now partly answered by the 2026-07-04 audit (see §0). Q2–Q5 resolve in the implementation plan; the Phase-1 audit closes the residual typed-edge question in Q1.
 
 ---
 
