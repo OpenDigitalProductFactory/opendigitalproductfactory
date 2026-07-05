@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { findMany, getPipelineInspectorView } = vi.hoisted(() => ({
+const { findMany, accountFindMany, getPipelineInspectorView } = vi.hoisted(() => ({
   findMany: vi.fn(),
+  accountFindMany: vi.fn(),
   getPipelineInspectorView: vi.fn(),
 }));
 
@@ -11,7 +12,15 @@ vi.mock("@dpf/db", () => ({
     opportunity: {
       findMany,
     },
+    customerAccount: {
+      findMany: accountFindMany,
+    },
   },
+}));
+
+// NewOpportunityButton (client component in the page header) calls useRouter().
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
 }));
 
 vi.mock("@/lib/actions/crm", () => ({
@@ -33,6 +42,7 @@ import OpportunitiesPage from "./page";
 describe("OpportunitiesPage", () => {
   beforeEach(() => {
     findMany.mockResolvedValue([]);
+    accountFindMany.mockResolvedValue([]);
     getPipelineInspectorView.mockResolvedValue(null);
   });
 
