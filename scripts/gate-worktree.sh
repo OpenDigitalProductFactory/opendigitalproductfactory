@@ -19,7 +19,9 @@ URL="${DPF_LOCAL_CI_URL:-http://localhost:3010}"
 PORTS="3010"
 GIT_BIN="${DPF_GATE_GIT_BIN:-git}"
 CURL_BIN="${DPF_GATE_CURL_BIN:-curl}"
+NODE_BIN="${DPF_GATE_NODE_BIN:-node}"
 STATE_FILE=""
+WORKTREE_HYDRATION_MESSAGE='This worktree is source-control isolation, not a runtime. Claim `local-integration-ci` and run the gate on the shared sandbox/canonical runner. Do not hydrate this worktree.'
 
 usage() {
   cat <<'EOF'
@@ -42,6 +44,9 @@ Options:
 
 Environment:
   DPF_LOCAL_CI_COMMAND        Command to run while holding the local-CI lease.
+                               Must target the shared sandbox/canonical runner;
+                               do not point it at pnpm/next/prisma in the topic
+                               worktree.
   DPF_ALLOW_LOCAL_CI_STUB=1   Test-only escape hatch for the Phase 1 stub.
 EOF
 }
@@ -52,17 +57,17 @@ die() {
 }
 
 json_escape() {
-  node -e 'process.stdout.write(JSON.stringify(process.argv[1] ?? ""))' "$1"
+  "$NODE_BIN" -e 'process.stdout.write(JSON.stringify(process.argv[1] ?? ""))' "$1"
 }
 
 json_array_numbers() {
-  node -e 'const xs=(process.argv[1]||"").split(",").filter(Boolean).map(Number); process.stdout.write(JSON.stringify(xs));' "$1"
+  "$NODE_BIN" -e 'const xs=(process.argv[1]||"").split(",").filter(Boolean).map(Number); process.stdout.write(JSON.stringify(xs));' "$1"
 }
 
 mcp_call() {
   tool_name="$1"
   arguments_json="$2"
-  request_json="$(node -e '
+  request_json="$("$NODE_BIN" -e '
 const name = process.argv[1];
 const args = JSON.parse(process.argv[2]);
 process.stdout.write(JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/call",params:{name,arguments:args}}));
@@ -74,7 +79,7 @@ process.stdout.write(JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/call",para
 }
 
 extract_tool_result() {
-  node -e '
+  "$NODE_BIN" -e '
 const fs = require("node:fs");
 const raw = fs.readFileSync(0, "utf8");
 const payload = JSON.parse(raw);
@@ -86,7 +91,7 @@ process.stdout.write(JSON.stringify(parsed));
 }
 
 field() {
-  node -e '
+  "$NODE_BIN" -e '
 const fs = require("node:fs");
 const raw = fs.readFileSync(0, "utf8");
 const obj = JSON.parse(raw);
@@ -97,13 +102,50 @@ if (value !== undefined && value !== null) process.stdout.write(String(value));
 ' "$1"
 }
 
+topic_worktree_state() {
+  marker="$WORKTREE_PATH/.dpf-worktree-readiness.json"
+  if [ -f "$marker" ]; then
+    "$NODE_BIN" -e '
+const fs = require("node:fs");
+try {
+  const marker = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  process.stdout.write(String(marker.state || "source-only"));
+} catch {
+  process.stdout.write("source-only");
+}
+' "$marker"
+    return 0
+  fi
+  case "$WORKTREE_PATH" in
+    "$HOME"/dpf-worktrees/*|*/dpf-worktrees/*|*/DPF-worktrees/*|*/.claude/worktrees/*)
+      printf '%s' "source-only"
+      return 0
+      ;;
+  esac
+  if [ -f "$WORKTREE_PATH/.git" ]; then
+    printf '%s' "source-only"
+    return 0
+  fi
+  printf '%s' ""
+}
+
+command_hydrates_topic_worktree() {
+  [ -n "$LOCAL_CI_COMMAND" ] || return 1
+  case "$LOCAL_CI_COMMAND" in
+    *"pnpm "*|*" pnpm"*|*"corepack pnpm"*|*"next build"*|*"prisma migrate"*|*"prisma db push"*|*"scripts/local-integration-ci.mjs"*|*"scripts/lib/bootstrap-worktree-deps.mjs"*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 write_state() {
   gate_passed="$1"
   lease_id="$2"
   evidence_id="$3"
   status="$4"
   mkdir -p "$(dirname "$STATE_FILE")"
-  node -e '
+  "$NODE_BIN" -e '
 const fs = require("node:fs");
 const out = process.argv[1];
 const payload = {
@@ -144,6 +186,7 @@ done
 [ -n "$WORKTREE_PATH" ] || WORKTREE_PATH="$("$GIT_BIN" rev-parse --show-toplevel)"
 [ -n "$OWNER_SESSION_ID" ] || OWNER_SESSION_ID="gate-$$"
 STATE_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-gate.json)"
+WORKTREE_STATE="$(topic_worktree_state)"
 
 if [ "$DRY_RUN" = "1" ]; then
   printf 'gate-worktree dry-run\n'
@@ -161,18 +204,25 @@ fi
 
 [ -n "$LOCAL_CI_COMMAND" ] || [ "$ALLOW_STUB" = "1" ] || die "local-CI gate runner is not wired; refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests."
 
+if [ -n "$WORKTREE_STATE" ] && command_hydrates_topic_worktree && [ "${DPF_ALLOW_WORKTREE_HYDRATION:-0}" != "1" ]; then
+  die "$WORKTREE_HYDRATION_MESSAGE"
+fi
+if [ -n "$WORKTREE_STATE" ] && command_hydrates_topic_worktree && [ "${DPF_ALLOW_WORKTREE_HYDRATION:-0}" = "1" ]; then
+  printf '%s\n' "gate-worktree: Emergency worktree hydration override active. Audit this in the Work Capsule/PR and remove generated artifacts when done." >&2
+fi
+
 [ -n "${DPF_MCP_BEARER_TOKEN:-}" ] || die "DPF_MCP_BEARER_TOKEN is required to claim the local-CI lease"
 
 if [ "$PUSH_BRANCH" = "1" ]; then
   "$GIT_BIN" push "$REMOTE" "$BRANCH"
 fi
 
-expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
-deadline="$(node -e 'process.stdout.write(String(Date.now() + Number(process.argv[1]) * 1000))' "$LEASE_WAIT_SECONDS")"
+expires_at="$("$NODE_BIN" -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
+deadline="$("$NODE_BIN" -e 'process.stdout.write(String(Date.now() + Number(process.argv[1]) * 1000))' "$LEASE_WAIT_SECONDS")"
 lease_id=""
 
 while :; do
-  claim_args="$(node -e '
+  claim_args="$("$NODE_BIN" -e '
 const args = {
   environmentKey: "local-integration-ci",
   ownerProvider: process.argv[1],
@@ -196,7 +246,7 @@ process.stdout.write(JSON.stringify(args));
     break
   fi
   if [ "$claim_error" = "lease_conflict" ]; then
-    now_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
+    now_ms="$("$NODE_BIN" -e 'process.stdout.write(String(Date.now()))')"
     [ "$now_ms" -lt "$deadline" ] || die "local-CI sandbox lease is busy; timed out waiting"
     printf '%s\n' "local-CI sandbox busy; queued behind active lease. Retrying in ${POLL_SECONDS}s..."
     sleep "$POLL_SECONDS"
@@ -236,7 +286,7 @@ if [ "$gate_status" -eq 0 ]; then
   status="passed"
 fi
 
-evidence_args="$(node -e '
+evidence_args="$("$NODE_BIN" -e '
 const status = process.argv[1];
 const gatePassed = process.argv[2] === "true";
 const evidence = {

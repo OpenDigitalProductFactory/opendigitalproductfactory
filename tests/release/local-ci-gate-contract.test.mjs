@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -12,7 +12,7 @@ function runGate(args, options = {}) {
   return spawnSync("sh", [script.pathname, ...args], {
     cwd: repoRoot,
     encoding: "utf8",
-    env: options.env ? { ...options.env } : process.env,
+    env: { ...(options.env ? options.env : process.env), DPF_GATE_NODE_BIN: process.execPath },
   });
 }
 
@@ -79,6 +79,39 @@ test("gate-worktree.sh refuses to record passing stub evidence by default", () =
   assert.match(result.stderr, /refusing to record passing stub evidence/);
 });
 
+test("gate-worktree.sh refuses direct pnpm gates from a source-only topic worktree", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-source-only-"));
+  try {
+    writeFileSync(join(temp, ".git"), "gitdir: /tmp/repo/.git/worktrees/source-only\n");
+    writeFileSync(
+      join(temp, ".dpf-worktree-readiness.json"),
+      JSON.stringify({ schemaVersion: 1, state: "source-only", reason: "test" }) + "\n",
+    );
+
+    const result = runGate([
+      "--branch",
+      "feat/source-only",
+      "--sha",
+      "abc123",
+      "--worktree",
+      temp,
+      "--no-push",
+    ], {
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+        DPF_LOCAL_CI_COMMAND: "pnpm --filter web build",
+      },
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /source-control isolation, not a runtime/);
+    assert.match(result.stderr, /local-integration-ci/);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
 test("gate-worktree.sh calls claim_nonprod_environment_lease before recording evidence when stub is explicitly allowed", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-gate-"));
   const callsFile = join(temp, "calls.ndjson");
@@ -105,7 +138,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 printf '%s\\n' "$data" >> "${callsFile}"
-tool="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(0,"utf8")); console.log(p.params.name)' <<EOF
+tool="$("${process.execPath}" -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(0,"utf8")); console.log(p.params.name)' <<EOF
 $data
 EOF
 )"

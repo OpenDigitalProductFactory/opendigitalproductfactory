@@ -185,14 +185,18 @@ foreach ($pair in $pairs) {
 # never slows routine creation; enable with $env:DPF_WORKTREE_BOOTSTRAP = "1".
 # Fail-safe: a failed bootstrap leaves the worktree source-only, never breaks creation.
 if ($env:DPF_WORKTREE_BOOTSTRAP -eq "1") {
-    $bootstrapHelper = Join-Path $Target "scripts/lib/bootstrap-worktree-deps.mjs"
-    if ((Test-Path $bootstrapHelper) -and (Get-Command node -ErrorAction SilentlyContinue)) {
-        Write-Step "Bootstrapping worktree dependencies (managed; DPF_WORKTREE_BOOTSTRAP=1)"
-        try {
-            & node $bootstrapHelper $Target *> $null
-            Write-Ok "Dependency bootstrap attempted (fail-safe; readiness recorded below)"
-        } catch {
-            Write-Host "  [WARN] Dependency bootstrap failed; worktree stays source-only." -ForegroundColor Yellow
+    if ($env:DPF_ALLOW_WORKTREE_HYDRATION -ne "1") {
+        Write-Host "  [WARN] Dependency bootstrap requested, but DPF_ALLOW_WORKTREE_HYDRATION=1 is not set. Skipping to avoid worktree hydration." -ForegroundColor Yellow
+    } else {
+        $bootstrapHelper = Join-Path $Target "scripts/lib/bootstrap-worktree-deps.mjs"
+        if ((Test-Path $bootstrapHelper) -and (Get-Command node -ErrorAction SilentlyContinue)) {
+            Write-Step "Bootstrapping worktree dependencies (managed; DPF_WORKTREE_BOOTSTRAP=1)"
+            try {
+                & node $bootstrapHelper $Target *> $null
+                Write-Ok "Dependency bootstrap attempted (fail-safe; readiness recorded below)"
+            } catch {
+                Write-Host "  [WARN] Dependency bootstrap failed; worktree stays source-only." -ForegroundColor Yellow
+            }
         }
     }
 }
@@ -230,13 +234,19 @@ Write-Ok "Recorded $readinessState readiness in $readinessPath ($readinessReason
 
 Write-Step "Ensuring DPF skill pack"
 $skillPackScript = Join-Path $Target "scripts\ensure-dpf-skill-pack.ps1"
-if (Test-Path -LiteralPath $skillPackScript) {
-    & $skillPackScript -RepoRoot $Target
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  [WARN] DPF skill pack bootstrap failed; MCP config, Compose isolation, and readiness marker were still written." -ForegroundColor Yellow
+if ($env:DPF_SEED_WORKTREE_TOOLCHAIN -eq "1") {
+    if (($readinessState -ne "compile-ready") -and ($env:DPF_ALLOW_WORKTREE_HYDRATION -ne "1")) {
+        Write-Host "  [WARN] Toolchain bootstrap requested, but this worktree is $readinessState. Skipping to avoid dependency hydration. Set DPF_ALLOW_WORKTREE_HYDRATION=1 only for an audited emergency." -ForegroundColor Yellow
+    } elseif (Test-Path -LiteralPath $skillPackScript) {
+        & $skillPackScript -RepoRoot $Target
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [WARN] DPF skill pack bootstrap failed; MCP config, Compose isolation, and readiness marker were still written." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Skip "No DPF skill pack installer found at $skillPackScript"
     }
 } else {
-    Write-Skip "No DPF skill pack installer found at $skillPackScript"
+    Write-Skip "Toolchain bootstrap skipped by default for topic worktrees. Use the root/canonical runner, or set DPF_SEED_WORKTREE_TOOLCHAIN=1 with DPF_ALLOW_WORKTREE_HYDRATION=1 for an audited emergency."
 }
 
 Write-Host ""

@@ -219,12 +219,18 @@ ok "Recorded $readiness_state readiness in $target_abs/.dpf-worktree-readiness.j
 
 step "Ensuring DPF skill pack"
 skill_pack_script="$target_abs/scripts/ensure-dpf-skill-pack.sh"
-if [ -f "$skill_pack_script" ]; then
-    if ! bash "$skill_pack_script" "$target_abs"; then
-        warn "DPF skill pack bootstrap failed; MCP config, Compose isolation, and readiness marker were still written."
+if [ "${DPF_SEED_WORKTREE_TOOLCHAIN:-0}" = "1" ]; then
+    if [ "$readiness_state" != "compile-ready" ] && [ "${DPF_ALLOW_WORKTREE_HYDRATION:-0}" != "1" ]; then
+        warn "Toolchain bootstrap requested, but this worktree is $readiness_state. Skipping to avoid dependency hydration. Set DPF_ALLOW_WORKTREE_HYDRATION=1 only for an audited emergency."
+    elif [ -f "$skill_pack_script" ]; then
+        if ! bash "$skill_pack_script" "$target_abs"; then
+            warn "DPF skill pack bootstrap failed; MCP config, Compose isolation, and readiness marker were still written."
+        fi
+    else
+        skip "No DPF skill pack installer found at $skill_pack_script"
     fi
 else
-    skip "No DPF skill pack installer found at $skill_pack_script"
+    skip "Toolchain bootstrap skipped by default for topic worktrees. Use the root/canonical runner, or set DPF_SEED_WORKTREE_TOOLCHAIN=1 with DPF_ALLOW_WORKTREE_HYDRATION=1 for an audited emergency."
 fi
 
 printf '\nDone. Restart Claude Code, Codex, or VS Code in the worktree to pick up the dpf connector and skill pack.\n\n'

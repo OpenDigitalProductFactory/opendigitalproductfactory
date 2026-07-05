@@ -83,11 +83,11 @@ For normal feature/fix work: commit from the worktree, then route runtime-bound 
    - **Canonical worktree base** (the 2026-06-05 unified-delivery-surfaces decision #1): both host surfaces (Claude Code and Codex) put topic worktrees in the dedicated sibling dir `D:/DPF-worktrees/<slug>` on Windows, `~/dpf-worktrees/<slug>` on macOS/Linux. Do NOT use Claude Code's default `.claude/worktrees/<random>` nesting inside the root clone, and do NOT use the older `D:/DPF-<slug>` alongside-the-clone form — one base, both surfaces. The dedicated base keeps worktrees out of the root clone's tree and gives the janitor one place to reap. → spec [`2026-06-05-unified-delivery-surfaces-execution-alignment-design.md`](../../../../docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) §4.1 + decision #1.
    - **Never** branch from local `main` — local main may carry unpushed commits that sweep into your PR and fail DCO.
 
-3. **Seed the MCP config + agent toolchain.** `.mcp.json` and `.vscode/mcp.json` are gitignored (they carry your local `dpfmcp_...` bearer token), so `git worktree add` does NOT carry them across. Run the bootstrap from inside the new worktree:
-   - Windows: `pwsh scripts/dpf-bootstrap-agent-toolchain.ps1`
-   - macOS / Linux: `bash scripts/dpf-bootstrap-agent-toolchain.sh`
+3. **Seed the MCP config + readiness marker.** `.mcp.json` and `.vscode/mcp.json` are gitignored (they carry your local `dpfmcp_...` bearer token), so `git worktree add` does NOT carry them across. Run the seed from inside the new worktree:
+   - Windows: `pwsh scripts/seed-worktree-mcp.ps1`
+   - macOS / Linux: `bash scripts/seed-worktree-mcp.sh`
 
-   The bootstrap copies `.mcp.json` and `.vscode/mcp.json` from the root clone, sets `COMPOSE_PROJECT_NAME=dpf-<slug>` in `.env`, converges the Claude Code + Codex client profiles to the DPF-scoped baseline (DPF MCP only + `dpf-platform` only; generic plugins/MCP servers disabled; the canonical worktree base + this worktree trusted in Codex), seeds kernel memory, runs probes, and prints a readiness banner that flags any residual drift. The legacy `scripts/seed-worktree-mcp.{ps1,sh}` shim still works for one release cycle.
+   The seed copies `.mcp.json` and `.vscode/mcp.json` from the root clone, sets `COMPOSE_PROJECT_NAME=dpf-<slug>` in `.env`, and writes `.dpf-worktree-readiness.json`. It does **not** install dependencies or run full agent-toolchain bootstrap by default. If the user-scope `dpf-platform` plugin or MCP client config is missing, run `scripts/dpf-bootstrap-agent-toolchain.{ps1,sh}` from the root/canonical runner, then restart the client. Do not hydrate the topic worktree as a tooling workaround.
 
 4. **Restart your agent in the worktree.** Claude Code / Codex need a fresh session to pick up the new `.mcp.json` — the `dpf` MCP connector won't appear in `/mcp` otherwise.
 
@@ -111,7 +111,7 @@ For normal feature/fix work: commit from the worktree, then route runtime-bound 
    ```
    - `compile-ready`: package manager plus dependencies are present. Cheap source-local gates may run here.
    - `source-only`: Git/MCP/Compose isolation is present, but local compile/test gates are not proven. Do code work here, but get verification from the shared local-CI convergence sandbox or canonical install.
-   - If a task requires cheap source-local gates and the worktree is source-only, try to make it compile-ready only when low-risk (`pnpm install --frozen-lockfile` with pinned pnpm available). If dependency bootstrap is unavailable or would distract from the task, record `source-only` and do not claim local gate passes.
+   - If a task requires cheap source-local gates and the worktree is source-only, route the gate through the shared local-CI convergence sandbox or canonical runner. Do not run `pnpm install` to make the topic worktree runnable unless the operator explicitly accepts the emergency override (`DPF_ALLOW_WORKTREE_HYDRATION=1`) and the generated artifacts are cleaned up afterward.
 
 ## Instructions for agents entering an existing worktree
 
@@ -143,7 +143,7 @@ Before editing or reviewing from an existing worktree:
 - **Never base a topic branch on local `main`.** Always `origin/main` after `git fetch`.
 - **Never commit MCP config files.** `.mcp.json` and `.vscode/mcp.json` are gitignored for a reason — they carry bearer tokens.
 - **Never modify the root clone's working tree for active feature work.** The root clone is the merge/release worktree per `keep-root-clone-as-merge-worktree`.
-- Don't treat the worktree as a runtime by default. Commit from the worktree, verify against the canonical install. 'Make the worktree runnable' is a dedicated platform task, not a side-effect of every feature thread.
+- Don't treat the worktree as a runtime by default. Commit from the worktree, verify against the canonical install or `local-integration-ci`. The `worktree-hydration-guard` blocks direct `pnpm install`, `pnpm --filter web build`, and related hydration/runtime commands in topic worktrees with the message: "This worktree is source-control isolation, not a runtime. Claim `local-integration-ci` and run the gate on the shared sandbox/canonical runner. Do not hydrate this worktree."
 - **Never claim unrun gates passed.** A `source-only` worktree can hold correct code, but its local typecheck/build/test status is unknown until proven in that worktree or in canonical runtime/local-CI.
 
 ## Worked example (this session, 2026-05-24)

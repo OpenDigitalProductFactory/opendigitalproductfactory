@@ -91,7 +91,7 @@ test("seed-worktree-mcp.sh preserves a custom non-root COMPOSE_PROJECT_NAME", ()
   }
 });
 
-test("seed-worktree-mcp.sh keeps core worktree setup even when optional skill bootstrap fails", () => {
+test("seed-worktree-mcp.sh skips toolchain bootstrap by default even if the shim would install/fail", () => {
   const fixture = createRepoWithWorktree("bootstrap-fails");
   try {
     mkdirSync(join(fixture.worktree, "scripts"), { recursive: true });
@@ -103,10 +103,30 @@ test("seed-worktree-mcp.sh keeps core worktree setup even when optional skill bo
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stderr, /skill pack bootstrap failed/i);
+    assert.match(result.stdout, /Toolchain bootstrap skipped by default/i);
     assert.match(readFileSync(join(fixture.worktree, ".env"), "utf8"), /^COMPOSE_PROJECT_NAME=dpf-bootstrap-fails$/m);
     assert.equal(readReadiness(fixture.worktree).state, "source-only");
     assert.equal(readFileSync(join(fixture.worktree, ".mcp.json"), "utf8"), readFileSync(join(fixture.repo, ".mcp.json"), "utf8"));
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("seed-worktree-mcp.sh refuses opt-in toolchain bootstrap in source-only worktree without hydration override", () => {
+  const fixture = createRepoWithWorktree("bootstrap-source-only");
+  try {
+    mkdirSync(join(fixture.worktree, "scripts"), { recursive: true });
+    writeFileSync(join(fixture.worktree, "scripts", "ensure-dpf-skill-pack.sh"), "#!/bin/sh\necho should-not-run >&2\nexit 42\n");
+
+    const result = spawnSync("sh", [seedScript.pathname, fixture.worktree], {
+      encoding: "utf8",
+      env: { ...process.env, DPF_SEED_WORKTREE_TOOLCHAIN: "1" },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /Skipping to avoid dependency hydration/i);
+    assert.doesNotMatch(result.stderr, /should-not-run/);
+    assert.equal(readReadiness(fixture.worktree).state, "source-only");
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }

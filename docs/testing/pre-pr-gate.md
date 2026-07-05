@@ -49,7 +49,7 @@ instead.
 
 | Gate | What it proves | Where it runs |
 | --- | --- | --- |
-| Targeted `vitest` / `pnpm --filter <pkg> typecheck` | Source-local correctness of files you touched | **Worktree** if `.dpf-worktree-readiness.json` says `compile-ready`; otherwise route through the sandbox |
+| Targeted `vitest` / `pnpm --filter <pkg> typecheck` | Source-local correctness of files you touched | **Worktree** only if `.dpf-worktree-readiness.json` says `compile-ready`; otherwise route through the sandbox |
 | Full root `pnpm test` (the CI-equivalent aggregate) | The whole suite is green | **Canonical local install** (root clone Docker stack) or the **shared local-CI convergence sandbox** lease |
 | `next build`, UX verification, migration apply | Runtime-bound behaviour | **Canonical install** or **sandbox lease** — never a worktree `next dev`/`next build` |
 | The **Unit Tests** CI job | The binding pre-merge gate | **GitHub Actions** (authoritative) |
@@ -126,7 +126,7 @@ sandbox runtime is declared in `docker-compose.local-ci.yml` behind the
 on `http://localhost:3010`, and connects to the existing dev data services on
 host ports `5433`, `6334`, and `7475`/`7688`.
 
-From a worktree, the opt-in gate is:
+From a worktree, the opt-in gate has one front door:
 
 ```bash
 pnpm run pregate            # → sh scripts/gate-worktree.sh
@@ -138,11 +138,33 @@ The script pushes the current branch, claims a `local-integration-ci` lease
 lease id and `gatePassed`, releases the lease, and writes the latest gate result
 to Git-local state (`.git/dpf-local-ci-gate.json`).
 
+`DPF_LOCAL_CI_COMMAND` must target the shared sandbox or canonical runner. Do
+not set it to direct `pnpm`, `next`, `prisma`, or `scripts/local-integration-ci.mjs`
+from the topic worktree; `scripts/gate-worktree.sh` refuses that because it
+would hydrate or mutate the source-control checkout. The built-in non-mutating
+runner path is tracked as `BI-157DC9B2`; until that lands, a configured command
+must make its own sandbox/canonical-runner target explicit.
+
 **It refuses to record a passing stub by default.** With no
 `DPF_LOCAL_CI_COMMAND` the command intentionally fails — an unimplemented
 local-CI runner must not produce green evidence. The old Phase 1 stub is only
 reachable via `DPF_ALLOW_LOCAL_CI_STUB=1` for contract tests and must never be
 used as release evidence.
+
+The same rule is enforced before agents can make the expensive mistake. The
+`dpf-platform` plugin ships `worktree-hydration-guard`, a Bash PreToolUse hook
+that detects topic worktrees (`~/dpf-worktrees/*`, `.claude/worktrees/*`, or
+`.dpf-worktree-readiness.json` missing/source-only) and blocks high-cost
+hydration/runtime commands by default:
+
+> This worktree is source-control isolation, not a runtime. Claim `local-integration-ci` and run the gate on the shared sandbox/canonical runner. Do not hydrate this worktree.
+
+An emergency override exists only for audited maintenance:
+`DPF_ALLOW_WORKTREE_HYDRATION=1`. It allows the command but emits an audit
+warning; the generated artifacts must be removed before handoff. At 100+
+concurrent worktrees, even a single 2GB dependency tree per worktree becomes
+hundreds of gigabytes of local state, plus CPU, RAM, and port contention. The
+shared lease is the scaling boundary.
 
 The opt-in pre-push hook is [`.githooks/pre-push-gate`](../../.githooks/pre-push-gate).
 It refuses a push when the latest local-CI gate record is missing, belongs to a

@@ -28,6 +28,7 @@ const GUARD_SCRIPTS = [
   "lease-guard.mjs",
   "root-clone-guard.mjs",
   "compose-guard.mjs",
+  "worktree-hydration-guard.mjs",
   "lease-punt-guard.mjs",
   "decision-routing-guard.mjs",
   "ux-fit-precheck.mjs",
@@ -104,7 +105,13 @@ test("lease-guard + root-clone-guard ride a Bash matcher; the prechecks ride a w
 
   const bashEntry = pre.find((e) => String(e.matcher ?? "").split("|").map((s) => s.trim()).includes("Bash"));
   assert.ok(bashEntry, "expected a Bash PreToolUse matcher for the Bash guards");
-  for (const guard of ["lease-guard.mjs", "root-clone-guard.mjs", "compose-guard.mjs", "lease-punt-guard.mjs"]) {
+  for (const guard of [
+    "lease-guard.mjs",
+    "root-clone-guard.mjs",
+    "compose-guard.mjs",
+    "worktree-hydration-guard.mjs",
+    "lease-punt-guard.mjs",
+  ]) {
     assert.ok(
       (bashEntry.hooks ?? []).some((h) => JSON.stringify(h).includes(guard)),
       `${guard} must ride the Bash matcher`,
