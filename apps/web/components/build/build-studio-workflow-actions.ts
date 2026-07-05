@@ -21,11 +21,18 @@ import type {
   ResumeImplementationModeDetail,
   TruthNumericSnapshot,
 } from "@/lib/build/progress-visibility-types";
+import {
+  friendlyInferenceFailureMessage,
+  type InferenceFailureKind,
+} from "@/lib/build/inference-failure";
 
 type BuildStudioWorkflowActionMetadata = {
   failureAxis?: BuildFailureAxis | null;
   truthSources?: TruthNumericSnapshot[];
   resumeMode?: ResumeImplementationModeDetail;
+  /** BI-F0005EB0 — set on the retry-inference action so the custodian can render
+   *  provider-detail-free copy for the specific failure. */
+  inferenceFailureKind?: InferenceFailureKind | null;
 };
 
 export type BuildOperatorStatusKind = "waiting-on-you" | "working" | "blocked-technical" | "escalated";
@@ -90,6 +97,22 @@ export type BuildStudioWorkflowAction =
   } & BuildStudioWorkflowActionMetadata)
   | ({
     kind: "retry-build";
+    title: string;
+    message: string;
+    primaryLabel: string;
+    targetPhase: null;
+    disabledReason: string | null;
+    coworkerLabel: string;
+    coworkerPrompt: string;
+  } & BuildStudioWorkflowActionMetadata)
+  | ({
+    // BI-F0005EB0 (EP-BS-UX-HARDENING) — the AI call itself failed (e.g. the
+    // ideate/scout inference errored with a connection/provider failure). Scoped
+    // to the coworker-chat deliberation phases (ideate/plan); surfaces a danger
+    // "Retry the AI call" affordance instead of the benign "Waiting on evidence"
+    // state, and re-drives the failed turn rather than asking the human to
+    // diagnose logs.
+    kind: "retry-inference";
     title: string;
     message: string;
     primaryLabel: string;
@@ -388,6 +411,7 @@ function statusForAction(
     action.kind === "retry-build"
     || action.kind === "reset-build"
     || action.kind === "resume-implementation"
+    || action.kind === "retry-inference"
   ) {
     return {
       kind: "blocked-technical",
@@ -446,6 +470,8 @@ function nextSentenceForAction(action: BuildStudioWorkflowAction): string {
       return "Next: record acceptance so release decisions can unlock.";
     case "retry-build":
       return "Next: retry the sandbox launch.";
+    case "retry-inference":
+      return "Next: retry the AI call. I will keep watching and pick it up if it fails again.";
     case "reset-build":
       return "Next: reset the build pipeline and start it again.";
     case "resume-implementation":
@@ -562,6 +588,33 @@ function buildResumeAction(args: {
 }
 
 /**
+ * BI-F0005EB0 — build the "Retry the AI call" action for a failed ideate/plan
+ * inference. Copy is provider-detail-free (via friendlyInferenceFailureMessage);
+ * the raw error stays in server logs. `phase` labels the coworker recovery
+ * prompt so the re-drive re-asks the right deliberation question.
+ */
+function buildRetryInferenceAction(
+  phase: "ideate" | "plan",
+  kind: InferenceFailureKind | null,
+): BuildStudioWorkflowAction {
+  const friendly = kind
+    ? friendlyInferenceFailureMessage(kind)
+    : "The AI call did not complete. Retry to try the request again.";
+  const phaseNoun = phase === "ideate" ? "define this feature" : "plan this build";
+  return {
+    kind: "retry-inference",
+    title: "The AI call failed.",
+    message: `${friendly} Next: click Retry the AI call to run it again.`,
+    primaryLabel: "Retry the AI call",
+    targetPhase: null,
+    disabledReason: null,
+    coworkerLabel: "Ask the AI Coworker to retry",
+    coworkerPrompt: `The last AI response failed to complete (the request errored, not a missing input from me). Please retry the request now and continue helping me ${phaseNoun}.`,
+    inferenceFailureKind: kind,
+  };
+}
+
+/**
  * FB-78E967D4 — detect a buildExecState shape that no existing recovery path
  * accepts:
  *   - `retryBuildExecution` rejects unless `state.step === "failed"`.
@@ -658,6 +711,19 @@ export function deriveBuildStudioWorkflowAction({
       coworkerPrompt:
         "Review the draft assumptions with me and confirm what I should approve before this build moves forward.",
     };
+  }
+
+  // BI-F0005EB0 — a failed AI call (inference errored) in a coworker-chat
+  // deliberation phase must surface as a distinct danger "Retry the AI call"
+  // affordance, NOT fall through to the phase's advance gate (which reads as the
+  // benign "Waiting on evidence"). Scoped to ideate/plan so it never shadows the
+  // richer exec-state recovery paths in build/review. Checked before the phase
+  // branches so it takes priority over "advance gate not met".
+  if (
+    (build.phase === "ideate" || build.phase === "plan")
+    && progressVisibility?.inferenceFailure?.failed === true
+  ) {
+    return buildRetryInferenceAction(build.phase, progressVisibility.inferenceFailure.kind ?? null);
   }
 
   if (build.phase === "ideate") {

@@ -167,6 +167,83 @@ describe("buildProgressProjectionFromParts", () => {
   });
 });
 
+describe("buildProgressProjectionFromParts — inferenceFailure (BI-F0005EB0)", () => {
+  function partsWithLastAssistant(
+    lastAssistant: { content: string | null; createdAt: Date | string | null } | null,
+    lastActivityAt: string | null,
+  ) {
+    return {
+      buildId: "FB-INF",
+      now: new Date("2026-07-05T12:00:00.000Z"),
+      dbTasks: normalizeTaskResults(null),
+      chatSnapshots: [],
+      sandbox: null,
+      dispatchHistory: [],
+      verification: buildScopedVerificationFromParts({
+        verification: normalizeVerificationOutput(null),
+        changedFiles: [],
+        dispatchHistory: [],
+      }),
+      lastActivityAt,
+      lastAssistant,
+    };
+  }
+
+  it("flags a failed ideate inference turn as inferenceFailure.failed", () => {
+    const projection = buildProgressProjectionFromParts(
+      partsWithLastAssistant(
+        {
+          content: "API Error: Unable to connect to API (ConnectionRefused)",
+          createdAt: "2026-07-05T11:59:00.000Z",
+        },
+        // No fresher observable signal than the failed turn.
+        "2026-07-05T11:59:00.000Z",
+      ),
+    );
+
+    expect(projection.inferenceFailure).toEqual({
+      failed: true,
+      kind: "connection",
+      observedAt: "2026-07-05T11:59:00.000Z",
+    });
+  });
+
+  it("does not flag when a fresher observable signal superseded the failed turn", () => {
+    const projection = buildProgressProjectionFromParts(
+      partsWithLastAssistant(
+        {
+          content: "API Error: Unable to connect to API (ConnectionRefused)",
+          createdAt: "2026-07-05T11:59:00.000Z",
+        },
+        // Activity landed AFTER the failed turn — pipeline moved on.
+        "2026-07-05T11:59:30.000Z",
+      ),
+    );
+
+    expect(projection.inferenceFailure?.failed).toBe(false);
+    expect(projection.inferenceFailure?.kind).toBe("connection");
+  });
+
+  it("does not flag a normal assistant turn", () => {
+    const projection = buildProgressProjectionFromParts(
+      partsWithLastAssistant(
+        {
+          content: "Let's define it together — what job types do you handle most?",
+          createdAt: "2026-07-05T11:59:00.000Z",
+        },
+        "2026-07-05T11:59:00.000Z",
+      ),
+    );
+
+    expect(projection.inferenceFailure).toEqual({ failed: false, kind: null, observedAt: null });
+  });
+
+  it("does not flag when there is no assistant turn", () => {
+    const projection = buildProgressProjectionFromParts(partsWithLastAssistant(null, null));
+    expect(projection.inferenceFailure).toEqual({ failed: false, kind: null, observedAt: null });
+  });
+});
+
 describe("extractChatProgressSnapshots", () => {
   it("extracts only valid assistant self-report task counts", () => {
     const snapshots = extractChatProgressSnapshots([

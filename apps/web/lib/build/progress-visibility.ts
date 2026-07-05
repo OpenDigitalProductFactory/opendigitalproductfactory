@@ -11,6 +11,7 @@ import { getScopedVerificationForBuild, type ScopedVerificationView } from "./sc
 import { normalizeTaskResults, type NormalizedTaskResults } from "./task-results";
 import { loadBuildEvidenceTimelineEvents } from "./evidence-timeline";
 import type { UnifiedEvidenceTimelineEvent } from "./evidence-timeline-types";
+import { classifyInferenceFailure, type InferenceFailureKind } from "./inference-failure";
 
 export type ChatProgressSnapshot = {
   completed: number | null;
@@ -58,6 +59,24 @@ export type BuildProgressVisibility = {
     minutesQuiet: number;
     lastObservableSignalAt: string | null;
   };
+  /**
+   * BI-F0005EB0 (EP-BS-UX-HARDENING) — whether the most recent assistant turn in
+   * the build's coworker thread is an inference failure (the AI call errored)
+   * rather than a real answer. Drives the danger "Retry the AI call" affordance
+   * so a failed ideate/scout inference is not mis-surfaced as "Waiting on
+   * evidence". `failed` is true only when the newest assistant message
+   * classifies AND no fresher observable signal (task/dispatch/activity) has
+   * landed since — so a successful turn after a retry self-clears it.
+   *
+   * Optional so projection literals (tests) need not supply it;
+   * getBuildProgressVisibility always populates it. Consumers read it with
+   * optional chaining (`progressVisibility?.inferenceFailure?.failed`).
+   */
+  inferenceFailure?: {
+    failed: boolean;
+    kind: InferenceFailureKind | null;
+    observedAt: string | null;
+  };
   /** Phase-level cost rollup; empty array when BuildPhaseRun rows don't exist yet */
   phaseRuns: PhaseRunSummary[];
   /**
@@ -77,6 +96,12 @@ export function buildProgressProjectionFromParts(args: {
   dispatchHistory: BuildDispatchAttemptView[];
   verification: ScopedVerificationView | null;
   lastActivityAt: string | null;
+  /**
+   * Newest assistant turn in the build's coworker thread, used to detect a
+   * failed inference. Optional so projection literals (tests) need not supply it
+   * — absent means "no inference failure".
+   */
+  lastAssistant?: { content: string | null; createdAt: Date | string | null } | null;
   phaseRuns?: PhaseRunSummary[];
   evidenceTimeline?: UnifiedEvidenceTimelineEvent[];
 }): BuildProgressVisibility {
@@ -93,6 +118,7 @@ export function buildProgressProjectionFromParts(args: {
     lastActivityAt: args.lastActivityAt,
   });
   const minutesQuiet = getMinutesQuiet(lastObservableSignalAt, now);
+  const inferenceFailure = deriveInferenceFailure(args.lastAssistant, lastObservableSignalAt);
 
   return {
     buildId: args.buildId,
@@ -127,9 +153,41 @@ export function buildProgressProjectionFromParts(args: {
       minutesQuiet,
       lastObservableSignalAt,
     },
+    inferenceFailure,
     phaseRuns: args.phaseRuns ?? [],
     evidenceTimeline: args.evidenceTimeline ?? [],
   };
+}
+
+/**
+ * BI-F0005EB0 — classify the newest assistant turn. Only reports `failed` when
+ * the failing turn is at least as recent as the last observable non-chat signal:
+ * a task result, dispatch, or activity landing AFTER the failed turn means the
+ * pipeline moved on (e.g. the user retried and work resumed), so the stale error
+ * must not keep the build parked in a danger state.
+ */
+function deriveInferenceFailure(
+  lastAssistant: { content: string | null; createdAt: Date | string | null } | null | undefined,
+  lastObservableSignalAt: string | null,
+): BuildProgressVisibility["inferenceFailure"] {
+  const none: BuildProgressVisibility["inferenceFailure"] = { failed: false, kind: null, observedAt: null };
+  if (!lastAssistant) {
+    return none;
+  }
+  const kind = classifyInferenceFailure(lastAssistant.content);
+  if (!kind) {
+    return none;
+  }
+  const observedAt = normalizeObservedAt(lastAssistant.createdAt);
+  if (
+    observedAt != null
+    && lastObservableSignalAt != null
+    && new Date(lastObservableSignalAt).getTime() > new Date(observedAt).getTime()
+  ) {
+    // A fresher observable signal superseded the failed turn — not stalled here.
+    return { failed: false, kind, observedAt };
+  }
+  return { failed: true, kind, observedAt };
 }
 
 export async function getBuildProgressVisibility(buildId: string): Promise<BuildProgressVisibility | null> {
@@ -199,6 +257,9 @@ export async function getBuildProgressVisibility(buildId: string): Promise<Build
     build: { id: build.id, buildId: build.buildId },
   });
 
+  // chatMessages is ordered createdAt desc, so [0] is the newest assistant turn.
+  const newestAssistant = chatMessages[0] ?? null;
+
   return buildProgressProjectionFromParts({
     buildId,
     dbTasks: normalizeTaskResults(build.taskResults),
@@ -207,6 +268,9 @@ export async function getBuildProgressVisibility(buildId: string): Promise<Build
     dispatchHistory: await getDispatchHistoryForBuild(buildId),
     verification: await getScopedVerificationForBuild(buildId),
     lastActivityAt: build.activities[0]?.createdAt.toISOString() ?? build.updatedAt.toISOString(),
+    lastAssistant: newestAssistant
+      ? { content: newestAssistant.content, createdAt: newestAssistant.createdAt }
+      : null,
     phaseRuns,
     evidenceTimeline,
   });

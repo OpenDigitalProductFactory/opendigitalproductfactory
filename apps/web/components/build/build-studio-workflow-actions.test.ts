@@ -1260,3 +1260,76 @@ describe("deriveBuildStudioWorkflowAction — escalate-to-human (BI-A2F3FA9D)", 
     expect(action.message).toContain("waiting for you in Delivery");
   });
 });
+
+describe("deriveBuildStudioWorkflowAction — failed inference (BI-F0005EB0)", () => {
+  function progressWithInferenceFailure(
+    failure: BuildProgressVisibility["inferenceFailure"],
+  ): BuildProgressVisibility {
+    return {
+      buildId: "FB-INF",
+      generatedAt: "2026-07-05T12:00:00.000Z",
+      statusHeading: { operatorAction: "Monitor build progress", failureAxis: null },
+      progress: { primary: { source: "db-task-results", completed: 0, total: 0, observedAt: null }, conflicts: [] },
+      tasks: {
+        completedTasks: 0,
+        totalTasks: 0,
+        source: { source: "db-task-results", completed: 0, total: 0, observedAt: null },
+        tasks: [],
+      },
+      staleChatSnapshots: [],
+      sandbox: null,
+      dispatchHistory: [],
+      verification: null,
+      quietAgent: { quiet: false, minutesQuiet: 0, lastObservableSignalAt: null },
+      inferenceFailure: failure,
+      phaseRuns: [],
+    } satisfies BuildProgressVisibility;
+  }
+
+  it("surfaces retry-inference (danger) for a failed ideate inference instead of Waiting on evidence", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      // designDoc null => the advance gate would otherwise fire with a disabledReason.
+      build: makeBuild({ phase: "ideate", draftApprovedAt: new Date("2026-04-25T13:00:00Z"), designDoc: null, designReview: null }),
+      governedBacklogEnabled: true,
+      progressVisibility: progressWithInferenceFailure({ failed: true, kind: "connection", observedAt: "2026-07-05T11:59:00.000Z" }),
+    });
+
+    expect(action.kind).toBe("retry-inference");
+    expect(action.primaryLabel).toBe("Retry the AI call");
+    expect(action.disabledReason).toBeNull();
+    expect(action.title).toMatch(/AI call failed/i);
+    // Never leak the raw provider string into user-facing copy.
+    expect(action.message).not.toMatch(/ECONNREFUSED|ConnectionRefused|API Error:/);
+    expect(deriveBuildStudioOperatorGuidance(action).status.intent).toBe("danger");
+  });
+
+  it("surfaces retry-inference for a failed plan inference", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({ phase: "plan", draftApprovedAt: new Date("2026-04-25T13:00:00Z") }),
+      governedBacklogEnabled: true,
+      progressVisibility: progressWithInferenceFailure({ failed: true, kind: "rate-limit", observedAt: "2026-07-05T11:59:00.000Z" }),
+    });
+
+    expect(action.kind).toBe("retry-inference");
+  });
+
+  it("does NOT surface retry-inference when the failure is stale (failed:false)", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({ phase: "ideate", draftApprovedAt: new Date("2026-04-25T13:00:00Z") }),
+      governedBacklogEnabled: true,
+      progressVisibility: progressWithInferenceFailure({ failed: false, kind: "connection", observedAt: "2026-07-05T11:59:00.000Z" }),
+    });
+
+    expect(action.kind).not.toBe("retry-inference");
+  });
+
+  it("does NOT surface retry-inference in build phase (scoped to ideate/plan)", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({ phase: "build", draftApprovedAt: new Date("2026-04-25T13:00:00Z") }),
+      governedBacklogEnabled: true,
+      progressVisibility: progressWithInferenceFailure({ failed: true, kind: "connection", observedAt: "2026-07-05T11:59:00.000Z" }),
+    });
+
+    expect(action.kind).not.toBe("retry-inference");
+  });
+});
