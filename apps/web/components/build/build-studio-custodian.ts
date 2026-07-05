@@ -115,6 +115,42 @@ export function deriveBuildStudioCustodianPrompt({
     return null;
   }
 
+  // BI-F0005EB0 — a failed AI inference turn. Checked FIRST (before the working
+  // short-circuit and the blockedByEvidence branch) so an inference failure
+  // surfaces as an honest danger "The AI call failed — Retry" state instead of
+  // the calm "Waiting on evidence" it used to fall through to. The signal comes
+  // from progress-visibility (the newest assistant turn is a provider error /
+  // the canonical sanitized failure message); a newer successful turn clears it.
+  if (progressVisibility?.failedInference) {
+    const dismissKey = buildDismissKey(build, action, progressVisibility);
+    return {
+      dismissKey,
+      title: "The AI call didn't go through.",
+      whyNow:
+        "The last turn came back as a provider error, not a real answer — so this build looks stuck when the AI request actually failed.",
+      recommendedAction:
+        "Retry the AI now. If it keeps failing, your AI provider is briefly unavailable — nothing you described is lost.",
+      primaryLabel: "Retry",
+      primaryAction: "coworker",
+      coworkerPrompt: appendCustodianInstruction(
+        action,
+        "Act as the Build Studio custodian. The previous AI turn failed to reach the provider. Retry the request now and continue defining or advancing this build. If it fails again, say so plainly in one sentence and stop — do not loop.",
+      ),
+      statusLabel: "AI call failed",
+      intent: "danger",
+      details: [
+        "The AI provider didn't respond to the last request — usually a brief outage, not a problem with your build.",
+        "Retry sends the request again; nothing you described is lost.",
+      ],
+      proactivityPlan: resolveProactivityPlan({
+        activityFamily: "build-studio-custodian",
+        agentId: build.claimedByAgentId,
+        routeContext: "/build",
+        statusSignal: "blocked",
+      }),
+    };
+  }
+
   const guidance = deriveBuildStudioOperatorGuidance(action, build);
   if (guidance.status.kind === "working" && progressVisibility?.quietAgent.quiet !== true) {
     return null;

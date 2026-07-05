@@ -197,3 +197,32 @@ describe("extractChatProgressSnapshots", () => {
     ]);
   });
 });
+
+// BI-F0005EB0 — the projection carries the failed-inference signal through so
+// the custodian can surface an honest danger state. Detection itself is unit-
+// tested in inference-failure.test.ts; here we prove the wiring + default.
+describe("buildProgressProjectionFromParts — failedInference (BI-F0005EB0)", () => {
+  const base = {
+    buildId: "FB-INF",
+    now: new Date("2026-07-05T12:00:00.000Z"),
+    dbTasks: normalizeTaskResults({ completedTasks: 0, totalTasks: 0, timestamp: "2026-07-05T11:59:00.000Z" }),
+    chatSnapshots: [],
+    sandbox: null,
+    dispatchHistory: [],
+    verification: buildScopedVerificationFromParts({
+      verification: normalizeVerificationOutput(null),
+      changedFiles: [],
+      dispatchHistory: [],
+    }),
+    lastActivityAt: "2026-07-05T11:59:00.000Z",
+  };
+
+  it("defaults failedInference to null when not supplied", () => {
+    expect(buildProgressProjectionFromParts(base).failedInference).toBeNull();
+  });
+
+  it("passes a supplied failedInference signal through unchanged", () => {
+    const signal = { errorExcerpt: "API Error: ConnectionRefused", observedAt: "2026-07-05T11:58:00.000Z" };
+    expect(buildProgressProjectionFromParts({ ...base, failedInference: signal }).failedInference).toEqual(signal);
+  });
+});

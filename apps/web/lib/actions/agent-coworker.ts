@@ -28,6 +28,7 @@ import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getActionsForRoute } from "@/lib/agent-action-registry";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
 import { getFeatureBuildForContext } from "@/lib/feature-build-data";
+import { sanitizeAssistantContent, CANONICAL_INFERENCE_FAILURE_MESSAGE } from "@/lib/build/inference-failure";
 // file-upload is imported dynamically at call site to avoid NFT whole-project tracing
 import { getRouteDataContext } from "@/lib/route-context";
 import { observeConversation } from "@/lib/process-observer-hook";
@@ -2032,10 +2033,15 @@ export async function sendMessage(input: {
                 responseContent = `Research completed but the design doc needs revision. ${saveResult.message ?? "Please provide more context about the feature."}`;
               }
             }
+          } else if (ideateResult.error) {
+            // BI-F0005EB0 — do NOT interpolate the raw provider/CLI error into a
+            // user-visible message. Log the detail; show one honest, retry-oriented
+            // line. The persist-boundary sanitizer is the catch-all, but making this
+            // branch explicit keeps the raw error out of responseContent entirely.
+            console.warn(`[inference-failure] Ideate research failed: ${JSON.stringify(String(ideateResult.error).slice(0, 240))}`);
+            responseContent = CANONICAL_INFERENCE_FAILURE_MESSAGE;
           } else {
-            responseContent = ideateResult.error
-              ? `Research encountered an issue: ${ideateResult.error}`
-              : "Research completed but I couldn't generate a structured design. Let me try a different approach.";
+            responseContent = "Research completed but I couldn't generate a structured design. Let me try a different approach.";
           }
 
           // Clear the research request
@@ -2180,6 +2186,22 @@ export async function sendMessage(input: {
       ? `Provider ${responseProviderId}/${responseModelId} returned an empty response.`
       : "No AI provider was matched by the routing pipeline.";
     responseContent = `**Unable to process this request.** ${providerHint} Check AI Workforce settings (Platform > AI) to verify provider configuration.`;
+  }
+
+  // BI-F0005EB0 — never persist a raw provider error as user-visible assistant
+  // content. This is the catch-all boundary: any path that left an inference-
+  // failure string in responseContent (the ideate-research branch, or a provider
+  // that returned the error AS its completion text with no exception to catch) is
+  // rewritten to one honest, retry-oriented message. The raw error survives only
+  // in the server log, and the custodian surfaces the Retry affordance.
+  {
+    const sanitizedInference = sanitizeAssistantContent(responseContent);
+    if (sanitizedInference.wasFailure) {
+      console.warn(
+        `[inference-failure] Rewrote a leaked provider error before persist: ${JSON.stringify(sanitizedInference.errorExcerpt)}`,
+      );
+      responseContent = sanitizedInference.content;
+    }
   }
 
   // Persist agent response

@@ -11,6 +11,7 @@ import { getScopedVerificationForBuild, type ScopedVerificationView } from "./sc
 import { normalizeTaskResults, type NormalizedTaskResults } from "./task-results";
 import { loadBuildEvidenceTimelineEvents } from "./evidence-timeline";
 import type { UnifiedEvidenceTimelineEvent } from "./evidence-timeline-types";
+import { detectFailedInferenceTurn, type FailedInferenceTurn } from "./inference-failure";
 
 export type ChatProgressSnapshot = {
   completed: number | null;
@@ -58,6 +59,16 @@ export type BuildProgressVisibility = {
     minutesQuiet: number;
     lastObservableSignalAt: string | null;
   };
+  /**
+   * BI-F0005EB0 — set when the MOST RECENT assistant turn on the build's thread
+   * is a failed inference (a raw provider error that leaked, or the canonical
+   * sanitized failure message). The custodian reads this to surface an honest
+   * danger "The AI call failed — Retry" state instead of a calm "Waiting on
+   * evidence". Null when the last turn succeeded (or was recovered by a newer one).
+   * Optional (like evidenceTimeline) so literal callers/tests need not supply it;
+   * buildProgressProjectionFromParts always sets it.
+   */
+  failedInference?: FailedInferenceTurn | null;
   /** Phase-level cost rollup; empty array when BuildPhaseRun rows don't exist yet */
   phaseRuns: PhaseRunSummary[];
   /**
@@ -79,6 +90,9 @@ export function buildProgressProjectionFromParts(args: {
   lastActivityAt: string | null;
   phaseRuns?: PhaseRunSummary[];
   evidenceTimeline?: UnifiedEvidenceTimelineEvent[];
+  /** BI-F0005EB0 — failed-inference signal for the last assistant turn. Optional
+   *  so literal callers (tests) may omit it; getBuildProgressVisibility computes it. */
+  failedInference?: FailedInferenceTurn | null;
 }): BuildProgressVisibility {
   const now = args.now ?? new Date();
   const conflicts = getProgressConflicts(args.dbTasks.source, args.chatSnapshots);
@@ -127,6 +141,7 @@ export function buildProgressProjectionFromParts(args: {
       minutesQuiet,
       lastObservableSignalAt,
     },
+    failedInference: args.failedInference ?? null,
     phaseRuns: args.phaseRuns ?? [],
     evidenceTimeline: args.evidenceTimeline ?? [],
   };
@@ -203,6 +218,9 @@ export async function getBuildProgressVisibility(buildId: string): Promise<Build
     buildId,
     dbTasks: normalizeTaskResults(build.taskResults),
     chatSnapshots: extractChatProgressSnapshots(chatMessages),
+    // chatMessages are role="assistant", newest-first — exactly what the
+    // detector expects (BI-F0005EB0).
+    failedInference: detectFailedInferenceTurn(chatMessages),
     sandbox: await getSandboxStateForBuild(buildId),
     dispatchHistory: await getDispatchHistoryForBuild(buildId),
     verification: await getScopedVerificationForBuild(buildId),

@@ -286,3 +286,52 @@ describe("deriveBuildStudioCustodianPrompt — terminal abandoned (BI-A2F3FA9D)"
     expect(prompt).toBeNull();
   });
 });
+
+// BI-F0005EB0 — a failed AI inference turn must surface as an honest danger
+// "AI call failed / Retry" state, taking precedence over the calm
+// "Waiting on evidence" it used to fall through to.
+describe("deriveBuildStudioCustodianPrompt — failed inference (BI-F0005EB0)", () => {
+  const signal = { errorExcerpt: "API Error: Unable to connect to API (ConnectionRefused)", observedAt: "2026-06-29T12:12:00.000Z" };
+
+  it("surfaces a danger Retry prompt when the last turn was a failed inference", () => {
+    const build = makeBuild({ phase: "ideate", brief: null, draftApprovedAt: new Date("2026-06-29T12:01:00Z") });
+    const action = deriveBuildStudioWorkflowAction({ build, governedBacklogEnabled: true });
+    const prompt = deriveBuildStudioCustodianPrompt({
+      build,
+      action,
+      progressVisibility: progress({ failedInference: signal }),
+    });
+
+    expect(prompt?.intent).toBe("danger");
+    expect(prompt?.statusLabel).toBe("AI call failed");
+    expect(prompt?.primaryLabel).toBe("Retry");
+    expect(prompt?.title).toContain("didn't go through");
+    // It must NOT be the calm evidence/getting-started copy.
+    expect(prompt?.statusLabel).not.toBe("Waiting on evidence");
+    expect(prompt?.statusLabel).not.toBe("Getting started");
+  });
+
+  it("does not leak the raw provider error into the user-facing details", () => {
+    const build = makeBuild({ phase: "ideate", brief: null });
+    const action = deriveBuildStudioWorkflowAction({ build, governedBacklogEnabled: true });
+    const prompt = deriveBuildStudioCustodianPrompt({
+      build,
+      action,
+      progressVisibility: progress({ failedInference: signal }),
+    });
+    const shown = [prompt?.title, prompt?.whyNow, prompt?.recommendedAction, ...(prompt?.details ?? [])].join(" ");
+    expect(shown).not.toContain("ConnectionRefused");
+    expect(shown).not.toContain("API Error");
+  });
+
+  it("clears (no failed-inference prompt) once a newer turn recovered it", () => {
+    const build = makeBuild({ phase: "ideate", brief: null });
+    const action = deriveBuildStudioWorkflowAction({ build, governedBacklogEnabled: true });
+    const prompt = deriveBuildStudioCustodianPrompt({
+      build,
+      action,
+      progressVisibility: progress({ failedInference: null }),
+    });
+    expect(prompt?.statusLabel).not.toBe("AI call failed");
+  });
+});
