@@ -1,6 +1,7 @@
 import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
-import { DISCOVERY_TRIAGE_AGENT_ID, attributeBacklogPortfolio, prisma } from "@dpf/db";
+import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
+import { handleUpdateBacklogItem } from "./mcp-handlers/update-backlog-item";
 // Static import: executeTool is a hot path; dynamic import per call would hurt throughput.
 import { evaluateExecution } from "@/lib/kernel/runtime-gate";
 import { loadEnforceablePrinciples } from "@/lib/kernel/load-enforceable-principles";
@@ -5761,97 +5762,8 @@ export async function executeTool(
       };
     }
 
-    case "update_backlog_item": {
-      const existing = await prisma.backlogItem.findUnique({ where: { itemId: String(params["itemId"]) } });
-      if (!existing) return { success: false, error: "Item not found", message: `Item ${String(params["itemId"])} not found` };
-      const data: Record<string, unknown> = {};
-      if (typeof params["title"] === "string") data["title"] = params["title"];
-      if (typeof params["status"] === "string") {
-        // Block direct status mutations that should go through dedicated tools.
-        // - Setting status='triaging' on an already-triaged item: use the retriage flow (BI-7D4AF644 follow-up).
-        // - Leaving triaging without going through triage_backlog_item: would skip the rationale + audit.
-        if (params["status"] === "triaging" && existing.status !== "triaging") {
-          return {
-            success: false,
-            error: "use_update_backlog_item_status_for_retriage",
-            message: "To move a triaged item back to triaging, use update_backlog_item_status (it requires a reason and audits the retriage). update_backlog_item is for editing fields, not for status transitions.",
-          };
-        }
-        if (existing.status === "triaging" && params["status"] !== "triaging") {
-          return {
-            success: false,
-            error: "Use triage_backlog_item to leave triaging status",
-            message: "Items in triaging must be moved out via triage_backlog_item so the decision is recorded with rationale.",
-          };
-        }
-        data["status"] = params["status"];
-        // Track completion date
-        const isTerminal = params["status"] === "done" || params["status"] === "deferred";
-        const wasTerminal = existing.status === "done" || existing.status === "deferred";
-        if (isTerminal && !wasTerminal) {
-          data["completedAt"] = new Date();
-        } else if (!isTerminal && wasTerminal) {
-          data["completedAt"] = null;
-        }
-      }
-      if (typeof params["priority"] === "number") data["priority"] = params["priority"];
-      if (typeof params["body"] === "string") data["body"] = params["body"];
-      if (typeof params["workType"] === "string") data["workType"] = params["workType"];
-      if (typeof params["source"] === "string") data["source"] = params["source"];
-      if (typeof params["proposedOutcome"] === "string") data["proposedOutcome"] = params["proposedOutcome"];
-
-      // Structural portfolio association (closes the DOC-1996319D "Open Gap":
-      // governed write paths for BacklogItem.digitalProductId / taxonomyNodeId /
-      // portfolioId). Accept the stable human ids and resolve to the FK ids.
-      let explicitPortfolio = false;
-      let touchedLinks = false;
-      if (typeof params["digitalProductId"] === "string") {
-        const prod = await prisma.digitalProduct.findUnique({
-          where: { productId: params["digitalProductId"] },
-          select: { id: true },
-        });
-        if (!prod) return { success: false, error: "digital_product_not_found", message: `DigitalProduct ${params["digitalProductId"]} not found` };
-        data["digitalProductId"] = prod.id;
-        touchedLinks = true;
-      }
-      if (typeof params["taxonomyNodeId"] === "string") {
-        const node = await prisma.taxonomyNode.findUnique({
-          where: { nodeId: params["taxonomyNodeId"] },
-          select: { id: true },
-        });
-        if (!node) return { success: false, error: "taxonomy_node_not_found", message: `TaxonomyNode ${params["taxonomyNodeId"]} not found` };
-        data["taxonomyNodeId"] = node.id;
-        touchedLinks = true;
-      }
-      if (typeof params["portfolioSlug"] === "string") {
-        const portfolio = await prisma.portfolio.findUnique({
-          where: { slug: params["portfolioSlug"] },
-          select: { id: true },
-        });
-        if (!portfolio) return { success: false, error: "portfolio_not_found", message: `Portfolio ${params["portfolioSlug"]} not found` };
-        data["portfolioId"] = portfolio.id;
-        explicitPortfolio = true;
-      }
-
-      await prisma.backlogItem.update({ where: { itemId: String(params["itemId"]) }, data });
-
-      // When links changed and the portfolio wasn't explicitly pinned, re-derive
-      // the denormalized portfolioId cache from the links (product → taxonomy →
-      // epic), reusing the canonical resolver.
-      let resolvedPortfolioId: string | null = null;
-      if (touchedLinks && !explicitPortfolio) {
-        resolvedPortfolioId = await attributeBacklogPortfolio(existing.id);
-      } else if (explicitPortfolio) {
-        resolvedPortfolioId = String(data["portfolioId"]);
-      }
-
-      return {
-        success: true,
-        entityId: String(params["itemId"]),
-        message: `Updated ${String(params["itemId"])}`,
-        ...(resolvedPortfolioId !== null ? { portfolioId: resolvedPortfolioId } : {}),
-      };
-    }
+    case "update_backlog_item":
+      return handleUpdateBacklogItem(params);
 
     case "create_digital_product": {
       const product = await prisma.digitalProduct.create({
