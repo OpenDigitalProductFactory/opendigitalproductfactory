@@ -1,7 +1,12 @@
 import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
+<<<<<<< HEAD
 import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
 import { handleUpdateBacklogItem } from "./mcp-handlers/update-backlog-item";
+=======
+import { DISCOVERY_TRIAGE_AGENT_ID, attributeBacklogPortfolio, prisma } from "@dpf/db";
+import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
+>>>>>>> a6f402426 (feat(mdm): customer merge lifecycle — orchestrator, adapters, tombstones, steward surfaces (EP-4A12A7CB WG-4))
 // Static import: executeTool is a hot path; dynamic import per call would hurt throughput.
 import { evaluateExecution } from "@/lib/kernel/runtime-gate";
 import { loadEnforceablePrinciples } from "@/lib/kernel/load-enforceable-principles";
@@ -1132,6 +1137,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "operate_customer",
     sideEffect: true,
     coworkerArtifact: true,
+  },
+  {
+    name: "merge_customer_accounts",
+    description: "Merge a duplicate customer account into the one to keep. Use when two accounts are confirmed to be the same real company (e.g. created under slightly different spellings). All related records (contacts, sites, opportunities, quotes, invoices, tickets, etc.) move to the surviving account; the duplicate is kept as a superseded tombstone pointing at the survivor — nothing is deleted. Not reversible from this tool, so confirm with the user which account survives before calling. Pass the account to KEEP as survivorAccountId and the duplicate as loserAccountId (CustomerAccount.id values from list_customer_accounts or a duplicates_found response).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        survivorAccountId: { type: "string", description: "CustomerAccount.id of the account to KEEP." },
+        loserAccountId: { type: "string", description: "CustomerAccount.id of the duplicate to merge away (tombstoned, not deleted)." },
+      },
+      required: ["survivorAccountId", "loserAccountId"],
+    },
+    requiredCapability: "operate_customer",
+    sideEffect: true,
   },
   {
     name: "create_opportunity",
@@ -14811,7 +14830,8 @@ export async function executeTool(
       const status = typeof params["status"] === "string" ? params["status"].trim() : undefined;
       const take = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 100) : 25;
       const accounts = await prisma.customerAccount.findMany({
-        where: status ? { status } : undefined,
+        // Default reads exclude merge tombstones (superseded rows).
+        where: status ? { status } : EXCLUDE_TOMBSTONED,
         orderBy: { createdAt: "desc" },
         take,
         select: {
@@ -14943,6 +14963,36 @@ export async function executeTool(
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return { success: false, error: "create_failed", message: `create_customer_account failed: ${msg}` };
+      }
+    }
+
+    case "merge_customer_accounts": {
+      const survivorId = typeof params["survivorAccountId"] === "string" ? params["survivorAccountId"].trim() : "";
+      const loserId = typeof params["loserAccountId"] === "string" ? params["loserAccountId"].trim() : "";
+      if (!survivorId || !loserId) {
+        return { success: false, error: "missing_fields", message: "survivorAccountId and loserAccountId are both required (CustomerAccount.id values)." };
+      }
+      const { mergeRecords, MergeValidationFailure } = await import("@/lib/mdm/merge");
+      try {
+        const result = await mergeRecords("customer-account", loserId, survivorId);
+        await prisma.activity.create({
+          data: {
+            activityId: `ACT-${crypto.randomUUID()}`,
+            type: "account_merged",
+            subject: `Account merged into survivor ${survivorId}`,
+            body: JSON.stringify(result),
+            accountId: survivorId,
+            createdById: null,
+          },
+        });
+        const moved = Object.entries(result.repointed).map(([step, count]) => `${step}: ${count}`).join(", ") || "no related rows";
+        return { success: true, message: `Merged duplicate account ${loserId} into ${survivorId}. Moved ${moved}. The duplicate is kept as a superseded record pointing at the survivor.`, data: { survivorId, loserId, repointed: result.repointed, nestedSiteMerges: result.nestedSiteMerges } };
+      } catch (err) {
+        if (err instanceof MergeValidationFailure) {
+          return { success: false, error: "merge_rejected", message: `Merge rejected: ${err.reason}. Check both ids exist, differ, and neither is already superseded.` };
+        }
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: "merge_failed", message: `merge_customer_accounts failed: ${msg}` };
       }
     }
 

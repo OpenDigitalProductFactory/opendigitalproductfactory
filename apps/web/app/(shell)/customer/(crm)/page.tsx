@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/customer/page.tsx
 import Link from "next/link";
 import { prisma } from "@dpf/db";
+import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
 import { NewCustomerButton } from "@/components/customer/NewCustomerButton";
 import { RevenueCockpit } from "@/components/customer/RevenueCockpit";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
@@ -27,6 +28,7 @@ export default async function CustomerPage({
     orgSettings,
   ] = await Promise.all([
     prisma.customerAccount.findMany({
+      where: EXCLUDE_TOMBSTONED,
       orderBy: { name: "asc" },
       select: {
         id: true,

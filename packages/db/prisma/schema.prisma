@@ -2562,6 +2562,11 @@ model CustomerAccount {
   domainNormalized       String                      @default("")
   status                 String                      @default("prospect")
   // prospect | qualified | onboarding | active | at_risk | suspended | closed
+  //   | superseded (merged away — mergedIntoId set) | archived
+  // Canonical union: packages/db/src/customer-lifecycle.ts
+  // Merge tombstone (EP-4A12A7CB WG-4): set when this row was merged into a
+  // survivor; superseded rows are excluded from default reads.
+  mergedIntoId           String?
   website                String?
   industry               String?
   employeeCount          Int?
@@ -2584,6 +2589,8 @@ model CustomerAccount {
   discoveryConnections   DiscoveryConnection[]
   parentAccount          CustomerAccount?            @relation("AccountHierarchy", fields: [parentAccountId], references: [id])
   childAccounts          CustomerAccount[]           @relation("AccountHierarchy")
+  mergedInto             CustomerAccount?            @relation("AccountMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom             CustomerAccount[]           @relation("AccountMerge")
   invoices               Invoice[]
   engagements            Engagement[]
   opportunities          Opportunity[]
@@ -2603,6 +2610,7 @@ model CustomerAccount {
   @@index([parentAccountId])
   @@index([nameNormalized])
   @@index([domainNormalized])
+  @@index([mergedIntoId])
 }
 
 model CustomerSite {
@@ -2615,7 +2623,10 @@ model CustomerSite {
   // enforces per-account uniqueness for non-superseded rows.
   nameNormalized         String                      @default("")
   siteType               String                      @default("office")
+  // active | planned | inactive | superseded (merged away) | archived
+  // Canonical union: packages/db/src/customer-lifecycle.ts
   status                 String                      @default("active")
+  mergedIntoId           String?
   primaryAddressId       String?
   timezone               String?
   accessInstructions     String?
@@ -2625,6 +2636,8 @@ model CustomerSite {
   updatedAt              DateTime                    @updatedAt
   account                CustomerAccount             @relation(fields: [accountId], references: [id], onDelete: Cascade)
   primaryAddress         Address?                    @relation(fields: [primaryAddressId], references: [id])
+  mergedInto             CustomerSite?               @relation("SiteMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom             CustomerSite[]              @relation("SiteMerge")
   configurationItems     CustomerConfigurationItem[]
   nodes                  CustomerSiteNode[]
   edgeNodes              EdgeNode[]
@@ -2640,6 +2653,7 @@ model CustomerSite {
   @@index([primaryAddressId])
   @@index([status])
   @@index([siteType])
+  @@index([mergedIntoId])
 }
 
 // ── EP-MSP-FEDERATION · A3 — customer service desk (BI-99FEA7FA) ──────────────
