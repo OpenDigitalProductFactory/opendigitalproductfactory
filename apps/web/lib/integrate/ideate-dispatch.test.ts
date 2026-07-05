@@ -104,4 +104,21 @@ describe("buildResearchPrompt", () => {
     const prompt = buildResearchPrompt(baseParams);
     expect(prompt).not.toContain("SCOUT FINDINGS");
   });
+
+  // Brief-drift guards (BI-4E84841D): the design researcher is the source of
+  // the auto-populated Feature Brief, so its prompt must (a) carry the
+  // user's explicit requirements into acceptanceCriteria untouched and
+  // (b) know that internal platform/meta-features have an internal audience.
+  it("instructs the researcher to preserve explicit user requirements verbatim in acceptance criteria", () => {
+    const prompt = buildResearchPrompt(baseParams);
+    expect(prompt).toContain("PRESERVE EXPLICIT USER REQUIREMENTS");
+    expect(prompt).toMatch(/never substitute your own design choice/i);
+  });
+
+  it("asks for targetRoles with internal-meta-feature audience guidance", () => {
+    const prompt = buildResearchPrompt(baseParams);
+    expect(prompt).toContain('"targetRoles"');
+    expect(prompt).toContain("INTERNAL platform/meta-feature");
+    expect(prompt).toMatch(/never 'customer'/i);
+  });
 });

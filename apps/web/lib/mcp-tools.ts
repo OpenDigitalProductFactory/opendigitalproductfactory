@@ -1659,11 +1659,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       properties: {
         title: { type: "string", description: "Feature title" },
         description: { type: "string", description: "Plain-language feature description" },
-        portfolioContext: { type: "string", description: "Portfolio slug that owns this feature" },
-        targetRoles: { type: "array", items: { type: "string" }, description: "Roles that will use this feature" },
+        portfolioContext: { type: "string", description: "Portfolio slug that owns this feature. For internal platform/meta work (a change to Build Studio, the portal, or platform tooling itself) pass an empty string rather than forcing a customer-facing portfolio." },
+        targetRoles: { type: "array", items: { type: "string" }, description: "Roles that will use this feature. For internal platform/meta work use internal operator roles (e.g. platform operator, admin) — never customer." },
         inputs: { type: "array", items: { type: "string" }, description: "User inputs the feature accepts" },
         dataNeeds: { type: "string", description: "What data the feature stores" },
-        acceptanceCriteria: { type: "array", items: { type: "string" }, description: "What done looks like" },
+        acceptanceCriteria: { type: "array", items: { type: "string" }, description: "What done looks like. Every requirement the user stated explicitly (exact formats, examples, behaviors) MUST appear as its own criterion, preserved faithfully — never substitute a different format or behavior for one the user specified." },
         fixContext: {
           type: "object",
           description: "For fix builds (kind=fix): the defect diagnosis. reproSteps, rootCause, and fixApproach are all required before a fix build can advance to plan. Merged into any existing fixContext, so partial updates accumulate.",
@@ -4820,6 +4820,49 @@ function extractBuildIdHint(params: Record<string, unknown>): string | null {
   if (typeof v !== "string") return null;
   const trimmed = v.trim();
   return trimmed.startsWith("FB-") ? trimmed : null;
+}
+
+/**
+ * Derive the auto-populated Feature Brief from an ideate designDoc.
+ *
+ * NEVER fabricates audience or ownership. The previous inline version
+ * hardcoded portfolioContext="manufacturing_and_delivery" and
+ * targetRoles=["admin","customer"], which surfaced verbatim in briefs for
+ * internal platform meta-features (BI-4E84841D) — a wrong-but-plausible
+ * default is worse than an honest blank. Empty values degrade gracefully
+ * downstream: feature attribution skips portfolio scoping when
+ * portfolioContext is empty, and the business brief raises "Who is affected
+ * by this business change?" as an open question when targetRoles is empty.
+ *
+ * Exported for unit tests.
+ */
+export function deriveAutoBriefFromDesignDoc(
+  doc: Record<string, unknown> | null,
+  buildTitle: string,
+): {
+  title: string;
+  description: string;
+  portfolioContext: string;
+  targetRoles: string[];
+  inputs: string[];
+  dataNeeds: string;
+  acceptanceCriteria: string[];
+} {
+  return {
+    title: buildTitle,
+    description: typeof doc?.problemStatement === "string" && doc.problemStatement.trim()
+      ? doc.problemStatement
+      : buildTitle,
+    portfolioContext: typeof doc?.portfolioContext === "string" ? doc.portfolioContext.trim() : "",
+    targetRoles: Array.isArray(doc?.targetRoles)
+      ? (doc.targetRoles as unknown[]).map(String).filter((r) => r.trim().length > 0)
+      : [],
+    inputs: [],
+    dataNeeds: typeof doc?.proposedApproach === "string" ? doc.proposedApproach : "",
+    acceptanceCriteria: Array.isArray(doc?.acceptanceCriteria)
+      ? (doc.acceptanceCriteria as unknown[]).map(String).filter((c) => c.trim().length > 0)
+      : [],
+  };
 }
 
 /**
@@ -8082,21 +8125,13 @@ export async function executeTool(
 
       // Auto-populate brief from designDoc when saving during ideate phase.
       // The generate_code tool requires brief to build codegen prompts.
+      // Derivation is honest-by-default (no fabricated portfolio/roles/ACs) —
+      // see deriveAutoBriefFromDesignDoc.
       if (field === "designDoc") {
         const currentBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { brief: true, title: true, phase: true } });
         if (currentBuild && !currentBuild.brief) {
           const doc = normalizedValue as Record<string, unknown> | null;
-          updateData.brief = {
-            title: currentBuild.title,
-            description: (doc?.problemStatement as string) ?? currentBuild.title,
-            portfolioContext: "manufacturing_and_delivery",
-            targetRoles: ["admin", "customer"],
-            inputs: [],
-            dataNeeds: (doc?.proposedApproach as string) ?? "",
-            acceptanceCriteria: Array.isArray(doc?.acceptanceCriteria)
-              ? (doc.acceptanceCriteria as string[])
-              : ["Feature works as described", "Meets accessibility standards"],
-          };
+          updateData.brief = deriveAutoBriefFromDesignDoc(doc, currentBuild.title);
         }
       }
 

@@ -211,7 +211,9 @@ YOUR TASK:
 
   "reusePlan": "What existing code, patterns, and utilities from the codebase will be reused. Be specific — name files and functions. If this feature genuinely cannot reuse existing code (truly novel surface), write exactly: 'Not applicable — <one-sentence reason>'. Only use this when you have searched and confirmed nothing reusable exists.",
 
-  "acceptanceCriteria": ["criterion 1 — written as a testable statement", "criterion 2", "..."],
+  "acceptanceCriteria": ["criterion 1 — written as a testable statement. EVERY explicit requirement in the FEATURE / DESCRIPTION / USER CONTEXT above must appear as its own criterion, preserved faithfully: if the user specified an exact format, example, or behavior (e.g. a RELATIVE timestamp like '3m ago'), the criterion states that exact requirement — never substitute your own design choice (e.g. an absolute 'Updated Jun 15' format) for something the user explicitly asked for.", "criterion 2", "..."],
+
+  "targetRoles": ["who will use this feature — e.g. operations lead, customer. IMPORTANT: if this is an INTERNAL platform/meta-feature (a change to Build Studio, the portal, admin/ops tooling, or the platform itself rather than the org's product for its customers), use internal operator roles like 'platform operator' or 'admin' — never 'customer'. The org's business context does not apply to internal tooling."],
 
   "accessibility": "REQUIRED for any feature with UI changes. Explicit, testable accessibility requirements: semantic HTML structure, keyboard-operable interactions (tab order, focus states, Enter/Escape handlers), ARIA labels and live regions for non-text affordances, color-is-not-the-sole-conveyor-of-meaning, visible focus indicators. If the feature has NO user-facing UI at all (pure backend / API-only / cron / utility), write exactly: 'Not applicable — <one-sentence reason, e.g. backend-only, no UI surface>'. The review rejects UI features that omit accessibility; this field is how you demonstrate you considered it.",
 
@@ -226,6 +228,7 @@ YOUR TASK:
 RULES:
 - Search thoroughly before writing. Your audit must reference real files.
 - existingFunctionalityAudit MUST never be empty or null. If you find nothing relevant, write what you searched for.
+- PRESERVE EXPLICIT USER REQUIREMENTS: anything the user explicitly specified (formats, examples, exact behaviors) is a hard constraint. Carry it verbatim into acceptanceCriteria and the proposedApproach. Never quietly replace a user-specified choice with your own.
 - If reusability scope is "parameterizable", the proposedApproach MUST describe how domain-specific values are stored as configuration, not hardcoded.
 - "Not applicable" convention: you MUST still evaluate every section. For sections that genuinely do not apply to this feature after evaluation (e.g. a UI-only fix has no data model change, a standalone utility has no reuse target), write the section value as exactly: "Not applicable — <one-sentence reason>". The reviewer accepts this format. Never use it to skip work — only when evaluation concluded the section legitimately does not apply.
 - Output ONLY the JSON block. No commentary, no explanations.
