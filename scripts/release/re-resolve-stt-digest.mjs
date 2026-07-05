@@ -37,10 +37,15 @@ export const EXIT_DRIFT = 3;
 
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
 
+/** Escape ALL regex metacharacters, not just "/" (CodeQL js/incomplete-sanitization). */
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Extract the pinned digest from the compose text. Returns "" when absent. */
 export function parsePinnedDigest(composeText, repo = STT_IMAGE_REPO) {
   const match = String(composeText ?? "").match(
-    new RegExp(`${repo.replace(/[/]/g, "\\/")}@(sha256:[0-9a-f]{64})`),
+    new RegExp(`${escapeRegExp(repo)}@(sha256:[0-9a-f]{64})`),
   );
   return match ? match[1] : "";
 }
@@ -49,7 +54,7 @@ export function parsePinnedDigest(composeText, repo = STT_IMAGE_REPO) {
 export function parseContractCurrentDigest(testText, repo = STT_IMAGE_REPO) {
   const match = String(testText ?? "").match(
     new RegExp(
-      `CURRENT_STT_DIGEST\\s*=\\s*\\n?\\s*"${repo.replace(/[/]/g, "\\/")}@(sha256:[0-9a-f]{64})"`,
+      `CURRENT_STT_DIGEST\\s*=\\s*\\n?\\s*"${escapeRegExp(repo)}@(sha256:[0-9a-f]{64})"`,
     ),
   );
   return match ? match[1] : "";
@@ -97,11 +102,11 @@ export function applyRepin({ composeText, testText, newDigest, repo = STT_IMAGE_
   const testCurrent = parseContractCurrentDigest(testText, repo);
   if (!testCurrent) throw new Error(`no CURRENT_STT_DIGEST found in contract test text`);
   let nextTest = testText.replace(
-    new RegExp(`(RETIRED_STT_DIGEST\\s*=\\s*\\n?\\s*")${repo.replace(/[/]/g, "\\/")}@sha256:[0-9a-f]{64}(")`),
+    new RegExp(`(RETIRED_STT_DIGEST\\s*=\\s*\\n?\\s*")${escapeRegExp(repo)}@sha256:[0-9a-f]{64}(")`),
     `$1${repo}@${oldDigest}$2`,
   );
   nextTest = nextTest.replace(
-    new RegExp(`(CURRENT_STT_DIGEST\\s*=\\s*\\n?\\s*")${repo.replace(/[/]/g, "\\/")}@sha256:[0-9a-f]{64}(")`),
+    new RegExp(`(CURRENT_STT_DIGEST\\s*=\\s*\\n?\\s*")${escapeRegExp(repo)}@sha256:[0-9a-f]{64}(")`),
     `$1${repo}@${newDigest}$2`,
   );
   if (!nextTest.includes(`${repo}@${newDigest}`) || !nextTest.includes(`${repo}@${oldDigest}`)) {
