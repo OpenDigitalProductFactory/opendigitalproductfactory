@@ -30,6 +30,9 @@ permissions:
 #                      so this is path-filtered.
 
 on:
+  # Manual/bot dispatch (BI-A9EAEE2C): lets the STT Digest Watch post these
+  # gates onto its GITHUB_TOKEN-created re-pin PR branch.
+  workflow_dispatch: {}
   pull_request:
     branches: [main]
     paths:

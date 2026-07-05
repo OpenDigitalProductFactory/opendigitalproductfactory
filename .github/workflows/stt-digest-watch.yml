@@ -1,0 +1,89 @@
+name: STT Digest Watch
+
+# The hwdsl2/whisper-server registry owner re-pushes :latest roughly weekly and
+# prunes the previously pinned index manifest. When that happens, the digest
+# pinned in docker-compose.yml rots and Release Contract Guards + Release Image
+# Manifest Guard go red on main for every open PR until someone manually
+# re-pins (BI-4439CDF1 sat red for two weeks; fixed by hand in PR #2615).
+# This watch closes the loop: on drift it applies the mechanical re-pin
+# (scripts/release/re-resolve-stt-digest.mjs --apply), opens a signed PR,
+# dispatches the required CI workflows onto the branch (PRs created with
+# GITHUB_TOKEN do not trigger checks on their own), and arms auto-merge.
+# BI-A9EAEE2C.
+
+on:
+  schedule:
+    - cron: "17 6 * * *" # daily 06:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # push the re-pin branch
+  pull-requests: write # open the re-pin PR + arm auto-merge
+  actions: write # dispatch ci.yml / release-gates.yml onto the branch
+
+concurrency:
+  group: stt-digest-watch
+  cancel-in-progress: true
+
+jobs:
+  watch:
+    name: Watch STT image digest
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: bot/stt-digest-repin
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Check pinned digest against the live registry
+        id: check
+        run: |
+          set +e
+          node scripts/release/re-resolve-stt-digest.mjs --check
+          code=$?
+          set -e
+          if [ "$code" = "0" ]; then
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+          elif [ "$code" = "3" ]; then
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Docker Hub API unavailable; skipping this run (transient)" >&2
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Skip if a re-pin PR is already open
+        id: existing
+        if: steps.check.outputs.drift == 'true'
+        run: |
+          open_pr=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number // empty' --repo "$GITHUB_REPOSITORY")
+          echo "pr=$open_pr" >> "$GITHUB_OUTPUT"
+      - name: Apply re-pin and open PR
+        if: steps.check.outputs.drift == 'true' && steps.existing.outputs.pr == ''
+        run: |
+          node scripts/release/re-resolve-stt-digest.mjs --apply
+          node --test scripts/release/re-resolve-stt-digest.test.mjs tests/release/installer-release-contract.test.mjs
+          node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only digest-pinned
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add docker-compose.yml tests/release/installer-release-contract.test.mjs
+          git commit -s \
+            -m "fix(release): re-pin hwdsl2/whisper-server to current registry digest" \
+            -m "Automated re-pin by STT Digest Watch (BI-A9EAEE2C): the registry owner re-pushed :latest and the previously pinned index digest is being (or has been) pruned. Re-resolved via the Docker Hub API; contract tests and the digest-pinned manifest guard were run in this workflow before the commit." \
+            -m "Process-Spine-Decision: mechanical dependency re-pin, no doc surface changed."
+          git push -f origin "$BRANCH"
+
+          gh pr create \
+            --title "fix(release): re-pin hwdsl2/whisper-server to current registry digest (auto)" \
+            --body "Automated re-pin by the **STT Digest Watch** (BI-A9EAEE2C). The registry owner re-pushed \`:latest\`, rotating the index digest; without this re-pin the Release Contract Guards + Release Image Manifest Guard go red on every PR (see BI-4439CDF1 / PR #2615 for the manual precedent). Verified inside the workflow before commit: contract tests + \`verify-compose-image-manifests.mjs --only digest-pinned\` against the live registry. Required CI is dispatched onto this branch by the watch (GITHUB_TOKEN-created PRs do not trigger checks); auto-merge is armed. If checks have not appeared, dispatch \`ci.yml\` on this branch or push an empty commit." \
+            --head "$BRANCH" --base main
+
+          # PRs created with GITHUB_TOKEN never trigger pull_request workflows;
+          # dispatch the required check workflows onto the branch explicitly.
+          gh workflow run ci.yml --ref "$BRANCH" || echo "ci.yml dispatch failed; dispatch manually"
+          gh workflow run release-gates.yml --ref "$BRANCH" || echo "release-gates dispatch failed; dispatch manually"
+
+          gh pr merge "$BRANCH" --auto || echo "auto-merge not armed; arm manually after checks pass"
