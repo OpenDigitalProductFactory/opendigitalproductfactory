@@ -21,6 +21,8 @@ The mistake people make with cross-domain data is assuming the value is in *cent
 
 The CSDM origin story is exactly this lesson: the early technical-debt reporting work needed a single source of truth, but trying to aggregate the data centrally was both expensive and politically intractable. **The vision was to create a common model that connects what naturally happens. CSDM was born.**
 
+DPF&#39;s canonical data model is the same move applied to the whole product estate: it names the entities — `[[entities/digital-product]]`s, `[[entities/portfolio]]`s, the teams and tools around them — and the relationships between them, so a coworker can reason across domains without a lake that forces every source into one warehouse first. Connect what naturally happens; don&#39;t centralise for its own sake.
+
 ## Counterexamples
 
 - Analytics workloads where you genuinely do need physically co-located data (e.g., joins at scale across hundreds of millions of rows). Build the lake for those; keep the canonical model for the cross-domain agreement.

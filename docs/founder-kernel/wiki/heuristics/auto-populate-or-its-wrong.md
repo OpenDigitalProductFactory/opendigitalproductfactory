@@ -23,6 +23,8 @@ The fix is structural: every record in the CMDB has an automated discovery sourc
 
 The second-order consequence: if you can&#39;t auto-discover an entity, you probably can&#39;t reason about it operationally either. The lack of a discovery pathway is itself a signal that the entity isn&#39;t operationally tracked.
 
+"CMDB" is the ITSM name for the record; the rule is the same for DPF&#39;s own spine. Any surface a coworker recalls from — the platform&#39;s canonical data model, the code graph, the retrieval layer — is subject to the identical test: if it depends on a human to keep it current, the coworker grounding a decision on it is grounding on decoration.
+
 ## Counterexamples
 
 - Strategic-intent records that genuinely live in someone&#39;s head — "this product is scheduled for retirement next year." Those need manual entry, but they should be flagged as forward-looking rather than current-state.
