@@ -312,6 +312,10 @@ model EmployeeProfile {
   updatedAt                    DateTime                      @updatedAt
   phoneMobile                  String?
   phoneEmergency               String?
+  payType                      String?
+  hourlyRate                   Decimal?
+  annualSalary                 Decimal?
+  standardAnnualHours          Int?
   accountableItems             BacklogItem[]                 @relation("ItemAccountable")
   calendarEvents               CalendarEvent[]
   calendarSyncs                CalendarSync[]
@@ -6886,10 +6890,28 @@ model TimesheetEntry {
   notes             String?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
+  customerAccountId String?
+  billableRateId    String?
+  billable          Boolean         @default(false)
+  billableHours     Float           @default(0)
   timesheetPeriod   TimesheetPeriod @relation(fields: [timesheetPeriodId], references: [id], onDelete: Cascade)
 
   @@unique([timesheetPeriodId, dayOfWeek])
   @@index([timesheetPeriodId])
+  @@index([customerAccountId])
+}
+
+model BillableRate {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  unit           String   @default("hour")
+  billRate       Decimal
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, isActive])
 }
 
 model CalendarEvent {
