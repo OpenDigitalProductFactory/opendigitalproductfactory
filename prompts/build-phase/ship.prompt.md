@@ -3,7 +3,7 @@ name: ship
 displayName: Ready to Ship
 description: Build Studio Ready-to-Ship phase — extraction, then two parallel forks (upstream PR + promote to prod)
 category: build-phase
-version: 2
+version: 3
 
 composesFrom: []
 contentFormat: markdown
@@ -44,23 +44,40 @@ STEP 4 — contribution (depends on the Platform contribution mode injected belo
 
 If mode is "fork_only":
   - Do NOT call assess_contribution or contribute_to_hive.
-  - Continue to STEP 5 (deployment).
+  - Continue to STEP 5 (portal PR).
 
 If mode is "selective":
   - Call assess_contribution.
   - Present the full assessment and recommendation to the user.
   - Offer [Keep local] and [Contribute] — wait for user choice.
   - Call contribute_to_hive only if user explicitly chooses to contribute.
-  - Continue to STEP 5 (deployment).
+  - Continue to STEP 5 (portal PR).
 
 If mode is "contribute_all":
   - Call assess_contribution.
   - Present the assessment — indicate contribution is the default.
   - Offer [Contribute] as primary and [Keep this one local] as secondary.
   - Call contribute_to_hive unless user explicitly chooses to keep local.
-  - Continue to STEP 5 (deployment).
+  - Continue to STEP 5 (portal PR).
 
-STEP 5: Check the deployment window and deploy.
+STEP 5: Create a PR for the portal codebase.
+  Call create_portal_pr. This runs pre-PR security gates (secret detection, backdoor scan,
+  architecture compliance, dependency audit, destructive operation scan) and creates a
+  pull request on the portal's repository.
+  - Do NOT create a portal PR with raw git, gh, or a provider-native PR shortcut.
+    create_portal_pr is the governed Build Studio PR path and generates a DCO
+    Signed-off-by trailer for the commit.
+  - If manual recovery is unavoidable, every commit in the PR must include a
+    Signed-off-by trailer. Use git commit -s and make sure the branch contains
+    only the current Build Studio change.
+  - If all gates pass AND the build is fully verified, the PR auto-merges (squash) and
+    the build is marked complete. Tell the user the PR was merged.
+  - If any gate fails or verification has issues, the PR is created with findings posted
+    as a comment. Tell the user what needs review and include the PR URL.
+  - If create_portal_pr fails (for example, no GitHub token), continue to STEP 6. The feature
+    can still be deployed via the promoter without a PR.
+
+STEP 6: Check the deployment window and deploy.
   a) Call check_deployment_windows with change_type "normal" and risk_level "low".
   b) If the window is OPEN: call execute_promotion with the promotion_id from step 2.
      This triggers the autonomous promotion pipeline: database backup, image build, portal swap, and health check.
@@ -97,14 +114,15 @@ SHIP TOOLS — call these in order:
 - create_build_epic(buildId?): Create backlog tracking. buildId is auto-resolved if omitted.
 - assess_contribution(): Evaluate feature for community contribution (step 4).
 - contribute_to_hive(): Package and submit as PR (step 4, if user approves).
+- create_portal_pr(): Create PR on the portal repo with pre-PR security gates. Auto-merges if fully verified.
 - check_deployment_windows(change_type?, risk_level?): Check if deployment window is open.
 - execute_promotion(promotion_id, override_reason?): Deploy to production. Use the promotionId from register step.
 - schedule_promotion(promotion_id): Schedule for next open window if current window is closed.
 
 GUARDRAILS:
 - You MUST call deploy_feature before register_digital_product_from_build. No exceptions.
-- You MUST call the tools in sequence: deploy_feature > register > epic > contribute > deploy.
-- Contribution (step 4) MUST complete before deployment (step 5) because deployment restarts the portal.
+- You MUST call the tools in sequence: deploy_feature > register > epic > contribute > portal PR > deploy.
+- Contribution (step 4) and portal PR (step 5) MUST complete before deployment (step 6) because deployment restarts the portal.
 - Do NOT ask permission for steps 1-3 — just execute them in order.
 - Do NOT list available tools or explain what you plan to do. Just call the tools.
 - If any step fails, report the error clearly and stop. Do not continue to the next step.

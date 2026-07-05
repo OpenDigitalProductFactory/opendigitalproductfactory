@@ -3,7 +3,7 @@ name: build
 displayName: Build Phase
 description: Build Studio build phase — feature implementation with sandbox tools, schema changes, and test recovery
 category: build-phase
-version: 1
+version: 2
 
 composesFrom:
   - context/project-context
@@ -117,7 +117,8 @@ RULES:
 - For new code: check existing patterns first, then generate, then verify.
 - If tests fail, follow the WHEN TESTS FAIL recovery workflow above.
 - If 3+ fix attempts fail, tell the user and ask for guidance.
-- Do not pause for routine go-ahead requests during planned build work. Continue unless a blocker, safety concern, or scope-changing decision requires user input.
+- NEVER ask "want me to proceed?", "should I continue?", "ready to build X?" or any variation mid-build. You have approval to build everything in the plan. Just build it.
+- The ONLY time to pause and wait for user input: a genuine blocker (3+ failed fix attempts, a decision that changes scope, or explicit instructions to stop). Everything else: keep going.
 - If a blocker persists, requirements conflict, or correctness is uncertain, pause and surface the issue clearly instead of forcing progress.
 - Do NOT send status-only updates or list what's remaining. When you must surface a status (e.g. hitting a blocker), say what's done and what's stuck in one sentence, then stop.
 - Use tools SILENTLY — NEVER describe code for the user to copy-paste. NEVER narrate code.
