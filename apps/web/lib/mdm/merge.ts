@@ -74,6 +74,7 @@ const CUSTOMER_ACCOUNT_ADAPTER: MergeAdapter = {
       alsoSet: (survivorId) => ({ canonicalId: survivorId }),
     },
     { model: "recurringSchedule", field: "accountId" },
+    { model: "subscription", field: "accountId" },
     { model: "discoveryConnection", field: "customerAccountId" },
     { model: "edgeNode", field: "customerAccountId" },
     { model: "bootstrapToken", field: "targetCustomerAccountId" },
