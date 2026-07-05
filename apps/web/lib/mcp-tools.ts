@@ -4823,49 +4823,6 @@ function extractBuildIdHint(params: Record<string, unknown>): string | null {
 }
 
 /**
- * Derive the auto-populated Feature Brief from an ideate designDoc.
- *
- * NEVER fabricates audience or ownership. The previous inline version
- * hardcoded portfolioContext="manufacturing_and_delivery" and
- * targetRoles=["admin","customer"], which surfaced verbatim in briefs for
- * internal platform meta-features (BI-4E84841D) — a wrong-but-plausible
- * default is worse than an honest blank. Empty values degrade gracefully
- * downstream: feature attribution skips portfolio scoping when
- * portfolioContext is empty, and the business brief raises "Who is affected
- * by this business change?" as an open question when targetRoles is empty.
- *
- * Exported for unit tests.
- */
-export function deriveAutoBriefFromDesignDoc(
-  doc: Record<string, unknown> | null,
-  buildTitle: string,
-): {
-  title: string;
-  description: string;
-  portfolioContext: string;
-  targetRoles: string[];
-  inputs: string[];
-  dataNeeds: string;
-  acceptanceCriteria: string[];
-} {
-  return {
-    title: buildTitle,
-    description: typeof doc?.problemStatement === "string" && doc.problemStatement.trim()
-      ? doc.problemStatement
-      : buildTitle,
-    portfolioContext: typeof doc?.portfolioContext === "string" ? doc.portfolioContext.trim() : "",
-    targetRoles: Array.isArray(doc?.targetRoles)
-      ? (doc.targetRoles as unknown[]).map(String).filter((r) => r.trim().length > 0)
-      : [],
-    inputs: [],
-    dataNeeds: typeof doc?.proposedApproach === "string" ? doc.proposedApproach : "",
-    acceptanceCriteria: Array.isArray(doc?.acceptanceCriteria)
-      ? (doc.acceptanceCriteria as unknown[]).map(String).filter((c) => c.trim().length > 0)
-      : [],
-  };
-}
-
-/**
  * Resolve the active FeatureBuild for the current user.
  *
  * When `buildIdHint` is supplied AND it resolves to an existing build the
@@ -8131,6 +8088,7 @@ export async function executeTool(
         const currentBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { brief: true, title: true, phase: true } });
         if (currentBuild && !currentBuild.brief) {
           const doc = normalizedValue as Record<string, unknown> | null;
+          const { deriveAutoBriefFromDesignDoc } = await import("@/lib/build/derive-auto-brief");
           updateData.brief = deriveAutoBriefFromDesignDoc(doc, currentBuild.title);
         }
       }
