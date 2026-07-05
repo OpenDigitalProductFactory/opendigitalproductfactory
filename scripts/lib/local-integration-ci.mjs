@@ -15,12 +15,22 @@ export function dockerBuildTag(candidateBranch) {
   return `dpf-${integrationBranchName(candidateBranch).replace(/\//g, "-")}-build`;
 }
 
+// V8 heap headroom for the host-next production build (BI-B5011ACE). With the
+// node 24 default heap, the Next build worker intermittently dies with SIGABRT
+// during the TypeScript phase — an exit that is indistinguishable from a red
+// product build, so it poisons gate evidence exactly like sandbox staleness
+// did (and the freshness gate correctly stays green, so nothing else catches
+// it). Verified 2026-07-05: default heap SIGABRT; 8 GiB completes cleanly.
+export const HOST_BUILD_NODE_OPTIONS = "NODE_OPTIONS=--max-old-space-size=8192";
+
 export function createLocalIntegrationPlan(input) {
   const branch = integrationBranchName(input.candidateBranch);
   const buildStrategy = input.buildStrategy ?? defaultBuildStrategy(input.hostPlatform);
   const productionBuildCommand = buildStrategy === "docker-build"
     ? ["docker", "build", "--target", "build", "-t", dockerBuildTag(input.candidateBranch), "."]
-    : ["pnpm", "--filter", "web", "exec", "next", "build"];
+    // `env VAR=… cmd` keeps the plan a plain argv (no shell) — host-next is
+    // POSIX-only by construction (Windows defaults to docker-build above).
+    : ["env", HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "next", "build"];
   const commands = [
     ["git", "fetch", "origin", "main"],
     ["git", "checkout", "-B", branch, "origin/main"],
