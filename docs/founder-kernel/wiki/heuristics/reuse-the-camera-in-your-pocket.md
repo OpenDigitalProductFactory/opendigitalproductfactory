@@ -15,13 +15,15 @@ sources:
 
 ## When it applies
 
-Tool consolidation decisions. EA platform vs. platform-native EA capability. Project portfolio management vs. platform-native PPM. Asset management vs. platform-native asset. Specialist analytics vs. platform-native reporting.
+Tool consolidation decisions. EA platform vs. platform-native EA capability. Project portfolio management vs. platform-native PPM. Asset management vs. platform-native asset. Specialist analytics vs. platform-native reporting. And, for adopters, any "should we bolt a specialist tool onto DPF?" decision — the same question in DPF's own vocabulary.
 
 ## Why it works
 
 The dedicated-camera-vs-phone-camera analogy works because everyone has lived it personally. The phone camera is worse on every spec sheet — but it&#39;s in your pocket, it shares the network with everything else, it&#39;s automatically backed up, the photos auto-tag with location and faces. Practicality dominates spec sheets for almost every use case.
 
-The same logic applies to enterprise tooling. The specialist EA tool has features ServiceNow lacks (or vice-versa). Those features cost feature-licence + integration build + ongoing reconciliation maintenance + the silent tax of two systems of record disagreeing. The platform-native version is in your pocket already.
+The same logic applies to enterprise tooling. A specialist tool has features the incumbent platform lacks (or vice-versa) — I first drew this out for an EA platform against ServiceNow, but the shape is general. Those features cost feature-licence + integration build + ongoing reconciliation maintenance + the silent tax of two systems of record disagreeing. The platform-native version is in your pocket already.
+
+For DPF this is not just an analogy — it is the product thesis. DPF exists to be the integrated whole: one data model, one platform, the coworkers reasoning off it. Reaching for a specialist tool and integrating it back in re-imports exactly the reconciliation cost DPF was built to remove. So the default is the strongest here: use what the platform already gives you, and make the integration argument earn its keep against the whole.
 
 For the rare case where the feature gap *is* big enough — and it&#39;s rarer than vendors will admit — the right answer is to accept the cost honestly: the integration will go through Independent → Honeymoon → Ugly Reckoning. Plan for the Reckoning.
 
