@@ -15,6 +15,11 @@ on:
   # statuses that never post. The `changes` gate below fails safe to heavy=true
   # on any non-PR event, so the heavy required jobs do run on merge_group.
   merge_group:
+  # Manual/bot dispatch (BI-A9EAEE2C): PRs created with GITHUB_TOKEN (e.g. the
+  # STT Digest Watch re-pin PR) never trigger pull_request workflows, so the
+  # bot dispatches this workflow onto its branch to post the required checks.
+  # The `changes` fail-safe above applies here too: heavy jobs run.
+  workflow_dispatch: {}
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -498,6 +503,7 @@ jobs:
             scripts/lib/compose-safety.test.mjs \
             scripts/lib/sandbox-freshness.test.mjs \
             scripts/sandbox-freshness-preflight.test.mjs \
+            scripts/release/re-resolve-stt-digest.test.mjs \
             tests/release/local-ci-gate-contract.test.mjs
       - name: Smoke --help (must exit 0, no docker required)
         run: node scripts/runtime-artifact-janitor.mjs --help > /dev/null
