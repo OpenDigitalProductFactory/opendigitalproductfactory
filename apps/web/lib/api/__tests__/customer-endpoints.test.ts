@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    // Update-path dedup gate candidate fetch (lib/mdm/dedup-gate.ts).
+    $queryRaw: vi.fn().mockResolvedValue([]),
     customerAccount: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
@@ -233,6 +235,8 @@ describe("PATCH /api/v1/customer/accounts/:id", () => {
     (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
     (prisma.customerAccount.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "acct-1",
+      name: "Acme",
+      website: null,
     });
     (prisma.customerAccount.update as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "acct-1",
@@ -249,6 +253,37 @@ describe("PATCH /api/v1/customer/accounts/:id", () => {
 
     expect(res.status).toBe(200);
     expect(body.name).toBe("Acme Inc");
+  });
+
+  it("returns 409 with candidates when a rename collides with an existing account", async () => {
+    (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
+    (prisma.customerAccount.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "acct-1",
+      name: "Emma 3D Films",
+      website: null,
+    });
+    // Dedup gate candidate fetch returns an existing exact-normalized match.
+    (prisma.$queryRaw as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      {
+        id: "acct-2",
+        name: "Emma3D",
+        status: "active",
+        website: null,
+        nameNormalized: "emma3d",
+        domainNormalized: "",
+      },
+    ]);
+
+    const res = await accountUpdateHandler(
+      patchRequest("/api/v1/customer/accounts/acct-1", { name: "Emma3D" }),
+      { params: Promise.resolve({ id: "acct-1" }) },
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.code).toBe("DUPLICATE_SUSPECTED");
+    expect(body.candidates[0]?.id).toBe("acct-2");
+    expect(prisma.customerAccount.update).not.toHaveBeenCalled();
   });
 
   it("returns 404 for nonexistent account", async () => {
