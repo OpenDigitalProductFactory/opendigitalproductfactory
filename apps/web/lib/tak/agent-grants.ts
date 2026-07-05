@@ -460,6 +460,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_opportunity:        ["crm_read"],
   list_quotes:            ["crm_read"],
   create_customer_account: ["crm_write"],
+  create_customer_contact: ["crm_write"],
   create_opportunity:      ["crm_write"],
   create_quote:            ["crm_write"],
   // Merging duplicates is customer-data stewardship: heavier than drafting,
