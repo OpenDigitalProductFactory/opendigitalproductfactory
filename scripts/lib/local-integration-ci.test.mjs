@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+// node --test (was vitest, which no CI job executed for scripts/ — converted
+// alongside BI-B5011ACE so the plan contract actually gates in the bare-runner
+// CI test job).
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { createLocalIntegrationPlan } from "./local-integration-ci.mjs";
 
 describe("createLocalIntegrationPlan", () => {
@@ -10,14 +14,14 @@ describe("createLocalIntegrationPlan", () => {
       hostPlatform: "linux",
     });
 
-    expect(plan.commands.map((command) => command.join(" "))).toEqual([
+    assert.deepEqual(plan.commands.map((command) => command.join(" ")), [
       "git fetch origin main",
       "git checkout -B local-integration/doc-build-studio-decision-skill-packs origin/main",
       "git merge --no-ff --no-edit doc/build-studio-decision-skill-packs",
       "node scripts/sandbox-freshness-preflight.mjs --converge --branch local-integration/doc-build-studio-decision-skill-packs",
       "pnpm --filter web exec vitest run",
       "pnpm --filter web typecheck",
-      "pnpm --filter web exec next build",
+      "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
     ]);
   });
 
@@ -32,8 +36,8 @@ describe("createLocalIntegrationPlan", () => {
     const preflightIndex = commands.findIndex((c) => c.includes("sandbox-freshness-preflight.mjs"));
     const lastMergeIndex = commands.map((c, i) => (c.startsWith("git merge") ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
     const firstGateIndex = commands.findIndex((c) => c.includes("vitest run"));
-    expect(preflightIndex).toBeGreaterThan(lastMergeIndex);
-    expect(preflightIndex).toBeLessThan(firstGateIndex);
+    assert.ok(preflightIndex > lastMergeIndex);
+    assert.ok(preflightIndex < firstGateIndex);
   });
 
   it("adds sibling branches in order for concurrent development", () => {
@@ -43,13 +47,13 @@ describe("createLocalIntegrationPlan", () => {
       siblingBranches: ["feat/environment-broker", "fix/build-studio-copy"],
     });
 
-    expect(plan.integrationBranch).toBe("local-integration/feat-build-studio-decision-skills-slice-1");
-    expect(plan.commands.map((command) => command.join(" "))).toContain(
+    assert.equal(plan.integrationBranch, "local-integration/feat-build-studio-decision-skills-slice-1");
+    assert.ok(plan.commands.map((command) => command.join(" ")).includes(
       "git merge --no-ff --no-edit feat/environment-broker",
-    );
-    expect(plan.commands.map((command) => command.join(" "))).toContain(
+    ));
+    assert.ok(plan.commands.map((command) => command.join(" ")).includes(
       "git merge --no-ff --no-edit fix/build-studio-copy",
-    );
+    ));
   });
 
   it("uses a Docker production build on Windows hosts", () => {
@@ -60,11 +64,11 @@ describe("createLocalIntegrationPlan", () => {
       hostPlatform: "win32",
     });
 
-    expect(plan.commands.map((command) => command.join(" "))).toContain(
+    assert.ok(plan.commands.map((command) => command.join(" ")).includes(
       "docker build --target build -t dpf-local-integration-feat-build-studio-decision-skills-slice-1-build .",
-    );
-    expect(plan.commands.map((command) => command.join(" "))).not.toContain(
-      "pnpm --filter web exec next build",
-    );
+    ));
+    assert.ok(!plan.commands.map((command) => command.join(" ")).join("\n").includes(
+      "exec next build",
+    ));
   });
 });
