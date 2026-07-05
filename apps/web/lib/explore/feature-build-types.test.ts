@@ -83,9 +83,9 @@ describe("validateFeatureBrief", () => {
 });
 
 describe("PHASE_ORDER", () => {
-  it("has 7 phases in correct order", () => {
+  it("has all phases in correct order (incl. terminal abandoned — BI-A2F3FA9D)", () => {
     expect(PHASE_ORDER).toEqual([
-      "ideate", "plan", "build", "review", "ship", "complete", "failed",
+      "ideate", "plan", "build", "review", "ship", "complete", "failed", "abandoned",
     ]);
   });
 });
@@ -129,6 +129,20 @@ describe("canTransitionPhase", () => {
   it("blocks transitions from terminal states", () => {
     expect(canTransitionPhase("complete", "ideate")).toBe(false);
     expect(canTransitionPhase("failed", "ideate")).toBe(false);
+  });
+
+  // BI-A2F3FA9D — "abandoned" is a terminal escalate-to-human state: no outbound
+  // transition (the work resumes by re-opening the parked backlog item), and it
+  // must carry a label so PHASE_LABELS stays exhaustive.
+  it("treats abandoned as terminal with no outbound transitions", () => {
+    expect(canTransitionPhase("abandoned", "ideate")).toBe(false);
+    expect(canTransitionPhase("abandoned", "plan")).toBe(false);
+    expect(canTransitionPhase("abandoned", "failed")).toBe(false);
+    expect(canTransitionPhase("abandoned", "complete")).toBe(false);
+  });
+
+  it("has a non-empty label for abandoned", () => {
+    expect(PHASE_LABELS.abandoned).toBeTruthy();
   });
 });
 

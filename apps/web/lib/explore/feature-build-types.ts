@@ -480,7 +480,14 @@ export type ScoutResult = {
   scoutDurationMs: number;
 };
 
-export type BuildPhase = "ideate" | "plan" | "build" | "review" | "ship" | "complete" | "failed";
+// "abandoned" is a TERMINAL phase the escalate-to-human path writes
+// (escalate-build-to-human.ts) when Build Studio cannot self-repair a build and
+// hands it to a human: WIP is freed, the originating BI is parked as "deferred",
+// and a durable escalation report is filed. It was previously stored in the DB
+// but missing from this union (BI-A2F3FA9D), so guidance/custodian switches had
+// no branch and fell through to a stale "Working" state. It is intentionally NOT
+// in VISIBLE_PHASES (terminal, off the happy-path stepper, like complete/failed).
+export type BuildPhase = "ideate" | "plan" | "build" | "review" | "ship" | "complete" | "failed" | "abandoned";
 
 export type FeatureBuildRow = {
   id: string;
@@ -508,6 +515,12 @@ export type FeatureBuildRow = {
   createdAt: Date;
   updatedAt: Date;
   draftApprovedAt: Date | null;
+  // Build-level terminal-abandon fields (BI-A2F3FA9D). Optional for back-compat:
+  // rows/fixtures that predate these selects read as undefined. Written by the
+  // escalate-to-human path (escalate-build-to-human.ts) alongside phase="abandoned"
+  // — abandonReason is the human-readable handoff reason surfaced in the terminal UI.
+  abandonReason?: string | null;
+  abandonedAt?: Date | null;
   designDoc: BuildDesignDoc | null;
   designReview: ReviewResult | null;
   buildPlan: BuildPlanDoc | null;
@@ -569,7 +582,7 @@ export type CodingCapability = "excellent" | "adequate" | "insufficient";
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 export const PHASE_ORDER: BuildPhase[] = [
-  "ideate", "plan", "build", "review", "ship", "complete", "failed",
+  "ideate", "plan", "build", "review", "ship", "complete", "failed", "abandoned",
 ];
 
 export const PHASE_LABELS: Record<BuildPhase, string> = {
@@ -584,6 +597,7 @@ export const PHASE_LABELS: Record<BuildPhase, string> = {
   ship:     "Ready to Ship",
   complete: "Complete",
   failed:   "Failed",
+  abandoned: "Escalated to human",
 };
 
 export const PHASE_COLOURS: Record<BuildPhase, string> = {
@@ -594,6 +608,10 @@ export const PHASE_COLOURS: Record<BuildPhase, string> = {
   ship:     "#4ade80",
   complete: "#4ade80",
   failed:   "#f87171",
+  // Terminal/parked handoff — a muted token (consumers already render
+  // var(--dpf-muted) for inactive phases, e.g. PhaseIndicator), keeping the
+  // style-drift discipline instead of adding a fresh hardcoded hex.
+  abandoned: "var(--dpf-muted)",
 };
 
 export const CODING_CAPABILITY_COLOURS: Record<CodingCapability, string> = {
@@ -703,6 +721,9 @@ const ALLOWED_TRANSITIONS: Record<BuildPhase, BuildPhase[]> = {
   ship:     ["complete", "failed"],
   complete: [],
   failed:   [],
+  // Terminal: an escalated build is handed to a human; the work resumes by
+  // re-opening the parked backlog item, not by transitioning this build.
+  abandoned: [],
 };
 
 export function canTransitionPhase(from: BuildPhase, to: BuildPhase): boolean {

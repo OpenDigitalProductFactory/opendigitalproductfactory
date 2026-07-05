@@ -19,6 +19,10 @@ export function formatOperatorPhaseLabel(phase: BuildPhase): string {
       return "Complete";
     case "failed":
       return "Blocked";
+    // BI-A2F3FA9D — terminal escalate-to-human handoff. Without this case the
+    // default returned "Working", the same stale signal this BI removes.
+    case "abandoned":
+      return "Escalated to you";
     default:
       return "Working";
   }
@@ -50,9 +54,15 @@ export function BuildOperatorHeaderDetails({
   engineerView: boolean;
 }) {
   if (!engineerView) {
+    // BI-A2F3FA9D — an abandoned build has been escalated to the human; the
+    // coworker is no longer handling it, so don't claim it is.
+    const headline =
+      build.phase === "abandoned"
+        ? "This build was escalated to you."
+        : "AI Coworker is handling this build.";
     return (
       <>
-        <span className="font-medium text-[var(--dpf-text)]">AI Coworker is handling this build.</span>
+        <span className="font-medium text-[var(--dpf-text)]">{headline}</span>
         <span>&middot;</span>
         <span>{formatOperatorPhaseLabel(build.phase)}</span>
         <span>&middot;</span>

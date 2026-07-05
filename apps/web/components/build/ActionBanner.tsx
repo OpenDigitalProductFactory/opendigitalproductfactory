@@ -22,7 +22,10 @@
 import { StatusBadge, type Intent } from "@/components/ui/report-kit";
 import { ACTION_BANNER_HEIGHT_CLASS, BUILD_STUDIO_TEST_IDS } from "./build-studio-layout";
 
-export type ActionBannerState = "ready" | "running" | "blocked" | "review_failed" | "complete";
+// "escalated" (BI-A2F3FA9D) is the terminal escalate-to-human handoff state
+// (build phase="abandoned"): danger tint + a detail line so the operator sees
+// the reason and parked item instead of the old stale "Working" banner.
+export type ActionBannerState = "ready" | "running" | "blocked" | "review_failed" | "complete" | "escalated";
 
 export type ActionBannerPrimaryAction = {
   label: string;
@@ -67,6 +70,13 @@ function stateClassName(state: ActionBannerState): string {
       "border-[var(--dpf-success)]",
     ].join(" ");
   }
+  if (state === "escalated") {
+    return [
+      "bg-[var(--dpf-state-error)]",
+      "text-[var(--dpf-text)]",
+      "border-[var(--dpf-error)]",
+    ].join(" ");
+  }
   // "ready" — default surface, no state color.
   return [
     "bg-[var(--dpf-surface-2)]",
@@ -78,7 +88,7 @@ function stateClassName(state: ActionBannerState): string {
 /** Detail is intentionally rendered only for blocked / review_failed. */
 function shouldShowDetail(state: ActionBannerState, detail: string | undefined): detail is string {
   if (!detail) return false;
-  return state === "blocked" || state === "review_failed";
+  return state === "blocked" || state === "review_failed" || state === "escalated";
 }
 
 export function ActionBanner({ state, operatorStatus, sentence, primaryAction, detail }: ActionBannerProps) {

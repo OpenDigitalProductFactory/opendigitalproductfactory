@@ -1183,3 +1183,80 @@ describe("deriveWorkflowStageGuidance", () => {
     expect(guidance.workflowAction.failureAxis).toBe("usage-limit");
   });
 });
+
+// BI-A2F3FA9D — an escalated-to-human build (phase="abandoned") is terminal:
+// WIP freed, originating BI parked as "deferred". The old code had no branch, so
+// it fell through to "review-only" and rendered a stale "Working" status. These
+// lock in the terminal handoff surface: escalated action + danger status + the
+// parked-BI link, and prove it is NOT review-only/"working".
+describe("deriveBuildStudioWorkflowAction — escalate-to-human (BI-A2F3FA9D)", () => {
+  function abandonedBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
+    return makeBuild({
+      phase: "abandoned",
+      abandonReason:
+        "Escalated to human after 2 self-repair round(s) at plan review (needs-human); tracked as PIR-123. Freed a Build Studio WIP slot. (BI-3E0EE3BA)",
+      abandonedAt: new Date("2026-07-04T18:00:00Z"),
+      ...overrides,
+    });
+  }
+
+  it("returns the escalated-to-human action, not review-only", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: abandonedBuild(),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("escalated-to-human");
+    expect(action.kind).not.toBe("review-only");
+    expect(action.primaryLabel).toBeNull();
+  });
+
+  it("carries the parked backlog item id, the abandon reason, and a resume href", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: abandonedBuild(),
+      governedBacklogEnabled: true,
+    });
+    if (action.kind !== "escalated-to-human") throw new Error("expected escalated-to-human");
+
+    // originator.itemId in the shared fixture is BI-5B839D74.
+    expect(action.parkedBacklogItemId).toBe("BI-5B839D74");
+    expect(action.abandonReason).toContain("Escalated to human");
+    expect(action.resumeHref).toBe("/ops");
+    expect(action.message).toContain("BI-5B839D74");
+  });
+
+  it("renders a danger 'Escalated to you' operator status, never 'Working'", () => {
+    const build = abandonedBuild();
+    const action = deriveBuildStudioWorkflowAction({ build, governedBacklogEnabled: true });
+    const guidance = deriveBuildStudioOperatorGuidance(action, build);
+
+    expect(guidance.status.kind).toBe("escalated");
+    expect(guidance.status.label).toBe("Escalated to you");
+    expect(guidance.status.intent).toBe("danger");
+    expect(guidance.status.label).not.toBe("Working");
+    expect(guidance.status.kind).not.toBe("working");
+  });
+
+  it("points the operator at the parked item in Delivery for the next step", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: abandonedBuild(),
+      governedBacklogEnabled: true,
+    });
+    const guidance = deriveBuildStudioOperatorGuidance(action);
+
+    expect(guidance.nextSentence).toContain("BI-5B839D74");
+    expect(guidance.nextSentence).toContain("Delivery");
+  });
+
+  it("still escalates when there is no originating backlog item", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: abandonedBuild({ originator: null, originatingBacklogItemId: null }),
+      governedBacklogEnabled: true,
+    });
+    if (action.kind !== "escalated-to-human") throw new Error("expected escalated-to-human");
+
+    expect(action.parkedBacklogItemId).toBeNull();
+    expect(action.resumeHref).toBe("/ops");
+    expect(action.message).toContain("waiting for you in Delivery");
+  });
+});
