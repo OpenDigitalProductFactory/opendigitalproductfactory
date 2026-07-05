@@ -47,10 +47,45 @@ describe("WorkControlPanel", () => {
   });
 
   it("renders empty state", () => {
-    const html = renderToStaticMarkup(<WorkControlPanel capsules={[]} adoptable={[]} createAction={vi.fn()} />);
+    const html = renderToStaticMarkup(
+      <WorkControlPanel capsules={[]} adoptable={[]} createAction={vi.fn()} canCreateGovernedWork />,
+    );
 
     expect(html).toContain("No active capsules yet.");
     expect(html).toContain("Plan governed work");
+  });
+
+  it("shows the governed-work create form to manage_backlog holders", () => {
+    const html = renderToStaticMarkup(
+      <WorkControlPanel capsules={[]} adoptable={[]} createAction={vi.fn()} canCreateGovernedWork />,
+    );
+
+    // Door 2's create form is present, and the "reserved role" fallback is not.
+    expect(html).toContain("Plan governed work");
+    expect(html).not.toContain("reserved for the manage-backlog role");
+  });
+
+  it("hides the create door and explains the alternative when manage_backlog is absent", () => {
+    // BI-E167A8A6: default (no capability) hides door 2's create form so a
+    // non-technical operator is not offered a second intake they cannot use.
+    const html = renderToStaticMarkup(
+      <WorkControlPanel capsules={[]} adoptable={[]} createAction={vi.fn()} />,
+    );
+
+    // No governed-work form heading/button ("Plan governed work"). The intro's
+    // "Planning governed work" prose does not contain that exact substring.
+    expect(html).not.toContain("Plan governed work");
+    expect(html).toContain("reserved for the manage-backlog role");
+    expect(html).toContain('href="/build"');
+  });
+
+  it("states the relationship to the plain-English Start a new build door", () => {
+    const html = renderToStaticMarkup(
+      <WorkControlPanel capsules={[]} adoptable={[]} createAction={vi.fn()} canCreateGovernedWork />,
+    );
+
+    expect(html).toContain("Start a new build");
+    expect(html).toContain('href="/build"');
   });
 
   it("renders the portal context strip when a server envelope is provided", () => {
