@@ -12,18 +12,23 @@ import { prisma } from "./client";
 export interface BacklogPortfolioLinks {
   digitalProduct?: { portfolioId: string | null } | null;
   taxonomyNode?: { portfolioId: string | null } | null;
+  coworkerNeeds?: Array<{ agent?: { portfolioId: string | null } | null }> | null;
   epic?: { portfolios?: Array<{ portfolioId: string }> } | null;
 }
 
 /**
  * Resolve a backlog item's portfolio by precedence: its digital product, then
- * its taxonomy node, then its epic's first portfolio. Returns null when none
- * of the links carry a portfolio.
+ * its taxonomy node, then linked AI coworker capability need ownership, then
+ * its epic's first portfolio. Returns null when none of the links carry a
+ * portfolio.
  */
 export function resolveBacklogPortfolio(links: BacklogPortfolioLinks): string | null {
+  const coworkerNeedPortfolio =
+    links.coworkerNeeds?.find((need) => need.agent?.portfolioId)?.agent?.portfolioId ?? null;
   return (
     links.digitalProduct?.portfolioId ??
     links.taxonomyNode?.portfolioId ??
+    coworkerNeedPortfolio ??
     links.epic?.portfolios?.[0]?.portfolioId ??
     null
   );
@@ -43,6 +48,7 @@ const LINK_SELECT = {
   portfolioId: true,
   digitalProduct: { select: { portfolioId: true } },
   taxonomyNode: { select: { portfolioId: true } },
+  coworkerNeeds: { select: { agent: { select: { portfolioId: true } } } },
   epic: { select: { portfolios: { select: { portfolioId: true } } } },
 } as const;
 

@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "../generated/client/client";
+import { AI_WORKFORCE_PRODUCT_ID } from "./workforce-portfolio";
 
 type CoworkerServiceSeed = {
   serviceId: string;
@@ -50,7 +51,7 @@ type CoworkerOfferSeed = {
   metadata: Prisma.InputJsonValue;
 };
 
-const dpfProductId = "dpf-portal";
+const LEGACY_COWORKER_CATALOG_PRODUCT_ID = "dpf-portal";
 
 export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSeed[] = [
   serviceSeed("svc-build-sensitive-requirements", "build-specialist", {
@@ -346,18 +347,34 @@ export async function seedCoworkerServiceCatalog(prisma: PrismaClient): Promise<
   for (const service of COWORKER_SERVICE_CATALOG_SERVICE_SEEDS) {
     await prisma.coworkerService.upsert({
       where: { serviceId: service.serviceId },
-      create: { ...service, digitalProductId: dpfProductId },
-      update: { ...service, digitalProductId: dpfProductId },
+      create: service,
+      update: service,
     });
   }
+
+  await prisma.coworkerService.updateMany({
+    where: {
+      serviceId: { in: COWORKER_SERVICE_CATALOG_SERVICE_SEEDS.map((service) => service.serviceId) },
+      digitalProductId: LEGACY_COWORKER_CATALOG_PRODUCT_ID,
+    },
+    data: { digitalProductId: null },
+  });
 
   for (const offer of COWORKER_SERVICE_CATALOG_OFFER_SEEDS) {
     await prisma.coworkerOffer.upsert({
       where: { offerId: offer.offerId },
-      create: { ...offer, digitalProductId: dpfProductId },
-      update: { ...offer, digitalProductId: dpfProductId },
+      create: { ...offer, digitalProductId: AI_WORKFORCE_PRODUCT_ID },
+      update: offer,
     });
   }
+
+  await prisma.coworkerOffer.updateMany({
+    where: {
+      offerId: { in: COWORKER_SERVICE_CATALOG_OFFER_SEEDS.map((offer) => offer.offerId) },
+      digitalProductId: LEGACY_COWORKER_CATALOG_PRODUCT_ID,
+    },
+    data: { digitalProductId: AI_WORKFORCE_PRODUCT_ID },
+  });
 }
 
 function serviceSeed(
@@ -377,7 +394,7 @@ function serviceSeed(
     authorityBoundary: overrides.authorityBoundary ?? "proposal-only",
     availabilityScope: overrides.availabilityScope ?? "internal",
     personas: overrides.personas ?? [],
-    portfolioRoles: overrides.portfolioRoles ?? ["platform"],
+    portfolioRoles: overrides.portfolioRoles ?? ["workforce"],
     valueStreams: overrides.valueStreams ?? ["cross-cutting"],
     archetypes: overrides.archetypes ?? ["software-and-platforms"],
     jurisdictions: overrides.jurisdictions ?? ["us", "global"],

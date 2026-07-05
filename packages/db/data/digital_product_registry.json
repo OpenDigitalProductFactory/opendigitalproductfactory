@@ -237,6 +237,7 @@
                                  "description":  "Externally offered platform subscription for digital product portfolio and delivery governance.",
                                  "depends_on_product_ids":  [
                                                                 "dpf-meta",
+                                                                "dpf-ai-workforce",
                                                                 "infra-neo4j-core"
                                                             ],
                                  "realizes_model_ids":  [
@@ -272,6 +273,110 @@
                                                       "status":  "planned",
                                                       "category":  "customer_value",
                                                       "introduced_in_revision":  "0.9.0"
+                                                  }
+                                              ],
+                                 "source":  "manual_entry",
+                                 "source_confidence":  "human_verified"
+                             },
+                             {
+                                 "product_id":  "dpf-ai-workforce",
+                                 "name":  "AI Workforce",
+                                 "portfolio_id":  "for_employees",
+                                 "taxonomy_node_id":  "for_employees/workforce_services",
+                                 "product_kind":  "internal_workforce_surface",
+                                 "product_type":  "ai_coworker_workforce",
+                                 "delivery_mode":  "digital",
+                                 "representation_level":  "logical",
+                                 "type_confidence":  "confirmed",
+                                 "commercial_scope":  "internal_only",
+                                 "usage_mode":  "used",
+                                 "description":  "Unified workforce surface for human employees and AI coworkers: roster, role parity, services, offers, approvals, supervision, capability needs, tools, skills, model budgets, and lifecycle management.",
+                                 "depends_on_product_ids":  [
+                                                                "dpf-meta",
+                                                                "cap-mcp-plane",
+                                                                "cap-local-ai-inference"
+                                                            ],
+                                 "is_part_of_product_ids":  [
+                                                                "dpf-meta"
+                                                            ],
+                                 "lifecycle":  {
+                                                   "stage":  "operate",
+                                                   "stage_status":  "active",
+                                                   "effective_from":  "2026-07-04",
+                                                   "next_review_at":  "2026-10-01",
+                                                   "owner_role":  "HR-200"
+                                               },
+                                 "features":  [
+                                                  {
+                                                      "feature_id":  "feat-unified-workforce-roster",
+                                                      "name":  "Unified Workforce Roster",
+                                                      "status":  "active",
+                                                      "category":  "workforce"
+                                                  },
+                                                  {
+                                                      "feature_id":  "feat-coworker-service-catalog",
+                                                      "name":  "Coworker Services and Offers",
+                                                      "status":  "active",
+                                                      "category":  "ai_coworker"
+                                                  },
+                                                  {
+                                                      "feature_id":  "feat-coworker-capability-needs",
+                                                      "name":  "Coworker Capability Needs",
+                                                      "status":  "active",
+                                                      "category":  "workforce_gap"
+                                                  }
+                                              ],
+                                 "source":  "manual_entry",
+                                 "source_confidence":  "human_verified"
+                             },
+                             {
+                                 "product_id":  "dpf-tax-remittance",
+                                 "name":  "Tax Remittance and Paying Taxes",
+                                 "portfolio_id":  "for_employees",
+                                 "taxonomy_node_id":  "for_employees/financial_management/manage_taxes",
+                                 "product_kind":  "internal_business_surface",
+                                 "product_type":  "finance_work_lane",
+                                 "delivery_mode":  "digital",
+                                 "representation_level":  "logical",
+                                 "type_confidence":  "confirmed",
+                                 "commercial_scope":  "internal_only",
+                                 "usage_mode":  "used",
+                                 "description":  "Workforce-facing finance surface for tax posture, remittance configuration, VAT/tax reporting evidence, approval boundaries, and accountant/coworker handoff for paying taxes.",
+                                 "depends_on_product_ids":  [
+                                                                "dpf-meta",
+                                                                "dpf-ai-workforce",
+                                                                "int-quickbooks",
+                                                                "int-stripe",
+                                                                "cap-mcp-plane"
+                                                            ],
+                                 "is_part_of_product_ids":  [
+                                                                "dpf-ai-workforce"
+                                                            ],
+                                 "lifecycle":  {
+                                                   "stage":  "operate",
+                                                   "stage_status":  "active",
+                                                   "effective_from":  "2026-07-04",
+                                                   "next_review_at":  "2026-10-01",
+                                                   "owner_role":  "HR-200"
+                                               },
+                                 "features":  [
+                                                  {
+                                                      "feature_id":  "feat-tax-remittance-settings",
+                                                      "name":  "Tax Remittance Settings",
+                                                      "status":  "active",
+                                                      "category":  "finance"
+                                                  },
+                                                  {
+                                                      "feature_id":  "feat-vat-tax-evidence",
+                                                      "name":  "VAT and Tax Evidence",
+                                                      "status":  "active",
+                                                      "category":  "finance"
+                                                  },
+                                                  {
+                                                      "feature_id":  "feat-accountant-approval-boundary",
+                                                      "name":  "Accountant Approval Boundary",
+                                                      "status":  "active",
+                                                      "category":  "approval"
                                                   }
                                               ],
                                  "source":  "manual_entry",

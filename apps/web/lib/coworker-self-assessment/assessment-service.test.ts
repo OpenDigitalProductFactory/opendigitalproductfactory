@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   capabilityNeedOriginId,
   capabilityNeedToWorkType,
+  buildCapabilityNeedBacklogInput,
+  fileCapabilityNeedToBacklog,
   linkNeedToBacklogItem,
   listCoworkerCapabilityNeeds,
   resolveCapabilityNeed,
@@ -186,6 +188,62 @@ describe("capabilityNeedOriginId", () => {
     const b = capabilityNeedOriginId("agent-1", "tool", "need publish tools.");
     expect(a).toBe(b);
     expect(a).toBe("agent-1:tool:need publish tools.");
+  });
+});
+
+describe("buildCapabilityNeedBacklogInput", () => {
+  it("anchors AI coworker capability needs to the AI Workforce product and taxonomy", () => {
+    const input = buildCapabilityNeedBacklogInput(
+      {
+        needId: "CWN-000001",
+        agentId: "finance-controller",
+        kind: "tool",
+        severity: "important",
+        need: "Read tax remittance configuration.",
+        blocks: "Cannot prepare tax evidence without configuration access.",
+      },
+      { digitalProductId: "dp-ai-workforce", taxonomyNodeId: "tn-workforce" },
+    );
+
+    expect(input).toMatchObject({
+      type: "product",
+      digitalProductId: "dp-ai-workforce",
+      taxonomyNodeId: "tn-workforce",
+      agentId: "finance-controller",
+      origin: { kind: "capability-need", id: "finance-controller:tool:read tax remittance configuration." },
+    });
+  });
+});
+
+describe("fileCapabilityNeedToBacklog", () => {
+  it("resolves structural Workforce links before filing through backlog ingest", async () => {
+    const ingest = vi.fn(async () => ({ itemId: "BI-CAP-000001", id: "cuid-bi", created: true }));
+
+    await fileCapabilityNeedToBacklog(
+      {
+        needId: "CWN-000001",
+        agentId: "finance-controller",
+        kind: "tool",
+        severity: "important",
+        need: "Read tax remittance configuration.",
+        blocks: "Cannot prepare tax evidence without configuration access.",
+      },
+      {
+        resolveWorkforceLinks: async () => ({
+          digitalProductId: "dp-ai-workforce",
+          taxonomyNodeId: "tn-workforce",
+        }),
+        ingest,
+      },
+    );
+
+    expect(ingest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        digitalProductId: "dp-ai-workforce",
+        taxonomyNodeId: "tn-workforce",
+        type: "product",
+      }),
+    );
   });
 });
 

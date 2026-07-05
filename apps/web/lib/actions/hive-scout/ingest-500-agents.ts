@@ -15,6 +15,10 @@ import { prisma } from "@dpf/db";
 import { slugify } from "@/lib/shared/slugify";
 import { upsertRawSource } from "@dpf/db/wiki-store";
 import type { Prisma, PrismaClient } from "@dpf/db";
+import {
+  AI_WORKFORCE_PRODUCT_ID,
+  AI_WORKFORCE_TAXONOMY_NODE_ID,
+} from "@dpf/db/workforce-portfolio";
 import { z } from "zod";
 import { loadPrompt } from "@/lib/tak/prompt-loader";
 import { sendQueueNotification } from "@/lib/queue/notification-adapter";
@@ -182,8 +186,15 @@ type HiveScoutPrisma = Pick<
   | "user"
   | "platformConfig"
   | "rawSource"
+  | "digitalProduct"
+  | "taxonomyNode"
 > & {
   taskRun?: unknown;
+};
+
+type HiveScoutWorkforceLinks = {
+  digitalProductId: string | null;
+  taxonomyNodeId: string | null;
 };
 
 const AmbiguityReviewDecisionSchema = z.object({
@@ -606,6 +617,7 @@ export async function runHiveScoutIngest(
   const db = (options.prisma ?? prisma) as HiveScoutPrisma;
   const promptLoader = options.loadPrompt ?? loadPrompt;
   const adminNotifier = options.notifyAdmins ?? notifyAdmins;
+  const workforceLinks = await resolveHiveScoutWorkforceLinks(db);
 
   const markdown = await fetcher(url);
   const entries = parseReadme(markdown);
@@ -827,6 +839,8 @@ export async function runHiveScoutIngest(
         status: finalStatus,
         body: renderBody(bodyTemplate, entry, match),
         source: BACKLOG_SOURCE,
+        digitalProductId: workforceLinks.digitalProductId,
+        taxonomyNodeId: workforceLinks.taxonomyNodeId,
       },
     });
     createdItemIds.push(itemId);
@@ -878,6 +892,26 @@ export async function runHiveScoutIngest(
     duplicates,
     deferred,
     createdItemIds,
+  };
+}
+
+async function resolveHiveScoutWorkforceLinks(
+  db: Pick<HiveScoutPrisma, "digitalProduct" | "taxonomyNode">,
+): Promise<HiveScoutWorkforceLinks> {
+  const [product, taxonomyNode] = await Promise.all([
+    db.digitalProduct.findUnique({
+      where: { productId: AI_WORKFORCE_PRODUCT_ID },
+      select: { id: true },
+    }),
+    db.taxonomyNode.findUnique({
+      where: { nodeId: AI_WORKFORCE_TAXONOMY_NODE_ID },
+      select: { id: true },
+    }),
+  ]);
+
+  return {
+    digitalProductId: product?.id ?? null,
+    taxonomyNodeId: taxonomyNode?.id ?? null,
   };
 }
 
