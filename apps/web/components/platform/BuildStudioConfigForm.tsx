@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
 import { saveBuildStudioConfig, checkLocalEndpoint, applyLocalModelContext } from "@/lib/actions/build-studio";
+import { probeBuildEnginesAction } from "@/lib/actions/build-engine-actions";
 import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
 import type { LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
 import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
@@ -98,6 +99,64 @@ export function BuildStudioConfigForm({
   // instead of showing the previous provider's stale readiness.
   const autoCheckedRef = useRef<string | null>(null);
 
+  // BI-805D01E4: live sandbox readiness for the dispatch engines. Seeded from
+  // the server's last-known state (BuildEngineState), then kept fresh by a
+  // proactive probe on mount, an explicit "Probe all engines" click, and a
+  // re-probe of the selected engine after Save — so the operator sees which
+  // engine will actually work BEFORE starting a build, not when it fails
+  // mid-flight.
+  const engineIds = Object.keys(engineReadiness ?? {});
+  const [readiness, setReadiness] = useState<Record<string, EngineReadinessBadge>>(
+    engineReadiness ?? {},
+  );
+  const [probingIds, setProbingIds] = useState<string[]>([]);
+  const [probing, setProbing] = useState(false);
+  const [probeError, setProbeError] = useState<string | null>(null);
+  const autoProbedRef = useRef(false);
+
+  async function probeEngines(ids?: string[]) {
+    if (!canWrite) return;
+    const targets = ids && ids.length > 0 ? ids : engineIds;
+    setProbeError(null);
+    setProbing(true);
+    setProbingIds(targets);
+    try {
+      const rows = await probeBuildEnginesAction(ids && ids.length > 0 ? ids : undefined);
+      setReadiness((prev) => {
+        const next = { ...prev };
+        for (const row of rows) {
+          next[row.engineId] = {
+            present: row.present,
+            version: row.version,
+            lastProbedAt: row.lastProbedAt,
+            error: row.error,
+          };
+        }
+        return next;
+      });
+    } catch (err) {
+      setProbeError(err instanceof Error ? err.message : "Could not probe build engines.");
+    } finally {
+      setProbing(false);
+      setProbingIds([]);
+    }
+  }
+
+  // Per-engine badge for a ProviderRadio: the live readiness plus whether a
+  // probe is currently in flight for that engine.
+  function badgeFor(id: string): EngineReadinessBadge | undefined {
+    const base = readiness[id];
+    const isProbing = probingIds.includes(id);
+    if (!base && !isProbing) return undefined;
+    return {
+      present: base?.present ?? null,
+      version: base?.version ?? null,
+      lastProbedAt: base?.lastProbedAt ?? null,
+      error: base?.error ?? null,
+      probing: isProbing,
+    };
+  }
+
   const hasClaudeCreds = claudeProviders.some(p => isConfigured(p.status));
   const hasCodexCreds = codexProviders.some(p => isConfigured(p.status));
   const hasGrokCreds = grokProviders.some(p => isConfigured(p.status));
@@ -168,6 +227,10 @@ export function BuildStudioConfigForm({
         });
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
+        // Re-probe the just-saved engine so its badge reflects the current
+        // sandbox after a config change (BI-805D01E4). Agentic has no sandbox
+        // binary to probe.
+        if (provider !== "agentic") void probeEngines([provider]);
       } catch (err) {
         setError((err as Error).message);
       }
@@ -192,6 +255,18 @@ export function BuildStudioConfigForm({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, opencodeProviderId, openCodeDescription.isLocal]);
+
+  // BI-805D01E4: proactively probe every dispatch engine once on mount so the
+  // config page never shows all engines as "not yet probed" — the operator can
+  // pick a known-good engine up front instead of selecting blind and finding
+  // out mid-build. Gated on canWrite (a probe runs docker exec in the sandbox).
+  useEffect(() => {
+    if (canWrite && !autoProbedRef.current && engineIds.length > 0) {
+      autoProbedRef.current = true;
+      void probeEngines();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canWrite]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -238,12 +313,44 @@ export function BuildStudioConfigForm({
 
       {/* Section 1: Active CLI Provider */}
       <section style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 16 }}>
-        <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
-          Build Dispatch Engine
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
+          <div>
+            <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+              Build Dispatch Engine
+            </div>
+            <p style={{ fontSize: 11, color: "var(--dpf-muted)", margin: 0 }}>
+              Choose which CLI agent executes build tasks in the sandbox.
+            </p>
+          </div>
+          {canWrite && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+              <button
+                type="button"
+                onClick={() => probeEngines()}
+                disabled={probing}
+                title="Run a live --version probe of every engine in the sandbox"
+                style={{
+                  padding: "4px 12px",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: "var(--dpf-surface-2)",
+                  color: "var(--dpf-text)",
+                  border: "1px solid var(--dpf-border)",
+                  borderRadius: 6,
+                  cursor: probing ? "wait" : "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {probing ? "Probing…" : "Probe all engines"}
+              </button>
+              {probeError && (
+                <span role="alert" style={{ fontSize: 10, color: "var(--dpf-error)", maxWidth: "16rem", textAlign: "right" }}>
+                  {probeError}
+                </span>
+              )}
+            </div>
+          )}
         </div>
-        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 12 }}>
-          Choose which CLI agent executes build tasks in the sandbox.
-        </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <ProviderRadio
@@ -255,7 +362,7 @@ export function BuildStudioConfigForm({
             label="Claude Code CLI"
             desc="Anthropic models"
             unconfiguredMsg={!hasClaudeCreds ? "No Anthropic credentials found." : undefined}
-            readiness={engineReadiness?.claude}
+            readiness={badgeFor("claude")}
             canProvision={canWrite}
           />
           <ProviderRadio
@@ -267,7 +374,7 @@ export function BuildStudioConfigForm({
             label="Codex CLI"
             desc="OpenAI models"
             unconfiguredMsg={!hasCodexCreds ? "No OpenAI credentials found." : undefined}
-            readiness={engineReadiness?.codex}
+            readiness={badgeFor("codex")}
             canProvision={canWrite}
           />
           <ProviderRadio
@@ -279,7 +386,7 @@ export function BuildStudioConfigForm({
             label="Grok CLI (Preview)"
             desc="xAI models · headless grok -p"
             unconfiguredMsg={!hasGrokCreds ? "No xAI credentials found." : undefined}
-            readiness={engineReadiness?.grok}
+            readiness={badgeFor("grok")}
             canProvision={canWrite}
           />
           <ProviderRadio
@@ -291,7 +398,7 @@ export function BuildStudioConfigForm({
             label={openCodeDescription.label}
             desc={openCodeDescription.desc}
             unconfiguredMsg={!hasOpencodeProvider ? "No OpenCode provider found." : undefined}
-            readiness={engineReadiness?.opencode}
+            readiness={badgeFor("opencode")}
             canProvision={canWrite}
           />
           <ProviderRadio
@@ -305,10 +412,16 @@ export function BuildStudioConfigForm({
           />
         </div>
         {(provider === "claude" || provider === "codex" || provider === "grok" || provider === "opencode") &&
-          engineReadiness?.[provider]?.present === false && (
+          !probingIds.includes(provider) &&
+          readiness[provider]?.present === false && (
             <div role="status" style={{ marginTop: 10, fontSize: 11, color: "var(--dpf-warning)" }}>
               ⚠ {provider.charAt(0).toUpperCase() + provider.slice(1)} is selected but not installed in the sandbox —
               builds dispatched to it will fail until you provision it (use the “Provision … in sandbox” button above).
+              {readiness[provider]?.error && (
+                <div style={{ marginTop: 2, color: "var(--dpf-muted)", fontWeight: 400 }}>
+                  {readiness[provider]?.error}
+                </div>
+              )}
             </div>
           )}
       </section>

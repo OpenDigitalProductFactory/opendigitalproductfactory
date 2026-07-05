@@ -8,6 +8,28 @@ import {
   provisionBuildEngine,
   type ProvisionOutcome,
 } from "@/lib/integrate/build-engine-provision";
+import {
+  probeBuildEngineReadiness,
+  type BuildEngineReadinessRow,
+} from "@/lib/integrate/build-engine-readiness";
+
+/** Shared operator gate: managing provider connections. Throws if not held. */
+async function requireManageProviders(): Promise<{ id: string }> {
+  const session = await auth();
+  const user = session?.user;
+  if (
+    !user ||
+    !can(
+      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
+      "manage_provider_connections",
+    )
+  ) {
+    throw new Error(
+      "Unauthorized: managing provider connections is required to manage build engines.",
+    );
+  }
+  return { id: user.id };
+}
 
 /**
  * Provision a build-dispatch engine into the running sandbox from its registry
@@ -21,21 +43,30 @@ export async function provisionBuildEngineAction(
   engineId: string,
   offline = false,
 ): Promise<ProvisionOutcome> {
-  const session = await auth();
-  const user = session?.user;
-  if (
-    !user ||
-    !can(
-      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
-      "manage_provider_connections",
-    )
-  ) {
-    throw new Error(
-      "Unauthorized: managing provider connections is required to provision build engines.",
-    );
-  }
-
+  const user = await requireManageProviders();
   const outcome = await provisionBuildEngine(engineId, { offline, actorUserId: user.id });
   revalidatePath("/platform/ai/build-studio");
   return outcome;
+}
+
+/**
+ * Live-probe the sandbox readiness of the given build engines — or all of them
+ * when `engineIds` is omitted — and return fresh rows including the failure
+ * reason (BI-805D01E4, EP-BS-UX-HARDENING). Backs the config page's proactive
+ * probe on load and its one-click "Probe all engines" action, so an operator
+ * sees which engine will actually work BEFORE selecting one and starting a
+ * build, instead of discovering a broken engine when the build fails mid-flight.
+ *
+ * Operator-gated by `manage_provider_connections` — the same authority that
+ * provisions engines and manages provider credentials (a probe runs
+ * `docker exec … --version` in the sandbox). Revalidates the config page so a
+ * subsequent server render reflects the newly persisted BuildEngineState.
+ */
+export async function probeBuildEnginesAction(
+  engineIds?: string[],
+): Promise<BuildEngineReadinessRow[]> {
+  await requireManageProviders();
+  const rows = await probeBuildEngineReadiness({ engineIds });
+  revalidatePath("/platform/ai/build-studio");
+  return rows;
 }

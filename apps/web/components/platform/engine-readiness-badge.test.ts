@@ -28,4 +28,14 @@ describe("engineReadinessBadgeContent", () => {
     expect(r.tone).toBe("muted");
     expect(r.text).toMatch(/not yet probed/i);
   });
+
+  it("probing → muted 'Probing sandbox…' regardless of prior state", () => {
+    const fromNever = engineReadinessBadgeContent(null, null, { probing: true });
+    expect(fromNever.tone).toBe("muted");
+    expect(fromNever.text).toMatch(/probing/i);
+    // probing overrides a stale present/absent state too
+    const fromPresent = engineReadinessBadgeContent(true, "1.2.3", { probing: true });
+    expect(fromPresent.text).toMatch(/probing/i);
+    expect(fromPresent.text).not.toContain("1.2.3");
+  });
 });

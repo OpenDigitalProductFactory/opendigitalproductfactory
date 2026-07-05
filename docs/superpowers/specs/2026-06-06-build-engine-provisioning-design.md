@@ -259,3 +259,31 @@ presence (Grok → `not installed ✗`), exposes readiness to the Coworker, and 
 the `BuildEngine` / `BuildEngineState` / recipe data foundation that Phases 2–3
 build on. Provisioning (the side-effecting work) lands only after readiness is
 trustworthy.
+
+## 8. Follow-up — proactive readiness on the config page (BI-805D01E4, EP-BS-UX-HARDENING)
+
+Phase 1b surfaced a per-engine readiness badge but only rendered the LAST
+persisted probe. On a fresh install / sandbox rebuild `BuildEngineState` is
+empty, so all four engines rendered "Sandbox readiness not yet probed" and the
+operator selected an engine blind — discovering it was broken only when a build
+failed mid-flight (see the codex rate-limit storm and Codex CLI exit-1 failures).
+
+The hardening keeps readiness a genuine check (never a fake green):
+
+- **Shared sweep** — `lib/integrate/build-engine-readiness.ts`:
+  `loadBuildEngineReadiness()` (DB-only, cheap first render) and
+  `probeBuildEngineReadiness({ engineIds? })` (live `docker exec … --version`
+  per engine, persisted, returning the per-engine **failure reason**). Both the
+  config page's server action and the `get_build_engine_readiness` MCP tool
+  (`refresh:true`) now call this one implementation.
+- **Server action** — `probeBuildEnginesAction(engineIds?)` in
+  `build-engine-actions.ts`, gated by `manage_provider_connections` (a probe
+  runs `docker exec`), returns fresh rows and revalidates the config page.
+- **UX** (`BuildStudioConfigForm` + `engine-readiness-badge`):
+  1. proactive probe of every dispatch engine **once on mount** (canWrite only)
+     so the page never shows all-"not probed";
+  2. a one-click **"Probe all engines"** action to re-probe on demand;
+  3. re-probe of the selected engine **after Save**;
+  4. a live pass/fail badge with a "Probing sandbox…" in-flight state and the
+     **failure reason** shown under a "not installed" engine, so the operator
+     can pick a known-good engine up front.
