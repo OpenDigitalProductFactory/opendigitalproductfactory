@@ -75,6 +75,26 @@ describe("coworker seed invariants", () => {
     expect(grants).not.toContain("marketing_read");
   });
 
+  it("grants platform-engineer (AI Ops Engineer) backlog_read + backlog_write so it can file readiness findings", () => {
+    // The AI Ops Engineer resolves its runtime grants from THIS map, not
+    // agent_registry.json. Regression guard for BI-CAP-CBC41758: it observed
+    // capability needs on /platform/ai/readiness but its grant set had dropped
+    // backlog_read/backlog_write, so it could not file or track the issues it found.
+    const grants = HARDCODED_COWORKER_GRANTS["platform-engineer"];
+    expect(grants).toEqual(expect.arrayContaining(["backlog_read", "backlog_write"]));
+  });
+
+  it("keeps inventory-specialist scoped to estate stewardship — no AI-ops agent_control_read", () => {
+    // Regression guard for BI-CAP-C2565D94 (tool-surface overload). The Digital
+    // Product Estate Specialist stewards products via registry_*/backlog; the
+    // AI-ops agent_control_read grant (add_provider, configure_gateway_scan,
+    // manage_coworker_tool_grant, …) was out-of-role and only inflated its surface.
+    const grants = HARDCODED_COWORKER_GRANTS["inventory-specialist"];
+    expect(grants).toEqual(expect.arrayContaining(["registry_read", "registry_write", "backlog_read", "backlog_write"]));
+    expect(grants).not.toContain("agent_control_read");
+    expect(grants).not.toContain("portfolio_read");
+  });
+
   it("binds every hardcoded coworker seed to one profession family", () => {
     const registeredRoles = new Map<string, string>();
     const duplicates: string[] = [];
