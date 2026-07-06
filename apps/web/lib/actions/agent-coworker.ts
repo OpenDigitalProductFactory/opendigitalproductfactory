@@ -69,6 +69,7 @@ import {
   executeAutonomousAgenticLoop,
   findCurrentAutonomousWorkRun,
 } from "@/lib/tak/autonomous-work-run";
+import { applyLocalDegradationCaveat } from "@/lib/tak/local-degradation-caveat";
 import {
   isConversationalExpansionRequest,
   isPageExplanationOnlyRequest,
@@ -1856,7 +1857,14 @@ export async function sendMessage(input: {
       toolCalls: undefined as undefined, // already handled by loop
     };
 
-    responseContent = result.content;
+    // BI-C0F180E8 — honest local-degradation. If the bundled local model answered
+    // without using any tools, the coworker could not inspect live data this turn;
+    // prepend an unmissable caveat so the reply is framed as unverified instead of
+    // authoritative (it is kept, not discarded — it may still be a fine no-tool reply).
+    responseContent = applyLocalDegradationCaveat(result.content, {
+      providerId: result.providerId,
+      executedToolCount: agenticResult.executedTools.length,
+    });
     responseProviderId = result.providerId;
     responseModelId = result.modelId;
 
