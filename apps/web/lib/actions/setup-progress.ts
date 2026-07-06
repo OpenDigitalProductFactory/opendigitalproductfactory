@@ -1,21 +1,17 @@
 "use server";
 
-import { prisma, projectArchetypeSupply } from "@dpf/db";
+import { prisma } from "@dpf/db";
 import { SETUP_STEPS, type SetupStep, type StepStatus, type SetupContext } from "./setup-constants";
-import { seedOrgWwwdCorpus } from "@/lib/onboarding/seed-org-wwwd-corpus";
-import { seedPortfolioDecomposition } from "@/lib/onboarding/seed-portfolio-decomposition";
-import { seedMarketOffer } from "@/lib/onboarding/seed-market-offer";
-import { seedRiskPosture } from "@/lib/onboarding/seed-risk-posture";
-import { applyRiskEnvelopeToOrgProfile } from "@/lib/onboarding/apply-risk-envelope-to-profile";
-import { applyMissionPrompt } from "@/lib/onboarding/apply-mission-prompt";
+import { runSetupCompletionSeeds } from "@/lib/onboarding/setup-completion-seeds";
 
 /**
- * Runs once when initial setup completes: persist the captured mission into
- * the company-mission prompt (visible to every coworker), seed the per-org
- * WWWD corpus, persist the per-org portfolio decomposition (BI-2D452667), and
- * seed the archetype-derived market offer into the Products & Services Sold
- * portfolio (BI-4503E6B9). Fail-open and idempotent — onboarding completion
- * must never block on embedding/seeding errors, and the seeds are safe to re-run.
+ * Runs once when initial setup completes: the shared seed chain in
+ * setup-completion-seeds.ts (mission prompt, WWWD corpus, portfolio
+ * decomposition BI-2D452667, market offer BI-4503E6B9, archetype supply,
+ * risk posture + envelope). Fail-open and idempotent — onboarding completion
+ * must never block on embedding/seeding errors, and the seeds are safe to
+ * re-run. The boot backfill (backfill-org-wwwd-on-boot.ts) runs the same
+ * chain for installs that completed setup before these seeders existed.
  */
 async function finalizeSetupCompletion(organizationId: string | null): Promise<void> {
   try {
@@ -25,20 +21,7 @@ async function finalizeSetupCompletion(organizationId: string | null): Promise<v
       null;
     if (!orgId) return;
 
-    const bc = await prisma.businessContext.findUnique({
-      where: { organizationId: orgId },
-      select: { mission: true },
-    });
-
-    await applyMissionPrompt({ mission: bc?.mission ?? null });
-    await seedOrgWwwdCorpus({ organizationId: orgId });
-    await seedPortfolioDecomposition({ organizationId: orgId });
-    await seedMarketOffer({ organizationId: orgId });
-    await projectArchetypeSupply({ organizationId: orgId });
-    await seedRiskPosture({ organizationId: orgId });
-    // P1: project the seeded posture onto the org WWWD profile's autonomy policy
-    // (runs after the profile exists + the posture is set; balanced = no change).
-    await applyRiskEnvelopeToOrgProfile({ organizationId: orgId });
+    await runSetupCompletionSeeds(orgId);
   } catch (err) {
     console.warn("[setup] mission/WWWD seeding on completion failed (fail-open):", err);
   }

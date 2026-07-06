@@ -950,6 +950,19 @@ export async function register() {
       await backfillOperationalValueStreamsOnBoot();
     })();
 
+    // Backfill the org WWWD corpus (BI-44526F3E Phase A) for any install that
+    // completed setup before the onboarding seed chain existed — those orgs
+    // have no overlay wiki pages and no org DecisionPerspectiveProfile, so the
+    // Decision Governance hub shows "no stance of your own yet" forever and
+    // business decisions silently fall back to platform doctrine. Cheap when
+    // already present (existence checks only); idempotent and non-fatal per org.
+    void (async () => {
+      const { backfillOrgWwwdOnBoot } = await import(
+        "@/lib/onboarding/backfill-org-wwwd-on-boot"
+      );
+      await backfillOrgWwwdOnBoot();
+    })();
+
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
     // These run unconditionally — they are correctness reconcilers, not optional
     // maintenance — and FIX 1 runs before FIX 2 so contradictory checkpoints are
