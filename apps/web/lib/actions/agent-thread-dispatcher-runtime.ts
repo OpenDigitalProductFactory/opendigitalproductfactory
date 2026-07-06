@@ -162,6 +162,37 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
       mode: "act",
     });
 
+    // Grant preflight: if this agent holds no grant for a single tool it was
+    // handed, every tool call in the loop would be rejected with
+    // forbidden_grant. Fail fast with an actionable message instead of
+    // dispatching a loop that can only spin (the runAgenticLoop circuit breaker
+    // is the backstop; this avoids paying for the wasted inference calls). Only
+    // short-circuits total grant-starvation — an agent that can call even one
+    // tool proceeds normally.
+    const { agentHasAnyGrant } = await import("@/lib/mcp-governed-execute");
+    if (!(await agentHasAnyGrant(resolvedAgentId, tools.map((t) => t.name)))) {
+      const blockedMessage =
+        `Blocked — this agent's profile (${resolvedAgentId}) lacks a grant for any of the tools it needs, ` +
+        `so it cannot act on this work. A platform operator must grant it the required tools ` +
+        `(or route the work to a peer that already holds them).`;
+      console.warn(
+        `[agent-thread-dispatcher] grant-preflight blocked agent=${JSON.stringify(resolvedAgentId)} ` +
+        `thread=${JSON.stringify(context.threadId)} toolCount=${tools.length}`,
+      );
+      await prisma.agentMessage.create({
+        data: {
+          threadId: context.threadId,
+          taskRunId: context.taskRunId,
+          role: "assistant",
+          content: blockedMessage,
+          agentId: resolvedAgentId,
+          routeContext: context.routeContext,
+        },
+      });
+      await markChildThreadFailed(context, blockedMessage);
+      return;
+    }
+
     const result = await executeAutonomousAgenticLoop({
       systemPrompt: agentInfo.systemPrompt,
       chatHistory,

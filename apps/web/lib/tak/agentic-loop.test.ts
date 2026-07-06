@@ -569,6 +569,40 @@ describe("runAgenticLoop", () => {
     );
   });
 
+  it("breaks early with a blocked status when every tool call is forbidden_grant (no full-duration spin)", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+
+    // Model keeps emitting tool calls with VARYING args (as the real
+    // grant-starved loop did) so the exact-args repetition detector never
+    // fires — only the grant-starvation circuit breaker should stop it.
+    let call = 0;
+    mockRoute.mockImplementation(async () =>
+      mockResult({
+        content: "Let me use a tool.",
+        toolCalls: [
+          { id: `toolu_${call}`, name: "search_project_files", arguments: { query: `attempt-${call++}` } },
+        ],
+      }),
+    );
+
+    // Every governed execution is rejected for a missing grant.
+    vi.mocked(governedExecuteTool).mockResolvedValue({
+      success: false,
+      error: "forbidden_grant",
+      message: "search_project_files rejected: agent lacks a required grant",
+    } as never);
+
+    const result = await runAgenticLoop({ ...baseParams, agentId: "build-architect" });
+
+    // Honest, actionable blocked message that names the agent + the tool.
+    expect(result.content).toContain("Blocked");
+    expect(result.content).toContain("forbidden_grant");
+    expect(result.content).toContain("search_project_files");
+    expect(result.content).toContain("build-architect");
+    // Broke on the streak (3), did NOT burn toward MAX_ITERATIONS (200).
+    expect(vi.mocked(governedExecuteTool).mock.calls.length).toBeLessThan(10);
+  });
+
   it("returns a visible diagnostic instead of issuing a second local-model nudge on non-build tool turns", async () => {
     const mockRoute = vi.mocked(routeAndCall);
 

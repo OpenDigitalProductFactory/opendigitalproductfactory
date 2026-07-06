@@ -194,6 +194,23 @@ async function isAllowedByGrants(toolName: string, grants: string[]): Promise<bo
   return isToolAllowedByGrants(toolName, grants);
 }
 
+/**
+ * Preflight for autonomous dispatch: does this agent hold a grant for at least
+ * one of the given tools? An agent that can call NOTHING it was handed will
+ * have every tool call rejected with `forbidden_grant` — entering an agentic
+ * loop just burns inference calls before the circuit breaker stops it. Callers
+ * use this to fail fast with an actionable "needs grant" message instead.
+ * Read-only; uses the same grant resolution as the execution-time check.
+ */
+export async function agentHasAnyGrant(agentId: string, toolNames: string[]): Promise<boolean> {
+  if (toolNames.length === 0) return true; // no tools attached → nothing to gate
+  const grants = await resolveGrants(agentId);
+  for (const name of toolNames) {
+    if (await isAllowedByGrants(name, grants)) return true;
+  }
+  return false;
+}
+
 async function callExecuteTool(
   toolName: string,
   params: Record<string, unknown>,
