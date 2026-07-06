@@ -13,6 +13,7 @@ vi.mock("@dpf/db", () => ({
       update: vi.fn(),
     },
     recurringLineItem: {},
+    subscription: { update: vi.fn().mockResolvedValue({}), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     invoice: { findFirst: vi.fn(), findMany: vi.fn() },
   },
 }));
@@ -333,5 +334,43 @@ describe("generateDueInvoices", () => {
     const createCall = mockCreateInvoice.mock.calls[0][0];
     expect(createCall.sourceType).toBe("recurring");
     expect(createCall.sourceId).toBe("sch-1");
+  });
+});
+
+describe("generateDueInvoices — subscription renewal sync", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (prisma as any).subscription.update.mockResolvedValue({});
+    (prisma as any).subscription.updateMany.mockResolvedValue({ count: 0 });
+  });
+
+  it("advances the linked contract's renewalDate when a renewal invoice is minted", async () => {
+    const due = new Date(Date.now() - 3600_000);
+    mockPrisma.recurringSchedule.findMany.mockResolvedValue([
+      {
+        id: "sch1", accountId: "a1", subscriptionId: "sub1", frequency: "annually",
+        nextInvoiceDate: due, endDate: null, autoSend: false, currency: "GBP",
+        lineItems: [{ description: "plan", quantity: 1, unitPrice: 12000, taxRate: 0, sortOrder: 0 }],
+      },
+    ]);
+    mockPrisma.invoice.findFirst.mockResolvedValue(null);
+    vi.mocked(createInvoice).mockResolvedValue({ id: "inv1", invoiceRef: "INV-X" });
+    mockPrisma.recurringSchedule.update.mockResolvedValue({});
+
+    const res = await generateDueInvoices();
+    expect(res.generated).toBe(1);
+    const call = (prisma as any).subscription.update.mock.calls[0][0];
+    expect(call.where).toEqual({ id: "sub1" });
+    expect(call.data.renewalDate).toBeInstanceOf(Date);
+  });
+
+  it("expires past-due non-auto-renew contracts in the same sweep", async () => {
+    mockPrisma.recurringSchedule.findMany.mockResolvedValue([]);
+    (prisma as any).subscription.updateMany.mockResolvedValue({ count: 2 });
+    const res = await generateDueInvoices();
+    expect(res.expired).toBe(2);
+    const call = (prisma as any).subscription.updateMany.mock.calls[0][0];
+    expect(call.where.autoRenew).toBe(false);
+    expect(call.data.status).toBe("expired");
   });
 });
