@@ -21,18 +21,20 @@ export function FederationProposalsClient({ rows }: { rows: FederationProposalRo
   const [flash, setFlash] = useState<Flash>(null);
   const [isPending, startTransition] = useTransition();
 
-  function onDecide(row: FederationProposalRow, decision: "approve" | "reject") {
+  async function onDecide(row: FederationProposalRow, decision: "approve" | "reject") {
+    // Await the confirm dialog OUTSIDE the transition — a dialog helper deferred
+    // inside startTransition never renders interactively (BI-FE7C543C).
+    const ok = await confirmDialog({
+      title: decision === "approve" ? "Approve remediation" : "Reject remediation",
+      message:
+        decision === "approve"
+          ? `Approve the proposed remediation for ${row.incidentKey}? Approved actions execute on your own runner.`
+          : `Reject the proposed remediation for ${row.incidentKey}?`,
+      confirmLabel: decision === "approve" ? "Approve" : "Reject",
+    });
+    if (!ok) return;
     setFlash(null);
     startTransition(async () => {
-      const ok = await confirmDialog({
-        title: decision === "approve" ? "Approve remediation" : "Reject remediation",
-        message:
-          decision === "approve"
-            ? `Approve the proposed remediation for ${row.incidentKey}? Approved actions execute on your own runner.`
-            : `Reject the proposed remediation for ${row.incidentKey}?`,
-        confirmLabel: decision === "approve" ? "Approve" : "Reject",
-      });
-      if (!ok) return;
       const result = await decideFederatedProposalAction(row.proposalId, decision);
       setFlash(
         result.ok

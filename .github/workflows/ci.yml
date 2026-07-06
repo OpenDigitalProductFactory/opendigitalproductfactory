@@ -254,6 +254,26 @@ jobs:
       - name: Run guard
         run: node scripts/check-no-native-dialogs.mjs
 
+  dialog-in-transition-guard:
+    name: Dialog-in-Transition Guard
+    runs-on: ubuntu-latest
+    # BI-FE7C543C. confirmDialog/alertDialog/promptDialog dispatch a DialogHost
+    # state update to render; deferred inside a React transition it never renders
+    # interactively, so the dialog silently never appears and the triggering
+    # button wedges in its isPending/disabled state (bit EP-LABOR-ECONOMICS
+    # Phase 4 live, fixed in PR #2649). This guard fails any apps/web PR that
+    # calls a dialog helper inside a startTransition(...) callback; the correct
+    # pattern is to await the dialog FIRST, then run the work inside the
+    # transition (see components/storefront-admin/ItemsManager.tsx handleDelete).
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/check-no-dialog-in-transition.mjs
+
   raw-event-source-guard:
     name: Raw EventSource Guard
     runs-on: ubuntu-latest
