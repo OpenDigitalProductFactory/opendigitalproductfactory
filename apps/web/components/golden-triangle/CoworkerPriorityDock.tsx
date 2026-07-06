@@ -31,12 +31,24 @@ export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
   const [collapsed, setCollapsed] = useState(true);
   const savedRef = useRef<string>(JSON.stringify(preferenceFromPreset("balanced")));
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The operator has changed the posture this mount. Guards the async load from
+  // clobbering an edit made while the initial fetch was still in flight, and marks
+  // whether a pending change still needs flushing on unmount.
+  const editedRef = useRef(false);
+  // The latest changed-but-not-yet-persisted posture (the debounce target). Held in
+  // a ref so the unmount cleanup can flush it — cleanup closes over stale `pref`.
+  const pendingRef = useRef<GoldenTrianglePreference | null>(null);
+  // Same clobber guard for the proactivity load (it persists immediately, so no
+  // debounce-flush is needed — only the in-flight-load overwrite to prevent).
+  const proactivityEditedRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
     getCoworkerGoldenTrianglePosture(agentId)
       .then((p) => {
-        if (alive && p) {
+        // Don't overwrite a value the operator already changed while this load was
+        // in flight (founder report 2026-07-06: Priority snapping back to the middle).
+        if (alive && p && !editedRef.current) {
           setPref(p);
           savedRef.current = JSON.stringify(p);
         }
@@ -45,6 +57,14 @@ export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
     return () => {
       alive = false;
       if (timerRef.current) clearTimeout(timerRef.current);
+      // Flush a pending debounced save so a change made <800ms before navigating away
+      // (switching coworkers, closing the panel) is persisted instead of silently lost
+      // — the primary cause of Priority resetting to the middle on return.
+      const pending = pendingRef.current;
+      if (pending && JSON.stringify(pending) !== savedRef.current) {
+        savedRef.current = JSON.stringify(pending);
+        void saveCoworkerGoldenTrianglePosture(agentId, pending).catch(() => {});
+      }
     };
   }, [agentId]);
 
@@ -52,7 +72,7 @@ export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
     let alive = true;
     getCoworkerProactivityPreference(agentId)
       .then((level) => {
-        if (alive && level) setProactivityLevel(level);
+        if (alive && level && !proactivityEditedRef.current) setProactivityLevel(level);
       })
       .catch(() => {});
     return () => {
@@ -65,6 +85,8 @@ export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
   const activeLabel = postureLabel(pref);
 
   function onChange(next: GoldenTrianglePreference) {
+    editedRef.current = true;
+    pendingRef.current = next;
     setPref(next);
     if (timerRef.current) clearTimeout(timerRef.current);
     // Debounced per-coworker save (drag emits many changes; persist the settled one).
@@ -74,10 +96,12 @@ export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
         savedRef.current = cur;
         saveCoworkerGoldenTrianglePosture(agentId, next).catch(() => {});
       }
+      pendingRef.current = null;
     }, 800);
   }
 
   function onProactivityChange(next: ProactivityLevel) {
+    proactivityEditedRef.current = true;
     setProactivityLevel(next);
     saveCoworkerProactivityPreference(agentId, next).catch(() => {});
   }
