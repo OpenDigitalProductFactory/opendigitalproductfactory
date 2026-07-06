@@ -71,11 +71,17 @@ with a grounded recommendation, not a raw question, and never to deflect with "s
 governance?". It respects the AGENTS.md §16 non-inherit boundary (platform doctrine is advisory to a
 business decision, not binding).
 
-### Phase 2 — Coworker-callable WWWD decision door *(filed; depends on BI-E1FB2307)*
-Expose the Decision Perspective Gate as a coworker-callable tool (or land the consolidation in
-BI-E1FB2307) so "what would WE do?" has a real governed door rather than only Build-Studio-internal
-plumbing. Until then Phase 1 grounds business answers in the org's recorded stance and surfaces
-coverage gaps via the existing `recordCoverageGap` path.
+### Phase 2 — Coworker-callable WWWD decision door *(LANDED — 2026-07-06 update)*
+The governed door shipped as `evaluate_org_business_decision` (org-decision tool pack,
+`apps/web/lib/decision-perspective/org-business-gate.ts`, BI-230C9EF7/EP-8AF1C996): it resolves the
+org's own WWWD profile via `resolveOrgProfileId`, scores only its material, treats platform doctrine
+as advisory fallback, and records every call to the `DecisionInteraction` ledger. The routing block
+now points the business branch at it (BI-44526F3E Phase A). The **elicitation return path** also
+exists: `record_org_business_answer` (same pack, `registry_write`, BI-44526F3E Phase C) captures a
+CONFIRMED operator answer through `enrichOrgCorpus` (qa provenance, first-party trust,
+draft-by-default per BI-1378), and the /wiki/review gap findings surface where the org was silent —
+silence → gap finding → ask once → captured answer → reviewed stance. The onboarding COO holds the
+grant and its persona instructs the interview.
 
 ### Phase 3 — Unified-path migration / legacy retirement *(filed)*
 The two divergent prompt paths are the underlying architectural debt. Decide whether to default

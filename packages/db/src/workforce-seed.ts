@@ -297,6 +297,10 @@ export const ONBOARDING_AGENT_GRANTS: Record<string, readonly string[]> = {
     "web_search",
     "data_governance_validate",
     "registry_read",
+    // WWWD elicitation (BI-44526F3E Phase C): the onboarding COO interviews the
+    // operator about how the business runs and captures confirmed answers into
+    // the org corpus (record_org_business_answer → draft pages for review).
+    "registry_write",
     "backlog_read",
     "portfolio_read",
     "admin_write",

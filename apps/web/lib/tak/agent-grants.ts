@@ -207,6 +207,13 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // its organization's stance without a write grant. Satisfies routing-audit INV-1.
   evaluate_org_business_decision: ["work_capsule_read"],
 
+  // Org/WWWD qa elicitation feeder (BI-44526F3E Phase C): capture a CONFIRMED
+  // operator answer about the business into the org corpus via enrichOrgCorpus
+  // (qa provenance, first-party trust, draft-by-default per BI-1378). Requires
+  // `registry_write` — same scope as wiki_ingest, because the commit writes
+  // draft WikiPage/WikiPageRevision rows under the org's overlay.
+  record_org_business_answer: ["registry_write"],
+
   // Backlog triage and Build Studio promotion (spec 2026-04-21)
   // These were defined in PLATFORM_TOOLS but missing here, so every call was
   // denied by the default-deny rule below. That broke the entire backlog →
