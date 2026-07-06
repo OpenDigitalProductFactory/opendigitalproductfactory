@@ -154,3 +154,15 @@ run_mdm_steward_sweep, list_mdm_steward_tasks, enrich_customer_account).
 Covers BI-FEA49EC1, BI-28577CD1, BI-130EF887, BI-37F52B70, BI-16450BB2,
 BI-F71DBE84, BI-A4B73F87, BI-77489158, BI-1ABF6443, BI-2D435AFC (v1 scope
 noted per-BI in spec §9).
+
+## Slice 4 (2026-07-06): Autonomous Data Steward (BI-87C655D1)
+
+Files: lib/mdm/autonomous-steward.ts (engine + survivor selection + cap +
+guardrails + retro digest), lib/mdm/steward-schedule-constants.ts,
+lib/queue/functions/mdm-steward-sweep.ts (scheduled + manual Inngest),
+registered in queue/functions/index.ts, catalog entry in
+operate/scheduled-jobs/catalog.ts (parity test). Persona: data-steward in
+workforce-seed.ts + grants. Surfaces: DataStewardPanel + runDataStewardAction
+on /admin/data-stewardship; run_data_steward pack tool. Tests:
+autonomous-steward.test.ts (8: survivor selection, domain guardrail, identity
+carve-out, cap, dry-run). No migration — reuses slice-3 substrate.

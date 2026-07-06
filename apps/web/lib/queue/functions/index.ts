@@ -34,6 +34,7 @@ import {
   contributorInventorySyncOnDemand,
 } from "./contributor-inventory-sync";
 import { selfUpgradeScheduled, selfUpgradeManual } from "./self-upgrade";
+import { mdmStewardSweepScheduled, mdmStewardSweepRequested } from "./mdm-steward-sweep";
 import { quiescenceRun } from "./quiescence-run";
 import { wikiLint } from "./wiki-lint";
 import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verification";
@@ -93,6 +94,7 @@ export const scheduledFunctions = [
   selfUpgradeScheduled,
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
+  mdmStewardSweepScheduled, // EP-4A12A7CB slice 4: autonomous Data Steward — sweep + auto-resolve account dupes, daily 05:00
   logSignatureScanner,   // BI-5FE8656F: EP-FULL-OBS Tier 2 novel-signature log scan, every 15m
   edgeIncidentCorrelation, // EP-MSP-FEDERATION A2+A3: correlate edge alerts->incidents->customer tickets, every 10m (flag-gated)
   alertDeliveryBridge,   // BI-5FE8656F: EP-FULL-OBS Tier 2 item #6 — Prometheus+Loki firing alerts -> PortfolioQualityIssue, every 1m
@@ -130,6 +132,7 @@ export const eventFunctions = [
   selfUpgradeManual,
   quiescenceRun,
   dataRetentionSweepRequested, // EP-DATA-RETENTION: operator "run now" / dry-run
+  mdmStewardSweepRequested, // EP-4A12A7CB slice 4: Data Steward "run now" / dry-run
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

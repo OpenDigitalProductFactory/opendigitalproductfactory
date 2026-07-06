@@ -6,17 +6,20 @@
 import { listOpenStewardTasks } from "@/lib/mdm/steward";
 import { getCustomerMasterDataQuality } from "@/lib/mdm/publish";
 import { loadMatchConfig } from "@/lib/mdm/match-config";
+import { listRecentAutoResolutions } from "@/lib/mdm/autonomous-steward";
 import { StewardTaskList, type StewardTaskRow } from "@/components/admin/StewardTaskList";
 import { MatchConfigCard } from "@/components/admin/MatchConfigCard";
+import { DataStewardPanel, type AutoResolution } from "@/components/admin/DataStewardPanel";
 
 export const dynamic = "force-dynamic";
 
 export default async function DataStewardshipPage() {
-  const [tasks, quality, accountConfig, contactConfig] = await Promise.all([
+  const [tasks, quality, accountConfig, contactConfig, recentAuto] = await Promise.all([
     listOpenStewardTasks(),
     getCustomerMasterDataQuality(),
     loadMatchConfig("customer-account"),
     loadMatchConfig("customer-contact"),
+    listRecentAutoResolutions(),
   ]);
 
   const tiles = [
@@ -47,6 +50,12 @@ export default async function DataStewardshipPage() {
             <p className="text-sm font-semibold text-[var(--dpf-text)]">{tile.value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="mb-6">
+        <DataStewardPanel
+          recent={recentAuto.map((r) => ({ ...r, at: r.at.toISOString() })) as AutoResolution[]}
+        />
       </div>
 
       <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-2">Review queue</h2>

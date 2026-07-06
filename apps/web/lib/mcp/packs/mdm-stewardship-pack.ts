@@ -103,7 +103,34 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     requiresExternalAccess: true,
   },
+  {
+    name: "run_data_steward",
+    description:
+      "Run one autonomous data-stewardship pass: sweep for duplicates + stale records, then auto-merge the account duplicates it is confident about (keeping the best survivor), leaving ambiguous or identity cases for a human. Everything auto-merged is audit-logged and reversible with unmerge_customer_accounts. Use when asked to clean up customer data end-to-end. Pass dryRun=true to preview what WOULD be auto-merged without changing anything. This is the same pass the scheduled Data Steward runs daily.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dryRun: { type: "boolean", description: "Preview only — report what would auto-merge without merging. Default false." },
+      },
+    },
+    requiredCapability: "operate_customer",
+    sideEffect: true,
+  },
 ];
+
+async function runDataStewardTool(params: Record<string, unknown>): Promise<ToolResult> {
+  const dryRun = params["dryRun"] === true;
+  const { runAutonomousStewardship } = await import("@/lib/mdm/autonomous-steward");
+  const summary = await runAutonomousStewardship({ dryRun });
+  const merges = summary.autoMerged
+    .map((m) => `${m.loserLabel}→${m.survivorLabel} (${m.reason})`)
+    .join("; ") || "none";
+  return {
+    success: true,
+    message: `${dryRun ? "[dry-run] " : ""}Data Steward pass: swept ${summary.sweep.duplicatesFound} duplicate pair(s) + ${summary.sweep.staleFound} stale record(s); ${dryRun ? "would auto-merge" : "auto-merged"} ${summary.autoMerged.length} (${merges}); escalated ${summary.escalated.length} to human review${summary.capped ? " (per-run cap hit)" : ""}.`,
+    data: summary,
+  };
+}
 
 async function mergeCustomerContactsTool(params: Record<string, unknown>): Promise<ToolResult> {
   const survivorId = typeof params["survivorContactId"] === "string" ? params["survivorContactId"].trim() : "";
@@ -313,6 +340,7 @@ export const mdmStewardshipPack: ToolPack = {
     run_mdm_steward_sweep: () => runStewardSweepTool(),
     list_mdm_steward_tasks: () => listStewardTasksTool(),
     enrich_customer_account: (params) => enrichCustomerAccountTool(params),
+    run_data_steward: (params) => runDataStewardTool(params),
   },
   grants: {
     // Mirrors agent-grants.ts TOOL_TO_GRANTS (the gating source): merging
@@ -326,5 +354,7 @@ export const mdmStewardshipPack: ToolPack = {
     list_mdm_steward_tasks: ["crm_read"],
     // Enrichment fetches an external site: gated by the web toggle AND grant.
     enrich_customer_account: ["web_search"],
+    // The autonomous pass merges records: crm_write, same envelope as merge.
+    run_data_steward: ["crm_write"],
   },
 };

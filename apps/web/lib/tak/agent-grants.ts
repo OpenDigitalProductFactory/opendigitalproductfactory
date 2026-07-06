@@ -484,6 +484,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   run_mdm_steward_sweep: ["crm_write"],
   list_mdm_steward_tasks: ["crm_read"],
   enrich_customer_account: ["web_search"],
+  run_data_steward: ["crm_write"],
 
   // Security Operations / SIEM (EP-SOVEREIGN-SOC). Writes are propose-only +
   // coworkerArtifact; siem_investigate/siem_tune/incident_respond imply siem_read.

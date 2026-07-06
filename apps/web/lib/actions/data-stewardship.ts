@@ -17,6 +17,7 @@ import { runStewardSweep, resolveStewardTask, type StewardResolution } from "@/l
 import { mergeRecords, MergeValidationFailure, type MergeableDomain } from "@/lib/mdm/merge";
 import { saveMatchConfig, matchConfigSchema, type MatchConfig } from "@/lib/mdm/match-config";
 import type { DedupGatedDomain } from "@/lib/mdm/dedup-gate";
+import { runAutonomousStewardship } from "@/lib/mdm/autonomous-steward";
 
 type ActionResult<T = undefined> = { ok: true; data?: T } | { ok: false; message: string };
 
@@ -95,4 +96,19 @@ export async function saveMatchConfigAction(
   const next = await saveMatchConfig(domain, parsed.data, gate.userId);
   revalidatePath("/admin/data-stewardship");
   return { ok: true, data: next };
+}
+
+/** Trigger one autonomous Data Steward pass on demand (admin). */
+export async function runDataStewardAction(
+  dryRun: boolean,
+): Promise<{ ok: true; summary: string } | { ok: false; message: string }> {
+  const gate = await requireAdmin();
+  if ("denied" in gate) return gate.denied;
+  const s = await runAutonomousStewardship({ dryRun });
+  revalidatePath("/admin/data-stewardship");
+  const merges = s.autoMerged.map((m) => `${m.loserLabel}→${m.survivorLabel}`).join(", ") || "none";
+  return {
+    ok: true,
+    summary: `${dryRun ? "[preview] " : ""}Swept ${s.sweep.duplicatesFound} duplicate pair(s), ${s.sweep.staleFound} stale; ${dryRun ? "would merge" : "merged"} ${s.autoMerged.length} (${merges}); ${s.escalated.length} escalated${s.capped ? "; cap hit" : ""}.`,
+  };
 }
