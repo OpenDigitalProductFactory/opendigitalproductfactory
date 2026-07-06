@@ -50,8 +50,9 @@ export type DedupCheckResult = {
   candidates: DedupCandidate[];
 };
 
-/** Fallback trigram floor — the governed per-domain MdmMatchConfig overrides. */
-const TRGM_SIMILARITY_FLOOR = MATCH_CONFIG_DEFAULTS.trgmFloor;
+// The trigram floor is no longer a module constant — it comes from the
+// governed per-domain MdmMatchConfig (loadMatchConfig), falling back to
+// MATCH_CONFIG_DEFAULTS.trgmFloor inside each check.
 const CANDIDATE_LIMIT = 10;
 
 /**
