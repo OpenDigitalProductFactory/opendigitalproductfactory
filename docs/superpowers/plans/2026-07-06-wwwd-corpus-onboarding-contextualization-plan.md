@@ -3,7 +3,7 @@
 **Date:** 2026-07-06
 **BI:** BI-44526F3E (sized L, triaged build, linked to EP-0AF96937)
 **Scope:** The org-level "what would WE do?" (WWWD) decision corpus — how a new company's onboarding produces it, how existing installs get it retroactively, and how coworkers' business decisions actually consult it. Companion to the WWMD recontextualization (PRs #2591/#2623).
-**Status:** Plan — awaiting operator review before any build (mirrors the WWMD thread's review → plan → confirm → execute flow).
+**Status:** Executing — operator authorized full overnight execution 2026-07-06 ("execute all"). Phases A+B land together in one PR (the boot backfill runs the Phase-B generator through the shared seed chain); Phase C is its own PR. Open-question calls taken with the recommendations: backfill via boot reconcile (no extra hub button), C1 as coworker conversation, honest starter framing kept.
 
 ---
 

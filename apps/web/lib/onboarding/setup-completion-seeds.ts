@@ -12,6 +12,7 @@ import { prisma, projectArchetypeSupply } from "@dpf/db";
 import { seedOrgWwwdCorpus } from "./seed-org-wwwd-corpus";
 import { seedPortfolioDecomposition } from "./seed-portfolio-decomposition";
 import { seedMarketOffer } from "./seed-market-offer";
+import { seedOrgOperatingModelPages } from "./seed-org-operating-model-pages";
 import { seedRiskPosture } from "./seed-risk-posture";
 import { applyRiskEnvelopeToOrgProfile } from "./apply-risk-envelope-to-profile";
 import { applyMissionPrompt } from "./apply-mission-prompt";
@@ -36,6 +37,9 @@ export async function runSetupCompletionSeeds(organizationId: string): Promise<v
   await seedPortfolioDecomposition({ organizationId });
   await seedMarketOffer({ organizationId });
   await projectArchetypeSupply({ organizationId });
+  // Runs after the portfolio/market/supply seeds so the persisted operating-
+  // model map it reads is complete (BI-44526F3E Phase B).
+  await seedOrgOperatingModelPages({ organizationId });
   await seedRiskPosture({ organizationId });
   // P1: project the seeded posture onto the org WWWD profile's autonomy policy
   // (runs after the profile exists + the posture is set; balanced = no change).
