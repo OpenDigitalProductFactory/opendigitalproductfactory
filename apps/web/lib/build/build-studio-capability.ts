@@ -235,15 +235,22 @@ export async function loadBuildStudioCapability(): Promise<BuildStudioCapability
     }),
     // The opencode build engine — the deterministic tool-calling runner that
     // makes a local model viable for Build Studio. "Available" = its binary is
-    // present in the sandbox (probed) OR it is baked into the image by default.
+    // actually PRESENT in the sandbox (probed at boot). We deliberately do NOT
+    // trust bakeInDefault here: that flag is config *intent* ("this engine should
+    // be baked into the image"), not runtime *fact*. When an image drifts and a
+    // bakeInDefault engine is missing (opencode absent → `which opencode` fails),
+    // trusting the flag opens the gate, the orchestrator dispatches to a binary
+    // that isn't there, and the build hard-fails at deps_installed with exit 127
+    // instead of degrading to a present cloud engine. Gate on presence so a
+    // missing engine closes the local gate and builds fall back gracefully.
+    // (BI-9394E7C5 — evidence over config-intent.)
     prisma.buildEngine.findFirst({
       where: { engineId: "opencode" },
       select: { bakeInDefault: true, state: { select: { present: true } } },
     }),
   ]);
 
-  const localBuildEngineAvailable =
-    !!localEngine && (localEngine.state?.present === true || localEngine.bakeInDefault === true);
+  const localBuildEngineAvailable = localEngine?.state?.present === true;
 
   const models: ActiveProviderModel[] = profiles.map((p) => ({
     providerId: p.providerId,

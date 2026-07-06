@@ -136,4 +136,30 @@ describe("loadBuildStudioCapability", () => {
       expect(result.reason).toBe("only_local_provider_active");
     }
   });
+
+  it("keeps the gate closed when opencode is bakeInDefault but NOT actually present (image drift → BI-9394E7C5)", async () => {
+    // The exact failure that hard-crashes builds at exit 127: the engine is
+    // marked baked-in-by-default, but its binary is missing from the image.
+    // Availability must follow runtime presence, not the config-intent flag.
+    mockModelProfileFindMany.mockResolvedValue([
+      {
+        providerId: "local",
+        modelId: "docker.io/ai/qwen3-coder:latest",
+        supportsToolUse: false,
+        maxInputTokens: null,
+        provider: { name: "Docker Model Runner (local)" },
+      },
+    ] as unknown as Awaited<ReturnType<typeof prisma.modelProfile.findMany>>);
+    mockBuildEngineFindFirst.mockResolvedValue(
+      { bakeInDefault: true, state: { present: false } } as unknown as Awaited<
+        ReturnType<typeof prisma.buildEngine.findFirst>
+      >,
+    );
+
+    const result = await loadBuildStudioCapability();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("only_local_provider_active");
+    }
+  });
 });
