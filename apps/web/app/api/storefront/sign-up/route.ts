@@ -6,6 +6,7 @@ import {
   customerAccountNormalizedColumns,
   customerContactNormalizedColumns,
 } from "@/lib/mdm/dedup-gate";
+import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
 
 export async function POST(req: NextRequest) {
   const body = await req.json() as { name?: string; email?: string; password?: string; orgSlug?: string };
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
   const passwordHash = await hashPassword(password);
 
   // Create CustomerAccount and CustomerContact in a transaction
-  await prisma.$transaction(async (tx) => {
+  const createdAccountId = await prisma.$transaction(async (tx) => {
     const account = await tx.customerAccount.create({
       data: {
         accountId: `CA-${nanoid(10)}`,
@@ -48,6 +49,13 @@ export async function POST(req: NextRequest) {
         isActive: true,
       },
     });
+    return account.id;
+  });
+
+  await registerCustomerAccountSource({
+    accountId: createdAccountId,
+    sourceSystem: "storefront-signup",
+    sourceEntityId: email,
   });
 
   return NextResponse.json({ success: true });

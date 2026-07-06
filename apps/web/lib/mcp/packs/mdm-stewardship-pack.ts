@@ -57,7 +57,127 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "operate_customer",
     sideEffect: true,
   },
+  {
+    name: "merge_customer_contacts",
+    description:
+      "Merge a duplicate customer contact into the one to keep — use when two contact records are confirmed to be the SAME PERSON (e.g. added under two emails). Roles, opportunities, activities, and invoices move to the surviving contact; the duplicate keeps its own email but is deactivated and points at the survivor. The survivor keeps its login credentials. Confirm with the user which record survives before calling. Pass CustomerContact.id values.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        survivorContactId: { type: "string", description: "CustomerContact.id of the record to KEEP." },
+        loserContactId: { type: "string", description: "CustomerContact.id of the duplicate to merge away (deactivated, not deleted)." },
+      },
+      required: ["survivorContactId", "loserContactId"],
+    },
+    requiredCapability: "operate_customer",
+    sideEffect: true,
+  },
+  {
+    name: "run_mdm_steward_sweep",
+    description:
+      "Scan customer data for quality issues and file them into the steward review queue: duplicate account/contact pairs (batch scan) and stale records (no update within the configured window). Idempotent — re-running refreshes open items and never re-files resolved ones. Use when asked to check or clean up data quality. Returns counts; follow with list_mdm_steward_tasks to see the queue.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "operate_customer",
+    sideEffect: true,
+  },
+  {
+    name: "list_mdm_steward_tasks",
+    description:
+      "List open data-quality review tasks (possible duplicates and stale records) from the steward queue, strongest signal first. Read-only. Resolve duplicates with merge_customer_accounts / merge_customer_contacts; a human can also resolve tasks at /admin/data-stewardship.",
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: "view_customer",
+    sideEffect: false,
+  },
+  {
+    name: "enrich_customer_account",
+    description:
+      "Fetch a customer account's own stored website and propose data enrichment (page title / description signals) as a steward review task — never writes account fields directly. Requires web access to be enabled. Use when an account looks sparse or possibly outdated and it has a website on record. Pass the CustomerAccount.id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        accountId: { type: "string", description: "CustomerAccount.id to enrich (must have a website set)." },
+      },
+      required: ["accountId"],
+    },
+    requiredCapability: "operate_customer",
+    sideEffect: true,
+    requiresExternalAccess: true,
+  },
 ];
+
+async function mergeCustomerContactsTool(params: Record<string, unknown>): Promise<ToolResult> {
+  const survivorId = typeof params["survivorContactId"] === "string" ? params["survivorContactId"].trim() : "";
+  const loserId = typeof params["loserContactId"] === "string" ? params["loserContactId"].trim() : "";
+  if (!survivorId || !loserId) {
+    return { success: false, error: "missing_fields", message: "survivorContactId and loserContactId are both required (CustomerContact.id values)." };
+  }
+  const { mergeRecords, MergeValidationFailure } = await import("@/lib/mdm/merge");
+  try {
+    const result = await mergeRecords("customer-contact", loserId, survivorId);
+    const moved = Object.entries(result.repointed).map(([step, count]) => `${step}: ${count}`).join(", ") || "no related rows";
+    return {
+      success: true,
+      message: `Merged duplicate contact ${loserId} into ${survivorId}. Moved ${moved}. The duplicate keeps its email but is deactivated and points at the survivor.`,
+      data: { survivorId, loserId, repointed: result.repointed, survivorship: result.survivorship },
+    };
+  } catch (err) {
+    if (err instanceof MergeValidationFailure) {
+      return { success: false, error: "merge_rejected", message: `Merge rejected: ${err.reason}. Check both ids exist, differ, and neither is already merged away.` };
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: "merge_failed", message: `merge_customer_contacts failed: ${msg}` };
+  }
+}
+
+async function runStewardSweepTool(): Promise<ToolResult> {
+  const { runStewardSweep } = await import("@/lib/mdm/steward");
+  const summary = await runStewardSweep();
+  return {
+    success: true,
+    message: `Sweep complete: ${summary.duplicatesFound} duplicate pair(s) (${summary.duplicateTasksOpened} newly queued), ${summary.staleFound} stale record(s) (${summary.staleTasksOpened} newly queued). Review with list_mdm_steward_tasks or at /admin/data-stewardship.`,
+    data: summary,
+  };
+}
+
+async function listStewardTasksTool(): Promise<ToolResult> {
+  const { listOpenStewardTasks } = await import("@/lib/mdm/steward");
+  const tasks = await listOpenStewardTasks();
+  return {
+    success: true,
+    message: tasks.length === 0 ? "The steward queue is clear." : `${tasks.length} open data-quality task(s), strongest first.`,
+    data: {
+      tasks: tasks.map((t) => ({
+        taskId: t.taskId,
+        domain: t.domain,
+        kind: t.kind,
+        subject: { id: t.subjectId, label: t.subjectLabel },
+        candidate: t.candidateId ? { id: t.candidateId, label: t.candidateLabel } : null,
+        score: t.score,
+        note: t.note,
+      })),
+    },
+  };
+}
+
+async function enrichCustomerAccountTool(params: Record<string, unknown>): Promise<ToolResult> {
+  const accountId = typeof params["accountId"] === "string" ? params["accountId"].trim() : "";
+  if (!accountId) {
+    return { success: false, error: "missing_fields", message: "accountId is required (CustomerAccount.id)." };
+  }
+  const { proposeAccountEnrichment } = await import("@/lib/mdm/enrichment");
+  const result = await proposeAccountEnrichment(accountId);
+  if (!result.ok) {
+    return { success: false, error: "enrichment_failed", message: result.message };
+  }
+  const { proposal } = result;
+  return {
+    success: true,
+    message: proposal.stewardTaskId
+      ? `Enrichment proposal filed as steward task ${proposal.stewardTaskId} (title: ${proposal.pageTitle ?? "n/a"}). A human applies it from /admin/data-stewardship — nothing was written to the account.`
+      : `Website reachable but nothing new to propose (title: ${proposal.pageTitle ?? "n/a"}).`,
+    data: proposal,
+  };
+}
 
 async function findDuplicateCustomerAccountsTool(): Promise<ToolResult> {
   const { scanCustomerAccountDuplicates } = await import("@/lib/mdm/batch-scan");
@@ -189,6 +309,10 @@ export const mdmStewardshipPack: ToolPack = {
     merge_customer_accounts: (params) => mergeCustomerAccountsTool(params),
     find_duplicate_customer_accounts: () => findDuplicateCustomerAccountsTool(),
     unmerge_customer_accounts: (params) => unmergeCustomerAccountsTool(params),
+    merge_customer_contacts: (params) => mergeCustomerContactsTool(params),
+    run_mdm_steward_sweep: () => runStewardSweepTool(),
+    list_mdm_steward_tasks: () => listStewardTasksTool(),
+    enrich_customer_account: (params) => enrichCustomerAccountTool(params),
   },
   grants: {
     // Mirrors agent-grants.ts TOOL_TO_GRANTS (the gating source): merging
@@ -197,5 +321,10 @@ export const mdmStewardshipPack: ToolPack = {
     merge_customer_accounts: ["crm_write"],
     find_duplicate_customer_accounts: ["crm_read"],
     unmerge_customer_accounts: ["crm_write"],
+    merge_customer_contacts: ["crm_write"],
+    run_mdm_steward_sweep: ["crm_write"],
+    list_mdm_steward_tasks: ["crm_read"],
+    // Enrichment fetches an external site: gated by the web toggle AND grant.
+    enrich_customer_account: ["web_search"],
   },
 };

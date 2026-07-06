@@ -475,6 +475,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   merge_customer_accounts: ["crm_write"],
   find_duplicate_customer_accounts: ["crm_read"],
   unmerge_customer_accounts: ["crm_write"],
+  merge_customer_contacts: ["crm_write"],
+  run_mdm_steward_sweep: ["crm_write"],
+  list_mdm_steward_tasks: ["crm_read"],
+  enrich_customer_account: ["web_search"],
 
   // Security Operations / SIEM (EP-SOVEREIGN-SOC). Writes are propose-only +
   // coworkerArtifact; siem_investigate/siem_tune/incident_respond imply siem_read.

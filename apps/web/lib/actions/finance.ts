@@ -12,6 +12,7 @@ import { getOrgIdentity } from "@/lib/org-identity";
 import { sendEmail, composeSignedConfirmationEmail, isEmailConfigured } from "@/lib/email";
 import { postInvoiceIssued, postPaymentRecorded } from "@/lib/finance/ledger-service";
 import { customerAccountNormalizedColumns } from "@/lib/mdm/dedup-gate";
+import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
 
 // ─── Auth guard ───────────────────────────────────────────────────────────────
 
@@ -388,6 +389,12 @@ export async function generateInvoiceFromStorefrontOrder(orderId: string) {
     contact = await prisma.customerContact.create({
       data: { email: order.customerEmail, accountId: account.id },
       include: { account: true },
+    });
+    await registerCustomerAccountSource({
+      accountId: account.id,
+      sourceSystem: "storefront-order",
+      sourceEntityId: order.customerEmail,
+      sourceEntityType: "order-contact",
     });
   }
 

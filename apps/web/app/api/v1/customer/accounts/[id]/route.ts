@@ -13,6 +13,7 @@ import {
   parseDedupResolution,
   resolveDedupDecision,
 } from "@/lib/mdm/dedup-gate";
+import { recordAttributeChanges } from "@/lib/mdm/history";
 
 export async function GET(
   request: Request,
@@ -159,6 +160,16 @@ export async function PATCH(
         ...identityUpdate,
       },
       include: { contacts: true },
+    });
+
+    // Attribute history (BI-130EF887): identity fields, append-only, best-effort.
+    await recordAttributeChanges({
+      domain: "customer-account",
+      entityId: id,
+      before: { name: existing.name, website: existing.website },
+      after: { name: updated.name, website: updated.website },
+      attributes: ["name", "website"],
+      source: "api-patch",
     });
 
     return apiSuccess(updated);

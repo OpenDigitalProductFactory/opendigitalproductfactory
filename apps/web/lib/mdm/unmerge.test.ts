@@ -41,6 +41,7 @@ function lineage(overrides: Partial<MergeResult> = {}): MergeResult {
     repointedIdsTruncated: [],
     nestedSiteMerges: [],
     loserSnapshot: { id: "a1", status: "prospect", name: "Emma 3D" },
+    survivorship: {},
     ...overrides,
   };
 }

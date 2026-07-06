@@ -343,3 +343,69 @@ the merge collision plan (exact duplicates of survivor rows) are not
 recreated. Surfaces: "Undo merge" on the tombstone banner (admin) and the
 `unmerge_customer_accounts` coworker tool (crm_write). customer-account only:
 the audit Activity is the lineage store, and only account merges write one.
+
+## 9. Slice 3 (2026-07-06): stewardship, temporality, and governance closure
+
+Closes the remaining filed gaps as working v1s (operator directive: deliver on
+all functionality):
+
+**Steward queue (BI-FEA49EC1).** `MdmStewardTask` persists one row per open
+data-quality question — a duplicate pair (from the batch scan) or a stale
+record (from the staleness sweep). Idempotency key
+`(domain, kind, subjectId, candidateId)` with `candidateId=""` for
+single-record tasks (NOT NULL so the compound unique actually dedupes —
+NULL≠NULL in PG). Re-sweeps refresh open tasks and never resurrect resolved
+ones. Surfaces: `/admin/data-stewardship` (queue + one-decision-per-row
+resolution: merge / different-records / confirmed-current / dismiss) and
+coworker tools `run_mdm_steward_sweep` / `list_mdm_steward_tasks`. The
+steward capability boundary stays `view_admin` (reference-data precedent);
+a dedicated `mdm-steward` PlatformCapability remains follow-up.
+
+**Staleness detection (BI-28577CD1).** `runStewardSweep` flags active
+accounts/contacts whose `updatedAt` predates the configurable
+`staleAfterDays` window; resolving "confirmed current" touches the record so
+the window restarts.
+
+**Attribute history (BI-130EF887).** `MdmAttributeChange` is the append-only
+temporal record (domain, entityId, attribute, old/new, actor, source),
+written best-effort by the PATCH routes, merges (survivorship fills +
+tombstone pointer), and unmerges — history never fails the write it
+describes.
+
+**Match tuning (BI-37F52B70).** `MdmMatchConfig` (one JSON row per domain,
+zod-validated, code defaults on any failure) drives the gate's and scan's
+trigram floor + possible/likely thresholds. UX-fit: the admin card exposes
+three plain-language sensitivity presets (relaxed/standard/strict) — raw
+scores are derived, never typed; staleness window and survivorship mode are
+the only other controls.
+
+**Survivorship v1 (BI-16450BB2).** Merge honours the configured mode:
+`fill-empty` (default — survivor keeps its values, empty survivor fields are
+completed from the loser, each fill audited to attribute history) or
+`keep-survivor`.
+
+**Contact merge (BI-F71DBE84).** Third merge adapter with identity
+semantics: tombstone = `isActive:false` + `mergedIntoId` (contacts have no
+status union; the loser keeps its unique email and credentials die with
+deactivation, the survivor's credentials win). Role-collision plan mirrors
+the account merge on `(contactId, accountId, startedAt)`. Tool:
+`merge_customer_contacts` (crm_write). Unmerge stays account-only (the
+Activity audit is the lineage store).
+
+**Multi-source crosswalk (BI-A4B73F87).** `registerCustomerAccountSource`
+is the single lineage door; every identity flow (portal UI, storefront
+order, storefront sign-up, social auth) now writes a MasterDataSourceRef row
+(upsert on `(domain, sourceSystem, sourceEntityId)`, `lastSeenAt` refresh) —
+the "same customer from a second system" case lands as a crosswalk link.
+
+**DQ scorecard + publishing contract (BI-77489158 / BI-1ABF6443).**
+`getCustomerMasterDataQuality` (lib/mdm/publish.ts) is the first published
+read model: completeness/uniqueness/freshness scored through the existing
+`scoreTrustVector`, returning a TrustAssessment envelope. First consumer:
+the scorecard tiles on `/admin/data-stewardship`.
+
+**Enrichment v1 (BI-2D435AFC).** `proposeAccountEnrichment` fetches the
+account's OWN stored website (no search; 8s timeout; 200KB cap), extracts
+title/description, and files the proposal as a steward task — enrichment
+never writes master data directly. Tool `enrich_customer_account` requires
+the web toggle + `web_search` grant (two-gate, matching the research tools).

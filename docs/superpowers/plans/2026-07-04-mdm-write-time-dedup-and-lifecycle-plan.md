@@ -139,3 +139,18 @@ UnmergeCustomerAccountButton + unmerge_customer_accounts). Remaining filed,
 not built: BI-130EF887 (attribute history), BI-37F52B70 (match tuning),
 BI-A4B73F87 (multi-source), BI-77489158 (DQ scorecard), BI-2D435AFC
 (enrichment).
+
+## Slice 3 (2026-07-06): stewardship + governance closure
+
+Built on feat/mdm-steward-core (operator directive: deliver remaining
+functionality, self-upgrade, browser-test). One migration
+(20260706080000): MdmStewardTask, MdmAttributeChange, MdmMatchConfig,
+CustomerContact.mergedIntoId. Modules: steward.ts (sweep+queue),
+match-config.ts, history.ts, publish.ts, crosswalk.ts, enrichment.ts;
+merge.ts gains the customer-contact adapter + survivorship + per-adapter
+tombstones. Surfaces: /admin/data-stewardship (queue, DQ scorecard tiles,
+sensitivity presets), 4 new pack tools (merge_customer_contacts,
+run_mdm_steward_sweep, list_mdm_steward_tasks, enrich_customer_account).
+Covers BI-FEA49EC1, BI-28577CD1, BI-130EF887, BI-37F52B70, BI-16450BB2,
+BI-F71DBE84, BI-A4B73F87, BI-77489158, BI-1ABF6443, BI-2D435AFC (v1 scope
+noted per-BI in spec §9).

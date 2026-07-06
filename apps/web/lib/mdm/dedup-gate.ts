@@ -25,6 +25,7 @@ import {
   type MatchSubject,
 } from "./match-candidate";
 import { standardizeDomain, standardizeEmail, standardizeName, standardizePhone } from "./standardize";
+import { MATCH_CONFIG_DEFAULTS, loadMatchConfig, type MatchConfig } from "./match-config";
 
 /** Domains the write-time gate covers today (subset of MasterDataDomain). */
 export type DedupGatedDomain = "customer-account" | "customer-site" | "customer-contact";
@@ -49,8 +50,8 @@ export type DedupCheckResult = {
   candidates: DedupCandidate[];
 };
 
-/** Similarity floor for trigram blocking — recall-oriented; precision comes from scoring. */
-const TRGM_SIMILARITY_FLOOR = 0.3;
+/** Fallback trigram floor — the governed per-domain MdmMatchConfig overrides. */
+const TRGM_SIMILARITY_FLOOR = MATCH_CONFIG_DEFAULTS.trgmFloor;
 const CANDIDATE_LIMIT = 10;
 
 /**
@@ -106,6 +107,7 @@ export async function checkCustomerAccountDuplicates(
   const domainNormalized = standardizeDomain(subject.website);
   const excludeId = subject.excludeId ?? "";
   if (!nameNormalized && !domainNormalized) return { verdict: "clear", candidates: [] };
+  const config = await loadMatchConfig("customer-account");
 
   const rows = await prisma.$queryRaw<AccountCandidateRow[]>`
     SELECT "id", "name", "status", "website", "nameNormalized", "domainNormalized"
@@ -115,7 +117,7 @@ export async function checkCustomerAccountDuplicates(
       AND (
         ("nameNormalized" <> '' AND "nameNormalized" = ${nameNormalized})
         OR (${domainNormalized} <> '' AND "domainNormalized" <> '' AND "domainNormalized" = ${domainNormalized})
-        OR ("nameNormalized" <> '' AND similarity("nameNormalized", ${nameNormalized}) > ${TRGM_SIMILARITY_FLOOR})
+        OR ("nameNormalized" <> '' AND similarity("nameNormalized", ${nameNormalized}) > ${config.trgmFloor})
       )
     ORDER BY similarity("nameNormalized", ${nameNormalized}) DESC NULLS LAST
     LIMIT ${CANDIDATE_LIMIT}
@@ -137,6 +139,7 @@ export async function checkCustomerAccountDuplicates(
       exactNameMatch: row.nameNormalized !== "" && row.nameNormalized === nameNormalized,
     })),
     subjectMatch,
+    config,
   );
 }
 
@@ -179,6 +182,7 @@ export async function checkCustomerContactDuplicates(
 
   const accountId = subject.accountId ?? "";
   const excludeId = subject.excludeId ?? "";
+  const config = await loadMatchConfig("customer-contact");
   const rows = await prisma.$queryRaw<ContactCandidateRow[]>`
     SELECT "id", "email", "firstName", "lastName", "name", "phone", "accountId"
     FROM "CustomerContact"
@@ -188,7 +192,7 @@ export async function checkCustomerContactDuplicates(
        OR (
             ${nameNormalized} <> '' AND "nameNormalized" <> ''
             AND (${accountId} = '' OR "accountId" = ${accountId})
-            AND similarity("nameNormalized", ${nameNormalized}) > ${TRGM_SIMILARITY_FLOOR}
+            AND similarity("nameNormalized", ${nameNormalized}) > ${config.trgmFloor}
           ))
     ORDER BY similarity("nameNormalized", ${nameNormalized}) DESC NULLS LAST
     LIMIT ${CANDIDATE_LIMIT}
@@ -213,6 +217,7 @@ export async function checkCustomerContactDuplicates(
       detail: row.email,
     })),
     subjectMatch,
+    config,
   );
 }
 
@@ -232,6 +237,7 @@ export async function checkCustomerSiteDuplicates(
   const nameNormalized = standardizeName(subject.name);
   const excludeId = subject.excludeId ?? "";
   if (!nameNormalized) return { verdict: "clear", candidates: [] };
+  const config = await loadMatchConfig("customer-site");
 
   const rows = await prisma.$queryRaw<SiteCandidateRow[]>`
     SELECT "id", "name", "status", "nameNormalized"
@@ -241,7 +247,7 @@ export async function checkCustomerSiteDuplicates(
       AND (${excludeId} = '' OR "id" <> ${excludeId})
       AND (
         "nameNormalized" = ${nameNormalized}
-        OR similarity("nameNormalized", ${nameNormalized}) > ${TRGM_SIMILARITY_FLOOR}
+        OR similarity("nameNormalized", ${nameNormalized}) > ${config.trgmFloor}
       )
     ORDER BY similarity("nameNormalized", ${nameNormalized}) DESC NULLS LAST
     LIMIT ${CANDIDATE_LIMIT}
@@ -256,6 +262,7 @@ export async function checkCustomerSiteDuplicates(
       exactNameMatch: row.nameNormalized !== "" && row.nameNormalized === nameNormalized,
     })),
     subjectMatch,
+    config,
   );
 }
 
@@ -321,11 +328,19 @@ function toResult(
     exactNameMatch?: boolean;
   }>,
   subject: MatchSubject,
+  config: MatchConfig = MATCH_CONFIG_DEFAULTS,
 ): DedupCheckResult {
   const candidates: DedupCandidate[] = rows
     .map((row) => {
       const scored = scoreMatchCandidate(subject, row.match);
-      let recommendation = scored.recommendation;
+      // Governed thresholds (MdmMatchConfig) decide the recommendation from
+      // the raw score; the scorer's built-in bands are the code default.
+      let recommendation: MatchCandidateResult["recommendation"] =
+        scored.score >= config.likelyThreshold
+          ? "likely-duplicate"
+          : scored.score >= config.possibleThreshold
+            ? "possible-duplicate"
+            : "distinct";
       if (row.exactNameMatch && recommendation !== "likely-duplicate") {
         recommendation = "likely-duplicate";
       } else if (

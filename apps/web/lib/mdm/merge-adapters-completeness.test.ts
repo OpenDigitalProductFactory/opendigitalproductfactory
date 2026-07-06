@@ -22,11 +22,14 @@ const WAIVED: Record<string, string> = {
     "the tombstone pointer itself — merged-away rows keep pointing at their survivor",
   "CustomerSite.mergedIntoId":
     "the tombstone pointer itself — merged-away rows keep pointing at their survivor",
+  "CustomerContact.mergedIntoId":
+    "the tombstone pointer itself — merged-away rows keep pointing at their survivor",
 };
 
 const MODEL_NAME: Record<string, string> = {
   "customer-account": "CustomerAccount",
   "customer-site": "CustomerSite",
+  "customer-contact": "CustomerContact",
 };
 
 function lowerFirst(name: string): string {

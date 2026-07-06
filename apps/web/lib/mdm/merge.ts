@@ -19,8 +19,10 @@
  */
 import { prisma } from "@dpf/db";
 import { CUSTOMER_TOMBSTONE_STATUSES } from "@dpf/db/customer-lifecycle";
+import { loadMatchConfig } from "./match-config";
+import { recordAttributeChanges } from "./history";
 
-export type MergeableDomain = "customer-account" | "customer-site";
+export type MergeableDomain = "customer-account" | "customer-site" | "customer-contact";
 
 /** One repoint: set `model.field` from loserId → survivorId via updateMany. */
 export type RepointStep = {
@@ -42,6 +44,26 @@ export type MergeAdapter = {
   hardRelations: RepointStep[];
   /** Columns pointing at the canonical model WITHOUT an FK relation. */
   softReferences: RepointStep[];
+  /**
+   * Tombstone semantics differ per domain: account/site rows carry a status
+   * union; contacts are identity-bearing (no status) and tombstone via
+   * isActive=false + mergedIntoId.
+   */
+  isTombstoned: (row: Record<string, unknown>) => boolean;
+  tombstoneData: (survivorId: string) => Record<string, unknown>;
+  /**
+   * Fields eligible for fill-empty survivorship (BI-16450BB2): survivor keeps
+   * its values; empty survivor fields are filled from the loser and audited.
+   */
+  survivorshipFields: readonly string[];
+};
+
+const statusTombstone = {
+  isTombstoned: (row: Record<string, unknown>) => row["status"] === CUSTOMER_TOMBSTONE_STATUSES[0],
+  tombstoneData: (survivorId: string) => ({
+    status: CUSTOMER_TOMBSTONE_STATUSES[0],
+    mergedIntoId: survivorId,
+  }),
 };
 
 const CUSTOMER_ACCOUNT_ADAPTER: MergeAdapter = {
@@ -87,6 +109,8 @@ const CUSTOMER_ACCOUNT_ADAPTER: MergeAdapter = {
     { model: "securityCase", field: "customerAccountId" },
     { model: "journalLine", field: "customerAccountId" },
   ],
+  ...statusTombstone,
+  survivorshipFields: ["website", "industry", "employeeCount", "annualRevenue", "notes"],
 };
 
 const CUSTOMER_SITE_ADAPTER: MergeAdapter = {
@@ -110,11 +134,36 @@ const CUSTOMER_SITE_ADAPTER: MergeAdapter = {
     { model: "detection", field: "customerSiteId" },
     { model: "securityCase", field: "customerSiteId" },
   ],
+  ...statusTombstone,
+  survivorshipFields: ["timezone", "accessInstructions", "hoursNotes", "serviceNotes"],
+};
+
+// Contacts are identity-bearing (passwordHash, social identities, unique
+// email) — a contact merge is a Principal convergence (BI-F71DBE84): the
+// survivor keeps its credentials and email; the loser keeps its own email on
+// the tombstone row (email stays unique), isActive=false, mergedIntoId set.
+const CUSTOMER_CONTACT_ADAPTER: MergeAdapter = {
+  domain: "customer-contact",
+  model: "customerContact",
+  hardRelations: [
+    { model: "socialIdentity", field: "contactId" },
+    { model: "contactAccountRole", field: "contactId" },
+    { model: "engagement", field: "contactId" },
+    { model: "opportunity", field: "contactId" },
+    { model: "activity", field: "contactId" },
+    { model: "rentalAgreement", field: "customerContactId" },
+    { model: "invoice", field: "contactId" },
+  ],
+  softReferences: [{ model: "journalLine", field: "contactId" }],
+  isTombstoned: (row) => row["mergedIntoId"] != null,
+  tombstoneData: (survivorId) => ({ isActive: false, mergedIntoId: survivorId }),
+  survivorshipFields: ["phone", "jobTitle", "linkedinUrl", "firstName", "lastName"],
 };
 
 export const MERGE_ADAPTERS: Readonly<Record<MergeableDomain, MergeAdapter>> = {
   "customer-account": CUSTOMER_ACCOUNT_ADAPTER,
   "customer-site": CUSTOMER_SITE_ADAPTER,
+  "customer-contact": CUSTOMER_CONTACT_ADAPTER,
 };
 
 export type MergeResult = {
@@ -134,6 +183,8 @@ export type MergeResult = {
   nestedSiteMerges: Array<{ loserSiteId: string; survivorSiteId: string; priorStatus: string }>;
   /** Pre-merge snapshot of the loser row (tombstone keeps it too). */
   loserSnapshot: Record<string, unknown>;
+  /** Fields filled onto the survivor from the loser (fill-empty survivorship). */
+  survivorship: Record<string, string>;
 };
 
 /** Per-step lineage cap: above this an unmerge would be lossy, so we refuse. */
@@ -178,15 +229,16 @@ export async function mergeRecords(
 ): Promise<MergeResult> {
   const adapter = MERGE_ADAPTERS[domain];
   if (loserId === survivorId) throw new MergeValidationFailure("same-record");
+  const config = await loadMatchConfig(domain);
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const canonical = delegate(tx, adapter.model);
     const [loser, survivor] = await Promise.all([
       canonical.findUnique({ where: { id: loserId } }),
       canonical.findUnique({ where: { id: survivorId } }),
     ]);
     if (!loser || !survivor) throw new MergeValidationFailure("not-found");
-    if (loser["status"] === TOMBSTONE || survivor["status"] === TOMBSTONE) {
+    if (adapter.isTombstoned(loser) || adapter.isTombstoned(survivor)) {
       throw new MergeValidationFailure("already-superseded");
     }
 
@@ -278,6 +330,32 @@ export async function mergeRecords(
       }
     }
 
+    if (domain === "customer-contact") {
+      const roleDelegate = delegate(tx, "contactAccountRole");
+      const [loserRoles, survivorRoles] = await Promise.all([
+        roleDelegate.findMany({
+          where: { contactId: loserId },
+          select: { id: true, accountId: true, startedAt: true },
+        }),
+        roleDelegate.findMany({
+          where: { contactId: survivorId },
+          select: { accountId: true, startedAt: true },
+        }),
+      ]);
+      const survivorRoleKeys = new Set(
+        survivorRoles.map((r) => `${r["accountId"]}|${(r["startedAt"] as Date).toISOString()}`),
+      );
+      const collidingRoleIds = loserRoles
+        .filter((r) =>
+          survivorRoleKeys.has(`${r["accountId"]}|${(r["startedAt"] as Date).toISOString()}`),
+        )
+        .map((r) => r["id"] as string);
+      if (collidingRoleIds.length > 0) {
+        const dropped = await roleDelegate.deleteMany({ where: { id: { in: collidingRoleIds } } });
+        repointed["contactAccountRole.dropped-duplicates"] = dropped.count;
+      }
+    }
+
     // Repoint every declared hard relation and soft reference, recording the
     // moved row ids so unmerge can restore exactly this set.
     for (const step of [...adapter.hardRelations, ...adapter.softReferences]) {
@@ -300,10 +378,31 @@ export async function mergeRecords(
       }
     }
 
+    // Fill-empty survivorship (BI-16450BB2): survivor keeps its values;
+    // empty survivor fields are completed from the loser, audited per field.
+    const survivorship: Record<string, string> = {};
+    if (config.survivorship === "fill-empty") {
+      const fills: Record<string, unknown> = {};
+      for (const field of adapter.survivorshipFields) {
+        const survivorValue = survivor[field];
+        const loserValue = loser[field];
+        const survivorEmpty =
+          survivorValue === null || survivorValue === undefined || survivorValue === "";
+        const loserHasValue = loserValue !== null && loserValue !== undefined && loserValue !== "";
+        if (survivorEmpty && loserHasValue) {
+          fills[field] = loserValue;
+          survivorship[field] = String(loserValue);
+        }
+      }
+      if (Object.keys(fills).length > 0) {
+        await canonical.update({ where: { id: survivorId }, data: fills });
+      }
+    }
+
     // Tombstone the loser: link + supersede, never delete.
     await canonical.update({
       where: { id: loserId },
-      data: { status: TOMBSTONE, mergedIntoId: survivorId },
+      data: adapter.tombstoneData(survivorId),
     });
 
     return {
@@ -315,8 +414,30 @@ export async function mergeRecords(
       repointedIdsTruncated,
       nestedSiteMerges,
       loserSnapshot: loser,
+      survivorship,
     };
   });
+
+  // Attribute history (append-only, best-effort): survivor fills + loser tombstone.
+  if (Object.keys(result.survivorship).length > 0) {
+    await recordAttributeChanges({
+      domain,
+      entityId: survivorId,
+      before: Object.fromEntries(Object.keys(result.survivorship).map((f) => [f, null])),
+      after: result.survivorship,
+      attributes: Object.keys(result.survivorship),
+      source: "merge",
+    });
+  }
+  await recordAttributeChanges({
+    domain,
+    entityId: loserId,
+    before: { mergedIntoId: null },
+    after: { mergedIntoId: survivorId },
+    attributes: ["mergedIntoId"],
+    source: "merge",
+  });
+  return result;
 }
 
 /** Merge one site into another inside an outer account-merge transaction. */
