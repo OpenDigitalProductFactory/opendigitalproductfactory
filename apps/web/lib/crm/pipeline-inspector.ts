@@ -93,6 +93,7 @@ export type PipelineInspectorOpportunityInput = {
   currency?: string | null;
   expectedClose?: Date | null;
   stageChangedAt: Date;
+  nextActivityAt?: Date | null;
   notes?: string | null;
   account: {
     id: string;
@@ -133,6 +134,7 @@ export type PipelineInspectorView = {
   stageAgeLabel: string;
   isStale: boolean;
   staleLabel: string | null;
+  nextActivityAt: string | null;
   probabilityLabel: string;
   expectedValueLabel: string | null;
   expectedCloseLabel: string | null;
@@ -352,6 +354,7 @@ export function buildPipelineInspectorView(input: {
     stageTone: stageMeta.tone,
     stageAgeDays,
     stageAgeLabel: formatStageAgeLabel(stageAgeDays),
+    nextActivityAt: opportunity.nextActivityAt ? opportunity.nextActivityAt.toISOString() : null,
     isStale: stale,
     staleLabel: stale ? "Stale stage" : null,
     probabilityLabel: `${opportunity.probability}%`,

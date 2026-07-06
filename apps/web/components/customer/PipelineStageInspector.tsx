@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AgentWorkLauncher } from "@/components/agent/AgentWorkLauncher";
+import { NextStepControl } from "@/components/customer/NextStepControl";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
 import {
   PIPELINE_STAGE_UPDATE_OPTIONS,
@@ -115,6 +116,7 @@ export function PipelineStageInspector({
           Suggested next action
         </p>
         <p className="mt-1 text-sm text-[var(--dpf-text)]">{inspector.suggestedNextAction}</p>
+        <NextStepControl opportunityId={inspector.id} nextActivityAt={inspector.nextActivityAt} />
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-1">

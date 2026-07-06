@@ -11,7 +11,7 @@ import {
   getOpportunityStageMeta,
   OPEN_OPPORTUNITY_STAGES,
 } from "@/lib/crm/presentation";
-import { getStageAgeDays } from "@/lib/crm/pipeline-inspector";
+import { getStageAgeDays, isStageStale } from "@/lib/crm/pipeline-inspector";
 import { getPipelineInspectorView } from "@/lib/crm/pipeline-inspector-data";
 import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
 import { getOrgSettings } from "@/lib/actions/currency";
@@ -129,6 +129,11 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
                     {opps.map((opp) => {
                       const selected = opp.id === selectedOpportunityId;
                       const stageAgeDays = getStageAgeDays(opp.stageChangedAt);
+                      // Deal rotting — ambient visual state, no report needed:
+                      // a deal past its stage's inactivity threshold tints red.
+                      const rotting = isStageStale({ stage: opp.stage, stageAgeDays, isDormant: opp.isDormant });
+                      const nextAt = opp.nextActivityAt ? new Date(opp.nextActivityAt) : null;
+                      const nextOverdue = nextAt !== null && nextAt.getTime() < Date.now();
                       return (
                         <Link
                           key={opp.id}
@@ -136,16 +141,22 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
                           aria-current={selected ? "true" : undefined}
                           className={[
                             "block rounded-lg border bg-[var(--dpf-surface-1)] p-3 transition-colors hover:bg-[var(--dpf-surface-2)]",
-                            selected ? "border-[var(--dpf-accent)]" : "border-[var(--dpf-border)]",
+                            selected
+                              ? "border-[var(--dpf-accent)]"
+                              : rotting
+                                ? "border-red-500/60"
+                                : "border-[var(--dpf-border)]",
                           ].join(" ")}
                         >
                           <div className="mb-1 flex items-start justify-between gap-2">
                             <p className="min-w-0 truncate text-xs font-semibold leading-tight text-[var(--dpf-text)]">
                               {opp.title}
                             </p>
-                            {opp.isDormant && (
+                            {rotting ? (
+                              <CustomerStatusBadge label={`Rotting ${stageAgeDays}d`} tone="danger" />
+                            ) : opp.isDormant ? (
                               <CustomerStatusBadge label="Dormant" tone="warning" />
-                            )}
+                            ) : null}
                           </div>
                           <p className="truncate text-[9px] text-[var(--dpf-muted)]">
                             {opp.account.name}
@@ -157,6 +168,11 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
                               </span>
                             )}
                             <span className="shrink-0 text-[9px] text-[var(--dpf-muted)]">
+                              {nextAt === null ? (
+                                <span className="mr-1 text-amber-400" title="No next step planned">⚠ no next step</span>
+                              ) : nextOverdue ? (
+                                <span className="mr-1 text-red-400" title="Planned next step is overdue">⚠ step overdue</span>
+                              ) : null}
                               {opp.probability}% / {stageAgeDays}d
                             </span>
                           </div>
