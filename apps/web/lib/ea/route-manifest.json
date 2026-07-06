@@ -103,6 +103,16 @@
       "file": "apps/web/app/(shell)/admin/cockpit/page.tsx"
     },
     {
+      "routePath": "/admin/data-stewardship",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "data-stewardship"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/data-stewardship/page.tsx"
+    },
+    {
       "routePath": "/admin/diagnostics",
       "kind": "page",
       "segments": [
