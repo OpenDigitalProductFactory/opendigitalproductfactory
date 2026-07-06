@@ -1,18 +1,19 @@
 // apps/web/components/queue/QueueHealthSection.tsx
 //
-// EP-3516E23D Phase 3 — the human half of queue visibility. A server component
-// that renders one report-kit StatCard per queue with a snapshot today, so an
-// operator sees at a glance where scarce-resource work is piling up (depth, p95
-// wait, cycle time, first-pass yield, SLA) — the same numbers the AI coworker
-// reads through get_queue_status. Spec §4.5.
+// EP-3516E23D Phase 3 — the human half of queue visibility. A SYNCHRONOUS
+// presentational component: it renders one report-kit StatCard per queue with a
+// snapshot today, so an operator sees at a glance where scarce-resource work is
+// piling up (depth, p95 wait, cycle time, first-pass yield, SLA) — the same
+// numbers the AI coworker reads through get_queue_status. Spec §4.5.
+//
+// Data-in-props (not a self-fetching async component) so a page can render it in
+// a synchronous pass — the caller (a server component) does the awaiting.
 
 import { StatCard } from "@/components/ui/report-kit";
-import { readQueueSnapshots } from "@/lib/queue/queue-snapshot-service";
+import type { QueueSnapshotView } from "@/lib/queue/queue-snapshot-service";
 import { queueTileModel } from "@/lib/queue/queue-tile-model";
 
-export async function QueueHealthSection() {
-  const snapshots = await readQueueSnapshots({ limit: 24 });
-
+export function QueueHealthSection({ snapshots }: { snapshots: QueueSnapshotView[] }) {
   return (
     <section aria-labelledby="queue-health-heading" style={{ display: "grid", gap: "0.75rem" }}>
       <div>

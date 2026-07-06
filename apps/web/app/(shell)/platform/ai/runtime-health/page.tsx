@@ -16,6 +16,7 @@ import {
 import { LocalTime } from "@/components/ui/LocalTime";
 import { AiReadinessHeaderLink } from "@/components/platform/AiReadinessHeaderLink";
 import { QueueHealthSection } from "@/components/queue/QueueHealthSection";
+import { readQueueSnapshots } from "@/lib/queue/queue-snapshot-service";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -99,6 +100,10 @@ export default async function RuntimeHealthPage() {
 
   const errorCount = overview?.flags.filter((f) => f.severity === "error").length ?? 0;
 
+  // Fetch here (in the async page body) and pass to the synchronous section so
+  // the page renders in a single synchronous pass — no suspending child.
+  const queueSnapshots = await readQueueSnapshots({ limit: 24 });
+
   return (
     <div>
       <div style={{ marginBottom: 20, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
@@ -117,7 +122,7 @@ export default async function RuntimeHealthPage() {
       </div>
 
       <div style={{ marginBottom: 20 }}>
-        <QueueHealthSection />
+        <QueueHealthSection snapshots={queueSnapshots} />
       </div>
 
       {loadError && (
