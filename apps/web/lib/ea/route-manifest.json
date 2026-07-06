@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 536,
+  "routeCount": 537,
   "routes": [
     {
       "routePath": "/",
@@ -4247,6 +4247,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/finance/settings/dunning/page.tsx"
+    },
+    {
+      "routePath": "/finance/settings/rate-card",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "settings",
+        "rate-card"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/settings/rate-card/page.tsx"
     },
     {
       "routePath": "/finance/settings/setup",

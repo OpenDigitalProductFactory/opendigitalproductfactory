@@ -16,6 +16,13 @@ export async function saveTimesheetEntries(input: {
     hours: number;
     breakMinutes: number;
     notes?: string;
+    // Billable time (EP-LABOR-ECONOMICS). Only persisted when the org's
+    // financial profile enables billable time (the UI hides them otherwise);
+    // harmless defaults when omitted.
+    billable?: boolean;
+    customerAccountId?: string | null;
+    billableRateId?: string | null;
+    billableHours?: number;
   }>;
   notes?: string;
 }): Promise<{ success: boolean; periodId?: string; error?: string }> {
@@ -76,8 +83,34 @@ export async function saveTimesheetEntries(input: {
     });
   }
 
+  // Billing lock: an entry whose hours are already on an invoice keeps its
+  // billing fields frozen (belt-and-braces — an invoiced entry's period is
+  // approved and not editable anyway, but never trust one guard alone).
+  const invoicedDays = new Set(
+    (
+      await prisma.timesheetEntry.findMany({
+        where: { timesheetPeriodId: period.id, invoiceId: { not: null } },
+        select: { dayOfWeek: true },
+      })
+    ).map((e) => e.dayOfWeek),
+  );
+
   // Upsert each day's entry
   for (const entry of input.entries) {
+    const billable = entry.billable ?? false;
+    // Billable hours default to the day's worked hours and can never exceed them.
+    const billableHours = billable
+      ? Math.min(Math.max(entry.billableHours ?? entry.hours, 0), entry.hours)
+      : 0;
+    const billingFields = invoicedDays.has(entry.dayOfWeek)
+      ? {}
+      : {
+          billable,
+          billableHours,
+          customerAccountId: billable ? (entry.customerAccountId ?? null) : null,
+          billableRateId: billable ? (entry.billableRateId ?? null) : null,
+        };
+
     await prisma.timesheetEntry.upsert({
       where: {
         timesheetPeriodId_dayOfWeek: {
@@ -92,11 +125,13 @@ export async function saveTimesheetEntries(input: {
         hours: entry.hours,
         breakMinutes: entry.breakMinutes,
         notes: entry.notes ?? null,
+        ...billingFields,
       },
       update: {
         hours: entry.hours,
         breakMinutes: entry.breakMinutes,
         notes: entry.notes ?? null,
+        ...billingFields,
       },
     });
   }
