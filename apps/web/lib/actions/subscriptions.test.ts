@@ -7,6 +7,7 @@ vi.mock("@dpf/db", () => ({
     customerAccount: { findUnique: vi.fn(), update: vi.fn() },
     salesOrder: { findUnique: vi.fn() },
     subscription: { create: vi.fn() },
+    recurringSchedule: { create: vi.fn().mockResolvedValue({}) },
     edgeNode: { update: vi.fn() },
     activity: { create: vi.fn().mockResolvedValue({}) },
   },
@@ -19,6 +20,7 @@ const p = prisma as unknown as {
   customerAccount: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   salesOrder: { findUnique: ReturnType<typeof vi.fn> };
   subscription: { create: ReturnType<typeof vi.fn> };
+  recurringSchedule: { create: ReturnType<typeof vi.fn> };
   edgeNode: { update: ReturnType<typeof vi.fn> };
 };
 
@@ -87,5 +89,45 @@ describe("convertOrderToSubscription", () => {
     const sub = await convertOrderToSubscription("so1");
     expect(sub).toEqual({ id: "existing" });
     expect(p.subscription.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("renewal schedule pairing", () => {
+  const order = {
+    id: "so1",
+    accountId: "a1",
+    totalAmount: 12000,
+    currency: "GBP",
+    account: { id: "a1", name: "Emma3D" },
+    subscription: null,
+  };
+
+  it("creates a renewal RecurringSchedule for auto-renew contracts, starting at the renewal date", async () => {
+    p.salesOrder.findUnique.mockResolvedValue(order);
+    p.subscription.create.mockImplementation(({ data }: { data: Record<string, unknown> }) => ({ id: "sub1", ...data }));
+    await convertOrderToSubscription("so1", { billingCadence: "annual" });
+    expect(p.recurringSchedule.create).toHaveBeenCalledTimes(1);
+    const data = p.recurringSchedule.create.mock.calls[0][0].data;
+    expect(data.subscriptionId).toBe("sub1");
+    expect(data.frequency).toBe("annually"); // cadence vocab mapped to schedule vocab
+    expect(data.amount).toBe(12000);
+    expect(data.autoSend).toBe(true);
+    // first period was billed by the order — the schedule begins AT renewal
+    expect(new Date(data.nextInvoiceDate).getTime()).toBeGreaterThan(Date.now());
+    expect(data.lineItems.create).toHaveLength(1);
+  });
+
+  it("maps monthly cadence straight through", async () => {
+    p.salesOrder.findUnique.mockResolvedValue(order);
+    p.subscription.create.mockImplementation(({ data }: { data: Record<string, unknown> }) => ({ id: "sub1", ...data }));
+    await convertOrderToSubscription("so1", { billingCadence: "monthly" });
+    expect(p.recurringSchedule.create.mock.calls[0][0].data.frequency).toBe("monthly");
+  });
+
+  it("creates NO schedule for non-auto-renew contracts (term simply ends)", async () => {
+    p.salesOrder.findUnique.mockResolvedValue(order);
+    p.subscription.create.mockImplementation(({ data }: { data: Record<string, unknown> }) => ({ id: "sub1", ...data }));
+    await convertOrderToSubscription("so1", { autoRenew: false });
+    expect(p.recurringSchedule.create).not.toHaveBeenCalled();
   });
 });

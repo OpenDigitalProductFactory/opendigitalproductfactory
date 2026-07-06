@@ -142,7 +142,7 @@ export async function updateScheduleStatus(
 
 // ─── generateDueInvoices ──────────────────────────────────────────────────────
 
-export async function generateDueInvoices(): Promise<{ generated: number; sent: number }> {
+export async function generateDueInvoices(): Promise<{ generated: number; sent: number; expired: number }> {
   const now = new Date();
   let generated = 0;
   let sent = 0;
@@ -220,7 +220,27 @@ export async function generateDueInvoices(): Promise<{ generated: number; sent: 
         status: isCompleted ? "completed" : "active",
       },
     });
+
+    // Renewal-linked schedule: the invoice we just minted IS the contract
+    // renewal, so advance the support contract's renewalDate in lockstep
+    // (or expire it when the schedule's term completed).
+    if (schedule.subscriptionId) {
+      await prisma.subscription
+        .update({
+          where: { id: schedule.subscriptionId },
+          data: isCompleted ? { status: "expired" } : { renewalDate: nextDate },
+        })
+        .catch(() => {});
+    }
   }
 
-  return { generated, sent };
+  // Contracts that do NOT auto-renew have no schedule; their term simply ends.
+  // Expire any active non-auto-renew subscription whose renewalDate has passed,
+  // so the account surface stops showing a live contract that lapsed.
+  const expired = await prisma.subscription.updateMany({
+    where: { status: "active", autoRenew: false, renewalDate: { lt: now } },
+    data: { status: "expired" },
+  });
+
+  return { generated, sent, expired: expired.count };
 }

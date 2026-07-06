@@ -3177,6 +3177,7 @@ model Subscription {
   account    CustomerAccount @relation(fields: [accountId], references: [id])
   salesOrder SalesOrder?     @relation(fields: [salesOrderId], references: [id])
   edgeNodes  EdgeNode[]
+  renewalSchedule RecurringSchedule?
 
   @@index([accountId])
   @@index([status])
@@ -9301,8 +9302,11 @@ model RecurringSchedule {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  // The support contract this schedule renews, if it was minted from one.
+  subscriptionId String? @unique
   account   CustomerAccount     @relation(fields: [accountId], references: [id])
   createdBy User?               @relation("RecurringScheduleCreations", fields: [createdById], references: [id])
+  subscription Subscription?    @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   lineItems RecurringLineItem[]
 
   @@index([accountId])

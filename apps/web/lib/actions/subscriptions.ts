@@ -105,6 +105,42 @@ export async function convertOrderToSubscription(
       .catch(() => {});
   }
 
+  // Auto-renewing contracts get a paired RecurringSchedule so the existing
+  // daily recurring-invoice cron (generateDueInvoices) mints each renewal
+  // invoice when renewalDate arrives and keeps the contract's renewalDate
+  // advancing. The order already billed the first period, so the schedule
+  // starts AT the renewal date, not today. Non-auto-renew contracts get no
+  // schedule — the renewal sweep expires them when their term ends.
+  if (subscription.autoRenew) {
+    const frequency = cadence === "annual" ? "annually" : cadence; // schedule vocab
+    await prisma.recurringSchedule.create({
+      data: {
+        scheduleId: `REC-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        accountId: order.accountId,
+        subscriptionId: subscription.id,
+        name: `${subscription.planName} — renewal`,
+        frequency,
+        amount: order.totalAmount,
+        currency: order.currency,
+        startDate: renewal,
+        nextInvoiceDate: renewal,
+        status: "active",
+        autoSend: true,
+        lineItems: {
+          create: [
+            {
+              description: subscription.planName,
+              quantity: 1,
+              unitPrice: order.totalAmount,
+              taxRate: 0,
+              sortOrder: 0,
+            },
+          ],
+        },
+      },
+    });
+  }
+
   await prisma.activity
     .create({
       data: {
