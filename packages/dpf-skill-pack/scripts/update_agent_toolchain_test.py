@@ -126,6 +126,32 @@ class UpdateAgentToolchainTest(unittest.TestCase):
             self.assertTrue(data["plugins"]["dpf-platform"]["enabled"])
             self.assertEqual(data["mcp_servers"]["dpf"]["url"], "https://mcp.example.test/api/mcp/v1")
 
+    def test_reuses_bare_codex_plugin_table_instead_of_appending_duplicate(self) -> None:
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config = home / ".codex" / "config.toml"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                'model = "gpt-5.5"\n'
+                "[plugins.dpf-platform]\n"
+                "enabled = true\n",
+                encoding="utf-8",
+            )
+
+            with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}, clear=False):
+                updater.main([
+                    "--skill-pack-path",
+                    str(skill_pack),
+                    "--skip-claude-cli-install",
+                ])
+
+            raw = config.read_text()
+            if tomllib is not None:
+                data = tomllib.loads(raw)
+                self.assertTrue(data["plugins"]["dpf-platform"]["enabled"])
+            self.assertEqual(raw.count("dpf-platform"), 1)
+
     @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11+")
     def test_repairs_missing_managed_plugin_without_token_or_portal(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]
