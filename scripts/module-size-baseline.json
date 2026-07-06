@@ -15,7 +15,7 @@
   "apps/web/components/storefront/SlotBookingFlow.tsx": 919,
   "apps/web/components/workbooks/Grid.tsx": 924,
   "apps/web/instrumentation.test.ts": 826,
-  "apps/web/instrumentation.ts": 1324,
+  "apps/web/instrumentation.ts": 1337,
   "apps/web/lib/actions/agent-coworker-external.test.ts": 866,
   "apps/web/lib/actions/agent-coworker.ts": 2612,
   "apps/web/lib/actions/agent-task-scheduler.test.ts": 890,
