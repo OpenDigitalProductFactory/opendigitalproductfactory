@@ -3,6 +3,8 @@
 import { Prisma, prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { inngest } from "@/lib/queue/inngest-client";
+import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
+import { computeFlowDurations } from "@/lib/queue/flow-metrics";
 import type {
   WorkItemSourceType,
   WorkItemUrgency,
@@ -13,6 +15,11 @@ import type {
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+/** Stable telemetry queue key for a CWQ WorkQueue row (its FK id). */
+function cwqQueueKey(queueId: string): string {
+  return `cwq:${queueId}`;
 }
 
 async function requireAuth(): Promise<string> {
@@ -84,13 +91,22 @@ export async function createWorkItem(data: {
     },
   });
 
+  // Flow-telemetry spine (EP-3516E23D): an item entering the queue is an arrival.
+  void recordQueueTransition({
+    queueKey: cwqQueueKey(item.queueId),
+    itemKind: "work-item",
+    itemId: item.itemId,
+    transition: "enqueued",
+    occurredAt: item.createdAt,
+  });
+
   return item;
 }
 
 export async function claimWorkItem(itemId: string) {
   const userId = await requireAuth();
 
-  return prisma.workItem.update({
+  const item = await prisma.workItem.update({
     where: { itemId, status: "queued" },
     data: {
       status: "assigned",
@@ -99,6 +115,22 @@ export async function claimWorkItem(itemId: string) {
       claimedAt: new Date(),
     },
   });
+
+  // A claim starts service — wait clock ends, process clock begins.
+  void recordQueueTransition({
+    queueKey: cwqQueueKey(item.queueId),
+    itemKind: "work-item",
+    itemId: item.itemId,
+    transition: "started",
+    actorType: "human",
+    actorId: userId,
+    durations: { waitMs: computeFlowDurations({
+      enqueuedAt: item.createdAt,
+      startedAt: item.claimedAt,
+    }).waitMs },
+  });
+
+  return item;
 }
 
 export async function completeWorkItem(
@@ -119,6 +151,21 @@ export async function completeWorkItem(
   await inngest.send({
     name: "cwq/item.completed",
     data: { workItemId: itemId, outcome: "success" },
+  });
+
+  // Completion is a terminal outcome — records throughput + process/cycle time.
+  const durations = computeFlowDurations({
+    enqueuedAt: item.createdAt,
+    startedAt: item.claimedAt,
+    finishedAt: item.completedAt,
+  });
+  void recordQueueTransition({
+    queueKey: cwqQueueKey(item.queueId),
+    itemKind: "work-item",
+    itemId: item.itemId,
+    transition: "finished",
+    outcome: "success",
+    durations,
   });
 
   return item;

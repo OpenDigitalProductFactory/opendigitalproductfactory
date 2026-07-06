@@ -10394,6 +10394,57 @@ model WorkSchedule {
   updatedAt         DateTime @updatedAt
 }
 
+// ---- Reusable Queueing Substrate — shared flow telemetry (EP-3516E23D) ----
+// Spec: docs/superpowers/specs/2026-07-06-reusable-queueing-substrate-design.md
+// The ONE telemetry contract every queue (compute admission lanes AND CWQ work
+// queues) emits into. QueueTelemetryEvent is the append-only per-item stream;
+// QueueMetricSnapshot is the periodic rollup (per queueKey × period) the human
+// tiles and the coworker MCP pack both read from — same numbers, one source.
+
+model QueueTelemetryEvent {
+  id         String   @id @default(cuid())
+  queueKey   String // stable queue identifier, e.g. "cwq:triage-default" | "compute:sandbox-pool"
+  itemKind   String // "work-item" | "sandbox-slot" | "inference" | ...
+  itemId     String // source record id (WorkItem.itemId, buildId, ...)
+  transition String // enqueued | started | finished | cancelled | requeued (flow-metrics.ts)
+  outcome    String? // success | failed | cancelled — set on finished/cancelled
+  laneKey    String? // sub-lane within the queue (e.g. GPU id, container id)
+  actorType  String? // human | ai-agent | system
+  actorId    String?
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([queueKey, occurredAt])
+  @@index([itemKind, itemId])
+  @@index([occurredAt])
+}
+
+model QueueMetricSnapshot {
+  id              String   @id @default(cuid())
+  queueKey        String
+  period          String // day-grain "YYYY-MM-DD" (UTC) — mirrors SkillMetric (subject,period)
+  depth           Int      @default(0) // point-in-time queued count at computedAt
+  wip             Int      @default(0) // queued + in-progress at computedAt
+  arrivals        Int      @default(0) // enqueued in window
+  throughput      Int      @default(0) // finished in window
+  waitP50Ms       Int?
+  waitP95Ms       Int?
+  processP50Ms    Int?
+  processP95Ms    Int?
+  cycleP50Ms      Int?
+  cycleP95Ms      Int?
+  firstPassYield  Float? // 0..1 — % correct without rework
+  slaAttainment   Float? // 0..1 — null when no finished item carried an SLA
+  abandonmentRate Float? // 0..1
+  computedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([queueKey, period])
+  @@index([queueKey, period])
+  @@index([period])
+}
+
 // ─── Prompt Templates ─────────────────────────────────────────────────────────
 // Editable AI coworker instructions. Source of truth: prompts/*.prompt.md files.
 // Seeded on deploy, overridable at runtime via Admin > Prompts.

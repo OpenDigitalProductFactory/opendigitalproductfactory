@@ -5,6 +5,14 @@
 
 import { prisma } from "@dpf/db";
 import { getQuiescenceLevel, QuiescingError } from "@/lib/self-upgrade/quiescence";
+import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
+
+/**
+ * Flow-telemetry queue key for the shared sandbox-slot pool (EP-3516E23D). The
+ * pool is a scarce-compute lane; acquire=started, release=finished so its hold
+ * time (process time), throughput, and utilization become measurable.
+ */
+const SANDBOX_QUEUE_KEY = "compute:sandbox-pool";
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -152,6 +160,16 @@ export async function acquireSandboxLease(
 
   await syncFeatureBuildSandbox(input.buildId, claimed.containerId, claimed.port);
 
+  // The build began holding a scarce slot — start of the service interval.
+  void recordQueueTransition({
+    queueKey: SANDBOX_QUEUE_KEY,
+    itemKind: "sandbox-slot",
+    itemId: input.buildId,
+    transition: "started",
+    laneKey: claimed.containerId,
+    actorType: "system",
+  });
+
   return {
     slotIndex: claimed.slotIndex,
     containerId: claimed.containerId,
@@ -168,14 +186,30 @@ export async function releaseSandboxLease(
   });
   if (!slot || slot.status !== "in_use") return;
 
+  const releasedAt = new Date();
   await prisma.sandboxSlot.update({
     where: { id: slot.id },
     data: {
       status: "available",
       buildId: null,
       userId: null,
-      releasedAt: new Date(),
+      releasedAt,
     },
+  });
+
+  // Slot returned to the pool — terminal transition; process time = hold duration.
+  const processMs = slot.acquiredAt
+    ? Math.max(0, releasedAt.getTime() - slot.acquiredAt.getTime())
+    : null;
+  void recordQueueTransition({
+    queueKey: SANDBOX_QUEUE_KEY,
+    itemKind: "sandbox-slot",
+    itemId: input.buildId,
+    transition: "finished",
+    outcome: "success",
+    laneKey: slot.containerId,
+    actorType: "system",
+    durations: { processMs },
   });
 }
 
