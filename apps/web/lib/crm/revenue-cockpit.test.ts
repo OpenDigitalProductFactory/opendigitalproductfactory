@@ -73,7 +73,15 @@ describe("revenue cockpit summary", () => {
         tone: "success",
       },
     ]);
-    expect(summary.attentionItems).toEqual([]);
+    // 3 "new" engagements now surface as the new-leads triage inbox item.
+    expect(summary.attentionItems).toEqual([
+      {
+        id: "new-leads",
+        label: "3 new leads are waiting for triage",
+        href: "/customer/engagements",
+        tone: "attention",
+      },
+    ]);
   });
 
   it("surfaces stale opportunities and marketing work as attention items", () => {
@@ -134,5 +142,45 @@ describe("revenue cockpit summary", () => {
         tone: "accent",
       },
     ]);
+  });
+
+  it("builds the engagement inbox: urgency-ordered items each with a plain-language why", () => {
+    const summary = buildRevenueCockpitSummary({
+      engagementCounts: [{ status: "new", count: 3 }],
+      opportunityCounts: [],
+      quoteCounts: [],
+      orderCounts: [],
+      staleOpportunityCount: 2,
+      renewalsDueSoonCount: 1,
+      overdueInvoiceCount: 2,
+      marketingWork: { campaignBriefsOpen: 0, assetTasksOpen: 0, automationCandidatesOpen: 0 },
+    });
+
+    expect(summary.attentionItems.map((i) => i.id)).toEqual([
+      "overdue-invoices",
+      "stale-opportunities",
+      "new-leads",
+      "renewals-due",
+    ]);
+    expect(summary.attentionItems[0]).toEqual({
+      id: "overdue-invoices",
+      label: "2 invoices are past due — chase payment",
+      href: "/finance/invoices",
+      tone: "danger",
+    });
+    expect(summary.attentionItems[2].label).toBe("3 new leads are waiting for triage");
+    expect(summary.attentionItems[3].label).toBe("1 support contract renews within 30 days");
+  });
+
+  it("omits inbox items when the optional counts are absent (back-compat)", () => {
+    const summary = buildRevenueCockpitSummary({
+      engagementCounts: [],
+      opportunityCounts: [],
+      quoteCounts: [],
+      orderCounts: [],
+      staleOpportunityCount: 0,
+      marketingWork: { campaignBriefsOpen: 0, assetTasksOpen: 0, automationCandidatesOpen: 0 },
+    });
+    expect(summary.attentionItems).toEqual([]);
   });
 });

@@ -41,6 +41,10 @@ export type RevenueCockpitInput = {
   /** Workspace base currency (from OrgSettings). Defaults to "USD" when not passed. */
   currency?: string;
   staleOpportunityCount: number;
+  /** Active support contracts whose renewalDate falls within the next 30 days. */
+  renewalsDueSoonCount?: number;
+  /** Customer invoices past their due date and not yet paid/void. */
+  overdueInvoiceCount?: number;
   marketingWork: {
     campaignBriefsOpen: number;
     assetTasksOpen: number;
@@ -79,7 +83,19 @@ export function buildRevenueCockpitSummary(input: RevenueCockpitInput): RevenueC
     input.marketingWork.assetTasksOpen +
     input.marketingWork.automationCandidatesOpen;
 
+  // The engagement inbox: what to work NOW, each with a plain-language why,
+  // ordered by urgency (money overdue > deals stalling > new leads > renewals).
   const attentionItems: RevenueCockpitAttentionItem[] = [];
+
+  const overdueInvoices = input.overdueInvoiceCount ?? 0;
+  if (overdueInvoices > 0) {
+    attentionItems.push({
+      id: "overdue-invoices",
+      label: `${overdueInvoices} invoice${overdueInvoices === 1 ? " is" : "s are"} past due — chase payment`,
+      href: "/finance/invoices",
+      tone: "danger",
+    });
+  }
 
   if (input.staleOpportunityCount > 0) {
     attentionItems.push({
@@ -87,6 +103,25 @@ export function buildRevenueCockpitSummary(input: RevenueCockpitInput): RevenueC
       label: `${input.staleOpportunityCount} stale opportunit${input.staleOpportunityCount === 1 ? "y needs" : "ies need"} a next action`,
       href: "/customer/opportunities",
       tone: "warning",
+    });
+  }
+
+  if (newEngagements > 0) {
+    attentionItems.push({
+      id: "new-leads",
+      label: `${newEngagements} new lead${newEngagements === 1 ? " is" : "s are"} waiting for triage`,
+      href: "/customer/engagements",
+      tone: "attention",
+    });
+  }
+
+  const renewalsDue = input.renewalsDueSoonCount ?? 0;
+  if (renewalsDue > 0) {
+    attentionItems.push({
+      id: "renewals-due",
+      label: `${renewalsDue} support contract${renewalsDue === 1 ? " renews" : "s renew"} within 30 days`,
+      href: "/customer",
+      tone: "info",
     });
   }
 

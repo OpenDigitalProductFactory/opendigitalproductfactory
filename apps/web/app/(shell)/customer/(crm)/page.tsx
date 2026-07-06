@@ -27,6 +27,8 @@ export default async function CustomerPage({
     assetTasksOpen,
     automationCandidatesOpen,
     orgSettings,
+    renewalsDueSoonCount,
+    overdueInvoiceCount,
   ] = await Promise.all([
     prisma.customerAccount.findMany({
       where: EXCLUDE_TOMBSTONED,
@@ -73,6 +75,18 @@ export default async function CustomerPage({
       where: { status: "draft" },
     }),
     prisma.orgSettings.findFirst({ select: { baseCurrency: true } }),
+    prisma.subscription.count({
+      where: {
+        status: "active",
+        renewalDate: { lte: new Date(Date.now() + 30 * 86400_000) },
+      },
+    }),
+    prisma.invoice.count({
+      where: {
+        status: { in: ["sent", "viewed", "partially_paid"] },
+        dueDate: { lt: new Date() },
+      },
+    }),
   ]);
 
   const revenueSummary = buildRevenueCockpitSummary({
@@ -95,6 +109,8 @@ export default async function CustomerPage({
     })),
     currency: orgSettings?.baseCurrency ?? "USD",
     staleOpportunityCount,
+    renewalsDueSoonCount,
+    overdueInvoiceCount,
     marketingWork: {
       campaignBriefsOpen,
       assetTasksOpen,
