@@ -221,6 +221,28 @@ export async function seedOrgWwwdCorpus(
   const industry = sf?.archetype?.category ?? bc?.industry ?? null;
   const orgName = org?.name ?? null;
 
+  // 0. Ensure the platform fallback profile ROW exists. The org profile's
+  // fallbackProfileId carries an FK to it, but the fallback shipped only as an
+  // in-code constant (default-profile.ts) — no seed ever materialized it, so
+  // this upsert threw P2003 on every install and the fail-open completion
+  // chain swallowed it: THE reason the WWWD substrate stayed dormant
+  // (observed live 2026-07-06, BI-44526F3E). Minimal row, no version — the
+  // resolution chain only needs the profile to exist.
+  await db.decisionPerspectiveProfile.upsert({
+    where: { profileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID },
+    update: {},
+    create: {
+      profileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID,
+      name: "DPF Organizational Principles",
+      kind: "organization",
+      scope: { domains: ["platform-governance", PLAN_READINESS_DOMAIN_CLASS] },
+      fallbackProfileId: null,
+      defaultResolver: { type: "build-studio-owner" },
+      autonomyPolicy: DEFAULT_AUTONOMY_POLICY,
+      status: "active",
+    },
+  });
+
   // 1. Profile (container).
   await db.decisionPerspectiveProfile.upsert({
     where: { profileId },
