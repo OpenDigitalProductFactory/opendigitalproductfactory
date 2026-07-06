@@ -15,6 +15,7 @@ import {
 } from "@/lib/inference/phase-model-resolution";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { AiReadinessHeaderLink } from "@/components/platform/AiReadinessHeaderLink";
+import { QueueHealthSection } from "@/components/queue/QueueHealthSection";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -113,6 +114,10 @@ export default async function RuntimeHealthPage() {
           </p>
         </div>
         <AiReadinessHeaderLink />
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <QueueHealthSection />
       </div>
 
       {loadError && (

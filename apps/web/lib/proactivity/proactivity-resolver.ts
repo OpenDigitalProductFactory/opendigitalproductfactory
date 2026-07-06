@@ -114,6 +114,12 @@ function resolveLevel(input: ProactivityResolverInput): ProactivityLevel {
     return input.statusSignal === "degraded" || input.statusSignal === "offline" ? "assertive" : "balanced";
   }
 
+  if (input.activityFamily === "queue-health") {
+    // A queue past its backpressure thresholds surfaces as blocked/degraded —
+    // nudge assertively so a backing-up scarce resource does not sit unnoticed.
+    return input.statusSignal === "blocked" || input.statusSignal === "degraded" ? "assertive" : "balanced";
+  }
+
   if (input.activityFamily === "tax-compliance") {
     return typeof input.deadlineWindowDays === "number" && input.deadlineWindowDays <= 7 ? "assertive" : "balanced";
   }

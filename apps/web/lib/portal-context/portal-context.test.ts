@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+// Keep the envelope hermetic: the queue-attention resolver reads QueueMetricSnapshot
+// via the live client; stub it so this suite never touches an ambient DB.
+vi.mock("./queue-awareness-resolver", () => ({
+  resolveQueueAttention: vi.fn().mockResolvedValue([]),
+}));
+
 import {
   bucketPortalContextTimestamp,
   createPortalContextEnvelopeId,
