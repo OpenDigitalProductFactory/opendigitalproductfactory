@@ -36,7 +36,17 @@ vi.mock("@dpf/db", () => ({
     user: {
       findMany: vi.fn(),
     },
+    orgSettings: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
   },
+}));
+
+vi.mock("@/lib/hr/compensation-data", () => ({
+  getEmployeeCompensationRows: vi.fn().mockResolvedValue([]),
+}));
+vi.mock("@/components/employee/CompensationPanel", () => ({
+  CompensationPanel: () => <section>Pay</section>,
 }));
 
 vi.mock("@/lib/workforce-data", () => ({

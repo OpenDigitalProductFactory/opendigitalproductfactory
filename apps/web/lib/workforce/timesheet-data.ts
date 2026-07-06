@@ -13,6 +13,14 @@ export type TimesheetEntryRow = {
   hours: number;
   breakMinutes: number;
   notes: string | null;
+  // Billable time (EP-LABOR-ECONOMICS) — rendered only when the org's
+  // financial profile carries billableTimeEnabled.
+  billable: boolean;
+  customerAccountId: string | null;
+  billableRateId: string | null;
+  billableHours: number;
+  /** Set once the hours are on an invoice — the entry's billing is then locked. */
+  invoiceId: string | null;
 };
 
 export type TimesheetPeriodRow = {
@@ -81,6 +89,11 @@ export const getTimesheetForWeek = cache(async (
       hours: e.hours,
       breakMinutes: e.breakMinutes,
       notes: e.notes,
+      billable: e.billable,
+      customerAccountId: e.customerAccountId,
+      billableRateId: e.billableRateId,
+      billableHours: e.billableHours,
+      invoiceId: e.invoiceId,
     })),
   };
 });
@@ -133,6 +146,11 @@ export const getPendingTimesheetsForManager = cache(async (
       hours: e.hours,
       breakMinutes: e.breakMinutes,
       notes: e.notes,
+      billable: e.billable,
+      customerAccountId: e.customerAccountId,
+      billableRateId: e.billableRateId,
+      billableHours: e.billableHours,
+      invoiceId: e.invoiceId,
     })),
   }));
 });

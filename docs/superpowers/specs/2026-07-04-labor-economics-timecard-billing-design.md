@@ -118,3 +118,51 @@ Phases 1 (#2598) and 2 (#2621) are merged. Phase 3 connects them:
 **Approval is the money gate on both flows:** unapproved time is neither payable nor
 billable. Phase 4 (UX: compensation on the employee record, rate-card admin, billable
 timesheet columns, generate-invoice action, margin view) remains.
+
+## 7. Phase 4 — the UX, as built (delivered 2026-07-06)
+
+Four surfaces, each embedded in its existing home (kernel-scored placement: no new hub,
+no new global nav; every billable surface disappears entirely when the applied financial
+profile lacks `billableTimeEnabled`, so non-labour archetypes never see any of it).
+
+- **Pay on the employee record** (`components/employee/CompensationPanel.tsx`, mounted on
+  `/employee` directory view). Plain words: pick a person → "Paid hourly" or "Salaried" →
+  one number (hourly rate or annual salary). Standard annual hours (the salary→hourly
+  cost divisor) sits behind an **Advanced** disclosure, blank = 2,080. Saves through the
+  governed `setEmployeeCompensation` action (`lib/actions/workforce.ts`,
+  `employee_profile.set_compensation`, risk band medium); switching pay type never
+  destroys the other type's stored value. Read model:
+  `lib/hr/compensation-data.ts`. Pay is universal (payroll), so this panel is NOT
+  archetype-gated.
+- **Labour rate card** (`/finance/settings/rate-card` +
+  `components/finance/RateCardManager.tsx`). "What do you bill labour as?" — name +
+  rate/hour + active toggle, inline add/edit via `upsertBillableRate`
+  (`lib/actions/labor.ts`, `manage_finance`-gated, org-scoped). The Finance settings page
+  shows a **Labour Rates** card (active-rate count + Manage link) only when
+  `billableTimeEnabled`; the route itself explains "billable time isn't used for your
+  business type" for everyone else.
+- **Billable columns on the timesheet** (`components/employee/TimesheetGrid.tsx`,
+  `billing` prop wired from `/employee?view=timesheets`). One extra column — a
+  "Bill to customer" checkbox per day; ticking it discloses a sub-row: customer picker,
+  service picker (active rates), billable hours (defaults to the day's hours, capped at
+  them). A missing customer/service shows an inline warning so hours can't silently
+  never-bill. Entries whose hours are on an invoice render an **Invoiced** chip and their
+  billing is frozen — enforced again server-side in `saveTimesheetEntries`
+  (`lib/actions/timesheet.ts`), which refuses billing-field changes for invoiced entries
+  and re-caps billable hours.
+- **Billable time on the customer account** (`components/customer/BillableTimeSection.tsx`
+  on `/customer/[id]`, shown only when the account has approved billable hours). A
+  report-kit StatCard band — **Labour cost / Billed value / Margin** (with %) — computed
+  by `lib/hr/labor-report.ts` (`aggregateAccountLaborEconomics`, pure + unit-tested;
+  hours from employees with no pay set are counted and surfaced as "true cost is higher",
+  with a Set-their-pay link, never silently costed at £0). "Create draft invoice" runs
+  through `confirmDialog` → `generateBillableInvoice` (`lib/actions/labor.ts`) and shows
+  the typed result: draft invoice link (`/finance/invoices/[id]`), hours/entries billed,
+  and skipped entries with a **Fix the rates →** nudge to the rate card — skips are a
+  decision surface, never silent.
+
+Verification: `lib/hr/labor-report.test.ts` (aggregation), employee page tests extended
+for the new reads, full `components/*` + `lib/actions` vitest sweep and `web` typecheck
+green in the worktree; live happy-path verification (set pay → approve billable hours →
+generate invoice → margin band; non-labour archetype sees none of it) follows the next
+self-upgrade per `dpf-verify-on-live-install`.

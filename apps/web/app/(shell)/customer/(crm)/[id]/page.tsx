@@ -21,6 +21,9 @@ import {
 import { getAccountStatusMeta } from "@/lib/crm/presentation";
 import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { getFinancialProfile } from "@dpf/finance-templates";
+import { getAccountLaborEconomics } from "@/lib/hr/labor-report";
+import { BillableTimeSection } from "@/components/customer/BillableTimeSection";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝",
@@ -202,6 +205,17 @@ export default async function AccountDetailPage({
       : null,
   };
 
+  // Billable time (EP-LABOR-ECONOMICS) — labour archetypes only, and only
+  // once this account actually has approved billable hours.
+  const laborOrgSettings = await prisma.orgSettings.findFirst({
+    select: { appliedProfileSlug: true, baseCurrency: true },
+  });
+  const billableTimeEnabled =
+    (laborOrgSettings?.appliedProfileSlug
+      ? getFinancialProfile(laborOrgSettings.appliedProfileSlug)?.billableTimeEnabled
+      : false) ?? false;
+  const laborEconomics = billableTimeEnabled ? await getAccountLaborEconomics(id) : null;
+
   const statusMeta = getAccountStatusMeta(account.status);
   const managedItemDefaults = deriveCustomerConfigurationItemDefaults(
     readActivationProfile(storefrontConfig?.archetype?.activationProfile),
@@ -263,6 +277,15 @@ export default async function AccountDetailPage({
       </div>
 
       <AccountLifecycleActions {...lifecycleContext} />
+
+      {laborEconomics && laborEconomics.billableHours > 0 && (
+        <BillableTimeSection
+          accountId={account.id}
+          accountName={account.name}
+          economics={laborEconomics}
+          currency={laborOrgSettings?.baseCurrency ?? "GBP"}
+        />
+      )}
 
       {/* Metadata grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">

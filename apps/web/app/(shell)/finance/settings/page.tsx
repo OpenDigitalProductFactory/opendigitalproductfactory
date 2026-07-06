@@ -28,6 +28,10 @@ export default async function FinancialSettingsPage() {
   const recurringEnabled = profile?.recurringBillingEnabled ?? false;
   const purchaseOrdersEnabled = profile?.purchaseOrdersEnabled ?? false;
   const invoiceTemplateStyle = profile?.invoiceTemplateStyle ?? "professional";
+  // Labour archetypes only — the card (and the rate-card surface behind it)
+  // is hidden entirely for business types that don't bill time.
+  const billableTimeEnabled = profile?.billableTimeEnabled ?? false;
+  const activeRateCount = billableTimeEnabled ? await prisma.billableRate.count({ where: { isActive: true } }) : 0;
 
   const dunningStepCount = dunningSequence?.steps.length ?? 0;
   const dunningEnabled = setupStatus.dunningActive && dunningStepCount > 0;
@@ -271,6 +275,31 @@ export default async function FinancialSettingsPage() {
             Formal PO workflow for procurement approvals.
           </p>
         </div>
+
+        {/* Billable time / labour rates — labour archetypes only */}
+        {billableTimeEnabled && (
+          <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+            <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
+              Labour Rates
+            </p>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-bold text-[var(--dpf-text)]">
+                {activeRateCount > 0
+                  ? `${activeRateCount} active rate${activeRateCount !== 1 ? "s" : ""}`
+                  : "No rates yet"}
+              </span>
+              <Link
+                href="/finance/settings/rate-card"
+                className="text-[10px] text-[var(--dpf-accent)] hover:underline"
+              >
+                Manage rates →
+              </Link>
+            </div>
+            <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+              The services you bill your team&apos;s time as when invoicing billable hours.
+            </p>
+          </div>
+        )}
 
         {/* 8. Invoice Template */}
         <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">

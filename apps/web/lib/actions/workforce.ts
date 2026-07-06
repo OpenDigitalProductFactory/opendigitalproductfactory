@@ -458,3 +458,77 @@ export async function recordEmploymentLifecycleEvent(
     },
   });
 }
+
+// ─── Compensation (EP-LABOR-ECONOMICS) ───────────────────────────────────────
+
+export type SetEmployeeCompensationInput = {
+  employeeProfileId: string;
+  payType: "hourly" | "salary";
+  /** Required when payType is "hourly". */
+  hourlyRate?: number | null;
+  /** Required when payType is "salary". */
+  annualSalary?: number | null;
+  /** Salary only; defaults to 2080 (40h × 52w) when left unset. */
+  standardAnnualHours?: number | null;
+};
+
+/**
+ * Set how an employee is paid. Stores the compensation columns that feed both
+ * payroll earnings (lib/hr/labor-service.ts) and job costing (lib/hr/labor.ts).
+ * Switching pay type keeps the other type's stored value — payType decides
+ * which one is live, so a switch back never loses data.
+ */
+export async function setEmployeeCompensation(
+  input: SetEmployeeCompensationInput,
+): Promise<WorkforceActionResult> {
+  const employeeProfileId = trimRequired(input.employeeProfileId);
+  if (!employeeProfileId) return workforceDenied("Employee profile is required.");
+
+  if (input.payType === "hourly") {
+    if (input.hourlyRate == null || !Number.isFinite(input.hourlyRate) || input.hourlyRate <= 0) {
+      return workforceDenied("Enter an hourly pay rate greater than zero.");
+    }
+  } else if (input.payType === "salary") {
+    if (input.annualSalary == null || !Number.isFinite(input.annualSalary) || input.annualSalary <= 0) {
+      return workforceDenied("Enter an annual salary greater than zero.");
+    }
+    if (
+      input.standardAnnualHours != null &&
+      (!Number.isInteger(input.standardAnnualHours) ||
+        input.standardAnnualHours < 1 ||
+        input.standardAnnualHours > 8760)
+    ) {
+      return workforceDenied("Standard hours per year must be a whole number between 1 and 8760.");
+    }
+  } else {
+    return workforceDenied("Choose how this employee is paid.");
+  }
+
+  return withGovernedWorkforceAction({
+    actionKey: "employee_profile.set_compensation",
+    riskBand: "medium",
+    objectRef: employeeProfileId,
+    run: async () => {
+      const employee = await prisma.employeeProfile.findUnique({
+        where: { id: employeeProfileId },
+        select: { id: true, displayName: true },
+      });
+      if (!employee) return workforceDenied("Employee profile not found.");
+
+      await prisma.employeeProfile.update({
+        where: { id: employeeProfileId },
+        data:
+          input.payType === "hourly"
+            ? { payType: "hourly", hourlyRate: input.hourlyRate }
+            : {
+                payType: "salary",
+                annualSalary: input.annualSalary,
+                standardAnnualHours: input.standardAnnualHours ?? null,
+              },
+      });
+
+      revalidatePath("/employee");
+      return { ok: true, message: `Pay updated for ${employee.displayName}.` };
+    },
+  });
+}

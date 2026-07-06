@@ -23,6 +23,10 @@ import {
 import { getEmployeeAddresses } from "@/lib/address-data";
 import { getTimesheetForWeek, getPendingTimesheetsForManager, getCurrentWeekStart } from "@/lib/timesheet-data";
 import { auth } from "@/lib/auth";
+import { getFinancialProfile } from "@dpf/finance-templates";
+import { CompensationPanel } from "@/components/employee/CompensationPanel";
+import { getEmployeeCompensationRows } from "@/lib/hr/compensation-data";
+import type { TimesheetBillingContext } from "@/components/employee/TimesheetGrid";
 
 type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -94,6 +98,39 @@ export default async function EmployeePage({ searchParams }: Props) {
     ? await getPendingTimesheetsForManager(currentUserProfile.id)
     : [];
   const workforceRoster = view === "workforce" ? await loadWorkforceRoster() : null;
+
+  // Billable time is archetype-gated (labour financial profiles only); when
+  // off, the timesheet shows no billing controls at all.
+  const orgSettings = await prisma.orgSettings.findFirst({
+    select: { appliedProfileSlug: true, baseCurrency: true },
+  });
+  const billableTimeEnabled =
+    (orgSettings?.appliedProfileSlug
+      ? getFinancialProfile(orgSettings.appliedProfileSlug)?.billableTimeEnabled
+      : false) ?? false;
+  let timesheetBilling: TimesheetBillingContext | null = null;
+  if (view === "timesheets" && billableTimeEnabled) {
+    const [customers, org] = await Promise.all([
+      prisma.customerAccount.findMany({
+        where: { status: { not: "superseded" } },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.organization.findFirst({ select: { id: true } }),
+    ]);
+    const services = org
+      ? await prisma.billableRate.findMany({
+          where: { organizationId: org.id, isActive: true },
+          select: { id: true, name: true },
+          orderBy: { name: "asc" },
+        })
+      : [];
+    timesheetBilling = {
+      customers,
+      services: services.map((s) => ({ id: s.id, name: s.name })),
+    };
+  }
+  const compensationRows = view === "directory" ? await getEmployeeCompensationRows() : [];
 
   return (
     <div>
@@ -187,6 +224,7 @@ export default async function EmployeePage({ searchParams }: Props) {
               <TimesheetGrid
                 existingPeriod={currentTimesheet}
                 weekStarting={weekStart.toISOString()}
+                billing={timesheetBilling}
               />
             ) : (
               <p className="text-sm text-[var(--dpf-muted)] py-8 text-center">
@@ -213,6 +251,13 @@ export default async function EmployeePage({ searchParams }: Props) {
                 workLocations={workforceReferenceData.workLocations}
               />
               <LifecycleEventPanel events={lifecycleEvents} />
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <CompensationPanel
+                employees={compensationRows}
+                currency={orgSettings?.baseCurrency ?? "GBP"}
+              />
             </div>
           </>
         )}

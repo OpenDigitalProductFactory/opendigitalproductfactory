@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveTimesheetEntries, submitTimesheet } from "@/lib/actions/timesheet";
 import type { TimesheetPeriodRow } from "@/lib/timesheet-data";
@@ -20,11 +20,23 @@ type EntryState = {
   hours: number;
   breakMinutes: number;
   notes: string;
+  billable: boolean;
+  customerAccountId: string | null;
+  billableRateId: string | null;
+  billableHours: number;
+  invoiceId: string | null;
+};
+
+/** Present only when the org's financial profile enables billable time. */
+export type TimesheetBillingContext = {
+  customers: Array<{ id: string; name: string }>;
+  services: Array<{ id: string; name: string }>;
 };
 
 type Props = {
   existingPeriod: TimesheetPeriodRow | null;
   weekStarting: string;
+  billing?: TimesheetBillingContext | null;
 };
 
 function buildEmptyEntries(weekStarting: string): EntryState[] {
@@ -38,6 +50,11 @@ function buildEmptyEntries(weekStarting: string): EntryState[] {
       hours: 0,
       breakMinutes: 0,
       notes: "",
+      billable: false,
+      customerAccountId: null,
+      billableRateId: null,
+      billableHours: 0,
+      invoiceId: null,
     };
   });
 }
@@ -53,13 +70,18 @@ function buildEntriesFromPeriod(period: TimesheetPeriodRow, weekStarting: string
         hours: entry.hours,
         breakMinutes: entry.breakMinutes,
         notes: entry.notes ?? "",
+        billable: entry.billable,
+        customerAccountId: entry.customerAccountId,
+        billableRateId: entry.billableRateId,
+        billableHours: entry.billableHours,
+        invoiceId: entry.invoiceId,
       };
     }
   }
   return empty;
 }
 
-export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
+export function TimesheetGrid({ existingPeriod, weekStarting, billing }: Props) {
   const router = useRouter();
 
   function navigateWeek(direction: -1 | 1) {
@@ -78,12 +100,39 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
   const isEditable = !existingPeriod || existingPeriod.status === "draft" || existingPeriod.status === "rejected";
   const totalHours = entries.reduce((sum, e) => sum + e.hours, 0);
   const totalBreaks = entries.reduce((sum, e) => sum + e.breakMinutes, 0);
+  const totalBillable = entries.reduce((sum, e) => sum + (e.billable ? e.billableHours : 0), 0);
   const overtimeThreshold = existingPeriod?.overtimeThreshold ?? 40;
   const overtimeHours = Math.max(0, totalHours - overtimeThreshold);
+  const showBilling = Boolean(billing);
 
   function updateEntry(dayOfWeek: number, field: "hours" | "breakMinutes", value: number) {
     setEntries((prev) =>
-      prev.map((e) => (e.dayOfWeek === dayOfWeek ? { ...e, [field]: value } : e)),
+      prev.map((e) => {
+        if (e.dayOfWeek !== dayOfWeek) return e;
+        const next = { ...e, [field]: value };
+        // Billable hours track worked hours: never above them, and follow them
+        // while the two are still equal (the common "all of it" case).
+        if (field === "hours" && next.billable) {
+          next.billableHours = e.billableHours === e.hours ? value : Math.min(next.billableHours, value);
+        }
+        return next;
+      }),
+    );
+  }
+
+  function updateBilling(dayOfWeek: number, patch: Partial<EntryState>) {
+    setEntries((prev) =>
+      prev.map((e) => (e.dayOfWeek === dayOfWeek ? { ...e, ...patch } : e)),
+    );
+  }
+
+  function toggleBillable(dayOfWeek: number, on: boolean) {
+    setEntries((prev) =>
+      prev.map((e) =>
+        e.dayOfWeek === dayOfWeek
+          ? { ...e, billable: on, billableHours: on ? e.hours : 0 }
+          : e,
+      ),
     );
   }
 
@@ -177,14 +226,19 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
               <th className="text-left text-[10px] text-[var(--dpf-muted)] uppercase pb-2 w-20">Date</th>
               <th className="text-center text-[10px] text-[var(--dpf-muted)] uppercase pb-2 w-20">Hours</th>
               <th className="text-center text-[10px] text-[var(--dpf-muted)] uppercase pb-2 w-24">Break (min)</th>
+              {showBilling && (
+                <th className="text-center text-[10px] text-[var(--dpf-muted)] uppercase pb-2 w-24">Bill to customer</th>
+              )}
             </tr>
           </thead>
           <tbody>
             {entries.map((entry) => {
               const isWeekend = entry.dayOfWeek >= 5;
+              const isInvoiced = entry.invoiceId != null;
+              const billingEditable = isEditable && !isInvoiced;
               return (
+                <Fragment key={entry.dayOfWeek}>
                 <tr
-                  key={entry.dayOfWeek}
                   style={{ background: isWeekend ? "rgba(255,255,255,0.02)" : "transparent" }}
                 >
                   <td className="py-1.5 text-[var(--dpf-text)] font-medium">{DAY_NAMES[entry.dayOfWeek]}</td>
@@ -219,7 +273,86 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
                       <span className="text-[var(--dpf-muted)]">{entry.breakMinutes}</span>
                     )}
                   </td>
+                  {showBilling && (
+                    <td className="py-1.5 text-center">
+                      {isInvoiced ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--dpf-success)]/10 text-[var(--dpf-success)]">
+                          Invoiced
+                        </span>
+                      ) : billingEditable ? (
+                        <input
+                          type="checkbox"
+                          checked={entry.billable}
+                          disabled={entry.hours <= 0 && !entry.billable}
+                          onChange={(e) => toggleBillable(entry.dayOfWeek, e.target.checked)}
+                          aria-label={`Bill ${DAY_NAMES[entry.dayOfWeek]} to a customer`}
+                        />
+                      ) : (
+                        <span className="text-[var(--dpf-muted)]">{entry.billable ? `${entry.billableHours}h` : "—"}</span>
+                      )}
+                    </td>
+                  )}
                 </tr>
+                {showBilling && entry.billable && (
+                  <tr>
+                    <td />
+                    <td colSpan={showBilling ? 4 : 3} className="pb-2">
+                      <div className="flex flex-wrap items-center gap-2 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1.5">
+                        <select
+                          value={entry.customerAccountId ?? ""}
+                          disabled={!billingEditable}
+                          onChange={(e) => updateBilling(entry.dayOfWeek, { customerAccountId: e.target.value || null })}
+                          className="px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] max-w-40"
+                          aria-label="Customer"
+                        >
+                          <option value="" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Customer…</option>
+                          {billing!.customers.map((c) => (
+                            <option key={c.id} value={c.id} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={entry.billableRateId ?? ""}
+                          disabled={!billingEditable}
+                          onChange={(e) => updateBilling(entry.dayOfWeek, { billableRateId: e.target.value || null })}
+                          className="px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] max-w-40"
+                          aria-label="Service billed as"
+                        >
+                          <option value="" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Service…</option>
+                          {billing!.services.map((s) => (
+                            <option key={s.id} value={s.id} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                        <label className="flex items-center gap-1 text-[10px] text-[var(--dpf-muted)]">
+                          Billable hours
+                          <input
+                            type="number"
+                            min={0}
+                            max={entry.hours}
+                            step={0.25}
+                            value={entry.billableHours || ""}
+                            disabled={!billingEditable}
+                            onChange={(e) =>
+                              updateBilling(entry.dayOfWeek, {
+                                billableHours: Math.min(Math.max(parseFloat(e.target.value) || 0, 0), entry.hours),
+                              })
+                            }
+                            className="w-16 px-2 py-1 text-center text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)]"
+                          />
+                        </label>
+                        {billingEditable && (!entry.customerAccountId || !entry.billableRateId) && (
+                          <span className="text-[10px] text-[var(--dpf-warning)]">
+                            Choose a customer and service so these hours can be invoiced.
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
@@ -228,6 +361,11 @@ export function TimesheetGrid({ existingPeriod, weekStarting }: Props) {
               <td colSpan={2} className="py-2 text-[var(--dpf-text)] font-semibold">Total</td>
               <td className="py-2 text-center font-semibold text-[var(--dpf-text)]">{totalHours}h</td>
               <td className="py-2 text-center text-[var(--dpf-muted)]">{totalBreaks}m</td>
+              {showBilling && (
+                <td className="py-2 text-center text-[var(--dpf-text)] font-semibold">
+                  {totalBillable > 0 ? `${totalBillable}h billable` : "—"}
+                </td>
+              )}
             </tr>
           </tfoot>
         </table>
