@@ -833,6 +833,19 @@ export async function register() {
     // boot rather than waiting for a contribution to trip it.
     warnIfLegacyHiveTokenEnvSet();
 
+    // Plane-2 decision-routing gate (BI-B22DE548): register the server-side
+    // governance hook so an in-portal coworker / Build Studio agent that takes a
+    // consequential backlog decision (triage/retire) without consulting the
+    // kernel (principle_decide) is gated. Registration is in-memory + idempotent
+    // (deduped by hook id); mode is DPF_DECISION_GATE_MODE (enforce default).
+    {
+      const { registerToolLifecycleHook } = await import("@/lib/mcp-governed-execute");
+      const { createDecisionRoutingGovernanceHook } = await import(
+        "@/lib/tak/decision-routing-governance-hook"
+      );
+      registerToolLifecycleHook(createDecisionRoutingGovernanceHook());
+    }
+
     // Mirror version.json into PlatformConfig["platform.version"] so the
     // DB-backed runtime metadata matches the canonical file. Non-fatal —
     // logs loudly on failure but does not block startup.
