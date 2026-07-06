@@ -141,3 +141,23 @@ Gate A was bypassed in the wild three days after it merged, and the failure was 
 **Grok — Gate B NOT live; two layered causes.** Probe (`grok -p`, session `019f39a1-ffb9-7310-bc02-58a6376d0226`): the same probe **RAN**. Root causes, both isolated with throwaway plugins: (1) **manifest path bug** — `.grok-plugin/plugin.json` shipped `../skills/ · ../hooks/hooks.json · ../grok.mcp.json`; Grok resolves component paths from the *package root* (the dir containing `.grok-plugin/`), so `../` escaped the package and Grok loaded **zero** components (`grok inspect`: `dpf-platform (user, enabled)  -`). A `./`-path throwaway loaded its hooks correctly. **Fixed in this PR** (`../`→`./`, plus a conformance test `surface-manifest-paths.test.mjs` asserting all three surface manifests are plugin-root-relative). (2) **harness contract gap** — even with hooks loaded, a captured-payload throwaway confirmed Grok does **not** invoke the Claude `${CLAUDE_PLUGIN_ROOT}` PreToolUse *blocking* command-hook (`x.ai/hooks` advertises `blockingEvents:["pre_tool_use"]` but not via this contract). So fix (1) restores **skill** loading and is necessary-but-not-sufficient for the runtime gate; full Grok Gate-B enforcement needs Grok-native blocking-hook support. Classification: **guards-dead (path bug fixed; blocking-hook contract residual).** Follow-up: **BI-3157516C**. Until then the DPF MCP connector (plane 2) is the enforcing path on Grok.
 
 **Scope decision (kernel-ratified: `implement_toolchain_fixes_now`, `principle_decide` 2026-07-07 `DI-5846C7848762`, composite 8.280, margin 0.723, high confidence, no commandment conflict; vs `document_and_file_followups` 6.706, `build_liveness_verifier` 7.557).** Implement the restorative fixes now (Grok manifest correction + version-skew close + installer Grok-install and per-surface liveness advisory) rather than document-only, with the two harness-limited residuals filed as follow-ups above. In-portal coworker / Build Studio remain server-side always-fresh (plane 2, unaffected).
+## 12. Addendum (2026-07-06) — match executable text, not quoted data
+
+**Observed false positive:** Gate B's patterns ran against the raw Bash command
+string, so quoted DATA that merely *mentioned* a gate command was denied like a
+real invocation. Live case: a `curl` POST recording MCP evidence whose JSON
+summary contained the words "prisma migrate deploy" was blocked — and the Bash
+command writing the backlog item *about* the bug was blocked too, then the
+sibling `lease-guard` blocked the command writing the regression-test files
+because they mention "pnpm dev". Same class in both guards.
+
+**Fix (shared helper `hooks/command-text.mjs`):** deny/block patterns now match
+`executableCommandText(command)` — the command with single/double-quoted
+segments and heredoc bodies removed, and with `sh|bash|zsh|dash -c '<payload>'`
+payloads unquoted and re-appended (a `-c` payload IS a command; one recursion
+level). `GOVERNED_MARKERS` deliberately still match the RAW text: they act in
+the allow direction, so an over-match fails open, consistent with the guards'
+never-wedge-the-session contract. Known accepted misses (fail-open by design):
+a command smuggled inside a heredoc piped to a shell, and unmatched quotes
+(strip to end). Regression tests: `hooks/command-text.test.mjs` plus new cases
+in both guard test files — including the evidence-post repro verbatim.

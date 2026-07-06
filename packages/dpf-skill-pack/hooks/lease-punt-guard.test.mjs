@@ -55,3 +55,20 @@ test("does not touch unrelated commands", () => {
   assert.equal(decide("").action, "allow");
   assert.equal(decide(undefined).action, "allow");
 });
+
+// ── quoted DATA mentioning a gate command must not deny (2026-07-06 false positive) ──
+
+test("allows a curl/MCP evidence post whose JSON summary mentions the migrate gate (live repro)", () => {
+  const cmd = `REQ=$(node -e 'process.stdout.write(JSON.stringify({summary: "plan: fetch/merge, freshness converge, prisma migrate deploy (CI-parity DB), vitest"}))'); curl -sS -X POST http://127.0.0.1:3000/api/mcp/v1 --data "$REQ"`;
+  assert.equal(decide(cmd).action, "allow");
+});
+
+test("allows commit messages and heredoc bodies that mention gate commands", () => {
+  assert.equal(decide(`git commit -m "docs: explain prisma migrate deploy step"`).action, "allow");
+  assert.equal(decide(`node - <<'EOD'\nconst summary = "prisma migrate deploy step green";\nEOD`).action, "allow");
+});
+
+test("still denies a real invocation smuggled through sh -c", () => {
+  assert.equal(decide(`sh -c 'prisma migrate dev'`).action, "deny");
+  assert.equal(decide(`bash -lc "pnpm prisma db push"`).action, "deny");
+});

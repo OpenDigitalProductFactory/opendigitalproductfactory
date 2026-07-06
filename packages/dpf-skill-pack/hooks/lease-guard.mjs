@@ -21,6 +21,8 @@
 
 import { readFileSync } from "node:fs";
 
+import { executableCommandText } from "./command-text.mjs";
+
 // Raw dev-server / preview launchers that spawn an untracked long-lived process.
 // Deliberately NOT docker-compose (legit platform-stack infra) — scoped to the
 // dev-server vectors behind the rogue-server incidents.
@@ -59,7 +61,11 @@ export function decide(command, env = {}) {
   if (typeof command !== "string" || command.trim() === "") return { block: false };
   if (env.DPF_ALLOW_UNGATED_SERVER === "1") return { block: false };
   if (GOVERNED_MARKERS.some((re) => re.test(command))) return { block: false };
-  const hit = BLOCK_PATTERNS.some((re) => re.test(command));
+  // Block patterns run against the EXECUTABLE text only — a commit message or
+  // echoed string mentioning `pnpm dev` is data, not a server launch; a real
+  // launch (incl. `sh -c '…'` payloads) still matches. Markers above stay
+  // raw-matched (allow-direction).
+  const hit = BLOCK_PATTERNS.some((re) => re.test(executableCommandText(command)));
   if (!hit) return { block: false };
   return { block: true, reason: GUIDANCE };
 }
