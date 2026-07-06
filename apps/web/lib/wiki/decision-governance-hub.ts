@@ -31,10 +31,28 @@ export type DisciplineHealthInput = {
   wsidActiveProfiles: number;
   /** Unresolved decisions across profession (WSID) profiles. */
   wsidOpenReviews: number;
+  /** Ledger decisions recorded in the last 30 days, per tier (audit signal). */
+  wwmdDecisions30d: number;
+  wwwdDecisions30d: number;
+  wsidDecisions30d: number;
 };
 
 function reviewChipLabel(count: number): string {
   return count === 1 ? "1 open review" : `${count} open reviews`;
+}
+
+/**
+ * Usage chip for a tier's decision ledger: green when decisions are flowing,
+ * warning when the tier is silent — a silent tier means the gate exists but
+ * is not being exercised, which is itself the finding the hub must surface.
+ */
+function usageChip(decisions30d: number): { label: string; tone: "success" | "warning" } {
+  return decisions30d > 0
+    ? {
+      label: decisions30d === 1 ? "1 decision · 30d" : `${decisions30d} decisions · 30d`,
+      tone: "success",
+    }
+    : { label: "no decisions recorded", tone: "warning" };
 }
 
 /**
@@ -53,12 +71,14 @@ export function buildDisciplineCards(
     chips: [
       { label: `${input.kernelPrincipleCount} principles`, tone: "neutral" },
       { label: `${input.kernelHeuristicCount} heuristics`, tone: "neutral" },
+      usageChip(input.wwmdDecisions30d),
       ...(input.wwmdOpenReviews > 0
         ? [{ label: reviewChipLabel(input.wwmdOpenReviews), tone: "warning" as const }]
         : []),
     ],
     actions: [
       { label: "Governing material", href: "#governing-material" },
+      { label: "Decision log", href: "/wiki/decisions?tier=wwmd" },
       { label: "Review decisions", href: "/platform/ai/founder-review?mode=wwmd" },
     ],
   };
@@ -73,12 +93,14 @@ export function buildDisciplineCards(
       input.orgHasOwnWwwdStance
         ? { label: "your own stance", tone: "success" }
         : { label: "no stance of your own yet", tone: "warning" },
+      usageChip(input.wwwdDecisions30d),
       ...(input.wwwdOpenReviews > 0
         ? [{ label: reviewChipLabel(input.wwwdOpenReviews), tone: "warning" as const }]
         : []),
     ],
     actions: [
       { label: "Manage stance", href: "/wiki/stance", emphasis: true },
+      { label: "Decision log", href: "/wiki/decisions?tier=wwwd" },
       { label: "Review decisions", href: "/platform/ai/founder-review?mode=wwwd" },
     ],
   };
@@ -97,12 +119,14 @@ export function buildDisciplineCards(
             : `${input.wsidActiveProfiles} corpora active`,
         tone: "neutral",
       },
+      usageChip(input.wsidDecisions30d),
       ...(input.wsidOpenReviews > 0
         ? [{ label: reviewChipLabel(input.wsidOpenReviews), tone: "warning" as const }]
         : []),
     ],
     actions: [
       { label: "Role craft", href: "/wiki/craft", emphasis: true },
+      { label: "Decision log", href: "/wiki/decisions?tier=wsid" },
       { label: "Review decisions", href: "/platform/ai/founder-review" },
     ],
   };

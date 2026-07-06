@@ -11,6 +11,9 @@ const base = {
   wsidFamilyCount: 23,
   wsidActiveProfiles: 1,
   wsidOpenReviews: 0,
+  wwmdDecisions30d: 0,
+  wwwdDecisions30d: 0,
+  wsidDecisions30d: 0,
 };
 
 describe("buildDisciplineCards", () => {
@@ -86,5 +89,44 @@ describe("buildDisciplineCards", () => {
     const wwwd = cards.find((c) => c.key === "wwwd");
     const manage = wwwd?.actions.find((a) => a.emphasis);
     expect(manage?.label).toBe("Manage stance");
+  });
+
+  it("flags a silent decision ledger with a warning usage chip on every tier", () => {
+    const cards = buildDisciplineCards(base);
+    for (const card of cards) {
+      const chip = card.chips.find((c) => c.label === "no decisions recorded");
+      expect(chip?.tone).toBe("warning");
+    }
+  });
+
+  it("shows 30d decision counts (pluralized) when the ledger is in use", () => {
+    const cards = buildDisciplineCards({
+      ...base,
+      wwmdDecisions30d: 12,
+      wwwdDecisions30d: 1,
+      wsidDecisions30d: 0,
+    });
+    const wwmdChip = cards
+      .find((c) => c.key === "wwmd")
+      ?.chips.find((c) => c.label.includes("decision"));
+    expect(wwmdChip?.label).toBe("12 decisions · 30d");
+    expect(wwmdChip?.tone).toBe("success");
+    const wwwdChip = cards
+      .find((c) => c.key === "wwwd")
+      ?.chips.find((c) => c.label.includes("decision"));
+    expect(wwwdChip?.label).toBe("1 decision · 30d");
+    const wsidChip = cards
+      .find((c) => c.key === "wsid")
+      ?.chips.find((c) => c.label.includes("decision"));
+    expect(wsidChip?.label).toBe("no decisions recorded");
+  });
+
+  it("links every tier card to its decision log", () => {
+    const cards = buildDisciplineCards(base);
+    for (const card of cards) {
+      expect(
+        card.actions.some((a) => a.href === `/wiki/decisions?tier=${card.key}`),
+      ).toBe(true);
+    }
   });
 });

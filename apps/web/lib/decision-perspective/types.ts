@@ -16,7 +16,7 @@ export type DecisionRiskTier = typeof DECISION_RISK_TIERS[number];
 export const DECISION_OUTCOME_TYPES = ["recommend", "arbitrate", "escalate", "defer"] as const;
 export type DecisionOutcomeType = typeof DECISION_OUTCOME_TYPES[number];
 
-export const DECISION_DOMAIN_CLASSES = ["plan-readiness", "architecture-tradeoff", "risk-assessment", "professional-practice"] as const;
+export const DECISION_DOMAIN_CLASSES = ["plan-readiness", "architecture-tradeoff", "risk-assessment", "professional-practice", "kernel-consult"] as const;
 export type DecisionDomainClass = typeof DECISION_DOMAIN_CLASSES[number];
 export const PLAN_READINESS_DOMAIN_CLASS = "plan-readiness" satisfies DecisionDomainClass;
 

@@ -56,6 +56,19 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  // Decision governance ledger (DecisionInteraction.outcomeType / riskTier).
+  decisionOutcome: {
+    recommend: "success",
+    arbitrate: "info",
+    escalate: "danger",
+    defer: "warning",
+  },
+  decisionRisk: {
+    low: "success",
+    medium: "warning",
+    high: "danger",
+    critical: "danger",
+  },
   // Portfolio coverage axis (BI-PORTCOV-P6): what relationship the org has to a
   // portfolio entry — used/sold = in use, available = configurable now,
   // potential = one governed click to enable, planned/retired.

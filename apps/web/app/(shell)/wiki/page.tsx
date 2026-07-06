@@ -72,6 +72,8 @@ export default async function WikiBrowsePage({
     : [WWWD_ORGANIZATION_PROFILE_ID];
 
   // Derive discipline health + fetch the retained material list in parallel.
+  const decisionWindow = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
   const [
     pages,
     kernelPrincipleCount,
@@ -81,6 +83,9 @@ export default async function WikiBrowsePage({
     wwwdOpenReviews,
     wsidActiveProfiles,
     wsidOpenReviews,
+    wwmdDecisions30d,
+    wwwdDecisions30d,
+    wsidDecisions30d,
   ] = await Promise.all([
     prisma.wikiPage.findMany({
       where,
@@ -127,6 +132,18 @@ export default async function WikiBrowsePage({
     prisma.decisionInteraction.count({
       where: { outcomeType: { in: UNRESOLVED }, profileId: { startsWith: "wsid-" } },
     }),
+    // Ledger usage per tier (30d) — the audit signal behind each card's
+    // usage chip; a zero surfaces "no decisions recorded" so a dormant gate
+    // is visible, not silently assumed active.
+    prisma.decisionInteraction.count({
+      where: { profileId: WWMD_PLATFORM_PROFILE_ID, createdAt: { gte: decisionWindow } },
+    }),
+    prisma.decisionInteraction.count({
+      where: { profileId: { in: wwwdProfileIds }, createdAt: { gte: decisionWindow } },
+    }),
+    prisma.decisionInteraction.count({
+      where: { profile: { kind: "profession" }, createdAt: { gte: decisionWindow } },
+    }),
   ]);
 
   const disciplineCards = buildDisciplineCards({
@@ -138,6 +155,9 @@ export default async function WikiBrowsePage({
     wsidFamilyCount: PROFESSION_REGISTRY.families.length,
     wsidActiveProfiles,
     wsidOpenReviews,
+    wwmdDecisions30d,
+    wwwdDecisions30d,
+    wsidDecisions30d,
   });
 
   return (
