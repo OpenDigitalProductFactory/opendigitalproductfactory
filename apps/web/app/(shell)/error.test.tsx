@@ -79,4 +79,72 @@ describe("ShellError", () => {
     // Screen-reader confirmation is announced.
     expect(screen.getByText("Diagnostic prompt copied to clipboard")).toBeInTheDocument();
   });
+
+  // BI-D22D4607: stale-tab deployment skew auto-recovers with one reload
+  // instead of the crash screen + a critical auto-report.
+  describe("deployment skew auto-reload", () => {
+    const skewError = () =>
+      new Error("An unexpected response was received from the server.");
+
+    let reload: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      sessionStorage.clear();
+      reload = vi.fn();
+      // jsdom's location.reload throws "Not implemented" — replace it.
+      Object.defineProperty(window, "location", {
+        value: { ...window.location, pathname: "/portal/build", reload },
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it("reloads once, shows the update notice, and skips the auto-report", async () => {
+      render(<ShellError error={skewError()} reset={() => undefined} />);
+
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(screen.getByText("The portal was updated")).toBeInTheDocument();
+      expect(screen.getByText(/Refreshing this page to the latest version/)).toBeInTheDocument();
+      expect(screen.queryByText("Something went wrong")).not.toBeInTheDocument();
+      // The reload-loop guard is stamped…
+      expect(sessionStorage.getItem("dpf-skew-reload-at")).not.toBeNull();
+      // …and no critical runtime_error report is filed for routine skew.
+      expect(vi.mocked(fetch)).not.toHaveBeenCalledWith(
+        "/api/quality/report",
+        expect.anything(),
+      );
+    });
+
+    it("falls through to the crash screen when a reload was already tried", async () => {
+      // A recent stamp means the previous reload did not fix it — real problem.
+      sessionStorage.setItem("dpf-skew-reload-at", String(Date.now() - 5_000));
+
+      render(<ShellError error={skewError()} reset={() => undefined} />);
+
+      expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+      expect(screen.getByText(/open across a platform update/)).toBeInTheDocument();
+      expect(reload).not.toHaveBeenCalled();
+      // This time it IS reportable — the auto-report fires.
+      await waitFor(() =>
+        expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+          "/api/quality/report",
+          expect.anything(),
+        ),
+      );
+    });
+
+    it("never auto-reloads for ordinary crashes", async () => {
+      render(
+        <ShellError
+          error={new Error("Cannot read properties of undefined (reading 'split')")}
+          reset={() => undefined}
+        />,
+      );
+
+      expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+      expect(screen.queryByText(/open across a platform update/)).not.toBeInTheDocument();
+      await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
+      expect(reload).not.toHaveBeenCalled();
+    });
+  });
 });

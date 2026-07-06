@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UpstreamEscalation } from "@/components/feedback/UpstreamEscalation";
+import { isDeploymentSkewError, SKEW_RELOAD_KEY, SKEW_RELOAD_WINDOW_MS } from "@/lib/deployment-skew";
 
 export default function ShellError({
   error,
@@ -12,6 +13,42 @@ export default function ShellError({
 }) {
   const [submitted, setSubmitted] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
+
+  // BI-D22D4607: stale-tab deployment skew. A tab loaded from the previous
+  // build fails its next server-action POST / chunk load after a self-upgrade
+  // swaps the image. That's routine, not a crash — reload once onto the
+  // current build instead of alarming the operator with this screen (and skip
+  // the critical auto-report for the auto-recovered case). The sessionStorage
+  // timestamp guard makes a second skew error within the window fall through
+  // to the normal crash screen: reloading didn't fix it, so it's real.
+  const isSkew = isDeploymentSkewError(error.message);
+  const skewDecisionRef = useRef<boolean | null>(null);
+  function shouldAutoReload(): boolean {
+    if (skewDecisionRef.current !== null) return skewDecisionRef.current;
+    let decision = false;
+    if (isSkew && typeof window !== "undefined") {
+      try {
+        const last = Number(sessionStorage.getItem(SKEW_RELOAD_KEY) ?? "0");
+        if (!Number.isFinite(last) || Date.now() - last >= SKEW_RELOAD_WINDOW_MS) {
+          sessionStorage.setItem(SKEW_RELOAD_KEY, String(Date.now()));
+          decision = true;
+        }
+      } catch {
+        // sessionStorage unavailable (private mode edge cases) — without the
+        // reload-loop guard we must not auto-reload; show the normal screen.
+      }
+    }
+    skewDecisionRef.current = decision;
+    return decision;
+  }
+  const [autoReloading, setAutoReloading] = useState(false);
+  useEffect(() => {
+    if (shouldAutoReload()) {
+      setAutoReloading(true);
+      window.location.reload();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error]);
 
   // BI-B4F401B3: crash-boundary diagnostic prompt. The production error message
   // is sanitized by Next.js — only the digest survives to the client. Rather
@@ -36,6 +73,8 @@ export default function ShellError({
   // reference it. Fire-and-forget for the page, but we await internally so the
   // prompt is populated.
   useEffect(() => {
+    // Auto-recovering deployment skew is not a reportable crash (BI-D22D4607).
+    if (shouldAutoReload()) return;
     const body = {
       type: "runtime_error",
       severity: "critical",
@@ -160,6 +199,29 @@ export default function ShellError({
   // submission (has their description); fall back to the auto-filed crash report.
   const escalationReportId = reportId ?? autoReportId;
 
+  // While the skew auto-reload is in flight, show a calm one-liner instead of
+  // the crash card — the page is about to be replaced by the current build.
+  if (autoReloading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-4 py-10">
+        <div className="w-full max-w-[34rem] rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6 text-center shadow-sm sm:p-8">
+          <div
+            aria-hidden="true"
+            className="mx-auto mb-3 flex size-10 animate-pulse items-center justify-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-2xl font-semibold text-[var(--dpf-accent)]"
+          >
+            ↻
+          </div>
+          <h2 className="mb-2 text-lg font-semibold text-[var(--dpf-text)]">
+            The portal was updated
+          </h2>
+          <p role="status" className="text-sm leading-6 text-[var(--dpf-muted)]">
+            Refreshing this page to the latest version…
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-[60vh] items-center justify-center px-4 py-10">
       <div className="w-full max-w-[34rem] rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6 text-center shadow-sm sm:p-8">
@@ -175,6 +237,12 @@ export default function ShellError({
         <p className="mb-5 text-sm leading-6 text-[var(--dpf-muted)]">
           The platform team has been automatically notified. You can add what you were doing below.
         </p>
+        {isSkew && (
+          <p className="mb-5 text-sm leading-6 text-[var(--dpf-muted)]">
+            This can happen when a page stays open across a platform update. If this
+            screen keeps returning after a refresh, it&apos;s worth reporting below.
+          </p>
+        )}
 
         <dl className="mb-4 grid gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-left text-xs">
           <div className="grid gap-1 sm:grid-cols-[4.5rem_1fr] sm:items-start">
