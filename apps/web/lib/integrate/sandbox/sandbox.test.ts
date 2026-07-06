@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildSandboxAppsWebCopyCommand,
+  buildSandboxDevServerStopCommand,
   buildDockerExecSandboxCommand,
   buildSandboxDiffForFilesCommand,
   buildSandboxCreateArgs,
@@ -258,6 +259,30 @@ describe("sandbox workspace initialization helpers", () => {
     expect(command).toContain("rm -rf /workspace/apps/web/node_modules");
     expect(command).toContain("/workspace/apps/web/.next");
     expect(command).toContain("/workspace/apps/web/tsconfig.tsbuildinfo");
+  });
+
+  it("stops the dev server BEFORE deleting .next so turbopack's cache is never yanked mid-run", () => {
+    const command = buildSandboxWorkspaceCleanupCommand();
+
+    // The dev-server stop must precede the destructive rm of .next.
+    const stopIdx = command.indexOf("pkill");
+    const rmIdx = command.indexOf("rm -rf");
+    expect(stopIdx).toBeGreaterThanOrEqual(0);
+    expect(rmIdx).toBeGreaterThan(stopIdx);
+    // Best-effort, never fails the sequence.
+    expect(command).toContain("|| true");
+  });
+
+  it("builds a best-effort dev-server stop command that frees the turbopack process", () => {
+    const command = buildSandboxDevServerStopCommand();
+
+    expect(command).toContain("pkill -f 'next dev'");
+    expect(command).toContain("pkill -f next-server");
+    expect(command).toContain("sleep 1");
+    // Every stanza tolerates "no such process" so a clean sandbox is a no-op.
+    expect(command).toContain("|| true");
+    // Must not hard-quote in a way that breaks the JSON.stringify exec sites.
+    expect(command).not.toContain('"');
   });
 
   it("copies root scripts so workspace postinstall hooks can run in the sandbox", () => {

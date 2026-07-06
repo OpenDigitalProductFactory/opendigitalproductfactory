@@ -108,4 +108,7 @@ WORKDIR /workspace
 # Start the Next.js dev server if workspace is bootstrapped,
 # otherwise wait for it. The dev server keeps the container alive
 # and serves the app on port 3000 for the Build Studio preview.
-CMD ["sh", "-c", "while [ ! -f /workspace/.dpf-version ]; do echo 'Waiting for workspace bootstrap...'; sleep 5; done; cd /workspace && pnpm --filter web dev 2>&1 || sleep infinity"]
+# Clear any stale turbopack cache on boot: it lives on the persistent
+# /workspace volume, so a container restart would otherwise re-open a cache
+# a prior process left corrupt (deleted .sst files) and wedge in a CPU storm.
+CMD ["sh", "-c", "while [ ! -f /workspace/.dpf-version ]; do echo 'Waiting for workspace bootstrap...'; sleep 5; done; rm -rf /workspace/apps/web/.next/dev/cache 2>/dev/null || true; cd /workspace && pnpm --filter web dev 2>&1 || sleep infinity"]

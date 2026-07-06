@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   _setGovernanceForTests,
+  agentHasAnyGrant,
   governedExecuteTool,
   registerToolLifecycleHook,
 } from "./mcp-governed-execute";
@@ -619,5 +620,30 @@ describe("governedExecuteTool — Work Case receipt context", () => {
         toolExecutionId: "tool-exec-work-case-2",
       }),
     );
+  });
+});
+
+describe("agentHasAnyGrant (autonomous dispatch preflight)", () => {
+  it("returns false when the agent can call none of its tools", async () => {
+    _setGovernanceForTests({
+      resolveAgentGrants: async () => [],
+      isAllowedByGrants: () => false,
+    });
+    const result = await agentHasAnyGrant("build-architect", ["read_sandbox_file", "run_sandbox_command"]);
+    expect(result).toBe(false);
+  });
+
+  it("returns true when the agent can call at least one tool", async () => {
+    _setGovernanceForTests({
+      resolveAgentGrants: async () => ["sandbox_read"],
+      isAllowedByGrants: (toolName: string) => toolName === "read_sandbox_file",
+    });
+    const result = await agentHasAnyGrant("build-architect", ["run_sandbox_command", "read_sandbox_file"]);
+    expect(result).toBe(true);
+  });
+
+  it("returns true (nothing to gate) when no tools are attached", async () => {
+    _setGovernanceForTests({ resolveAgentGrants: async () => [], isAllowedByGrants: () => false });
+    expect(await agentHasAnyGrant("any-agent", [])).toBe(true);
   });
 });

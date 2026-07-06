@@ -1279,6 +1279,17 @@ export async function runAgenticLoop(params: {
   let ctxPeakTokens = 0; // Peak assembled context (est. tokens) this turn — dumb-zone gauge.
   let resolvedMaxContextTokens: number | null = null; // BI-9679EB1A: learned from the first dispatch; sizes compaction + the gauge to the real window.
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
+  // Grant-starvation circuit breaker: an agent whose profile lacks the grants
+  // for the tools it was handed keeps emitting tool calls that all return
+  // `forbidden_grant`. Without this, the loop burns the full MAX_ITERATIONS /
+  // MAX_DURATION with executedTools=0 (observed 2026-07-06: build-architect on
+  // a build-pipeline thread spun ~500s, iter=200, zero tools executed). The
+  // repetition detector doesn't fire because the model keeps trying DIFFERENT
+  // forbidden tools; the nudge cap (1) is spent after the first iteration. We
+  // count consecutive forbidden_grant rejections and reset on ANY tool success,
+  // so a legitimately mixed grant surface (some tools allowed) never trips it.
+  let forbiddenGrantStreak = 0;
+  const forbiddenGrantTools = new Set<string>(); // names seen rejected, for the blocked message
   let previousResponseId: string | undefined; // Responses API conversation chaining
 
   // Per-turn observability: one structured summary line with the correlation
@@ -1361,6 +1372,35 @@ export async function runAgenticLoop(params: {
       console.warn(`[agentic-loop] sandbox unavailable after ${sandboxUnavailableCount} attempts. Aborting loop.`);
       return {
         content: "The sandbox is not available — no slots are free. Please ensure the sandbox container is running (check Docker Desktop), then try again.",
+        providerId: lastResult?.providerId ?? "",
+        modelId: lastResult?.modelId ?? "",
+        downgraded: lastResult?.downgraded ?? false,
+        downgradeMessage: lastResult?.downgradeMessage ?? null,
+        totalInputTokens,
+        totalOutputTokens,
+        executedTools,
+        proposal: null,
+      };
+    }
+
+    // Grant-starvation circuit breaker — after 3 consecutive forbidden_grant
+    // rejections with no intervening success, this agent's profile is missing
+    // the grants for the work it was handed. Continuing only burns iterations
+    // (repetition detector won't fire — the model varies which forbidden tool
+    // it tries). Exit with an actionable, honest blocked status that names the
+    // held-back tools so the operator can grant them, rather than spinning to
+    // MAX_DURATION with executedTools=0.
+    if (forbiddenGrantStreak >= 3) {
+      const blockedTools = Array.from(forbiddenGrantTools).sort();
+      console.warn(
+        `[agentic-loop] grant-starved: ${forbiddenGrantStreak} consecutive forbidden_grant rejections. ` +
+        `agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)} tools=${JSON.stringify(blockedTools)}. Aborting loop.`,
+      );
+      return {
+        content:
+          `Blocked — hard stop, not a retry situation. This agent's profile lacks the grant(s) required for ` +
+          `the tools it needs: ${blockedTools.join(", ")}. Every attempt was rejected with \`forbidden_grant\`. ` +
+          `A platform operator needs to grant \`${agentId}\` access to these tools (or hand the work to a peer that already holds them) before it can proceed.`,
         providerId: lastResult?.providerId ?? "",
         modelId: lastResult?.modelId ?? "",
         downgraded: lastResult?.downgraded ?? false,
@@ -2279,6 +2319,17 @@ export async function runAgenticLoop(params: {
       // Sandbox circuit breaker: track consecutive unavailable responses
       if (!toolResult.success && (toolResult.error ?? toolResult.message ?? "").includes("No sandbox slots available")) {
         sandboxUnavailableCount++;
+      }
+
+      // Grant-starvation circuit breaker: governedExecuteTool returns the
+      // rejection code in `error` ("forbidden_grant"). Count consecutive
+      // rejections; any successful tool clears the streak so a mixed surface
+      // (some grants present) never trips it.
+      if (!toolResult.success && toolResult.error === "forbidden_grant") {
+        forbiddenGrantStreak++;
+        forbiddenGrantTools.add(tc.name);
+      } else if (toolResult.success) {
+        forbiddenGrantStreak = 0;
       }
 
       executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
