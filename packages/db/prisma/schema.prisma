@@ -3091,6 +3091,9 @@ model Quote {
   currency      String    @default("GBP")
   terms         String?
   notes         String?
+  // Public accept-link token (mirrors Invoice.payToken): possession authorizes
+  // the customer to view and accept this quote at /s/quote/[token].
+  acceptToken String?   @unique
   sentAt        DateTime?
   acceptedAt    DateTime?
   rejectedAt    DateTime?

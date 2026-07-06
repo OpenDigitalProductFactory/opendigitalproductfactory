@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
 import { QuoteLifecycleActions } from "@/components/customer/QuoteLifecycleActions";
+import { QuoteShareLink } from "@/components/customer/QuoteShareLink";
 import { LocalTime } from "@/components/ui/LocalTime";
 import {
   CRM_TONE_CLASSES,
@@ -87,6 +88,9 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
           </p>
           <div className="mt-3">
             <QuoteLifecycleActions quoteId={quote.id} status={quote.status} />
+            {quote.status === "sent" && quote.acceptToken ? (
+              <QuoteShareLink acceptToken={quote.acceptToken} />
+            ) : null}
           </div>
         </div>
         <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3 md:text-right">

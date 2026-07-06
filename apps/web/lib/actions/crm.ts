@@ -1291,9 +1291,16 @@ export async function reviseQuote(quoteId: string, userId?: string) {
 }
 
 export async function sendQuote(quoteId: string, userId?: string) {
+  // Mint the public accept-link token on first send (mirrors sendInvoice's
+  // payToken): possession authorizes the customer to view + accept the quote.
+  const existing = await prisma.quote.findUnique({
+    where: { id: quoteId },
+    select: { acceptToken: true },
+  });
+  const acceptToken = existing?.acceptToken ?? crypto.randomBytes(24).toString("base64url");
   const quote = await prisma.quote.update({
     where: { id: quoteId },
-    data: { status: "sent", sentAt: new Date() },
+    data: { status: "sent", sentAt: new Date(), acceptToken },
     include: {
       lineItems: { orderBy: { sortOrder: "asc" } },
       account: { select: { id: true, accountId: true, name: true } },
