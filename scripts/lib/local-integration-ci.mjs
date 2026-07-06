@@ -41,6 +41,13 @@ export function createLocalIntegrationPlan(input) {
     // test/build result counts as product evidence. Exits 3/4 (sandbox drift /
     // not ready) instead of letting a stale install masquerade as a red build.
     ["node", "scripts/sandbox-freshness-preflight.mjs", "--converge", "--branch", branch],
+    // CI parity: the workflow runs `prisma generate` explicitly before every
+    // typecheck/build (ci.yml). The freshness preflight only converges when the
+    // LOCKFILE drifts — a merge that changes schema.prisma without touching
+    // dependencies leaves the generated client stale, and tsc then floods with
+    // false "Property X does not exist" errors (observed live 2026-07-06 right
+    // after #2636 landed a schema change on main). Cheap and idempotent.
+    ["pnpm", "--filter", "@dpf/db", "exec", "prisma", "generate"],
     // CI parity (BI-157DC9B2): the Unit Tests job applies migrations before the
     // suite — a handful of web tests exercise real Prisma reads. Callers that
     // resolved a test DATABASE_URL opt in via includeMigrateDeploy.
