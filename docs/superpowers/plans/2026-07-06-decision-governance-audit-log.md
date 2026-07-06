@@ -38,3 +38,12 @@ Tier attribution is by profile kind (`platform`→WWMD, `organization`→WWWD, `
 
 - Unit: `kernel-consult-ledger.test.ts` (outcome mapping, profile attribution, observable skip, fail-open), `decision-audit.test.ts` (tier mapping, awaiting-human semantics), extended `decision-governance-hub.test.ts` (usage chips, log links).
 - Runtime (canonical install, post self-upgrade): call `principle_decide` via MCP → row visible at `/wiki/decisions` with WWMD attribution; hub chip flips from "no decisions recorded" to a live count.
+
+## 5. Migration addendum (post-#2647 live verification)
+
+Live verification caught a DB/TS enum drift: the `DecisionInteraction_domainClass_check` /
+`PerspectiveMaterial_domainClass_check` constraints (migration 20260517233000) froze the
+domain-class set at the original three values, so every `kernel-consult` ledger write failed
+its CHECK — observably (`ledger.recorded=false`, fail-open) but the audit trail stayed empty.
+Migration `20260706110000_align_decision_domainclass_check` widens both constraints to the
+full registry (`professional-practice`, `kernel-consult` added). Widening is data-safe.
