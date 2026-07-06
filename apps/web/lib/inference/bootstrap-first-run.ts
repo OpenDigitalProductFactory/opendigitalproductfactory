@@ -42,6 +42,9 @@ export async function seedOnboardingAgent(): Promise<void> {
   //   prefill_onboarding_wizard → data_governance_validate
   //   list_products / read references → registry_read, backlog_read, portfolio_read
   //   setup_email (PBI-INV-04 Phase 2) → email_config
+  //   record_org_business_answer (BI-44526F3E Phase C) → registry_write, so the
+  //     COO can capture the operator's confirmed answers about the business into
+  //     the org WWWD corpus (draft-by-default)
   // Without grants, every tool call is silently denied — the COO then claims
   // success on operations that never happened.
   const grants = [
@@ -49,6 +52,7 @@ export async function seedOnboardingAgent(): Promise<void> {
     "web_search",
     "data_governance_validate",
     "registry_read",
+    "registry_write",
     "backlog_read",
     "portfolio_read",
     "email_config",

@@ -14,6 +14,32 @@ import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
   {
+    name: "record_org_business_answer",
+    description:
+      "Capture a CONFIRMED first-party answer about how this business operates into the organization's decision corpus (WWWD). Use after the employee/operator has confirmed an answer to a question about the business — what it sells, who it serves, how it decides something, how work gets done — so future decisions can cite it. The answer lands as DRAFT knowledge for the operator to review and publish; nothing becomes authoritative without human review. Use ONLY for confirmed statements from the operator about their own business, never for speculation, research findings, or platform matters.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        question: {
+          type: "string",
+          description: "The business question that was asked, e.g. 'Who are your most important customers?'",
+        },
+        answer: {
+          type: "string",
+          description: "The operator's confirmed answer, as close to their own words as practical.",
+        },
+        topic: {
+          type: "string",
+          description: "Optional short label for the knowledge, e.g. 'key customers'. Defaults to the question.",
+        },
+      },
+      required: ["question", "answer"],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
     name: "evaluate_org_business_decision",
     description:
       "Weigh a business decision against your organization's own recorded stance (its mission and how-we-decide profile), returning a confidence-scored recommendation and recording the outcome to the decision ledger. Falls back to platform defaults only as advisory when your organization has not recorded a stance for this kind of decision, and escalates to a human when confidence is low or no applicable guidance exists. Use this to ground a business call in what the organization would do, rather than deciding unaided.",
@@ -96,13 +122,81 @@ async function evaluateOrgBusinessDecision(
   };
 }
 
+// The qa elicitation feeder (BI-44526F3E Phase C): a confirmed operator answer
+// enters the org's WWWD corpus through the SAME governed enrichment façade
+// every other source uses (enrichOrgCorpus) — qa provenance, first-party
+// trust, draft-by-default per BI-1378. This closes the elicitation half of the
+// review loop: evaluate_org_business_decision surfaces where the org is silent
+// (gap findings on /wiki/review), and this tool captures the operator's answer
+// once so the silence doesn't repeat.
+async function recordOrgBusinessAnswer(
+  params: Record<string, unknown>,
+  userId: string,
+  agentId?: string | null,
+): Promise<ToolResult> {
+  const { enrichOrgCorpus } = await import("@/lib/wiki/enrich-org-corpus");
+  const { createProductionInference } = await import("@/lib/wiki/inference-adapter");
+  const { prisma } = await import("@dpf/db");
+
+  const org = await prisma.organization.findFirst({ select: { id: true } });
+  if (!org) return { success: false, error: "no_org", message: "No organization is configured for this install." };
+
+  const question = String(params["question"] ?? "").trim();
+  const answer = String(params["answer"] ?? "").trim();
+  const topic = String(params["topic"] ?? "").trim();
+  if (!question || !answer) {
+    return {
+      success: false,
+      error: "invalid_params",
+      message: "Provide both the question that was asked and the operator's confirmed answer.",
+    };
+  }
+
+  try {
+    const result = await enrichOrgCorpus({
+      organizationId: org.id,
+      text: `Question: ${question}\n\nConfirmed answer: ${answer}`,
+      title: topic || question,
+      provenance: { sourceType: "qa", sourceRef: { question, askedBy: userId } },
+      trust: "first-party",
+      agentId: agentId ?? null,
+      userId,
+      infer: createProductionInference({ taskType: "wiki_proposal" }),
+    });
+
+    const pageCount = result.committed.length;
+    return {
+      success: true,
+      entityId: result.rawSourceId,
+      message:
+        pageCount > 0
+          ? `Captured. ${pageCount} draft knowledge page(s) await the operator's review before they become authoritative.`
+          : "Captured the answer, but no reviewable knowledge could be extracted from it — consider rephrasing or adding detail.",
+      data: {
+        rawSourceId: result.rawSourceId,
+        committed: result.committed,
+        warnings: result.warnings,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: "enrichment_failed",
+      message: `Could not capture the answer: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+}
+
 export const orgDecisionPack: ToolPack = {
   packId: "org-decision",
   definitions,
   handlers: {
     evaluate_org_business_decision: (params, userId) => evaluateOrgBusinessDecision(params, userId),
+    record_org_business_answer: (params, userId, context) =>
+      recordOrgBusinessAnswer(params, userId, context?.agentId ?? null),
   },
   grants: {
     evaluate_org_business_decision: ["work_capsule_read"],
+    record_org_business_answer: ["registry_write"],
   },
 };
