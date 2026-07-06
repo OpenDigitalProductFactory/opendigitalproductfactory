@@ -25,7 +25,6 @@
   "apps/web/lib/actions/compliance.ts": 1064,
   "apps/web/lib/actions/crm.ts": 1408,
   "apps/web/lib/actions/ea.ts": 1055,
-  "apps/web/lib/actions/hive-scout/ingest-500-agents.ts": 1005,
   "apps/web/lib/actions/mcp-tokens.test.ts": 1254,
   "apps/web/lib/actions/platform-dev-config.ts": 1330,
   "apps/web/lib/actions/promotions.self-upgrade.test.ts": 1021,
