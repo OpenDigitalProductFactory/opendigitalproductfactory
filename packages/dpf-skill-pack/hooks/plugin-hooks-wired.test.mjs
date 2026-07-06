@@ -182,10 +182,28 @@ test("surface manifests wire the hooks file so guards ship on every surface", ()
   );
 });
 
-test("repo .claude/settings.json does NOT also wire the plugin-owned guards (anti double-fire)", () => {
+test("repo .claude/settings.json ALSO wires every PreToolUse guard (belt-and-braces vs the plugin-install/hook-registration race)", () => {
+  // Deliberate INVERSION of the former anti-duplication assertion. Evidence
+  // (2026-07-06, session e07d5d79 / worktree stoic-fermat-b18696): plugin hooks
+  // register at session init, but in the FIRST session of a freshly created
+  // auto-worktree the dpf-platform plugin install for the new projectPath
+  // completes during session bootstrap AFTER hook registration — skills resolve
+  // dynamically so the plugin looks present, while every plane-1 guard silently
+  // fails OPEN (a lease-punt-deniable Bash command and a decision-routing-
+  // deniable AskUserQuestion both passed unimpeded). Project-plane settings.json
+  // hooks load from the checkout at session start and are immune to that race
+  // (the transcript-snapshot hook fired in the same failing session).
+  //
+  // So the PreToolUse guards are wired on BOTH planes. Double-fire when both
+  // planes are live is benign for these guards: a deny is idempotent (two denies
+  // block the same call once) and a warn only repeats additionalContext. The
+  // WorktreeCreate hook is NOT idempotent and must stay plugin-only (asserted
+  // separately above). Kernel-ratified: principle_decide 2026-07-06,
+  // settings_json_redundant_wiring composite 8.52, margin 1.59, high confidence.
+  //
   // hooks -> dpf-skill-pack -> packages -> repo root
   const settingsPath = join(here, "..", "..", "..", ".claude", "settings.json");
-  if (!existsSync(settingsPath)) return; // standalone plugin install: nothing to collide with
+  if (!existsSync(settingsPath)) return; // standalone plugin install: no repo settings.json
   const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
   const pre = settings?.hooks?.PreToolUse ?? [];
   const commands = [];
@@ -196,8 +214,29 @@ test("repo .claude/settings.json does NOT also wire the plugin-owned guards (ant
   }
   for (const script of GUARD_SCRIPTS) {
     assert.ok(
-      !commands.some((c) => c.includes(script)),
-      `${script} is wired in BOTH the plugin and .claude/settings.json — both fire, so this double-fires. Remove it from settings.json.`,
+      commands.some((c) => c.includes(script)),
+      `${script} is missing from .claude/settings.json PreToolUse — the settings plane is the race-immune fallback for fresh-worktree first sessions (see test comment); wire it alongside the plugin plane.`,
+    );
+  }
+  for (const c of commands) {
+    assert.ok(
+      !c.includes("CLAUDE_PLUGIN_ROOT"),
+      `settings.json hook command must reference the checked-in script via \${CLAUDE_PROJECT_DIR}, not \${CLAUDE_PLUGIN_ROOT} (which only resolves for plugin-plane hooks): ${c}`,
+    );
+  }
+
+  // Same matcher shape as the plugin plane: decision-routing on AskUserQuestion,
+  // Bash guards on Bash — a guard wired under the wrong matcher never fires.
+  const matcherOf = (script) =>
+    pre.find((e) => (e?.hooks ?? []).some((h) => String(h?.command ?? "").includes(script)))?.matcher ?? "";
+  assert.ok(
+    String(matcherOf("decision-routing-guard.mjs")).split("|").map((s) => s.trim()).includes("AskUserQuestion"),
+    "settings.json must wire decision-routing-guard.mjs on an AskUserQuestion matcher",
+  );
+  for (const guard of ["lease-guard.mjs", "root-clone-guard.mjs", "compose-guard.mjs", "lease-punt-guard.mjs"]) {
+    assert.ok(
+      String(matcherOf(guard)).split("|").map((s) => s.trim()).includes("Bash"),
+      `settings.json must wire ${guard} on a Bash matcher`,
     );
   }
 });
