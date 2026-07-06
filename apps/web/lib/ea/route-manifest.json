@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 537,
+  "routeCount": 538,
   "routes": [
     {
       "routePath": "/",
@@ -5931,6 +5931,19 @@
         "token"
       ],
       "file": "apps/web/app/(storefront)/s/pay/[token]/page.tsx"
+    },
+    {
+      "routePath": "/s/quote/[token]",
+      "kind": "page",
+      "segments": [
+        "s",
+        "quote",
+        "[token]"
+      ],
+      "dynamicParams": [
+        "token"
+      ],
+      "file": "apps/web/app/(storefront)/s/quote/[token]/page.tsx"
     },
     {
       "routePath": "/sandbox-restricted",
