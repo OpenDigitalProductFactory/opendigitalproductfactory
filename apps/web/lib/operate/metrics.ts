@@ -426,3 +426,54 @@ export const workspaceHomeResolutionsTotal = new Counter({
   labelNames: ["match", "has_archetype"] as const,
   registers: [metricsRegistry],
 });
+
+// ─── Reusable Queueing Substrate — flow telemetry (EP-3516E23D Phase 1) ───────
+// Prometheus mirror of the QueueTelemetryEvent stream so the existing monitoring
+// profile graphs every queue (compute lanes AND CWQ work queues) with zero new
+// infra. Labelled by the stable queueKey (+ outcome where terminal). Recorded
+// from `recordQueueTransition` (lib/queue/queue-telemetry.ts). Spec §4.2.
+
+export const queueDepth = new Gauge({
+  name: "dpf_queue_depth",
+  help: "Instantaneous count of items waiting in a queue (status=queued).",
+  labelNames: ["queue_key"] as const,
+  registers: [metricsRegistry],
+});
+
+export const queueWaitSeconds = new Histogram({
+  name: "dpf_queue_wait_seconds",
+  help: "Time an item waited in a queue before a worker/lane started serving it (enqueued→started).",
+  labelNames: ["queue_key"] as const,
+  buckets: [1, 5, 15, 30, 60, 300, 900, 1800, 3600, 14400],
+  registers: [metricsRegistry],
+});
+
+export const queueProcessSeconds = new Histogram({
+  name: "dpf_queue_process_seconds",
+  help: "Time a worker/lane spent serving an item (started→finished).",
+  labelNames: ["queue_key", "outcome"] as const,
+  buckets: [1, 5, 15, 30, 60, 300, 900, 1800, 3600, 14400],
+  registers: [metricsRegistry],
+});
+
+export const queueCycleSeconds = new Histogram({
+  name: "dpf_queue_cycle_seconds",
+  help: "Total time from enqueue to terminal outcome (enqueued→finished/cancelled) — lead time through the queue.",
+  labelNames: ["queue_key"] as const,
+  buckets: [1, 5, 15, 30, 60, 300, 900, 1800, 3600, 14400, 86400],
+  registers: [metricsRegistry],
+});
+
+export const queueThroughputTotal = new Counter({
+  name: "dpf_queue_throughput_total",
+  help: "Items served to a terminal outcome, by queue and outcome (success|failed|cancelled).",
+  labelNames: ["queue_key", "outcome"] as const,
+  registers: [metricsRegistry],
+});
+
+export const queueArrivalsTotal = new Counter({
+  name: "dpf_queue_arrivals_total",
+  help: "Items entering a queue (enqueued transitions) — demand/arrival rate.",
+  labelNames: ["queue_key"] as const,
+  registers: [metricsRegistry],
+});

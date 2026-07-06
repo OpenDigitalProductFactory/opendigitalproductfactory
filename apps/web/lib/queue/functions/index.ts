@@ -38,6 +38,7 @@ import { quiescenceRun } from "./quiescence-run";
 import { wikiLint } from "./wiki-lint";
 import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verification";
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
+import { queueMetricsAggregator } from "./queue-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
 import { workPatternProfileReview } from "./work-pattern-profile-review";
 import {
@@ -82,6 +83,7 @@ export const scheduledFunctions = [
   contributorInventorySyncCron,
   wikiLint,
   skillMetricsAggregator,
+  queueMetricsAggregator, // EP-3516E23D P1: hourly QueueTelemetryEvent → QueueMetricSnapshot rollup
   skillCurator,
   workPatternProfileReview,
   researchScheduleScan,

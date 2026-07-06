@@ -347,6 +347,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "queue-metrics-aggregator",
+    inngestId: "queue/metrics-aggregator",
+    name: "Queue metrics aggregator",
+    purpose:
+      "Rolls up the QueueTelemetryEvent stream into per-queue QueueMetricSnapshot rows (wait/process/cycle time, throughput, first-pass yield). Without it, queue flow metrics never materialise for tiles or the coworker surface.",
+    cron: "7 * * * *",
+    cadence: "Hourly at :07",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "skill-curator",
     inngestId: "skills/curator",
     name: "Skill curator",
