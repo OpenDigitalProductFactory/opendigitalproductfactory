@@ -258,6 +258,33 @@ export function deriveBuildStudioCustodianPrompt({
     // normal first step (and contradicts the panel telling the user to describe
     // the feature). Surface an honest "getting started" state instead.
     if (build.phase === "ideate" && build.brief == null) {
+      // BI-0F7C855A: the soothing "getting started" card is only honest while
+      // the drafting turn is genuinely young. Without a time bound it shadowed
+      // the early-phase quiet detection (BI-97738ED0) FOREVER — a build whose
+      // drafting turn died showed "Nothing is wrong" indefinitely (observed
+      // live: 46 idle minutes on FB-673BF54B). Past the quiet bar, surface the
+      // stall honestly and offer to restart the drafting turn.
+      if (isQuietEarlyPhase) {
+        return {
+          dismissKey,
+          title: "Drafting your Feature Brief has stalled.",
+          whyNow: `I have not seen drafting progress for ${formatMinutes(quietMinutes)}. Something interrupted the coworker — this needs a restart, not more waiting.`,
+          recommendedAction: "Restart the brief drafting now. Your description is preserved; you do not need to add anything unless you want to.",
+          primaryLabel: action.coworkerLabel,
+          primaryAction: "coworker",
+          coworkerPrompt: appendCustodianInstruction(
+            action,
+            "Act as the Build Studio custodian. Brief drafting stalled — continue drafting the Feature Brief from the user's description and any saved scout findings, save it with saveBuildEvidence, and reply with one next action.",
+          ),
+          statusLabel: "Stalled",
+          intent: "warning",
+          details: [
+            "The build sat in the defining step past the quiet threshold with no progress signal.",
+            "Restarting the drafting turn re-runs the coworker; nothing you wrote is lost.",
+          ],
+          proactivityPlan,
+        };
+      }
       return {
         dismissKey,
         title: "Let's get this build started.",

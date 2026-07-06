@@ -8446,23 +8446,23 @@ export async function executeTool(
           const plan = (updatedBuild.plan as Record<string, unknown> | null) ?? {};
           let happyPathState = normalizeHappyPathState(plan.happyPathState);
 
-          // Auto-create epic if missing.
+          // Auto-create epic if missing via the request-scope-INDEPENDENT
+          // autoCreateBuildEpic helper (NOT the createBuildEpic server action,
+          // whose headers() throws on autonomous resume — see auto-intake-epic.ts).
           if (!happyPathState.intake.epicId) {
             try {
-              const { createBuildEpic } = await import("@/lib/actions/build");
+              const { autoCreateBuildEpic } = await import("@/lib/integrate/auto-intake-epic");
               const epicTitle = updatedBuild.title || happyPathState.intake.constrainedGoal || "Build Studio feature";
-              const portfolioSlug = updatedBuild.digitalProduct?.portfolio?.slug ?? undefined;
-              const epicResult = await createBuildEpic({
-                buildId,
+              const createdEpic = await autoCreateBuildEpic({
+                db: prisma,
                 title: epicTitle,
-                ...(portfolioSlug ? { portfolioSlug } : {}),
-                ...(updatedBuild.digitalProductId ? { digitalProductId: updatedBuild.digitalProductId } : {}),
+                portfolioSlug: updatedBuild.digitalProduct?.portfolio?.slug ?? null,
               });
               await updateBuildHappyPathState(userId, {
-                intake: { epicId: epicResult.epicId },
+                intake: { epicId: createdEpic.epicId },
               }, buildId);
-              happyPathState = { ...happyPathState, intake: { ...happyPathState.intake, epicId: epicResult.epicId } };
-              logBuildActivity(buildId, "auto-intake:epic", `Auto-created epic ${epicResult.epicId} (${epicTitle})`);
+              happyPathState = { ...happyPathState, intake: { ...happyPathState.intake, epicId: createdEpic.epicId } };
+              logBuildActivity(buildId, "auto-intake:epic", `Auto-created epic ${createdEpic.epicId} (${epicTitle})`);
             } catch (err) {
               console.warn("[reviewDesignDoc] auto-create epic failed:", err);
             }

@@ -234,7 +234,7 @@ describe("deriveBuildStudioCustodianPrompt", () => {
     expect(active).toBeNull();
   });
 
-  it("shows a 'getting started' state (not 'Waiting on evidence') for a pre-brief ideate build", () => {
+  it("shows a 'getting started' state (not 'Waiting on evidence') for a FRESH pre-brief ideate build", () => {
     const build = makeBuild({
       phase: "ideate",
       brief: null,
@@ -257,12 +257,59 @@ describe("deriveBuildStudioCustodianPrompt", () => {
       coworkerLabel: "Continue with coworker",
       coworkerPrompt: "Draft the feature brief.",
     };
-    const prompt = deriveBuildStudioCustodianPrompt({ build, action, progressVisibility: progress() });
+    // BI-0F7C855A: the soothing card is only honest while drafting is genuinely
+    // young — below the early-phase quiet bar. (The old default fixture was 8
+    // quiet minutes, which pinned the WRONG behavior: an indefinitely soothing
+    // card that shadowed stall detection.)
+    const prompt = deriveBuildStudioCustodianPrompt({
+      build,
+      action,
+      progressVisibility: progress({
+        quietAgent: { quiet: true, minutesQuiet: 2, lastObservableSignalAt: "2026-06-29T12:18:00.000Z" },
+      }),
+    });
 
     expect(prompt?.statusLabel).toBe("Getting started");
     expect(prompt?.title).toBe("Let's get this build started.");
     expect(prompt?.intent).toBe("info");
     expect(prompt?.whyNow).not.toContain("required evidence is missing");
+  });
+
+  it("replaces 'Nothing is wrong' with an honest stalled card once a pre-brief ideate build passes the quiet bar (BI-0F7C855A)", () => {
+    const build = makeBuild({
+      phase: "ideate",
+      brief: null,
+      uxVerificationStatus: null,
+      designDoc: null,
+      designReview: null,
+      buildPlan: null,
+      planReview: null,
+      draftApprovedAt: null,
+    });
+    const action: BuildStudioWorkflowAction = {
+      kind: "advance-phase",
+      title: "Define the feature",
+      message: "The feature brief is not ready yet.",
+      primaryLabel: "Continue",
+      targetPhase: "plan",
+      disabledReason: "Feature brief not created yet.",
+      coworkerLabel: "Continue with coworker",
+      coworkerPrompt: "Draft the feature brief.",
+    };
+    // Default fixture: quiet for 8 minutes — past QUIET_EARLY_PHASE_THRESHOLD_MINUTES.
+    const prompt = deriveBuildStudioCustodianPrompt({ build, action, progressVisibility: progress() });
+
+    expect(prompt).not.toBeNull();
+    expect(prompt?.statusLabel).toBe("Stalled");
+    expect(prompt?.intent).toBe("warning");
+    expect(prompt?.title).not.toBe("Let's get this build started.");
+    // The dishonest copy must be gone: nothing IS wrong-claiming, no passive waiting.
+    expect(prompt?.whyNow).not.toContain("Nothing is wrong");
+    expect(prompt?.recommendedAction).not.toContain("let the coworker keep drafting");
+    // The card must offer an actionable restart of the drafting turn.
+    expect(prompt?.primaryAction).toBe("coworker");
+    expect(prompt?.coworkerPrompt).toContain("Act as the Build Studio custodian");
+    expect(prompt?.coworkerPrompt).toContain("Feature Brief");
   });
 
   it("surfaces a danger 'AI call failed' prompt (not 'Waiting on evidence') for a failed ideate inference (BI-F0005EB0)", () => {
