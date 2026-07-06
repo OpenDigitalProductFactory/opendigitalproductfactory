@@ -167,15 +167,20 @@ test("plugin hook commands reference the script via ${CLAUDE_PLUGIN_ROOT}, not a
 });
 
 test("surface manifests wire the hooks file so guards ship on every surface", () => {
-  // Codex and Grok resolve the hooks manifest from an explicit plugin.json key
-  // (Grok from the .grok-plugin dir, hence ../). Claude Code 2.1.197+ AUTO-LOADS
-  // hooks/hooks.json by convention, and an explicit "hooks" key now raises
-  // "Duplicate hooks file detected" — failing the WHOLE plugin load — so the
-  // .claude-plugin manifest must NOT declare it (#2544). The guards still ship on
-  // Claude via the auto-loaded file, asserted present below. BI-CA0ED781.
+  // Codex and Grok resolve the hooks manifest from an explicit plugin.json key.
+  // Both resolve component paths from the PLUGIN ROOT (the dir CONTAINING the
+  // .<surface>-plugin/ folder), so the key must be "./hooks/hooks.json". The
+  // .grok-plugin manifest previously used "../hooks/hooks.json" on the wrong
+  // assumption that it resolves from the .grok-plugin dir; live probing (BI-883FC2FC)
+  // showed Grok then loaded ZERO components and every guard was silently absent.
+  // Claude Code 2.1.197+ AUTO-LOADS hooks/hooks.json by convention, and an explicit
+  // "hooks" key now raises "Duplicate hooks file detected" — failing the WHOLE
+  // plugin load — so the .claude-plugin manifest must NOT declare it (#2544). The
+  // guards still ship on Claude via the auto-loaded file, asserted present below.
+  // BI-CA0ED781 / BI-883FC2FC. See also surface-manifest-paths.test.mjs.
   const declaring = [
     [".codex-plugin", "./hooks/hooks.json"],
-    [".grok-plugin", "../hooks/hooks.json"],
+    [".grok-plugin", "./hooks/hooks.json"],
   ];
   for (const [dir, expected] of declaring) {
     const manifest = JSON.parse(readFileSync(join(here, "..", dir, "plugin.json"), "utf8"));

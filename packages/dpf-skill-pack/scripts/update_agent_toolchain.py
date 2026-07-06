@@ -318,13 +318,88 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
     return "installed"
 
 
+def resolve_grok_binary() -> str | None:
+    found = shutil.which("grok")
+    if found:
+        return found
+    home = Path.home()
+    candidates: list[str] = []
+    if platform.system() == "Windows":
+        candidates.append(str(home / ".grok" / "bin" / "grok.exe"))
+    else:
+        candidates.extend([
+            str(home / ".grok" / "bin" / "grok"),
+            "/opt/homebrew/bin/grok",
+            "/usr/local/bin/grok",
+            str(home / ".local" / "bin" / "grok"),
+        ])
+    for candidate in candidates:
+        if Path(candidate).exists():
+            return candidate
+    return None
+
+
+def install_grok_plugin(managed: Path, dry_run: bool) -> str:
+    """Install the plugin into Grok's OWN plugin store.
+
+    Grok does not read Codex's `~/.codex/config.toml` marketplace; a plugin only
+    surfaces skills/hooks in Grok when installed via `grok plugin install`. The
+    `--trust` flag skips the interactive trust prompt (headless-safe). Installing
+    from the managed copy — the dir that CONTAINS `.grok-plugin/` — is what makes
+    the manifest's plugin-root-relative component paths resolve (BI-883FC2FC).
+    """
+    grok = resolve_grok_binary()
+    if not grok:
+        return "skipped: Grok CLI not found"
+    if dry_run:
+        return f"dry-run: would install {PLUGIN_NAME} from {managed}"
+    result = subprocess.run(
+        [grok, "plugin", "install", str(managed), "--trust"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return f"failed: grok plugin install exited {result.returncode}"
+    return "installed"
+
+
+def guard_liveness_advisory() -> list[str]:
+    """Per-surface caveats about whether the plane-1 guards actually FIRE.
+
+    "Installed" is not "enforcing". These are the live-probed (BI-883FC2FC)
+    conditions under which the plane-1 PreToolUse guards are inert on the
+    non-Claude surfaces, so the operator is not left believing enforcement is on
+    when it is fail-open. See docs/superpowers/specs/2026-07-03-...-gates-design.md
+    section 11.
+    """
+    codex_line = (
+        "  Codex : guards are Claude-contract-compatible and DENY correctly, but Codex "
+        + "gates all plugin hooks behind interactive HOOK TRUST. Until you open a Codex TUI "
+        + "session in this repo and choose 'Trust all and continue', every guard is silently "
+        + "fail-open. There is no non-interactive trust API (codex-cli 0.142.x); "
+        + "'--dangerously-bypass-hook-trust' is per-invocation only."
+    )
+    grok_line = (
+        "  Grok  : skills/hooks now LOAD (plugin-root-relative manifest paths), but Grok "
+        + "does not execute the Claude ${CLAUDE_PLUGIN_ROOT} PreToolUse *blocking* command-hook "
+        + "contract these guards use, so the runtime gate does not deny yet — tracked as a "
+        + "follow-up; the DPF MCP connector (plane 2) remains the enforcing path there."
+    )
+    return [
+        "Guard liveness (plane-1 PreToolUse enforcement is NOT implied by install):",
+        codex_line,
+        grok_line,
+    ]
+
+
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Update DPF Codex/Claude agent skills and MCP wiring.")
+    parser = argparse.ArgumentParser(description="Update DPF Codex/Claude/Grok agent skills and MCP wiring.")
     parser.add_argument("--skill-pack-path", default=str(default_skill_pack_path()))
     parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL", DEFAULT_MCP_URL))
     parser.add_argument("--codex-only", action="store_true")
     parser.add_argument("--claude-only", action="store_true")
     parser.add_argument("--skip-claude-cli-install", action="store_true")
+    parser.add_argument("--skip-grok-cli-install", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -350,6 +425,10 @@ def main(argv: list[str]) -> int:
         ensure_codex_marketplace(home, version, args.dry_run)
         ensure_codex_config(home, args.mcp_url, args.dry_run)
         print("  Codex      : marketplace + config converged")
+        grok_status = "skipped by flag"
+        if not args.skip_grok_cli_install:
+            grok_status = install_grok_plugin(managed, args.dry_run)
+        print(f"  Grok       : plugin install {grok_status}")
 
     if not args.codex_only:
         ensure_claude_marketplace(home, version, args.dry_run)
@@ -361,7 +440,9 @@ def main(argv: list[str]) -> int:
 
     token_present = bool(os.environ.get(TOKEN_ENV_VAR))
     print(f"  MCP token  : {'present' if token_present else 'missing'} ({TOKEN_ENV_VAR})")
-    print("Done. Start a new Codex/Claude session to load updated skills.")
+    for line in guard_liveness_advisory():
+        print(line)
+    print("Done. Start a new Codex/Claude/Grok session to load updated skills.")
     return 0
 
 
