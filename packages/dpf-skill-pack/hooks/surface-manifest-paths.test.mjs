@@ -46,7 +46,7 @@ test("every surface manifest exists and parses", () => {
 
 test("component paths are ./-relative and never escape the plugin root", () => {
   for (const surface of SURFACES) {
-    const { path, json } = loadManifest(surface);
+    const { json } = loadManifest(surface);
     for (const key of PATH_KEYS) {
       const val = json[key];
       if (typeof val !== "string") continue; // key absent on this surface

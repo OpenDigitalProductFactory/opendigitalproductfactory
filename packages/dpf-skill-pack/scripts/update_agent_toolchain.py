@@ -372,17 +372,23 @@ def guard_liveness_advisory() -> list[str]:
     when it is fail-open. See docs/superpowers/specs/2026-07-03-...-gates-design.md
     section 11.
     """
+    codex_line = (
+        "  Codex : guards are Claude-contract-compatible and DENY correctly, but Codex "
+        + "gates all plugin hooks behind interactive HOOK TRUST. Until you open a Codex TUI "
+        + "session in this repo and choose 'Trust all and continue', every guard is silently "
+        + "fail-open. There is no non-interactive trust API (codex-cli 0.142.x); "
+        + "'--dangerously-bypass-hook-trust' is per-invocation only."
+    )
+    grok_line = (
+        "  Grok  : skills/hooks now LOAD (plugin-root-relative manifest paths), but Grok "
+        + "does not execute the Claude ${CLAUDE_PLUGIN_ROOT} PreToolUse *blocking* command-hook "
+        + "contract these guards use, so the runtime gate does not deny yet — tracked as a "
+        + "follow-up; the DPF MCP connector (plane 2) remains the enforcing path there."
+    )
     return [
         "Guard liveness (plane-1 PreToolUse enforcement is NOT implied by install):",
-        "  Codex : guards are Claude-contract-compatible and DENY correctly, but Codex "
-        "gates all plugin hooks behind interactive HOOK TRUST. Until you open a Codex TUI "
-        "session in this repo and choose 'Trust all and continue', every guard is silently "
-        "fail-open. There is no non-interactive trust API (codex-cli 0.142.x); "
-        "'--dangerously-bypass-hook-trust' is per-invocation only.",
-        "  Grok  : skills/hooks now LOAD (plugin-root-relative manifest paths), but Grok "
-        "does not execute the Claude ${CLAUDE_PLUGIN_ROOT} PreToolUse *blocking* command-hook "
-        "contract these guards use, so the runtime gate does not deny yet — tracked as a "
-        "follow-up; the DPF MCP connector (plane 2) remains the enforcing path there.",
+        codex_line,
+        grok_line,
     ]
 
 
