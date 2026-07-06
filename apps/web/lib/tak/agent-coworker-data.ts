@@ -35,6 +35,7 @@ function serializeMessage(
     routeContext: string | null;
     createdAt: Date;
     providerId?: string | null;
+    modelId?: string | null;
     attachments?: AttachmentRow[];
   },
   proposal?: {
@@ -108,7 +109,7 @@ function selectVisibleTelemetry(rows: TelemetryRow[]): Map<string, TelemetryRow>
  * pre-telemetry rows.
  */
 async function loadProviderInfo(
-  messages: Array<{ id: string; role: string; providerId?: string | null }>,
+  messages: Array<{ id: string; role: string; providerId?: string | null; modelId?: string | null }>,
 ): Promise<Map<string, AgentMessageProvider>> {
   const assistantIds = messages
     .filter((m) => m.role === "assistant")
@@ -153,13 +154,16 @@ async function loadProviderInfo(
     if (t) {
       const name = nameByProviderId.get(t.providerId);
       if (!name) continue;
-      out.set(m.id, { name, modelId: t.modelId, adapterKind: t.adapterKind });
+      out.set(m.id, { name, providerId: t.providerId, modelId: t.modelId, adapterKind: t.adapterKind });
       continue;
     }
     if (m.providerId) {
       const name = nameByProviderId.get(m.providerId);
       if (!name) continue;
-      out.set(m.id, { name, modelId: null, adapterKind: null });
+      // No telemetry row — fall back to the model id persisted on the message
+      // itself (BI-1D0B5308). Pre-migration rows have modelId null and render
+      // as provider-name-only; newer rows now carry the model.
+      out.set(m.id, { name, providerId: m.providerId, modelId: m.modelId ?? null, adapterKind: null });
     }
   }
   return out;
@@ -183,6 +187,7 @@ export const getRecentMessages = cache(
         agentId: true,
         routeContext: true,
         providerId: true,
+        modelId: true,
         createdAt: true,
         attachments: {
           select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },

@@ -6,24 +6,38 @@ import { FileText } from "lucide-react";
 import type { AgentMessageProvider, AgentMessageRow } from "@/lib/agent-coworker-types";
 import type { ReactNode } from "react";
 import { AgentAttachmentCard } from "./AgentAttachmentCard";
+import { providerModelLabel } from "@/lib/agent/provider-model-label";
 
 /**
- * Format the provider badge label shown next to the coworker name.
+ * Format the per-turn provider/model attribution badge shown on assistant
+ * turns (BI-1D0B5308). Returns a compact, always-visible `label` plus a
+ * full-fidelity `title` for the hover tooltip (progressive disclosure — the
+ * `always-compact-badge` UX-fit decision on the human_cognitive_load axis).
  * Examples:
- *   { name: "Anthropic", modelId: "claude-opus-4-7", adapterKind: "anthropic-api" }
- *     → "Anthropic · claude-opus-4-7"
- *   { name: "ChatGPT", modelId: "gpt-5-codex", adapterKind: "codex-cli" }
- *     → "ChatGPT CLI · gpt-5-codex"
- *   { name: "Anthropic", modelId: null, adapterKind: null }
- *     → "Anthropic"
+ *   { name: "Anthropic", providerId: "anthropic", modelId: "claude-opus-4-8", adapterKind: "anthropic-api" }
+ *     → { label: "Claude · Opus 4.8", title: "anthropic / claude-opus-4-8" }
+ *   { name: "ChatGPT", providerId: "openai", modelId: "gpt-5-codex", adapterKind: "codex-cli" }
+ *     → { label: "ChatGPT CLI · GPT-5 Codex", title: "openai / gpt-5-codex" }
+ *   { name: "Anthropic", providerId: "anthropic", modelId: null, adapterKind: null }
+ *     → { label: "Claude", title: "anthropic" }
  * Returns null when there is nothing meaningful to show.
  */
-export function formatProviderBadge(provider: AgentMessageProvider | undefined): string | null {
+export function formatProviderBadge(
+  provider: AgentMessageProvider | undefined,
+): { label: string; title: string } | null {
   if (!provider) return null;
+  const { label, title } = providerModelLabel(provider.providerId, provider.modelId, provider.name);
+  // Preserve the CLI-vs-API distinction the telemetry adapterKind carries: a
+  // CLI leg is materially different from the hosted API, so stamp it on the chip.
   const isCli = !!provider.adapterKind && /cli/i.test(provider.adapterKind);
-  const cliAlreadyInName = /\bcli\b/i.test(provider.name);
-  const base = isCli && !cliAlreadyInName ? `${provider.name} CLI` : provider.name;
-  return provider.modelId ? `${base} · ${provider.modelId}` : base;
+  const cliAlreadyInLabel = /\bcli\b/i.test(label);
+  if (isCli && !cliAlreadyInLabel) {
+    // Insert " CLI" after the provider segment (before the " · model" part).
+    const [head, ...rest] = label.split(" · ");
+    const withCli = rest.length > 0 ? `${head} CLI · ${rest.join(" · ")}` : `${head} CLI`;
+    return { label: withCli, title };
+  }
+  return { label, title };
 }
 
 /**
@@ -350,7 +364,7 @@ export function AgentMessageBubble({
             <span style={{ fontSize: 10, color: "var(--dpf-accent)" }}>
               {agentName}
             </span>
-            {providerBadge && <ProviderBadge label={providerBadge} title={providerBadge} />}
+            {providerBadge && <ProviderBadge label={providerBadge.label} title={providerBadge.title} />}
           </div>
         )}
         <div style={{ maxWidth: "85%" }}>
@@ -465,7 +479,7 @@ export function AgentMessageBubble({
           <span style={{ fontSize: 10, color: "var(--dpf-accent)" }}>
             {agentName}
           </span>
-          {providerBadge && <ProviderBadge label={providerBadge} title={providerBadge} />}
+          {providerBadge && <ProviderBadge label={providerBadge.label} title={providerBadge.title} />}
         </div>
       )}
       <div

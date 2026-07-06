@@ -7,7 +7,7 @@ import { validateMessageInput } from "@/lib/agent-coworker-types";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
 import { generateCannedResponse } from "@/lib/agent-routing";
 import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
-import { serializeMessage } from "@/lib/agent-coworker-data";
+import { serializeMessage, loadProviderInfo } from "@/lib/agent-coworker-data";
 import {
   NoAllowedProvidersForSensitivityError,
   NoProvidersAvailableError,
@@ -341,6 +341,8 @@ export async function getThreadSnapshotById(input: {
       content: true,
       agentId: true,
       routeContext: true,
+      providerId: true,
+      modelId: true,
       createdAt: true,
       attachments: {
         select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
@@ -348,9 +350,13 @@ export async function getThreadSnapshotById(input: {
     },
   });
 
+  // BI-1D0B5308: resolve per-turn provider/model so the attribution badge shows
+  // right after a turn completes (client refreshes via this snapshot), not only
+  // on a full page reload.
+  const providerInfo = await loadProviderInfo(messages);
   return {
     threadId: thread.id,
-    messages: messages.reverse().map((m) => serializeMessage(m)),
+    messages: messages.reverse().map((m) => serializeMessage(m, undefined, providerInfo.get(m.id))),
   };
 }
 
@@ -385,6 +391,8 @@ export async function getOrCreateThreadSnapshot(input: {
       content: true,
       agentId: true,
       routeContext: true,
+      providerId: true,
+      modelId: true,
       createdAt: true,
       attachments: {
         select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
@@ -392,9 +400,11 @@ export async function getOrCreateThreadSnapshot(input: {
     },
   });
 
+  // BI-1D0B5308: attach per-turn provider/model attribution on initial load.
+  const providerInfo = await loadProviderInfo(messages);
   return {
     threadId: thread.id,
-    messages: messages.reverse().map((m) => serializeMessage(m)),
+    messages: messages.reverse().map((m) => serializeMessage(m, undefined, providerInfo.get(m.id))),
   };
 }
 
@@ -1823,6 +1833,7 @@ export async function sendMessage(input: {
           content: tc.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
           agentId: agent.agentId, routeContext: input.routeContext,
           providerId: agenticResult.providerId,
+          modelId: agenticResult.modelId,
           taskType: taskTypeId !== "unknown" ? taskTypeId : null,
           routedEndpointId: null, // EP-INF-009b: routing handled per-iteration by routeAndCall
         },
@@ -2234,6 +2245,7 @@ export async function sendMessage(input: {
       agentId: agent.agentId,
       routeContext: input.routeContext,
       providerId: responseProviderId,
+      modelId: responseModelId,
       taskType: taskTypeId !== "unknown" ? taskTypeId : null,
       routedEndpointId: null, // EP-INF-009b: routing is per-iteration via routeAndCall
     },

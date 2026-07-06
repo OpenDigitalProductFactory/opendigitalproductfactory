@@ -4379,6 +4379,7 @@ model AgentMessage {
   agentId          String?
   routeContext     String?
   providerId       String?
+  modelId          String?
   taskType         String?
   routedEndpointId String?
   proposal         AgentActionProposal?
