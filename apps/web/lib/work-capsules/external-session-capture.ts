@@ -10,6 +10,7 @@
 // best-effort so it never blocks the evidence write.
 
 import {
+  adoptWorktreeCapsule,
   createWorkCapsule,
   recordWorkCapsuleEvidence,
   type CapsuleDb,
@@ -43,24 +44,66 @@ export async function captureExternalSessionEvidence(args: {
   provider: string;
   summary: string;
   actor: WorkCapsuleActor;
+  /**
+   * BI-7D20BFDF: bind the direct-agent evidence record to a BacklogItem even
+   * without a buildId (the "direct-agent gap"). When worktreePath + branchName
+   * are also supplied we prefer the adopt path so the capsule carries the
+   * location too (BI ↔ work-location binding); otherwise the BI is bound on the
+   * createWorkCapsule path.
+   */
+  backlogItemId?: string | null;
+  worktreePath?: string | null;
+  branchName?: string | null;
+  repositoryFullName?: string | null;
+  baseBranch?: string | null;
 }): Promise<string> {
   const idempotencyKey = `external-session:${args.externalSessionId}`;
   const objective =
     args.summary.trim().slice(0, 500)
     || `External ${args.provider} development session`;
+  const title = `${providerLabel(args.provider)} session ${args.externalSessionId}`.slice(0, 120);
+  const backlogItemId = args.backlogItemId?.trim() || null;
+  const worktreePath = args.worktreePath?.trim() || null;
+  const branchName = args.branchName?.trim() || null;
 
-  const capsule = await createWorkCapsule({
-    db: args.db,
-    input: {
-      title: `${providerLabel(args.provider)} session ${args.externalSessionId}`.slice(0, 120),
-      objective,
-      source: "external-adoption",
-      executorKind: providerToExecutorKind(args.provider),
-      executorRef: args.externalSessionId,
-      idempotencyKey,
-    },
-    actor: args.actor,
-  });
+  // Prefer the adopt path when we have a location: it keys the capsule on
+  // (repo, branch) so the session's BI, worktree, and branch are one record —
+  // and late-binds the BI if the branch was already adopted without one.
+  let capsule;
+  if (worktreePath && branchName) {
+    capsule = await adoptWorktreeCapsule({
+      db: args.db,
+      input: {
+        title,
+        objective,
+        repositoryFullName:
+          args.repositoryFullName?.trim() ||
+          process.env.DPF_REPO_FULL_NAME?.trim() ||
+          "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: branchName,
+        worktreePath,
+        baseBranch: args.baseBranch?.trim() || "main",
+        executorKind: providerToExecutorKind(args.provider),
+        executorRef: args.externalSessionId,
+        backlogItemId,
+      },
+      actor: args.actor,
+    });
+  } else {
+    capsule = await createWorkCapsule({
+      db: args.db,
+      input: {
+        title,
+        objective,
+        source: "external-adoption",
+        executorKind: providerToExecutorKind(args.provider),
+        executorRef: args.externalSessionId,
+        idempotencyKey,
+        backlogItemId,
+      },
+      actor: args.actor,
+    });
+  }
 
   await recordWorkCapsuleEvidence({
     db: args.db,

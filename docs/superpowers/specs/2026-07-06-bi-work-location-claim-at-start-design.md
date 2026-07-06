@@ -1,0 +1,110 @@
+# Claim-at-start BI ↔ work-location binding
+
+- BI: BI-7D20BFDF
+- Date: 2026-07-06
+- Status: implemented (this branch)
+
+## Problem
+
+A parallel agent could pick up a BacklogItem that another session was already
+working on **directly** (outside Build Studio). The direct-build claim gate
+(`triage_backlog_item` → status `in-progress` in `apps/web/lib/mcp-tools.ts`)
+only fires when an agent flips the BI status through the governed tool. An
+external contributor (Claude / Codex / Grok) that clones a worktree, cuts a
+branch, and starts editing never touches that gate — so the BI still reads as
+unclaimed. The result was two sessions independently building the same BI (the
+EP-F7E35344 collision class), with no shared record tying the BI to *where* the
+work is happening (which worktree, which branch, which session).
+
+## Substrate
+
+`WorkCapsule` (`packages/db/prisma/schema.prisma`) is the unified work-tracking
+model. It already carries both `backlogItemId`/`epicId`/`featureBuildId` **and**
+`repositoryFullName`/`headBranch`/`worktreePath`/`baseBranch`/`executorRef`. The
+store (`apps/web/lib/work-capsules/work-capsule-store.ts`) has two creation
+paths that had never been joined:
+
+- `createWorkCapsule` — binds the BI/epic/build identity, **no** branch/worktree.
+  Idempotent on `idempotencyKey`.
+- `adoptWorktreeCapsule` — binds the location (`repositoryFullName` + `headBranch`
+  + `worktreePath`), **no** BI. Idempotent on `(repositoryFullName, headBranch)`.
+
+`BacklogItem` already has the claim fields (`claimStatus`, `claimedById`,
+`claimedByAgentId`, `claimedAt`) and a 12h-stale / force-override convention in
+`mcp-tools.ts`. No schema migration was needed — this work is purely optional
+inputs + wiring over existing columns.
+
+The "direct-agent gap" lived in
+`apps/web/lib/work-capsules/external-session-capture.ts`:
+`captureExternalSessionEvidence` recorded external work into a capsule but passed
+**no** `backlogItemId`, so evidence never bound the BI.
+
+## Design — soft claim-at-start
+
+A single new store function, `claimBacklogItemWorkspace`, joins the two paths:
+
+1. Resolve the `BacklogItem` (by `BI-*` id or cuid); throw if absent.
+2. Call `adoptWorktreeCapsule` with the BI id + location + session. This creates
+   the `(repo, branch)` capsule bound to the BI, or — critically — **late-binds**
+   an existing branch capsule that was adopted before the BI was known
+   (`backlogItemId == null` → set it, record a `WorkCapsuleActivity` note).
+3. Stamp the `BacklogItem` claim (`claimStatus="active"` + claimant + `claimedAt`)
+   following the existing 12h-stale convention — **unless** the BI already holds a
+   FRESH (`< 12h`) active claim by a different agent/session, in which case the
+   existing claim is **not** overwritten.
+
+The claim is **advisory, not a lock**. Even when another session holds the BI
+claim, the capsule for *this* location is still bound (so the work is tracked and
+visible) and the caller gets non-blocking `conflict` metadata describing the
+other active claim and any other in-flight locations. Multiple capsules per BI
+(one per branch) are expected and are **not** a conflict — a conflict is
+specifically (a) the BI already actively claimed by a different agent, or (b)
+another non-archived capsule on the same BI on a different branch/session.
+
+## WWMD kernel decision
+
+Claim-at-start (soft) was weighed against a hard lock. Kernel outcome:
+**claim-at-start won**, composite **6.07**, margin **0.32** (high). The hard-lock
+option was rejected against the operator-friction commandments — a hard lock
+would block a legitimate second branch or a founder taking over stalled work, and
+would turn a coordination signal into a gate. The soft signal preserves the
+existing force/stale override semantics already used on the direct-build path.
+
+## API — `claim_backlog_item_for_work`
+
+MCP tool in `apps/web/lib/mcp/packs/work-capsules-pack.ts`
+(handler `claimBacklogItemForWorkTool` in
+`apps/web/lib/work-capsules/mcp-handlers.ts`), grant `work_capsule_adopt`.
+
+Params:
+
+- `itemId` (required) — `BI-*`.
+- `worktreePath` (required) — local worktree location.
+- `branchName` (required) — head branch; the capsule is keyed on `(repo, branch)`.
+- `repositoryFullName` (optional) — defaults to `DPF_REPO_FULL_NAME` env or the
+  platform repo full name.
+- `baseBranch` (optional) — defaults to `main`.
+- `provider` (required) — mapped to an executor kind via `providerToExecutorKind`.
+- `sessionRef` (required) — owner/session id, stored as the capsule `executorRef`.
+
+Returns `{ capsuleId, backlogItemId, headBranch, worktreePath, claimed, conflict }`.
+When `conflict` is present the human-readable message states the BI already has
+active work elsewhere (branch/session listed) and that the call did **not** steal
+the claim — the tool still returns success with the capsule bound.
+
+## Evidence-gap closure
+
+`captureExternalSessionEvidence` now accepts optional `backlogItemId`,
+`worktreePath`, `branchName`, `repositoryFullName`, `baseBranch`, threaded from
+new optional params on `record_external_development_evidence`. When
+`worktreePath` + `branchName` are supplied it prefers the adopt path so the
+capsule carries the location too; otherwise it binds the BI on the
+`createWorkCapsule` path. All new params are optional — fully backward-compatible.
+
+## Tests
+
+`apps/web/lib/work-capsules/work-capsule-store.test.ts` covers: adopt persists
+`backlogItemId`/`epicId`; late-bind on reuse (and the no-op when already bound);
+claim stamps the BI; non-blocking conflict when the BI is freshly claimed by
+another agent; stale (>12h) reclaim; a second capsule on a different branch for
+the same BI without a blocking claim conflict; and idempotent branch reuse.
