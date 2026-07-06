@@ -32,14 +32,18 @@ export function BillableTimeSection({ accountId, accountName, economics, currenc
   const [result, setResult] = useState<BillableInvoiceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function handleGenerate() {
+  async function handleGenerate() {
+    // Await the confirm dialog OUTSIDE the transition — confirmDialog raises a
+    // DialogHost state update, and one deferred inside startTransition never
+    // renders interactively, wedging the button in its pending state. Every
+    // other confirmDialog caller awaits first, then runs the work.
+    const ok = await confirmDialog({
+      title: "Create a draft invoice?",
+      message: `Turn ${economics.unbilledHours} approved billable hour${economics.unbilledHours === 1 ? "" : "s"} for ${accountName} into a draft invoice. You can review it before sending.`,
+    });
+    if (!ok) return;
     startTransition(async () => {
       setError(null);
-      const ok = await confirmDialog({
-        title: "Create a draft invoice?",
-        message: `Turn ${economics.unbilledHours} approved billable hour${economics.unbilledHours === 1 ? "" : "s"} for ${accountName} into a draft invoice. You can review it before sending.`,
-      });
-      if (!ok) return;
       try {
         const r = await generateBillableInvoice(accountId);
         setResult(r);
