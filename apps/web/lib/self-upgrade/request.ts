@@ -4,6 +4,7 @@ import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { resolveAutoUpgradeWindow } from "@/lib/self-upgrade/auto-window";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
+import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { createRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
 
 type RequestActorKind = "human" | "agent";
@@ -32,6 +33,19 @@ export type RequestSelfUpgradeResult =
       status: "human_override_required";
       reason: "outside-window" | "no-window-needs-timezone";
       message: string;
+    }
+  | {
+      success: true;
+      status: "batch_below_threshold";
+      message: string;
+      /** Merged upstream PRs accumulated so far, or null when uncomputable. */
+      pendingPrCount: number | null;
+      /** Batch size a routine upgrade waits for. */
+      batchMinPendingPrs: number;
+      /** Bounded-staleness valve (hours); 0 = disabled. */
+      batchMaxWaitHours: number;
+      /** ISO time of the oldest pending merged commit, or null. */
+      oldestPendingAt: string | null;
     }
   | {
       success: false;
@@ -111,6 +125,24 @@ export async function requestSelfUpgrade(
         message: humanOverrideMessage(gate.reason),
       };
     }
+
+    // Release batching: an agent request is a ROUTINE trigger, so it waits for
+    // the batch like the scheduled cron does — one merged PR must not drain the
+    // portal on its own. Answer with the tally so the agent knows more PRs are
+    // still to be tallied and can defer live validation until the batch
+    // deploys (or an operator overrides via /ops/self-upgrade).
+    const batch = await resolveReleaseBatchStatus({ fresh: true, now: input.now });
+    if (batch.applicable && !batch.eligible) {
+      return {
+        success: true,
+        status: "batch_below_threshold",
+        message: `${batch.summary} The routine upgrade will run once the batch is ready; wait for it before validating live, or ask the operator to use /ops/self-upgrade to deploy now.`,
+        pendingPrCount: batch.pendingCount,
+        batchMinPendingPrs: batch.minPendingPrs,
+        batchMaxWaitHours: batch.maxWaitHours,
+        oldestPendingAt: batch.oldestPendingAt?.toISOString() ?? null,
+      };
+    }
   }
 
   const run = await createRun({ triggeredBy });
@@ -120,6 +152,9 @@ export async function requestSelfUpgrade(
       data: {
         runId: run.runId,
         triggeredBy,
+        // Agent-requested runs stay batch-gated in the runner too (authoritative
+        // re-check); operator/manual dispatch elsewhere leaves this unset.
+        ...(input.actorKind === "agent" ? { routine: true } : {}),
       },
     });
     return {

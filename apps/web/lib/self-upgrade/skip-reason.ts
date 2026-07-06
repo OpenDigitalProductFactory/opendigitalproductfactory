@@ -115,6 +115,14 @@ export function describeSkipReason(
         remedy:
           "Build the promoter image, then retry — the next attempt resumes automatically once it's present.",
       };
+    case "batch-below-threshold":
+      return {
+        title: "Batching updates",
+        detail: `Routine upgrades deploy merged updates in batches so the portal isn't paused for every single change${
+          rest ? ` — ${rest.replace(" PRs pending", "").replace("/", " of ")} accumulated so far` : ""
+        }. The upgrade runs automatically once the batch is ready or the oldest update has waited long enough.`,
+        remedy: 'Use "Upgrade now" to deploy the pending updates immediately.',
+      };
     case "up-to-date":
       return {
         title: "Already up to date",

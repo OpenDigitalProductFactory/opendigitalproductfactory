@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getLatestRun: vi.fn(),
   createRun: vi.fn(),
   failRun: vi.fn(),
+  resolveReleaseBatchStatus: vi.fn(),
 }));
 
 vi.mock("@/lib/queue/inngest-client", () => ({
@@ -37,6 +38,10 @@ vi.mock("@/lib/self-upgrade/window", () => ({
   isUpgradeWindowOpen: mocks.isUpgradeWindowOpen,
 }));
 
+vi.mock("@/lib/self-upgrade/release-batch-status", () => ({
+  resolveReleaseBatchStatus: mocks.resolveReleaseBatchStatus,
+}));
+
 vi.mock("@/lib/self-upgrade/run-store", () => ({
   getLatestRun: mocks.getLatestRun,
   createRun: mocks.createRun,
@@ -50,11 +55,26 @@ const CONFIG = {
   channel: "stable",
   checkIntervalHours: 24,
   cooldownMinutes: 30,
+  batchMinPendingPrs: 10,
+  batchMaxWaitHours: 168,
   healthTarget: 100,
   maintenanceWindows: [],
   sourceMode: "upstream" as const,
   installBranch: "dpf/install",
   useIsolatedWorkspace: true,
+};
+
+/** A release-batch status that lets the request through (eligible). */
+const BATCH_ELIGIBLE = {
+  applicable: true,
+  eligible: true,
+  reason: "threshold-met",
+  pendingCount: 12,
+  minPendingPrs: 10,
+  maxWaitHours: 168,
+  oldestPendingAt: null,
+  lineageSha: "lineage-sha",
+  summary: "12 merged updates accumulated (threshold 10) — the batch is ready to deploy.",
 };
 
 const SCHEDULE = {
@@ -83,6 +103,7 @@ describe("requestSelfUpgrade", () => {
     mocks.createRun.mockResolvedValue({ runId: "SUR-QUEUED1", status: "queued" });
     mocks.inngestSend.mockResolvedValue({ ids: ["evt-1"] });
     mocks.failRun.mockResolvedValue({});
+    mocks.resolveReleaseBatchStatus.mockResolvedValue(BATCH_ELIGIBLE);
   });
 
   it("queues the same event as the human action in manual mode", async () => {
@@ -183,9 +204,63 @@ describe("requestSelfUpgrade", () => {
       data: {
         runId: "SUR-QUEUED1",
         triggeredBy: "mcp:codex",
+        routine: true,
       },
     });
     expect(mocks.inngestSend.mock.calls[0]?.[0].data.force).toBeUndefined();
+  });
+
+  it("returns batch_below_threshold with the tally when an agent request is under the batch size", async () => {
+    mocks.resolveReleaseBatchStatus.mockResolvedValue({
+      applicable: true,
+      eligible: false,
+      reason: "below-threshold",
+      pendingCount: 3,
+      minPendingPrs: 10,
+      maxWaitHours: 168,
+      oldestPendingAt: new Date("2026-07-05T00:00:00.000Z"),
+      lineageSha: "lineage-sha",
+      summary: "3 of 10 merged updates accumulated — routine upgrades deploy in batches.",
+    });
+
+    const result = await requestSelfUpgrade({
+      requestedBy: "mcp:codex",
+      actorKind: "agent",
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      status: "batch_below_threshold",
+      pendingPrCount: 3,
+      batchMinPendingPrs: 10,
+      batchMaxWaitHours: 168,
+      oldestPendingAt: "2026-07-05T00:00:00.000Z",
+    });
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(mocks.inngestSend).not.toHaveBeenCalled();
+  });
+
+  it("does not batch-gate a human/manual request", async () => {
+    mocks.resolveReleaseBatchStatus.mockResolvedValue({
+      applicable: true,
+      eligible: false,
+      reason: "below-threshold",
+      pendingCount: 1,
+      minPendingPrs: 10,
+      maxWaitHours: 168,
+      oldestPendingAt: null,
+      lineageSha: "lineage-sha",
+      summary: "1 of 10 merged updates accumulated.",
+    });
+
+    const result = await requestSelfUpgrade({
+      requestedBy: "manual:user-ops-1",
+      actorKind: "human",
+    });
+
+    expect(result).toMatchObject({ success: true, status: "queued" });
+    expect(mocks.resolveReleaseBatchStatus).not.toHaveBeenCalled();
+    expect(mocks.inngestSend).toHaveBeenCalled();
   });
 
   it("requires human override when a 24/7 install has no known timezone", async () => {

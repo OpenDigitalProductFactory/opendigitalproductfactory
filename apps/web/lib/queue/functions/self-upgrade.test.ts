@@ -278,6 +278,11 @@ describe("manual payload schema", () => {
     const payload: SelfUpgradeRunEventData = { budgetMs: 600_000 };
     expect(payload.budgetMs).toBe(600_000);
   });
+
+  it("accepts routine boolean (agent-requested batch-gated run)", () => {
+    const payload: SelfUpgradeRunEventData = { routine: true };
+    expect(payload.routine).toBe(true);
+  });
 });
 
 describe("function registration", () => {
@@ -294,6 +299,8 @@ const ENABLED_CONFIG = {
   enabled: true,
   channel: "stable",
   checkIntervalHours: 24,
+  batchMinPendingPrs: 10,
+  batchMaxWaitHours: 168,
   healthTarget: 100,
   maintenanceWindows: [],
   hostInstallPath: "/Users/me/dpf",
@@ -857,6 +864,105 @@ describe("checkIntervalHours throttle (scheduled only)", () => {
     const result = await runSelfUpgrade({ triggeredBy: "manual:ops" }); // scheduled unset
     expect(result).toMatchObject({ ok: true, status: "succeeded" });
     expect(mocks.recordCheckedAt).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("release-batch gate (routine triggers)", () => {
+  // A lineage marker that DIFFERS from the resolved upstream stamp, so the
+  // up-to-date gate does not short-circuit before the batch gate is reached.
+  const LINEAGE = "0ldl1neage00000";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    mocks.isCheckIntervalElapsed.mockReturnValue(true);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    mocks.captureActiveSessionBlockers.mockResolvedValue({ surfaces: [] });
+    setupQuiescenceReady();
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.getLatestSucceededRun.mockResolvedValue({ targetSha: LINEAGE });
+    mocks.prepareUpgradeSource.mockResolvedValue({
+      ok: true,
+      mode: "upstream",
+      stamp: "abc1234deadbeef",
+      upstreamSha: "abc1234deadbeef",
+    });
+    mocks.createRun.mockResolvedValue({ runId: "SUR-BATCH" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    mocks.completeRun.mockResolvedValue({});
+  });
+
+  /** Recent committer-epoch (seconds), so the max-wait valve does not fire. */
+  function recentEpochs(count: number): string {
+    const nowSec = Math.floor(Date.now() / 1000);
+    return (
+      Array.from({ length: count }, (_, i) => String(nowSec - (count - i) * 60)).join("\n") +
+      "\n"
+    );
+  }
+
+  /** git runner: rev-parse => upstream stamp; log => `pendingLines` %ct lines. */
+  function gitWithPending(pendingLines: string): void {
+    mocks.defaultGitRunner.mockImplementation(async (args: string[]) => {
+      if (args.includes("rev-parse")) {
+        return { stdout: "abc1234deadbeef\n", stderr: "", code: 0 };
+      }
+      if (args.includes("log")) {
+        return { stdout: pendingLines, stderr: "", code: 0 };
+      }
+      return { stdout: "", stderr: "", code: 0 };
+    });
+  }
+
+  it("skips a scheduled run below the batch threshold without draining", async () => {
+    gitWithPending(recentEpochs(3)); // 3 pending < 10, all recent
+    const result = await runSelfUpgrade({ triggeredBy: "cron", scheduled: true });
+    expect(result).toMatchObject({ skipped: true, reason: "batch-below-threshold" });
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+    expect(mocks.recordCooldown).not.toHaveBeenCalled();
+  });
+
+  it("skips an agent routine run below the batch threshold", async () => {
+    gitWithPending(recentEpochs(1)); // 1 pending < 10, recent
+    const result = await runSelfUpgrade({ triggeredBy: "mcp:codex", routine: true });
+    expect(result).toMatchObject({ skipped: true, reason: "batch-below-threshold" });
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+  });
+
+  it("proceeds once the batch threshold is met", async () => {
+    const lines = Array.from({ length: 10 }, (_, i) => String(1700000000 + i)).join("\n");
+    gitWithPending(`${lines}\n`); // 10 pending >= 10
+    const result = await runSelfUpgrade({ triggeredBy: "cron", scheduled: true });
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.startQuiescence).toHaveBeenCalled();
+  });
+
+  it("does NOT batch-gate a manual (non-routine) trigger", async () => {
+    gitWithPending("1700000000\n"); // 1 pending — would block a routine run
+    const result = await runSelfUpgrade({ triggeredBy: "manual:ops" });
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+  });
+
+  it("does NOT batch-gate a forced run", async () => {
+    gitWithPending("1700000000\n");
+    const result = await runSelfUpgrade({ triggeredBy: "ops", scheduled: true, force: true });
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+  });
+
+  it("fails open and proceeds when the pending tally is uncomputable (shallow clone)", async () => {
+    // log fails, deepen fails => null tally => eligible.
+    mocks.defaultGitRunner.mockImplementation(async (args: string[]) => {
+      if (args.includes("rev-parse")) {
+        return { stdout: "abc1234deadbeef\n", stderr: "", code: 0 };
+      }
+      return { stdout: "", stderr: "shallow", code: 128 };
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "cron", scheduled: true });
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
   });
 });
 

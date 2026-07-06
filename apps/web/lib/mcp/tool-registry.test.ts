@@ -173,9 +173,10 @@ describe("activity-routing tool pack", () => {
 });
 
 describe("self-upgrade tool pack", () => {
-  it("bundles the governed self-upgrade request tool", () => {
+  it("bundles the governed self-upgrade request + queue-status tools", () => {
     expect(selfUpgradePack.definitions.map((t) => t.name)).toEqual([
       "request_self_upgrade",
+      "get_self_upgrade_queue_status",
     ]);
     for (const def of selfUpgradePack.definitions) {
       expect(selfUpgradePack.handlers[def.name], def.name).toBeTypeOf("function");

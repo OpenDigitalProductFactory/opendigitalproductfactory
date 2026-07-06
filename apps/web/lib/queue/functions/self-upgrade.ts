@@ -7,6 +7,10 @@ import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt, recordCheckedAt, isCheckIntervalElapsed } from "@/lib/self-upgrade/last-check";
 import { buildFetchCommand, buildRemoteHeadCommand } from "@/lib/self-upgrade/version";
+import {
+  countPendingUpstreamCommits,
+  evaluateReleaseBatch,
+} from "@/lib/self-upgrade/release-batch";
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import {
@@ -83,6 +87,14 @@ export type SelfUpgradeRunEventData = {
    * leave this unset and are never interval-throttled.
    */
   scheduled?: boolean;
+  /**
+   * Set by agent-requested runs (request_self_upgrade). Routine runs are
+   * release-batch gated like the scheduled cron — they wait until enough
+   * merged PRs have accumulated — but are not window/interval throttled
+   * (the request layer already applied the agent window gate). Operator
+   * manual triggers leave this unset; force always bypasses.
+   */
+  routine?: boolean;
 };
 
 export async function runSelfUpgrade(
@@ -306,6 +318,43 @@ export async function runSelfUpgrade(
     const lastOk = await getLatestSucceededRun();
     if (!params.dryRun && !params.force && lastOk?.targetSha === upstreamSha) {
       return await skipAttempt("up-to-date", `up-to-date: ${upstreamSha}`, { upstreamSha });
+    }
+
+    // Release-batching gate — ROUTINE triggers only (the scheduled cron and
+    // agent-requested runs; see SelfUpgradeRunEventData.routine). Every upgrade
+    // drains the portal, so upgrading on any single new commit costs one full
+    // drain per merged PR. Accumulate merged PRs and proceed only when the
+    // batch threshold is met or the oldest pending change has outwaited the
+    // bounded-staleness valve. Fail-open on an uncomputable tally (shallow
+    // clone), and never gate operator manual / force / dryRun triggers.
+    if ((params.scheduled || params.routine) && !params.dryRun && !params.force) {
+      const sinceSha = lastOk?.targetSha ?? null;
+      const tally = sinceSha
+        ? await countPendingUpstreamCommits(
+            { hostSourcePath, remote, branch, sinceSha },
+            gitRun,
+          )
+        : // No succeeded-run lineage marker (first governed upgrade): nothing to
+          // count against — treat as uncomputable so the upgrade proceeds.
+          { pendingCount: null, oldestPendingAt: null };
+      const batch = evaluateReleaseBatch({
+        tally,
+        minPendingPrs: config.batchMinPendingPrs,
+        maxWaitHours: config.batchMaxWaitHours,
+        now,
+      });
+      if (!batch.eligible) {
+        return await skipAttempt(
+          "batch-below-threshold",
+          `batch-below-threshold: ${batch.pendingCount}/${batch.minPendingPrs} PRs pending`,
+          {
+            pendingPrCount: batch.pendingCount,
+            batchMinPendingPrs: batch.minPendingPrs,
+            batchMaxWaitHours: batch.maxWaitHours,
+            oldestPendingAt: batch.oldestPendingAt?.toISOString() ?? null,
+          },
+        );
+      }
     }
   }
 

@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache";
 import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
 import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
+import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
@@ -750,6 +751,12 @@ export async function getSelfUpgradeStatus() {
       isShaFresh(latestSucceededRun?.targetSha ?? null, targetSha)
     : false;
 
+  // Release-batch tally for the panel ("N of M merged updates accumulated").
+  // No fetch here — display rides the hourly scheduled fetch; a stale-by-
+  // minutes tally is fine for a status line and keeps page load off the
+  // network. Never throws (degrades to an uncomputable tally).
+  const releaseBatch = await resolveReleaseBatchStatus({ config, now });
+
   return {
     enabled: config.enabled,
     channel: config.channel,
@@ -772,6 +779,16 @@ export async function getSelfUpgradeStatus() {
     deployedShaSource: platformVersion.imageVersion?.source ?? "unknown",
     targetSha,
     isFresh,
+    releaseBatch: {
+      applicable: releaseBatch.applicable,
+      eligible: releaseBatch.eligible,
+      reason: releaseBatch.reason,
+      pendingCount: releaseBatch.pendingCount,
+      minPendingPrs: releaseBatch.minPendingPrs,
+      maxWaitHours: releaseBatch.maxWaitHours,
+      oldestPendingAt: releaseBatch.oldestPendingAt?.toISOString() ?? null,
+      summary: releaseBatch.summary,
+    },
     latestRun,
     quiescence,
     // §4.5 admission observability — derived from the lane config + the
