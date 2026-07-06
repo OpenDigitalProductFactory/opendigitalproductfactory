@@ -13328,9 +13328,12 @@ export async function executeTool(
         agentId: context?.agentId ?? null,
       });
 
+      // When there is no recommendation, result.reasoning names why —
+      // insufficient signal (zero contributions, BI-5CE7CF0B) vs no
+      // applicable principles vs no options — instead of a one-size message.
       const summary = result.recommendation
         ? `Recommends ${result.recommendation.optionId} (confidence: ${result.recommendation.confidence}, composite ${result.recommendation.composite.toFixed(3)}; governing profile: ${governingProfile.governingProfileKind})`
-        : "No applicable principles to evaluate.";
+        : result.reasoning;
 
       // Persist the consult to the DecisionInteraction ledger so the decision
       // governance hub can audit that the gate is in use (per-tier log at
