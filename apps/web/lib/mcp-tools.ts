@@ -8416,22 +8416,34 @@ export async function executeTool(
           let happyPathState = normalizeHappyPathState(plan.happyPathState);
 
           // Auto-create epic if missing.
+          //
+          // BI-836C5243: this MUST be a direct prisma write, NOT the createBuildEpic
+          // server action. reviewDesignDoc's auto-intake runs in TWO contexts:
+          // interactive (request scope present) AND the autonomous resume path
+          // (instrumentation.ts setInterval -> resumePreBuildPhase -> executeTool
+          // reviewDesignDoc), which has NO request scope. createBuildEpic ->
+          // requireBuildAccess -> requireCapability -> headers() throws
+          // "called outside a request scope" there; the catch below swallowed it,
+          // epicId stayed null, and the ideate->plan gate blocked on
+          // "Missing: epic" FOREVER — the janitor re-failing every ~10 min and
+          // burning cloud review spend (observed live on FB-673BF54B). The
+          // sibling backlog-item leg below never had this bug precisely because
+          // it writes via prisma directly. Mirror it here so every auto-intake
+          // leg is request-scope-independent.
           if (!happyPathState.intake.epicId) {
             try {
-              const { createBuildEpic } = await import("@/lib/actions/build");
+              const { autoCreateBuildEpic } = await import("@/lib/integrate/auto-intake-epic");
               const epicTitle = updatedBuild.title || happyPathState.intake.constrainedGoal || "Build Studio feature";
-              const portfolioSlug = updatedBuild.digitalProduct?.portfolio?.slug ?? undefined;
-              const epicResult = await createBuildEpic({
-                buildId,
+              const createdEpic = await autoCreateBuildEpic({
+                db: prisma,
                 title: epicTitle,
-                ...(portfolioSlug ? { portfolioSlug } : {}),
-                ...(updatedBuild.digitalProductId ? { digitalProductId: updatedBuild.digitalProductId } : {}),
+                portfolioSlug: updatedBuild.digitalProduct?.portfolio?.slug ?? null,
               });
               await updateBuildHappyPathState(userId, {
-                intake: { epicId: epicResult.epicId },
+                intake: { epicId: createdEpic.epicId },
               }, buildId);
-              happyPathState = { ...happyPathState, intake: { ...happyPathState.intake, epicId: epicResult.epicId } };
-              logBuildActivity(buildId, "auto-intake:epic", `Auto-created epic ${epicResult.epicId} (${epicTitle})`);
+              happyPathState = { ...happyPathState, intake: { ...happyPathState.intake, epicId: createdEpic.epicId } };
+              logBuildActivity(buildId, "auto-intake:epic", `Auto-created epic ${createdEpic.epicId} (${epicTitle})`);
             } catch (err) {
               console.warn("[reviewDesignDoc] auto-create epic failed:", err);
             }

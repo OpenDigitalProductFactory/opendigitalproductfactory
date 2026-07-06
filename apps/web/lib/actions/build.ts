@@ -1570,49 +1570,25 @@ export async function createBuildEpic(input: {
 }): Promise<{ epicId: string; message: string }> {
   await requireBuildAccess();
 
-  // Resolve portfolio slug to internal ID
-  let portfolioInternalId: string | null = null;
-  if (input.portfolioSlug) {
-    const portfolio = await prisma.portfolio.findUnique({
-      where: { slug: input.portfolioSlug },
-      select: { id: true },
-    });
-    portfolioInternalId = portfolio?.id ?? null;
-  }
-
-  const epicId = `EP-BUILD-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
-
-  // Wrap epic + backlog items in a transaction for consistency
-  const epic = await prisma.$transaction(async (tx) => {
-    const created = await tx.epic.create({
-      data: {
-        epicId,
-        title: input.title,
-        status: "open",
-      },
-      select: { id: true, epicId: true },
-    });
-
-    // Link epic to portfolio if resolved
-    if (portfolioInternalId) {
-      await tx.epicPortfolio.create({
-        data: { epicId: created.id, portfolioId: portfolioInternalId },
-      }).catch((e) => {
-        console.warn("[createBuildEpic] portfolio link failed:", e);
-      });
-    }
-
-    // NOTE: previously this block pre-seeded a "Ship: <title>" item with
-    // status=done plus a "Gather user feedback" item with status=open at
-    // epic-create time. That ran during ideate auto-intake (design review
-    // pass) — long before the feature actually shipped — and produced a
-    // misleading backlog view showing the work as already done. The real
-    // in-progress backlog item is created separately by the auto-intake
-    // path in reviewDesignDoc (see mcp-tools.ts ~line 2990). Feedback items
-    // should be auto-created on actual ship, not at ideate-pass. Removed
-    // per Mark's observation 2026-04-20.
-
-    return created;
+  // Delegate to the request-scope-independent helper so this interactive
+  // server action and the autonomous ideate auto-intake path share ONE epic-
+  // create implementation. This action still enforces auth above; the helper
+  // itself does only the DB write (it must never call headers()/requireCapability
+  // so the auto-intake path can reuse it outside a request scope).
+  //
+  // NOTE: previously this block also pre-seeded a "Ship: <title>" item with
+  // status=done plus a "Gather user feedback" item at epic-create time, which
+  // ran during ideate auto-intake — long before the feature shipped — and made
+  // the backlog view show the work as already done. The real in-progress
+  // backlog item is created separately by the auto-intake path in reviewDesignDoc.
+  // Feedback items should be auto-created on actual ship. Removed per Mark's
+  // observation 2026-04-20.
+  const { autoCreateBuildEpic } = await import("@/lib/integrate/auto-intake-epic");
+  const epic = await autoCreateBuildEpic({
+    db: prisma,
+    title: input.title,
+    portfolioSlug: input.portfolioSlug ?? null,
+    logger: { warn: (...a) => console.warn("[createBuildEpic]", ...a) },
   });
 
   return {
