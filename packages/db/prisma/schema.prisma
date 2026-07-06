@@ -3049,6 +3049,10 @@ model Opportunity {
   assignedToId   String?
   engagementId   String? // FK to Engagement (if converted from engagement)
   notes          String?
+  // The planned next step (call/meeting/follow-up) — the activity-based-selling
+  // loop: every open deal should have one; pipeline cards warn when it's missing
+  // and flag when it's overdue.
+  nextActivityAt DateTime?
   stageChangedAt DateTime  @default(now())
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

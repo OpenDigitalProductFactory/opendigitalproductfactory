@@ -62,6 +62,7 @@ export async function getPipelineInspectorView(
       currency: opportunity.currency,
       expectedClose: opportunity.expectedClose,
       stageChangedAt: opportunity.stageChangedAt,
+      nextActivityAt: opportunity.nextActivityAt,
       notes: opportunity.notes,
       account: opportunity.account,
       contact: opportunity.contact,
