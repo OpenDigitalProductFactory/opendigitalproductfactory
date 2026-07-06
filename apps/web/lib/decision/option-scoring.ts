@@ -167,6 +167,14 @@ export type DecisionFlags = {
   commandmentConflict: boolean;
   /** ids of commandments triggering the commandmentConflict flag. */
   commandmentConflictPrinciples: string[];
+  /**
+   * True when principles applied but every option × principle contribution
+   * was exactly zero — typically options passed without `features` maps and
+   * with no semantic path available (BI-5CE7CF0B). No recommendation is made
+   * in this state: ranking all-zero composites just crowns input order.
+   * Optional so older stored result shapes remain valid.
+   */
+  insufficientSignal?: boolean;
 };
 
 export type DecisionRecommendation = {
@@ -232,12 +240,40 @@ export function decide(
       structuredCoverage: "strong",
       commandmentConflict: false,
       commandmentConflictPrinciples: [],
+      insufficientSignal: false,
     };
     const reasoning =
       principles.length === 0
         ? "No applicable principles to evaluate. The decision needs human judgment instead of advisory math."
         : "No options supplied. Nothing to score.";
     return { recommendation: null, scores, flags, reasoning };
+  }
+
+  // Zero-signal guard (BI-5CE7CF0B): principles applied, but every single
+  // contribution is exactly zero — no option carried features along any
+  // scored dimension and the semantic path never fired. Ranking would crown
+  // whichever option came first at composite 0.000; refuse instead and tell
+  // the caller what was missing. Offsetting positive/negative contributions
+  // that net to zero are genuine signal and do not trip this (the check is
+  // per-contribution, not per-composite).
+  const hasAnySignal = scores.some((s) =>
+    s.contributions.some((c) => c.contribution !== 0),
+  );
+  if (!hasAnySignal) {
+    const flags: DecisionFlags = {
+      tieMargin,
+      semanticFallbackRatio: 0,
+      structuredCoverage: "strong",
+      commandmentConflict: false,
+      commandmentConflictPrinciples: [],
+      insufficientSignal: true,
+    };
+    return {
+      recommendation: null,
+      scores,
+      flags,
+      reasoning: `Insufficient signal: ${principles.length} principle(s) applied but every contribution is zero — the options carry no scoreable features and semantic alignment was unavailable. Provide per-option \`features\` maps (or embeddings), or decide by human judgment.`,
+    };
   }
 
   // Rank by composite descending.
@@ -272,6 +308,7 @@ export function decide(
     structuredCoverage,
     commandmentConflict: conflictingPrinciples.length > 0,
     commandmentConflictPrinciples: conflictingPrinciples,
+    insufficientSignal: false,
   };
 
   // Reasoning: name the winner, the top two contributing principles, and

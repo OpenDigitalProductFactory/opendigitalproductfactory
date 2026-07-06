@@ -70,8 +70,19 @@ export default async function DecisionRecordPage({ params }: { params: Params })
   const options = Array.isArray(row.options)
     ? row.options.filter((o): o is string => typeof o === "string")
     : [];
+  // Insufficient-signal consults (every contribution zero) carry no real
+  // recommendation. New records set the explicit payload flag; records from
+  // before the guard existed are recognised by their all-zero composite +
+  // margin so the misleading "recommended" chip disappears from history too.
+  const insufficientSignal =
+    payload.insufficientSignal === true ||
+    (typeof payload.recommendedOptionId === "string" &&
+      payload.composite === 0 &&
+      payload.margin === 0);
   const recommendedOptionId =
-    typeof payload.recommendedOptionId === "string" ? payload.recommendedOptionId : null;
+    !insufficientSignal && typeof payload.recommendedOptionId === "string"
+      ? payload.recommendedOptionId
+      : null;
   // Caller attribution — who brought this decision (client UA token /
   // coworker agent / thread), so the row matches back to the activity.
   const caller = asRecord(payload.caller);
@@ -101,6 +112,9 @@ export default async function DecisionRecordPage({ params }: { params: Params })
           <StatusBadge domain="decisionRisk" status={row.riskTier} variant="soft" />
           {row.principleConflict ? (
             <StatusBadge intent="danger" label="principle conflict" variant="soft" />
+          ) : null}
+          {insufficientSignal ? (
+            <StatusBadge intent="warning" label="insufficient signal" variant="soft" />
           ) : null}
         </div>
         <h1 className="mt-3 text-xl font-semibold text-[var(--dpf-text)]">
@@ -162,6 +176,14 @@ export default async function DecisionRecordPage({ params }: { params: Params })
         <p className="text-sm text-[var(--dpf-text)] whitespace-pre-wrap">
           {row.rationale || "No rationale recorded."}
         </p>
+        {insufficientSignal ? (
+          <p className="mt-2 text-sm text-[var(--dpf-warning)]">
+            No option was actually scored: every principle contribution was
+            zero, so no recommendation stands. This usually means the consult
+            was submitted without per-option feature values. The decision
+            needs human judgment — or a re-run with scoreable options.
+          </p>
+        ) : null}
         {contributors.length > 0 ? (
           <div className="mt-3 rounded-lg border border-[var(--dpf-border)] overflow-hidden">
             <table className="w-full text-xs">

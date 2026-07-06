@@ -58,6 +58,12 @@ export function mapConsultOutcome(result: DecisionResult): {
   confidenceScore: number;
 } {
   if (!result.recommendation) {
+    // BI-5CE7CF0B: insufficient signal is a real question the gate could not
+    // weigh (options carried nothing scoreable) — that needs a human review,
+    // not a coverage-gap shrug.
+    if (result.flags.insufficientSignal) {
+      return { outcomeType: "escalate", riskTier: "medium", confidenceScore: 0 };
+    }
     return { outcomeType: "defer", riskTier: "medium", confidenceScore: 0 };
   }
   if (result.flags.commandmentConflict) {
@@ -180,6 +186,7 @@ export async function recordKernelConsultInteraction(input: {
         composite: input.result.recommendation?.composite ?? null,
         margin: input.result.recommendation?.margin ?? null,
         recommendationConfidence: input.result.recommendation?.confidence ?? null,
+        insufficientSignal: input.result.flags.insufficientSignal === true,
         commandmentConflictPrinciples: input.result.flags.commandmentConflictPrinciples,
         structuredCoverage: input.result.flags.structuredCoverage,
         optionDescriptions: input.optionDescriptions,

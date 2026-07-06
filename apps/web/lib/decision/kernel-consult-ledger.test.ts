@@ -113,6 +113,19 @@ describe("mapConsultOutcome", () => {
     expect(mapConsultOutcome(result).outcomeType).toBe("defer");
     expect(mapConsultOutcome(result).confidenceScore).toBe(0);
   });
+
+  // BI-5CE7CF0B: zero-contribution consults escalate to human review — the
+  // gate was asked a real question it could not weigh, which is not the same
+  // as no principles applying (defer).
+  it("maps an insufficient-signal result to escalate, not defer", () => {
+    const result = makeResult({ recommendation: null });
+    result.flags.insufficientSignal = true;
+    expect(mapConsultOutcome(result)).toEqual({
+      outcomeType: "escalate",
+      riskTier: "medium",
+      confidenceScore: 0,
+    });
+  });
 });
 
 describe("recordKernelConsultInteraction", () => {
