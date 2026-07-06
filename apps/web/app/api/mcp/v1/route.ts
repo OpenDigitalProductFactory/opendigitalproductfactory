@@ -19,6 +19,7 @@ import {
   type McpTokenScope,
   type ResolvedMcpToken,
 } from "@/lib/auth/mcp-api-token";
+import { deriveCallerClient } from "@/lib/mcp/caller-client";
 import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
@@ -362,6 +363,7 @@ async function handleToolsCall(
   id: JsonRpcId,
   token: ResolvedAuth,
   params: Record<string, unknown> | undefined,
+  callerClient?: string,
 ): Promise<Response> {
   if (!params || typeof params["name"] !== "string") {
     return jsonRpcError(id, JSONRPC_INVALID_PARAMS, "tools/call requires params.name (string)");
@@ -421,6 +423,8 @@ async function handleToolsCall(
       apiTokenId: token.tokenId,
       threadId: token.threadId ?? undefined,
       routeContext: token.routeContext ?? undefined,
+      callerClient,
+      authSource: token.source,
     },
     source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });
@@ -578,7 +582,12 @@ export async function POST(request: Request): Promise<Response> {
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return await handleToolsCall(body.id ?? null, token, body.params);
+        return await handleToolsCall(
+          body.id ?? null,
+          token,
+          body.params,
+          deriveCallerClient(request.headers.get("user-agent")),
+        );
 
       case "tasks/submit":
         if (isNotification) {

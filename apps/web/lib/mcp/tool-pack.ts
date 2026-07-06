@@ -23,7 +23,16 @@ import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 export type ToolPackHandler = (
   params: Record<string, unknown>,
   userId: string,
-  context?: { routeContext?: string; threadId?: string; agentId?: string },
+  context?: {
+    routeContext?: string;
+    threadId?: string;
+    agentId?: string;
+    /** Caller attribution from the MCP route (client UA token + auth identity)
+     *  for decision-ledger writers. */
+    callerClient?: string;
+    apiTokenId?: string;
+    authSource?: string;
+  },
 ) => Promise<ToolResult>;
 
 export type ToolPack = {

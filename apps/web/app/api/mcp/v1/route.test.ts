@@ -44,6 +44,7 @@ import {
 } from "@/lib/tak/autonomous-work-run";
 import { createTaskMessage } from "@/lib/tak/task-records";
 import { GET, POST } from "./route";
+import { deriveCallerClient } from "@/lib/mcp/caller-client";
 
 const resolveMock = resolveMcpApiToken as unknown as ReturnType<typeof vi.fn>;
 const verifySessionMock = verifyMcpSessionToken as unknown as ReturnType<typeof vi.fn>;
@@ -1236,5 +1237,23 @@ describe("POST — tasks/submit", () => {
       data: expect.objectContaining({ status: "input-required" }),
     }));
     expect(executeLoopMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("deriveCallerClient (decision-ledger caller attribution)", () => {
+  it("takes the first product token and strips platform detail", () => {
+    expect(deriveCallerClient("claude-code/2.1 (darwin; arm64)")).toBe("claude-code/2.1");
+    expect(deriveCallerClient("codex-cli/0.9.4")).toBe("codex-cli/0.9.4");
+  });
+
+  it("sanitizes hostile characters and caps the length", () => {
+    expect(deriveCallerClient("<script>alert(1)</script>/1.0 x")).toBe("scriptalert1/script/1.0");
+    expect(deriveCallerClient("a".repeat(200))).toHaveLength(64);
+  });
+
+  it("returns undefined for missing or empty user agents", () => {
+    expect(deriveCallerClient(null)).toBeUndefined();
+    expect(deriveCallerClient("   ")).toBeUndefined();
+    expect(deriveCallerClient("!!!")).toBeUndefined();
   });
 });

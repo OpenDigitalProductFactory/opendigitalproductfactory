@@ -125,6 +125,18 @@ export async function evaluateOrgBusinessDecisionGate(input: {
   fallbackProfileId?: string;
   triggeredByUserId?: string | null;
   taskRunId?: string | null;
+  /**
+   * Caller attribution (BI-0EEBA669): the client/agent/thread that brought
+   * this decision, persisted in outcomePayload.caller so the audit surface
+   * can match the decision back to the activity.
+   */
+  caller?: {
+    client?: string | null;
+    apiTokenId?: string | null;
+    authSource?: string | null;
+    agentId?: string | null;
+    threadId?: string | null;
+  } | null;
   evaluator?: GateEvaluator;
   /** Injectable for tests; defaults to the real (already-tested) org resolver. */
   resolver?: typeof resolveProfileMaterialForOrg;
@@ -180,7 +192,7 @@ export async function evaluateOrgBusinessDecisionGate(input: {
       routeContext: input.routeContext,
       phaseFrom: input.phaseFrom ?? null,
       phaseTo: input.phaseTo ?? null,
-      outcomePayloadExtra: { orgProfileSelected },
+      outcomePayloadExtra: { orgProfileSelected, caller: input.caller ?? null },
     });
     traceWwwd("wwwd.ledger.written", { interactionId, outcomeType: evaluation.outcomeType });
     return {

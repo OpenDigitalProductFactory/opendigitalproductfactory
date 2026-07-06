@@ -78,6 +78,10 @@ export type DecisionAuditRow = {
   domainClass: string;
   routeContext: string;
   confidence: number | null;
+  /** Who consulted: client UA token, coworker agent, or calling surface. */
+  callerLabel: string;
+  /** Thread the consult belonged to, when the caller carried one. */
+  callerThreadId: string | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -88,12 +92,67 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 const UNRESOLVED_OUTCOMES = new Set(["defer", "escalate"]);
 
+function asNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+/**
+ * Derive the caller attribution for a ledger row. Precedence: the explicit
+ * caller block writers persist (client UA token, else the coworker agent),
+ * then the voluntary callingSurface string, then unattributed. Rows written
+ * before attribution existed resolve the same way — usually to callingSurface
+ * or "—".
+ */
+export function callerForRow(payload: Record<string, unknown>): {
+  label: string;
+  threadId: string | null;
+} {
+  const caller = asRecord(payload.caller);
+  const client = asNullableString(caller.client);
+  const agentId = asNullableString(caller.agentId);
+  const threadId = asNullableString(caller.threadId);
+  const callingSurface = asNullableString(payload.callingSurface);
+
+  const label = client ?? (agentId ? `coworker:${agentId}` : null) ?? callingSurface ?? "—";
+  return { label, threadId };
+}
+
+export type DecisionCallerStat = {
+  label: string;
+  total: number;
+  lastAt: string;
+};
+
+/**
+ * Roll the timeline rows up by caller so the page can show who is (and by
+ * absence, who is not) consulting the kernel. Unattributed rows group under
+ * "—". Sorted by volume.
+ */
+export function buildCallerStats(rows: DecisionAuditRow[]): DecisionCallerStat[] {
+  const byCaller = new Map<string, { total: number; lastAt: string }>();
+  for (const row of rows) {
+    const existing = byCaller.get(row.callerLabel);
+    if (existing) {
+      existing.total += 1;
+      if (row.createdAt > existing.lastAt) existing.lastAt = row.createdAt;
+    } else {
+      byCaller.set(row.callerLabel, { total: 1, lastAt: row.createdAt });
+    }
+  }
+  return [...byCaller.entries()]
+    .map(([label, v]) => ({ label, total: v.total, lastAt: v.lastAt }))
+    .sort((a, b) => b.total - a.total);
+}
+
 export function toAuditRow(row: DecisionAuditRowInput): DecisionAuditRow {
   const tier = tierForProfileKind(row.profile?.kind);
   const payload = asRecord(row.outcomePayload);
   const human = asRecord(row.humanOutcome);
   const resolvedByHuman = Boolean(row.escalationCapture) || Object.keys(human).length > 0;
+  const caller = callerForRow(payload);
   return {
+    callerLabel: caller.label,
+    callerThreadId: caller.threadId,
     interactionId: row.interactionId,
     createdAt: row.createdAt.toISOString(),
     tier,

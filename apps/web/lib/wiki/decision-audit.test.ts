@@ -6,6 +6,7 @@ import {
   tierForProfileKind,
   toAuditRow,
   type DecisionAuditRowInput,
+  buildCallerStats,
 } from "./decision-audit";
 
 function makeRow(overrides: Partial<DecisionAuditRowInput> = {}): DecisionAuditRowInput {
@@ -117,5 +118,76 @@ describe("buildTierStats", () => {
       lastDecisionAt: new Date("2026-07-01T00:00:00Z"),
     });
     expect(stats.lastDecisionAt).toBe("2026-07-01T00:00:00.000Z");
+  });
+});
+
+describe("caller attribution (BI-0EEBA669)", () => {
+  const baseRow = {
+    interactionId: "DI-1",
+    createdAt: new Date("2026-07-06T08:00:00Z"),
+    question: "Q",
+    options: ["a", "b"],
+    outcomeType: "recommend",
+    riskTier: "low",
+    principleConflict: false,
+    domainClass: "kernel-consult",
+    routeContext: "/build",
+    rationale: null,
+    confidenceAfter: 0.9,
+    humanOutcome: null,
+    profile: { kind: "platform", name: "Mark / DPF Platform" },
+    escalationCapture: null,
+    deferralCapture: null,
+  };
+
+  it("prefers the persisted caller client over everything else", () => {
+    const row = toAuditRow({
+      ...baseRow,
+      outcomePayload: {
+        callingSurface: "claude-code/session-x",
+        caller: { client: "codex-cli/0.9", agentId: "customer-advisor", threadId: "th_123456789" },
+      },
+    });
+    expect(row.callerLabel).toBe("codex-cli/0.9");
+    expect(row.callerThreadId).toBe("th_123456789");
+  });
+
+  it("falls back to the coworker agent, then callingSurface, then unattributed", () => {
+    const agentRow = toAuditRow({
+      ...baseRow,
+      outcomePayload: { caller: { agentId: "customer-advisor" } },
+    });
+    expect(agentRow.callerLabel).toBe("coworker:customer-advisor");
+
+    const surfaceRow = toAuditRow({
+      ...baseRow,
+      outcomePayload: { callingSurface: "claude-code/wwwd-plan" },
+    });
+    expect(surfaceRow.callerLabel).toBe("claude-code/wwwd-plan");
+
+    const bareRow = toAuditRow({ ...baseRow, outcomePayload: {} });
+    expect(bareRow.callerLabel).toBe("—");
+    expect(bareRow.callerThreadId).toBeNull();
+  });
+
+  it("rolls timeline rows up by caller with volume ordering", () => {
+    const rows = [
+      { outcomePayload: { caller: { client: "claude-code/2.1" } } },
+      { outcomePayload: { caller: { client: "claude-code/2.1" } } },
+      { outcomePayload: { caller: { client: "grok-cli/1.0" } } },
+    ].map((extra, i) =>
+      toAuditRow({
+        ...baseRow,
+        interactionId: `DI-${i}`,
+        createdAt: new Date(Date.UTC(2026, 6, 6, 8, i)),
+        ...extra,
+      }),
+    );
+    const stats = buildCallerStats(rows);
+    expect(stats.map((s) => [s.label, s.total])).toEqual([
+      ["claude-code/2.1", 2],
+      ["grok-cli/1.0", 1],
+    ]);
+    expect(stats[0]!.lastAt).toBe("2026-07-06T08:01:00.000Z");
   });
 });

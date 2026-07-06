@@ -76,6 +76,22 @@ const columns: Column<DecisionAuditRow>[] = [
     sortAccessor: (r) => (r.principleConflict ? 1 : 0),
   },
   {
+    key: "caller",
+    header: "Caller",
+    cell: (r) => (
+      <span
+        className="block max-w-[11rem] truncate"
+        title={r.callerThreadId ? `${r.callerLabel} · thread ${r.callerThreadId}` : r.callerLabel}
+      >
+        {r.callerLabel}
+        {r.callerThreadId ? (
+          <span className="text-[var(--dpf-muted)]"> · {r.callerThreadId.slice(0, 8)}</span>
+        ) : null}
+      </span>
+    ),
+    sortAccessor: (r) => r.callerLabel,
+  },
+  {
     key: "where",
     header: "Where",
     cell: (r) => (

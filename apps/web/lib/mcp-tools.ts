@@ -100,6 +100,16 @@ type ToolExecutionContext = {
   agentId?: string;
   threadId?: string;
   taskRunId?: string;
+  /**
+   * Caller attribution for the decision ledger (BI-0EEBA669). The MCP route
+   * derives `callerClient` from the request User-Agent product token (e.g.
+   * "claude-code/2.1", "codex-cli/0.9") and sets `authSource`/`apiTokenId`
+   * from the resolved auth. In-portal callers leave these unset — the ledger
+   * falls back to agentId/threadId, which the coworker loop already plumbs.
+   */
+  callerClient?: string;
+  apiTokenId?: string;
+  authSource?: string;
   suppressDesignReviewAutoRepair?: boolean; suppressPlanReviewAutoRepair?: boolean;
   /**
    * Build the user is currently messaging from. Plumbed by agentic-loop.ts
@@ -13318,6 +13328,13 @@ export async function executeTool(
         callingSurface,
         routeContext: context?.routeContext ?? null,
         taskRunId: context?.taskRunId ?? null,
+        caller: {
+          client: context?.callerClient ?? null,
+          apiTokenId: context?.apiTokenId ?? null,
+          authSource: context?.authSource ?? null,
+          agentId: context?.agentId ?? null,
+          threadId: context?.threadId ?? null,
+        },
       });
 
       return {

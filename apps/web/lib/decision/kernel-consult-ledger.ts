@@ -84,6 +84,20 @@ export async function recordKernelConsultInteraction(input: {
   routeContext?: string | null;
   taskRunId?: string | null;
   triggeredByUserId?: string | null;
+  /**
+   * Caller attribution (BI-0EEBA669): who consulted the kernel — the client
+   * product token (from the MCP route's User-Agent derivation), the resolved
+   * auth identity, and the coworker agent/thread when in-portal. Persisted in
+   * outcomePayload.caller so the audit surface can match a decision back to
+   * the activity that produced it.
+   */
+  caller?: {
+    client?: string | null;
+    apiTokenId?: string | null;
+    authSource?: string | null;
+    agentId?: string | null;
+    threadId?: string | null;
+  } | null;
 }): Promise<KernelConsultLedgerOutcome> {
   try {
     const profileId = input.callerContext.governingProfileId;
@@ -161,6 +175,7 @@ export async function recordKernelConsultInteraction(input: {
         tool: "principle_decide",
         callingPopulation: input.callerContext.callingPopulation,
         callingSurface: input.callingSurface ?? null,
+        caller: input.caller ?? null,
         recommendedOptionId: input.result.recommendation?.optionId ?? null,
         composite: input.result.recommendation?.composite ?? null,
         margin: input.result.recommendation?.margin ?? null,
