@@ -34,6 +34,12 @@ export type GovernedExecuteContext = {
   routeContext?: string;
   taskRunId?: string;
   apiTokenId?: string;
+  /** Client product token from the caller's User-Agent (BI-0EEBA669);
+   *  persisted by decision-ledger writers so a decision can be matched back
+   *  to the client/session that consulted the kernel. */
+  callerClient?: string;
+  /** How the caller authenticated ("pat" | "session-jwt"), from the MCP route. */
+  authSource?: string;
   /**
    * Build the user is currently messaging from. Plumbed by runAgenticLoop
    * (via its `featureBuildId` param) so phase-scoped tools like

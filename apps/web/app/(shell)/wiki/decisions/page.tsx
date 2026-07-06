@@ -12,6 +12,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { DecisionAuditTable } from "@/components/wiki/DecisionAuditTable";
 import {
   DECISION_AUDIT_TIERS,
+  buildCallerStats,
   buildTierStats,
   profileKindsForTier,
   toAuditRow,
@@ -107,6 +108,7 @@ export default async function DecisionLogPage({
   ]);
 
   const auditRows = rows.map(toAuditRow);
+  const callerStats = buildCallerStats(auditRows);
 
   const tierFilters: Array<{ label: string; tier: DecisionAuditTier | null }> = [
     { label: "All tiers", tier: null },
@@ -155,6 +157,31 @@ export default async function DecisionLogPage({
           />
         ))}
       </div>
+
+      {/* Who consults — a client working outside this list never consulted
+          the kernel at all, which is itself the finding. */}
+      {callerStats.length > 0 ? (
+        <div className="mb-6 rounded-lg border border-[var(--dpf-border)] p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)] mb-2">
+            Consults by caller{activeTier ? ` — ${activeTier.toUpperCase()}` : ""}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {callerStats.map((c) => (
+              <span
+                key={c.label}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--dpf-border)] px-2.5 py-1 text-xs"
+              >
+                <span className="font-medium text-[var(--dpf-text)]">{c.label}</span>
+                <span className="text-[var(--dpf-muted)]">×{c.total}</span>
+              </span>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-[var(--dpf-muted)]">
+            A client or agent that never appears here has never consulted the
+            decision kernel.
+          </p>
+        </div>
+      ) : null}
 
       {/* Tier filter */}
       <div className="flex items-center gap-2 mb-4">

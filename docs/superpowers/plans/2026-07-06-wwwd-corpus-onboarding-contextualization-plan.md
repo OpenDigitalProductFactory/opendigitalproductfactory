@@ -7,6 +7,8 @@
 
 **Live-verification finding (post Phase A deploy):** the first backfill run on the reference install failed with a P2003 FK violation — `seedOrgWwwdCorpus` points `fallbackProfileId` at `dpf-organizational-principles`, which only ever existed as an in-code constant ([default-profile.ts](apps/web/lib/decision-perspective/default-profile.ts)); no seed materializes the row (`seed-decision-perspective.ts` creates `mark-dpf-platform` + `wsid-*` only). **This FK throw, swallowed by the fail-open completion chain, is the root cause of the WWWD substrate being dormant on every install — fresh ones included.** Fix: the seeder now upserts the fallback profile row before the org profile (same-BI follow-up PR).
 
+**Follow-on — decision-ledger caller attribution (BI-0EEBA669, operator ask post-verification):** every ledger write now carries a `caller` block in `outcomePayload` — the client product token derived from the MCP request User-Agent (`claude-code/…`, `codex-…`, `grok-…`), the resolved auth identity (`apiTokenId`, `authSource`), and the coworker `agentId`/`threadId` when in-portal — threaded route → `ToolExecutionContext` → both ledger writers (`kernel-consult-ledger`, `org-business-gate`). `/wiki/decisions` gains a Caller column, a "Consults by caller" rollup (a client absent from the rollup never consulted the kernel — the operator's Grok question), and caller detail on the drill-in. No schema change; pre-attribution rows fall back to `callingSurface`/unattributed.
+
 ---
 
 ## 1. What WWWD actually is (verified against code + live install, 2026-07-06)

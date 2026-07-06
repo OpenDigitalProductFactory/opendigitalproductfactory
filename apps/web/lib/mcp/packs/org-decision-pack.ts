@@ -67,9 +67,30 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
+type PackCallerContext = {
+  routeContext?: string;
+  threadId?: string;
+  agentId?: string;
+  callerClient?: string;
+  apiTokenId?: string;
+  authSource?: string;
+};
+
+/** Shape the dispatch context into the ledger's caller-attribution block. */
+function callerFromContext(context: PackCallerContext | undefined) {
+  return {
+    client: context?.callerClient ?? null,
+    apiTokenId: context?.apiTokenId ?? null,
+    authSource: context?.authSource ?? null,
+    agentId: context?.agentId ?? null,
+    threadId: context?.threadId ?? null,
+  };
+}
+
 async function evaluateOrgBusinessDecision(
   params: Record<string, unknown>,
   userId: string,
+  context?: PackCallerContext,
 ): Promise<ToolResult> {
   const { evaluateOrgBusinessDecisionGate } = await import("@/lib/decision-perspective/org-business-gate");
   const { DECISION_DOMAIN_CLASSES, DECISION_RISK_TIERS } = await import("@/lib/decision-perspective/types");
@@ -102,8 +123,9 @@ async function evaluateOrgBusinessDecision(
     options,
     domainClass: domainClass as Parameters<typeof evaluateOrgBusinessDecisionGate>[0]["domainClass"],
     riskTier: riskTier as Parameters<typeof evaluateOrgBusinessDecisionGate>[0]["riskTier"],
-    routeContext: "/coworker-business",
+    routeContext: context?.routeContext ?? "/coworker-business",
     triggeredByUserId: userId,
+    caller: callerFromContext(context),
   });
 
   const rationale = decision.evaluation.rationale;
@@ -191,7 +213,8 @@ export const orgDecisionPack: ToolPack = {
   packId: "org-decision",
   definitions,
   handlers: {
-    evaluate_org_business_decision: (params, userId) => evaluateOrgBusinessDecision(params, userId),
+    evaluate_org_business_decision: (params, userId, context) =>
+      evaluateOrgBusinessDecision(params, userId, context),
     record_org_business_answer: (params, userId, context) =>
       recordOrgBusinessAnswer(params, userId, context?.agentId ?? null),
   },

@@ -72,6 +72,18 @@ export default async function DecisionRecordPage({ params }: { params: Params })
     : [];
   const recommendedOptionId =
     typeof payload.recommendedOptionId === "string" ? payload.recommendedOptionId : null;
+  // Caller attribution — who brought this decision (client UA token /
+  // coworker agent / thread), so the row matches back to the activity.
+  const caller = asRecord(payload.caller);
+  const callerParts = [
+    typeof caller.client === "string" && caller.client ? caller.client : null,
+    typeof caller.agentId === "string" && caller.agentId ? `agent ${caller.agentId}` : null,
+    typeof caller.threadId === "string" && caller.threadId ? `thread ${caller.threadId}` : null,
+    typeof caller.apiTokenId === "string" && caller.apiTokenId ? `token ${caller.apiTokenId}` : null,
+    typeof payload.callingSurface === "string" && payload.callingSurface
+      ? `surface ${payload.callingSurface}`
+      : null,
+  ].filter((p): p is string => p !== null);
 
   return (
     <div className="max-w-3xl mx-auto py-6 px-4">
@@ -98,6 +110,11 @@ export default async function DecisionRecordPage({ params }: { params: Params })
           <LocalTime value={row.createdAt} /> · {row.profile?.name ?? row.profileId} ·{" "}
           {row.routeContext ?? "—"} · {row.domainClass} · {row.interactionId}
         </p>
+        {callerParts.length > 0 ? (
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+            Caller: {callerParts.join(" · ")}
+          </p>
+        ) : null}
       </header>
 
       {/* Options weighed */}
