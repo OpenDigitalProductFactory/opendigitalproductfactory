@@ -15,12 +15,15 @@ import { resolveHiveMindCandidates } from "./hive-mind-resolver";
 import { createPortalContextPromptDigest } from "./prompt-digest";
 import { resolvePortalRoute } from "./route-resolver";
 import { resolvePortalWork, type WorkResolution } from "./work-resolver";
+import { resolveQueueAttention } from "./queue-awareness-resolver";
 import type { AttentionSignal, PortalContextEnvelope, PortalContextInput } from "./types";
 
 type ResolverDeps = {
   db?: PortalContextDb;
   now?: () => Date;
   getRouteDataContext?: (routeContext: string, userId: string) => Promise<string | null>;
+  /** Injectable for tests; defaults to the live at-risk-queue resolver. */
+  getQueueAttention?: () => Promise<AttentionSignal[]>;
   resolverTimeoutMs?: number;
 };
 
@@ -89,6 +92,18 @@ export async function resolvePortalContextEnvelopeUncached(
   const workProjection = workProjectionResult.value;
   attention.push(...workProjectionResult.attention);
   attention.push(...workProjection.attention);
+
+  // Queue backpressure (EP-3516E23D): surface at-risk queues as attention so a
+  // coworker proactively knows where scarce-resource work is piling up. Value is
+  // the signal list itself; best-effort, capped inside the resolver.
+  const queueAttentionResult = await resolveSource(
+    "queue-awareness",
+    (deps.getQueueAttention ?? resolveQueueAttention)(),
+    [] as AttentionSignal[],
+    resolverTimeoutMs,
+  );
+  attention.push(...queueAttentionResult.value);
+  attention.push(...queueAttentionResult.attention);
 
   const evidenceResult = await resolveSource(
     "evidence",

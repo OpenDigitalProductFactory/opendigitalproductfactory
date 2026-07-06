@@ -186,6 +186,11 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   update_work_capsule_status: ["work_capsule_write"],
   release_capsule_scope: ["work_capsule_write"],
   get_runtime_coordination_map: ["work_capsule_read"],
+  // Queue-awareness reads (EP-3516E23D): platform-coordination visibility over
+  // the shared queue flow-telemetry — same read grant as the sibling ops-read
+  // tool above.
+  get_queue_status: ["work_capsule_read"],
+  list_at_risk_queues: ["work_capsule_read"],
   register_runtime_target: ["work_capsule_write"],
   heartbeat_runtime_target: ["work_capsule_write"],
   release_runtime_target: ["work_capsule_write"],

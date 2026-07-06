@@ -117,7 +117,8 @@ export type AttentionSignal = {
     | "source_unavailable"
     | "envelope_timeout"
     | "unknown_route"
-    | "no_active_build";
+    | "no_active_build"
+    | "queue_backpressure";
   severity: "info" | "warning" | "error";
   message: string;
   actionLabel?: string | null;

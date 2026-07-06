@@ -13,6 +13,9 @@ export const PROACTIVITY_ACTIVITY_FAMILIES = [
   "customer-communication",
   "finance-close",
   "security-incident",
+  // EP-3516E23D: queue backpressure — a scarce-resource queue backing up past
+  // its thresholds warrants a more assertive nudge to whoever manages it.
+  "queue-health",
 ] as const;
 export type ProactivityActivityFamily = (typeof PROACTIVITY_ACTIVITY_FAMILIES)[number];
 
