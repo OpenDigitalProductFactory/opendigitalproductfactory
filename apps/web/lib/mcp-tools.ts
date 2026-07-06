@@ -13295,6 +13295,31 @@ export async function executeTool(
         ? `Recommends ${result.recommendation.optionId} (confidence: ${result.recommendation.confidence}, composite ${result.recommendation.composite.toFixed(3)}; governing profile: ${governingProfile.governingProfileKind})`
         : "No applicable principles to evaluate.";
 
+      // Persist the consult to the DecisionInteraction ledger so the decision
+      // governance hub can audit that the gate is in use (per-tier log at
+      // /wiki/decisions). Fail-open: a ledger outage never blocks the
+      // decision, but the outcome is named in the response either way.
+      // This is audit observability, not a business mutation — the tool's
+      // read-only annotation stays as-is (ToolExecution already logs calls;
+      // this adds the decision-shaped record the governance surfaces read).
+      const { recordKernelConsultInteraction } = await import(
+        "@/lib/decision/kernel-consult-ledger"
+      );
+      const ledger = await recordKernelConsultInteraction({
+        db: prisma,
+        result,
+        callerContext: governingProfile,
+        question: contextQuery,
+        optionIds: decisionOptions.map((o) => o.id),
+        optionDescriptions: Object.fromEntries(
+          decisionOptions.map((o) => [o.id, o.description]),
+        ),
+        appliedPrincipleCount: cappedPrinciples.length,
+        callingSurface,
+        routeContext: context?.routeContext ?? null,
+        taskRunId: context?.taskRunId ?? null,
+      });
+
       return {
         success: true,
         message: summary,
@@ -13309,6 +13334,7 @@ export async function executeTool(
             kind: governingProfile.governingProfileKind,
             resolvedVia: governingProfile.resolvedVia,
           },
+          ledger,
         },
       };
     }

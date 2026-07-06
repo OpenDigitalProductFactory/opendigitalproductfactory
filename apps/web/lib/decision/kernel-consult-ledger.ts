@@ -1,0 +1,180 @@
+// Kernel-consult decision ledger — persists every `principle_decide` call to
+// the DecisionInteraction audit table so WWMD/WWWD/WSID governance is
+// observable, not just advisory.
+//
+// Before this module, `principle_decide` computed a recommendation and
+// returned it with no durable record: the decision ledger stayed empty on
+// installs where the kernel was consulted constantly, so an operator could
+// not validate the HITL-equivalent gate was in play at all. The write is
+// fail-open (a ledger outage must never block the decision itself), but the
+// outcome is always observable in the tool response (`ledger.recorded`),
+// per make-silent-failures-observable.
+
+import type { DecisionResult } from "@/lib/decision/option-scoring";
+import type { DecisionCallerContext } from "@/lib/decision/caller-context";
+import {
+  persistDecisionInteraction,
+} from "@/lib/decision-perspective/persistence";
+import type {
+  DecisionOutcomeType,
+  DecisionPerspectiveEvaluationResult,
+  DecisionRiskTier,
+} from "@/lib/decision-perspective/types";
+
+type ProfileResolverDb = {
+  decisionPerspectiveProfile: {
+    findUnique(args: {
+      where: { profileId: string };
+      select: { profileId: true; kind: true };
+    }): Promise<{ profileId: string; kind: string } | null>;
+  };
+  decisionPerspectiveProfileVersion: {
+    findFirst(args: {
+      where: { profileId: string };
+      orderBy: { versionNumber: "desc" };
+      select: { versionId: true };
+    }): Promise<{ versionId: string } | null>;
+  };
+} & Parameters<typeof persistDecisionInteraction>[0]["db"];
+
+export type KernelConsultLedgerOutcome = {
+  recorded: boolean;
+  interactionId?: string;
+  profileId?: string;
+  /** Why the write was skipped, when it was. */
+  reason?: string;
+};
+
+/**
+ * Map the pure decide() result onto the ledger's unresolved/resolved
+ * semantics: a confident, conflict-free recommendation is `recommend`; a
+ * commandment conflict or low-margin call is `escalate` (needs human review —
+ * these feed the hub's open-review counts); no applicable principles is
+ * `defer` (a coverage gap).
+ */
+export function mapConsultOutcome(result: DecisionResult): {
+  outcomeType: DecisionOutcomeType;
+  riskTier: DecisionRiskTier;
+  confidenceScore: number;
+} {
+  if (!result.recommendation) {
+    return { outcomeType: "defer", riskTier: "medium", confidenceScore: 0 };
+  }
+  if (result.flags.commandmentConflict) {
+    return { outcomeType: "escalate", riskTier: "high", confidenceScore: 0.3 };
+  }
+  if (result.recommendation.confidence === "low") {
+    return { outcomeType: "escalate", riskTier: "medium", confidenceScore: 0.5 };
+  }
+  return { outcomeType: "recommend", riskTier: "low", confidenceScore: 0.9 };
+}
+
+export async function recordKernelConsultInteraction(input: {
+  db: ProfileResolverDb;
+  result: DecisionResult;
+  callerContext: DecisionCallerContext;
+  /** The decision context/question text supplied by the caller. */
+  question: string;
+  /** Option ids as supplied to decide(). */
+  optionIds: string[];
+  /** Full option descriptions, kept in the payload for the audit drill-in. */
+  optionDescriptions: Record<string, string>;
+  appliedPrincipleCount: number;
+  callingSurface?: string | null;
+  routeContext?: string | null;
+  taskRunId?: string | null;
+  triggeredByUserId?: string | null;
+}): Promise<KernelConsultLedgerOutcome> {
+  try {
+    const profileId = input.callerContext.governingProfileId;
+    const [profile, version] = await Promise.all([
+      input.db.decisionPerspectiveProfile.findUnique({
+        where: { profileId },
+        select: { profileId: true, kind: true },
+      }),
+      input.db.decisionPerspectiveProfileVersion.findFirst({
+        where: { profileId },
+        orderBy: { versionNumber: "desc" },
+        select: { versionId: true },
+      }),
+    ]);
+    if (!profile || !version) {
+      // Observable skip — e.g. the WWWD fallback constant has no DB row on
+      // installs that predate the org-profile seed (BI-44526F3E).
+      console.warn(
+        `[kernel-consult-ledger] skipped: governing profile "${profileId}" is not provisioned (profile=${Boolean(profile)}, version=${Boolean(version)})`,
+      );
+      return { recorded: false, profileId, reason: "profile-not-provisioned" };
+    }
+
+    const { outcomeType, riskTier, confidenceScore } = mapConsultOutcome(input.result);
+
+    // Top contributions for the recommended option — the "why" the audit
+    // drill-in shows without replaying the scoring math.
+    const winner = input.result.recommendation
+      ? input.result.scores.find((s) => s.optionId === input.result.recommendation?.optionId)
+      : null;
+    const topContributors = winner
+      ? [...winner.contributions]
+        .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
+        .slice(0, 5)
+        .map((c) => ({
+          principleId: c.principleId,
+          principleName: c.principleName,
+          tier: c.tier,
+          contribution: Number(c.contribution.toFixed(4)),
+        }))
+      : [];
+
+    const evaluation: DecisionPerspectiveEvaluationResult = {
+      outcomeType,
+      selectedProfileId: profile.profileId,
+      fallbackProfileId: null,
+      profileVersionId: version.versionId,
+      confidenceBefore: confidenceScore,
+      confidenceAfter: confidenceScore,
+      confidenceScore,
+      coverageGap: !input.result.recommendation,
+      principleConflict: input.result.flags.commandmentConflict,
+      domainClass: "kernel-consult",
+      resolvedProfileChain: [profile.profileId],
+      materialCount: input.appliedPrincipleCount,
+      freshnessDistribution: { current: 0, stale: 0, superseded: 0, contradicted: 0 },
+      riskTier,
+      question: input.question,
+      options: input.optionIds,
+      rationale: input.result.reasoning,
+      materialScores: [],
+      sources: [],
+    };
+
+    const { interactionId } = await persistDecisionInteraction({
+      db: input.db,
+      build: null,
+      evaluation,
+      taskRunId: input.taskRunId ?? null,
+      triggeredByUserId: input.triggeredByUserId ?? null,
+      routeContext: input.routeContext ?? input.callingSurface ?? "mcp:principle_decide",
+      phaseFrom: null,
+      phaseTo: null,
+      outcomePayloadExtra: {
+        tool: "principle_decide",
+        callingPopulation: input.callerContext.callingPopulation,
+        callingSurface: input.callingSurface ?? null,
+        recommendedOptionId: input.result.recommendation?.optionId ?? null,
+        composite: input.result.recommendation?.composite ?? null,
+        margin: input.result.recommendation?.margin ?? null,
+        recommendationConfidence: input.result.recommendation?.confidence ?? null,
+        commandmentConflictPrinciples: input.result.flags.commandmentConflictPrinciples,
+        structuredCoverage: input.result.flags.structuredCoverage,
+        optionDescriptions: input.optionDescriptions,
+        topContributors,
+      },
+    });
+
+    return { recorded: true, interactionId, profileId: profile.profileId };
+  } catch (err) {
+    console.warn("[kernel-consult-ledger] write failed (fail-open):", err);
+    return { recorded: false, reason: "write-failed" };
+  }
+}
