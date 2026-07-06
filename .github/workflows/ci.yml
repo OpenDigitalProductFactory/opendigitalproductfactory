@@ -491,6 +491,8 @@ jobs:
         run: node --test packages/dpf-skill-pack/hooks/worktree-create.test.mjs
       - name: Conformance — DPF guards stay wired in the dpf-platform plugin (hooks/hooks.json)
         run: node --test packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs
+      - name: Conformance — surface manifests use plugin-root-relative paths (BI-883FC2FC)
+        run: node --test packages/dpf-skill-pack/hooks/surface-manifest-paths.test.mjs
       - name: Run spec/plan/doc gate
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}

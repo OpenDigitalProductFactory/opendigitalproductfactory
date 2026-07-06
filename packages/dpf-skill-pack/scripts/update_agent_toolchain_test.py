@@ -46,6 +46,7 @@ class WriteTextIfChangedTest(unittest.TestCase):
                     "--skill-pack-path",
                     str(skill_pack),
                     "--skip-claude-cli-install",
+                    "--skip-grok-cli-install",
                 ])
             self.assertEqual(code, 0)
             marketplace = json.loads(
@@ -64,6 +65,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                     "--skill-pack-path",
                     str(skill_pack),
                     "--skip-claude-cli-install",
+                    "--skip-grok-cli-install",
                 ])
 
             self.assertEqual(code, 0)
@@ -117,6 +119,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                     "--skill-pack-path",
                     str(skill_pack),
                     "--skip-claude-cli-install",
+                    "--skip-grok-cli-install",
                     "--mcp-url",
                     "https://mcp.example.test/api/mcp/v1",
                 ])
@@ -144,6 +147,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                     "--skill-pack-path",
                     str(skill_pack),
                     "--skip-claude-cli-install",
+                    "--skip-grok-cli-install",
                 ])
 
             raw = config.read_text()
@@ -165,6 +169,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                     "--skill-pack-path",
                     str(skill_pack),
                     "--skip-claude-cli-install",
+                    "--skip-grok-cli-install",
                 ])
 
             self.assertEqual(code, 0)
@@ -179,6 +184,59 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 codex_config["mcp_servers"]["dpf"]["bearer_token_env_var"],
                 "DPF_MCP_BEARER_TOKEN",
             )
+
+
+class GrokInstallTest(unittest.TestCase):
+    def test_install_skipped_when_grok_binary_absent(self) -> None:
+        with patch.object(updater, "resolve_grok_binary", return_value=None):
+            status = updater.install_grok_plugin(Path("/tmp/managed"), dry_run=False)
+        self.assertEqual(status, "skipped: Grok CLI not found")
+
+    def test_dry_run_never_shells_out(self) -> None:
+        with patch.object(updater, "resolve_grok_binary", return_value="/fake/grok"), patch(
+            "subprocess.run"
+        ) as run:
+            status = updater.install_grok_plugin(Path("/tmp/managed"), dry_run=True)
+        run.assert_not_called()
+        self.assertIn("dry-run", status)
+
+    def test_install_invokes_grok_plugin_install_trust_from_managed(self) -> None:
+        class _Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        with patch.object(updater, "resolve_grok_binary", return_value="/fake/grok"), patch(
+            "subprocess.run", return_value=_Result()
+        ) as run:
+            status = updater.install_grok_plugin(Path("/tmp/managed"), dry_run=False)
+        self.assertEqual(status, "installed")
+        run.assert_called_once()
+        argv = run.call_args[0][0]
+        self.assertEqual(argv, ["/fake/grok", "plugin", "install", "/tmp/managed", "--trust"])
+
+    def test_install_reports_failure_without_raising(self) -> None:
+        class _Result:
+            returncode = 3
+            stdout = ""
+            stderr = "boom"
+
+        with patch.object(updater, "resolve_grok_binary", return_value="/fake/grok"), patch(
+            "subprocess.run", return_value=_Result()
+        ):
+            status = updater.install_grok_plugin(Path("/tmp/managed"), dry_run=False)
+        self.assertIn("failed", status)
+
+
+class GuardLivenessAdvisoryTest(unittest.TestCase):
+    def test_advisory_names_codex_trust_and_grok_blocking_gap(self) -> None:
+        text = "\n".join(updater.guard_liveness_advisory()).lower()
+        # Codex: the fail-open-until-trusted condition must be named.
+        self.assertIn("codex", text)
+        self.assertIn("trust", text)
+        # Grok: the blocking-hook-contract gap must be named, not hidden.
+        self.assertIn("grok", text)
+        self.assertIn("block", text)
 
 
 if __name__ == "__main__":
