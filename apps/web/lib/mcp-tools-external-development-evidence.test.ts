@@ -12,6 +12,30 @@ vi.mock("@/lib/actions/external-evidence", () => ({
   recordExternalEvidence: mockRecordExternalEvidence,
 }));
 
+// Hermeticity (BI-BFDCE0A9): the handler runs an owner check
+// (`prisma.featureBuild.findUnique`) and a best-effort capsule capture before
+// returning. Neither is the unit under test, but against an unmocked prisma with
+// no ambient Postgres the owner check throws, executeTool catches it, and the
+// tool returns success:false — so this test used to pass ONLY where a DB was
+// wired (CI shards) and fail in every DB-less run (fresh worktree, pre-push
+// gate). Stub the DB-touching seams so the test asserts the handler's own
+// contract, not the presence of a database. mcp-tools.ts imports only `prisma`
+// and `DISCOVERY_TRIAGE_AGENT_ID` from @dpf/db, so preserving the rest of the
+// module and replacing just `prisma` is sufficient.
+vi.mock("@dpf/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dpf/db")>();
+  return {
+    ...actual,
+    prisma: {
+      featureBuild: { findUnique: vi.fn().mockResolvedValue(null) },
+    },
+  };
+});
+
+vi.mock("@/lib/work-capsules/external-session-capture", () => ({
+  captureExternalSessionEvidence: vi.fn().mockResolvedValue("WC-test-1"),
+}));
+
 import { executeTool } from "./mcp-tools";
 
 describe("record_external_development_evidence", () => {
