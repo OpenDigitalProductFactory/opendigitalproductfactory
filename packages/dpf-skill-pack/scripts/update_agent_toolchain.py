@@ -161,21 +161,71 @@ def ensure_claude_marketplace(home: Path, version: str, dry_run: bool) -> bool:
     return write_json(path, data)
 
 
+def split_toml_dotted_key(key: str) -> list[str] | None:
+    parts: list[str] = []
+    current: list[str] = []
+    quoted = False
+    escape = False
+
+    for char in key.strip():
+        if quoted:
+            if escape:
+                current.append(char)
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                quoted = False
+            else:
+                current.append(char)
+        elif char == '"':
+            quoted = True
+        elif char == ".":
+            part = "".join(current).strip()
+            if not part:
+                return None
+            parts.append(part)
+            current = []
+        else:
+            current.append(char)
+
+    if quoted or escape:
+        return None
+    part = "".join(current).strip()
+    if not part:
+        return None
+    parts.append(part)
+    return parts
+
+
+def canonical_toml_table_header(line: str) -> str | None:
+    stripped = line.strip()
+    if not stripped.startswith("[") or not stripped.endswith("]") or stripped.startswith("[["):
+        return None
+    parts = split_toml_dotted_key(stripped[1:-1])
+    if parts is None:
+        return None
+    return ".".join(parts)
+
+
 def upsert_toml_table(text: str, header: str, body_lines: list[str]) -> str:
     lines = text.splitlines()
     start = None
+    target_header = canonical_toml_table_header(header)
     for index, line in enumerate(lines):
-        if line.strip() == header:
+        if target_header is not None and canonical_toml_table_header(line) == target_header:
             start = index
             break
-    block = [header, *body_lines]
+    block = [lines[start].strip() if start is not None else header, *body_lines]
     if start is None:
         prefix = "\n" if text.strip() else ""
         return text.rstrip() + prefix + "\n".join(block) + "\n"
     end = start + 1
     while end < len(lines):
         stripped = lines[end].strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
+        if canonical_toml_table_header(stripped) is not None or (
+            stripped.startswith("[[") and stripped.endswith("]]")
+        ):
             break
         end += 1
     next_lines = lines[:start] + block + lines[end:]
