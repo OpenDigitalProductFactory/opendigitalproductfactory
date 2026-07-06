@@ -26,6 +26,12 @@ import {
 import { isAnthropic } from "./provider-utils";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
+import {
+  getResourceLane,
+  LOCAL_INFERENCE_LANE_KEY,
+  localInferenceMaxQueueDepth,
+} from "@/lib/queue/resource-lane";
+import type { QueueTransitionInput } from "@/lib/queue/queue-telemetry";
 import { buildAnthropicSystem } from "./anthropic-cache";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
@@ -48,17 +54,30 @@ function resolveInferenceTimeoutMs(providerId: string): number {
 // blow past the per-call timeout while still waiting, and 502 the endpoint under
 // load. Observed live: "Both review agents failed to respond" on every local
 // build because both reviewers aborted with "operation was aborted due to timeout".
-// Serialize local inference through a promise chain so each call gets the full GPU
-// and its timeout (created by the caller, inside this lock) covers real inference,
-// not queue-wait. Cloud providers are unaffected — only providerId === "local"
-// goes through the lock.
-let localInferenceChain: Promise<unknown> = Promise.resolve();
+// Serialize local inference so each call gets the full GPU and its timeout
+// (created by the caller, inside this lock) covers real inference, not queue-wait.
+// Cloud providers are unaffected — only providerId === "local" goes through it.
+//
+// This now delegates to the shared ResourceLane (EP-3516E23D Phase 2), which is
+// the same single-slot FIFO serializer with two opt-in additions: a bounded queue
+// depth (set DPF_LOCAL_INFERENCE_MAX_QUEUE_DEPTH to reject over-capacity calls with
+// a LaneBusyError — the honest busy signal, BI-6112DDE0 — instead of letting them
+// pile up and time out while waiting), and flow telemetry so lane wait/process
+// time is measurable. Both are gated on that env: UNSET ⇒ unbounded serialize with
+// no telemetry writes, byte-for-byte the prior behavior.
+const localInferenceLane = getResourceLane(LOCAL_INFERENCE_LANE_KEY, {
+  record: (input: QueueTransitionInput) => {
+    // Only emit on the hot inference path when an operator has opted into managing
+    // the lane — avoids per-inference DB writes in the default configuration.
+    if (localInferenceMaxQueueDepth() == null) return;
+    void import("@/lib/queue/queue-telemetry").then(({ recordQueueTransition }) => {
+      void recordQueueTransition(input);
+    });
+  },
+});
+
 export function withLocalInferenceLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = localInferenceChain.then(fn, fn);
-  // Keep the chain alive regardless of this call's outcome so one failure/timeout
-  // never wedges every subsequent local call.
-  localInferenceChain = run.then(() => undefined, () => undefined);
-  return run;
+  return localInferenceLane.run(fn, { maxQueueDepth: localInferenceMaxQueueDepth() });
 }
 
 // ─── Gemini part types ───────────────────────────────────────────────────────
