@@ -11,44 +11,47 @@ describe("formatProviderBadge", () => {
     expect(formatProviderBadge(undefined)).toBeNull();
   });
 
-  it("renders provider name plus model for API adapters", () => {
+  it("renders a friendly provider+model label with the raw id on hover (API adapters)", () => {
     expect(
       formatProviderBadge({
         name: "Anthropic",
-        modelId: "claude-opus-4-7",
+        providerId: "anthropic",
+        modelId: "claude-opus-4-8",
         adapterKind: "anthropic-api",
       }),
-    ).toBe("Anthropic · claude-opus-4-7");
+    ).toEqual({ label: "Claude · Opus 4.8", title: "anthropic / claude-opus-4-8" });
   });
 
-  it("appends ' CLI' for CLI adapters", () => {
+  it("appends ' CLI' for CLI adapters and keeps the raw id in the title", () => {
     expect(
       formatProviderBadge({
         name: "ChatGPT",
+        providerId: "openai",
         modelId: "gpt-5-codex",
         adapterKind: "codex-cli",
       }),
-    ).toBe("ChatGPT CLI · gpt-5-codex");
+    ).toEqual({ label: "ChatGPT CLI · GPT-5 Codex", title: "openai / gpt-5-codex" });
   });
 
-  it("does not double-stamp CLI when the provider name already says CLI", () => {
-    expect(
-      formatProviderBadge({
-        name: "Codex CLI",
-        modelId: "gpt-5-codex",
-        adapterKind: "codex-cli",
-      }),
-    ).toBe("Codex CLI · gpt-5-codex");
+  it("does not double-stamp CLI when the label already says CLI", () => {
+    const badge = formatProviderBadge({
+      name: "Codex CLI",
+      providerId: "openai",
+      modelId: "gpt-5-codex",
+      adapterKind: "codex-cli",
+    });
+    expect(badge?.label).not.toMatch(/CLI.*CLI/);
   });
 
-  it("renders provider name alone when model is missing (fallback path)", () => {
+  it("renders the provider label alone when model is missing (fallback path)", () => {
     expect(
       formatProviderBadge({
         name: "Anthropic",
+        providerId: "anthropic",
         modelId: null,
         adapterKind: null,
       }),
-    ).toBe("Anthropic");
+    ).toEqual({ label: "Claude", title: "anthropic" });
   });
 });
 
@@ -150,6 +153,7 @@ describe("AgentMessageBubble", () => {
           createdAt: "2026-05-22T12:00:00.000Z",
           provider: {
             name: "ChatGPT",
+            providerId: "openai",
             modelId: "gpt-5-codex",
             adapterKind: "codex-cli",
           },
@@ -160,8 +164,10 @@ describe("AgentMessageBubble", () => {
     );
 
     expect(html).toContain("Software Engineer");
-    expect(html).toContain("ChatGPT CLI · gpt-5-codex");
+    expect(html).toContain("ChatGPT CLI · GPT-5 Codex");
     expect(html).toContain('data-testid="agent-message-provider"');
+    // Progressive disclosure: the full raw model id lives in the hover title.
+    expect(html).toContain('title="openai / gpt-5-codex"');
   });
 
   it("omits the provider badge when no provider info is attached", () => {

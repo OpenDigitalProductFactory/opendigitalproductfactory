@@ -19,6 +19,8 @@ export type AttachmentInfo = {
 export type AgentMessageProvider = {
   /** Display name (from ModelProvider.name), e.g. "Anthropic", "ChatGPT". */
   name: string;
+  /** Raw provider id (AgentMessage.providerId / telemetry providerId), e.g. "anthropic", "openai", "local". Drives the friendly-label helper; may be null for legacy rows. */
+  providerId?: string | null;
   /** Model id used for the call, e.g. "claude-opus-4-7", "gpt-5-codex". May be null when only AgentMessage.providerId is known. */
   modelId: string | null;
   /** Adapter kind from telemetry (e.g. "claude-cli", "anthropic-api", "openai-api"). Null when falling back to AgentMessage.providerId. */
