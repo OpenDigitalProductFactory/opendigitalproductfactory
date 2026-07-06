@@ -409,3 +409,40 @@ account's OWN stored website (no search; 8s timeout; 200KB cap), extracts
 title/description, and files the proposal as a steward task — enrichment
 never writes master data directly. Tool `enrich_customer_account` requires
 the web toggle + `web_search` grant (two-gate, matching the research tools).
+
+## 10. Slice 4 (2026-07-06): Autonomous Data Steward
+
+Operator directive: MDM activities should be *assigned to and automated by* an
+AI coworker, not human-staffed — most can be automated in full. Slice 3 made
+the work coworker-capable (tools + grants); this slice makes it autonomous and
+owned.
+
+**Dedicated coworker.** A `data-steward` tier-2 cross-cutting coworker
+(workforce-seed.ts + HARDCODED_COWORKER_GRANTS: crm_read/crm_write/
+consumer_read/web_search) whose whole job is master-data quality.
+
+**Scheduled sweep.** `mdmStewardSweepScheduled` (Inngest cron, daily 05:00
+UTC, after the 04:00 retention sweep) on the standard scheduled-job pattern:
+quiescence-gated, concurrency 1, ScheduledJob.enabled kill switch, catalog
+entry (parity-tested). Manual `ops/mdm-steward.requested` event for run-now +
+dry-run.
+
+**Autonomy engine** (`lib/mdm/autonomous-steward.ts`). Runs the sweep, then
+auto-resolves account duplicates. Operator chose FULL autonomy incl. fuzzy
+matches — implemented as autonomous-AND-accountable:
+- **Deterministic survivor** — status rank (customer > prospect) → relationship
+  count → age. A total order, reproducible in the audit trail.
+- **Conflicting-domain guardrail** — a fuzzy name match whose two records carry
+  DIFFERENT web domains is two real companies, not a duplicate → escalate.
+- **Per-run cap** (`MAX_AUTO_MERGES_PER_RUN=25`) — bounds blast radius; a
+  scoring regression can mis-merge at most the cap before overflow escalates.
+- **Identity carve-out** — contact merges (credentials/social identities)
+  escalate to a human even under full autonomy.
+- Every auto-merge writes an `account_auto_merged` Activity + attribute history
+  and is reversible via unmerge (the undo).
+
+**Surfaces.** `/admin/data-stewardship` gains a Data Steward panel (Run now /
+Preview + a "auto-resolved, last 7 days" retro-review digest with links to the
+survivor). Coworker tool `run_data_steward` (dryRun param) for the on-demand
+path. Deferred: `mdm-steward` PlatformCapability (still on view_admin); tuning
+the auto-merge confidence floor separately from the queue thresholds.

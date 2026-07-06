@@ -75,6 +75,19 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     sensitivity: "confidential",
   },
   {
+    // EP-4A12A7CB slice 4: owns master-data quality — dedup review, merge,
+    // staleness, enrichment. Runs autonomously on a daily schedule and works
+    // the steward queue down; escalates the ambiguous cases to a human.
+    agentId: "data-steward",
+    slugId: "data-steward",
+    name: "Data Steward",
+    tier: 2,
+    type: "coworker",
+    description: "Master-data quality: duplicate resolution, record refresh, and merge governance",
+    valueStream: "cross-cutting",
+    sensitivity: "confidential",
+  },
+  {
     agentId: "marketing-specialist",
     slugId: "marketing-specialist",
     name: "Marketing Strategist",
@@ -241,6 +254,11 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // agentId "customer-advisor"), not from agent_registry.json — so the CRM
   // grants must live here to actually reach the coworker's tool surface.
   "customer-advisor": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search"],
+  // The Data Steward owns master-data quality: it runs the dedup/staleness
+  // sweep, merges duplicates, and proposes enrichment. crm_write reaches the
+  // mdm-stewardship pack tools (run_mdm_steward_sweep, merge_customer_*,
+  // list_mdm_steward_tasks); web_search gates the enrich_customer_account door.
+  "data-steward": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search"],
   "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read"],
   "storefront-advisor": [
     "consumer_read",

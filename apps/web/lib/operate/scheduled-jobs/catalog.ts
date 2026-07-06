@@ -213,6 +213,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: "ops/data-retention.requested",
   },
   {
+    jobId: "mdm-steward-sweep",
+    inngestId: "ops/mdm-steward-sweep-scheduled",
+    name: "MDM Data Steward sweep",
+    purpose:
+      "Runs the master-data quality sweep and lets the Data Steward coworker auto-resolve confident account duplicates (full autonomy incl. fuzzy, with audit trail + unmerge undo + per-run cap + conflicting-domain guardrail). If it stops, duplicates and stale customer records accumulate unreviewed. Editable so an operator can pause or run-now the autonomous steward.",
+    cron: "50 4 * * *",
+    cadence: "Daily at 04:50",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: "ops/mdm-steward.requested",
+  },
+  {
     jobId: "discovery-prometheus-poll",
     inngestId: "ops/prometheus-poll",
     name: "Discovery: Prometheus poll",
