@@ -12,6 +12,7 @@ import {
 } from "@/lib/proactivity/proactivity-override-preferences";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import { reconcileCoworkerSelfTask } from "@/lib/operate/scheduled-jobs/coworker-self-tasks";
 
 type ManualProactivityPreferenceValue = {
   scope: "agent";
@@ -65,6 +66,16 @@ export async function saveCoworkerProactivityPreference(
     sourceAgentId: agentId,
     lastValidatedAt: now,
   });
+
+  // Bridge the setting to autonomous work: a coworker with a registered
+  // self-task self-drives on a cadence (assertive=daily, balanced=weekly,
+  // quiet=stand down) via the ScheduledAgentTask engine. Best-effort — a
+  // scheduling hiccup must not fail saving the preference itself.
+  try {
+    await reconcileCoworkerSelfTask(user.id, agentId, level);
+  } catch (err) {
+    console.error("[proactivity] reconcileCoworkerSelfTask failed", err);
+  }
 
   revalidatePath("/platform/ai");
   revalidatePath(`/platform/ai/agent/${agentId}`);
