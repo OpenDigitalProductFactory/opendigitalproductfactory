@@ -1,7 +1,9 @@
 // apps/web/components/platform/OAuthConnectionStatus.tsx
 "use client";
 
+import { useState, useTransition } from "react";
 import type { CredentialRow } from "@/lib/ai-provider-types";
+import { startProviderOAuth } from "@/lib/actions/provider-oauth";
 
 function relativeTime(isoDate: string): string {
   const diff = new Date(isoDate).getTime() - Date.now();
@@ -26,12 +28,35 @@ type Props = {
 };
 
 export function OAuthConnectionStatus({ credential, authMethod, authorizeUrl, providerId }: Props) {
+  const [isPending, startTransition] = useTransition();
+  const [signInError, setSignInError] = useState<string | null>(null);
+
   if (authMethod !== "oauth2_authorization_code") return null;
 
   const isConnected = (credential.status === "configured" || credential.status === "ok") && credential.tokenExpiresAt;
   const isExpired = credential.tokenExpiresAt
     ? new Date(credential.tokenExpiresAt).getTime() < Date.now()
     : false;
+  // An expired access token with a stored refresh token is NOT an operator
+  // problem — getProviderBearerToken refreshes it on the next dispatch (and the
+  // provider detail page attempts it on view). Only demand a sign-in when there
+  // is no refresh token to heal with. (BI-2DD7042A)
+  const willSelfHeal = isExpired && credential.hasRefreshToken;
+
+  // BI-2DD7042A: this was previously an <a href="/api/oauth/authorize/…">,
+  // a route that never existed (404). The real flow is the startProviderOAuth
+  // server action — the same one ProviderDetailForm's sign-in button uses.
+  function handleSignIn() {
+    setSignInError(null);
+    startTransition(async () => {
+      const result = await startProviderOAuth(providerId);
+      if ("authorizeUrl" in result) {
+        window.open(result.authorizeUrl, "_self");
+      } else {
+        setSignInError(result.error);
+      }
+    });
+  }
 
   return (
     <div
@@ -63,9 +88,11 @@ export function OAuthConnectionStatus({ credential, authMethod, authorizeUrl, pr
         <span style={{ fontSize: 12, color: "var(--dpf-text)" }}>
           {isConnected && !isExpired
             ? `Connected · ${relativeTime(credential.tokenExpiresAt!)}`
-            : isExpired
-              ? "Token expired"
-              : "Not connected"}
+            : willSelfHeal
+              ? "Access token expired — refreshes automatically on next use"
+              : isExpired
+                ? "Token expired — sign in again"
+                : "Not connected"}
         </span>
 
         {/* Refresh token indicator */}
@@ -85,21 +112,32 @@ export function OAuthConnectionStatus({ credential, authMethod, authorizeUrl, pr
       </div>
 
       {/* Actions */}
-      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
         {(!isConnected || isExpired) && authorizeUrl && (
-          <a
-            href={`/api/oauth/authorize/${providerId}`}
-            style={{
-              fontSize: 11,
-              color: "var(--dpf-accent)",
-              padding: "4px 10px",
-              border: "1px solid var(--dpf-accent)",
-              borderRadius: 4,
-              textDecoration: "none",
-            }}
-          >
-            Sign in
-          </a>
+          <div>
+            <button
+              type="button"
+              onClick={handleSignIn}
+              disabled={isPending}
+              style={{
+                fontSize: 11,
+                color: "var(--dpf-accent)",
+                padding: "4px 10px",
+                border: "1px solid var(--dpf-accent)",
+                borderRadius: 4,
+                background: "transparent",
+                cursor: isPending ? "default" : "pointer",
+                opacity: isPending ? 0.5 : 1,
+              }}
+            >
+              {isPending ? "Redirecting…" : "Sign in"}
+            </button>
+          </div>
+        )}
+        {signInError && (
+          <div role="alert" style={{ fontSize: 11, color: "var(--dpf-error)" }}>
+            {signInError}
+          </div>
         )}
       </div>
     </div>

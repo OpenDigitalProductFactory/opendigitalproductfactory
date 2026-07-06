@@ -455,7 +455,13 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
       {selectedAuthMethod === "oauth2_authorization_code" && (
         <div style={{ marginBottom: 16 }}>
-          {credential?.status === "ok" && credential?.tokenExpiresAt ? (
+          {/* BI-2DD7042A: judge connected/expired by the tokenExpiresAt TIMESTAMP,
+              not the stored status enum — the enum only flips to "expired" when a
+              refresh attempt fails, so an idle provider's lapsed token used to
+              render green "Connected" here while the OAuth card above said
+              "Token expired", and the working sign-in button stayed hidden. */}
+          {credential?.status === "ok" && credential?.tokenExpiresAt &&
+           new Date(credential.tokenExpiresAt).getTime() > Date.now() ? (
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--dpf-success)", display: "inline-block" }} />
@@ -503,10 +509,13 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                 </button>
               )}
             </div>
-          ) : credential?.status === "expired" ? (
+          ) : credential?.status === "expired" ||
+              (credential?.tokenExpiresAt && new Date(credential.tokenExpiresAt).getTime() <= Date.now()) ? (
             <div>
               <div style={{ color: "var(--dpf-warning)", fontSize: 13, marginBottom: 8 }}>
-                Token expired — sign in again
+                {credential?.hasRefreshToken && credential?.status !== "expired"
+                  ? "Access token expired — it refreshes automatically on next use, or sign in again now"
+                  : "Token expired — sign in again"}
               </div>
               <button
                 type="button"
