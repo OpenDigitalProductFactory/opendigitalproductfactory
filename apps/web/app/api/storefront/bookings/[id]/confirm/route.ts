@@ -26,5 +26,20 @@ export async function POST(
     data: { status: "confirmed" },
   });
 
+  // EP-3516E23D field-service dispatch: a confirmed, provider-assigned booking
+  // becomes a job on the storefront's dispatch queue (with flow telemetry). The
+  // bridge is idempotent and no-ops for unassigned bookings; best-effort so a
+  // confirmation never fails because dispatch bridging did.
+  try {
+    const { bridgeBookingToWorkItem } = await import("@/lib/queue/bridges/booking-bridge");
+    await bridgeBookingToWorkItem(id);
+  } catch (err) {
+    console.warn(
+      `[field-dispatch] failed to bridge booking ${id} to a dispatch job: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+
   return NextResponse.json({ success: true });
 }

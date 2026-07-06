@@ -9,13 +9,20 @@ type Props = {
   showAnimals?: boolean;
   /** Show the Units tab — only for rental archetypes with a stockable fleet. */
   showUnits?: boolean;
+  /** Show the Dispatch tab — only for field-service (trades-maintenance) storefronts. */
+  showDispatch?: boolean;
 };
 
 // Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper owns
 // the archetype-aware tab labels and resolves active state from the pathname. Storefront
 // admin uses the flat "emphasis" tone (the heavier storefront-management strip).
 
-export function StorefrontAdminTabNav({ vocabulary, showAnimals = false, showUnits = false }: Props) {
+export function StorefrontAdminTabNav({
+  vocabulary,
+  showAnimals = false,
+  showUnits = false,
+  showDispatch = false,
+}: Props) {
   const path = usePathname();
 
   const tabs = [
@@ -25,6 +32,7 @@ export function StorefrontAdminTabNav({ vocabulary, showAnimals = false, showUni
     ...(showUnits ? [{ label: "Units", href: "/storefront/units" }] : []),
     ...(showAnimals ? [{ label: "Animals", href: "/storefront/animals" }] : []),
     { label: vocabulary.teamLabel, href: "/storefront/team" },
+    ...(showDispatch ? [{ label: "Dispatch", href: "/storefront/dispatch" }] : []),
     { label: vocabulary.inboxLabel, href: "/storefront/inbox" },
     { label: "Settings", href: "/storefront/settings" },
   ];
