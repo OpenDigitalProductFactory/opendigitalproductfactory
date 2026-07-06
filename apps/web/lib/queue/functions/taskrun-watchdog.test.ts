@@ -150,6 +150,22 @@ describe("recoverStuckQuiescenceCoordinators", () => {
     expect(where.status.notIn).toContain("completed");
     expect(where.OR[0].lastHeartbeatAt.lt.getTime()).toBe(now.getTime() - 2 * 60 * 1000);
   });
+
+  it("does NOT reap ready-to-swap / swapping — those park by design during the promoter build", async () => {
+    // Regression (BI-QUIESCE-READY-REAP): at ready-to-swap the coordinator stops
+    // heartbeating while the caller runs a multi-minute docker build, so the 2-min
+    // reaper must exclude the caller-owned states (bounded by the 60-min waitForEvent
+    // timeout instead). Excluding them at the query level is what prevents the reap.
+    quiescenceFindManyMock.mockResolvedValueOnce([]);
+    await recoverStuckQuiescenceCoordinators(new Date("2026-06-14T00:10:00.000Z"));
+    const notIn = quiescenceFindManyMock.mock.calls[0][0].where.status.notIn;
+    expect(notIn).toContain("ready-to-swap");
+    expect(notIn).toContain("swapping");
+    // still reaps the crashed drain phases
+    expect(notIn).not.toContain("draining");
+    expect(notIn).not.toContain("preparing");
+    expect(notIn).not.toContain("pending");
+  });
 });
 
 describe("taskrunWatchdog handler (the early-return fix)", () => {

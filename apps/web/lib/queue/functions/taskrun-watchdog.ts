@@ -54,7 +54,26 @@ export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<num
   const stuckCutoff = new Date(now.getTime() - STUCK_COORDINATOR_TIMEOUT_MS);
   const stuckCoordinators = await prisma.quiescenceRun.findMany({
     where: {
-      status: { notIn: ["completed", "deferred", "aborted", "failed"] },
+      // Only reap coordinators wedged in a DRAIN phase (pending/preparing/
+      // draining). Those heartbeat every wait-tick, so a >2min gap means the
+      // coordinator crashed and is holding the platform draining — the exact
+      // case this reaper exists for.
+      //
+      // Do NOT reap `ready-to-swap` or `swapping`: at ready-to-swap the
+      // coordinator parks in `step.waitForEvent(swap-complete)` and stops
+      // heartbeating BY DESIGN while the caller (runSelfUpgrade) takes the
+      // recovery-point backup and runs the promoter — a docker build that
+      // routinely exceeds 2 minutes in local mode. The 2-min heartbeat reaper
+      // was therefore killing the coordinator mid-build on essentially every
+      // local upgrade, flipping the level back to normal and wedging the run
+      // with the swap half-done. These caller-owned states are already bounded
+      // by the coordinator's own 60-min waitForEvent timeout and by the
+      // promoter timeout + runSelfUpgrade's failure path (failQuiescenceSwap),
+      // so a genuinely-crashed swap is still recovered — just not by this
+      // aggressive short-window reaper. (BI-QUIESCE-READY-REAP)
+      status: {
+        notIn: ["ready-to-swap", "swapping", "completed", "deferred", "aborted", "failed"],
+      },
       OR: [
         { lastHeartbeatAt: { lt: stuckCutoff } },
         { AND: [{ lastHeartbeatAt: null }, { startedAt: { lt: stuckCutoff } }] },
