@@ -77,15 +77,17 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
     });
   }
 
-  function onApprove(row: FederationLinkRow) {
+  async function onApprove(row: FederationLinkRow) {
+    // Await the dialog OUTSIDE the transition — a dialog helper deferred inside
+    // startTransition never renders interactively (BI-FE7C543C).
+    const ok = await confirmDialog({
+      title: "Approve federation link",
+      message: `Approve our side of "${row.displayName}"? The link becomes trusted only once the peer also approves.`,
+      confirmLabel: "Approve",
+    });
+    if (!ok) return;
     setFlash(null);
     startTransition(async () => {
-      const ok = await confirmDialog({
-        title: "Approve federation link",
-        message: `Approve our side of "${row.displayName}"? The link becomes trusted only once the peer also approves.`,
-        confirmLabel: "Approve",
-      });
-      if (!ok) return;
       const result = await approveFederationLinkAction(row.linkId);
       setFlash(
         result.ok
@@ -95,16 +97,17 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
     });
   }
 
-  function onQuarantine(row: FederationLinkRow) {
+  async function onQuarantine(row: FederationLinkRow) {
+    // Await the dialog OUTSIDE the transition (BI-FE7C543C).
+    const reason = await promptDialog({
+      title: "Quarantine federation link",
+      message: `Quarantine "${row.displayName}" — reason (recorded):`,
+      required: true,
+      confirmLabel: "Quarantine",
+    });
+    if (!reason?.trim()) return;
     setFlash(null);
     startTransition(async () => {
-      const reason = await promptDialog({
-        title: "Quarantine federation link",
-        message: `Quarantine "${row.displayName}" — reason (recorded):`,
-        required: true,
-        confirmLabel: "Quarantine",
-      });
-      if (!reason?.trim()) return;
       const result = await quarantineFederationLinkAction(row.linkId, reason.trim());
       setFlash(
         result.ok
@@ -114,16 +117,17 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
     });
   }
 
-  function onRevoke(row: FederationLinkRow) {
+  async function onRevoke(row: FederationLinkRow) {
+    // Await the dialog OUTSIDE the transition (BI-FE7C543C).
+    const reason = await promptDialog({
+      title: "Revoke federation link",
+      message: `Revoke "${row.displayName}"? This invalidates the link token immediately and cannot be undone. Reason (recorded):`,
+      required: true,
+      confirmLabel: "Revoke",
+    });
+    if (!reason?.trim()) return;
     setFlash(null);
     startTransition(async () => {
-      const reason = await promptDialog({
-        title: "Revoke federation link",
-        message: `Revoke "${row.displayName}"? This invalidates the link token immediately and cannot be undone. Reason (recorded):`,
-        required: true,
-        confirmLabel: "Revoke",
-      });
-      if (!reason?.trim()) return;
       const result = await revokeFederationLinkAction(row.linkId, reason.trim());
       setFlash(
         result.ok

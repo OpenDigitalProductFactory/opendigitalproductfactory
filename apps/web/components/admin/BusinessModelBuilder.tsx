@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { confirmDialog, alertDialog } from "@/components/ui/Dialog";
+import { confirmDialog } from "@/components/ui/Dialog";
 import {
   createCustomBusinessModel,
   updateCustomBusinessModel,
@@ -453,11 +453,14 @@ function ModelCard({
       }))
     )
       return;
+    setError(null);
     startTransition(async () => {
       try {
         await deprecateBusinessModel(model.modelId);
       } catch (e) {
-        await alertDialog(e instanceof Error ? e.message : "Unknown error");
+        // Surface via the inline error banner, NOT alertDialog — a dialog helper
+        // deferred inside startTransition never renders (BI-FE7C543C).
+        setError(e instanceof Error ? e.message : "Unknown error");
       }
     });
   }
@@ -472,11 +475,14 @@ function ModelCard({
       }))
     )
       return;
+    setError(null);
     startTransition(async () => {
       try {
         await retireBusinessModel(model.modelId);
       } catch (e) {
-        await alertDialog(e instanceof Error ? e.message : "Unknown error");
+        // Surface via the inline error banner, NOT alertDialog — a dialog helper
+        // deferred inside startTransition never renders (BI-FE7C543C).
+        setError(e instanceof Error ? e.message : "Unknown error");
       }
     });
   }
@@ -551,6 +557,10 @@ function ModelCard({
           </div>
         </div>
       ) : (
+        <>
+          {error && (
+            <p style={{ fontSize: 11, color: "var(--dpf-error)", margin: "0 0 8px" }}>{error}</p>
+          )}
         <div
           style={{
             display: "flex",
@@ -695,6 +705,7 @@ function ModelCard({
             )}
           </div>
         </div>
+        </>
       )}
     </div>
   );

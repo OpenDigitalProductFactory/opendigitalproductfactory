@@ -1,7 +1,7 @@
 {
   "apps/web/app/api/mcp/v1/route.test.ts": 1260,
   "apps/web/app/api/v1/edge/discovery-runs/route.test.ts": 982,
-  "apps/web/components/admin/BusinessModelBuilder.tsx": 810,
+  "apps/web/components/admin/BusinessModelBuilder.tsx": 821,
   "apps/web/components/admin/McpTokenManager.tsx": 1373,
   "apps/web/components/agent/AgentCoworkerPanel.tsx": 1143,
   "apps/web/components/agent/AgentMessageInput.tsx": 1029,
