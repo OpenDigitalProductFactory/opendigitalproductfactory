@@ -1,5 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// NextStepControl (client child) calls useRouter().
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 import { PipelineStageInspector } from "./PipelineStageInspector";
 import type { PipelineInspectorView } from "@/lib/crm/pipeline-inspector";
 
@@ -16,6 +19,7 @@ const inspector: PipelineInspectorView = {
   stageAgeLabel: "20 days in stage",
   isStale: true,
   staleLabel: "Stale stage",
+  nextActivityAt: null,
   probabilityLabel: "70%",
   expectedValueLabel: "£15,000",
   expectedCloseLabel: "10 Jun 2026",
