@@ -237,13 +237,17 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   "portfolio-advisor": ["portfolio_read", "registry_read", "backlog_read"],
   "external-catalog-scout": ["backlog_read", "backlog_write", "registry_read"],
+  // The Digital Product Estate Specialist stewards the product estate (discovery
+  // triage, portfolio quality) via registry_read/registry_write + backlog. It does
+  // NOT do AI-ops: agent_control_read (add_provider, configure_gateway_scan,
+  // manage_coworker_tool_grant, grok_signin, …) was out-of-role and only inflated
+  // its tool surface (BI-CAP-C2565D94). portfolio_read added no reachable tool that
+  // registry_read didn't already cover. Both removed for least-privilege.
   "inventory-specialist": [
-    "portfolio_read",
     "registry_read",
     "registry_write",
     "backlog_read",
     "backlog_write",
-    "agent_control_read",
   ],
   "ea-architect": ["ea_graph_read", "ea_graph_write", "architecture_read", "file_read", "registry_read"],
   "hr-specialist": ["registry_read", "consumer_read", "consumer_write"],
@@ -270,7 +274,12 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "web_search",
   ],
   "ops-coordinator": ["backlog_read", "backlog_write", "backlog_triage", "registry_read", "portfolio_read"],
-  "platform-engineer": ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read"],
+  // The AI Ops Engineer runs the /platform/ai/readiness surface: it observes
+  // coworker capability needs and must be able to file/track backlog items for the
+  // issues it detects. Its runtime grants resolve from THIS map (not
+  // agent_registry.json, which already intends backlog access), so backlog_read/
+  // backlog_write must live here to reach its tool surface (BI-CAP-CBC41758).
+  "platform-engineer": ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read", "backlog_read", "backlog_write"],
   "build-specialist": [
     "file_read",
     "code_graph_read",
