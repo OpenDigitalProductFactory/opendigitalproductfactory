@@ -9,6 +9,7 @@ export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
   "approval",
   "manual-task",
   "scheduled",
+  "field-service-job",
 ] as const;
 
 export type WorkCaseWorkItemSourceType =
@@ -197,6 +198,21 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     accountResolverKey: "activity",
     titleProjection: "Use the activity subject.",
     summaryProjection: "Use activity account, owner, and due context.",
+    supportedTransitions: STANDARD_TRANSITIONS,
+    receiptPolicy: OBSERVED_RECEIPT_POLICY,
+  },
+  {
+    // A field-service job dispatched to a provider from a confirmed booking.
+    // Account resolution flows through the originating booking, so this source
+    // is not itself an account-resolver key.
+    sourceKey: "field-service-job",
+    displayLabel: "Field service job",
+    owningArea: "storefront",
+    domainCategory: "field-dispatch",
+    defaultDecisionScope: "wwwd",
+    accountResolverKey: null,
+    titleProjection: "Use the booking reference, service, and scheduled window.",
+    summaryProjection: "Use the assigned provider, customer, service, and scheduled time.",
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
   },

@@ -36,13 +36,21 @@ export default async function StorefrontAdminLayout({ children }: { children: Re
         where: { storefrontId: config.id, ctaType: "rental" },
       })) > 0
     : false;
+  // Dispatch board is the field-service surface — only trades-maintenance
+  // storefronts assign confirmed bookings to a crew.
+  const showDispatch = config?.archetype?.category === "trades-maintenance";
 
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700 }}>{vocabulary.portalLabel}</h1>
       </div>
-      <StorefrontAdminTabNav vocabulary={vocabulary} showAnimals={showAnimals} showUnits={showUnits} />
+      <StorefrontAdminTabNav
+        vocabulary={vocabulary}
+        showAnimals={showAnimals}
+        showUnits={showUnits}
+        showDispatch={showDispatch}
+      />
       {children}
     </div>
   );
