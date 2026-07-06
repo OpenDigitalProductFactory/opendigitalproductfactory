@@ -163,6 +163,21 @@ profile lacks `billableTimeEnabled`, so non-labour archetypes never see any of i
 
 Verification: `lib/hr/labor-report.test.ts` (aggregation), employee page tests extended
 for the new reads, full `components/*` + `lib/actions` vitest sweep and `web` typecheck
-green in the worktree; live happy-path verification (set pay → approve billable hours →
-generate invoice → margin band; non-labour archetype sees none of it) follows the next
-self-upgrade per `dpf-verify-on-live-install`.
+green in the worktree.
+
+**Live-verified on the deployed install (2026-07-06, sha `e0a7e35`).** Full happy path
+driven end-to-end: set an hourly employee's pay ($50/h, governed action logged `allow`)
+→ add a rate-card service (Consulting $150/h) → mark 8 billable timesheet hours to a
+customer + service → approve → **Create draft invoice** on the customer account produced
+draft `INV-2026-0003` (`sourceType='billable-time'`, one line `Consulting (8 hours …)` at
+8 × $150 = **$1,200**), stamped `TimesheetEntry.invoiceId`/`invoicedAt` so the hours drop
+out of the unbilled set (double-bill guard confirmed live). Margin band computed exact
+throughout: $400 cost / $1,200 billed / $800 margin (66.67%). The archetype gate is
+structural — only the 6 labour profiles set `billableTimeEnabled: true`; every other
+profile falls through `?? false`, so non-labour installs render none of the billable
+surfaces.
+
+A confirm-dialog defect was caught during this verification and fixed in a follow-up
+(#2649): the "Create draft invoice" button raised `confirmDialog` inside `startTransition`,
+which deferred the dialog's render so it never became interactive. Fixed to await the
+dialog before the transition (the pattern every other `confirmDialog` caller uses).
