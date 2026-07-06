@@ -17,8 +17,8 @@ const PORTFOLIO_PERSONAS: Record<string, { label: string; description: string }>
     description: "Operational knowledge for delivery and production teams",
   },
   for_employees: {
-    label: "Workforce / For Employees",
-    description: "Knowledge for the workforce — human employees and AI coworkers — plus HR, managers, and policy",
+    label: "Workforce",
+    description: "Knowledge for employees, contractors, AI coworkers, robots, non-human identities, HR, managers, and policy",
   },
   products_and_services_sold: {
     label: "Products & Services Sold",

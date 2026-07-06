@@ -53,7 +53,7 @@ Introduce a per-company **Business Operating Model (BOM)** — not a new substra
 Archetype business context (top-down, leadership-defined)
   → seeds the two business-critical portfolios
       • Products & Services Sold  (DPPM "Provided Externally" — the market offer, line of sight to customers)
-      • Workforce / For Employees (DPPM "Provided Internally" + the workforce itself: humans + AI agents)
+      • Workforce (DPPM "Provided Internally" + the workforce itself: humans + AI agents)
   → those portfolios decompose down the DPPM dependency chain
       • Foundational  ◀── depended on by
       • Manufacturing & Delivery  ◀── delivers
@@ -130,6 +130,8 @@ Mark's reframe: "Employees" is too narrow because it excludes the AI agent workf
 > **Naming:** the canonical registry key stays `for_employees` (no churn to `portfolio_registry.json`), but the operator-facing label becomes **"Workforce"** (or "Workforce & Internal Enablement"), with a `displayShort` per the maturity spec's §12.4 label-fit invariant. The DPPM "Provided Internally" digital products (the tools the workforce *consumes*) and the workforce *identities themselves* both live here — consumer and contributor in one portfolio.
 
 **2026-07-04 implementation amendment.** The `for_employees` root now explicitly includes AI coworkers as workforce peers, not only human employees. Structural backlog attribution follows this order for AI coworker work: `DigitalProduct` first, `TaxonomyNode` second, linked `CoworkerCapabilityNeed.agent.portfolioId` third, then `EpicPortfolio` as the broad fallback. New AI coworker capability-need backlog filings and Hive Scout coworker-archetype suggestions resolve to the `dpf-ai-workforce` DigitalProduct under `for_employees/workforce_services`; tax-remittance / paying-taxes work resolves to `dpf-tax-remittance` under `for_employees/financial_management/manage_taxes`. Text-only classification is not a valid association path.
+
+**2026-07-06 terminology amendment.** The `for_employees` root now renders as **Workforce** in the portfolio registry. "For Employees" remains a legacy alias and standards cross-reference only; the canonical slug stays `for_employees` to avoid data churn. This aligns the platform with the standards-facing proposal in [`docs/architecture/2026-07-06-it4it-dppm-workforce-portfolio-white-paper.md`](../../architecture/2026-07-06-it4it-dppm-workforce-portfolio-white-paper.md): the internal portfolio should account for employees, contractors, AI coworkers, robots, non-human identities, and any other accountable actor that performs or approves work.
 
 ### 4.3 Facets C & D — Foundational and Manufacturing & Delivery (the dependency floor)
 

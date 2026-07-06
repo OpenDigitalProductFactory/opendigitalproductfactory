@@ -108,7 +108,7 @@ function listNames(names: string[]): string {
 const ROLE_LABELS: Record<string, string> = {
   productsAndServicesSold: "Products & Services Sold — what we offer the market",
   manufactureAndDeliver: "Manufacturing & Delivery — how the work gets made and delivered",
-  forEmployees: "Workforce / For Employees — what our people work with",
+  forEmployees: "Workforce — who and what performs work",
   foundational: "Foundational — the base the rest stands on",
 };
 
@@ -208,7 +208,7 @@ function buildToolsAndDataPage(input: {
   }
   if (input.forEmployeeNames.length > 0) {
     sections.push(
-      "What our people work with day to day (recorded in `Workforce / For Employees`):",
+      "What our workforce works with day to day (recorded in `Workforce`):",
       "",
       listNames(input.forEmployeeNames),
       "",

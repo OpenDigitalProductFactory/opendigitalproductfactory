@@ -20,6 +20,8 @@ DPF&#39;s `Portfolio` Prisma model groups Digital Products with explicit lifecyc
 
 Portfolios are also the unit of agent context — a coworker on a portfolio page sees the portfolio&#39;s Digital Products, their value-stream coverage, their lifecycle states, and the portfolio-scoped wiki overlay.
 
+DPF keeps the four DPPM root slugs stable for compatibility. The internal root slug remains `for_employees`, but the operator-facing portfolio label is **Workforce** so the same management surface covers employees, contractors, AI coworkers, robots, non-human identities, and other accountable work actors.
+
 ## Relationships
 
 - Contains: `[[entities/digital-product]]`s.

@@ -23,7 +23,7 @@ function product(productId: string): RegistryProduct {
 }
 
 describe("digital product registry BOM workforce mappings", () => {
-  it("maps the AI Workforce surface to the For Employees workforce taxonomy", () => {
+  it("maps the AI Workforce surface to the Workforce portfolio taxonomy", () => {
     const aiWorkforce = product("dpf-ai-workforce");
 
     expect(aiWorkforce.name).toBe("AI Workforce");
@@ -32,7 +32,7 @@ describe("digital product registry BOM workforce mappings", () => {
     expect(aiWorkforce.description).toContain("human employees and AI coworkers");
   });
 
-  it("maps paying taxes / tax remittance to For Employees financial management", () => {
+  it("maps paying taxes / tax remittance to Workforce financial management", () => {
     const taxRemittance = product("dpf-tax-remittance");
 
     expect(taxRemittance.portfolio_id).toBe("for_employees");

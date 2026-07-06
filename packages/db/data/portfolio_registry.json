@@ -21,10 +21,10 @@
     {
       "id": "for_employees",
       "portfolio_id": "for_employees",
-      "name": "Workforce / For Employees",
-      "description": "The workforce and the internal digital products it consumes. Members are BOTH human employees AND AI coworkers (role-shaped non-human peers per DOC-7693D528, each with a human-role parity anchor and an approval/interface owner). Products include productivity tools, ITSM, HR systems, internal portals, and the AI coworker services/offers the workforce runs on. Canonical key stays `for_employees`.",
+      "name": "Workforce",
+      "description": "The workforce and the internal digital products it consumes. This evolves the legacy For Employees label to include employees, contractors, AI coworkers, robots, non-human identities, and any other accountable actor that performs or approves work. Products include productivity tools, ITSM, HR systems, internal portals, and the AI coworker services/offers the workforce runs on. Canonical key stays `for_employees`.",
       "owner_role": "HR-200",
-      "it4it_reference": "IT4IT §6.3 For Employees Portfolio"
+      "it4it_reference": "DPPM Provided Internally / legacy IT4IT §6.3 For Employees Portfolio"
     },
     {
       "id": "products_and_services_sold",
