@@ -6248,6 +6248,26 @@ export async function executeTool(
         triageOutcome: item.triageOutcome,
         hasActiveBuild: item.activeBuildId != null,
       });
+      // EP-3516E23D CWQ activation: a claim-on-start (→ in-progress) surfaces the
+      // BI as a WorkItem in the triage queue and records its arrival into queue
+      // flow-telemetry. Idempotent (no duplicate on re-claim) and best-effort —
+      // queue bridging must never fail the claim it observes.
+      if (target === "in-progress") {
+        void (async () => {
+          try {
+            const { bridgeBacklogItemToWorkItem } = await import(
+              "@/lib/queue/bridges/backlog-bridge"
+            );
+            await bridgeBacklogItemToWorkItem(updated.itemId);
+          } catch (err) {
+            console.warn(
+              `[cwq-bridge] failed to bridge ${updated.itemId} to a work item: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          }
+        })();
+      }
       return {
         success: true,
         entityId: updated.itemId,
