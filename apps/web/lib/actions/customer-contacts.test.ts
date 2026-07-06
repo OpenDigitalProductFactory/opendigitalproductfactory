@@ -11,6 +11,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     customerAccount: { findUnique: vi.fn() },
     customerContact: { findUnique: vi.fn(), create: vi.fn() },
+    activity: { create: vi.fn().mockResolvedValue({}) },
   },
 }));
 
@@ -20,6 +21,7 @@ import { createCustomerContact } from "./customer-contacts";
 const p = prisma as unknown as {
   customerAccount: { findUnique: ReturnType<typeof vi.fn> };
   customerContact: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
+  activity: { create: ReturnType<typeof vi.fn> };
 };
 
 beforeEach(() => {
@@ -46,6 +48,11 @@ describe("createCustomerContact", () => {
     expect(data.name).toBe("Ian Pruden");
     expect(data.nameNormalized.length).toBeGreaterThan(0);
     expect(data.source).toBe("manual");
+    // auto-capture: creation lands on the account timeline
+    const act = p.activity.create.mock.calls[0][0].data;
+    expect(act.subject).toContain("Ian Pruden");
+    expect(act.accountId).toBe("a1");
+    expect(act.contactId).toBe("c1");
   });
 
   it("returns the existing contact on exact email match (never duplicates)", async () => {

@@ -8,6 +8,7 @@ import {
   type DedupResolution,
 } from "@/lib/mdm/dedup-gate";
 import { standardizeName } from "@/lib/mdm/standardize";
+import crypto from "crypto";
 
 // Structured contact capture (BI-D873CD28). CustomerContact existed as a model
 // but was unreachable from the CRM surface — no create action, no coworker
@@ -83,6 +84,21 @@ export async function createCustomerContact(
       source: "manual",
     },
   });
+
+  // Auto-capture: contact creation lands on the account timeline like every
+  // other CRM mutation, whether a human or a coworker performed it.
+  await prisma.activity
+    .create({
+      data: {
+        activityId: `ACT-${crypto.randomUUID()}`,
+        type: "note",
+        subject: `Contact added: ${displayName} (${email})`,
+        accountId: input.accountId,
+        contactId: contact.id,
+        completedAt: new Date(),
+      },
+    })
+    .catch(() => {});
 
   revalidatePath(`/customer/${input.accountId}`);
   revalidatePath("/customer");
