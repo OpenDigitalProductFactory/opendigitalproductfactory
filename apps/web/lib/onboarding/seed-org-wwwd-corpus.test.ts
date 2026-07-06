@@ -127,10 +127,16 @@ describe("seedOrgWwwdCorpus", () => {
 
     const result = await seedOrgWwwdCorpus({ organizationId: ORG, db: fake.db, embed });
 
-    // Profile container
+    // Profile containers: the platform fallback row (FK target, seeded first
+    // so the org profile's fallbackProfileId FK cannot violate) + the org row.
     expect(result.profileId).toBe(`org-perspective-${ORG}`);
-    expect(fake.profiles).toHaveLength(1);
+    expect(fake.profiles).toHaveLength(2);
     expect(fake.profiles[0]).toMatchObject({
+      profileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID,
+      kind: "organization",
+      fallbackProfileId: null,
+    });
+    expect(fake.profiles[1]).toMatchObject({
       kind: "organization",
       ownerOrganizationId: ORG,
       fallbackProfileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID,
@@ -193,7 +199,8 @@ describe("seedOrgWwwdCorpus", () => {
     await seedOrgWwwdCorpus({ organizationId: ORG, db: fake.db, embed });
     await seedOrgWwwdCorpus({ organizationId: ORG, db: fake.db, embed });
 
-    expect(fake.profiles).toHaveLength(1);
+    // Fallback + org profile, each upserted once (no duplicates on re-run).
+    expect(fake.profiles).toHaveLength(2);
     expect(fake.versions).toHaveLength(1);
     expect(fake.materials).toHaveLength(4);
     expect(fake.wikiPages).toHaveLength(4);
