@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -57,15 +57,13 @@ test("gate-worktree.sh exits non-zero when DPF_MCP_BEARER_TOKEN is missing", () 
   assert.match(result.stderr, /DPF_MCP_BEARER_TOKEN is required/);
 });
 
-test("gate-worktree.sh refuses to record passing stub evidence by default", () => {
-  const env = {
-    ...process.env,
-    DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
-  };
+test("gate-worktree.sh discovers the checked-in default runner when DPF_LOCAL_CI_COMMAND is unset (BI-157DC9B2)", () => {
+  const env = { ...process.env };
   delete env.DPF_ALLOW_LOCAL_CI_STUB;
   delete env.DPF_LOCAL_CI_COMMAND;
 
   const result = runGate([
+    "--dry-run",
     "--branch",
     "feat/local-ci-sandbox",
     "--sha",
@@ -74,6 +72,33 @@ test("gate-worktree.sh refuses to record passing stub evidence by default", () =
     "/tmp/dpf-worktree",
     "--no-push",
   ], { env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /localCiCommand=sh '.*local-ci-runner\.sh' --candidate 'feat\/local-ci-sandbox'/);
+  assert.ok(!result.stdout.includes("localCiCommand=missing"));
+});
+
+test("gate-worktree.sh still refuses to run when neither an explicit command, the stub, nor the checked-in runner exists", () => {
+  // Exercise the refuse path by running a copy of the script from a directory
+  // with no sibling local-ci-runner.sh (SCRIPT_DIR discovery finds nothing).
+  const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-gate-"));
+  const scriptCopy = join(temp, "gate-worktree.sh");
+  writeFileSync(scriptCopy, readFileSync(new URL("../../scripts/gate-worktree.sh", import.meta.url), "utf8"));
+  chmodSync(scriptCopy, 0o755);
+
+  const env = {
+    ...process.env,
+    DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+  };
+  delete env.DPF_ALLOW_LOCAL_CI_STUB;
+  delete env.DPF_LOCAL_CI_COMMAND;
+
+  const result = spawnSync("sh", [scriptCopy,
+    "--branch", "feat/local-ci-sandbox",
+    "--sha", "abc123",
+    "--worktree", "/tmp/dpf-worktree",
+    "--no-push",
+  ], { cwd: repoRoot, encoding: "utf8", env });
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /refusing to record passing stub evidence/);
@@ -233,4 +258,212 @@ esac
     "record_local_integration_result",
     "release_nonprod_environment_lease",
   ]);
+});
+
+// ── pre-push hook chain + pre-push-gate contract (BI-C74F4DE9) ───────────────
+
+// The tracked hook body — the local `pre-push` shim is gitignored (git-lfs
+// generates it; postinstall converges it to delegate here), so CI checkouts
+// only carry this file. Shim convergence is covered by
+// scripts/lib/ensure-pre-push-hook.test.mjs.
+const prePushHook = new URL("../../.githooks/lib/pre-push-chained.sh", import.meta.url).pathname;
+const prePushGate = new URL("../../.githooks/pre-push-gate", import.meta.url).pathname;
+const runnerScript = new URL("../../scripts/local-ci-runner.sh", import.meta.url).pathname;
+
+function cleanHookEnv(extra = {}) {
+  const env = { ...process.env, ...extra };
+  delete env.DPF_SKIP_PREPUSH_GATE;
+  delete env.DPF_SKIP_PREPUSH_GATE_REASON;
+  delete env.DPF_PREPUSH_GATE_INFLIGHT;
+  for (const [k, v] of Object.entries(extra)) if (v !== undefined) env[k] = v;
+  return env;
+}
+
+function makeTempRepo() {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-prepush-"));
+  const g = (args) => {
+    const r = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+    assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  g(["init", "-q", "-b", "main"]);
+  g(["config", "user.email", "test@dpf.local"]);
+  g(["config", "user.name", "dpf-test"]);
+  g(["config", "commit.gpgsign", "false"]);
+  writeFileSync(join(dir, "code.ts"), "export const x = 1;\n");
+  g(["add", "."]);
+  g(["commit", "-q", "-m", "base"]);
+  const baseSha = g(["rev-parse", "HEAD"]);
+  g(["update-ref", "refs/remotes/origin/main", baseSha]);
+  g(["checkout", "-q", "-b", "feat/topic"]);
+  return { dir, g };
+}
+
+function runGateHook(dir, { input, env } = {}) {
+  return spawnSync("sh", [prePushGate], {
+    cwd: dir,
+    encoding: "utf8",
+    input: input ?? "",
+    env: env ?? cleanHookEnv(),
+  });
+}
+
+function refsLine(g) {
+  const sha = g(["rev-parse", "HEAD"]);
+  return `refs/heads/feat/topic ${sha} refs/heads/feat/topic 0000000000000000000000000000000000000000\n`;
+}
+
+test("pre-push-gate blocks a runtime-code push with no gate record and points at pregate", () => {
+  const { dir, g } = makeTempRepo();
+  writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+  g(["commit", "-aqm", "runtime change"]);
+  const result = runGateHook(dir, { input: refsLine(g) });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /No local-CI gate record/);
+  assert.match(result.stderr, /pnpm run pregate/);
+});
+
+test("pre-push-gate passes with a matching passing gate record for branch+SHA", () => {
+  const { dir, g } = makeTempRepo();
+  writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+  g(["commit", "-aqm", "runtime change"]);
+  const sha = g(["rev-parse", "HEAD"]);
+  writeFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), JSON.stringify({ branch: "feat/topic", sha, gatePassed: true }));
+  const result = runGateHook(dir, { input: refsLine(g) });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /local-CI gate passed/);
+});
+
+test("pre-push-gate blocks a stale record (older SHA) and calls out the mismatch", () => {
+  const { dir, g } = makeTempRepo();
+  writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+  g(["commit", "-aqm", "runtime change"]);
+  writeFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), JSON.stringify({ branch: "feat/topic", sha: "stale000", gatePassed: true }));
+  const result = runGateHook(dir, { input: refsLine(g) });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /does not pass for this HEAD/);
+});
+
+test("pre-push-gate override requires a reason and RECORDS it (no silent skip)", () => {
+  const { dir, g } = makeTempRepo();
+  writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+  g(["commit", "-aqm", "runtime change"]);
+
+  const noReason = runGateHook(dir, { input: refsLine(g), env: cleanHookEnv({ DPF_SKIP_PREPUSH_GATE: "1" }) });
+  assert.notEqual(noReason.status, 0);
+  assert.match(noReason.stderr, /requires DPF_SKIP_PREPUSH_GATE_REASON/);
+
+  const withReason = runGateHook(dir, {
+    input: refsLine(g),
+    env: cleanHookEnv({ DPF_SKIP_PREPUSH_GATE: "1", DPF_SKIP_PREPUSH_GATE_REASON: "WIP recovery push" }),
+  });
+  assert.equal(withReason.status, 0, withReason.stderr);
+  const state = JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), "utf8"));
+  assert.equal(state.skipped, true);
+  assert.equal(state.skipReason, "WIP recovery push");
+  assert.equal(state.gatePassed, false);
+});
+
+test("pre-push-gate lets docs-only diffs through without a record", () => {
+  const { dir, g } = makeTempRepo();
+  mkdirSync(join(dir, "docs"), { recursive: true });
+  writeFileSync(join(dir, "docs", "note.md"), "# doc\n");
+  g(["add", "."]);
+  g(["commit", "-qm", "docs change"]);
+  const result = runGateHook(dir, { input: refsLine(g) });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /docs-only diff/);
+});
+
+test("pre-push-gate skips delete-only and tag-only pushes", () => {
+  const { dir, g } = makeTempRepo();
+  writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+  g(["commit", "-aqm", "runtime change"]);
+  const del = runGateHook(dir, { input: "(delete) 0000000000000000000000000000000000000000 refs/heads/feat/old abc123\n" });
+  assert.equal(del.status, 0, del.stderr);
+  assert.match(del.stdout, /delete\/tag-only/);
+  const sha = g(["rev-parse", "HEAD"]);
+  const tag = runGateHook(dir, { input: `refs/tags/v1 ${sha} refs/tags/v1 0000000000000000000000000000000000000000\n` });
+  assert.equal(tag.status, 0, tag.stderr);
+});
+
+test("pre-push-gate defers to an in-flight gate-worktree run (its push must not deadlock)", () => {
+  const { dir, g } = makeTempRepo();
+  writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+  g(["commit", "-aqm", "runtime change"]);
+  const result = runGateHook(dir, { input: refsLine(g), env: cleanHookEnv({ DPF_PREPUSH_GATE_INFLIGHT: "1" }) });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /gate run in progress/);
+});
+
+test("pre-push-gate skips main (merge queue governs it)", () => {
+  const { dir, g } = makeTempRepo();
+  g(["checkout", "-q", "main"]);
+  writeFileSync(join(dir, "code.ts"), "export const x = 3;\n");
+  g(["commit", "-aqm", "on main"]);
+  const sha = g(["rev-parse", "HEAD"]);
+  const result = runGateHook(dir, { input: `refs/heads/main ${sha} refs/heads/main 0000000000000000000000000000000000000000\n` });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /merge queue/);
+});
+
+test("pre-push chains BOTH git-lfs and the gate (gate blocks, LFS still ran)", () => {
+  const { dir, g } = makeTempRepo();
+  writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+  g(["commit", "-aqm", "runtime change"]);
+
+  // PATH-stub git-lfs: record the call, swallow stdin, succeed.
+  const stubDir = mkdtempSync(join(tmpdir(), "dpf-lfs-stub-"));
+  const marker = join(stubDir, "lfs-ran");
+  writeFileSync(join(stubDir, "git-lfs"), `#!/bin/sh\nif [ "$1" = "pre-push" ]; then cat >/dev/null; fi\ntouch "${marker}"\nexit 0\n`);
+  chmodSync(join(stubDir, "git-lfs"), 0o755);
+
+  // The repo has no gate record → the chained gate must block the push, and
+  // the LFS half must already have run.
+  const blocked = spawnSync("sh", [prePushHook, "origin", "https://example.invalid/repo.git"], {
+    cwd: dir,
+    encoding: "utf8",
+    input: refsLine(g),
+    env: cleanHookEnv({ PATH: `${stubDir}:${process.env.PATH}` }),
+  });
+  assert.notEqual(blocked.status, 0);
+  assert.match(blocked.stderr, /No local-CI gate record/);
+  assert.ok(existsSync(marker), "git-lfs pre-push must run before the gate");
+
+  // With a passing record the whole chain goes green.
+  const sha = g(["rev-parse", "HEAD"]);
+  writeFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), JSON.stringify({ branch: "feat/topic", sha, gatePassed: true }));
+  const ok = spawnSync("sh", [prePushHook, "origin", "https://example.invalid/repo.git"], {
+    cwd: dir,
+    encoding: "utf8",
+    input: refsLine(g),
+    env: cleanHookEnv({ PATH: `${stubDir}:${process.env.PATH}` }),
+  });
+  assert.equal(ok.status, 0, `${ok.stdout}\n${ok.stderr}`);
+  assert.match(ok.stdout, /local-CI gate passed/);
+});
+
+// ── checked-in default runner (BI-157DC9B2) ──────────────────────────────────
+
+test("local-ci-runner.sh --dry-run resolves candidate, root and a non-mutating scratch workspace", () => {
+  const result = spawnSync("sh", [runnerScript, "--dry-run", "--candidate", "feat/topic"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: process.env,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /local-ci-runner dry-run/);
+  assert.match(result.stdout, /candidate=feat\/topic/);
+  assert.match(result.stdout, /workspace=.*\.local-ci-runner/);
+  assert.match(result.stdout, /plan=node scripts\/local-integration-ci\.mjs --candidate feat\/topic/);
+});
+
+test("local-ci-runner.sh refuses to gate main or a detached HEAD", () => {
+  const onMain = spawnSync("sh", [runnerScript, "--dry-run", "--candidate", "main"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: process.env,
+  });
+  assert.notEqual(onMain.status, 0);
+  assert.match(onMain.stderr, /gate topic branches, not main/);
 });

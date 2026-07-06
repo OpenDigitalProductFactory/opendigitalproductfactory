@@ -20,7 +20,7 @@ describe("createLocalIntegrationPlan", () => {
       "git merge --no-ff --no-edit doc/build-studio-decision-skill-packs",
       "node scripts/sandbox-freshness-preflight.mjs --converge --branch local-integration/doc-build-studio-decision-skill-packs",
       "pnpm --filter web exec vitest run",
-      "pnpm --filter web typecheck",
+      "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
     ]);
   });
@@ -70,5 +70,33 @@ describe("createLocalIntegrationPlan", () => {
     assert.ok(!plan.commands.map((command) => command.join(" ")).join("\n").includes(
       "exec next build",
     ));
+  });
+});
+
+describe("createLocalIntegrationPlan migrate-deploy opt-in (BI-157DC9B2)", () => {
+  it("inserts prisma migrate deploy after freshness and before vitest when includeMigrateDeploy is set", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/x",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "linux",
+      includeMigrateDeploy: true,
+    });
+    const commands = plan.commands.map((command) => command.join(" "));
+    const migrateIndex = commands.indexOf("pnpm --filter @dpf/db exec prisma migrate deploy");
+    const freshnessIndex = commands.findIndex((c) => c.includes("sandbox-freshness-preflight.mjs"));
+    const vitestIndex = commands.findIndex((c) => c.includes("vitest run"));
+    assert.ok(migrateIndex > freshnessIndex, "migrate deploy must run after deps convergence");
+    assert.ok(migrateIndex < vitestIndex, "migrate deploy must run before the suite");
+  });
+
+  it("omits migrate deploy by default (no DB resolved)", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/x",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "linux",
+    });
+    assert.ok(!plan.commands.map((command) => command.join(" ")).some((c) => c.includes("migrate deploy")));
   });
 });

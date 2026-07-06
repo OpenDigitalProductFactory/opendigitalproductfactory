@@ -15,7 +15,7 @@ const siblingBranches = process.argv
   .map((arg) => arg.slice("--sibling=".length));
 
 if (!candidateBranch) {
-  console.error("Usage: node scripts/local-integration-ci.mjs --candidate BRANCH [--mode single-branch|sibling-set|post-merge-main] [--sibling=BRANCH]");
+  console.error("Usage: node scripts/local-integration-ci.mjs --candidate BRANCH [--mode single-branch|sibling-set|post-merge-main] [--sibling=BRANCH] [--migrate-deploy]");
   process.exit(2);
 }
 
@@ -24,6 +24,7 @@ const plan = createLocalIntegrationPlan({
   mode,
   siblingBranches,
   buildStrategy: buildStrategy || undefined,
+  includeMigrateDeploy: process.argv.includes("--migrate-deploy"),
 });
 for (const command of plan.commands) {
   console.log(`[local-integration-ci] ${command.join(" ")}`);

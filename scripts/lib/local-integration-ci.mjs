@@ -41,8 +41,21 @@ export function createLocalIntegrationPlan(input) {
     // test/build result counts as product evidence. Exits 3/4 (sandbox drift /
     // not ready) instead of letting a stale install masquerade as a red build.
     ["node", "scripts/sandbox-freshness-preflight.mjs", "--converge", "--branch", branch],
+    // CI parity (BI-157DC9B2): the Unit Tests job applies migrations before the
+    // suite — a handful of web tests exercise real Prisma reads. Callers that
+    // resolved a test DATABASE_URL opt in via includeMigrateDeploy.
+    ...(input.includeMigrateDeploy
+      ? [["pnpm", "--filter", "@dpf/db", "exec", "prisma", "migrate", "deploy"]]
+      : []),
     ["pnpm", "--filter", "web", "exec", "vitest", "run"],
-    ["pnpm", "--filter", "web", "typecheck"],
+    // typecheck needs the same heap headroom as the host-next build: with the
+    // node 24 default heap, `tsc --noEmit` over apps/web SIGABRTs (exit 134)
+    // exactly like the build worker did (BI-B5011ACE) — observed live on the
+    // first BI-157DC9B2 gate run, 2026-07-06. Windows keeps the plain form
+    // (`env` is POSIX; win32 routes the build through docker anyway).
+    buildStrategy === "docker-build"
+      ? ["pnpm", "--filter", "web", "typecheck"]
+      : ["env", HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "typecheck"],
     productionBuildCommand,
   ];
   return {

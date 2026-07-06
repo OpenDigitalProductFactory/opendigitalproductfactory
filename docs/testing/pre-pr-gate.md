@@ -118,40 +118,69 @@ source-control, concerns).
 Rough timing on a modern laptop: the `apps/web` suite alone is ~2–4 minutes; the
 full root `pnpm test` adds ~1–2 minutes for `@dpf/db` and the mobile jest suite.
 
-## The opt-in pre-push gate (`pregate`)
+## The pre-push gate (`pregate`) — default-on
 
-BI-166C59F3 Phase 1 adds the shared local-CI convergence sandbox workflow. The
-sandbox runtime is declared in `docker-compose.local-ci.yml` behind the
-`local-ci` profile, uses `COMPOSE_PROJECT_NAME=dpf-local-ci`, serves the portal
-on `http://localhost:3010`, and connects to the existing dev data services on
+BI-166C59F3 Phase 1 added the shared local-CI convergence sandbox workflow;
+BI-C74F4DE9 made it mechanically enforced (the gate used to be dormant — the
+`pre-push` hook only ran Git LFS and never chained the gate). The sandbox
+runtime is declared in `docker-compose.local-ci.yml` behind the `local-ci`
+profile, uses `COMPOSE_PROJECT_NAME=dpf-local-ci`, serves the portal on
+`http://localhost:3010`, and connects to the existing dev data services on
 host ports `5433`, `6334`, and `7475`/`7688`.
 
-From a worktree, the opt-in gate is:
+From a worktree, the gate is:
 
 ```bash
 pnpm run pregate            # → sh scripts/gate-worktree.sh
 ```
 
 The script pushes the current branch, claims a `local-integration-ci` lease
-(waiting if the sandbox is already leased), runs the command supplied in
-`DPF_LOCAL_CI_COMMAND`, records a local-integration evidence record with the
-lease id and `gatePassed`, releases the lease, and writes the latest gate result
-to Git-local state (`.git/dpf-local-ci-gate.json`).
+(waiting if the sandbox is already leased), runs the gate command, records a
+local-integration evidence record with the lease id and `gatePassed`, releases
+the lease, and writes the latest gate result to Git-local state
+(`.git/dpf-local-ci-gate.json`).
 
-**It refuses to record a passing stub by default.** With no
-`DPF_LOCAL_CI_COMMAND` the command intentionally fails — an unimplemented
-local-CI runner must not produce green evidence. The old Phase 1 stub is only
-reachable via `DPF_ALLOW_LOCAL_CI_STUB=1` for contract tests and must never be
-used as release evidence.
+**The gate command has a checked-in default (BI-157DC9B2):**
+[`scripts/local-ci-runner.sh`](../../scripts/local-ci-runner.sh) runs the
+canonical merged-code plan (`scripts/lib/local-integration-ci.mjs`: fetch
+`origin/main` → merge candidate → sandbox-freshness converge → vitest →
+typecheck → production build) in a dedicated **non-mutating scratch worktree**
+(`~/dpf-worktrees/.local-ci-runner` by default) — never in your topic worktree.
+`DPF_LOCAL_CI_COMMAND` remains an explicit override. The old Phase 1 stub is
+only reachable via `DPF_ALLOW_LOCAL_CI_STUB=1` for contract tests and must
+never be used as release evidence.
 
-The opt-in pre-push hook is [`.githooks/pre-push-gate`](../../.githooks/pre-push-gate).
-It refuses a push when the latest local-CI gate record is missing, belongs to a
-different branch/SHA, or has `gatePassed=false`. Emergency bypass (verified
-clean only):
+**The pre-push hook chain is active by default.** The local `pre-push` file is
+gitignored (git-lfs generates it), so the enforced logic ships as the tracked
+[`.githooks/lib/pre-push-chained.sh`](../../.githooks/lib/pre-push-chained.sh)
+— Git LFS first, then [`.githooks/pre-push-gate`](../../.githooks/pre-push-gate)
+— and `postinstall` (`scripts/set-hooks-path.mjs` →
+`scripts/lib/ensure-pre-push-hook.mjs`) converges the local shim to delegate to
+it (a hand-rolled custom hook is never clobbered; the install prints a warning
+instead). The gate refuses a push when the latest local-CI gate record is
+missing, belongs to a different branch/SHA, or has `gatePassed=false`. Not
+everything needs a record: docs-only diffs vs `origin/main`, delete/tag-only
+pushes, detached HEAD, and `main` (merge-queue-governed) pass through.
+
+The bypass is **recorded, never silent** — the reason is persisted into the
+gate state file and surfaced by `pnpm pr:health` at PR time:
 
 ```bash
-DPF_SKIP_PREPUSH_GATE=1 git push
+DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON="WIP handoff, gate before PR" git push
 ```
+
+**PR-time guard.** `pnpm pr:health` treats a runtime-code PR without local-CI
+evidence as NOT READY: it needs a passing gate record for the PR head SHA, a
+recorded push-time override, or an explicit `Local-CI-Override: <reason>` /
+`Local-CI-Evidence: <record-id>` trailer in the PR body. Docs-only PRs are
+exempt automatically.
+
+**Pre-PR vs post-merge (do not confuse the runtimes).** "Pre-PR test" means
+this sandbox lane — the lease + the runner above. "Test on :3000" (the
+canonical install) is only meaningful **after** PR/merge/self-upgrade, because
+:3000 serves merged, self-upgrade-deployed bytes; use `pnpm verify:preflight`
+and the `dpf-verify-on-live-install` skill for that, never as a pre-PR branch
+runtime.
 
 ## The pre-commit typecheck gate
 

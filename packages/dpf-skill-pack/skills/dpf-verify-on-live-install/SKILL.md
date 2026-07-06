@@ -30,6 +30,8 @@ enforces:
 
 # DPF Verify On Live Install
 
+**Scope guard first: this skill verifies MERGED work on the canonical install. If the change under test has not merged yet, stop — route through the local-CI sandbox gate (`pnpm run pregate` / `dpf-local-merge-ci-before-push`) instead; `:3000` is not a pre-PR branch runtime.**
+
 **Before driving any feature's happy path on the live install, run the preflight and follow its verdict.** One command answers "can I even trust this runtime to test against?" — replacing the 4+ manual git/curl batches agents currently improvise to discover version skew. The preflight changes nothing; it returns a verdict and exactly one next action.
 
 Spec (single source of truth): [`docs/superpowers/specs/2026-06-06-procedural-functional-verification-design.md`](../../../../docs/superpowers/specs/2026-06-06-procedural-functional-verification-design.md).
@@ -42,6 +44,7 @@ Spec (single source of truth): [`docs/superpowers/specs/2026-06-06-procedural-fu
 
 ## When NOT to use
 
+- **Pre-PR / pre-merge branch verification — even when the request says "test on 3000" or "verify on the portal".** The canonical install at `:3000` serves merged, self-upgrade-deployed bytes only; an unmerged branch can NEVER be verified there. Before the PR merges, the verification lane is the shared local-CI convergence sandbox: `pnpm run pregate` (claims the `local-integration-ci` lease, runs the checked-in merged-code runner, records evidence) or `dpf-local-merge-ci-before-push`. This skill is the **post-merge** half of verification; triggering it on ":3000" language before merge is the misfire that produced the 2026-07-05 ungated-push incident.
 - Pure source-local gates (targeted `vitest`, `typecheck`) that don't need a runtime — those run in the worktree directly.
 - The change has no user-facing/runtime behavior (a doc edit, a type-only refactor).
 - You're inside a Build Studio ship-phase build where `build/review.verify` already auto-fires the UX verification.

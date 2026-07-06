@@ -1,18 +1,120 @@
 #!/bin/sh
+# pre-push-gate: refuse a push unless the current branch+SHA carries a passing
+# local-CI sandbox gate record (BI-166C59F3 mechanics, enforced by default per
+# BI-C74F4DE9). Chained from .githooks/pre-push after Git LFS.
+#
+# The gate record is written by scripts/gate-worktree.sh (`pnpm run pregate`),
+# which claims the shared local-integration-ci lease, runs the checked-in
+# CI-equivalent runner (scripts/local-ci-runner.sh by default), records MCP
+# evidence, and persists the result to .git/dpf-local-ci-gate.json.
+#
+# What does NOT need a gate record:
+#   - delete-only / tag-only pushes (nothing to verify)
+#   - pushes from main or a detached HEAD (the merge queue governs main)
+#   - docs-only diffs vs origin/main (no runtime code changed)
+#
+# Override (recorded, PR-visible — NOT silent): set BOTH
+#   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON="why" git push
+# The skip reason is persisted into the gate state file so `pnpm pr:health`
+# can surface it as an explicit operator attestation at PR time.
+
 set -eu
 
-if [ "${DPF_SKIP_PREPUSH_GATE:-}" = "1" ]; then
-  echo "[pre-push-gate] DPF_SKIP_PREPUSH_GATE=1 - skipping local-CI gate check."
+# gate-worktree.sh pushes the branch as part of the gate run itself, before the
+# gate record exists. That push carries the in-flight marker and must pass —
+# the run it belongs to records the real result minutes later.
+if [ "${DPF_PREPUSH_GATE_INFLIGHT:-}" = "1" ]; then
+  echo "[pre-push-gate] gate run in progress (gate-worktree.sh) — deferring to its recorded result."
   exit 0
+fi
+
+refs_input="$(cat 2>/dev/null || true)"
+
+# Delete-only / tag-only pushes carry nothing to gate. When stdin is empty
+# (hook exercised directly), fall through to the branch checks.
+if [ -n "$refs_input" ]; then
+  needs_gate=0
+  while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+    [ -n "$local_ref" ] || continue
+    case "$local_ref" in
+      refs/tags/*) continue ;;
+      "(delete)") continue ;;
+    esac
+    case "$local_sha" in
+      0000000000000000000000000000000000000000) continue ;;
+    esac
+    needs_gate=1
+  done <<EOF
+$refs_input
+EOF
+  if [ "$needs_gate" = "0" ]; then
+    echo "[pre-push-gate] delete/tag-only push — local-CI gate not required."
+    exit 0
+  fi
 fi
 
 branch="$(git rev-parse --abbrev-ref HEAD)"
 sha="$(git rev-parse HEAD)"
 state_file="$(git rev-parse --git-path dpf-local-ci-gate.json)"
 
+if [ "$branch" = "HEAD" ]; then
+  echo "[pre-push-gate] detached HEAD — gate applies to branch pushes only; skipping."
+  exit 0
+fi
+if [ "$branch" = "main" ]; then
+  echo "[pre-push-gate] main is governed by the merge queue — local-CI gate skipped."
+  exit 0
+fi
+
+# Recorded override: allowed, but never silent. The reason is persisted so the
+# PR-health guard can read it back as an explicit operator attestation.
+if [ "${DPF_SKIP_PREPUSH_GATE:-}" = "1" ]; then
+  reason="${DPF_SKIP_PREPUSH_GATE_REASON:-}"
+  if [ -z "$reason" ]; then
+    echo "[pre-push-gate] DPF_SKIP_PREPUSH_GATE=1 requires DPF_SKIP_PREPUSH_GATE_REASON." >&2
+    echo "[pre-push-gate] The override is recorded and surfaced at PR time — state why this" >&2
+    echo "[pre-push-gate] push is verified-clean without a sandbox gate run, e.g.:" >&2
+    echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"WIP handoff, gate before PR\" git push" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$state_file")"
+  node -e '
+const fs = require("node:fs");
+const [file, branch, sha, reason] = process.argv.slice(1);
+fs.writeFileSync(file, JSON.stringify({
+  branch,
+  sha,
+  gatePassed: false,
+  skipped: true,
+  skipReason: reason,
+  recordedAt: new Date().toISOString()
+}, null, 2) + "\n");
+' "$state_file" "$branch" "$sha" "$reason"
+  echo "[pre-push-gate] override recorded for $branch@$sha: $reason"
+  echo "[pre-push-gate] NOTE: pnpm pr:health will require a passing gate record or a"
+  echo "[pre-push-gate] Local-CI-Override attestation in the PR body before merge-readiness."
+  exit 0
+fi
+
+# Docs-only diffs need no sandbox run — there is no runtime code to gate.
+if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then
+  merge_base="$(git merge-base HEAD origin/main 2>/dev/null || true)"
+  if [ -n "$merge_base" ]; then
+    non_docs_changes="$(git diff --name-only "$merge_base" HEAD | grep -Ev '^docs/|^memory/|\.md$' || true)"
+    if [ -z "$non_docs_changes" ]; then
+      echo "[pre-push-gate] docs-only diff vs origin/main — local-CI gate not required."
+      exit 0
+    fi
+  fi
+fi
+
 if [ ! -f "$state_file" ]; then
-  echo "[pre-push-gate] No local-CI gate record exists for this worktree."
-  echo "[pre-push-gate] Run: scripts/gate-worktree.sh"
+  echo "[pre-push-gate] No local-CI gate record exists for this worktree." >&2
+  echo "[pre-push-gate] Run the sandbox gate first:  pnpm run pregate" >&2
+  echo "[pre-push-gate] (claims the shared local-integration-ci lease, runs the checked-in" >&2
+  echo "[pre-push-gate]  CI-equivalent runner, records MCP evidence, writes the gate record)" >&2
+  echo "[pre-push-gate] Recorded override for a verified-clean push:" >&2
+  echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"why\" git push" >&2
   exit 1
 fi
 
@@ -23,7 +125,8 @@ const state = JSON.parse(fs.readFileSync(file, "utf8"));
 if (state.branch !== branch || state.sha !== sha || state.gatePassed !== true) {
   console.error("[pre-push-gate] Latest local-CI gate does not pass for this HEAD.");
   console.error(`[pre-push-gate] expected ${branch}@${sha}`);
-  console.error(`[pre-push-gate] found ${state.branch || "(none)"}@${state.sha || "(none)"} gatePassed=${state.gatePassed}`);
+  console.error(`[pre-push-gate] found ${state.branch || "(none)"}@${state.sha || "(none)"} gatePassed=${state.gatePassed}${state.skipped ? " (recorded override, not a pass)" : ""}`);
+  console.error("[pre-push-gate] Run: pnpm run pregate   (or a recorded override — see above)");
   process.exit(1);
 }
 ' "$state_file" "$branch" "$sha"

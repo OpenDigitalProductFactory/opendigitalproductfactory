@@ -48,6 +48,7 @@ If a gate cannot run in the worktree because pnpm/corepack is missing, workspace
 
 ## Steps
 
+0. **Front door: `pnpm run pregate`.** It does this whole skill mechanically — pushes the branch, claims the `local-integration-ci` lease, runs the checked-in non-mutating runner (`scripts/local-ci-runner.sh` → the local-integration plan in a dedicated scratch worktree; `DPF_LOCAL_CI_COMMAND` overrides), records the MCP evidence, releases the lease, and writes the gate record the default-on pre-push hook checks. Only fall through to the manual steps below when pregate itself cannot run.
 1. Confirm the branch is not `main` and is not detached.
 2. Fetch current `origin/main`.
 3. Run the local integration CI script or its current equivalent in an isolated merge path.
