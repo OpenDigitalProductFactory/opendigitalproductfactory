@@ -6,6 +6,8 @@ import { createEngagementFromSignalForm } from "@/lib/actions/crm";
 import { getAcquisitionSignalWorkspace } from "@/lib/crm/acquisition-signal-data";
 import { formatAcquisitionSourceLabel } from "@/lib/crm/acquisition-signals";
 import { getEngagementStatusMeta } from "@/lib/crm/presentation";
+import { NewLeadButton } from "@/components/customer/NewLeadButton";
+import { EngagementTriageActions } from "@/components/customer/EngagementTriageActions";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 
@@ -37,7 +39,10 @@ export default async function EngagementsPage({ searchParams }: { searchParams?:
   return (
     <div className="space-y-6">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Engagements</h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Engagements</h1>
+          <NewLeadButton />
+        </div>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {engagements.length} engagement{engagements.length !== 1 ? "s" : ""}
         </p>
@@ -105,6 +110,11 @@ export default async function EngagementsPage({ searchParams }: { searchParams?:
                     {e.notes}
                   </p>
                 ) : null}
+                <EngagementTriageActions
+                  engagementId={e.id}
+                  status={e.status}
+                  hasAccount={Boolean(e.account)}
+                />
               </div>
               <LocalTime
                 value={e.createdAt}
