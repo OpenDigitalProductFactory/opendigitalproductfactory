@@ -75,6 +75,26 @@ test("hooks.json wires the WorktreeCreate hook and worktree-create.mjs exists (B
   );
 });
 
+test("hooks.json wires the SessionStart governance-freshness self-check via CLAUDE_PLUGIN_ROOT (BI-3260D977)", () => {
+  const cfg = loadHooksJson();
+  const ss = cfg?.hooks?.SessionStart ?? [];
+  assert.ok(Array.isArray(ss) && ss.length > 0, "expected a SessionStart event in plugin hooks.json");
+  const cmds = [];
+  for (const entry of ss) for (const h of entry?.hooks ?? []) if (typeof h?.command === "string") cmds.push(h.command);
+  assert.ok(
+    cmds.some((c) => c.includes("governance-freshness-check.mjs")),
+    "SessionStart must run governance-freshness-check.mjs so the guard is present branch-independently",
+  );
+  assert.ok(
+    cmds.filter((c) => c.includes("governance-freshness-check.mjs")).every((c) => c.includes("CLAUDE_PLUGIN_ROOT")),
+    "the SessionStart check must load from ${CLAUDE_PLUGIN_ROOT} (the branch-independent plugin cache), not a repo path",
+  );
+  assert.ok(
+    existsSync(join(here, "governance-freshness-check.mjs")),
+    "governance-freshness-check.mjs referenced by hooks.json is missing from packages/dpf-skill-pack/hooks/",
+  );
+});
+
 test("repo .claude/settings.json does NOT also define WorktreeCreate (anti double-create)", () => {
   const settingsPath = join(here, "..", "..", "..", ".claude", "settings.json");
   if (!existsSync(settingsPath)) return; // standalone plugin install
