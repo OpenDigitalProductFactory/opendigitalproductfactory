@@ -6,7 +6,8 @@ import { can } from "@/lib/permissions";
 import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles, getRecipesForProvider, getModelClassCounts, getTokenSpendByProvider } from "@/lib/ai-provider-data";
 import { ProviderDetailForm } from "@/components/platform/ProviderDetailForm";
 import { ProviderCostSourcePanel } from "@/components/platform/ProviderCostSourcePanel";
-import { getInfraCIs } from "@dpf/db";
+import { getInfraCIs, prisma } from "@dpf/db";
+import { getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { getEndpointPerformance, getRoutingProfiles, getRecentRouteDecisions } from "@/lib/actions/endpoint-performance";
 import EndpointPerformancePanel from "@/components/platform/EndpointPerformancePanel";
 import RouteDecisionLog from "@/components/platform/RouteDecisionLog";
@@ -31,6 +32,27 @@ export default async function ProviderDetailPage({ params }: Props) {
   const { providerId } = await params;
   const now = new Date();
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
+
+  // BI-2DD7042A: self-heal expired OAuth tokens on view. Token refresh is lazy —
+  // getProviderBearerToken refreshes only when a dispatch actually uses the
+  // provider — so a provider that sat idle or disabled lapses and this page used
+  // to demand a sign-in the operator doesn't need. Attempt the refresh here,
+  // BEFORE the cached data reads below, so the page renders the healed state.
+  // Best-effort: a failed refresh marks the credential "expired" and the UI
+  // falls back to the sign-in flow.
+  const oauthPeek = await prisma.modelProvider.findUnique({
+    where: { providerId },
+    select: { authMethod: true },
+  });
+  if (oauthPeek?.authMethod === "oauth2_authorization_code") {
+    const credPeek = await prisma.credentialEntry.findUnique({
+      where: { providerId },
+      select: { tokenExpiresAt: true, refreshToken: true },
+    });
+    if (credPeek?.refreshToken && credPeek.tokenExpiresAt && credPeek.tokenExpiresAt.getTime() <= now.getTime()) {
+      await getProviderBearerToken(providerId).catch(() => null);
+    }
+  }
   const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions, recipes, modelClassCounts, financeDetail, tokenSpend] = await Promise.all([
     getProviderById(providerId),
     getDiscoveredModels(providerId),
