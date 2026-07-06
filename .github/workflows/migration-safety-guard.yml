@@ -24,6 +24,7 @@ on:
       # Also trigger when the guard machinery itself changes so a guard
       # regression can't slip through without exercising the CI path.
       - "packages/db/scripts/migration-safety-guard.mjs"
+      - "packages/db/scripts/migration-timestamp-collision-guard.mjs"
       - ".github/workflows/migration-safety-guard.yml"
 
 jobs:
@@ -44,3 +45,14 @@ jobs:
         run: |
           git fetch origin main --depth=50
           node packages/db/scripts/migration-safety-guard.mjs origin/main
+
+      - name: Detect new migration timestamp collisions
+        # Fails a PR whose NEW migration reuses another migration's 14-digit
+        # timestamp prefix. Ordering stays deterministic (Prisma sorts by full
+        # dir name) so this is hygiene, not a mechanical break — but it stops the
+        # collision set from growing and heads off the destructive "de-collide by
+        # renaming an applied migration" reflex (P3018 on every install).
+        # Logic in packages/db/scripts/migration-timestamp-collision-guard.mjs;
+        # covered by packages/db/scripts/migration-timestamp-collision-guard.test.ts.
+        # BI-BFDCE0A9.
+        run: node packages/db/scripts/migration-timestamp-collision-guard.mjs origin/main
