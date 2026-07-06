@@ -20,7 +20,7 @@ describe("createLocalIntegrationPlan", () => {
       "git merge --no-ff --no-edit doc/build-studio-decision-skill-packs",
       "node scripts/sandbox-freshness-preflight.mjs --converge --branch local-integration/doc-build-studio-decision-skill-packs",
       "pnpm --filter web exec vitest run",
-      "pnpm --filter web typecheck",
+      "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
     ]);
   });

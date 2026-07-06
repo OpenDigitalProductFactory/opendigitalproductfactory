@@ -48,7 +48,14 @@ export function createLocalIntegrationPlan(input) {
       ? [["pnpm", "--filter", "@dpf/db", "exec", "prisma", "migrate", "deploy"]]
       : []),
     ["pnpm", "--filter", "web", "exec", "vitest", "run"],
-    ["pnpm", "--filter", "web", "typecheck"],
+    // typecheck needs the same heap headroom as the host-next build: with the
+    // node 24 default heap, `tsc --noEmit` over apps/web SIGABRTs (exit 134)
+    // exactly like the build worker did (BI-B5011ACE) — observed live on the
+    // first BI-157DC9B2 gate run, 2026-07-06. Windows keeps the plain form
+    // (`env` is POSIX; win32 routes the build through docker anyway).
+    buildStrategy === "docker-build"
+      ? ["pnpm", "--filter", "web", "typecheck"]
+      : ["env", HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "typecheck"],
     productionBuildCommand,
   ];
   return {
