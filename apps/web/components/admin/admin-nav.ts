@@ -41,12 +41,14 @@ export const ADMIN_FAMILIES: AdminFamily[] = [
     matchPrefixes: [
       "/admin/settings",
       "/admin/reference-data",
+      "/admin/data-stewardship",
       "/admin/business-models",
       "/admin/operating-hours",
     ],
     subItems: [
       { label: "Settings", href: "/admin/settings" },
       { label: "Reference Data", href: "/admin/reference-data" },
+      { label: "Data Stewardship", href: "/admin/data-stewardship" },
       { label: "Business Models", href: "/admin/business-models" },
     ],
   },

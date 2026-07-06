@@ -13,6 +13,7 @@ import {
   parseDedupResolution,
   resolveDedupDecision,
 } from "@/lib/mdm/dedup-gate";
+import { recordAttributeChanges } from "@/lib/mdm/history";
 
 function contactInclude() {
   return {
@@ -123,6 +124,11 @@ export async function PATCH(
       }
     }
 
+    const prior = await prisma.customerContact.findUnique({
+      where: { id },
+      select: { firstName: true, lastName: true, jobTitle: true, phone: true },
+    });
+
     const updated = await prisma.customerContact.update({
       where: { id },
       data: {
@@ -132,6 +138,21 @@ export async function PATCH(
         ...rest,
       },
       include: contactInclude(),
+    });
+
+    // Attribute history (BI-130EF887): the "Ian changed roles" temporal record.
+    await recordAttributeChanges({
+      domain: "customer-contact",
+      entityId: id,
+      before: { ...prior },
+      after: {
+        firstName: updated.firstName,
+        lastName: updated.lastName,
+        jobTitle: updated.jobTitle,
+        phone: updated.phone,
+      },
+      attributes: ["firstName", "lastName", "jobTitle", "phone"],
+      source: "api-patch",
     });
 
     return apiSuccess(updated);

@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 538,
+  "routeCount": 541,
   "routes": [
     {
       "routePath": "/",
@@ -101,6 +101,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/admin/cockpit/page.tsx"
+    },
+    {
+      "routePath": "/admin/data-stewardship",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "data-stewardship"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/data-stewardship/page.tsx"
     },
     {
       "routePath": "/admin/diagnostics",
@@ -6146,6 +6156,29 @@
         "professionKey"
       ],
       "file": "apps/web/app/(shell)/wiki/craft/[professionKey]/page.tsx"
+    },
+    {
+      "routePath": "/wiki/decisions",
+      "kind": "page",
+      "segments": [
+        "wiki",
+        "decisions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/wiki/decisions/page.tsx"
+    },
+    {
+      "routePath": "/wiki/decisions/[interactionId]",
+      "kind": "page",
+      "segments": [
+        "wiki",
+        "decisions",
+        "[interactionId]"
+      ],
+      "dynamicParams": [
+        "interactionId"
+      ],
+      "file": "apps/web/app/(shell)/wiki/decisions/[interactionId]/page.tsx"
     },
     {
       "routePath": "/wiki/edit/[...slug]",

@@ -2,6 +2,7 @@
 
 import { prisma } from "@dpf/db";
 import { normalizeLocalityName } from "@dpf/db/location-normalize";
+import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
 import crypto from "crypto";
 import { STAGE_DEFAULT_PROBABILITY } from "@dpf/validators";
 import { revalidatePath } from "next/cache";
@@ -135,6 +136,13 @@ export async function createCustomerAccount(
       accountId: account.id,
     },
   );
+  // Source lineage (BI-A4B73F87): register where this record came from.
+  await registerCustomerAccountSource({
+    accountId: account.id,
+    sourceSystem: "portal-ui",
+    sourceEntityId: account.id,
+  });
+
   revalidatePath("/customer");
   return { outcome: "created", account };
 }

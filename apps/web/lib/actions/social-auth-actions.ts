@@ -2,6 +2,7 @@
 
 import { prisma } from "@dpf/db";
 import { customerAccountNormalizedColumns, customerContactNormalizedColumns } from "@/lib/mdm/dedup-gate";
+import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
 import * as crypto from "crypto";
 import { verifyPassword, hashPassword } from "@/lib/password";
 import { verifyTempToken, type SocialProfile } from "@/lib/social-auth";
@@ -89,9 +90,15 @@ export async function completeProfileWithSocial(
       await tx.socialIdentity.create({
         data: { provider: profile.provider, providerAccountId: profile.providerAccountId, email: profile.email, contactId: contact.id },
       });
-      return { contactId: contact.id, accountId: account.accountId, accountName: account.name };
+      return { contactId: contact.id, accountId: account.accountId, accountName: account.name, accountRowId: account.id };
     });
-    return { success: true, ...result };
+    await registerCustomerAccountSource({
+      accountId: result.accountRowId,
+      sourceSystem: "social-auth",
+      sourceEntityId: `${profile.provider}:${profile.providerAccountId}`,
+    });
+    const { accountRowId: _ignored, ...publicResult } = result;
+    return { success: true, ...publicResult };
   }
 
   // mode === "join"

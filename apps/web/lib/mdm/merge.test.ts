@@ -27,6 +27,8 @@ function makeTx(rows: Record<string, Record<string, unknown>>): Record<string, D
     ...MERGE_ADAPTERS["customer-account"].softReferences.map((s) => s.model),
     ...MERGE_ADAPTERS["customer-site"].hardRelations.map((s) => s.model),
     ...MERGE_ADAPTERS["customer-site"].softReferences.map((s) => s.model),
+    ...MERGE_ADAPTERS["customer-contact"].hardRelations.map((s) => s.model),
+    ...MERGE_ADAPTERS["customer-contact"].softReferences.map((s) => s.model),
   ]);
   for (const model of models) {
     tx[model] = {
@@ -191,6 +193,36 @@ describe("mergeRecords customer-account", () => {
       expect.objectContaining({
         where: expect.objectContaining({ parentAccountId: "a1", id: { not: "a1" } }),
       }),
+    );
+  });
+});
+
+describe("mergeRecords customer-contact", () => {
+  it("tombstones via isActive+mergedIntoId (no status), repoints identity relations", async () => {
+    const tx = makeTx({
+      c1: { id: "c1", mergedIntoId: null, isActive: true, email: "ian@old.com" },
+      c2: { id: "c2", mergedIntoId: null, isActive: true, email: "ian@emma3d.co.uk" },
+    });
+    tx["socialIdentity"]!.updateMany.mockResolvedValue({ count: 1 });
+    wireTransaction(tx);
+
+    const result = await mergeRecords("customer-contact", "c1", "c2");
+
+    expect(tx["customerContact"]!.update).toHaveBeenCalledWith({
+      where: { id: "c1" },
+      data: { isActive: false, mergedIntoId: "c2" },
+    });
+    expect(result.repointed["socialIdentity.contactId"]).toBe(1);
+  });
+
+  it("rejects an already-merged contact", async () => {
+    const tx = makeTx({
+      c1: { id: "c1", mergedIntoId: "c9", isActive: false },
+      c2: { id: "c2", mergedIntoId: null, isActive: true },
+    });
+    wireTransaction(tx);
+    await expect(mergeRecords("customer-contact", "c1", "c2")).rejects.toThrow(
+      /already-superseded/,
     );
   });
 });
