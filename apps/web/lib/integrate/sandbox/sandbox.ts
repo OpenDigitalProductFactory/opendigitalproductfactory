@@ -191,9 +191,32 @@ export function buildSandboxRootScriptsCopyCommand(
   return `docker exec ${portalContainer} tar -cf - -C /app scripts | docker exec -i ${containerId} tar -xf - -C /workspace`;
 }
 
-export function buildSandboxWorkspaceCleanupCommand(workspace: string = SANDBOX_WORKSPACE): string {
+/**
+ * Stop any running Next.js/Turbopack dev server in the sandbox before the
+ * workspace is mutated. Deleting apps/web/.next out from under a live turbopack
+ * process yanks its persistent cache (.sst files) and wedges it in a retry
+ * storm (~485% CPU) that a container restart does NOT clear — the corrupt cache
+ * lives on the persistent /workspace volume. Each stanza is best-effort so a
+ * container image without a given signal (or with nothing running) is a no-op;
+ * the `sleep` lets the process release file handles before the caller deletes
+ * the tree. Uses only single-quoted patterns so it is safe both under
+ * quotePosixArg (execInSandbox) and under the JSON.stringify exec sites.
+ */
+export function buildSandboxDevServerStopCommand(): string {
   return [
-    `rm -rf ${workspace}/apps/web/node_modules`,
+    "pkill -f 'next dev' 2>/dev/null || true",
+    "pkill -f next-server 2>/dev/null || true",
+    "pkill -f 'filter web dev' 2>/dev/null || true",
+    "sleep 1",
+    "true",
+  ].join("; ");
+}
+
+export function buildSandboxWorkspaceCleanupCommand(workspace: string = SANDBOX_WORKSPACE): string {
+  // Stop the dev server FIRST so the rm below never corrupts a live turbopack
+  // cache (the 2026-07-06 sandbox CPU-storm root cause).
+  return [
+    `${buildSandboxDevServerStopCommand()}; rm -rf ${workspace}/apps/web/node_modules`,
     `${workspace}/apps/web/.next`,
     `${workspace}/apps/web/tsconfig.tsbuildinfo`,
   ].join(" ");
@@ -391,8 +414,22 @@ export async function startSandboxDevServer(containerId: string): Promise<void> 
       `docker exec ${containerId} sh -c "ss -tlnp 2>/dev/null | grep ':3000' || echo none"`,
     );
     if (stdout.trim() !== "none") {
-      console.log("[sandbox] port 3000 already in use — server running");
-      return;
+      // Bound — but a turbopack process wedged on a corrupt cache stays BOUND
+      // while erroring on every request (the ~485% CPU storm). Skipping
+      // relaunch on "bound" alone is why such a wedge never auto-recovered.
+      // Only skip if it is actually SERVING; otherwise kill it and fall
+      // through to a clean relaunch.
+      const healthy = await exec(
+        `docker exec ${containerId} sh -c "wget -qO /dev/null http://127.0.0.1:3000/api/health"`,
+      ).then(() => true).catch(() => false);
+      if (healthy) {
+        console.log("[sandbox] port 3000 already in use — server healthy");
+        return;
+      }
+      console.warn("[sandbox] port 3000 bound but not serving — killing wedged dev server and relaunching");
+      await exec(
+        `docker exec ${containerId} sh -c ${JSON.stringify(buildSandboxDevServerStopCommand())}`,
+      ).catch(() => { /* best-effort; relaunch attempts regardless */ });
     }
   } catch { /* proceed to start */ }
 
