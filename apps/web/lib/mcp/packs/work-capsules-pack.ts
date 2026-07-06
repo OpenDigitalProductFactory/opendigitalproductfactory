@@ -131,6 +131,26 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "claim_backlog_item_for_work",
+    description:
+      "Claim a BacklogItem for work by binding it to the worktree + branch + session you are starting in (soft claim-at-start). Creates or reuses+late-binds the WorkCapsule for the branch and stamps the BI claim so a directly-working agent's BI no longer looks unclaimed to a parallel session. Advisory, NOT a lock: if the BI already has active work elsewhere the call still binds this location but returns a non-blocking conflict — it does not steal the existing claim. Multiple branches per BI are expected and are not a conflict.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "BacklogItem id (BI-*) to claim." },
+        worktreePath: { type: "string", description: "Local worktree path where the work is happening." },
+        branchName: { type: "string", description: "Branch (head) for this work — the capsule is keyed on (repo, branch)." },
+        repositoryFullName: { type: "string", description: "Optional GitHub repository full name; defaults to the platform repo." },
+        baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
+        provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
+        sessionRef: { type: "string", description: "Owner/session id, stored as the capsule executorRef." },
+      },
+      required: ["itemId", "worktreePath", "branchName", "provider", "sessionRef"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
     name: "claim_capsule_scope",
     description: "Claim path/module/package/route/skill/prompt scope for a Work Capsule. Repeated claims refresh the existing scope entry. Rejected with error=scope_conflict if another active Work Capsule already holds an overlapping edit claim — coordinate, claim different scope, or pass force=true to deliberately co-claim.",
     inputSchema: {
@@ -244,6 +264,7 @@ export const workCapsulesPack: ToolPack = {
     create_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_capsule_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
     adopt_worktree: (params, userId, context) => HANDLERS().then((m) => m.adoptWorktreeTool(params, userId, context)),
+    claim_backlog_item_for_work: (params, userId, context) => HANDLERS().then((m) => m.claimBacklogItemForWorkTool(params, userId, context)),
     claim_capsule_scope: (params, userId, context) => HANDLERS().then((m) => m.claimCapsuleScopeTool(params, userId, context)),
     heartbeat_capsule: (params, userId, context) => HANDLERS().then((m) => m.heartbeatCapsuleTool(params, userId, context)),
     update_work_capsule_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
@@ -256,6 +277,7 @@ export const workCapsulesPack: ToolPack = {
     create_work_capsule: ["work_capsule_write"],
     plan_capsule_worktree: ["work_capsule_write"],
     adopt_worktree: ["work_capsule_adopt"],
+    claim_backlog_item_for_work: ["work_capsule_adopt"],
     claim_capsule_scope: ["work_capsule_write"],
     heartbeat_capsule: ["work_capsule_write"],
     update_work_capsule_status: ["work_capsule_write"],

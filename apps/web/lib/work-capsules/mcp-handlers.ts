@@ -27,6 +27,7 @@ import {
 
 import {
   adoptWorktreeCapsule,
+  claimBacklogItemWorkspace,
   claimWorkCapsuleScope,
   createWorkCapsule,
   heartbeatWorkCapsule,
@@ -39,6 +40,7 @@ import {
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
+import { providerToExecutorKind } from "./external-session-capture";
 
 type ToolContext = {
   routeContext?: string;
@@ -330,6 +332,84 @@ export async function adoptWorktreeTool(
     message: `Adopted ${headBranch} as Work Capsule ${capsule.capsuleId}.`,
     data: { capsule },
   };
+}
+
+export async function claimBacklogItemForWorkTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const itemId = stringParam(params, "itemId");
+  const worktreePath = stringParam(params, "worktreePath");
+  const branchName = stringParam(params, "branchName");
+  const provider = stringParam(params, "provider");
+  const sessionRef = stringParam(params, "sessionRef");
+
+  if (!itemId || !worktreePath || !branchName || !provider || !sessionRef) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message: "itemId, worktreePath, branchName, provider, and sessionRef are required.",
+    };
+  }
+
+  const repositoryFullName =
+    stringParam(params, "repositoryFullName") ??
+    process.env.DPF_REPO_FULL_NAME?.trim() ??
+    "OpenDigitalProductFactory/opendigitalproductfactory";
+  const baseBranch = stringParam(params, "baseBranch") ?? "main";
+  const executorKind = providerToExecutorKind(provider);
+
+  try {
+    const result = await claimBacklogItemWorkspace({
+      db: workCapsuleDb(),
+      input: {
+        backlogItemId: itemId,
+        repositoryFullName,
+        headBranch: branchName,
+        worktreePath,
+        baseBranch,
+        executorKind,
+        executorRef: sessionRef,
+      },
+      actor: await actor(userId, context),
+    });
+
+    const base = `Bound ${result.backlogItemId} to ${result.headBranch} (${result.capsuleId}).`;
+    let message: string;
+    if (result.conflict) {
+      const parts: string[] = [];
+      if (result.conflict.backlogClaim) {
+        const age = result.conflict.backlogClaim.claimAgeMinutes;
+        parts.push(
+          `${result.backlogItemId} already has an ACTIVE claim by another session` +
+            (age != null ? ` (${age}m ago)` : "") +
+            " — this call did NOT steal it",
+        );
+      }
+      for (const loc of result.conflict.otherLocations) {
+        parts.push(`also in flight on ${loc.headBranch ?? "?"} (${loc.capsuleId})`);
+      }
+      message =
+        `${base} ADVISORY: ${result.backlogItemId} already has active work elsewhere — ${parts.join("; ")}. ` +
+        "Claim-at-start is a soft signal, not a lock: coordinate with the other session before pushing.";
+    } else {
+      message = `${base} Claim-at-start recorded for this session.`;
+    }
+
+    return {
+      success: true,
+      entityId: result.capsuleId,
+      message,
+      data: result,
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown failure";
+    if (/not found/i.test(detail)) {
+      return { success: false, error: "not_found", message: detail };
+    }
+    throw error;
+  }
 }
 
 export async function claimCapsuleScopeTool(

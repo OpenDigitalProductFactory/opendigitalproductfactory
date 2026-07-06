@@ -897,6 +897,9 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       properties: {
         provider: { type: "string", description: "External development provider, for example claude, codex, or grok" },
         externalSessionId: { type: "string", description: "External thread/session/capsule identifier" },
+        backlogItemId: { type: "string", description: "Optional BI-* to bind the captured Work Capsule to, even without a build (closes the direct-agent binding gap)" },
+        worktreePath: { type: "string", description: "Optional local worktree path — when given with branchName the capsule also records the work location" },
+        branchName: { type: "string", description: "Optional branch (head) for this work — pairs with worktreePath to bind location" },
         buildId: { type: "string", description: "Optional FB-* build id" },
         taskRunId: { type: "string", description: "Optional TaskRun id" },
         routeContext: { type: "string", description: "Route context where the work belongs, usually /build" },
@@ -6568,6 +6571,9 @@ export async function executeTool(
           provider,
           summary,
           actor: { userId, agentId: context?.agentId ?? null, principalId: null },
+          backlogItemId: stringValue("backlogItemId") || null,
+          worktreePath: stringValue("worktreePath") || null,
+          branchName: stringValue("branchName") || null,
         });
       } catch (captureError) {
         console.warn(

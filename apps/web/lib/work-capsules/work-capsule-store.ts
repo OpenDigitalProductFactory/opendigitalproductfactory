@@ -42,6 +42,10 @@ export type CapsuleDb = {
   workCapsuleActivity: {
     create(args: unknown): Promise<any>;
   };
+  backlogItem?: {
+    findFirst(args: unknown): Promise<any>;
+    update(args: unknown): Promise<any>;
+  };
   $transaction?<T>(fn: (tx: CapsuleDb) => Promise<T>): Promise<T>;
 };
 
@@ -70,6 +74,9 @@ type CapsuleAdoptionInput = {
   baseSha?: string | null;
   headSha?: string | null;
   executorKind?: WorkCapsuleExecutorKind | null;
+  executorRef?: string | null;
+  backlogItemId?: string | null;
+  epicId?: string | null;
   scope?: WorkCapsuleScopeInput | null;
 };
 
@@ -231,7 +238,36 @@ export async function adoptWorktreeCapsule(args: {
       archivedAt: null,
     },
   });
-  if (existing) return existing;
+  if (existing) {
+    // Late-bind (BI-7D20BFDF): a branch adopted before its BacklogItem was known
+    // has a null backlogItemId. When a claim now supplies one, bind the existing
+    // capsule instead of leaving the work orphaned — this is what lets a worktree
+    // cut before the BI was chosen still join the BI↔location record.
+    if (args.input.backlogItemId && existing.backlogItemId == null) {
+      const bound = await inTransaction(args.db, async (tx) => {
+        const updated = await tx.workCapsule.update({
+          where: { capsuleId: existing.capsuleId },
+          data: {
+            backlogItemId: args.input.backlogItemId,
+            ...(args.input.epicId && existing.epicId == null ? { epicId: args.input.epicId } : {}),
+            ...(args.input.executorRef && existing.executorRef == null
+              ? { executorRef: args.input.executorRef }
+              : {}),
+          },
+        });
+        await recordActivity(tx, {
+          workCapsuleId: existing.id,
+          kind: "adopted",
+          summary: `Late-bound ${existing.capsuleId} to ${args.input.backlogItemId}`,
+          payload: { backlogItemId: args.input.backlogItemId, lateBind: true },
+          actor: args.actor,
+        });
+        return updated;
+      });
+      return bound;
+    }
+    return existing;
+  }
 
   const now = new Date();
   try {
@@ -244,6 +280,9 @@ export async function adoptWorktreeCapsule(args: {
           source: "external-adoption",
           status: "ready",
           executorKind: args.input.executorKind ?? null,
+          executorRef: args.input.executorRef ?? null,
+          backlogItemId: args.input.backlogItemId ?? null,
+          epicId: args.input.epicId ?? null,
           repositoryFullName: args.input.repositoryFullName,
           baseBranch: args.input.baseBranch ?? "main",
           baseSha: args.input.baseSha ?? null,
@@ -288,6 +327,187 @@ export async function adoptWorktreeCapsule(args: {
     }
     throw error;
   }
+}
+
+// A claim older than this is treated as abandoned (a dead session) and is
+// reclaimable — mirrors STALE_BACKLOG_CLAIM_MS in the direct-build claim gate
+// (mcp-tools.ts triage_backlog_item / status→in-progress). REUSE, do not diverge.
+const STALE_BACKLOG_CLAIM_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * A NON-blocking conflict surfaced by claimBacklogItemWorkspace. The soft
+ * claim-at-start binds the capsule regardless; this metadata advises the caller
+ * that other active work already exists so it can coordinate (it is NOT a lock).
+ */
+export type BacklogWorkspaceConflict = {
+  /** The BacklogItem already carries a fresh active claim held by another session. */
+  backlogClaim: {
+    claimedById: string | null;
+    claimedByAgentId: string | null;
+    claimedAt: Date | null;
+    claimAgeMinutes: number | null;
+  } | null;
+  /** Other non-archived capsules on the same BI, on a DIFFERENT branch/session. */
+  otherLocations: Array<{
+    capsuleId: string;
+    headBranch: string | null;
+    worktreePath: string | null;
+    executorRef: string | null;
+    leaseHolderPrincipalId: string | null;
+  }>;
+};
+
+/**
+ * Soft claim-at-start (BI-7D20BFDF): bind a BacklogItem to the location + session
+ * that is starting work on it, so a directly-working agent's BI no longer looks
+ * unclaimed to a parallel session. Creates (or reuses + late-binds) the
+ * WorkCapsule for (repositoryFullName, headBranch) and stamps the BI claim
+ * fields, FOLLOWING the existing 12h-stale claim convention.
+ *
+ * This is advisory, not a hard lock (per the WWMD kernel decision): an existing
+ * FRESH claim held by a DIFFERENT agent/session is NOT overwritten and is
+ * returned as a non-blocking `conflict` — but the capsule is still bound so the
+ * work is tracked. Multiple capsules per BI (one per branch) are expected and are
+ * NOT themselves a conflict.
+ */
+export async function claimBacklogItemWorkspace(args: {
+  db: CapsuleDb;
+  input: {
+    backlogItemId: string;
+    repositoryFullName: string;
+    headBranch: string;
+    worktreePath: string;
+    baseBranch?: string | null;
+    executorKind?: WorkCapsuleExecutorKind | null;
+    executorRef?: string | null;
+    title?: string;
+    objective?: string;
+  };
+  actor: WorkCapsuleActor;
+  now?: Date;
+}): Promise<{
+  capsuleId: string;
+  backlogItemId: string;
+  headBranch: string;
+  worktreePath: string;
+  claimed: boolean;
+  conflict: BacklogWorkspaceConflict | null;
+}> {
+  if (!args.db.backlogItem) {
+    throw new Error("claimBacklogItemWorkspace requires a db with backlogItem access");
+  }
+  const now = args.now ?? new Date();
+
+  // Resolve the BacklogItem by semantic itemId (BI-*) or cuid; fail clearly if absent.
+  const item = await args.db.backlogItem.findFirst({
+    where: { OR: [{ itemId: args.input.backlogItemId }, { id: args.input.backlogItemId }] },
+    select: {
+      id: true,
+      itemId: true,
+      epicId: true,
+      claimStatus: true,
+      claimedById: true,
+      claimedByAgentId: true,
+      claimedAt: true,
+    },
+  });
+  if (!item) {
+    throw new Error(`BacklogItem ${args.input.backlogItemId} not found`);
+  }
+
+  // Create or reuse+late-bind the capsule bound to BI + location + session.
+  const capsule = await adoptWorktreeCapsule({
+    db: args.db,
+    input: {
+      title: args.input.title ?? `Work on ${item.itemId}`,
+      objective: args.input.objective ?? `Claim-at-start binding for ${item.itemId}`,
+      repositoryFullName: args.input.repositoryFullName,
+      headBranch: args.input.headBranch,
+      worktreePath: args.input.worktreePath,
+      baseBranch: args.input.baseBranch ?? "main",
+      backlogItemId: item.itemId,
+      epicId: item.epicId ?? null,
+      executorKind: args.input.executorKind ?? null,
+      executorRef: args.input.executorRef ?? null,
+    },
+    actor: args.actor,
+  });
+
+  // Conflict 1: the BI already carries a FRESH active claim held by a different
+  // session. Do NOT overwrite it (soft claim) — surface it as advisory.
+  const claimAgeMs = item.claimedAt ? now.getTime() - new Date(item.claimedAt).getTime() : Infinity;
+  const claimIsFresh = claimAgeMs < STALE_BACKLOG_CLAIM_MS;
+  const ownedByCaller =
+    (item.claimedById != null && item.claimedById === args.actor.userId) ||
+    (item.claimedByAgentId != null && item.claimedByAgentId === args.actor.agentId);
+  const activelyClaimedByOther =
+    item.claimStatus === "active" &&
+    claimIsFresh &&
+    !ownedByCaller &&
+    (item.claimedById != null || item.claimedByAgentId != null);
+
+  // Conflict 2: another non-archived capsule on the SAME BI, on a different branch
+  // or session. Multiple branches per BI are fine, but we still list them so the
+  // caller can see the parallel work.
+  const otherCapsules = await args.db.workCapsule.findMany({
+    where: {
+      backlogItemId: item.itemId,
+      archivedAt: null,
+      capsuleId: { not: capsule.capsuleId },
+    },
+    select: {
+      capsuleId: true,
+      headBranch: true,
+      worktreePath: true,
+      executorRef: true,
+      leaseHolderPrincipalId: true,
+    },
+  });
+
+  let claimed = false;
+  if (!activelyClaimedByOther) {
+    // Acquire (or refresh) the BI claim for this session — the stale/self case.
+    await args.db.backlogItem.update({
+      where: { id: item.id },
+      data: {
+        claimStatus: "active",
+        claimedById: args.actor.userId,
+        claimedByAgentId: args.actor.agentId,
+        claimedAt: now,
+      },
+    });
+    claimed = true;
+  }
+
+  const hasConflict = activelyClaimedByOther || (otherCapsules?.length ?? 0) > 0;
+  const conflict: BacklogWorkspaceConflict | null = hasConflict
+    ? {
+        backlogClaim: activelyClaimedByOther
+          ? {
+              claimedById: item.claimedById,
+              claimedByAgentId: item.claimedByAgentId,
+              claimedAt: item.claimedAt ?? null,
+              claimAgeMinutes: Number.isFinite(claimAgeMs) ? Math.round(claimAgeMs / 60000) : null,
+            }
+          : null,
+        otherLocations: (otherCapsules ?? []).map((c) => ({
+          capsuleId: c.capsuleId,
+          headBranch: c.headBranch ?? null,
+          worktreePath: c.worktreePath ?? null,
+          executorRef: c.executorRef ?? null,
+          leaseHolderPrincipalId: c.leaseHolderPrincipalId ?? null,
+        })),
+      }
+    : null;
+
+  return {
+    capsuleId: capsule.capsuleId,
+    backlogItemId: item.itemId,
+    headBranch: capsule.headBranch ?? args.input.headBranch,
+    worktreePath: capsule.worktreePath ?? args.input.worktreePath,
+    claimed,
+    conflict,
+  };
 }
 
 async function hasWorkspaceCollision(
