@@ -32,6 +32,9 @@ vi.mock("@dpf/db", () => ({
       findMany: vi.fn(),
       deleteMany: vi.fn(),
     },
+    adapterRunTelemetry: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -57,6 +60,9 @@ describe("agent coworker thread scoping", () => {
       },
     });
     mockPrisma.user.findUnique.mockResolvedValue({ id: "user-1" });
+    // loadProviderInfo now runs inside the thread-snapshot path; with no telemetry
+    // rows it falls back to each message's persisted providerId/modelId.
+    mockPrisma.adapterRunTelemetry.findMany.mockResolvedValue([]);
   });
 
   it("builds a page-scoped context key from the route", () => {
