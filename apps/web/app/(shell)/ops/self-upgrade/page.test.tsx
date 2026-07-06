@@ -81,6 +81,16 @@ const baseStatus = {
   deployedShaSource: "unknown" as const,
   targetSha: null,
   isFresh: false,
+  releaseBatch: {
+    applicable: true,
+    eligible: true,
+    reason: "tally-uncomputable" as const,
+    pendingCount: null,
+    minPendingPrs: 10,
+    maxWaitHours: 168,
+    oldestPendingAt: null,
+    summary: "Pending-update tally unavailable — routine upgrades proceed without batching.",
+  },
   latestRun: null,
   quiescence: {
     level: "normal" as const,

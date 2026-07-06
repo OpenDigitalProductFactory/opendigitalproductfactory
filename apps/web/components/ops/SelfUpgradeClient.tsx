@@ -102,6 +102,17 @@ type Props = {
   deployedShaSource?: ImageVersionSource;
   targetSha: string | null;
   isFresh: boolean;
+  /** Release-batch tally: routine upgrades wait for a batch of merged updates. */
+  releaseBatch?: {
+    applicable: boolean;
+    eligible: boolean;
+    reason: string;
+    pendingCount: number | null;
+    minPendingPrs: number;
+    maxWaitHours: number;
+    oldestPendingAt: string | null;
+    summary: string;
+  } | null;
   latestRun: LatestRun | null;
   quiescence?: QuiescenceActivity | null;
   admission?: AdmissionSnapshot | null;
@@ -265,6 +276,7 @@ export default function SelfUpgradeClient({
   deployedShaSource,
   targetSha,
   isFresh,
+  releaseBatch,
   latestRun,
   quiescence,
   admission,
@@ -927,6 +939,18 @@ export default function SelfUpgradeClient({
             {!isFresh && targetSha && deployedShaSource !== "content-hash" && (
               <div className="text-xs text-[var(--dpf-warning)]">Update available</div>
             )}
+            {!isFresh &&
+              targetSha &&
+              releaseBatch?.applicable &&
+              !releaseBatch.eligible && (
+                <div className="text-xs text-[var(--dpf-muted)]" data-release-batch="waiting">
+                  Batching updates:{" "}
+                  {releaseBatch.pendingCount ?? "?"} of {releaseBatch.minPendingPrs} merged
+                  updates accumulated. Routine upgrades deploy in batches so the portal
+                  isn&apos;t paused for every change; &quot;Upgrade now&quot; deploys them
+                  immediately.
+                </div>
+              )}
           </>
         )}
       </div>

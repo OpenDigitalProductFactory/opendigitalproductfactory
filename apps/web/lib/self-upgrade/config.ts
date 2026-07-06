@@ -1,5 +1,9 @@
 import { prisma } from "@dpf/db";
 import { DEFAULT_COOLDOWN_MINUTES } from "./cooldown";
+import {
+  DEFAULT_BATCH_MIN_PENDING_PRS,
+  DEFAULT_BATCH_MAX_WAIT_HOURS,
+} from "./release-batch";
 import { isWithinWindows, nextWindowStartForWindows } from "./windows-eval";
 
 export type MaintenanceWindow = {
@@ -35,6 +39,21 @@ export type SelfUpgradeConfig = {
    * {@link DEFAULT_COOLDOWN_MINUTES}.
    */
   cooldownMinutes: number;
+  /**
+   * Release batching: routine (scheduled / agent-requested) upgrades wait
+   * until at least this many merged upstream PRs have accumulated since the
+   * deployed lineage marker, so the portal is not drained once per merged PR.
+   * <=1 disables batching (any new commit upgrades). Operator manual and
+   * force triggers are never batch-gated.
+   */
+  batchMinPendingPrs: number;
+  /**
+   * Bounded-staleness valve for release batching: once the OLDEST pending
+   * merged commit has waited this many hours, the batch becomes eligible even
+   * below `batchMinPendingPrs`, so low-traffic installs still converge.
+   * 0 disables the valve (wait for a full batch or an operator trigger).
+   */
+  batchMaxWaitHours: number;
   healthTarget: number;
   maintenanceWindows: MaintenanceWindow[];
   hostInstallPath?: string;
@@ -99,6 +118,8 @@ const DEFAULTS: SelfUpgradeConfig = {
   channel: "stable",
   checkIntervalHours: 24,
   cooldownMinutes: DEFAULT_COOLDOWN_MINUTES,
+  batchMinPendingPrs: DEFAULT_BATCH_MIN_PENDING_PRS,
+  batchMaxWaitHours: DEFAULT_BATCH_MAX_WAIT_HOURS,
   healthTarget: 100,
   maintenanceWindows: [],
   sourceMode: "upstream",
@@ -174,6 +195,18 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
       typeof cfg.cooldownMinutes === "number" && cfg.cooldownMinutes >= 0
         ? cfg.cooldownMinutes
         : DEFAULTS.cooldownMinutes,
+    batchMinPendingPrs:
+      typeof cfg.batchMinPendingPrs === "number" &&
+      Number.isFinite(cfg.batchMinPendingPrs) &&
+      cfg.batchMinPendingPrs >= 0
+        ? Math.floor(cfg.batchMinPendingPrs)
+        : DEFAULTS.batchMinPendingPrs,
+    batchMaxWaitHours:
+      typeof cfg.batchMaxWaitHours === "number" &&
+      Number.isFinite(cfg.batchMaxWaitHours) &&
+      cfg.batchMaxWaitHours >= 0
+        ? cfg.batchMaxWaitHours
+        : DEFAULTS.batchMaxWaitHours,
     healthTarget:
       typeof cfg.healthTarget === "number" &&
       cfg.healthTarget >= 0 &&

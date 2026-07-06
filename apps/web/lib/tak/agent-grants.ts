@@ -580,6 +580,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // out-of-band rather than waiting up to 10 minutes (BI-063BDF1B Phase 5).
   trigger_contributor_inventory_sync: ["admin_write"],
   request_self_upgrade: ["admin_write"],
+  get_self_upgrade_queue_status: ["release_plan_read"],
 
   // Design intelligence (read-only references)
   search_design_intelligence: ["file_read"],
