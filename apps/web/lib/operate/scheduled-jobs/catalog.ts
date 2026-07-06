@@ -218,8 +218,8 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     name: "MDM Data Steward sweep",
     purpose:
       "Runs the master-data quality sweep and lets the Data Steward coworker auto-resolve confident account duplicates (full autonomy incl. fuzzy, with audit trail + unmerge undo + per-run cap + conflicting-domain guardrail). If it stops, duplicates and stale customer records accumulate unreviewed. Editable so an operator can pause or run-now the autonomous steward.",
-    cron: "0 5 * * *",
-    cadence: "Daily at 05:00",
+    cron: "50 4 * * *",
+    cadence: "Daily at 04:50",
     category: "editable",
     tracksRunData: false,
     runNowEvent: "ops/mdm-steward.requested",

@@ -5,7 +5,7 @@
     {
       "professionKey": "data-architect",
       "label": "Data Architect",
-      "roles": ["build-data-architect", "data-architect"],
+      "roles": ["build-data-architect", "data-architect", "data-steward"],
       "contextSlugs": ["data-model", "data-security"],
       "sources": [
         {
