@@ -76,6 +76,80 @@ export function coworkerSelfTaskId(agentId: string, userId: string): string {
   return `self-${agentId}-${userId}`;
 }
 
+/** True when a taskId is a coworker self-task (see {@link coworkerSelfTaskId}). */
+export function isCoworkerSelfTaskId(taskId: string): boolean {
+  return taskId.startsWith("self-");
+}
+
+/**
+ * A procedural tool the scheduled runner force-executes as a LAST-RESORT
+ * guarantee when the coworker's own agentic loop finished the self-task without
+ * calling it (e.g. a weak model fabricated "Done" with zero tool calls). This is
+ * the same "required procedural tool" mechanism the discovery-triage daily task
+ * uses — extended to coworker self-tasks so an Assertive coworker never leaves
+ * its page empty.
+ */
+export type CoworkerSelfTaskProceduralTool = {
+  /** Tool name to force, resolved via governed execute. */
+  name: string;
+  /**
+   * Args for the forced fallback call. These are honest, generic placeholders —
+   * the fallback only ever fires when the page is otherwise empty, and the
+   * coworker (on a capable model) produces the real, contextual artifact itself.
+   */
+  args: Record<string, unknown>;
+  /**
+   * Recency guard for the forced fallback. The self-task's artifact tool (e.g.
+   * create_marketing_campaign_brief → a plain prisma.create with NO write-time
+   * dedup) would otherwise create a duplicate placeholder on every tick. Returns
+   * true when a fresh artifact already exists — the coworker just created one
+   * this run, or a recent run did — so the fallback MUST be skipped.
+   */
+  hasRecentArtifact: () => Promise<boolean>;
+};
+
+// A brief created within this window counts as "recent", so the forced fallback
+// stands down. Wider than the daily assertive cadence so a single placeholder is
+// never re-created tick-over-tick; the coworker's own (capable-model) briefs land
+// well inside it and suppress the fallback entirely.
+const RECENT_CAMPAIGN_BRIEF_WINDOW_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
+/**
+ * Required-tool guarantee for a coworker self-task, keyed by agentId. Null when
+ * the coworker's self-task has no procedural guarantee (the loop's own output is
+ * sufficient). Mirrors getRequiredProceduralToolForScheduledTask for the curated
+ * self-task registry above.
+ */
+export function coworkerSelfTaskRequiredTool(
+  agentId: string,
+): CoworkerSelfTaskProceduralTool | null {
+  if (agentId === "marketing-specialist") {
+    return {
+      name: "create_marketing_campaign_brief",
+      // Honest, generic placeholder. Only reached when the marketing page has no
+      // recent brief AND the coworker's loop failed to produce one — so a clearly
+      // provisional brief beats an empty Campaigns page. required: title, objective.
+      args: {
+        title: "Acquisition campaign brief (needs refresh)",
+        objective:
+          "Provisional acquisition brief created automatically because the Campaigns page had no recent brief. Refresh with a segment-specific objective, audience, and channel mix.",
+        notes:
+          "Auto-generated fallback so the Campaigns page is not empty. The Marketing Strategist should replace this with a grounded, ICP-specific brief on its next run.",
+      },
+      hasRecentArtifact: async () => {
+        const since = new Date(Date.now() - RECENT_CAMPAIGN_BRIEF_WINDOW_MS);
+        const recent = await prisma.marketingCampaignBrief.findFirst({
+          where: { createdAt: { gte: since } },
+          select: { briefId: true },
+        });
+        return recent !== null;
+      },
+    };
+  }
+
+  return null;
+}
+
 export type ReconcileSelfTaskResult =
   | { ok: true; action: "none" | "removed" | "scheduled"; taskId?: string; schedule?: string };
 
