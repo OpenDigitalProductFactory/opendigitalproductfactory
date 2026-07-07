@@ -194,6 +194,40 @@ describe("governedExecuteTool — happy path", () => {
     expect(auditRows[0]!.agentId).toBe("AGT-100");
   });
 
+  it("forwards caller attribution (callerClient/apiTokenId/authSource) into executeTool (BI-0EEBA669)", async () => {
+    // Regression: governedExecuteTool built the executeTool context from only
+    // {agentId, threadId, routeContext, taskRunId, featureBuildId} and dropped
+    // the three caller-attribution fields, so every principle_decide consult
+    // recorded an all-null caller and the decision ledger could not match a
+    // decision back to the client/thread that made it.
+    await governedExecuteTool({
+      toolName: "query_backlog",
+      rawParams: { status: "open" },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      context: {
+        agentId: "AGT-100",
+        threadId: "thread-9",
+        callerClient: "claude-code/2.1",
+        apiTokenId: "tok_xyz",
+        authSource: "pat",
+      },
+      source: "external-jsonrpc",
+    });
+
+    expect(executeMock).toHaveBeenCalledWith(
+      "query_backlog",
+      { status: "open" },
+      "user-1",
+      expect.objectContaining({
+        callerClient: "claude-code/2.1",
+        apiTokenId: "tok_xyz",
+        authSource: "pat",
+        threadId: "thread-9",
+      }),
+    );
+  });
+
   it("propagates the source field unchanged for each transport", async () => {
     for (const source of ["rest", "jsonrpc", "external-jsonrpc", "agentic-loop"] as const) {
       auditRows.length = 0;
