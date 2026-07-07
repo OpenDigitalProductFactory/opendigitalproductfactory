@@ -50,6 +50,48 @@ function listTimeZones(current: string, detected: string | null): string[] {
   return zones;
 }
 
+/**
+ * The current UTC offset for a zone as a display string ("UTC−05:00") plus its
+ * signed minutes, so options can be sorted by offset like a conventional picker.
+ */
+function zoneOffset(zone: string): { label: string; minutes: number } {
+  try {
+    const name =
+      new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longOffset" })
+        .formatToParts(new Date())
+        .find((p) => p.type === "timeZoneName")?.value ?? "GMT";
+    const m = name.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+    let minutes = 0;
+    if (m) {
+      const sign = m[1] === "-" ? -1 : 1;
+      minutes = sign * (parseInt(m[2], 10) * 60 + parseInt(m[3] ?? "0", 10));
+    }
+    const hh = String(Math.floor(Math.abs(minutes) / 60)).padStart(2, "0");
+    const mm = String(Math.abs(minutes) % 60).padStart(2, "0");
+    const body = minutes === 0 ? "±00:00" : `${minutes < 0 ? "−" : "+"}${hh}:${mm}`;
+    return { label: `UTC${body}`, minutes };
+  } catch {
+    return { label: "UTC±00:00", minutes: 0 };
+  }
+}
+
+type ZoneOption = { value: string; label: string; minutes: number };
+
+/**
+ * Turn the raw IANA catalog into conventional picker options — each labelled
+ * "(UTC−06:00) America/Chicago" (offset prefix + de-underscored name) and ordered
+ * by offset, so the operator scans a familiar list instead of raw zone ids in
+ * "Africa/Abidjan first" alphabetical order.
+ */
+function buildZoneOptions(current: string, detected: string | null): ZoneOption[] {
+  return listTimeZones(current, detected)
+    .map((z) => {
+      const { label, minutes } = zoneOffset(z);
+      return { value: z, label: `(${label}) ${z.replace(/_/g, " ")}`, minutes };
+    })
+    .sort((a, b) => a.minutes - b.minutes || a.value.localeCompare(b.value));
+}
+
 /** The browser's own timezone — the sensible default a layman shouldn't have to type. */
 function detectBrowserTimeZone(): string | null {
   try {
@@ -76,7 +118,7 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
   const [tz, setTz] = useState<string>(
     timezone && timezone !== "UTC" ? timezone : detected ?? timezone,
   );
-  const zones = useMemo(() => listTimeZones(tz, detected), [tz, detected]);
+  const zones = useMemo(() => buildZoneOptions(tz, detected), [tz, detected]);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -147,8 +189,8 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
             className="px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm"
           >
             {zones.map((z) => (
-              <option key={z} value={z} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
-                {z}
+              <option key={z.value} value={z.value} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                {z.label}
               </option>
             ))}
           </select>
