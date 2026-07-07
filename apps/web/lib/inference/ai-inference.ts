@@ -45,6 +45,11 @@ import "../routing/transcription-adapter"; // EP-INF-009c: registers "transcript
 import "../routing/async-adapter"; // EP-INF-009d: registers "async" adapter
 import "../routing/cli-adapter"; // anthropic-sub: registers "claude-cli" adapter
 import "../routing/codex-cli-adapter"; // codex: registers "codex-cli" adapter
+import {
+  acquireInferenceSlot,
+  currentInferenceOrigin,
+  engineKeyForProvider,
+} from "./inference-admission";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -567,6 +572,17 @@ export async function callProvider(
     selector !== null
       ? selector.kind
       : `legacy:${typeof executionAdapterRaw === "string" ? executionAdapterRaw : "unknown"}`;
+  // Admission gate: bound concurrent inference per engine so a fleet of
+  // autonomous coworkers can't overload a scarce backend (local model ≈ 1-2
+  // concurrent before latency collapses; remote = provider rate limit / cost).
+  // Interactive turns take priority over autonomous/background work, so a human
+  // waiting on a reply never queues behind a scheduled brief. Held only across
+  // the actual inference call, released in `finally`. See inference-admission.ts.
+  const engineKey = engineKeyForProvider(providerId);
+  const releaseInferenceSlot = await acquireInferenceSlot(engineKey, currentInferenceOrigin(), {
+    providerId,
+    modelId,
+  });
   let result;
   try {
     result = await adapter.execute({
@@ -619,6 +635,8 @@ export async function callProvider(
       });
     }
     throw err;
+  } finally {
+    releaseInferenceSlot();
   }
 
   void clearProviderCapacityStatus({ providerId, source: "api" }).catch((capacityErr) => {
