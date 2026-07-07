@@ -166,6 +166,30 @@ function formatDuration(start: Date | string, end: Date | string): string {
   return `${minutes}m ${seconds}s`;
 }
 
+/**
+ * Median wall-clock duration (ms) of past *successful* upgrade runs — the basis
+ * for estimating when an in-flight run will finish. Median, not mean, so one
+ * pathologically long run doesn't drag the estimate out. Returns null when no
+ * completed run exists to learn from (first-ever upgrade shows no estimate).
+ */
+function estimateRunDurationMs(history: LatestRun[] | undefined): number | null {
+  if (!history || history.length === 0) return null;
+  const durations = history
+    .filter((r) => r.status === "succeeded" && r.startedAt && r.completedAt)
+    .map(
+      (r) =>
+        new Date(r.completedAt as string | Date).getTime() -
+        new Date(r.startedAt as string | Date).getTime(),
+    )
+    .filter((ms) => ms > 0)
+    .sort((a, b) => a - b);
+  if (durations.length === 0) return null;
+  const mid = Math.floor(durations.length / 2);
+  return durations.length % 2 === 0
+    ? Math.round((durations[mid - 1] + durations[mid]) / 2)
+    : durations[mid];
+}
+
 function approxWait(ms: number | null): string | null {
   if (ms == null || ms <= 0) return null;
   if (!Number.isFinite(ms)) return "indefinite";
@@ -329,6 +353,16 @@ export default function SelfUpgradeClient({
   // or the portal is draining/swapping for the swap.
   const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
   const upgradeInFlight = queuedRun || latestRun?.status === "running" || draining;
+
+  // Once a run is actually running, project when it should finish from the
+  // median duration of past successful runs, anchored to this run's start. Null
+  // until there's history to learn from or until the run is running with a
+  // start time. Rendered on the "Started:" line as the estimated finish clock.
+  const estimatedDurationMs = estimateRunDurationMs(history);
+  const estimatedCompletionAt =
+    latestRun?.status === "running" && latestRun.startedAt && estimatedDurationMs != null
+      ? new Date(latestRun.startedAt).getTime() + estimatedDurationMs
+      : null;
 
   // The manual trigger only *queues* an upgrade: the server action returns
   // `{ queued: true }` in well under a second, but the Inngest worker still has
@@ -1087,8 +1121,19 @@ export default function SelfUpgradeClient({
             <div className="text-xs text-[var(--dpf-muted)]">
               Started:{" "}
               <LocalTime className="font-mono" value={latestRun.startedAt} />
-              {latestRun.completedAt && (
+              {latestRun.completedAt ? (
                 <> · {formatDuration(latestRun.startedAt, latestRun.completedAt)}</>
+              ) : (
+                estimatedCompletionAt != null && (
+                  <>
+                    {" · est. done "}
+                    <LocalTime
+                      className="font-mono"
+                      value={estimatedCompletionAt}
+                      mode="time"
+                    />
+                  </>
+                )
               )}
             </div>
           ) : (
