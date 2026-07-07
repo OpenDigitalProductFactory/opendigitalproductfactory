@@ -16,6 +16,12 @@
 
 import { prisma } from "@dpf/db";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import {
+  PROACTIVITY_FACT_CATEGORY,
+  PROACTIVITY_OVERRIDE_FACT_PREFIX,
+  persistProactivityFact,
+} from "@/lib/proactivity/proactivity-override-preferences";
 import { SCHEDULING_MAP } from "@/lib/operate/scheduled-jobs/scheduling-map";
 import { occupiedTicks, deconflictCron } from "@/lib/operate/scheduled-jobs/scheduling-allocator";
 import { computeNextCronRun } from "@/lib/operate/cron-next-run";
@@ -37,6 +43,14 @@ export type CoworkerSelfTask = {
     assertive: string;
   };
 };
+
+/**
+ * Stable documentId the Documentation Specialist self-task upserts. A fixed id
+ * makes the refresh idempotent: doc_save updates this one overview (appending a
+ * version) instead of creating a fresh Document every run. Declared before the
+ * registry so the prompt template can reference it at module load.
+ */
+export const DOCS_HEALTH_DOCUMENT_ID = "DOC-COWORKER-DOCS-HEALTH";
 
 /**
  * Registry of coworkers that self-drive when their Proactivity is turned up.
@@ -67,6 +81,73 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
       // allocator is unlikely to collide, and deconflictCron shifts it if it does.
       balanced: "7 14 * * 1",
       assertive: "7 14 * * *",
+    },
+  },
+
+  // Digital Product Estate Specialist keeps a current estate-posture knowledge
+  // article on /inventory. This is a DISTINCT artifact from its existing
+  // discovery-taxonomy-gap-triage-daily autonomy (that files backlog gaps; this
+  // publishes a human-readable posture summary). A knowledge article is an
+  // internal reference doc — benign if the model produces a generic one — which
+  // is why this coworker qualifies where CRM/HR/EA coworkers (whose write tools
+  // create business-fact rows) do not. registry_write is already granted.
+  "inventory-specialist": {
+    title: "Refresh the estate-posture knowledge article",
+    prompt: [
+      "You are running as a scheduled, autonomous task — no human is watching this",
+      "turn, so finish the work rather than asking questions.",
+      "",
+      "Goal: keep a current estate-posture knowledge article on the Discovery /",
+      "Inventory surface so the estate's health is legible without a human asking.",
+      "Steps:",
+      "1. Review the real discovered estate available to you (posture, freshness,",
+      "   attribution confidence, support/version risks) using your read tools.",
+      "2. Search existing knowledge articles first (search_knowledge_base). If there",
+      "   is NO recent estate-posture article, create ONE with create_knowledge_article:",
+      "   a concise reference article (category 'reference') titled for the estate",
+      "   posture, summarizing the top risks and what needs review, grounded ONLY in",
+      "   real discovered evidence.",
+      "3. If a recent posture article already exists, do NOT duplicate it — refresh",
+      "   the assessment only if the estate has materially changed, otherwise stop.",
+      "Do not invent products, vendors, or numbers; cite only real discovered data.",
+    ].join("\n"),
+    routeContext: "/inventory",
+    cadence: {
+      // Weekly (Tue) and twice-weekly (Tue+Fri) at 15:31 UTC. Knowledge does not
+      // need a daily refresh, so even Assertive stays sub-daily — conservative by
+      // design (BI-E962B9CD: prefer Balanced-weekly, daily only where useful).
+      balanced: "31 15 * * 2",
+      assertive: "31 15 * * 2,5",
+    },
+  },
+
+  // Documentation Specialist keeps a single living "documentation health" overview
+  // document fresh on the Workspace documents surface. doc_save UPSERTS by a stable
+  // documentId, so refreshing this overview never accumulates duplicates — it just
+  // appends a new version. document_write is already granted.
+  "doc-specialist": {
+    title: "Refresh the documentation-health overview",
+    prompt: [
+      "You are running as a scheduled, autonomous task — no human is watching this",
+      "turn, so finish the work rather than asking questions.",
+      "",
+      "Goal: keep ONE living documentation-health overview document current so the",
+      "Workspace documents surface reflects real doc coverage and gaps. Steps:",
+      "1. Review the real documentation available to you (doc_search, and the project",
+      "   docs you can read) to assess coverage, staleness, and structural gaps.",
+      `2. Refresh the SAME overview document by calling doc_save with documentId`,
+      `   "${DOCS_HEALTH_DOCUMENT_ID}" (a stable id — this UPDATES the one overview,`,
+      "   it does NOT create a new document each run): documentKind 'overview',",
+      "   contentFormat 'markdown', a contentText summary of what is well-documented,",
+      "   what is stale, and the top 3 documentation gaps to close next.",
+      "Ground every claim in real docs; do not invent documents or coverage numbers.",
+    ].join("\n"),
+    routeContext: "/workspace/documents",
+    cadence: {
+      // Weekly (Wed) and twice-weekly (Wed+Sat) at 16:43 UTC. Documentation health
+      // changes slowly, so Assertive stays sub-daily.
+      balanced: "43 16 * * 3",
+      assertive: "43 16 * * 3,6",
     },
   },
 };
@@ -114,6 +195,12 @@ export type CoworkerSelfTaskProceduralTool = {
 // well inside it and suppress the fallback entirely.
 const RECENT_CAMPAIGN_BRIEF_WINDOW_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 
+// Recency windows for the sub-daily self-tasks. Each is wider than that
+// coworker's Assertive cadence gap (twice-weekly) so a single placeholder is
+// never re-created between two consecutive runs.
+const RECENT_KNOWLEDGE_ARTICLE_WINDOW_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
+const RECENT_DOCS_OVERVIEW_WINDOW_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
+
 /**
  * Required-tool guarantee for a coworker self-task, keyed by agentId. Null when
  * the coworker's self-task has no procedural guarantee (the loop's own output is
@@ -141,6 +228,58 @@ export function coworkerSelfTaskRequiredTool(
         const recent = await prisma.marketingCampaignBrief.findFirst({
           where: { createdAt: { gte: since } },
           select: { briefId: true },
+        });
+        return recent !== null;
+      },
+    };
+  }
+
+  if (agentId === "inventory-specialist") {
+    return {
+      name: "create_knowledge_article",
+      // Honest, provisional placeholder — only reached when the estate surface has
+      // no recent posture article AND the coworker's loop failed to produce one.
+      // required: title, body. category defaults to 'reference'.
+      args: {
+        title: "Estate posture summary (needs refresh)",
+        body:
+          "Provisional estate-posture article created automatically because the Discovery/Inventory surface had no recent posture summary. The Digital Product Estate Specialist should replace this with a grounded assessment of real discovered posture, freshness, and top risks on its next run.",
+        category: "reference",
+      },
+      hasRecentArtifact: async () => {
+        const since = new Date(Date.now() - RECENT_KNOWLEDGE_ARTICLE_WINDOW_MS);
+        const recent = await prisma.knowledgeArticle.findFirst({
+          where: { createdAt: { gte: since } },
+          select: { articleId: true },
+        });
+        return recent !== null;
+      },
+    };
+  }
+
+  if (agentId === "doc-specialist") {
+    return {
+      name: "doc_save",
+      // Upsert by the stable overview id — the fallback refreshes the SAME document
+      // (appending a version) rather than creating a duplicate. required by the
+      // store: title, documentKind, contentFormat, contentText.
+      args: {
+        documentId: DOCS_HEALTH_DOCUMENT_ID,
+        title: "Documentation health overview (needs refresh)",
+        documentKind: "overview",
+        contentFormat: "markdown",
+        contentText:
+          "# Documentation health overview\n\nProvisional overview created automatically because no recent documentation-health summary existed. The Documentation Specialist should replace this with a grounded assessment of coverage, staleness, and the top documentation gaps to close next.",
+        summary: "Auto-generated placeholder documentation-health overview.",
+      },
+      hasRecentArtifact: async () => {
+        // doc_save upserts by DOCS_HEALTH_DOCUMENT_ID, so duplication is already
+        // impossible; this simply stands the fallback down when the coworker (or a
+        // recent run) already refreshed the overview this window.
+        const since = new Date(Date.now() - RECENT_DOCS_OVERVIEW_WINDOW_MS);
+        const recent = await prisma.document.findFirst({
+          where: { documentId: DOCS_HEALTH_DOCUMENT_ID, updatedAt: { gte: since } },
+          select: { id: true },
         });
         return recent !== null;
       },
@@ -232,4 +371,152 @@ export async function reconcileCoworkerSelfTask(
   });
 
   return { ok: true, action: "scheduled", taskId, schedule };
+}
+
+// ─── Toggle ⇆ self-task convergence (desync self-heal, BI-E962B9CD) ──────────
+//
+// reconcileCoworkerSelfTask only fires on SAVE (saveCoworkerProactivityPreference).
+// That leaves two ways the Proactivity toggle and the scheduled self-task drift
+// apart, both observed live:
+//   A. A coworker was set to Balanced/Assertive BEFORE it had a registry entry
+//      (or before the fact was ever bridged) — the fact exists but no task does,
+//      and the coworker sits idle despite the UI showing it working.
+//   B. A self-task keeps running after its backing Proactivity fact disappeared
+//      (the Marketing Strategist's fact went missing while its daily task still
+//      ran) — the toggle silently lies about what the coworker is doing.
+// The periodic sweep below converges both directions from the UserFact, which is
+// the operator's expressed intent. It is additive and non-destructive: it creates
+// missing tasks, deactivates tasks a now-quiet toggle should stop, and — for an
+// orphaned task with no fact — RESTORES the toggle from the task's cadence rather
+// than silently stopping the coworker.
+
+const PROACTIVITY_AGENT_KEY_PREFIX = `${PROACTIVITY_OVERRIDE_FACT_PREFIX}:agent:`;
+
+/** Parse the persisted proactivity fact value → its level, or null if unreadable. */
+function readSelfTaskFactLevel(value: string | null | undefined): ProactivityLevel | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as { level?: unknown };
+    return isProactivityLevel(parsed.level) ? parsed.level : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Best-effort level a self-task's cadence implies, for healing an orphaned task
+ * (Direction B). A daily cron (day-of-week wildcard) is Assertive; anything
+ * narrower is Balanced. Sub-daily Assertive cadences (e.g. twice-weekly) infer
+ * Balanced — acceptable for a rare heal case; the operator can re-toggle.
+ */
+export function inferLevelFromSelfTaskSchedule(schedule: string): ProactivityLevel {
+  const fields = schedule.trim().split(/\s+/);
+  return fields[4] === "*" ? "assertive" : "balanced";
+}
+
+/** Write (or refresh) the manual Proactivity fact for a coworker to `level`. */
+async function backfillProactivityFact(
+  userId: string,
+  agentId: string,
+  level: ProactivityLevel,
+): Promise<void> {
+  const now = new Date();
+  const value = JSON.stringify({
+    scope: "agent",
+    scopeKey: `agent:${agentId}`,
+    level,
+    source: "reconcile-backfill",
+    acknowledgedByUserId: userId,
+    acknowledgedAt: now.toISOString(),
+  });
+  await persistProactivityFact(userId, {
+    category: PROACTIVITY_FACT_CATEGORY,
+    key: `${PROACTIVITY_AGENT_KEY_PREFIX}${agentId}`,
+    value,
+    sourceRoute: "/platform/ai",
+    sourceAgentId: agentId,
+    lastValidatedAt: now,
+  });
+}
+
+export type ReconcileAllSelfTasksResult = {
+  /** Missing self-tasks created for an active non-quiet fact (Direction A). */
+  created: number;
+  /** Live self-tasks stood down because the toggle is now quiet (Direction A). */
+  deactivated: number;
+  /** Orphaned live self-tasks whose toggle was restored from cadence (Direction B). */
+  backfilledFacts: number;
+};
+
+/**
+ * Converge every coworker self-task with its owner's current Proactivity toggle.
+ * Safe to run on a cadence: it only creates missing tasks, deactivates tasks a
+ * quiet toggle should stop, and restores a missing toggle from an orphaned task —
+ * it never perturbs the schedule of a task that is already correctly active.
+ */
+export async function reconcileAllCoworkerSelfTasks(): Promise<ReconcileAllSelfTasksResult> {
+  const result: ReconcileAllSelfTasksResult = { created: 0, deactivated: 0, backfilledFacts: 0 };
+
+  // Direction A — every active Proactivity fact for a REGISTERED coworker should
+  // have a matching self-task (create when missing; stand down when quiet).
+  const facts = await prisma.userFact.findMany({
+    where: {
+      category: PROACTIVITY_FACT_CATEGORY,
+      key: { startsWith: PROACTIVITY_AGENT_KEY_PREFIX },
+      supersededAt: null,
+    },
+    select: { userId: true, key: true, value: true },
+  });
+
+  // (taskId) that legitimately SHOULD be active — used to spot orphans below.
+  const desiredActive = new Set<string>();
+
+  for (const fact of facts) {
+    const agentId = fact.key.slice(PROACTIVITY_AGENT_KEY_PREFIX.length);
+    if (!COWORKER_SELF_TASKS[agentId]) continue;
+    const level = readSelfTaskFactLevel(fact.value);
+    if (!level) continue;
+
+    const taskId = coworkerSelfTaskId(agentId, fact.userId);
+    const existing = await prisma.scheduledAgentTask.findUnique({
+      where: { taskId },
+      select: { isActive: true },
+    });
+
+    if (level === "quiet") {
+      if (existing?.isActive) {
+        await reconcileCoworkerSelfTask(fact.userId, agentId, "quiet");
+        result.deactivated++;
+      }
+      continue;
+    }
+
+    desiredActive.add(taskId);
+    if (!existing?.isActive) {
+      // Missing or deactivated → (re)schedule it. Leave already-active tasks
+      // untouched so the sweep never churns their schedule / nextRunAt.
+      await reconcileCoworkerSelfTask(fact.userId, agentId, level);
+      result.created++;
+    }
+  }
+
+  // Direction B — an active self-task with no backing active fact is an orphan
+  // (the toggle desynced from the task). Restore the toggle from the task's
+  // cadence so the UI tells the truth, rather than stopping the coworker.
+  const liveSelfTasks = await prisma.scheduledAgentTask.findMany({
+    where: { isActive: true, taskId: { startsWith: "self-" } },
+    select: { taskId: true, agentId: true, ownerUserId: true, schedule: true },
+  });
+  for (const task of liveSelfTasks) {
+    if (desiredActive.has(task.taskId)) continue;
+    const level = inferLevelFromSelfTaskSchedule(task.schedule);
+    await backfillProactivityFact(task.ownerUserId, task.agentId, level);
+    result.backfilledFacts++;
+    console.info(
+      "[coworker-self-tasks] restored missing Proactivity toggle from orphaned self-task",
+      { taskId: task.taskId, agentId: task.agentId, level },
+    );
+  }
+
+  return result;
 }
