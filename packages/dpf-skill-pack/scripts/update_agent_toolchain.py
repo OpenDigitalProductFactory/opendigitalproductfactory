@@ -363,6 +363,52 @@ def install_grok_plugin(managed: Path, dry_run: bool) -> str:
     return "installed"
 
 
+# PreToolUse guards to wire into Grok's hook plane. Blocking safety/decision
+# guards only; the Write/Edit advisory prechecks are Claude-shaped and non-blocking.
+GROK_HOOK_GUARDS = (
+    "lease-punt-guard.mjs",
+    "decision-routing-guard.mjs",
+    "lease-guard.mjs",
+    "root-clone-guard.mjs",
+    "compose-guard.mjs",
+)
+
+
+def grok_hooks_file(home: Path) -> Path:
+    return home / ".grok" / "hooks" / "dpf-guards.json"
+
+
+def install_grok_hooks(managed: Path, home: Path, dry_run: bool) -> str:
+    """Wire the plane-1 guards into a hook plane Grok actually executes.
+
+    Live probe (BI-883FC2FC, Grok 0.2.87) proved Grok runs PreToolUse blocking
+    command-hooks and honors deny, but its hook-execution plane loads ONLY from
+    ~/.grok/hooks, ~/.claude/settings.json, and ~/.cursor/hooks — NOT from a
+    plugin's bundled hooks.json (a plugin shows has_hooks=true in inventory yet
+    contributes total_hooks=0 to the plane). So `grok plugin install` surfaces the
+    SKILLS but never the guards. This writes a global ~/.grok/hooks/dpf-guards.json
+    pointing at the managed guard copies. Global hooks are always-trusted (no
+    folder-trust prompt); the guards self-scope to DPF checkouts (inDpfWorkspace)
+    so they never fire DPF-branded denials in unrelated repos. Kernel ledger
+    DI-C17A5861CE0E (opt_global_context_gated).
+    """
+    hooks_dir = managed / "hooks"
+    entries = [
+        {"hooks": [{"type": "command", "command": f'node "{hooks_dir / guard}"', "timeout": 15}]}
+        for guard in GROK_HOOK_GUARDS
+        if (dry_run or (hooks_dir / guard).exists())
+    ]
+    if not entries:
+        return "skipped: no guard scripts found in managed copy"
+    payload = {"hooks": {"PreToolUse": entries}}
+    path = grok_hooks_file(home)
+    if dry_run:
+        return f"dry-run: would write {len(entries)} guard(s) to {path}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    changed = write_json(path, payload)
+    return f"wired {len(entries)} guard(s) -> {path}" + ("" if changed else " (unchanged)")
+
+
 def guard_liveness_advisory() -> list[str]:
     """Per-surface caveats about whether the plane-1 guards actually FIRE.
 
@@ -380,10 +426,10 @@ def guard_liveness_advisory() -> list[str]:
         + "'--dangerously-bypass-hook-trust' is per-invocation only."
     )
     grok_line = (
-        "  Grok  : skills/hooks now LOAD (plugin-root-relative manifest paths), but Grok "
-        + "does not execute the Claude ${CLAUDE_PLUGIN_ROOT} PreToolUse *blocking* command-hook "
-        + "contract these guards use, so the runtime gate does not deny yet — tracked as a "
-        + "follow-up; the DPF MCP connector (plane 2) remains the enforcing path there."
+        "  Grok  : guards now DENY (live-probed, Grok 0.2.87). Grok DOES execute PreToolUse "
+        + "blocking command-hooks, but its hook plane ignores plugin-bundled hooks — so the guards "
+        + "are wired into ~/.grok/hooks/dpf-guards.json (always-trusted) instead, and self-scope to "
+        + "DPF checkouts. Restart Grok to load them; `/hooks` should list 5 PreToolUse guards."
     )
     return [
         "Guard liveness (plane-1 PreToolUse enforcement is NOT implied by install):",
@@ -429,6 +475,10 @@ def main(argv: list[str]) -> int:
         if not args.skip_grok_cli_install:
             grok_status = install_grok_plugin(managed, args.dry_run)
         print(f"  Grok       : plugin install {grok_status}")
+        # Grok's hook plane ignores plugin-bundled hooks (BI-883FC2FC), so the
+        # blocking guards are delivered via the always-trusted global hook plane.
+        grok_hooks_status = install_grok_hooks(managed, home, args.dry_run)
+        print(f"  Grok hooks : {grok_hooks_status}")
 
     if not args.codex_only:
         ensure_claude_marketplace(home, version, args.dry_run)

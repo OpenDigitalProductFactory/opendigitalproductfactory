@@ -55,6 +55,37 @@ class WriteTextIfChangedTest(unittest.TestCase):
             self.assertEqual(marketplace["plugins"][0]["name"], "dpf-platform")
 
 
+class InstallGrokHooksTest(unittest.TestCase):
+    """The plane-1 guards reach Grok only via ~/.grok/hooks (BI-883FC2FC)."""
+
+    def test_writes_global_hook_file_pointing_at_managed_guards(self) -> None:
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
+            updater.copy_skill_pack(skill_pack, managed, dry_run=False)
+            status = updater.install_grok_hooks(managed, home, dry_run=False)
+            self.assertIn("wired 5 guard", status)
+            hook_file = updater.grok_hooks_file(home)
+            self.assertTrue(hook_file.exists())
+            data = json.loads(hook_file.read_text())
+            entries = data["hooks"]["PreToolUse"]
+            self.assertEqual(len(entries), 5)
+            cmds = [h["command"] for e in entries for h in e["hooks"]]
+            # Every command points at an existing managed guard script.
+            self.assertTrue(any("lease-punt-guard.mjs" in c for c in cmds))
+            self.assertTrue(any("decision-routing-guard.mjs" in c for c in cmds))
+            for guard in updater.GROK_HOOK_GUARDS:
+                self.assertTrue((managed / "hooks" / guard).exists(), guard)
+
+    def test_dry_run_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            status = updater.install_grok_hooks(home / "managed", home, dry_run=True)
+            self.assertIn("dry-run", status)
+            self.assertFalse(updater.grok_hooks_file(home).exists())
+
+
 class UpdateAgentToolchainTest(unittest.TestCase):
     @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11+")
     def test_converges_codex_and_claude_marketplaces_in_temp_home(self) -> None:

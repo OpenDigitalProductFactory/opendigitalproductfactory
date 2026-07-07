@@ -29,7 +29,7 @@
 // Emergency bypass: prefix the command with DPF_ALLOW_ROOT_COMPOSE_UP=1 (an
 // intentional install/recovery `up`) or DPF_ALLOW_DESTRUCTIVE_COMPOSE=1 (either).
 
-import { readFileSync } from "node:fs";
+import { readHookPayload, isShellTool, emitDeny, inDpfWorkspace } from "./lib/hook-io.mjs";
 
 const DEFAULT_PROJECT = "dpf";
 const CONTAINER_CREATING = new Set(["up", "create", "start", "restart", "run"]);
@@ -183,29 +183,16 @@ export function decide({ command, env = {} }) {
 // ── runtime entry ────────────────────────────────────────────────────────────
 
 function main() {
-  let payload;
-  try {
-    const raw = readFileSync(0, "utf8");
-    payload = raw ? JSON.parse(raw) : {};
-  } catch {
-    process.exit(0); // fail open — never wedge the session on a bad payload
-  }
+  const payload = readHookPayload();
+  if (payload === null) process.exit(0); // fail open on read/parse error
+  if (!inDpfWorkspace(payload.cwd)) process.exit(0); // DPF-scoped global hook: enforce only inside a DPF checkout
 
-  if (payload?.tool_name !== "Bash") process.exit(0);
-  const command = payload?.tool_input?.command ?? "";
+  if (!isShellTool(payload.toolName)) process.exit(0);
+  const command = payload.toolInput?.command ?? "";
   const verdict = decide({ command, env: process.env });
   if (!verdict.block) process.exit(0);
 
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: verdict.reason,
-      },
-    }),
-  );
-  process.exit(0);
+  emitDeny(verdict.reason); // dual-envelope deny — blocks on every surface
 }
 
 // Run only when invoked directly (not when imported by the test).

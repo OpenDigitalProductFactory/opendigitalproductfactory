@@ -29,7 +29,7 @@
 //
 // Decision protocol mirrors lease-guard.mjs (deny + reason, exit 0).
 
-import { readFileSync } from "node:fs";
+import { readHookPayload, isDecisionTool, emitDeny, inDpfWorkspace } from "./lib/hook-io.mjs";
 
 // Engineering approach/architecture-selection vocabulary. Deliberately excludes
 // generic "which" so operator-owned questions ("which brand color", "what should
@@ -77,7 +77,7 @@ const GUIDANCE =
  * @returns {{ block: boolean, reason?: string, header?: string }}
  */
 export function decide(toolName, toolInput = {}, env = {}) {
-  if (toolName !== "AskUserQuestion") return { block: false };
+  if (!isDecisionTool(toolName)) return { block: false };
   if (env.DPF_ALLOW_DIRECT_ASK === "1") return { block: false };
   const questions = Array.isArray(toolInput?.questions) ? toolInput.questions : [];
   for (const q of questions) {
@@ -100,28 +100,16 @@ export function decide(toolName, toolInput = {}, env = {}) {
 }
 
 function main() {
-  let payload;
-  try {
-    const raw = readFileSync(0, "utf8");
-    payload = raw ? JSON.parse(raw) : {};
-  } catch {
-    process.exit(0); // fail open
-  }
+  const payload = readHookPayload();
+  if (payload === null) process.exit(0); // fail open on read/parse error
+  if (!inDpfWorkspace(payload.cwd)) process.exit(0); // DPF-scoped global hook: enforce only inside a DPF checkout
 
-  if (payload?.tool_name !== "AskUserQuestion") process.exit(0);
-  const verdict = decide(payload.tool_name, payload?.tool_input ?? {}, process.env);
+  // Operator-decision tool across surfaces (AskUserQuestion / AskQuestion).
+  if (!isDecisionTool(payload.toolName)) process.exit(0);
+  const verdict = decide(payload.toolName, payload.toolInput ?? {}, process.env);
   if (!verdict.block) process.exit(0);
 
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: verdict.reason,
-      },
-    }),
-  );
-  process.exit(0);
+  emitDeny(verdict.reason); // dual-envelope deny — blocks on every surface
 }
 
 const invokedPath = process.argv[1] ? process.argv[1].replace(/\\/g, "/") : "";
