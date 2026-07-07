@@ -19,7 +19,7 @@
 // stdout and exit 0; to ALLOW, exit 0 with no output. The hook fails OPEN — any
 // parse/IO error allows the command (a guard must never wedge the session).
 
-import { readFileSync } from "node:fs";
+import { readHookPayload, isShellTool, emitDeny, inDpfWorkspace } from "./lib/hook-io.mjs";
 
 import { executableCommandText } from "./command-text.mjs";
 
@@ -71,30 +71,17 @@ export function decide(command, env = {}) {
 }
 
 function main() {
-  let payload;
-  try {
-    const raw = readFileSync(0, "utf8");
-    payload = raw ? JSON.parse(raw) : {};
-  } catch {
-    process.exit(0); // fail open — never wedge the session on a bad payload
-  }
+  const payload = readHookPayload();
+  if (payload === null) process.exit(0); // fail open on read/parse error
+  if (!inDpfWorkspace(payload.cwd)) process.exit(0); // DPF-scoped global hook: enforce only inside a DPF checkout
 
-  // Only Bash launches a server; ignore every other tool.
-  if (payload?.tool_name !== "Bash") process.exit(0);
-  const command = payload?.tool_input?.command ?? "";
+  // Only a shell tool launches a server; ignore every other tool (Bash / Shell / run_terminal_command).
+  if (!isShellTool(payload.toolName)) process.exit(0);
+  const command = payload.toolInput?.command ?? "";
   const verdict = decide(command, process.env);
   if (!verdict.block) process.exit(0);
 
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: verdict.reason,
-      },
-    }),
-  );
-  process.exit(0);
+  emitDeny(verdict.reason); // dual-envelope deny — blocks on every surface
 }
 
 // Run only when invoked directly (not when imported by the test).

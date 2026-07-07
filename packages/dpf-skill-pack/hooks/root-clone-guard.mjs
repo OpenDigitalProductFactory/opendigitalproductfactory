@@ -31,7 +31,8 @@
 //   - normal recursive deletes of a real (non-linked) dir inside your own worktree
 // Emergency bypass: prefix the command with DPF_ALLOW_ROOT_CLONE_MUTATION=1.
 
-import { readFileSync, lstatSync, statSync } from "node:fs";
+import { lstatSync, statSync } from "node:fs";
+import { readHookPayload, isShellTool, emitDeny, inDpfWorkspace } from "./lib/hook-io.mjs";
 
 const WORKTREE_MARKER = "/.claude/worktrees/";
 
@@ -233,30 +234,17 @@ function realIsDir(p) {
 }
 
 function main() {
-  let payload;
-  try {
-    const raw = readFileSync(0, "utf8");
-    payload = raw ? JSON.parse(raw) : {};
-  } catch {
-    process.exit(0); // fail open — never wedge the session on a bad payload
-  }
+  const payload = readHookPayload();
+  if (payload === null) process.exit(0); // fail open on read/parse error
+  if (!inDpfWorkspace(payload.cwd)) process.exit(0); // DPF-scoped global hook: enforce only inside a DPF checkout
 
-  if (payload?.tool_name !== "Bash") process.exit(0);
-  const command = payload?.tool_input?.command ?? "";
-  const cwd = payload?.cwd ?? process.cwd();
+  if (!isShellTool(payload.toolName)) process.exit(0);
+  const command = payload.toolInput?.command ?? "";
+  const cwd = payload.cwd ?? process.cwd();
   const verdict = decide({ command, cwd, env: process.env, isSymlink: realIsSymlink, isDir: realIsDir });
   if (!verdict.block) process.exit(0);
 
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: verdict.reason,
-      },
-    }),
-  );
-  process.exit(0);
+  emitDeny(verdict.reason); // dual-envelope deny — blocks on every surface
 }
 
 // Run only when invoked directly (not when imported by the test).

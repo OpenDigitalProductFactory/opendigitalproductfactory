@@ -24,7 +24,7 @@
 // must never wedge the session. Shipped INSIDE the dpf-platform plugin so it
 // travels to every surface.
 
-import { readFileSync } from "node:fs";
+import { readHookPayload, isShellTool, emitDeny, emitContext, inDpfWorkspace } from "./lib/hook-io.mjs";
 
 import { executableCommandText } from "./command-text.mjs";
 
@@ -85,26 +85,20 @@ export function decide(command, env = {}) {
 }
 
 function main() {
-  let payload;
-  try {
-    const raw = readFileSync(0, "utf8");
-    payload = raw ? JSON.parse(raw) : {};
-  } catch {
-    process.exit(0); // fail open
-  }
+  const payload = readHookPayload();
+  if (payload === null) process.exit(0); // fail open on read/parse error
+  if (!inDpfWorkspace(payload.cwd)) process.exit(0); // DPF-scoped global hook: enforce only inside a DPF checkout
 
-  if (payload?.tool_name !== "Bash") process.exit(0);
-  const command = payload?.tool_input?.command ?? "";
+  // Shell tool across surfaces (Bash / Shell / run_terminal_command).
+  if (!isShellTool(payload.toolName)) process.exit(0);
+  const command = payload.toolInput?.command ?? "";
   const verdict = decide(command, process.env);
   if (verdict.action === "allow") process.exit(0);
 
-  const hookSpecificOutput =
-    verdict.action === "deny"
-      ? { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: verdict.reason }
-      : { hookEventName: "PreToolUse", additionalContext: verdict.reason };
-
-  process.stdout.write(JSON.stringify({ hookSpecificOutput }));
-  process.exit(0);
+  // Dual-envelope emit: deny hard-blocks on every surface; warn is Claude-only
+  // additionalContext (Grok has no non-blocking channel and ignores it).
+  if (verdict.action === "deny") emitDeny(verdict.reason);
+  emitContext(verdict.reason);
 }
 
 const invokedPath = process.argv[1] ? process.argv[1].replace(/\\/g, "/") : "";
