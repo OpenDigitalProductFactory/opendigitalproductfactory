@@ -502,6 +502,8 @@ jobs:
         run: node --test packages/dpf-skill-pack/hooks/spec-plan-doc-precheck.test.mjs
       - name: Test lease-guard hook
         run: node --test packages/dpf-skill-pack/hooks/lease-guard.test.mjs
+      - name: Test lease-punt-guard hook + shared command-text helper
+        run: node --test packages/dpf-skill-pack/hooks/lease-punt-guard.test.mjs packages/dpf-skill-pack/hooks/command-text.test.mjs
       - name: Test root-clone-guard hook
         run: node --test packages/dpf-skill-pack/hooks/root-clone-guard.test.mjs
       - name: Test compose-guard hook

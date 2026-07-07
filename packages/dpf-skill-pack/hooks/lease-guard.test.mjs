@@ -54,3 +54,15 @@ test("does not match 'dev' inside an unrelated word (devDependencies, devops)", 
   assert.equal(decide("pnpm add -D devDependencies-thing").block, false);
   assert.equal(decide("echo devops").block, false);
 });
+
+// ── quoted DATA mentioning a dev-server launch must not block ────────────────
+
+test("allows quoted mentions of dev-server commands (data, not a launch)", () => {
+  assert.equal(decide(`git commit -m "block raw pnpm dev launches"`).block, false);
+  assert.equal(decide(`echo "next dev is gated now"`).block, false);
+  assert.equal(decide(`node - <<'EOD'\nconst tip = "run pnpm dev";\nEOD`).block, false);
+});
+
+test("still blocks a launch smuggled through sh -c", () => {
+  assert.equal(decide(`sh -c 'pnpm dev'`).block, true);
+});

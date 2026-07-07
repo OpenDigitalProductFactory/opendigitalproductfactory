@@ -26,6 +26,8 @@
 
 import { readFileSync } from "node:fs";
 
+import { executableCommandText } from "./command-text.mjs";
+
 // Gates that CANNOT meaningfully run in a source-only worktree (need a live DB /
 // shadow DB). A hard deny + lease redirect — they fail without a DB regardless.
 const HARD_GATE_PATTERNS = [
@@ -72,8 +74,13 @@ export function decide(command, env = {}) {
   if (GOVERNED_MARKERS.some((re) => re.test(command))) return { action: "allow" };
   // DATABASE_URL present => a runnable runtime (canonical or leased). Not our case.
   if (typeof env.DATABASE_URL === "string" && env.DATABASE_URL.trim() !== "") return { action: "allow" };
-  if (HARD_GATE_PATTERNS.some((re) => re.test(command))) return { action: "deny", reason: DENY_GUIDANCE };
-  if (WARN_GATE_PATTERNS.some((re) => re.test(command))) return { action: "warn", reason: WARN_GUIDANCE };
+  // Gate patterns run against the EXECUTABLE text only — quoted data (evidence
+  // summaries, commit messages, node -e scripts, heredoc bodies) mentioning
+  // `prisma migrate` must not deny; a real invocation (incl. `sh -c '…'`
+  // payloads) still does. Markers above stay raw-matched (allow-direction).
+  const executable = executableCommandText(command);
+  if (HARD_GATE_PATTERNS.some((re) => re.test(executable))) return { action: "deny", reason: DENY_GUIDANCE };
+  if (WARN_GATE_PATTERNS.some((re) => re.test(executable))) return { action: "warn", reason: WARN_GUIDANCE };
   return { action: "allow" };
 }
 

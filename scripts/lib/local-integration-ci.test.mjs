@@ -19,6 +19,7 @@ describe("createLocalIntegrationPlan", () => {
       "git checkout -B local-integration/doc-build-studio-decision-skill-packs origin/main",
       "git merge --no-ff --no-edit doc/build-studio-decision-skill-packs",
       "node scripts/sandbox-freshness-preflight.mjs --converge --branch local-integration/doc-build-studio-decision-skill-packs",
+      "pnpm --filter @dpf/db exec prisma generate",
       "pnpm --filter web exec vitest run",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
