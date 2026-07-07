@@ -15,6 +15,7 @@
 
 import { useState, useTransition } from "react";
 import type { SummaryResult, ImpactItem } from "@/lib/self-upgrade/impact/types";
+import { CollapsibleList } from "@/components/ui/report-kit";
 
 const CATEGORY_LABEL: Record<ImpactItem["category"], string> = {
   breaking: "Breaking",
@@ -143,7 +144,6 @@ export default function UpgradeImpactPanel({
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<SummaryResult | null>(initialSummary ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [showFullList, setShowFullList] = useState(false);
 
   function run(refresh = false) {
     setError(null);
@@ -243,34 +243,27 @@ export default function UpgradeImpactPanel({
           )}
 
           {result.summary.topItems.length > 0 && (
-            <ul className="space-y-2">
-              {result.summary.topItems.map((item, idx) => (
-                <ItemRow
-                  key={item.sha}
-                  item={item}
-                  phrasing={result.summary.phrased?.itemPhrasings[idx]}
-                />
-              ))}
-            </ul>
-          )}
-
-          {remainingItems.length > 0 && (
-            <details
-              className="text-xs"
-              open={showFullList}
-              onToggle={(e) => setShowFullList((e.target as HTMLDetailsElement).open)}
+            // Top-N rows always shown (with their "why relevant" phrasing); the
+            // remainder reveals below, with the toggle anchored at the FOOT of the
+            // list — never stranded mid-list the way the old <details> hinge left
+            // "Show fewer" when expanded (EP-829D997C / BI-CB260C2D).
+            <CollapsibleList
+              previewCount={result.summary.topItems.length}
+              moreLabel={(n) => `Show ${n} more change${n === 1 ? "" : "s"}`}
             >
-              <summary className="cursor-pointer text-[var(--dpf-accent)] hover:underline">
-                {showFullList
-                  ? "Show fewer"
-                  : `Show ${remainingItems.length} more change${remainingItems.length === 1 ? "" : "s"}`}
-              </summary>
-              <ul className="space-y-2 mt-2">
-                {remainingItems.map((item) => (
+              {[
+                ...result.summary.topItems.map((item, idx) => (
+                  <ItemRow
+                    key={item.sha}
+                    item={item}
+                    phrasing={result.summary.phrased?.itemPhrasings[idx]}
+                  />
+                )),
+                ...remainingItems.map((item) => (
                   <ItemRow key={item.sha} item={item} />
-                ))}
-              </ul>
-            </details>
+                )),
+              ]}
+            </CollapsibleList>
           )}
 
           <div className="text-[10px] text-[var(--dpf-muted)] pt-1">

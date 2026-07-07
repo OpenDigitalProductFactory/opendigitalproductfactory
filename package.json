@@ -24,6 +24,7 @@
     "test:endpoints": "tsx scripts/test-endpoints.ts",
     "verify:preflight": "tsx scripts/dpf-verify-preflight.ts",
     "check:bundle-boundaries": "node scripts/check-bundle-boundaries.mjs",
+    "check:reporting-composition": "node scripts/check-reporting-composition.mjs",
     "check:module-size": "node scripts/check-module-size.mjs",
     "check:mcp-tool-pack": "node scripts/check-mcp-tool-pack.mjs",
     "check:no-native-dialogs": "node scripts/check-no-native-dialogs.mjs",
