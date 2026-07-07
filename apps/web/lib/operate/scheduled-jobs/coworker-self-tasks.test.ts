@@ -1,9 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     scheduledAgentTask: {
       findMany: vi.fn().mockResolvedValue([]),
+      findUnique: vi.fn().mockResolvedValue(null),
       upsert: vi.fn().mockResolvedValue({}),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
@@ -11,6 +12,15 @@ vi.mock("@dpf/db", () => ({
       upsert: vi.fn().mockResolvedValue({}),
       update: vi.fn().mockResolvedValue({}),
     },
+    userFact: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({}),
+      create: vi.fn().mockResolvedValue({}),
+    },
+    marketingCampaignBrief: { findFirst: vi.fn().mockResolvedValue(null) },
+    knowledgeArticle: { findFirst: vi.fn().mockResolvedValue(null) },
+    document: { findFirst: vi.fn().mockResolvedValue(null) },
   },
 }));
 
@@ -18,11 +28,23 @@ vi.mock("@dpf/db", () => ({
 // allocator helpers it imports are pure (no DB), so they run for real.
 import {
   reconcileCoworkerSelfTask,
+  reconcileAllCoworkerSelfTasks,
   coworkerSelfTaskId,
+  coworkerSelfTaskRequiredTool,
+  inferLevelFromSelfTaskSchedule,
   COWORKER_SELF_TASKS,
+  DOCS_HEALTH_DOCUMENT_ID,
 } from "./coworker-self-tasks";
 
 const MKT = "marketing-specialist";
+const INV = "inventory-specialist";
+const DOC = "doc-specialist";
+const PROACTIVITY_KEY = (agentId: string) => `aiCoworkerProactivity:agent:${agentId}`;
+const factRow = (userId: string, agentId: string, level: string) => ({
+  userId,
+  key: PROACTIVITY_KEY(agentId),
+  value: JSON.stringify({ level }),
+});
 
 describe("coworkerSelfTaskId", () => {
   it("is deterministic per (agent, user) so reconcile stays idempotent", () => {
@@ -99,5 +121,185 @@ describe("reconcileCoworkerSelfTask", () => {
     expect(COWORKER_SELF_TASKS[MKT]).toBeDefined();
     expect(COWORKER_SELF_TASKS[MKT]!.routeContext).toBe("/customer/marketing");
     expect(COWORKER_SELF_TASKS[MKT]!.prompt).toMatch(/create_marketing_campaign_brief/);
+  });
+});
+
+describe("rollout registry (BI-E962B9CD)", () => {
+  it("registers the Estate Specialist knowledge-article self-task on /inventory", () => {
+    const entry = COWORKER_SELF_TASKS[INV];
+    expect(entry).toBeDefined();
+    expect(entry!.routeContext).toBe("/inventory");
+    expect(entry!.prompt).toMatch(/create_knowledge_article/);
+  });
+
+  it("registers the Documentation Specialist doc-overview self-task on /workspace/documents", () => {
+    const entry = COWORKER_SELF_TASKS[DOC];
+    expect(entry).toBeDefined();
+    expect(entry!.routeContext).toBe("/workspace/documents");
+    expect(entry!.prompt).toMatch(/doc_save/);
+    // The stable upsert id must appear in the prompt so the coworker refreshes the
+    // one overview instead of creating a new document each run.
+    expect(entry!.prompt).toContain(DOCS_HEALTH_DOCUMENT_ID);
+  });
+
+  it("keeps the new coworkers sub-daily even at Assertive (conservative cadence)", () => {
+    for (const agentId of [INV, DOC]) {
+      const dowField = COWORKER_SELF_TASKS[agentId]!.cadence.assertive.split(" ")[4];
+      // A daily task has a wildcard day-of-week; these must NOT (sub-daily).
+      expect(dowField).not.toBe("*");
+    }
+  });
+});
+
+describe("coworkerSelfTaskRequiredTool (anti-fabrication floor)", () => {
+  it("forces a knowledge article for the Estate Specialist, recency-guarded on KnowledgeArticle", async () => {
+    const { prisma } = await import("@dpf/db");
+    const tool = coworkerSelfTaskRequiredTool(INV);
+    expect(tool?.name).toBe("create_knowledge_article");
+    expect(tool!.args).toHaveProperty("title");
+    expect(tool!.args).toHaveProperty("body");
+
+    (prisma.knowledgeArticle.findFirst as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ articleId: "KA-001" });
+    expect(await tool!.hasRecentArtifact!()).toBe(true);
+    (prisma.knowledgeArticle.findFirst as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    expect(await tool!.hasRecentArtifact!()).toBe(false);
+  });
+
+  it("forces an idempotent doc_save (stable id) for the Documentation Specialist", async () => {
+    const { prisma } = await import("@dpf/db");
+    const tool = coworkerSelfTaskRequiredTool(DOC);
+    expect(tool?.name).toBe("doc_save");
+    // Stable documentId → upsert, so the fallback never duplicates the overview.
+    expect(tool!.args["documentId"]).toBe(DOCS_HEALTH_DOCUMENT_ID);
+    expect(tool!.args).toHaveProperty("contentText");
+
+    const findFirst = prisma.document.findFirst as ReturnType<typeof vi.fn>;
+    findFirst.mockResolvedValueOnce({ id: "d1" });
+    expect(await tool!.hasRecentArtifact!()).toBe(true);
+    // Guard must scope to the stable overview id.
+    expect(findFirst.mock.calls[0]![0].where.documentId).toBe(DOCS_HEALTH_DOCUMENT_ID);
+  });
+
+  it("returns null for a coworker with no self-task", () => {
+    expect(coworkerSelfTaskRequiredTool("some-advisor")).toBeNull();
+  });
+});
+
+describe("inferLevelFromSelfTaskSchedule", () => {
+  it("reads a daily cron (day-of-week wildcard) as assertive", () => {
+    expect(inferLevelFromSelfTaskSchedule("7 14 * * *")).toBe("assertive");
+  });
+  it("reads a pinned day-of-week (weekly / twice-weekly) as balanced", () => {
+    expect(inferLevelFromSelfTaskSchedule("7 14 * * 1")).toBe("balanced");
+    expect(inferLevelFromSelfTaskSchedule("31 15 * * 2,5")).toBe("balanced");
+  });
+});
+
+describe("reconcileAllCoworkerSelfTasks (toggle ⇆ task convergence)", () => {
+  beforeEach(async () => {
+    const { prisma } = await import("@dpf/db");
+    for (const fn of [
+      prisma.userFact.findMany,
+      prisma.userFact.findFirst,
+      prisma.userFact.update,
+      prisma.userFact.create,
+      prisma.scheduledAgentTask.findMany,
+      prisma.scheduledAgentTask.findUnique,
+      prisma.scheduledAgentTask.upsert,
+      prisma.scheduledAgentTask.updateMany,
+    ]) {
+      (fn as ReturnType<typeof vi.fn>).mockClear();
+    }
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (prisma.scheduledAgentTask.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (prisma.userFact.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+  });
+
+  it("Direction A: creates a missing task for an active Assertive fact (idle coworker)", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      factRow("u1", INV, "assertive"),
+    ]);
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    expect(r.created).toBe(1);
+    const upsert = prisma.scheduledAgentTask.upsert as ReturnType<typeof vi.fn>;
+    expect(upsert.mock.calls[0]![0].where).toEqual({ taskId: coworkerSelfTaskId(INV, "u1") });
+  });
+
+  it("Direction A: leaves an already-active task untouched (no schedule churn)", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      factRow("u1", INV, "assertive"),
+    ]);
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({ isActive: true });
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    expect(r.created).toBe(0);
+    expect(prisma.scheduledAgentTask.upsert as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
+  it("Direction A: deactivates a live task whose toggle is now quiet", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      factRow("u1", INV, "quiet"),
+    ]);
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({ isActive: true });
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    expect(r.deactivated).toBe(1);
+    expect(prisma.scheduledAgentTask.updateMany as ReturnType<typeof vi.fn>).toHaveBeenCalledWith({
+      where: { taskId: coworkerSelfTaskId(INV, "u1") },
+      data: { isActive: false },
+    });
+  });
+
+  it("ignores facts for coworkers with no registered self-task", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      factRow("u1", "coo", "assertive"),
+    ]);
+    const r = await reconcileAllCoworkerSelfTasks();
+    expect(r.created).toBe(0);
+    expect(prisma.scheduledAgentTask.upsert as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
+  it("Direction B: restores a missing toggle from an orphaned daily self-task", async () => {
+    const { prisma } = await import("@dpf/db");
+    // No facts, but a live daily marketing self-task exists (fact went missing).
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (prisma.scheduledAgentTask.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { taskId: coworkerSelfTaskId(MKT, "u1"), agentId: MKT, ownerUserId: "u1", schedule: "7 14 * * *" },
+    ]);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    expect(r.backfilledFacts).toBe(1);
+    // A daily orphan → Assertive toggle restored via a UserFact write.
+    const created = prisma.userFact.create as ReturnType<typeof vi.fn>;
+    expect(created).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(created.mock.calls[0]![0].data.value).level).toBe("assertive");
+    expect(created.mock.calls[0]![0].data.key).toBe(PROACTIVITY_KEY(MKT));
+  });
+
+  it("Direction B: does NOT backfill a task that already has an active fact", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      factRow("u1", MKT, "assertive"),
+    ]);
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({ isActive: true });
+    (prisma.scheduledAgentTask.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { taskId: coworkerSelfTaskId(MKT, "u1"), agentId: MKT, ownerUserId: "u1", schedule: "7 14 * * *" },
+    ]);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    expect(r.backfilledFacts).toBe(0);
+    expect(prisma.userFact.create as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 });
