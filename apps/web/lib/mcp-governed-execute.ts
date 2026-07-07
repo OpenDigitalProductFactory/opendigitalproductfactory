@@ -221,6 +221,9 @@ async function callExecuteTool(
     routeContext?: string;
     taskRunId?: string;
     featureBuildId?: string;
+    callerClient?: string;
+    apiTokenId?: string;
+    authSource?: string;
   },
 ): Promise<ToolResult> {
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
@@ -535,6 +538,13 @@ export async function governedExecuteTool(
       routeContext: args.context?.routeContext,
       taskRunId: args.context?.taskRunId,
       featureBuildId: args.context?.featureBuildId,
+      // Caller attribution for the decision ledger (BI-0EEBA669). Without these
+      // three, every principle_decide consult recorded an all-null caller — the
+      // route builds them from the request UA + resolved token, but this
+      // forwarding dropped them on the floor, so the ledger never saw them.
+      callerClient: args.context?.callerClient,
+      apiTokenId: args.context?.apiTokenId,
+      authSource: args.context?.authSource,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown tool error";
