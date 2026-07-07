@@ -319,6 +319,29 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
     return "installed"
 
 
+def resolve_codex_binary() -> str | None:
+    found = shutil.which("codex")
+    if found:
+        return found
+    home = Path.home()
+    candidates: list[str] = []
+    if platform.system() == "Windows":
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            candidates.append(str(Path(local) / "Programs" / "Codex" / "codex.exe"))
+        candidates.append(str(home / "AppData" / "Roaming" / "npm" / "codex.cmd"))
+    else:
+        candidates.extend([
+            "/opt/homebrew/bin/codex",
+            "/usr/local/bin/codex",
+            str(home / ".local" / "bin" / "codex"),
+        ])
+    for candidate in candidates:
+        if Path(candidate).exists():
+            return candidate
+    return None
+
+
 def resolve_grok_binary() -> str | None:
     found = shutil.which("grok")
     if found:
@@ -410,6 +433,163 @@ def install_grok_hooks(managed: Path, home: Path, dry_run: bool) -> str:
     return f"wired {len(entries)} guard(s) -> {path}" + ("" if changed else " (unchanged)")
 
 
+# Bash-scoped blocking guards for Codex's user hook plane (~/.codex/hooks.json).
+# decision-routing-guard is wired separately on AskUserQuestion (Gate A).
+CODEX_BASH_GUARDS = (
+    "lease-guard.mjs",
+    "root-clone-guard.mjs",
+    "compose-guard.mjs",
+    "lease-punt-guard.mjs",
+)
+CODEX_ASK_GUARDS = ("decision-routing-guard.mjs",)
+
+
+def codex_hooks_file(home: Path) -> Path:
+    return home / ".codex" / "hooks.json"
+
+
+def _dpf_hook_command(command: str, managed_hooks_dir: Path) -> bool:
+    if not command:
+        return False
+    managed_prefix = str(managed_hooks_dir)
+    if managed_prefix in command and ".mjs" in command:
+        return True
+    return any(name in command for name in (*CODEX_BASH_GUARDS, *CODEX_ASK_GUARDS))
+
+
+def _build_codex_pre_tool_use_groups(managed: Path, *, dry_run: bool) -> list[dict[str, Any]]:
+    hooks_dir = managed / "hooks"
+    groups: list[dict[str, Any]] = []
+    bash_entries = [
+        {"type": "command", "command": f'node "{hooks_dir / guard}"', "timeout": 15}
+        for guard in CODEX_BASH_GUARDS
+        if dry_run or (hooks_dir / guard).exists()
+    ]
+    if bash_entries:
+        groups.append({"matcher": "Bash", "hooks": bash_entries})
+    ask_entries = [
+        {"type": "command", "command": f'node "{hooks_dir / guard}"', "timeout": 15}
+        for guard in CODEX_ASK_GUARDS
+        if dry_run or (hooks_dir / guard).exists()
+    ]
+    if ask_entries:
+        groups.append({"matcher": "AskUserQuestion", "hooks": ask_entries})
+    return groups
+
+
+def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_run: bool) -> dict[str, Any]:
+    """Upsert DPF plane-1 guards into ~/.codex/hooks.json without clobbering other hooks."""
+    hooks_dir = managed / "hooks"
+    payload = dict(existing) if isinstance(existing, dict) else {}
+    events = payload.setdefault("hooks", {})
+    if not isinstance(events, dict):
+        events = {}
+        payload["hooks"] = events
+
+    pre_tool_use = events.get("PreToolUse")
+    if not isinstance(pre_tool_use, list):
+        pre_tool_use = []
+    cleaned: list[Any] = []
+    for group in pre_tool_use:
+        if not isinstance(group, dict):
+            cleaned.append(group)
+            continue
+        kept = [
+            hook
+            for hook in group.get("hooks", [])
+            if isinstance(hook, dict)
+            and not _dpf_hook_command(str(hook.get("command", "")), hooks_dir)
+        ]
+        if kept:
+            cleaned.append({**group, "hooks": kept})
+    dpf_groups = _build_codex_pre_tool_use_groups(managed, dry_run=dry_run)
+    for dpf_group in dpf_groups:
+        matcher = dpf_group.get("matcher")
+        merged = False
+        for group in cleaned:
+            if isinstance(group, dict) and group.get("matcher") == matcher:
+                existing_cmds = {
+                    str(hook.get("command", ""))
+                    for hook in group.get("hooks", [])
+                    if isinstance(hook, dict)
+                }
+                for hook in dpf_group.get("hooks", []):
+                    cmd = str(hook.get("command", ""))
+                    if cmd and cmd not in existing_cmds:
+                        group.setdefault("hooks", []).insert(0, hook)
+                        existing_cmds.add(cmd)
+                merged = True
+                break
+        if not merged:
+            cleaned.insert(0, dpf_group)
+    events["PreToolUse"] = cleaned
+    return payload
+
+
+def install_codex_hooks(managed: Path, home: Path, dry_run: bool) -> str:
+    """Wire plane-1 guards into Codex's user hook plane (~/.codex/hooks.json).
+
+    Plugin-bundled hooks still require interactive HOOK TRUST (BI-66EBEA06).
+    Delivering the same guards via the user hook file ensures Codex discovers
+    them alongside plugin hooks and surfaces them in `/hooks` for a one-time
+    trust grant. We do NOT forge trusted_hash entries (openai/codex#21615).
+    """
+    path = codex_hooks_file(home)
+    existing = read_json(path, {"hooks": {}})
+    payload = merge_codex_hooks_payload(existing, managed, dry_run=dry_run)
+    dpf_groups = _build_codex_pre_tool_use_groups(managed, dry_run=dry_run)
+    if not dpf_groups:
+        return "skipped: no guard scripts found in managed copy"
+    if dry_run:
+        bash_count = sum(len(g.get("hooks", [])) for g in dpf_groups if g.get("matcher") == "Bash")
+        ask_count = sum(len(g.get("hooks", [])) for g in dpf_groups if g.get("matcher") == "AskUserQuestion")
+        return f"dry-run: would merge {bash_count} Bash + {ask_count} AskUserQuestion guard(s) into {path}"
+    changed = write_json(path, payload)
+    return f"merged guards into {path}" + ("" if changed else " (unchanged)")
+
+
+def codex_hook_trust_established(home: Path) -> bool:
+    """True when Codex has persisted at least one hook-trust entry.
+
+    Live-probed (BI-883FC2FC): absent `hooks.state` / `[hooks.state.*] trusted_hash`
+    means every plugin + user hook is silently fail-open until the operator
+    reviews `/hooks` and trusts. We treat ANY persisted trust as "operator has
+    completed the flow at least once" — a coarse but non-forged signal.
+    """
+    config = codex_config_path(home)
+    if config.exists():
+        text = config.read_text(encoding="utf-8")
+        if "hooks.state" in text and "trusted_hash" in text:
+            return True
+    for name in ("hooks.state", "hooks.state.toml"):
+        state_path = home / ".codex" / name
+        if state_path.exists() and state_path.stat().st_size > 0:
+            return True
+    return False
+
+
+def codex_hook_trust_pending(home: Path, *, codex_present: bool) -> bool:
+    if not codex_present:
+        return False
+    return not codex_hook_trust_established(home)
+
+
+def codex_hook_trust_blocking_notice() -> list[str]:
+    return [
+        "",
+        "ACTION REQUIRED — Codex hook trust not granted (BI-66EBEA06)",
+        "Plane-1 governance guards are installed but will NOT run until you trust them.",
+        "  1. Start Codex in this repo:  codex",
+        "  2. Run:  /hooks",
+        "  3. Review the hook roster below and choose 'Trust all and continue'",
+        "  4. Start a new Codex session — guards should then DENY unsafe commands",
+        "",
+        "Upstream: https://github.com/openai/codex/issues/21615 (no non-interactive trust API).",
+        "Per-invocation bypass only: codex exec --dangerously-bypass-hook-trust ...",
+        "",
+    ]
+
+
 # One-line purpose per hook script. The operator granting hook-trust on Codex/Grok
 # sees an opaque numbered list ("Hook 1..N") because the hook-object schema has no
 # name/description field (BI-276EC984; upstream asks openai/codex#31469 and
@@ -479,10 +659,10 @@ def guard_liveness_advisory() -> list[str]:
     section 11.
     """
     codex_line = (
-        "  Codex : guards are Claude-contract-compatible and DENY correctly, but Codex "
-        + "gates all plugin hooks behind interactive HOOK TRUST. Until you open a Codex TUI "
-        + "session in this repo and choose 'Trust all and continue', every guard is silently "
-        + "fail-open. There is no non-interactive trust API (codex-cli 0.142.x); "
+        "  Codex : guards are wired into ~/.codex/hooks.json and DENY correctly once trusted, "
+        + "but Codex gates every non-managed hook behind interactive HOOK TRUST. Until you "
+        + "open a Codex TUI session and choose 'Trust all and continue' in /hooks, every guard "
+        + "is silently fail-open. There is no non-interactive trust API (openai/codex#21615); "
         + "'--dangerously-bypass-hook-trust' is per-invocation only."
     )
     grok_line = (
@@ -506,6 +686,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--claude-only", action="store_true")
     parser.add_argument("--skip-claude-cli-install", action="store_true")
     parser.add_argument("--skip-grok-cli-install", action="store_true")
+    parser.add_argument(
+        "--require-codex-hook-trust",
+        action="store_true",
+        help="Exit 2 when Codex is installed but hook trust has not been granted (BI-66EBEA06).",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -527,10 +712,13 @@ def main(argv: list[str]) -> int:
     copy_skill_pack(skill_pack, managed, args.dry_run)
     print(f"  managed copy: {managed}")
 
+    codex_present = resolve_codex_binary() is not None
+
     if not args.claude_only:
         ensure_codex_marketplace(home, version, args.dry_run)
         ensure_codex_config(home, args.mcp_url, args.dry_run)
-        print("  Codex      : marketplace + config converged")
+        codex_hooks_status = install_codex_hooks(managed, home, args.dry_run)
+        print(f"  Codex      : marketplace + config converged; hooks {codex_hooks_status}")
         grok_status = "skipped by flag"
         if not args.skip_grok_cli_install:
             grok_status = install_grok_plugin(managed, args.dry_run)
@@ -552,10 +740,25 @@ def main(argv: list[str]) -> int:
     print(f"  MCP token  : {'present' if token_present else 'missing'} ({TOKEN_ENV_VAR})")
     for line in guard_liveness_advisory():
         print(line)
-    for line in hook_roster(skill_pack):
-        print(line)
+
+    exit_code = 0
+    roster_printed = False
+    trust_pending = codex_hook_trust_pending(home, codex_present=codex_present)
+    if trust_pending:
+        for line in codex_hook_trust_blocking_notice():
+            print(line)
+        for line in hook_roster(skill_pack):
+            print(line)
+        roster_printed = True
+        require = args.require_codex_hook_trust or os.environ.get("DPF_REQUIRE_CODEX_HOOK_TRUST") == "1"
+        if require:
+            exit_code = 2
+    if not roster_printed:
+        for line in hook_roster(skill_pack):
+            print(line)
+
     print("Done. Start a new Codex/Claude/Grok session to load updated skills.")
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":
