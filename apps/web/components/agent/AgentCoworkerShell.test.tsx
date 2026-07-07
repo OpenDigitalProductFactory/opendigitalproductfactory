@@ -366,6 +366,65 @@ describe("AgentCoworkerShell support entry", () => {
     expect(startFeedbackSupportMock).not.toHaveBeenCalled();
   });
 
+  it("surfaces a failed thread load and recovers via retry (BI-D028B2A8)", async () => {
+    vi.useFakeTimers();
+    try {
+      // Both the initial load and the single bounded auto-retry fail…
+      getOrCreateThreadSnapshotMock
+        .mockRejectedValueOnce(new Error("Failed to find Server Action"))
+        .mockRejectedValueOnce(new Error("Failed to find Server Action"))
+        .mockResolvedValueOnce({ threadId: "thread-recovered", messages: [] });
+
+      renderShell();
+      fireEvent.click(screen.getByRole("button", { name: "Open coworker" }));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      let latestProps = agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(latestProps.threadLoadState).toBe("loading");
+
+      // …the auto-retry fires after ~2s and also fails → explicit failed state.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2500);
+      });
+      latestProps = agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(latestProps.threadLoadState).toBe("failed");
+      expect(getOrCreateThreadSnapshotMock).toHaveBeenCalledTimes(2);
+
+      // Manual retry re-invokes the load and recovers.
+      await act(async () => {
+        (latestProps.onRetryThreadLoad as () => void)();
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      latestProps = agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(getOrCreateThreadSnapshotMock).toHaveBeenCalledTimes(3);
+      expect(latestProps.threadLoadState).toBe("ready");
+      expect(latestProps.threadId).toBe("thread-recovered");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("treats a snapshot without a threadId as a failed load, not a silent dead composer", async () => {
+    vi.useFakeTimers();
+    try {
+      getOrCreateThreadSnapshotMock.mockResolvedValue(null);
+
+      renderShell();
+      fireEvent.click(screen.getByRole("button", { name: "Open coworker" }));
+
+      // Initial null + auto-retry null → failed.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2500);
+      });
+      const latestProps = agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(latestProps.threadLoadState).toBe("failed");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("passes guided work route context to the coworker panel", async () => {
     pathname = "/customer";
     renderShell();

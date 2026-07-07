@@ -71,7 +71,7 @@ vi.mock("./uploadAgentAttachment", () => ({
 
 const defaultProps = {
   onSend: vi.fn(),
-  disabled: false,
+  composerState: "ready" as const,
   threadId: "thread-1",
   pendingFile: null,
   onFileUploaded: vi.fn(),
@@ -99,7 +99,7 @@ describe("AgentMessageInput — mic button is mounted", () => {
   });
 
   it("disables the mic button when the parent is busy or disabled", () => {
-    render(<AgentMessageInput {...defaultProps} disabled={true} />);
+    render(<AgentMessageInput {...defaultProps} composerState="connecting" />);
     const mic = screen.getByRole("button", { name: /start dictation/i });
     expect((mic as HTMLButtonElement).disabled).toBe(true);
   });

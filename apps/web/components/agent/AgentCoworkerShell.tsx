@@ -12,6 +12,7 @@ import {
 } from "@/lib/feedback/feedback-event";
 import { AgentFAB } from "./AgentFAB";
 import { AgentCoworkerPanel } from "./AgentCoworkerPanel";
+import type { ThreadLoadState } from "./composer-state";
 import {
   shouldDispatchAutoMessageImmediately,
   shouldSuppressAutoMessage,
@@ -121,6 +122,13 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
   const [hydrated, setHydrated] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<AgentMessageRow[]>([]);
+  // Thread snapshot load lifecycle (BI-D028B2A8). A failed load must surface
+  // — the old behavior swallowed the error and left a dead composer forever
+  // (seen when a stale tab's server actions 404 after a self-upgrade swap).
+  const [threadLoadState, setThreadLoadState] = useState<ThreadLoadState>("loading");
+  const [threadLoadRetryToken, setThreadLoadRetryToken] = useState(0);
+  const threadAutoRetryUsedRef = useRef(false);
+  const prevThreadContextRef = useRef<string | null>(null);
   const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);
   const [guidedRouteContext, setGuidedRouteContext] = useState<string | null>(null);
   const [dockedFrame, setDockedFrame] = useState<DockedPanelFrame | null>(null);
@@ -228,24 +236,52 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
 
   useEffect(() => {
     let active = true;
+    let autoRetryTimer: number | undefined;
+    // A context switch gets a fresh auto-retry budget; a retryToken bump
+    // (auto or manual retry) does not.
+    if (prevThreadContextRef.current !== threadContext) {
+      prevThreadContextRef.current = threadContext;
+      threadAutoRetryUsedRef.current = false;
+    }
     setThreadId(null);
     setInitialMessages([]);
+    setThreadLoadState("loading");
+
+    // One bounded auto-retry (~2s) covers transient blips; after that the
+    // panel shows an explicit failed state with a Retry action instead of a
+    // silently dead composer.
+    const failLoad = () => {
+      setThreadId(null);
+      setInitialMessages([]);
+      if (!threadAutoRetryUsedRef.current) {
+        threadAutoRetryUsedRef.current = true;
+        autoRetryTimer = window.setTimeout(() => {
+          setThreadLoadRetryToken((token) => token + 1);
+        }, 2000);
+      } else {
+        setThreadLoadState("failed");
+      }
+    };
 
     (async () => {
       const snapshot = await getOrCreateThreadSnapshot({ routeContext: threadContext });
       if (!active) return;
-      setThreadId(snapshot?.threadId ?? null);
+      if (!snapshot?.threadId) {
+        failLoad();
+        return;
+      }
+      setThreadId(snapshot.threadId);
+      setThreadLoadState("ready");
+      threadAutoRetryUsedRef.current = false;
       const hasPendingSupport = pendingSupportSessionsRef.current.size > 0;
       setInitialMessages(
         hasPendingSupport
-          ? withSupportWelcomeMessage(snapshot?.messages ?? [])
-          : snapshot?.messages ?? [],
+          ? withSupportWelcomeMessage(snapshot.messages ?? [])
+          : snapshot.messages ?? [],
       );
 
-      if (snapshot?.threadId) {
-        for (const session of Array.from(pendingSupportSessionsRef.current.values())) {
-          beginFeedbackSupport(session, snapshot.threadId);
-        }
+      for (const session of Array.from(pendingSupportSessionsRef.current.values())) {
+        beginFeedbackSupport(session, snapshot.threadId);
       }
 
       // Release a queued auto-message targeted at THIS build now that its
@@ -256,21 +292,29 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
       const queued = queuedAutoMessageRef.current;
       const expectedBuildId = activeBuildId && pathname === "/build" ? activeBuildId : null;
       const matchesRouteContext = !queued?.routeContext || queued.routeContext === threadContext;
-      if (queued && snapshot?.threadId && queued.targetBuildId === expectedBuildId && matchesRouteContext) {
+      if (queued && snapshot.threadId && queued.targetBuildId === expectedBuildId && matchesRouteContext) {
         setPendingAutoMessage(queued.message);
         setQueuedAutoMessage(null);
       }
     })().catch((error) => {
       console.warn("getOrCreateThreadSnapshot error:", error);
       if (!active) return;
-      setThreadId(null);
-      setInitialMessages([]);
+      failLoad();
     });
 
     return () => {
       active = false;
+      if (autoRetryTimer !== undefined) window.clearTimeout(autoRetryTimer);
     };
-  }, [threadContext]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [threadContext, threadLoadRetryToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleRetryThreadLoad() {
+    // Manual retry spends the auto-retry budget too: if it fails again the
+    // panel goes straight back to the failed state rather than looping.
+    threadAutoRetryUsedRef.current = true;
+    setThreadLoadState("loading");
+    setThreadLoadRetryToken((token) => token + 1);
+  }
 
   function handleOpen() {
     lastFocusRef.current = document.activeElement instanceof HTMLElement
@@ -576,6 +620,8 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
             onConversationCleared={() => setInitialMessages([])}
             routeContextOverride={guidedRouteContext ?? undefined}
             isDocked={isDocked}
+            threadLoadState={threadLoadState}
+            onRetryThreadLoad={handleRetryThreadLoad}
           />
           {!isDocked && (
             <div
