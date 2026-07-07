@@ -64,13 +64,23 @@ export function classifyGrantDenial(
   };
 }
 
-function toolSurfaceEvidence(assessment: ToolSurfaceAssessment): Record<string, unknown> {
+// Minimum executed tool-call sample before observed selection accuracy is
+// trustworthy enough to CONFIRM or REFUTE a count-proxy overload prediction.
+const MIN_SELECTION_SAMPLE_FOR_OVERLOAD = 3;
+
+function toolSurfaceEvidence(
+  assessment: ToolSurfaceAssessment,
+  selection?: ToolSelectionAccuracy | null,
+): Record<string, unknown> {
   return {
     toolCount: assessment.toolCount,
     estDefinitionTokens: assessment.estDefinitionTokens,
     windowShare: assessment.windowShare,
     zone: assessment.zone,
     exceedsLocalCliff: assessment.exceedsLocalCliff,
+    ...(selection
+      ? { observedSelectionAccuracy: selection.accuracy, observedSelectionSample: selection.total }
+      : {}),
   };
 }
 
@@ -78,22 +88,48 @@ function isNearLocalCliff(toolCount: number): boolean {
   return toolCount >= LOCAL_TOOL_SELECTION_CLIFF - NEAR_LOCAL_CLIFF_DISTANCE;
 }
 
+/** True only when there is a meaningful sample AND accuracy is below healthy —
+ *  i.e. positive evidence that selection is actually degrading on this surface. */
+function selectionIsDegraded(selection?: ToolSelectionAccuracy | null): boolean {
+  if (!selection || selection.total < MIN_SELECTION_SAMPLE_FOR_OVERLOAD) return false;
+  return selection.accuracy < MIN_SUCCESSFUL_WORKFLOW_ACCURACY;
+}
+
 export function classifyToolSurfaceOverload(
   assessment: ToolSurfaceAssessment,
+  selection?: ToolSelectionAccuracy | null,
 ): CoworkerCapabilityNeedInput | null {
-  if (assessment.zone === "overload" || assessment.exceedsLocalCliff) {
+  const windowKnown = assessment.windowShare !== null;
+
+  // Two overload regimes, only one of which is self-evidently real:
+  //  • window KNOWN and definitions crowd it (zone === "overload") — mechanistic
+  //    evidence the surface eats the model's window; fire directly.
+  //  • window UNKNOWN and past the raw-count local cliff — the cliff is only a
+  //    PROXY for a small local window. Fire ONLY with corroborating evidence
+  //    that tool selection is actually degrading. A large surface a model
+  //    selects across accurately is not overloaded; asserting otherwise on the
+  //    count alone mis-flagged every cloud-served coworker forever (BI-3346DC28).
+  const knownOverload = windowKnown && assessment.zone === "overload";
+  const proxyOverload = !windowKnown && assessment.exceedsLocalCliff;
+
+  if (knownOverload || (proxyOverload && selectionIsDegraded(selection))) {
     return {
       kind: "tool",
       severity: "important",
       need: "Reduce or phase-scope the coworker's tool surface before local selection degrades.",
       blocks: "The current tool surface risks unreliable tool selection.",
-      evidenceJson: toolSurfaceEvidence(assessment),
+      evidenceJson: toolSurfaceEvidence(assessment, selection),
     };
   }
 
+  // A count-proxy overload we could not corroborate is SUPPRESSED (not
+  // downgraded): asserting overload without evidence is exactly the recurring
+  // false-positive this fixes. Evidence-before-diagnosis.
+  if (proxyOverload) return null;
+
   const cautionIsActionable =
     assessment.zone === "caution" &&
-    (isNearLocalCliff(assessment.toolCount) || assessment.windowShare !== null);
+    (isNearLocalCliff(assessment.toolCount) || windowKnown);
 
   if (!cautionIsActionable) return null;
 
@@ -102,7 +138,7 @@ export function classifyToolSurfaceOverload(
     severity: "minor",
     need: "Trim or phase the caution-zone tool surface before it reaches overload.",
     blocks: "The tool surface is approaching the local selection cliff.",
-    evidenceJson: toolSurfaceEvidence(assessment),
+    evidenceJson: toolSurfaceEvidence(assessment, selection),
   };
 }
 
