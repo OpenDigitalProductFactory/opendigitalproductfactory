@@ -29,6 +29,11 @@ Consequence encoded as a guardrail below: no structural layout changes to the le
 - AI boundary: unchanged; page stays read-only, approval queuing keeps explicit confirmation
 - Captured in: this plan + BI bodies
 
+## Status
+
+- Phase 1 (composer honest states + thread-load retry): **implemented** — `composer-state.ts` state machine, shell load-state + bounded auto-retry + Retry banner.
+- Phases 2–4: in flight on `feat/opsmap-digestibility`.
+
 ## Workstream 1 — BI-D028B2A8: coworker composer honest states (ships first, independent)
 
 ### Phase 1: truthful composer state machine + thread-load retry

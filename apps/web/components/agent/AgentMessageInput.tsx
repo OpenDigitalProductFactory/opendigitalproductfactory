@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { MAX_MESSAGE_LENGTH } from "@/lib/agent-coworker-types";
+import { composerInputDisabled, composerPlaceholder, type ComposerState } from "./composer-state";
 import {
   QUESTION_PACKET_EXPECTED_ARTIFACTS,
   type QuestionPacket,
@@ -22,7 +23,7 @@ type PendingFile = {
 
 type Props = {
   onSend: (content: string, options?: { questionPacket?: QuestionPacket | null }) => void;
-  disabled: boolean;
+  composerState: ComposerState;
   busy?: boolean;
   threadId: string | null;
   pendingFile: PendingFile | null;
@@ -89,7 +90,8 @@ function truncate(value: string, max = 32): string {
   return `${value.slice(0, max - 1)}…`;
 }
 
-export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voicePlaybackUnavailableReason, voicePlaybackEnabled, onVoicePlaybackToggle, elevatedAssistEnabled, onToggleElevatedAssist, externalAccessEnabled, onToggleExternalAccess, coworkerMode, onToggleCoworkerMode, useUnified }: Props) {
+export function AgentMessageInput({ onSend, composerState, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voicePlaybackUnavailableReason, voicePlaybackEnabled, onVoicePlaybackToggle, elevatedAssistEnabled, onToggleElevatedAssist, externalAccessEnabled, onToggleExternalAccess, coworkerMode, onToggleCoworkerMode, useUnified }: Props) {
+  const disabled = composerInputDisabled(composerState);
   const [value, setValue] = useState("");
   const [intentCenter, setIntentCenter] = useState("");
   const [sources, setSources] = useState<string[]>([]);
@@ -812,7 +814,7 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           disabled={disabled}
-          placeholder={disabled ? "Sending..." : busy ? "Agent is working... type your next message" : "Ask your co-worker..."}
+          placeholder={composerPlaceholder(composerState)}
           rows={1}
           style={{
             width: "100%",

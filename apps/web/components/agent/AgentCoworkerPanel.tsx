@@ -67,6 +67,7 @@ import {
   type AgentRenderableMessage,
 } from "./agent-message-state";
 import { useVoiceSynth } from "./hooks/useVoiceSynth";
+import { deriveComposerState, type ThreadLoadState } from "./composer-state";
 
 type Props = {
   threadId: string | null;
@@ -82,6 +83,10 @@ type Props = {
    *  Used during setup so all steps route to the onboarding-coo agent. */
   routeContextOverride?: string;
   isDocked?: boolean;
+  /** Thread snapshot load lifecycle from the shell; "failed" renders the
+   *  retry banner instead of a silently dead composer (BI-D028B2A8). */
+  threadLoadState?: ThreadLoadState;
+  onRetryThreadLoad?: () => void;
 };
 
 type MessageSendOptions = {
@@ -131,6 +136,8 @@ export function AgentCoworkerPanel({
   onConversationCleared,
   routeContextOverride,
   isDocked = false,
+  threadLoadState,
+  onRetryThreadLoad,
 }: Props) {
   const pathname = usePathname();
   // During setup, use the override so the onboarding-coo agent handles all steps
@@ -139,7 +146,21 @@ export function AgentCoworkerPanel({
   // EP-ASYNC-COWORKER-001: isBusy replaces useTransition's isPending for message flow.
   // This is a plain useState — it does NOT block the Next.js router or prevent navigation.
   const [isBusy, setIsBusy] = useState(false);
+  // Count of /api/agent/send requests still settling — drives the composer's
+  // "Sending…" window; isBusy keeps covering the whole agent execution.
+  const [sendsInFlight, setSendsInFlight] = useState(0);
   const [isClearing, startClearing] = useTransition();
+  // Embedders that don't thread load state through (e.g. tests rendering the
+  // panel directly) get the legacy inference: no threadId means still loading.
+  const effectiveThreadLoadState: ThreadLoadState =
+    threadLoadState ?? (threadId ? "ready" : "loading");
+  const composerState = deriveComposerState({
+    isClearing,
+    threadLoadState: effectiveThreadLoadState,
+    threadId,
+    sendsInFlight,
+    isBusy,
+  });
   const [elevatedAssistEnabled, setElevatedAssistEnabled] = useState(false);
   const [externalAccessEnabled, setExternalAccessEnabled] = useState(false);
   // Build Studio defaults to Act mode — its purpose is building, not advising
@@ -631,6 +652,7 @@ export function AgentCoworkerPanel({
     if (attachmentForThisMessage) setPendingAttachment(null);
 
     setIsBusy(true);
+    setSendsInFlight((count) => count + 1);
 
     const runtimeMode = resolveCoworkerRuntimeMode({
       pathname,
@@ -693,6 +715,8 @@ export function AgentCoworkerPanel({
         ),
       );
       setIsBusy(false);
+    }).finally(() => {
+      setSendsInFlight((count) => Math.max(0, count - 1));
     });
   }
 
@@ -1117,9 +1141,45 @@ export function AgentCoworkerPanel({
 
       <CoworkerHealthStatus />
       <CoworkerPriorityDock agentId={agent.agentId} />
+      {effectiveThreadLoadState === "failed" && (
+        <div
+          role="alert"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            margin: "0 10px 6px",
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid color-mix(in srgb, var(--dpf-error) 35%, transparent)",
+            background: "color-mix(in srgb, var(--dpf-error) 8%, transparent)",
+            fontSize: 12,
+            color: "var(--dpf-text)",
+          }}
+        >
+          <span style={{ flex: 1 }}>Couldn&apos;t load this conversation.</span>
+          {onRetryThreadLoad && (
+            <button
+              type="button"
+              onClick={onRetryThreadLoad}
+              style={{
+                background: "none",
+                border: "1px solid var(--dpf-border)",
+                borderRadius: 999,
+                color: "var(--dpf-accent)",
+                cursor: "pointer",
+                fontSize: 12,
+                padding: "3px 12px",
+              }}
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      )}
       <AgentMessageInput
         onSend={handleSend}
-        disabled={isClearing || !threadId}
+        composerState={composerState}
         busy={isBusy}
         threadId={threadId}
         pendingFile={pendingAttachment}
