@@ -78,13 +78,23 @@ export function assessToolSurface(input: {
   const win = typeof input.windowTokens === "number" && input.windowTokens > 0 ? input.windowTokens : 0;
   const windowShare = win > 0 ? estDefinitionTokens / win : null;
 
+  // The raw-count cliff (LOCAL_TOOL_SELECTION_CLIFF) is a PROXY for "a small
+  // local model with a small window" — the regime where selection accuracy
+  // collapses past ~15 tools. When the REAL window is known, its definition-
+  // share is the authoritative signal and supersedes the proxy: a 68-tool
+  // surface that occupies 8% of a large cloud window is genuinely lean for the
+  // model that will serve it, even though it exceeds the local cliff. Applying
+  // the count cliff unconditionally mis-flagged every cloud-served coworker as
+  // "overload" forever (BI-3346DC28), because the mandatory read baseline alone
+  // already exceeds the cliff. So band by windowShare when the window is known;
+  // fall back to the count cliff only when it is not.
   let zone: ToolSurfaceZone = "lean";
-  if (exceedsLocalCliff || (windowShare !== null && windowShare >= SURFACE_OVERLOAD_WINDOW_SHARE)) {
+  if (windowShare !== null) {
+    if (windowShare >= SURFACE_OVERLOAD_WINDOW_SHARE) zone = "overload";
+    else if (windowShare >= SURFACE_CAUTION_WINDOW_SHARE) zone = "caution";
+  } else if (exceedsLocalCliff) {
     zone = "overload";
-  } else if (
-    toolCount > Math.floor(LOCAL_TOOL_SELECTION_CLIFF * SURFACE_CAUTION_COUNT_RATIO) ||
-    (windowShare !== null && windowShare >= SURFACE_CAUTION_WINDOW_SHARE)
-  ) {
+  } else if (toolCount > Math.floor(LOCAL_TOOL_SELECTION_CLIFF * SURFACE_CAUTION_COUNT_RATIO)) {
     zone = "caution";
   }
   return { toolCount, estDefinitionTokens, exceedsLocalCliff, windowShare, zone };

@@ -520,7 +520,10 @@ export async function observeCoworkerPatterns(
   );
 
   const grantCandidates = classifyGrantDenials(toolExecutions);
-  const toolSurfaceNeed = classifyToolSurfaceOverload(toolSurfaceAssessment);
+  // Pass observed tool-selection accuracy so a count-proxy overload (window
+  // unknown, surface past the local cliff) is only asserted when selection is
+  // actually degrading — not on the raw count alone (BI-3346DC28).
+  const toolSurfaceNeed = classifyToolSurfaceOverload(toolSurfaceAssessment, toolSelectionAccuracy);
   const toolSurfaceCandidates: CandidateNeed[] = toolSurfaceNeed
     ? [{ classifier: "tool-surface-overload", need: toolSurfaceNeed }]
     : [];

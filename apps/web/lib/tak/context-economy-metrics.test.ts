@@ -50,6 +50,21 @@ describe("assessToolSurface", () => {
     expect(a.windowShare).not.toBeNull();
     expect(a.zone).toBe("overload");
   });
+
+  it("a known LARGE window supersedes the raw-count cliff (BI-3346DC28)", () => {
+    // 20 tools (past the cliff) but they occupy a trivial share of a big cloud
+    // window → genuinely lean for the model that serves it, NOT overload.
+    const a = assessToolSurface({ tools: mk(LOCAL_TOOL_SELECTION_CLIFF + 5), windowTokens: 200_000 });
+    expect(a.exceedsLocalCliff).toBe(true); // still reported for observability
+    expect(a.windowShare).toBeLessThan(0.15);
+    expect(a.zone).toBe("lean");
+  });
+
+  it("the same surface in a SMALL window is still overload (via windowShare)", () => {
+    const a = assessToolSurface({ tools: mk(LOCAL_TOOL_SELECTION_CLIFF + 5), windowTokens: 600 });
+    expect(a.windowShare).toBeGreaterThanOrEqual(0.25);
+    expect(a.zone).toBe("overload");
+  });
 });
 
 describe("computeToolSelectionAccuracy", () => {
