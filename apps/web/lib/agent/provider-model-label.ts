@@ -95,6 +95,7 @@ function shortModel(providerFamily: string, modelId: string): string {
     .filter(Boolean)
     .map((seg) => {
       if (/^gpt$/i.test(seg)) return "GPT";
+      if (/^glm$/i.test(seg)) return "GLM";
       if (/^\d/.test(seg)) return seg;
       return titleCaseWord(seg);
     })
@@ -141,6 +142,9 @@ export function providerModelLabel(
   } else if (matches("google") || matches("gemini")) {
     providerLabel = "Gemini";
     family = "gemini";
+  } else if (matches("zai") || matches("z.ai") || matches("glm")) {
+    providerLabel = "Z.ai";
+    family = "zai";
   } else if (providerName && providerName.trim()) {
     providerLabel = providerName.trim();
     family = key || nameKey;

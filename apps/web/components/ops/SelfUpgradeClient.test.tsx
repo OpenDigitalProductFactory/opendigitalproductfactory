@@ -701,6 +701,52 @@ describe("SelfUpgradeClient – latest run timestamps", () => {
   });
 });
 
+// ─── Latest run – finish estimate ─────────────────────────────────────────────
+
+describe("SelfUpgradeClient – running finish estimate", () => {
+  it("projects an est. done finish time for a running run given past successful runs", () => {
+    // history: a 5m successful run (02:00→02:05Z) sets the median duration.
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("running", {
+          startedAt: new Date("2026-05-20T03:00:00Z"),
+          completedAt: null,
+        })}
+        history={[makeRun("succeeded")]}
+        historyNextCursor={null}
+      />,
+    );
+    expect(html).toContain("est. done");
+  });
+
+  it("does not project a finish time when there is no prior successful run", () => {
+    // Only a failed run in history → no duration to learn from.
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("running", { completedAt: null })}
+        history={[makeRun("failed", { runId: "SUR-0002", failureLog: "boom" })]}
+        historyNextCursor={null}
+      />,
+    );
+    expect(html).not.toContain("est. done");
+  });
+
+  it("does not project a finish time once the run has completed", () => {
+    // A completed run shows its actual duration, never an estimate.
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("succeeded")}
+        history={[makeRun("succeeded")]}
+        historyNextCursor={null}
+      />,
+    );
+    expect(html).not.toContain("est. done");
+  });
+});
+
 // ─── No runs yet ──────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeClient – no runs yet", () => {

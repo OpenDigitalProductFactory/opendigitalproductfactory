@@ -3,6 +3,71 @@
 import { useState, useTransition } from "react";
 import type { OperationsMapActivityRouting } from "@/lib/ai-operations-map/types";
 import { proposeActivityHarnessOverrideAction } from "@/lib/actions/activity-harness-routing";
+import {
+  ACTIVITY_CLASS_COPY,
+  CONFIDENCE_COPY,
+  DISTRIBUTION_COPY,
+  RISK_COPY,
+  SUCCESS_SIGNAL_COPY,
+  emptyOutcomeEvidenceSummary,
+  presentModelRoute,
+  presentRecipeKey,
+} from "@/lib/ai-operations-map/route-labels";
+import { TechnicalDetails } from "./ActivityRoutingPresentation";
+
+type ActivityStep = OperationsMapActivityRouting["activities"][number];
+
+/** "summarizing · routine work · Low stakes" — the card subtitle in operator words. */
+function describeActivityShape(activity: ActivityStep): string {
+  return [
+    ACTIVITY_CLASS_COPY[activity.activityClass],
+    DISTRIBUTION_COPY[activity.distributionShape].label,
+    RISK_COPY[activity.riskClass].label,
+  ].join(" · ");
+}
+
+/** Short recipe phrase for tight card real estate; full sentence lives in the drawer. */
+function shortRecipeLabel(activity: ActivityStep): string {
+  const presentation = presentRecipeKey(activity.harnessRecipeKey, {
+    providerId: activity.selectedProviderId,
+    modelId: activity.selectedModelId,
+  });
+  if (presentation.parsed) {
+    return `${CONFIDENCE_COPY[presentation.parsed.confidence].label} recipe for ${ACTIVITY_CLASS_COPY[presentation.parsed.activity]}`;
+  }
+  return presentation.technicalId ? "Custom recipe" : "No recipe bound yet";
+}
+
+function modelRouteLabel(activity: ActivityStep): string {
+  if (!activity.selectedProviderId && !activity.selectedModelId) {
+    return "No model selected yet";
+  }
+  return presentModelRoute(activity.selectedProviderId, activity.selectedModelId).label;
+}
+
+/** Whether this activity has a governed action proposal an operator can queue. */
+function canQueueApproval(activity: ActivityStep): boolean {
+  return Boolean(
+    activity.actionProposalId &&
+    activity.actionProposalSummary &&
+    activity.harnessRecipeKey &&
+    activity.selectedProviderId &&
+    activity.actionProposalRecommendedConfidence &&
+    !activity.approvedConfidenceOverrideId,
+  );
+}
+
+/** One plain-language line explaining why a flagged activity needs a look. */
+function reviewReason(activity: ActivityStep): string {
+  return activity.tuningRationale?.trim() || activity.decisionSummary.trim() || SUCCESS_SIGNAL_COPY[activity.successSignal].description;
+}
+
+/** Link to the build/task this activity ran under, using the shared parent ref. */
+function originatingWorkHref(taskRef: OperationsMapActivityRouting["taskRef"]): string | null {
+  if (taskRef.buildId) return `/build?buildId=${encodeURIComponent(taskRef.buildId)}`;
+  if (taskRef.workCaseId) return `/build/work/${encodeURIComponent(taskRef.workCaseId)}`;
+  return null;
+}
 
 export function ActivityRoutingWorkbench({
   activityRouting,
@@ -13,6 +78,7 @@ export function ActivityRoutingWorkbench({
   const [pendingProposalId, setPendingProposalId] = useState<string | null>(null);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [approvalStatusByActivity, setApprovalStatusByActivity] = useState<Record<string, string>>({});
+  const [showReviewQueue, setShowReviewQueue] = useState(false);
 
   if (!activityRouting || activityRouting.activities.length === 0) {
     return (
@@ -51,9 +117,10 @@ export function ActivityRoutingWorkbench({
   const selectedActivity =
     activityRouting.activities.find((activity) => activity.activityId === selectedActivityId) ??
     activityRouting.activities[0];
-  const attentionCount = activityRouting.activities.filter((activity) =>
-    activity.successSignal === "attention" || activity.successSignal === "failed",
-  ).length;
+  const attentionActivities = activityRouting.activities.filter(
+    (activity) => activity.successSignal === "attention" || activity.successSignal === "failed",
+  );
+  const attentionCount = attentionActivities.length;
   const queueApproval = (activity: OperationsMapActivityRouting["activities"][number]) => {
     if (
       !activity.actionProposalId ||
@@ -114,12 +181,34 @@ export function ActivityRoutingWorkbench({
             Updated {formatReplayTime(Date.parse(activityRouting.generatedAt))}
           </span>
           {attentionCount > 0 ? (
-            <span className="rounded border border-[var(--dpf-warning)] bg-[color-mix(in_srgb,var(--dpf-warning)_12%,var(--dpf-surface-1))] px-2 py-1 text-[var(--dpf-text)]">
-              {attentionCount} needs review
-            </span>
+            <button
+              type="button"
+              onClick={() => setShowReviewQueue((open) => !open)}
+              aria-expanded={showReviewQueue}
+              aria-controls="activity-review-queue"
+              className="inline-flex items-center gap-1 rounded border border-[var(--dpf-warning)] bg-[color-mix(in_srgb,var(--dpf-warning)_12%,var(--dpf-surface-1))] px-2 py-1 font-medium text-[var(--dpf-text)] transition-colors hover:bg-[color-mix(in_srgb,var(--dpf-warning)_20%,var(--dpf-surface-1))] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-warning)]"
+            >
+              {attentionCount} {attentionCount === 1 ? "needs" : "need"} review
+              <span aria-hidden="true">{showReviewQueue ? "▾" : "▸"}</span>
+            </button>
           ) : null}
         </div>
       </div>
+
+      {showReviewQueue && attentionCount > 0 ? (
+        <ActivityReviewQueue
+          activities={attentionActivities}
+          taskRef={activityRouting.taskRef}
+          approvalStatusByActivity={approvalStatusByActivity}
+          isApprovalPending={isApprovalPending}
+          pendingProposalId={pendingProposalId}
+          onQueueApproval={queueApproval}
+          onInspect={(activityId) => {
+            setSelectedActivityId(activityId);
+            setShowReviewQueue(false);
+          }}
+        />
+      ) : null}
 
       <ActivityFlowRail
         activities={activityRouting.activities}
@@ -131,14 +220,7 @@ export function ActivityRoutingWorkbench({
 
       <div className="mt-3 grid gap-2 lg:grid-cols-2 xl:grid-cols-3">
         {activityRouting.activities.map((activity) => {
-          const canQueueApproval = Boolean(
-            activity.actionProposalId &&
-            activity.actionProposalSummary &&
-            activity.harnessRecipeKey &&
-            activity.selectedProviderId &&
-            activity.actionProposalRecommendedConfidence &&
-            !activity.approvedConfidenceOverrideId,
-          );
+          const cardCanQueueApproval = canQueueApproval(activity);
           return (
             <article
               key={activity.activityId}
@@ -151,7 +233,7 @@ export function ActivityRoutingWorkbench({
                     {activity.label}
                   </h3>
                   <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-                    {activity.activityClass} / {activity.distributionShape} / {activity.riskClass}
+                    {describeActivityShape(activity)}
                   </p>
                 </div>
                 <span
@@ -159,18 +241,29 @@ export function ActivityRoutingWorkbench({
                     "shrink-0 rounded border px-2 py-1 text-[10px] uppercase tracking-[0.14em]",
                     activitySignalClass(activity.successSignal),
                   ].join(" ")}
+                  title={SUCCESS_SIGNAL_COPY[activity.successSignal].description}
                 >
-                  {activity.successSignal}
+                  {SUCCESS_SIGNAL_COPY[activity.successSignal].label}
                 </span>
               </div>
 
               <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <InspectorFact label="Provider" value={activity.selectedProviderId ?? "Unresolved"} />
-                <InspectorFact label="Model" value={activity.selectedModelId ?? "Unresolved"} />
-                <InspectorFact label="Harness" value={activity.harnessRecipeKey ?? "Unbound"} />
-                <InspectorFact label="Confidence" value={activity.confidence ?? "Unknown"} />
+                <InspectorFact label="Model route" value={modelRouteLabel(activity)} />
+                <InspectorFact label="Harness" value={shortRecipeLabel(activity)} />
+                <InspectorFact
+                  label="Confidence"
+                  value={activity.confidence ? CONFIDENCE_COPY[activity.confidence].label : "Unrated"}
+                  title={activity.confidence ? CONFIDENCE_COPY[activity.confidence].description : undefined}
+                />
                 <InspectorFact label="Tuning" value={activity.tuningRecommendation ?? "Observe"} />
               </dl>
+              <TechnicalDetails
+                entries={[
+                  { label: "Recipe key", value: activity.harnessRecipeKey },
+                  { label: "Provider id", value: activity.selectedProviderId },
+                  { label: "Model id", value: activity.selectedModelId },
+                ]}
+              />
 
               <div className="mt-3 border-t border-[var(--dpf-border)] pt-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
@@ -192,7 +285,7 @@ export function ActivityRoutingWorkbench({
                         Proposed confidence: {activity.actionProposalRecommendedConfidence}
                       </p>
                     ) : null}
-                    {canQueueApproval ? (
+                    {cardCanQueueApproval ? (
                       <button
                         type="button"
                         onClick={() => queueApproval(activity)}
@@ -228,6 +321,104 @@ export function ActivityRoutingWorkbench({
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function ActivityReviewQueue({
+  activities,
+  taskRef,
+  approvalStatusByActivity,
+  isApprovalPending,
+  pendingProposalId,
+  onQueueApproval,
+  onInspect,
+}: {
+  activities: ActivityStep[];
+  taskRef: OperationsMapActivityRouting["taskRef"];
+  approvalStatusByActivity: Record<string, string>;
+  isApprovalPending: boolean;
+  pendingProposalId: string | null;
+  onQueueApproval: (activity: ActivityStep) => void;
+  onInspect: (activityId: string) => void;
+}) {
+  const buildHref = originatingWorkHref(taskRef);
+  return (
+    <section
+      id="activity-review-queue"
+      aria-label="Activities needing review"
+      className="mt-3 rounded-md border border-[var(--dpf-warning)] bg-[color-mix(in_srgb,var(--dpf-warning)_6%,var(--dpf-surface-1))] p-3"
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
+        Needs review — {activities.length} {activities.length === 1 ? "activity" : "activities"}
+      </p>
+      <ul className="mt-2 space-y-2">
+        {activities.map((activity) => {
+          const status = approvalStatusByActivity[activity.activityId];
+          const queueable = canQueueApproval(activity);
+          const pending = isApprovalPending && pendingProposalId === activity.actionProposalId;
+          return (
+            <li
+              key={activity.activityId}
+              data-review-queue-row
+              className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
+            >
+              <div className="flex items-start gap-2">
+                <span
+                  className={[
+                    "mt-0.5 shrink-0 rounded border px-2 py-1 text-[10px] uppercase tracking-[0.14em]",
+                    activitySignalClass(activity.successSignal),
+                  ].join(" ")}
+                  title={SUCCESS_SIGNAL_COPY[activity.successSignal].description}
+                >
+                  {SUCCESS_SIGNAL_COPY[activity.successSignal].label}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-sm font-semibold text-[var(--dpf-text)]">
+                    {activity.label}
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
+                    {reviewReason(activity)}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {queueable ? (
+                  <button
+                    type="button"
+                    onClick={() => onQueueApproval(activity)}
+                    disabled={pending}
+                    className="inline-flex min-h-8 items-center rounded border border-[var(--dpf-accent)] px-2 py-1 text-xs font-medium text-[var(--dpf-text)] transition-colors hover:bg-[var(--dpf-accent-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {pending ? "Queueing..." : "Queue approval"}
+                  </button>
+                ) : buildHref ? (
+                  <a
+                    href={buildHref}
+                    className="inline-flex min-h-8 items-center rounded border border-[var(--dpf-border)] px-2 py-1 text-xs font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]"
+                  >
+                    Open originating build
+                  </a>
+                ) : (
+                  <span className="text-[11px] text-[var(--dpf-muted)]">
+                    Informational — no action available yet
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onInspect(activity.activityId)}
+                  className="inline-flex min-h-8 items-center rounded border border-[var(--dpf-border)] px-2 py-1 text-xs font-medium text-[var(--dpf-muted)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]"
+                >
+                  Inspect decision
+                </button>
+                {status ? (
+                  <span className="text-[11px] text-[var(--dpf-muted)]">{status}</span>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
@@ -278,33 +469,32 @@ function ActivityFlowRail({
                       "rounded border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em]",
                       activityFlowRiskClass(activity.riskClass),
                     ].join(" ")}
+                    title={RISK_COPY[activity.riskClass].description}
                   >
-                    {activity.riskClass}
+                    {RISK_COPY[activity.riskClass].label}
                   </span>
                   <span
                     className={[
                       "rounded border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em]",
                       activityFlowConfidenceClass(activity.confidence),
                     ].join(" ")}
+                    title={activity.confidence ? CONFIDENCE_COPY[activity.confidence].description : "This route has not been rated yet."}
                   >
-                    {activity.confidence ?? "unknown"}
+                    {activity.confidence ? CONFIDENCE_COPY[activity.confidence].label : "Unrated"}
                   </span>
                 </div>
                 <p className="mt-3 line-clamp-2 text-sm font-semibold leading-5 text-[var(--dpf-text)]">
                   {activity.label}
                 </p>
                 <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-                  {activity.activityClass} / {activity.distributionShape}
+                  {ACTIVITY_CLASS_COPY[activity.activityClass]} · {DISTRIBUTION_COPY[activity.distributionShape].label}
                 </p>
                 <div className="mt-auto space-y-1 pt-3 text-[11px] leading-4 text-[var(--dpf-muted)]">
-                  <p className="truncate text-[var(--dpf-text)]">
-                    {activity.selectedProviderId ?? "Unresolved provider"}
+                  <p className="truncate text-[var(--dpf-text)]" title={`${activity.selectedProviderId ?? "unresolved"} / ${activity.selectedModelId ?? "unresolved"}`}>
+                    {modelRouteLabel(activity)}
                   </p>
-                  <p className="truncate">
-                    {activity.selectedModelId ?? "Unresolved model"}
-                  </p>
-                  <p className="truncate">
-                    {activity.harnessRecipeKey ?? "Unbound harness"}
+                  <p className="truncate" title={activity.harnessRecipeKey ?? undefined}>
+                    {shortRecipeLabel(activity)}
                   </p>
                 </div>
               </button>
@@ -333,6 +523,11 @@ function ActivityDecisionDrawer({
 }: {
   activity: OperationsMapActivityRouting["activities"][number];
 }) {
+  const recipePresentation = presentRecipeKey(activity.harnessRecipeKey, {
+    providerId: activity.selectedProviderId,
+    modelId: activity.selectedModelId,
+  });
+  const emptyEvidence = emptyOutcomeEvidenceSummary(activity);
   return (
     <section
       aria-label="Activity decision details"
@@ -360,10 +555,18 @@ function ActivityDecisionDrawer({
         </div>
 
         <dl className="grid grid-cols-2 gap-2 text-xs">
-          <InspectorFact label="Activity" value={activity.activityClass} />
-          <InspectorFact label="Shape" value={`${activity.distributionShape} / ${activity.riskClass}`} />
-          <InspectorFact label="Model route" value={`${activity.selectedProviderId ?? "Unresolved"} / ${activity.selectedModelId ?? "Unresolved"}`} />
-          <InspectorFact label="Routing confidence" value={activity.confidence ?? "Unknown"} />
+          <InspectorFact label="Activity" value={ACTIVITY_CLASS_COPY[activity.activityClass]} />
+          <InspectorFact
+            label="Shape"
+            value={`${DISTRIBUTION_COPY[activity.distributionShape].label} · ${RISK_COPY[activity.riskClass].label}`}
+            title={`${DISTRIBUTION_COPY[activity.distributionShape].description} ${RISK_COPY[activity.riskClass].description}`}
+          />
+          <InspectorFact label="Model route" value={modelRouteLabel(activity)} />
+          <InspectorFact
+            label="Routing confidence"
+            value={activity.confidence ? CONFIDENCE_COPY[activity.confidence].label : "Unrated"}
+            title={activity.confidence ? CONFIDENCE_COPY[activity.confidence].description : "This route has not been rated yet."}
+          />
         </dl>
       </div>
 
@@ -372,44 +575,68 @@ function ActivityDecisionDrawer({
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
             Outcome evidence
           </p>
-          <dl className="mt-2 space-y-1 text-xs text-[var(--dpf-muted)]">
-            <ActivityEvidenceFact label="Signal" value={activity.successSignal} />
-            <ActivityEvidenceFact label="Route decision" value={activity.routeDecisionId ?? "No route evidence"} />
-            <ActivityEvidenceFact label="Tokens" value={activity.tokenTotal == null ? "Unknown" : activity.tokenTotal.toLocaleString()} />
-            <ActivityEvidenceFact label="Cost" value={activity.costUsd == null ? "Unknown" : `$${activity.costUsd.toFixed(4)}`} />
-          </dl>
+          {emptyEvidence ? (
+            <p className="mt-2 text-xs leading-5 text-[var(--dpf-muted)]">{emptyEvidence}</p>
+          ) : (
+            <dl className="mt-2 space-y-1 text-xs text-[var(--dpf-muted)]">
+              <ActivityEvidenceFact
+                label="Signal"
+                value={SUCCESS_SIGNAL_COPY[activity.successSignal].label}
+              />
+              <ActivityEvidenceFact label="Tokens" value={activity.tokenTotal == null ? "Not recorded" : activity.tokenTotal.toLocaleString()} />
+              <ActivityEvidenceFact label="Cost" value={activity.costUsd == null ? "Not recorded" : `$${activity.costUsd.toFixed(4)}`} />
+            </dl>
+          )}
+          <TechnicalDetails
+            entries={[{ label: "Route decision", value: activity.routeDecisionId }]}
+          />
         </div>
 
         <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
             Harness
           </p>
+          <p className="mt-2 text-xs leading-5 text-[var(--dpf-text)]">
+            {recipePresentation.label ??
+              (recipePresentation.technicalId
+                ? "Custom recipe — see technical details."
+                : "No recipe bound to this route yet.")}
+          </p>
           <dl className="mt-2 space-y-1 text-xs text-[var(--dpf-muted)]">
-            <ActivityEvidenceFact label="Recipe" value={activity.harnessRecipeKey ?? "Unbound"} />
-            <ActivityEvidenceFact label="Adapter run" value={activity.adapterTelemetryId ?? "No telemetry"} />
+            <ActivityEvidenceFact label="Adapter run" value={activity.adapterTelemetryId ? "Telemetry recorded" : "No telemetry yet"} />
             <ActivityEvidenceFact label="Tuning" value={activity.tuningRecommendation ?? "observe"} />
-            <ActivityEvidenceFact label="Approved override" value={activity.approvedConfidenceOverrideId ?? "None"} />
+            <ActivityEvidenceFact label="Approved override" value={activity.approvedConfidenceOverrideId ? "Approved" : "None"} />
           </dl>
+          <TechnicalDetails
+            entries={[
+              { label: "Recipe key", value: activity.harnessRecipeKey },
+              { label: "Adapter run", value: activity.adapterTelemetryId },
+              { label: "Override", value: activity.approvedConfidenceOverrideId },
+            ]}
+          />
         </div>
 
-        <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
-            Alternatives excluded
-          </p>
-          {activity.exclusions.length > 0 ? (
+        {activity.exclusions.length > 0 ? (
+          <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
+              Alternatives excluded
+            </p>
             <ul className="mt-2 space-y-1 text-xs leading-5 text-[var(--dpf-muted)]">
               {activity.exclusions.slice(0, 3).map((exclusion, index) => (
                 <li key={`${activity.activityId}:decision-exclusion:${index}`}>
-                  {exclusion.providerId}/{exclusion.modelId ?? "default"}: {exclusion.reason}
+                  <span className="text-[var(--dpf-text)]">
+                    {presentModelRoute(exclusion.providerId, exclusion.modelId).label}:
+                  </span>{" "}
+                  {exclusion.reason}
                 </li>
               ))}
             </ul>
-          ) : (
-            <p className="mt-2 text-xs leading-5 text-[var(--dpf-muted)]">
-              No exclusions recorded for this activity route.
-            </p>
-          )}
-        </div>
+          </div>
+        ) : (
+          <p className="p-3 text-xs leading-5 text-[var(--dpf-muted)]">
+            No alternatives were excluded for this route.
+          </p>
+        )}
       </div>
     </section>
   );
@@ -433,9 +660,9 @@ function EmptyStateStep({ label, detail }: { label: string; detail: string }) {
   );
 }
 
-function InspectorFact({ label, value }: { label: string; value: string }) {
+function InspectorFact({ label, value, title }: { label: string; value: string; title?: string }) {
   return (
-    <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+    <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2" title={title}>
       <dt className="text-[10px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">{label}</dt>
       <dd className="mt-1 break-words font-medium text-[var(--dpf-text)]">{value}</dd>
     </div>

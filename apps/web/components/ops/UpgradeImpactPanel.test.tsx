@@ -73,16 +73,15 @@ describe("UpgradeImpactPanel — show-more disclosure", () => {
     item("sha4", "Tail change four"),
   ];
 
-  it("does not duplicate the top-N rows when the full list is available", () => {
+  it("shows only the top-N rows while collapsed, tail hidden", () => {
     render(<UpgradeImpactPanel enabled initialSummary={summaryWith(top, all)} />);
 
-    // Each change — top-N and tail alike — must appear exactly once. Before the
-    // fix, the top-N rows rendered twice (once in the top list, once inside the
-    // disclosure that re-rendered the whole `allItems`).
+    // Collapsed: the preview (top-N) is shown; the tail is not yet in the DOM
+    // (the CollapsibleList primitive slices hidden rows out until expanded).
     expect(screen.getAllByText("Top change one")).toHaveLength(1);
     expect(screen.getAllByText("Top change two")).toHaveLength(1);
-    expect(screen.getAllByText("Tail change three")).toHaveLength(1);
-    expect(screen.getAllByText("Tail change four")).toHaveLength(1);
+    expect(screen.queryByText("Tail change three")).toBeNull();
+    expect(screen.queryByText("Tail change four")).toBeNull();
   });
 
   it("labels the disclosure with the remaining count, not the full count", () => {
@@ -93,21 +92,19 @@ describe("UpgradeImpactPanel — show-more disclosure", () => {
     expect(screen.queryByText("Show all 4 changes")).toBeNull();
   });
 
-  it("flips the label when expanded and keeps rows unduplicated", () => {
-    const { container } = render(
-      <UpgradeImpactPanel enabled initialSummary={summaryWith(top, all)} />,
-    );
+  it("flips the label when expanded and keeps every change unduplicated", () => {
+    render(<UpgradeImpactPanel enabled initialSummary={summaryWith(top, all)} />);
 
-    // jsdom doesn't toggle <details open> or fire `toggle` from a summary
-    // click, so reproduce what the browser does — open the element and fire the
-    // toggle event — to drive the controlled onToggle -> setShowFullList path.
-    const details = container.querySelector("details") as HTMLDetailsElement;
-    details.open = true;
-    fireEvent(details, new Event("toggle"));
+    // The toggle is a real button at the FOOT of the list (not a mid-list
+    // <details> summary) — click it to reveal the tail.
+    fireEvent.click(screen.getByText("Show 2 more changes"));
 
     expect(screen.getByText("Show fewer")).toBeTruthy();
-    // Expanded view still shows each change exactly once.
+    // Expanded view shows each change exactly once — top-N never re-rendered
+    // (remainingItems is allItems minus the top-N by SHA).
     expect(screen.getAllByText("Top change one")).toHaveLength(1);
+    expect(screen.getAllByText("Top change two")).toHaveLength(1);
+    expect(screen.getAllByText("Tail change three")).toHaveLength(1);
     expect(screen.getAllByText("Tail change four")).toHaveLength(1);
   });
 

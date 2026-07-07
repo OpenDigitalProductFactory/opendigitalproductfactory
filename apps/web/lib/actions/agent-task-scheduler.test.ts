@@ -35,6 +35,9 @@ const mocks = vi.hoisted(() => ({
     toolExecution: {
       findFirst: vi.fn(),
     },
+    marketingCampaignBrief: {
+      findFirst: vi.fn(),
+    },
   },
   resolveAgentForRouteWithPrompts: vi.fn(),
   resolveAgentByIdWithPrompts: vi.fn(),
@@ -354,6 +357,131 @@ function arrangeHiveScoutTask() {
   mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
   mocks.prisma.scheduledJob.update.mockResolvedValue({});
 }
+
+// Marketing Strategist coworker self-task (Proactivity → autonomous, BI-3F09BDD4).
+// taskId is the deterministic self-<agentId>-<userId>; routeContext carries the
+// route's frontier modelRequirements floor.
+function arrangeMarketingSelfTask() {
+  mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+    taskId: "self-marketing-specialist-user-1",
+    agentId: "marketing-specialist",
+    title: "Refresh the acquisition campaign brief",
+    prompt: "Keep a current acquisition campaign brief on the Campaigns page.",
+    routeContext: "/customer/marketing",
+    schedule: "7 14 * * *",
+    timezone: "UTC",
+    isActive: true,
+    ownerUserId: "user-1",
+  });
+  mocks.prisma.agentThread.upsert.mockResolvedValue({ id: "thread-1" });
+  mocks.prisma.agentMessage.create.mockResolvedValue({});
+  mocks.prisma.user.findUnique.mockResolvedValue({ id: "user-1", isSuperuser: true });
+  mocks.prisma.userFact.findMany.mockResolvedValue([]);
+  // The route resolver returns the Marketing Strategist WITH its frontier floor
+  // (agent-routing.ts "/customer/marketing").
+  mocks.resolveAgentForRouteWithPrompts.mockResolvedValue({
+    agentId: "marketing-specialist",
+    systemPrompt: "You are the Marketing Strategist.",
+    sensitivity: "confidential",
+    modelRequirements: { defaultMinimumTier: "frontier", defaultBudgetClass: "balanced" },
+  });
+  mocks.resolveAgentByIdWithPrompts.mockResolvedValue({
+    agentId: "marketing-specialist",
+    agentName: "Marketing Strategist",
+    agentDescription: "Marketing",
+    canAssist: true,
+    systemPrompt: "You are the Marketing Strategist.",
+    sensitivity: "confidential",
+    skills: [],
+  });
+  mocks.prisma.agentMessage.findMany.mockResolvedValue([]);
+  mocks.getAvailableTools.mockResolvedValue([
+    {
+      name: "create_marketing_campaign_brief",
+      description: "Create a campaign brief",
+      inputSchema: {},
+      requiredCapability: "operate_marketing",
+      executionMode: "immediate",
+      sideEffect: true,
+    },
+  ]);
+  mocks.toolsToOpenAIFormat.mockReturnValue([]);
+  mocks.governedExecuteTool.mockResolvedValue({
+    success: true,
+    message: "Saved marketing campaign brief brief-1",
+  });
+  mocks.prisma.taskRun.create.mockResolvedValue({
+    id: "task-run-row-1",
+    taskRunId: "TR-SCHED-MKTG1",
+    contextId: "thread-1",
+  });
+  mocks.prisma.taskMessage.create.mockResolvedValue({});
+  mocks.prisma.taskRun.update.mockResolvedValue({});
+  mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
+  mocks.prisma.scheduledJob.update.mockResolvedValue({});
+}
+
+describe("executeScheduledAgentTask — coworker self-task model + required-tool guarantee (BI-3F09BDD4)", () => {
+  it("carries the coworker's frontier modelRequirements into the scheduled run", async () => {
+    arrangeMarketingSelfTask();
+    mocks.prisma.toolExecution.findFirst.mockResolvedValue({ id: "te-1" });
+    mocks.prisma.marketingCampaignBrief.findFirst.mockResolvedValue({ briefId: "brief-1" });
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "Saved campaign brief.",
+      executedTools: [
+        { name: "create_marketing_campaign_brief", args: {}, result: { success: true } },
+      ],
+    });
+
+    await executeScheduledAgentTask("self-marketing-specialist-user-1");
+
+    const loopArgs = mocks.runAgenticLoop.mock.calls[0]?.[0];
+    expect(loopArgs?.modelRequirements).toMatchObject({
+      defaultMinimumTier: "frontier",
+      defaultBudgetClass: "balanced",
+    });
+  });
+
+  it("force-creates a brief when the loop narrated without calling the tool and no recent brief exists", async () => {
+    arrangeMarketingSelfTask();
+    // No successful tool call recorded this run, and no recent brief anywhere.
+    mocks.prisma.toolExecution.findFirst.mockResolvedValue(null);
+    mocks.prisma.marketingCampaignBrief.findFirst.mockResolvedValue(null);
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "Campaign brief recorded. Done.",
+      executedTools: [],
+    });
+
+    await executeScheduledAgentTask("self-marketing-specialist-user-1");
+
+    expect(mocks.governedExecuteTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "create_marketing_campaign_brief",
+        context: expect.objectContaining({
+          routeContext: "/customer/marketing",
+          agentId: "marketing-specialist",
+          taskRunId: "TR-SCHED-MKTG1",
+        }),
+      }),
+    );
+  });
+
+  it("does NOT force-create a brief when a recent brief already exists (recency guard)", async () => {
+    arrangeMarketingSelfTask();
+    // The loop didn't record a tool call this run, but a recent brief exists —
+    // forcing would duplicate a placeholder, so the fallback must stand down.
+    mocks.prisma.toolExecution.findFirst.mockResolvedValue(null);
+    mocks.prisma.marketingCampaignBrief.findFirst.mockResolvedValue({ briefId: "brief-existing" });
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "Campaign brief recorded. Done.",
+      executedTools: [],
+    });
+
+    await executeScheduledAgentTask("self-marketing-specialist-user-1");
+
+    expect(mocks.governedExecuteTool).not.toHaveBeenCalled();
+  });
+});
 
 describe("executeScheduledAgentTask TaskRun lifecycle", () => {
   it("creates a TaskRun before the first runAgenticLoop call and links it back to ScheduledAgentTask", async () => {

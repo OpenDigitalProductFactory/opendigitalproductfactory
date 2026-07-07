@@ -152,6 +152,49 @@ describe("pattern observer classifiers", () => {
         }),
       ).toBeNull();
     });
+
+    // BI-3346DC28: a surface past the raw-count cliff with an UNKNOWN window is
+    // only a PROXY for local-model overload. It must not fire on the count alone.
+    const proxyOverload: ToolSurfaceAssessment = {
+      toolCount: 68,
+      estDefinitionTokens: 16000,
+      exceedsLocalCliff: true,
+      windowShare: null,
+      zone: "overload",
+    };
+
+    it("suppresses a count-proxy overload when tool selection is demonstrably healthy", () => {
+      const healthy: ToolSelectionAccuracy = { total: 20, succeeded: 20, accuracy: 1, perTool: {} };
+      expect(classifyToolSurfaceOverload(proxyOverload, healthy)).toBeNull();
+    });
+
+    it("suppresses a count-proxy overload when there is no corroborating evidence", () => {
+      expect(classifyToolSurfaceOverload(proxyOverload, null)).toBeNull();
+      const tinySample: ToolSelectionAccuracy = { total: 1, succeeded: 0, accuracy: 0, perTool: {} };
+      expect(classifyToolSurfaceOverload(proxyOverload, tinySample)).toBeNull();
+    });
+
+    it("fires a count-proxy overload only when selection is actually degrading", () => {
+      const degraded: ToolSelectionAccuracy = { total: 10, succeeded: 6, accuracy: 0.6, perTool: {} };
+      const need = classifyToolSurfaceOverload(proxyOverload, degraded);
+      expect(need).toMatchObject({ kind: "tool", severity: "important" });
+      expect(need?.evidenceJson).toMatchObject({ observedSelectionAccuracy: 0.6, observedSelectionSample: 10 });
+    });
+
+    it("fires a window-known overload directly — definitions crowd the real window", () => {
+      const knownOverload: ToolSurfaceAssessment = {
+        toolCount: 40,
+        estDefinitionTokens: 9000,
+        exceedsLocalCliff: true,
+        windowShare: 0.4,
+        zone: "overload",
+      };
+      // No selection evidence needed: windowShare is mechanistic, not a proxy.
+      expect(classifyToolSurfaceOverload(knownOverload)).toMatchObject({
+        kind: "tool",
+        severity: "important",
+      });
+    });
   });
 
   describe("classifyRepeatedSuccess", () => {
