@@ -202,6 +202,25 @@ jobs:
       - name: Run guard
         run: node scripts/check-style-drift.mjs
 
+  reporting-composition-guard:
+    name: Reporting Composition Guard
+    runs-on: ubuntu-latest
+    # EP-829D997C / BI-801758D1. The kernel principle compose-report-kit-for-
+    # reporting-ux (AGENTS.md §12) says tabular data-display composes the shared
+    # report-kit DataTable, not hand-rolled raw <table> markup (~87 legacy files
+    # still do). This ratchet fails a PR that adds a NEW raw <table> (or grows an
+    # existing file's count) against scripts/reporting-composition-baseline.json,
+    # without forcing a mass migration. Migrate a surface to DataTable, then
+    # `--update` the baseline to retighten.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/check-reporting-composition.mjs
+
   module-size-guard:
     name: Module Size Guard
     runs-on: ubuntu-latest
