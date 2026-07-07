@@ -26,6 +26,11 @@ import {
   resolveAutonomousWorkTools,
 } from "@/lib/tak/autonomous-work-run";
 import { resolveUserAwareProactivityPlan } from "@/lib/proactivity/proactivity-resolver.server";
+import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
+import {
+  isCoworkerSelfTaskId,
+  coworkerSelfTaskRequiredTool,
+} from "@/lib/operate/scheduled-jobs/coworker-self-tasks";
 
 // ─── Cron helpers ───────────────────────────────────────────────────────────
 
@@ -35,15 +40,34 @@ import { resolveUserAwareProactivityPlan } from "@/lib/proactivity/proactivity-r
 // module honors all five cron fields and is unit-tested outside this
 // "use server" file.
 
-function getRequiredProceduralToolForScheduledTask(taskId: string): {
+type RequiredProceduralTool = {
   name: string;
   args: Record<string, unknown>;
-} | null {
+  /**
+   * Optional recency guard for artifact tools with no write-time dedup. When it
+   * resolves true, the forced fallback is skipped so a placeholder is not
+   * duplicated on every tick. See CoworkerSelfTaskProceduralTool.
+   */
+  hasRecentArtifact?: () => Promise<boolean>;
+};
+
+function getRequiredProceduralToolForScheduledTask(
+  taskId: string,
+  agentId: string,
+): RequiredProceduralTool | null {
   if (taskId === "discovery-taxonomy-gap-triage-daily") {
     return {
       name: "run_discovery_triage",
       args: { trigger: "cadence" },
     };
+  }
+
+  // Coworker self-tasks (Proactivity → autonomous, BI-3F09BDD4) get their own
+  // required-tool guarantee, keyed by the coworker's agentId. Unlike the
+  // deterministic discovery-triage tool, the marketing artifact tool has no
+  // dedup, so the returned descriptor carries a recency guard the caller honors.
+  if (isCoworkerSelfTaskId(taskId)) {
+    return coworkerSelfTaskRequiredTool(agentId);
   }
 
   return null;
@@ -240,6 +264,25 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       agentId: task.agentId,
     });
 
+    // Mirror the interactive coworker path (agent-coworker.sendMessage): carry the
+    // coworker's configured model requirements into the scheduled run. Without
+    // this, executeAutonomousAgenticLoop routes at the default tier — for the
+    // Marketing Strategist that drops its route's frontier floor
+    // (defaultMinimumTier: "frontier", set precisely because weaker models were
+    // observed refusing to call tools) and the loop fabricates "Done" with zero
+    // tool calls (BI-3F09BDD4). The Golden Triangle posture is still applied
+    // independently at prepareRoute via agentId; this restores the per-coworker
+    // floor the interactive path sends, and benefits every autonomous coworker
+    // whose route declares modelRequirements.
+    const rawModelRequirements =
+      agentInfo.modelRequirements && typeof agentInfo.modelRequirements === "object"
+        ? (agentInfo.modelRequirements as Record<string, unknown>)
+        : {};
+    const modelRequirements = applyProviderRouteModelPreference(
+      { ...rawModelRequirements },
+      task.routeContext,
+    );
+
     const result = await executeAutonomousAgenticLoop({
       systemPrompt: agentInfo.systemPrompt,
       chatHistory,
@@ -251,10 +294,11 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       agentId: task.agentId,
       threadId: thread.id,
       taskRunId: taskRunRef.taskRunId,
+      ...(Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
     });
     const executedTools = [...(result.executedTools ?? [])];
 
-    const requiredTool = getRequiredProceduralToolForScheduledTask(task.taskId);
+    const requiredTool = getRequiredProceduralToolForScheduledTask(task.taskId, task.agentId);
     if (requiredTool) {
       const hasPersistedRequiredTool = await prisma.toolExecution.findFirst({
         where: {
@@ -265,7 +309,16 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         select: { id: true },
       });
 
-      if (!hasPersistedRequiredTool) {
+      // Recency guard: for artifact tools with no write-time dedup (the marketing
+      // brief tool is a plain .create), skip the forced fallback when a fresh
+      // artifact already exists — the coworker just produced one this run, or a
+      // recent run did. Without this, the daily self-task would duplicate a
+      // placeholder brief every tick (BI-3F09BDD4).
+      const artifactAlreadyFresh = requiredTool.hasRecentArtifact
+        ? await requiredTool.hasRecentArtifact().catch(() => false)
+        : false;
+
+      if (!hasPersistedRequiredTool && !artifactAlreadyFresh) {
         const alreadyCountedRequiredTool = executedTools.some(
           (tool) => tool.name === requiredTool.name,
         );
