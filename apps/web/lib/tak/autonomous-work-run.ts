@@ -232,34 +232,44 @@ export async function executeAutonomousAgenticLoop(input: {
   onProgress?: (event: AgentEvent) => void;
 }) {
   const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
+  const { withInferenceOrigin } = await import("@/lib/inference/inference-admission");
 
   // Capture before-run timestamp so the post-run reflection trigger only
   // considers PlatformIssueReport rows this run produced.
   const startedAt = new Date();
 
-  const result = await runAgenticLoop({
-    systemPrompt: input.systemPrompt,
-    chatHistory: input.chatHistory,
-    sensitivity: input.sensitivity,
-    tools: input.tools,
-    toolsForProvider: input.toolsForProvider,
-    deferredTools: input.deferredTools,
-    userId: input.userId,
-    routeContext: input.routeContext,
-    agentId: input.agentId,
-    threadId: input.threadId,
-    taskRunId: input.taskRunId,
-    apiTokenId: input.apiTokenId,
-    taskType: input.taskType,
-    agentDisplayName: input.agentDisplayName,
-    buildPhase: input.buildPhase,
-    featureBuildId: input.featureBuildId,
-    activeSkillId: input.activeSkillId ?? null,
-    agentMessageId: input.agentMessageId ?? null,
-    interactionMode: input.interactionMode,
-    ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
-    onProgress: input.onProgress,
-  });
+  // This is the single seam both interactive chat (interactionMode "chat") and
+  // autonomous work (scheduled self-tasks, build phases, system tasks) flow
+  // through. Tag the inference origin here so the admission gate in callProvider
+  // gives human turns priority over background work on a shared engine. Chat →
+  // interactive; everything else → autonomous (matching the "autonomous" default).
+  const inferenceOrigin = input.interactionMode === "chat" ? "interactive" : "autonomous";
+
+  const result = await withInferenceOrigin(inferenceOrigin, () =>
+    runAgenticLoop({
+      systemPrompt: input.systemPrompt,
+      chatHistory: input.chatHistory,
+      sensitivity: input.sensitivity,
+      tools: input.tools,
+      toolsForProvider: input.toolsForProvider,
+      deferredTools: input.deferredTools,
+      userId: input.userId,
+      routeContext: input.routeContext,
+      agentId: input.agentId,
+      threadId: input.threadId,
+      taskRunId: input.taskRunId,
+      apiTokenId: input.apiTokenId,
+      taskType: input.taskType,
+      agentDisplayName: input.agentDisplayName,
+      buildPhase: input.buildPhase,
+      featureBuildId: input.featureBuildId,
+      activeSkillId: input.activeSkillId ?? null,
+      agentMessageId: input.agentMessageId ?? null,
+      interactionMode: input.interactionMode,
+      ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
+      onProgress: input.onProgress,
+    }),
+  );
 
   // EP-GOLDEN-TRIANGLE: leverage the rigor ladder. This is the SINGLE seam for both
   // chat and autonomous coworker turns. When the coworker's posture sits high on
