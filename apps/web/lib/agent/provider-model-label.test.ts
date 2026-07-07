@@ -45,9 +45,13 @@ describe("providerModelLabel", () => {
     });
   });
 
-  it("prefers a resolved provider display name for unknown providers", () => {
+  it("labels the Z.ai / GLM family natively (BI-E3969A69 convergence)", () => {
     expect(providerModelLabel("zai", "glm-5.2", "Z.ai")).toEqual({
-      label: "Z.ai · Glm 5.2",
+      label: "Z.ai · GLM 5.2",
+      title: "zai / glm-5.2",
+    });
+    expect(providerModelLabel("zai", "glm-5.2")).toEqual({
+      label: "Z.ai · GLM 5.2",
       title: "zai / glm-5.2",
     });
   });

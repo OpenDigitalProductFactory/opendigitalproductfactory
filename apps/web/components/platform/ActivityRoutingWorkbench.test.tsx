@@ -163,25 +163,164 @@ describe("ActivityRoutingWorkbench", () => {
     expect(screen.getByRole("region", { name: "Activity routing workbench" })).toBeTruthy();
     expect(screen.getByLabelText("Activity routing flow")).toBeTruthy();
     const nodes = screen.getAllByRole("button");
-    expect(nodes).toHaveLength(2);
-    expect(within(nodes[0]).getByText("Summarize transcript")).toBeTruthy();
-    expect(within(nodes[0]).getByText("zai")).toBeTruthy();
-    expect(within(nodes[0]).getByText("glm-5.2")).toBeTruthy();
-    expect(within(nodes[1]).getByText("Review architecture implications")).toBeTruthy();
+    // Two flow nodes + each node card carries a "Technical details" disclosure summary.
+    const flowNodes = nodes.filter((node) => node.hasAttribute("data-activity-flow-node"));
+    expect(flowNodes).toHaveLength(2);
+    expect(within(flowNodes[0]).getByText("Summarize transcript")).toBeTruthy();
+    // Humanized model route, not the raw provider/model ids.
+    expect(within(flowNodes[0]).getByText("Z.ai · GLM 5.2")).toBeTruthy();
+    expect(within(flowNodes[0]).queryByText("zai")).toBeNull();
+    expect(within(flowNodes[0]).queryByText("glm-5.2")).toBeNull();
+    expect(within(flowNodes[1]).getByText("Review architecture implications")).toBeTruthy();
 
     const drawer = screen.getByRole("region", { name: "Activity decision details" });
     expect(within(drawer).getByText("Summarize transcript")).toBeTruthy();
+    // Raw route decision id is preserved behind the technical-details disclosure.
     expect(within(drawer).getByText("RD-SUMMARY")).toBeTruthy();
     expect(within(drawer).getByText("1,280")).toBeTruthy();
     expect(within(drawer).getByText("$0.0042")).toBeTruthy();
     expect(within(drawer).getByText(/Excluded frontier model/)).toBeTruthy();
 
-    fireEvent.click(nodes[1]);
+    fireEvent.click(flowNodes[1]);
 
     expect(within(drawer).getByText("Review architecture implications")).toBeTruthy();
     expect(within(drawer).getByText("RD-REVIEW")).toBeTruthy();
     expect(within(drawer).getByText("4,820")).toBeTruthy();
     expect(within(drawer).getByText("$0.0310")).toBeTruthy();
     expect(within(drawer).getByText(/Excluded GLM/)).toBeTruthy();
+  });
+
+  it("humanizes routing internals and hides raw ids behind technical disclosure (BI-E3969A69)", () => {
+    render(<ActivityRoutingWorkbench activityRouting={ACTIVITY_ROUTING_FIXTURE} />);
+
+    // Recipe key is presented as a sentence, not the raw dotted key.
+    expect(
+      screen.getAllByText(/trial recipe for summarizing/i).length,
+    ).toBeGreaterThan(0);
+
+    // Flow nodes never show the raw dotted key as operator-facing text.
+    const flowNodes = screen
+      .getAllByRole("button")
+      .filter((node) => node.hasAttribute("data-activity-flow-node"));
+    for (const node of flowNodes) {
+      expect(node.textContent ?? "").not.toContain("glm.center.summarize.provisional");
+    }
+
+    // The raw recipe key still exists in the DOM so an engineer can copy it,
+    // but every occurrence is inside a collapsed Technical-details disclosure.
+    const rawKeyOccurrences = screen.queryAllByText("glm.center.summarize.provisional");
+    expect(rawKeyOccurrences.length).toBeGreaterThan(0);
+    for (const occurrence of rawKeyOccurrences) {
+      expect(occurrence.closest("details[data-technical-details]")).toBeTruthy();
+    }
+
+    // Confidence enum is rendered in operator language.
+    const drawer = screen.getByRole("region", { name: "Activity decision details" });
+    expect(within(drawer).getByText("Trial")).toBeTruthy();
+  });
+
+  it("opens an attention-first review queue with the right action per row (BI-E3969A69)", () => {
+    const base = ACTIVITY_ROUTING_FIXTURE.activities[0];
+    const routing: OperationsMapActivityRouting = {
+      ...ACTIVITY_ROUTING_FIXTURE,
+      taskRef: { buildId: "FB-QUEUE" },
+      activities: [
+        // Failed, no proposal → link to originating build.
+        {
+          ...base,
+          activityId: "activity:failed",
+          label: "Generate migration",
+          successSignal: "failed",
+          actionProposalId: null,
+          actionProposalSummary: null,
+          actionProposalRecommendedConfidence: null,
+          approvedConfidenceOverrideId: null,
+        },
+        // Attention with a full proposal → queue approval.
+        {
+          ...base,
+          activityId: "activity:attention",
+          label: "Draft release notes",
+          successSignal: "attention",
+          actionProposalId: "PROP-1",
+          actionProposalSummary: "Promote this route to calibrating.",
+          actionProposalRecommendedConfidence: "calibrating",
+          approvedConfidenceOverrideId: null,
+        },
+        // A healthy activity that must NOT appear in the queue.
+        { ...base, activityId: "activity:ok", label: "Summarize call", successSignal: "valid" },
+      ],
+    };
+    render(<ActivityRoutingWorkbench activityRouting={routing} />);
+
+    // Queue is collapsed until the badge is pressed.
+    expect(screen.queryByRole("region", { name: "Activities needing review" })).toBeNull();
+    const badge = screen.getByRole("button", { name: /2 need review/i });
+    fireEvent.click(badge);
+
+    const queue = screen.getByRole("region", { name: "Activities needing review" });
+    const rows = within(queue)
+      .getAllByRole("listitem")
+      .filter((row) => row.hasAttribute("data-review-queue-row"));
+    expect(rows).toHaveLength(2);
+
+    // Failed row (no proposal) links to the originating build.
+    const failedRow = rows.find((row) => within(row).queryByText("Generate migration"));
+    expect(failedRow).toBeTruthy();
+    const buildLink = within(failedRow!).getByRole("link", { name: "Open originating build" });
+    expect(buildLink.getAttribute("href")).toBe("/build?buildId=FB-QUEUE");
+
+    // Attention row (proposal present) offers a governed queue-approval action.
+    const attentionRow = rows.find((row) => within(row).queryByText("Draft release notes"));
+    expect(within(attentionRow!).getByRole("button", { name: "Queue approval" })).toBeTruthy();
+
+    // Healthy activity is never listed.
+    expect(within(queue).queryByText("Summarize call")).toBeNull();
+  });
+
+  it("labels an unactionable flagged activity as informational when no work ref exists", () => {
+    const base = ACTIVITY_ROUTING_FIXTURE.activities[0];
+    const routing: OperationsMapActivityRouting = {
+      ...ACTIVITY_ROUTING_FIXTURE,
+      taskRef: {},
+      activities: [
+        {
+          ...base,
+          activityId: "activity:orphan",
+          label: "Orphan step",
+          successSignal: "failed",
+          actionProposalId: null,
+          actionProposalSummary: null,
+          actionProposalRecommendedConfidence: null,
+          approvedConfidenceOverrideId: null,
+        },
+      ],
+    };
+    render(<ActivityRoutingWorkbench activityRouting={routing} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /1 needs review/i }));
+    const queue = screen.getByRole("region", { name: "Activities needing review" });
+    expect(within(queue).getByText("Informational — no action available yet")).toBeTruthy();
+    expect(within(queue).queryByRole("link")).toBeNull();
+  });
+
+  it("collapses an all-unknown outcome grid into one honest sentence", () => {
+    const noOutcome: OperationsMapActivityRouting = {
+      ...ACTIVITY_ROUTING_FIXTURE,
+      activities: [
+        {
+          ...ACTIVITY_ROUTING_FIXTURE.activities[0],
+          successSignal: "unknown",
+          routeDecisionId: null,
+          tokenTotal: null,
+          costUsd: null,
+        },
+      ],
+    };
+    render(<ActivityRoutingWorkbench activityRouting={noOutcome} />);
+
+    expect(
+      screen.getByText("No outcome recorded yet — this route hasn't run."),
+    ).toBeTruthy();
   });
 });
