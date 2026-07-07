@@ -86,6 +86,39 @@ class InstallGrokHooksTest(unittest.TestCase):
             self.assertFalse(updater.grok_hooks_file(home).exists())
 
 
+class HookRosterTest(unittest.TestCase):
+    """The trust-UI roster must name+describe every hook (BI-276EC984)."""
+
+    def test_every_hooks_json_command_hook_has_a_purpose(self) -> None:
+        skill_pack = Path(__file__).resolve().parents[1]
+        data = json.loads((skill_pack / "hooks" / "hooks.json").read_text())
+        missing = []
+        for groups in data.get("hooks", {}).values():
+            for group in groups if isinstance(groups, list) else []:
+                for hook in group.get("hooks", []) if isinstance(group, dict) else []:
+                    base = updater.hook_script_basename(hook.get("command", ""))
+                    if base and base not in updater.HOOK_PURPOSES:
+                        missing.append(base)
+        self.assertEqual(missing, [], f"hooks missing a HOOK_PURPOSES entry: {missing}")
+
+    def test_roster_enumerates_named_hooks(self) -> None:
+        skill_pack = Path(__file__).resolve().parents[1]
+        lines = updater.hook_roster(skill_pack)
+        self.assertTrue(lines and lines[0].startswith("Plugin hooks"))
+        blob = "\n".join(lines)
+        self.assertIn("lease-punt-guard.mjs", blob)
+        self.assertIn("decision-routing-guard.mjs", blob)
+        # numbered like the trust UI, and carries a purpose (em dash separator)
+        self.assertRegex(blob, r"Hook 1[^\n]*: [A-Za-z0-9_.-]+\.mjs — ")
+
+    def test_basename_extractor(self) -> None:
+        self.assertEqual(
+            updater.hook_script_basename('node "${CLAUDE_PLUGIN_ROOT}/hooks/lease-punt-guard.mjs"'),
+            "lease-punt-guard.mjs",
+        )
+        self.assertIsNone(updater.hook_script_basename("echo hi"))
+
+
 class UpdateAgentToolchainTest(unittest.TestCase):
     @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11+")
     def test_converges_codex_and_claude_marketplaces_in_temp_home(self) -> None:

@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -409,6 +410,65 @@ def install_grok_hooks(managed: Path, home: Path, dry_run: bool) -> str:
     return f"wired {len(entries)} guard(s) -> {path}" + ("" if changed else " (unchanged)")
 
 
+# One-line purpose per hook script. The operator granting hook-trust on Codex/Grok
+# sees an opaque numbered list ("Hook 1..N") because the hook-object schema has no
+# name/description field (BI-276EC984; upstream asks openai/codex#31469 and
+# xai-org/plugin-marketplace#71). Until those land, the installer prints this roster
+# so the trust decision is informed. Keyed by script basename; a CI test asserts
+# every command hook in hooks.json has an entry here (kept in sync mechanically).
+HOOK_PURPOSES = {
+    "lease-guard.mjs": "blocks launching a long-running server without a nonprod lease",
+    "root-clone-guard.mjs": "blocks destructive rm / git clean aimed at the root clone",
+    "compose-guard.mjs": "blocks docker compose commands that tear down shared services",
+    "lease-punt-guard.mjs": "blocks a runtime-bound gate (prisma migrate / db push) in a source-only worktree",
+    "decision-routing-guard.mjs": "blocks asking the operator a platform decision with no kernel consultation",
+    "ux-fit-precheck.mjs": "reminds to run a UX-fit review when editing UI surfaces",
+    "spec-plan-doc-precheck.mjs": "reminds to attach a spec/plan/doc when writing gated files",
+    "tool-economy-precheck.mjs": "reminds about tool-economy budget when adding tool surface",
+    "worktree-create.mjs": "seeds a new worktree with MCP config on WorktreeCreate",
+    "governance-freshness-check.mjs": "SessionStart: warns if governance guard wiring is stale",
+}
+
+
+def hook_script_basename(command: str) -> str | None:
+    """Extract the `*.mjs` script name from a hook `command` string."""
+    match = re.search(r"([A-Za-z0-9_.-]+\.mjs)", command or "")
+    return match.group(1) if match else None
+
+
+def hook_roster(skill_pack: Path) -> list[str]:
+    """Human-readable roster of the plugin's hooks (name + purpose), grouped by event.
+
+    Printed so an operator granting hook-trust on Codex/Grok knows what each numbered
+    "Hook N" actually is (BI-276EC984). Order matches hooks.json, which is the order
+    the trust UIs number them.
+    """
+    hooks_json = skill_pack / "hooks" / "hooks.json"
+    try:
+        data = json.loads(hooks_json.read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+    events = data.get("hooks", {})
+    if not isinstance(events, dict):
+        return []
+    lines = ["Plugin hooks — what each numbered 'Hook N' in the Codex/Grok trust UI is:"]
+    for event, groups in events.items():
+        entry_lines = []
+        n = 0
+        for group in groups if isinstance(groups, list) else []:
+            matcher = group.get("matcher") if isinstance(group, dict) else None
+            for hook in group.get("hooks", []) if isinstance(group, dict) else []:
+                n += 1
+                base = hook_script_basename(hook.get("command", "")) or "?"
+                purpose = HOOK_PURPOSES.get(base, "(undescribed — add to HOOK_PURPOSES)")
+                mtag = f" [{matcher}]" if matcher else ""
+                entry_lines.append(f"    Hook {n}{mtag}: {base} — {purpose}")
+        if entry_lines:
+            lines.append(f"  {event}:")
+            lines.extend(entry_lines)
+    return lines
+
+
 def guard_liveness_advisory() -> list[str]:
     """Per-surface caveats about whether the plane-1 guards actually FIRE.
 
@@ -491,6 +551,8 @@ def main(argv: list[str]) -> int:
     token_present = bool(os.environ.get(TOKEN_ENV_VAR))
     print(f"  MCP token  : {'present' if token_present else 'missing'} ({TOKEN_ENV_VAR})")
     for line in guard_liveness_advisory():
+        print(line)
+    for line in hook_roster(skill_pack):
         print(line)
     print("Done. Start a new Codex/Claude/Grok session to load updated skills.")
     return 0
