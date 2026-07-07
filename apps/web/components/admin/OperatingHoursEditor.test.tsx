@@ -24,3 +24,27 @@ describe("OperatingHoursEditor save feedback", () => {
     await waitFor(() => expect(screen.getByText(/operating hours saved/i)).toBeTruthy());
   });
 });
+
+describe("OperatingHoursEditor timezone options", () => {
+  it("labels zones with a UTC-offset prefix and a de-underscored name", () => {
+    render(<OperatingHoursEditor defaultSchedule={schedule} timezone="America/New_York" onSave={vi.fn()} />);
+    const select = screen.getByLabelText("Operating hours timezone") as HTMLSelectElement;
+    const selected = Array.from(select.options).find((o) => o.value === "America/New_York");
+    // Orthodox: "(UTC−05:00) America/New York" — offset prefix, no underscore.
+    expect(selected?.textContent).toMatch(/^\(UTC[+−±]\d{2}:\d{2}\) America\/New York$/);
+    expect(selected?.textContent).not.toContain("_");
+  });
+
+  it("orders options by UTC offset, not raw alphabetical", () => {
+    render(<OperatingHoursEditor defaultSchedule={schedule} timezone="America/Chicago" onSave={vi.fn()} />);
+    const select = screen.getByLabelText("Operating hours timezone") as HTMLSelectElement;
+    const offsets = Array.from(select.options).map((o) => {
+      const m = o.textContent?.match(/^\(UTC([+−±])(\d{2}):(\d{2})\)/);
+      if (!m) return 0;
+      const sign = m[1] === "−" ? -1 : 1;
+      return sign * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10));
+    });
+    const sorted = [...offsets].sort((a, b) => a - b);
+    expect(offsets).toEqual(sorted);
+  });
+});
