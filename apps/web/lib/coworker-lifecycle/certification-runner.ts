@@ -27,6 +27,7 @@ import { toolsToOpenAIFormat } from "@/lib/mcp-tools";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
 import { ROUTE_AGENT_MAP_ENTRIES } from "@/lib/tak/agent-routing";
 import { journeysForCoworker, type GoldenJourney } from "./golden-journeys";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   evaluateJourneyOracles,
   journeyPassed,
@@ -190,7 +191,7 @@ async function executeJourney(
       durationMs: deps.now().getTime() - startedAt,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     const verdicts = evaluateJourneyOracles({
       content: "",
       executedTools: [],
