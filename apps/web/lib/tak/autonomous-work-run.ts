@@ -147,7 +147,24 @@ export async function resolveAutonomousWorkAgent(input: {
   agentId: string;
   routeContext: string;
   userContext: AutonomousWorkUserContext;
+  /**
+   * EP-COWORKER-LIFECYCLE Phase 3: the certification runner passes
+   * "certification" to bypass the lifecycle gate — certifying is how a
+   * draft/failed coworker earns activation, so gating it would deadlock.
+   */
+  purpose?: "autonomous" | "certification";
 }): Promise<AgentPromptInfo> {
+  // Lifecycle gate (Phase 3, BI-2C4056BF): scheduled tasks, spawned child
+  // threads, and remote MCP task submission all resolve here — a draft or
+  // retired coworker must not execute autonomous work.
+  const { evaluateLifecycleGate } = await import("@/lib/coworker-lifecycle/lifecycle-gate");
+  const verdict = await evaluateLifecycleGate(input.agentId, {
+    purpose: input.purpose ?? "autonomous",
+  });
+  if (!verdict.allowed) {
+    throw new Error(`COWORKER_NOT_SUMMONABLE: ${verdict.reason}`);
+  }
+
   const { resolveAgentByIdWithPrompts, resolveAgentForRouteWithPrompts } = await import(
     "@/lib/tak/agent-routing-server"
   );

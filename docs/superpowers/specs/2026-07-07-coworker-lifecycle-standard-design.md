@@ -83,13 +83,23 @@ Trigger: nightly + post-deploy; results surface as certification state (certifie
 failed / never-certified) on the workforce roster. Golden journeys live next to the definition —
 the contract from Phase 1 gains a `goldenJourneys` field.
 
-### Phase 3 — Enforced activation lifecycle (BI-2C4056BF)
+### Phase 3 — Enforced activation lifecycle (BI-2C4056BF) — slice 1 shipped 2026-07-09
 
 `Agent.lifecycleStage` becomes load-bearing: `draft → defined → certified → active`. A coworker
 that is not definition-conformant and certified is not summonable and renders honestly on the
 roster. One **factory door** (server action + MCP tool) instantiates the canonical template from
 any dev surface — Build Studio, MCP clients, seed — closing the two-population drift (19 roster
 vs 67 registry agents). Existing agents grandfather to `defined`.
+
+As-built (slice 1): enforcement rides the EXISTING lifecycleStage vocabulary — stored
+load-bearing states are `draft` (factory-door creations; blocked by the lifecycle gate at all
+three resolution chokepoints) and `production` (summonable); `defined`/`certified` are derived
+facts checked at promotion time (roster membership + passing coworker-cert run), not new stored
+stages. Strict certification enforcement (blocking failed-certification agents) ships behind
+the `COWORKER_LIFECYCLE_STRICT` PlatformConfig flag, seeded off; grandfathered agents keep
+working while never/stale-certified. The `establish_coworker` MCP tool (actions
+`establish`/`promote`) is the factory door; it returns the code-side definition checklist the
+Phase 1 conformance gate enforces.
 
 ### Phase 4 — Template, skill, docs (BI-14E4F9AF)
 

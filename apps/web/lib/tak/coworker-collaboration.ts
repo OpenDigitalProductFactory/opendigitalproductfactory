@@ -150,6 +150,14 @@ export type SummonCoworkerInput = {
 async function resolveTargetOrThrow(targetAgent: string) {
   const target = await resolveAgent(targetAgent);
   if (!target) throw new Error(`UNKNOWN_AGENT: ${targetAgent}`);
+  // Lifecycle gate (EP-COWORKER-LIFECYCLE Phase 3): a draft/retired coworker —
+  // and, under strict mode, one that failed certification — cannot be the
+  // target of a summon or handoff. The MCP handler surfaces the thrown message.
+  const { evaluateLifecycleGate } = await import("@/lib/coworker-lifecycle/lifecycle-gate");
+  const verdict = await evaluateLifecycleGate(target.agentId, { purpose: "summon" });
+  if (!verdict.allowed) {
+    throw new Error(`COWORKER_NOT_SUMMONABLE: ${verdict.reason}`);
+  }
   return target;
 }
 
