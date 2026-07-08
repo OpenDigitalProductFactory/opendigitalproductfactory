@@ -41,7 +41,7 @@ describe("saveWikiOverlayEdit — auth + scope", () => {
       title: "Foo",
       body: "## Definition\n\nFoo is something.",
     });
-    expect(result).toEqual({ ok: false, error: expect.stringMatching(/not authenticated/i) });
+    expect(result).toEqual({ ok: false, error: expect.stringMatching(/unauthorized/i) });
   });
 
   it("rejects when there is no Organization row", async () => {

@@ -1,7 +1,6 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { validateMessageInput } from "@/lib/agent-coworker-types";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
@@ -87,14 +86,8 @@ import {
 
 import { filterToolsForCoworkerRuntime, adviseHeldBackTools } from "./coworker-tool-filter";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { requireUser } from "./shared/guards";
 export { filterToolsForCoworkerRuntime };
-
-async function requireAuthUser() {
-  const session = await auth();
-  const user = session?.user;
-  if (!user?.id) throw new Error("Unauthorized");
-  return user;
-}
 
 
 async function buildPortalContextPromptSection(input: {
@@ -324,7 +317,7 @@ async function summariseIdeateOutcome(
 export async function getThreadSnapshotById(input: {
   threadId: string;
 }): Promise<{ threadId: string; messages: AgentMessageRow[] } | null> {
-  const user = await requireAuthUser();
+  const user = await requireUser();
 
   const thread = await prisma.agentThread.findFirst({
     where: { id: input.threadId, userId: user.id },
@@ -364,7 +357,7 @@ export async function getThreadSnapshotById(input: {
 export async function getOrCreateThreadSnapshot(input: {
   routeContext: string;
 }): Promise<{ threadId: string; messages: AgentMessageRow[] } | null> {
-  const user = await requireAuthUser();
+  const user = await requireUser();
 
   // Verify user exists in DB (JWT may reference a stale user after re-seed)
   const dbUser = await prisma.user.findUnique({
@@ -433,7 +426,7 @@ export async function sendMessage(input: {
   | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow; formAssistUpdate?: Record<string, unknown> }
   | { error: string }
 > {
-  const user = await requireAuthUser();
+  const user = await requireUser();
 
   // Verify thread ownership
   const thread = await prisma.agentThread.findUnique({
@@ -2340,7 +2333,7 @@ export async function loadEarlierMessages(input: {
   before: string;
   limit?: number;
 }): Promise<{ messages: AgentMessageRow[]; hasMore: boolean } | { error: string }> {
-  const user = await requireAuthUser();
+  const user = await requireUser();
 
   const thread = await prisma.agentThread.findUnique({
     where: { id: input.threadId },
@@ -2383,7 +2376,7 @@ export async function recordAgentTransition(input: {
   agentName: string;
   routeContext: string;
 }): Promise<{ message: AgentMessageRow } | { error: string }> {
-  const user = await requireAuthUser();
+  const user = await requireUser();
 
   const thread = await prisma.agentThread.findUnique({
     where: { id: input.threadId },
@@ -2417,7 +2410,7 @@ export async function recordAgentTransition(input: {
 export async function clearConversation(input: {
   threadId: string;
 }): Promise<{ ok: true } | { error: string }> {
-  const user = await requireAuthUser();
+  const user = await requireUser();
 
   const thread = await prisma.agentThread.findUnique({
     where: { id: input.threadId },

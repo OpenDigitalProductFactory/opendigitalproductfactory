@@ -157,6 +157,12 @@ Gate A was bypassed in the wild three days after it merged, and the failure was 
 
 **End-to-end verification (real refactored guards on real Grok 0.2.87):** in a DPF worktree cwd a `prisma migrate` hard-gate was **DENIED** (`stopReason: Cancelled`); in a bare non-DPF cwd the same command **RAN** (`EndTurn`, exit 0) — envelope portability + delivery + scoping all confirmed live. Classification: **Grok Gate B LIVE (Gate A wired for `AskQuestion`).** BI-3157516C is re-scoped from "upstream contract gap" to the in-house delivery+portability fix landed here. The DPF MCP connector (plane 2) remains a defence-in-depth backstop, no longer the sole enforcing path on Grok.
 
+## 13. Addendum (2026-07-07): Codex hook-trust — deliver + block, do not forge (BI-66EBEA06)
+
+Codex remains **fail-open until the operator grants hook trust** (§11). There is still no supported non-interactive trust API ([openai/codex#21615](https://github.com/openai/codex/issues/21615)); forging `[hooks.state.*] trusted_hash` entries is explicitly out of scope (version-specific, brittle).
+
+**Fix:** the standalone installer (`update_agent_toolchain.py`) now (1) **merges** the five blocking plane-1 guards into `~/.codex/hooks.json` (Bash + AskUserQuestion matchers, preserving foreign hooks), (2) **detects** absent hook-trust state (`hooks.state` / `[hooks.state.*] trusted_hash` in `config.toml`), and (3) prints an **ACTION REQUIRED** block with the hook roster (BI-276EC984) plus optional exit code `2` when `--require-codex-hook-trust` or `DPF_REQUIRE_CODEX_HOOK_TRUST=1` is set. This converts the silent fail-open into a blocking install-time instruction — the acceptance path allowed when automation is impossible.
+
 ## 12. Addendum (2026-07-06) — match executable text, not quoted data
 
 **Observed false positive:** Gate B's patterns ran against the raw Bash command
@@ -193,3 +199,9 @@ in both guard test files — including the evidence-post repro verbatim.
 3. **DPF-workspace scoping** — because the delivery is global, each guard first confirms the session `cwd` is inside a DPF checkout (`inDpfWorkspace`, `packages/dpf-skill-pack` marker) so DPF-branded denials never fire in unrelated repos.
 
 **End-to-end verification (real refactored guards on real Grok 0.2.87):** in a DPF worktree cwd a `prisma migrate` hard-gate was **DENIED** (`stopReason: Cancelled`); in a bare non-DPF cwd the same command **RAN** (`EndTurn`, exit 0) — envelope portability + delivery + scoping all confirmed live. Classification: **Grok Gate B LIVE (Gate A wired for `AskQuestion`).** BI-3157516C is re-scoped from "upstream contract gap" to the in-house delivery+portability fix landed here. The DPF MCP connector (plane 2) remains a defence-in-depth backstop, no longer the sole enforcing path on Grok.
+
+## 13. Addendum (2026-07-07): Codex hook-trust — deliver + block, do not forge (BI-66EBEA06)
+
+Codex remains **fail-open until the operator grants hook trust** (§11). There is still no supported non-interactive trust API ([openai/codex#21615](https://github.com/openai/codex/issues/21615)); forging `[hooks.state.*] trusted_hash` entries is explicitly out of scope (version-specific, brittle).
+
+**Fix:** the standalone installer (`update_agent_toolchain.py`) now (1) **merges** the five blocking plane-1 guards into `~/.codex/hooks.json` (Bash + AskUserQuestion matchers, preserving foreign hooks), (2) **detects** absent hook-trust state (`hooks.state` / `[hooks.state.*] trusted_hash` in `config.toml`), and (3) prints an **ACTION REQUIRED** block with the hook roster (BI-276EC984) plus optional exit code `2` when `--require-codex-hook-trust` or `DPF_REQUIRE_CODEX_HOOK_TRUST=1` is set. This converts the silent fail-open into a blocking install-time instruction — the acceptance path allowed when automation is impossible.

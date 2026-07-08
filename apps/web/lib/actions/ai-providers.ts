@@ -2,7 +2,6 @@
 
 import { lazyFs, lazyPath, lazyFsPromises } from "@/lib/shared/lazy-node";
 import { prisma } from "@dpf/db";
-import { auth } from "@/lib/auth";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import {
   computeNextRunAt,
@@ -52,11 +51,6 @@ function getLinkedActivationOptions(
 
 async function requireManageProviders(): Promise<string> {
   return (await requireCapability("manage_provider_connections")).userId;
-}
-
-async function requireSession(): Promise<void> {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
 }
 
 // ─── Registry sync ────────────────────────────────────────────────────────────

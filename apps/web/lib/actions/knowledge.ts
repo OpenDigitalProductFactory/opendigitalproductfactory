@@ -1,18 +1,10 @@
 "use server";
 
 import { prisma } from "@dpf/db";
-import { auth } from "@/lib/auth";
-import { requireCapability } from "@/lib/actions/shared/guards";
+import { requireCapability, requireUserId } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
 
 // ─── Auth guards ──────────────────────────────────────────────────────────────
-
-async function requireAuth(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user) throw new Error("Unauthorized");
-  return user.id;
-}
 
 async function requireManageKnowledge(): Promise<string> {
   return (await requireCapability("manage_backlog")).userId;
@@ -215,7 +207,7 @@ export async function publishKnowledgeArticle(id: string): Promise<void> {
 // ─── Confirm Review ───────────────────────────────────────────────────────────
 
 export async function confirmKnowledgeArticleReview(id: string): Promise<void> {
-  await requireAuth();
+  await requireUserId();
 
   await prisma.knowledgeArticle.update({
     where: { id },
