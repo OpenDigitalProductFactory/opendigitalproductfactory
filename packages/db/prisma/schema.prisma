@@ -2304,6 +2304,7 @@ model Agent {
   skills               AgentSkillAssignment[]
   toolGrants           AgentToolGrant[]
   toolGrantRevocations AgentToolGrantRevocation[]
+  memoryNotes          CoworkerMemoryNote[]      @relation("CoworkerMemoryNoteAgent")
   coworkerServices     CoworkerService[]
   coworkerEngagements  CoworkerEngagement[]
   coworkerAssessments  CoworkerSelfAssessment[]    @relation("CoworkerSelfAssessmentAgent")
@@ -2467,6 +2468,31 @@ model AgentToolGrantRevocation {
 
   @@unique([agentId, grantKey])
   @@index([grantKey])
+}
+
+// BI-F9025BA0 (EP-CLAUDE-INSIDE-OUT): per-coworker durable working memory. The
+// shared WWMD/WWWD corpus and per-user facts already exist; this is the
+// role-local notes layer — a coworker's own techniques, workspace context, and
+// cautions that do not belong in the org corpus. Superseded-by-key (like
+// UserFact): recording the same (agentId, noteKind, noteKey) supersedes the
+// prior active row so the note stays current instead of accumulating. Confirmed
+// durable learnings should be routed onward to WWMD/WWWD via
+// dpf-route-learning-to-commons; this store is the staging/working layer.
+model CoworkerMemoryNote {
+  id             String    @id @default(cuid())
+  agentId        String // Agent.id (cuid) — the coworker this note belongs to
+  noteKind       String // closed vocabulary: technique|context|preference|caution|reference
+  noteKey        String // short stable identifier for supersede-by-key
+  content        String
+  sourceRef      String? // free-form provenance (route/thread/task) for audit
+  createdBy      String? // userId if a human recorded it; null = the coworker itself
+  createdAt      DateTime  @default(now())
+  supersededAt   DateTime?
+  supersededById String?
+  agent          Agent     @relation("CoworkerMemoryNoteAgent", fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, supersededAt])
+  @@index([agentId, noteKind, noteKey])
 }
 
 model CoworkerSelfAssessment {
