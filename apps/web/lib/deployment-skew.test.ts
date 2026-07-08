@@ -1,6 +1,12 @@
 // BI-D22D4607: stale-tab deployment-skew detection for the crash boundary.
+// BI-F381D902: identity comparison + event-aware matcher for the global sentinel.
 import { describe, expect, it } from "vitest";
-import { isDeploymentSkewError } from "./deployment-skew";
+import {
+  isBundleMismatch,
+  isDeploymentSkewError,
+  isDeploymentSkewReason,
+  skewMessageFromReason,
+} from "./deployment-skew";
 
 describe("isDeploymentSkewError", () => {
   it.each([
@@ -35,5 +41,80 @@ describe("isDeploymentSkewError", () => {
   it("handles null/undefined", () => {
     expect(isDeploymentSkewError(null)).toBe(false);
     expect(isDeploymentSkewError(undefined)).toBe(false);
+  });
+});
+
+describe("skewMessageFromReason", () => {
+  it("extracts a message from Error, string, ErrorEvent-like, and rejection-like objects", () => {
+    expect(skewMessageFromReason("plain string")).toBe("plain string");
+    expect(skewMessageFromReason(new Error("boom"))).toBe("boom");
+    // ErrorEvent shape.
+    expect(skewMessageFromReason({ message: "evented" })).toBe("evented");
+    // PromiseRejectionEvent shape → unwrap .reason.
+    expect(skewMessageFromReason({ reason: new Error("rejected") })).toBe("rejected");
+    // Wrapped .error.
+    expect(skewMessageFromReason({ error: "wrapped" })).toBe("wrapped");
+  });
+
+  it("returns empty string for values it cannot read", () => {
+    expect(skewMessageFromReason(null)).toBe("");
+    expect(skewMessageFromReason(undefined)).toBe("");
+    expect(skewMessageFromReason(42)).toBe("");
+    expect(skewMessageFromReason({})).toBe("");
+  });
+});
+
+describe("isDeploymentSkewReason", () => {
+  it("matches skew inside Error, ErrorEvent, and PromiseRejectionEvent shapes", () => {
+    expect(
+      isDeploymentSkewReason(new Error("An unexpected response was received from the server.")),
+    ).toBe(true);
+    // ErrorEvent.
+    expect(isDeploymentSkewReason({ message: "ChunkLoadError: Loading chunk 4 failed." })).toBe(true);
+    // PromiseRejectionEvent.reason as an Error.
+    expect(
+      isDeploymentSkewReason({
+        reason: new Error('Failed to find Server Action "abc". This request might be from an older or newer deployment.'),
+      }),
+    ).toBe(true);
+  });
+
+  it("ignores non-skew reasons", () => {
+    expect(isDeploymentSkewReason(new Error("Failed to fetch"))).toBe(false);
+    expect(isDeploymentSkewReason({ message: "Cannot read properties of undefined" })).toBe(false);
+    expect(isDeploymentSkewReason(null)).toBe(false);
+  });
+});
+
+describe("isBundleMismatch", () => {
+  it("is true when a known bundleHash or version changed", () => {
+    expect(
+      isBundleMismatch({ version: "1", bundleHash: "aaa" }, { version: "1", bundleHash: "bbb" }),
+    ).toBe(true);
+    expect(
+      isBundleMismatch({ version: "1", bundleHash: "aaa" }, { version: "2", bundleHash: "aaa" }),
+    ).toBe(true);
+  });
+
+  it("is false when identities match", () => {
+    expect(
+      isBundleMismatch({ version: "1", bundleHash: "aaa" }, { version: "1", bundleHash: "aaa" }),
+    ).toBe(false);
+  });
+
+  it("never treats 'unknown' or missing values as a mismatch (anti-loop invariant)", () => {
+    // `next dev` reports "unknown" on both sides — must not loop-reload.
+    expect(
+      isBundleMismatch({ version: "unknown", bundleHash: "unknown" }, { version: "unknown", bundleHash: "unknown" }),
+    ).toBe(false);
+    // One side unknown → indeterminate, not a mismatch.
+    expect(
+      isBundleMismatch({ version: "1", bundleHash: "unknown" }, { version: "1", bundleHash: "bbb" }),
+    ).toBe(false);
+    expect(
+      isBundleMismatch({ bundleHash: "aaa" }, { bundleHash: null }),
+    ).toBe(false);
+    expect(isBundleMismatch(null, { bundleHash: "aaa" })).toBe(false);
+    expect(isBundleMismatch({ bundleHash: "aaa" }, null)).toBe(false);
   });
 });

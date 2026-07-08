@@ -11,6 +11,7 @@ import { AgentCoworkerShell } from "@/components/agent/AgentCoworkerShell";
 import { QueueFlusher } from "@/components/feedback/QueueFlusher";
 import { StatusBanner } from "@/components/shell/StatusBanner";
 import { UpdatePendingBanner } from "@/components/shell/UpdatePendingBanner";
+import { DeploymentSkewBanner } from "@/components/shell/DeploymentSkewBanner";
 import { PlatformBanner } from "@/components/platform/PlatformBanner";
 import { ShellBannerOverlay } from "@/components/shell/ShellBannerOverlay";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
@@ -169,6 +170,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           />
         )}
         <ShellBannerOverlay>
+          <DeploymentSkewBanner />
           <PlatformBanner />
           <StatusBanner />
           <UpdatePendingBanner />
