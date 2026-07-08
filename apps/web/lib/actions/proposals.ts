@@ -1,8 +1,8 @@
 "use server";
 
-import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { can } from "@/lib/permissions";
+import { requireUser } from "@/lib/actions/shared/guards";
 import { PLATFORM_TOOLS, executeTool } from "@/lib/mcp-tools";
 import * as crypto from "crypto";
 import {
@@ -16,17 +16,11 @@ import {
   scopeKeyFor,
 } from "@/lib/proactivity/proactivity-override-preferences";
 
-async function requireAuthUser() {
-  const session = await auth();
-  const user = session?.user;
-  if (!user?.id) throw new Error("Unauthorized");
-  return user;
-}
 
 export async function approveProposal(
   proposalId: string,
 ): Promise<{ success: boolean; resultEntityId?: string; error?: string }> {
-  const user = await requireAuthUser();
+  const user = await requireUser();
 
   const proposal = await prisma.agentActionProposal.findUnique({
     where: { proposalId },
@@ -123,7 +117,7 @@ export async function rejectProposal(
   proposalId: string,
   reason?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const user = await requireAuthUser();
+  const user = await requireUser();
 
   const proposal = await prisma.agentActionProposal.findUnique({
     where: { proposalId },

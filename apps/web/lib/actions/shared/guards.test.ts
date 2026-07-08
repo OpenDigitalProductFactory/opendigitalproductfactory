@@ -5,7 +5,7 @@ vi.mock("@/lib/permissions", () => ({ can: vi.fn() }));
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { requireCapability, withCapability } from "./guards";
+import { requireCapability, requireUser, requireUserId, withCapability } from "./guards";
 
 const mockAuth = vi.mocked(auth);
 const mockCan = vi.mocked(can);
@@ -59,6 +59,49 @@ describe("requireCapability", () => {
     mockCan.mockReturnValue(true);
 
     await expect(requireCapability("manage_platform")).rejects.toThrow("Unauthorized");
+  });
+});
+
+describe("requireUser", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns the session user when signed in", async () => {
+    signedIn("user-42", "HR-000", true);
+
+    const user = await requireUser();
+    expect(user.id).toBe("user-42");
+    expect(user.platformRole).toBe("HR-000");
+    expect(user.isSuperuser).toBe(true);
+    // The auth check must not depend on the capability primitive.
+    expect(mockCan).not.toHaveBeenCalled();
+  });
+
+  it("throws Unauthorized when there is no session user", async () => {
+    signedOut();
+    await expect(requireUser()).rejects.toThrow("Unauthorized");
+  });
+
+  it("throws Unauthorized (strict !user?.id) when the session user has no id", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "", platformRole: "HR-000", isSuperuser: false } } as never);
+    await expect(requireUser()).rejects.toThrow("Unauthorized");
+  });
+});
+
+describe("requireUserId", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns just the id when signed in", async () => {
+    signedIn("user-7");
+    await expect(requireUserId()).resolves.toBe("user-7");
+  });
+
+  it("throws Unauthorized when signed out", async () => {
+    signedOut();
+    await expect(requireUserId()).rejects.toThrow("Unauthorized");
   });
 });
 

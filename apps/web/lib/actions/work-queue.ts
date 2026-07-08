@@ -1,7 +1,7 @@
 "use server";
 
 import { Prisma, prisma } from "@dpf/db";
-import { auth } from "@/lib/auth";
+import { requireUserId } from "@/lib/actions/shared/guards";
 import { inngest } from "@/lib/queue/inngest-client";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
 import { computeFlowDurations } from "@/lib/queue/flow-metrics";
@@ -22,11 +22,6 @@ function cwqQueueKey(queueId: string): string {
   return `cwq:${queueId}`;
 }
 
-async function requireAuth(): Promise<string> {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
-  return session.user.id;
-}
 
 // ─── Queue CRUD ───────────────────────────────────────────────────────────────
 
@@ -39,7 +34,7 @@ export async function createWorkQueue(data: {
   digitalProductId?: string;
   slaMinutes?: Record<string, number>;
 }) {
-  await requireAuth();
+  await requireUserId();
   return prisma.workQueue.create({
     data: {
       ...data,
@@ -64,7 +59,7 @@ export async function createWorkItem(data: {
   dueAt?: Date;
   parentItemId?: string;
 }) {
-  await requireAuth();
+  await requireUserId();
 
   const item = await prisma.workItem.create({
     data: {
@@ -104,7 +99,7 @@ export async function createWorkItem(data: {
 }
 
 export async function claimWorkItem(itemId: string) {
-  const userId = await requireAuth();
+  const userId = await requireUserId();
 
   const item = await prisma.workItem.update({
     where: { itemId, status: "queued" },
@@ -137,7 +132,7 @@ export async function completeWorkItem(
   itemId: string,
   evidence?: Record<string, unknown>,
 ) {
-  await requireAuth();
+  await requireUserId();
 
   const item = await prisma.workItem.update({
     where: { itemId },
@@ -174,7 +169,7 @@ export async function completeWorkItem(
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 export async function getMyQueue() {
-  const userId = await requireAuth();
+  const userId = await requireUserId();
 
   return prisma.workItem.findMany({
     where: {
@@ -193,7 +188,7 @@ export async function getMyQueue() {
 }
 
 export async function getTriageQueue() {
-  await requireAuth();
+  await requireUserId();
 
   return prisma.workItem.findMany({
     where: {

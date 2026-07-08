@@ -9,8 +9,7 @@
 
 import { createHash } from "node:crypto";
 import { prisma } from "@dpf/db";
-import { auth } from "@/lib/auth";
-import { requireCapability } from "@/lib/actions/shared/guards";
+import { requireCapability, requireUserId } from "@/lib/actions/shared/guards";
 import { getDisplayPseudonym, resolveHiveToken } from "@/lib/integrate/identity-privacy";
 import { loadSource } from "@/lib/integrate/issue-bridge";
 import { buildRedactedFeedbackPayload, selectTransport } from "@/lib/integrate/feedback-transport";
@@ -27,13 +26,6 @@ export type FileUpstreamFeedbackResult =
   | { ok: true; status: "filed"; issueNumber: number | null; url: string }
   | { ok: true; status: "already-filed"; issueNumber: number; url: string | null }
   | { ok: false; status: "blocked" | "skipped" | "failed" | "rate-limited"; reason: string };
-
-async function requireAuthUserId(): Promise<string> {
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) throw new Error("Unauthorized");
-  return userId;
-}
 
 async function requireManagePlatformUserId(): Promise<string> {
   return (await requireCapability("manage_platform")).userId;
@@ -70,7 +62,7 @@ async function enforceEscalationRateLimit(contributor: string): Promise<boolean>
 export async function fileUpstreamFeedback(input: {
   reportId: string;
 }): Promise<FileUpstreamFeedbackResult> {
-  await requireAuthUserId();
+  await requireUserId();
   return escalateReportUpstream(input);
 }
 
@@ -171,7 +163,7 @@ export type UpstreamFeedbackConsent = {
 
 /** Read the current upstream-feedback consent + availability for the UI/coworker. */
 export async function getUpstreamFeedbackConsent(): Promise<UpstreamFeedbackConsent> {
-  await requireAuthUserId();
+  await requireUserId();
   const config = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
     select: {

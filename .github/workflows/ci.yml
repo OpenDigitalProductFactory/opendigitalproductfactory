@@ -310,6 +310,13 @@ jobs:
           node-version: 24
       - name: Run guard
         run: node scripts/check-no-raw-event-source.mjs
+      # BI-991D4DC8 (EP-8DC217EB, BET-2): server actions must use the canonical
+      # requireUser/requireUserId from apps/web/lib/actions/shared/guards.ts
+      # rather than re-implementing the session-auth preamble locally (which
+      # drifted on both the null-check and the error string). This guard fails
+      # any PR that (re)introduces a local requireAuth/requireUser guard.
+      - name: Run local auth-guard ratchet
+        run: node scripts/check-no-local-auth-guard.mjs
 
   package-boundary-guard:
     name: Package Boundary Guard

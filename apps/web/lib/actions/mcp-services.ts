@@ -1,20 +1,14 @@
 "use server";
 
 import { prisma } from "@dpf/db";
-import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { requireUser } from "@/lib/actions/shared/guards";
 import { checkMcpServerHealth } from "@/lib/mcp-server-health";
 import { discoverMcpServerTools } from "@/lib/mcp-server-tools";
 import { validateConnectionConfig, redactConfig, type McpConnectionConfig } from "@/lib/mcp-server-types";
 
-async function requireAuthenticated() {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
-  return session.user;
-}
-
 async function requireManageProviders(): Promise<string> {
-  const user = await requireAuthenticated();
+  const user = await requireUser();
   if (!can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections")) {
     throw new Error("Unauthorized");
   }
@@ -174,7 +168,7 @@ export async function queryMcpServers(options?: {
   status?: string;
   category?: string;
 }) {
-  await requireAuthenticated();
+  await requireUser();
   return prisma.mcpServer.findMany({
     where: {
       ...(options?.status ? { status: options.status } : { status: { not: "deactivated" } }),
@@ -189,7 +183,7 @@ export async function queryMcpServers(options?: {
 }
 
 export async function getMcpServerDetail(serverId: string) {
-  await requireAuthenticated();
+  await requireUser();
   const server = await prisma.mcpServer.findUnique({
     where: { id: serverId },
     include: {

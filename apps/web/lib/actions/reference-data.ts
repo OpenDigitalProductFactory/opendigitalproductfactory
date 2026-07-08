@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
+import { requireUserId } from "@/lib/actions/shared/guards";
 import { prisma } from "@dpf/db";
 import {
   createLocality,
@@ -10,12 +10,6 @@ import {
   searchLocalities,
   searchRegionsForLocation,
 } from "@/lib/location-resolution/service";
-
-async function requireAuth(): Promise<string> {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error("Not authenticated");
-  return session.user.id;
-}
 
 export type CreateRefResult = {
   ok: boolean;
@@ -29,17 +23,17 @@ export type CreateRefResult = {
 // ---------------------------------------------------------------------------
 
 export async function searchCountries(query: string) {
-  await requireAuth();
+  await requireUserId();
   return searchCountriesForLocation(query);
 }
 
 export async function searchRegions(countryId: string, query: string) {
-  await requireAuth();
+  await requireUserId();
   return searchRegionsForLocation(countryId, query);
 }
 
 export async function searchCities(regionId: string, query: string) {
-  await requireAuth();
+  await requireUserId();
   return searchLocalities(regionId, query);
 }
 
@@ -52,7 +46,7 @@ export async function createRegion(
   name: string,
   code?: string,
 ): Promise<CreateRefResult> {
-  await requireAuth();
+  await requireUserId();
   const trimmedName = name.trim();
   if (!trimmedName) {
     return { ok: false, message: "Region name is required." };
@@ -98,7 +92,7 @@ export async function createCity(
   regionId: string,
   name: string,
 ): Promise<CreateRefResult> {
-  const userId = await requireAuth();
+  const userId = await requireUserId();
   const result = await createLocality({ regionId, name, addedByUserId: userId });
   revalidatePath("/employee");
   revalidatePath("/admin/reference-data");
@@ -114,7 +108,7 @@ export async function forceCreateRegion(
   name: string,
   code?: string,
 ): Promise<CreateRefResult> {
-  await requireAuth();
+  await requireUserId();
   const trimmedName = name.trim();
   if (!trimmedName) {
     return { ok: false, message: "Region name is required." };
@@ -141,7 +135,7 @@ export async function forceCreateCity(
   regionId: string,
   name: string,
 ): Promise<CreateRefResult> {
-  const userId = await requireAuth();
+  const userId = await requireUserId();
   const result = await forceCreateLocality({ regionId, name, addedByUserId: userId });
   revalidatePath("/employee");
   revalidatePath("/admin/reference-data");
