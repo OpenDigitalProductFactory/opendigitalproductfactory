@@ -1,39 +1,41 @@
 ---
-title: Trust the CMDB or rebuild it on the three pillars
+title: Trust your data spine or rebuild it on the three pillars
 pageKind: stance
 status: published
-abstract: Most organisations have a CMDB; very few actually trust it. Trust is built through Ingestion (auto-populate), Insight (actually use the data), and Governance & Health (people and process). If any pillar is missing, the CMDB is lying to you.
+abstract: A coworker's decisions are only as trustworthy as the record beneath them. A trusted data spine rests on three pillars — Ingestion (auto-populate), Insight (actually use it), and Governance & Health (someone owns and prunes it). Miss any pillar and the record is lying to you. The CMDB is the war-story where this lesson was learned.
 sources:
   - frameworks/csdm
 ---
 
 ## The position
 
-Most organisations have a CMDB. Very few actually trust it. **Trust is the only quality of a CMDB that matters** — an untrusted CMDB is technical debt that compounds.
+Any system that reasons off a record of what an organisation runs — a CMDB, a `[[entities/digital-product]]` model, DPF&#39;s own canonical data spine — is **only as trustworthy as that record**. Most organisations have such a record. Very few actually trust it. **Trust is the only quality of the record that matters** — an untrusted spine is technical debt that compounds, and every decision grounded on it inherits the lie.
 
 Trust rests on three pillars:
 
 1. **Ingestion** — auto-populate. It is not humanly possible to manually track the rapid inflation and deflation of virtualised cloud resources, hybrid environments, and on-premises infrastructure.
-2. **Insight** — actually use the data for operations and planning. A CMDB nobody queries is a CMDB nobody fixes.
+2. **Insight** — actually use the data for operations and planning. A record nobody queries is a record nobody fixes.
 3. **Governance &amp; Health** — people and process, not just tech. Someone has to own the model, someone has to triage discoveries, someone has to retire stale rows.
 
-If any pillar is missing, the CMDB is lying to you — and acting on it produces wrong decisions you&#39;ll only discover months later.
+If any pillar is missing, the record is lying to you — and acting on it produces wrong decisions you&#39;ll only discover months later.
 
 ## Why
 
-The CMDB problem isn&#39;t that the data model is hard. `[[entities/csdm]]` (currently at v5) has settled the model question — it&#39;s the canonical spine. The problem is that organisations stand up the data model without standing up the three pillars, then are surprised when the CMDB stops being useful.
+In DPF this is not an analogy — it is the acceptance test for the platform&#39;s own spine. DPF&#39;s coworkers reason off its canonical data model the way an ITSM team reasons off a CMDB. So the three pillars apply directly: if DPF&#39;s model isn&#39;t auto-populated (Ingestion), actually used by the coworkers making calls (Insight), and owned and pruned (Governance), then every `[[stances/ea-is-meteorology]]` forecast — every WWMD, WWWD, and WSID recommendation — is grounded on decoration. A decision surface is only as trustworthy as the record beneath it; this stance is that constraint made explicit.
 
-The technical-debt use case was where this lesson originally landed. The early ServiceNow Technology Portfolio Management work hit the wall on technical-debt reporting because there was no single source of truth across asset, dev, ops, ITSM, and CSM. **The vision was to create a common model that connects what naturally happens. CSDM was born.** The same lesson kept replaying across every customer: model alone isn&#39;t enough.
+The failure is never that the data model is hard. `[[entities/csdm]]` (currently at v5) settled the model question a decade ago. The failure is standing up the model without standing up the three pillars, then being surprised when the record stops being useful.
 
-The ROI conversation that lands with executives is tool consolidation: organisations routinely have 300+ tools doing the same IT function (monitoring is the canonical example). You can&#39;t rationalise that without a trusted CMDB to tell you which tool does what. Build the three pillars; the rationalisation funds itself.
+### The war-story: the CMDB and technical-debt reporting
 
-The lesson generalises past the CMDB. "CMDB" is the ITSM name for *the record of what you run*; DPF has the same record in its own canonical data model, and its coworkers reason off it. The three pillars are the acceptance test for any such record: if DPF&#39;s model isn&#39;t auto-populated (Ingestion), actually used by the coworkers making calls (Insight), and owned and pruned (Governance), then every WWMD/WWWD/WSID recommendation grounded in it inherits the same lie. A decision surface is only as trustworthy as the record beneath it.
+The lesson originally landed on the CMDB. The early ServiceNow Technology Portfolio Management work hit the wall on technical-debt reporting because there was no single source of truth across asset, dev, ops, ITSM, and CSM. **The vision was to create a common model that connects what naturally happens. CSDM was born.** The same lesson replayed across every customer: model alone isn&#39;t enough.
+
+The ROI conversation that landed with executives was tool consolidation — organisations routinely run 300+ tools doing the same IT function (monitoring is the canonical example), and you can&#39;t rationalise that without a trusted record to tell you which tool does what. Build the three pillars; the rationalisation funds itself. "CMDB" was simply the ITSM name for *the record of what you run* — the pillars are the same wherever that record lives.
 
 ## When this applies
 
-- Standing up a new CMDB.
-- Rescuing a CMDB that&#39;s lost the team&#39;s trust.
-- Designing data foundations for cross-product reasoning, AI co-workers, or rationalisation initiatives.
+- Designing data foundations for cross-product reasoning, AI coworkers, or rationalisation initiatives — including DPF&#39;s own canonical model.
+- Standing up a new CMDB, or rescuing one that&#39;s lost the team&#39;s trust.
+- Any decision surface whose recommendations are only as good as the record they read from.
 
 ## When it doesn&#39;t
 
@@ -48,5 +50,6 @@ The lesson generalises past the CMDB. "CMDB" is the ITSM name for *the record of
 ## See also
 
 - Entity: `[[entities/csdm]]`
-- Stance: `[[stances/dont-integrate-ea-platform]]` — why one trusted CMDB beats two integrated ones.
+- Stance: `[[stances/dont-integrate-ea-platform]]` — why one trusted record beats two integrated ones.
+- Stance: `[[stances/ea-is-meteorology]]` — the forecast inherits the trust of the record beneath it.
 - Raw source: `[raw-sources/frameworks/csdm](../../raw-sources/frameworks/csdm.md)`

@@ -2,7 +2,7 @@
 title: Auto-populate or it's already wrong
 pageKind: heuristic
 status: published
-abstract: It is not humanly possible to manually track the rapid inflation and deflation of virtualised cloud, hybrid, and on-prem resources. If your CMDB depends on humans to enter records, it's already lying to you.
+abstract: Any operational record that depends on a human to keep it current is already lying to you — the rate of change outruns manual entry. Auto-populate or accept that the record is decoration. Applies to a CMDB, and equally to DPF's own data spine that its coworkers reason off.
 sources:
   - frameworks/csdm
 ---
@@ -13,7 +13,7 @@ sources:
 
 ## When it applies
 
-Designing a CMDB, an asset inventory, a software catalog, a service registry, or any operational data source that needs to reflect current reality. Also: AI-co-worker context surfaces that rely on platform data being accurate.
+Designing any operational data source that needs to reflect current reality — a CMDB, an asset inventory, a software catalog, a service registry, or the DPF data spine and context surfaces a coworker recalls from. If a decision will be made off the record, the record has to keep itself current.
 
 ## Why it works
 
