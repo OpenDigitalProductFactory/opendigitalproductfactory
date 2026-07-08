@@ -11,6 +11,8 @@
 // Runaway guard: the fan-out width is hard-capped (MAX_FANOUT_WIDTH); excess
 // subtasks are dropped and reported, never silently truncated.
 
+import { randomUUID } from "node:crypto";
+
 import { prisma } from "@dpf/db";
 
 import { startChain } from "./delegation-authority";
@@ -78,6 +80,7 @@ export async function spawnSubagentFanout(input: {
 
     const child = await prisma.taskRun.create({
       data: {
+        taskRunId: `fanout-${randomUUID()}`,
         userId: input.userId,
         parentTaskRunId: input.parentTaskRunId ?? null,
         initiatingAgentId: input.parentAgentId,
