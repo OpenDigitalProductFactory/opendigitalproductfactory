@@ -23,6 +23,11 @@ const mocks = vi.hoisted(() => ({
   runPromoter: vi.fn(),
   // Skip-before-drain guard: promoter image present by default in every setup.
   isPromoterAvailable: vi.fn().mockResolvedValue(true),
+  // Auto-heal: default to "couldn't build" so a test that flips the image to
+  // absent still exercises the skip path unless it opts into a successful build.
+  ensurePromoterImage: vi
+    .fn()
+    .mockResolvedValue({ ok: false, alreadyPresent: false, built: false, skipReason: "build-failed" }),
   // Cooldown backoff (this fix): no active cooldown by default.
   getCooldownUntil: vi.fn().mockResolvedValue(null),
   recordCooldown: vi.fn().mockResolvedValue(undefined),
@@ -118,6 +123,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
 vi.mock("@/lib/self-upgrade/promoter", () => ({
   runPromoter: mocks.runPromoter,
   isPromoterAvailable: mocks.isPromoterAvailable,
+  ensurePromoterImage: mocks.ensurePromoterImage,
 }));
 
 vi.mock("@/lib/self-upgrade/cooldown", () => ({
@@ -1111,6 +1117,12 @@ describe("skip-before-drain guards", () => {
     // the gate defaults each test (a prior describe can leave them flipped).
     mocks.isCheckIntervalElapsed.mockReturnValue(true);
     mocks.isPromoterAvailable.mockResolvedValue(true);
+    mocks.ensurePromoterImage.mockResolvedValue({
+      ok: false,
+      alreadyPresent: false,
+      built: false,
+      skipReason: "build-failed",
+    });
     mocks.getCooldownUntil.mockResolvedValue(null);
     mocks.recordCooldown.mockResolvedValue(undefined);
     mocks.clearCooldown.mockResolvedValue(undefined);
@@ -1125,11 +1137,19 @@ describe("skip-before-drain guards", () => {
     mocks.completeRun.mockResolvedValue({});
   });
 
-  it("skips with promoter-unavailable BEFORE draining when the image is absent", async () => {
+  it("skips with promoter-unavailable BEFORE draining when the image is absent AND unbuildable", async () => {
     mocks.isPromoterAvailable.mockResolvedValue(false);
+    // Auto-heal is attempted first; skip only survives when the build fails.
+    mocks.ensurePromoterImage.mockResolvedValue({
+      ok: false,
+      alreadyPresent: false,
+      built: false,
+      skipReason: "build-failed",
+    });
 
     const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
 
+    expect(mocks.ensurePromoterImage).toHaveBeenCalledWith("dpf-promoter");
     expect(result).toMatchObject({ skipped: true, reason: "promoter-unavailable" });
     // Never drained, never prepared a source, never created a run.
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
@@ -1137,6 +1157,25 @@ describe("skip-before-drain guards", () => {
     expect(mocks.createRun).not.toHaveBeenCalled();
     // A clean no-op sets no cooldown — the next tick re-checks immediately.
     expect(mocks.recordCooldown).not.toHaveBeenCalled();
+  });
+
+  it("auto-heals a missing promoter image (builds it) and proceeds without skipping", async () => {
+    // The image is absent but JIT-buildable — the precheck builds it in place,
+    // still before any drain, so the upgrade resumes instead of stranding the
+    // operator with a docker command (BI-F2C53237).
+    mocks.isPromoterAvailable.mockResolvedValue(false);
+    mocks.ensurePromoterImage.mockResolvedValue({
+      ok: true,
+      alreadyPresent: false,
+      built: true,
+    });
+
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+
+    expect(mocks.ensurePromoterImage).toHaveBeenCalledWith("dpf-promoter");
+    // Not a promoter-unavailable skip — the run advances past the precheck.
+    expect(result).not.toMatchObject({ reason: "promoter-unavailable" });
+    expect(mocks.startQuiescence).toHaveBeenCalled();
   });
 
   it("marks a pre-created queued run skipped when a pre-drain guard stops the attempt", async () => {

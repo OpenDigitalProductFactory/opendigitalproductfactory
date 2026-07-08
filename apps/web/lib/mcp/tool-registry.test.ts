@@ -174,9 +174,10 @@ describe("activity-routing tool pack", () => {
 });
 
 describe("self-upgrade tool pack", () => {
-  it("bundles the governed self-upgrade request + queue-status tools", () => {
+  it("bundles the governed self-upgrade request + repair + queue-status tools", () => {
     expect(selfUpgradePack.definitions.map((t) => t.name)).toEqual([
       "request_self_upgrade",
+      "repair_promoter_image",
       "get_self_upgrade_queue_status",
     ]);
     for (const def of selfUpgradePack.definitions) {

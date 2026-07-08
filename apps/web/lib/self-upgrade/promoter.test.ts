@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { buildPromoterCommand } from "./promoter";
+import {
+  buildPromoterCommand,
+  isJitBuildablePromoterImage,
+  PROMOTER_JIT_BUILD_SCRIPT,
+} from "./promoter";
 
 const BASE = {
   hostInstallPath: "/Users/me/dpf",
@@ -94,5 +98,36 @@ describe("buildPromoterCommand", () => {
     const joined = buildPromoterCommand(BASE).args.join(" ");
     expect(joined).not.toContain("PROMOTE_COMPOSE_FILES=");
     expect(joined).not.toContain("PROMOTE_COMPOSE_PROJECT=");
+  });
+});
+
+describe("isJitBuildablePromoterImage", () => {
+  it("treats the default local tag (and an empty/omitted image) as buildable", () => {
+    expect(isJitBuildablePromoterImage()).toBe(true);
+    expect(isJitBuildablePromoterImage("")).toBe(true);
+    expect(isJitBuildablePromoterImage("dpf-promoter")).toBe(true);
+  });
+
+  it("refuses to synthesise a custom or registry-qualified image", () => {
+    // A configured registry image is pull-based deployment the operator owns;
+    // building and mis-tagging it locally would masquerade as the real image.
+    expect(isJitBuildablePromoterImage("ghcr.io/acme/dpf-promoter:v1")).toBe(false);
+    expect(isJitBuildablePromoterImage("dpf-promoter:pinned")).toBe(false);
+  });
+});
+
+describe("PROMOTER_JIT_BUILD_SCRIPT", () => {
+  it("builds from the portal's baked-in /promoter/ layout and tags dpf-promoter", () => {
+    // The recipe must consume the files the Dockerfile copies to /promoter/ and
+    // produce the default local tag isPromoterAvailable() looks for.
+    expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("/promoter/portal.Dockerfile");
+    expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("/promoter/Dockerfile.promoter");
+    expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("/promoter/promote.sh");
+    expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("docker build -t dpf-promoter -f Dockerfile.promoter");
+  });
+
+  it("is a fixed constant with no interpolation (safe under sh -c)", () => {
+    expect(PROMOTER_JIT_BUILD_SCRIPT).not.toContain("${");
+    expect(PROMOTER_JIT_BUILD_SCRIPT).not.toContain("`");
   });
 });

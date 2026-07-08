@@ -111,9 +111,9 @@ export function describeSkipReason(
         title: "Upgrade engine not ready",
         detail: `The promoter image${
           rest ? ` (${rest})` : ""
-        } isn't built on this host, so the portal can't be swapped. The portal was left running rather than drained.`,
+        } isn't built on this host and couldn't be built automatically, so the portal can't be swapped. The portal was left running rather than drained.`,
         remedy:
-          "Build the promoter image, then retry — the next attempt resumes automatically once it's present.",
+          'Use "Build engine now" below to build it (or ask the AI Ops Engineer to). The next attempt resumes automatically once it succeeds. A custom/registry promoter image must be provided by the operator.',
       };
     case "batch-below-threshold":
       return {

@@ -55,7 +55,7 @@ export const SELF_UPGRADE_EVENT = "ops/self-upgrade.run";
 
 type PromoterRuntime = Pick<
   typeof import("@/lib/self-upgrade/promoter"),
-  "isPromoterAvailable" | "runPromoter"
+  "isPromoterAvailable" | "ensurePromoterImage" | "runPromoter"
 >;
 
 async function loadPromoterRuntime(): Promise<PromoterRuntime> {
@@ -202,11 +202,21 @@ export async function runSelfUpgrade(
   // the portal (which would burn the full quiescence budget and then fail at
   // `docker run`). This is the live symptom: promoterImage `dpf-promoter` was
   // never built, yet the portal kept draining. dryRun never swaps, so it skips
-  // this check. A skip here is a clean no-op: it sets no cooldown and the next
-  // tick re-checks, so the upgrade resumes the moment the image appears.
+  // this check.
+  //
+  // Auto-heal (BI-F2C53237): the promoter image is buildable from files baked
+  // into the portal at /promoter/ (the same recipe the promotion path uses), so
+  // rather than strand a non-technical operator with a `docker build` command,
+  // build it here — still BEFORE any drain — and only skip if the build itself
+  // fails (or a custom/registry image is configured, which the operator pulls).
+  // A skip here remains a clean no-op: no cooldown, and the next tick re-checks.
   if (!params.dryRun) {
-    const { isPromoterAvailable } = await loadPromoterRuntime();
-    const promoterReady = await isPromoterAvailable(config.promoterImage);
+    const { isPromoterAvailable, ensurePromoterImage } = await loadPromoterRuntime();
+    let promoterReady = await isPromoterAvailable(config.promoterImage);
+    if (!promoterReady) {
+      const healed = await ensurePromoterImage(config.promoterImage);
+      promoterReady = healed.ok;
+    }
     if (!promoterReady) {
       const promoterImage = config.promoterImage ?? "dpf-promoter";
       return await skipAttempt(

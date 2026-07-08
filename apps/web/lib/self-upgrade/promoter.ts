@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
  * The promoter runs as a SIBLING container, never inside the portal.
@@ -178,6 +179,128 @@ export async function isPromoterAvailable(promoterImage?: string): Promise<boole
       child.on("error", () => finish(false));
     } catch {
       finish(false);
+    }
+  });
+}
+
+/**
+ * The just-in-time promoter build recipe. The build inputs are baked into the
+ * portal image at `/promoter/` (see Dockerfile `COPY … /promoter/*`), laid out
+ * to mirror the repo root — `portal.Dockerfile` (the portal build),
+ * `Dockerfile.promoter`, and `scripts/promote.sh`. Building from a temp dir with
+ * that layout lets the same `Dockerfile.promoter` build the promoter image from
+ * inside the portal container, with no host clone. This is the exact recipe the
+ * promotion path has used (apps/web/lib/actions/promotions.ts); it now lives
+ * here so the self-upgrade auto-heal and the governed repair tool share it.
+ *
+ * The script is a fixed constant — no interpolation — so it is safe to run via
+ * `sh -c` without shell-injection risk.
+ */
+export const PROMOTER_JIT_BUILD_SCRIPT =
+  "BDIR=$(mktemp -d) && " +
+  "cp /promoter/portal.Dockerfile $BDIR/Dockerfile && " +
+  "cp /promoter/Dockerfile.promoter $BDIR/Dockerfile.promoter && " +
+  "mkdir -p $BDIR/scripts && " +
+  "cp /promoter/promote.sh $BDIR/scripts/promote.sh && " +
+  "tar -C $BDIR -c . | docker build -t dpf-promoter -f Dockerfile.promoter - && " +
+  "rm -rf $BDIR";
+
+/**
+ * Whether the configured promoter image can be built here from the portal's
+ * baked-in `/promoter/` files. Only the default local `dpf-promoter` tag is —
+ * a custom or registry-qualified image (e.g. `ghcr.io/acme/dpf-promoter:v1`) is
+ * a pull-based deployment the operator owns, not something we synthesise and
+ * mis-tag locally. Pure so it is unit-testable without a daemon.
+ */
+export function isJitBuildablePromoterImage(promoterImage?: string): boolean {
+  const image =
+    promoterImage && promoterImage.length > 0 ? promoterImage : DEFAULT_PROMOTER_IMAGE;
+  return image === DEFAULT_PROMOTER_IMAGE;
+}
+
+export type EnsurePromoterResult = {
+  /** True when the image is present on the daemon after this call. */
+  ok: boolean;
+  /** The image was already present; no build was attempted. */
+  alreadyPresent: boolean;
+  /** A build ran and succeeded during this call. */
+  built: boolean;
+  /** Why `ok` is false, when it is. */
+  skipReason?: "custom-image" | "build-failed";
+  /** Trailing build stderr (truncated) when a build failed. */
+  detail?: string;
+};
+
+/**
+ * Make the promoter image present, building it just-in-time if it is missing.
+ *
+ * This is the self-heal for the `promoter-unavailable` self-upgrade skip and the
+ * body of the governed `repair_promoter_image` tool: instead of stranding a
+ * non-technical operator with a `docker build` command, the platform builds the
+ * image itself from the inputs already baked into the portal. Idempotent — a
+ * present image returns `{ ok: true, alreadyPresent: true }` without rebuilding.
+ * Never throws (mirrors `isPromoterAvailable`); failures surface via `ok:false`
+ * + `skipReason` so callers decide whether to skip, fall back, or report.
+ */
+export async function ensurePromoterImage(
+  promoterImage?: string,
+): Promise<EnsurePromoterResult> {
+  if (await isPromoterAvailable(promoterImage)) {
+    return { ok: true, alreadyPresent: true, built: false };
+  }
+
+  // A custom/registry image can't be synthesised locally — leave it to the
+  // operator's pull, and report cleanly so the caller keeps the skip.
+  if (!isJitBuildablePromoterImage(promoterImage)) {
+    return { ok: false, alreadyPresent: false, built: false, skipReason: "custom-image" };
+  }
+
+  return await new Promise<EnsurePromoterResult>((resolve) => {
+    let settled = false;
+    const finish = (r: EnsurePromoterResult): void => {
+      if (settled) return;
+      settled = true;
+      resolve(r);
+    };
+    try {
+      const child = spawn("sh", ["-c", PROMOTER_JIT_BUILD_SCRIPT], {
+        env: { ...process.env },
+      });
+      let stderr = "";
+      child.stdout?.on("data", () => {});
+      child.stderr?.on("data", (chunk: Buffer) => {
+        stderr += chunk;
+      });
+      child.on("close", (code: number | null) => {
+        if (code === 0) {
+          finish({ ok: true, alreadyPresent: false, built: true });
+        } else {
+          finish({
+            ok: false,
+            alreadyPresent: false,
+            built: false,
+            skipReason: "build-failed",
+            detail: stderr.trim().slice(-1500) || undefined,
+          });
+        }
+      });
+      child.on("error", (err: Error) => {
+        finish({
+          ok: false,
+          alreadyPresent: false,
+          built: false,
+          skipReason: "build-failed",
+          detail: err.message,
+        });
+      });
+    } catch (err) {
+      finish({
+        ok: false,
+        alreadyPresent: false,
+        built: false,
+        skipReason: "build-failed",
+        detail: getErrorMessage(err),
+      });
     }
   });
 }
