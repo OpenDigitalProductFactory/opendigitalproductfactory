@@ -81,9 +81,9 @@ export async function revokeCoworkerTool(
   agentBusinessId: string,
   slugId?: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireCapability("manage_platform");
+  const { userId } = await requireCapability("manage_platform");
 
-  await removeCoworkerToolGrant(agentCuid, grantKey);
+  await removeCoworkerToolGrant(agentCuid, grantKey, userId);
 
   revalidateRecord(agentBusinessId, slugId);
   return { ok: true };
