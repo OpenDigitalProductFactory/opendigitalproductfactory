@@ -68,6 +68,10 @@ import { marketingSchedulerDispatch } from "./marketing-scheduler-dispatch";
 import { recurringInvoiceDispatch } from "./recurring-invoice-dispatch";
 import { siemCorrelationSweep } from "./siem-correlation-sweep";
 import { patchAssessmentSweep } from "./patch-assessment-sweep";
+import {
+  coworkerCertificationNightly,
+  coworkerCertificationRunNow,
+} from "./coworker-certification";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 export const scheduledFunctions = [
@@ -109,6 +113,7 @@ export const scheduledFunctions = [
   siemCorrelationSweep,       // BI-6D9496F1: EP-SOVEREIGN-SOC P1 — project internal audit -> SecurityEvent + run detection rules, every 15m
   patchAssessmentSweep,       // EP-PATCH-MANAGEMENT P0: daily estate patch posture sweep (OSV+KEV -> AssuranceFinding), 05:00
   remoteActionClaimTimeout,   // EP-REMOTE-ACTION P2: time out stale claimed RemoteActions so the pull queue can't wedge, every 10m (flag-gated)
+  coworkerCertificationNightly, // EP-COWORKER-LIFECYCLE P2 (BI-DE9CC88B): nightly golden-journey certification of every roster coworker, 04:40
 ];
 
 export const eventFunctions = [
@@ -139,6 +144,7 @@ export const eventFunctions = [
   dataRetentionSweepRequested, // EP-DATA-RETENTION: operator "run now" / dry-run
   inngestRetentionSweepRequested, // BI-0AB96FE7: operator "run now" / dry-run for the Inngest retention sweep
   mdmStewardSweepRequested, // EP-4A12A7CB slice 4: Data Steward "run now" / dry-run
+  coworkerCertificationRunNow, // EP-COWORKER-LIFECYCLE P2 (BI-DE9CC88B): operator "run now" certification sweep
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

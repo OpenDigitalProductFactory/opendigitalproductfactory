@@ -8,6 +8,9 @@ export const ASSURANCE_FINDING_KINDS = [
   "missing-patch",
   "unsupported-component",
   "maintainer-risk",
+  // EP-COWORKER-LIFECYCLE Phase 2: a coworker failed a certification oracle
+  // (no tool call, fabrication, false refusal, empty tool surface).
+  "coworker-certification",
 ] as const;
 
 export type AssuranceFindingKind = (typeof ASSURANCE_FINDING_KINDS)[number];
@@ -18,6 +21,8 @@ export const ASSURANCE_AFFECTED_TYPES = [
   "inventory-entity",
   "build-artifact-revision",
   "release-bundle",
+  // EP-COWORKER-LIFECYCLE Phase 2: certification findings target a coworker.
+  "agent",
 ] as const;
 
 export type AssuranceAffectedType = (typeof ASSURANCE_AFFECTED_TYPES)[number];

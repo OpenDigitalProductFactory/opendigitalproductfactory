@@ -46,6 +46,18 @@ function AgentNeeds({ member }: { member: WorkforceMember }) {
       <StatPill label="budget" value={tokenBudget} />
       <StatPill label="tools" value={needs.toolGrantCount} />
       <StatPill label="skills" value={needs.skillCount} />
+      {/* EP-COWORKER-LIFECYCLE Phase 2: behavioral certification from the
+          nightly golden-journey sweep — honest "does this coworker work". */}
+      <span
+        className={[
+          "text-[9px]",
+          needs.certification === "certified"
+            ? "text-[var(--dpf-muted)]"
+            : "text-[var(--dpf-accent)]",
+        ].join(" ")}
+      >
+        certification <span className="text-[var(--dpf-text)]">{needs.certification}</span>
+      </span>
       <span
         className={[
           "text-[9px]",

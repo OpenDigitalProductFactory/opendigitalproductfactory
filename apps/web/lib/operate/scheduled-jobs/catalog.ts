@@ -501,6 +501,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
+  {
+    jobId: "coworker-certification",
+    inngestId: "ops/coworker-certification-nightly",
+    name: "Coworker certification",
+    purpose:
+      "EP-COWORKER-LIFECYCLE Phase 2 (BI-DE9CC88B): exercises every roster coworker's golden journeys through the real execution path (read-only tool surface) and records per-coworker pass/fail AssuranceRuns the workforce roster shows. If it stops, coworker certification goes stale and broken coworkers surface late again.",
+    cron: "40 4 * * *",
+    cadence: "Daily at 04:40",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: "ops/coworker-certification.requested",
+  },
 ] as const;
 
 const CATALOG_BY_JOB_ID = new Map<string, ScheduledJobCatalogEntry>(
