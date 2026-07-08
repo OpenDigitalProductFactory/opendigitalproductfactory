@@ -11542,7 +11542,7 @@ export async function executeTool(
                   logBuildActivity(buildId, "contribution_review", `Merge readiness: ${reviewResult.mergeReadiness}. Verticals: ${reviewResult.verticals.applicableVerticals.filter((v) => v.relevance !== "unlikely").map((v) => v.category).join(", ") || "none"}`);
                 } catch (reviewErr) {
                   console.warn("[contribute_to_hive] contribution review failed:", reviewErr);
-                  prError = prError ?? `Contribution review failed: ${getErrorMessage(reviewErr)}`;
+                  prError = `Contribution review failed: ${getErrorMessage(reviewErr)}`;
                 }
               }
             } else {
