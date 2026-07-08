@@ -57,6 +57,7 @@ model User {
   improvementReviews            ImprovementProposal[]         @relation("ImprovementReviews")
   improvementSubmissions        ImprovementProposal[]         @relation("ImprovementSubmissions")
   notifications                 Notification[]
+  notificationSubscriptions     NotificationSubscription[] @relation("NotificationSubscriptionUser")
   requestedPasswordResetTokens  PasswordResetToken[]          @relation("PasswordResetRequestedBy")
   passwordResetTokens           PasswordResetToken[]          @relation("PasswordResetForUser")
   issueReports                  PlatformIssueReport[]
@@ -4914,6 +4915,29 @@ model Notification {
 
   @@index([userId, read])
   @@index([createdAt])
+}
+
+// BI-997503EC (EP-CLAUDE-INSIDE-OUT): user-configurable notification rules —
+// "notify me when a record in category X matching filter Y changes". A rule is a
+// durable subscription owned by a user: an event category, an optional equality
+// filter over event attributes, a channel, and a cadence. When an event is
+// dispatched, active immediate rules whose filter matches produce a Notification
+// row for the owner. Replaces code-only notification delivery with an end-user
+// rule surface. Slice 1 = model + matcher + dispatch + door; wiring concrete
+// record-change event sources is Slice 2 (see BI follow-up).
+model NotificationSubscription {
+  id            String   @id @default(cuid())
+  userId        String
+  eventCategory String // e.g. "backlog", "service-ticket", "build"
+  filter        Json? // equality filter {attr: value}; null/empty = all in category
+  channel       String   @default("in_app") // in_app (Notification row); extensible
+  cadence       String   @default("immediate") // immediate | digest (digest = Slice 2)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  user          User     @relation("NotificationSubscriptionUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+  @@index([eventCategory, active])
 }
 
 model PlatformNotification {
