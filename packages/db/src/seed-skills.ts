@@ -6,6 +6,7 @@
 import { readdirSync, readFileSync } from "fs";
 import { join, basename } from "path";
 import type { PrismaClient } from "../generated/client/client";
+import { COWORKER_AGENT_SEEDS, ONBOARDING_AGENT_GRANTS } from "./workforce-seed.js";
 
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 const SKILLS_DIR = join(REPO_ROOT, "skills");
@@ -80,26 +81,18 @@ export type NormalizedSkillSeed = {
   assignTo: string[];
 };
 
-// All known agent IDs — used when assignTo includes "*"
-const ALL_AGENT_IDS = [
-  "portfolio-advisor",
-  "external-catalog-scout",
-  "inventory-specialist",
-  "ea-architect",
-  "hr-specialist",
-  "customer-advisor",
-  "ops-coordinator",
-  "platform-engineer",
-  "build-specialist",
-  "admin-assistant",
-  "marketing-specialist",
-  "storefront-advisor",
-  "onboarding-coo",
-  "coo",
-  "compliance-officer",
-  "docs-specialist",
-  "data-architect",
+// All known agent IDs — used when assignTo includes "*". Derived from the
+// canonical coworker roster (plus the bootstrap-created onboarding agent)
+// instead of a hand-copied list: the previous literal list had drifted to a
+// nonexistent "docs-specialist" (roster id is "doc-specialist") and silently
+// omitted five roster coworkers (data-steward, doc-specialist,
+// legal-operations-counsel, finance-controller, dispatcher), so wildcard
+// skills never reached them (EP-COWORKER-LIFECYCLE Phase 1, BI-53ABC4A4).
+export const SKILL_WILDCARD_AGENT_IDS: readonly string[] = [
+  ...COWORKER_AGENT_SEEDS.map((seed) => seed.agentId),
+  ...Object.keys(ONBOARDING_AGENT_GRANTS),
 ];
+const ALL_AGENT_IDS = SKILL_WILDCARD_AGENT_IDS;
 
 /**
  * Simple YAML frontmatter parser for .skill.md files.
@@ -501,7 +494,7 @@ type SkillAssignmentSeedClient = Pick<PrismaClient, "skillAssignment">;
 export async function reconcileSkillAssignments(
   prisma: SkillAssignmentSeedClient,
   skillId: string,
-  targetAgents: string[],
+  targetAgents: readonly string[],
   priority = 10,
 ): Promise<{ created: number; removed: number }> {
   const existingAssignments = await prisma.skillAssignment.findMany({
