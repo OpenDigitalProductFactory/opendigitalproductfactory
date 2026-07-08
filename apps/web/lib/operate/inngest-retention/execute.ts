@@ -25,6 +25,7 @@ import {
   cutoffForHours,
   cutoffForDays,
 } from "./constants";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export interface SqlResult {
   rowCount: number | null;
@@ -202,7 +203,7 @@ export async function runInngestRetentionSweep(opts: {
   } catch (err) {
     errors.push({
       table: "function_runs:orphans",
-      error: err instanceof Error ? err.message : String(err),
+      error: getErrorMessage(err),
     });
   }
 
@@ -231,7 +232,7 @@ export async function runInngestRetentionSweep(opts: {
     } catch (err) {
       errors.push({
         table: t.table,
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
       });
     }
   }
