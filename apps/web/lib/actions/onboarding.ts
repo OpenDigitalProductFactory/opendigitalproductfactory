@@ -1,6 +1,7 @@
 // apps/web/lib/actions/onboarding.ts
 "use server";
 
+import { ROUTES } from "@/lib/routes";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
@@ -61,7 +62,7 @@ export async function generateOnboardingTasks(
 
   await prisma.onboardingTask.createMany({ data: tasks });
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { created: tasks.length };
 }
 
@@ -86,7 +87,7 @@ export async function completeOnboardingTask(
     },
   });
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { success: true };
 }
 
@@ -107,7 +108,7 @@ export async function skipOnboardingTask(
     data: { status: "skipped" },
   });
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { success: true };
 }
 
@@ -143,6 +144,6 @@ export async function createChecklist(input: {
     },
   });
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { success: true, checklistId };
 }

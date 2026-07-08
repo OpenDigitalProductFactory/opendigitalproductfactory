@@ -43,10 +43,11 @@ import { parseDelimitedGrid } from "@/lib/onboarding/roster-import";
 import { mapGridToEmployees } from "@/lib/onboarding/roster-from-grid";
 import { importRoster } from "@/lib/onboarding/roster-import-actions";
 import type { CellValue, ColumnDefinition, FieldType, FieldConfig, GridRow } from "@/lib/workbooks/types";
+import { ok, err, type ActionResult } from "@/lib/shared/action-result";
 
-export type ActionResult<T = void> =
-  | ({ ok: true } & (T extends void ? Record<string, never> : { data: T }))
-  | { ok: false; error: string };
+// Re-exported for backwards compatibility with callers that imported the type
+// from this module before it was hoisted to the shared primitive.
+export type { ActionResult };
 
 async function requireUser(capability: "view_workbooks" | "manage_workbooks"): Promise<ServiceUser> {
   const session = await auth();
@@ -59,14 +60,14 @@ async function requireUser(capability: "view_workbooks" | "manage_workbooks"): P
 }
 
 function fail(e: unknown): { ok: false; error: string } {
-  if (e instanceof WorkbookError) return { ok: false, error: e.message };
-  return { ok: false, error: e instanceof Error ? e.message : "Unexpected error" };
+  if (e instanceof WorkbookError) return err(e.message);
+  return err(e instanceof Error ? e.message : "Unexpected error");
 }
 
 export async function listWorkbooksAction(): Promise<ActionResult<WorkbookSummary[]>> {
   try {
     const user = await requireUser("view_workbooks");
-    return { ok: true, data: await svcListWorkbooks(user) };
+    return ok(await svcListWorkbooks(user));
   } catch (e) {
     return fail(e);
   }
@@ -81,7 +82,7 @@ export async function createWorkbookAction(input: {
     const user = await requireUser("manage_workbooks");
     const wb = await svcCreateWorkbook(user, input);
     revalidatePath("/workbooks");
-    return { ok: true, data: wb };
+    return ok(wb);
   } catch (e) {
     return fail(e);
   }
@@ -90,7 +91,7 @@ export async function createWorkbookAction(input: {
 export async function getWorkbookAction(workbookId: string): Promise<ActionResult<WorkbookDetail>> {
   try {
     const user = await requireUser("view_workbooks");
-    return { ok: true, data: await svcGetWorkbook(user, workbookId) };
+    return ok(await svcGetWorkbook(user, workbookId));
   } catch (e) {
     return fail(e);
   }
@@ -101,7 +102,7 @@ export async function deleteWorkbookAction(workbookId: string): Promise<ActionRe
     const user = await requireUser("manage_workbooks");
     await svcDeleteWorkbook(user, workbookId);
     revalidatePath("/workbooks");
-    return { ok: true } as ActionResult;
+    return ok();
   } catch (e) {
     return fail(e);
   }
@@ -115,7 +116,7 @@ export async function createTableAction(
     const user = await requireUser("manage_workbooks");
     const table = await svcCreateTable(user, workbookId, input);
     revalidatePath(`/workbooks/${workbookId}`);
-    return { ok: true, data: table };
+    return ok(table);
   } catch (e) {
     return fail(e);
   }
@@ -126,7 +127,7 @@ export async function deleteTableAction(workbookId: string, tableId: string): Pr
     const user = await requireUser("manage_workbooks");
     await svcDeleteTable(user, tableId);
     revalidatePath(`/workbooks/${workbookId}`);
-    return { ok: true } as ActionResult;
+    return ok();
   } catch (e) {
     return fail(e);
   }
@@ -141,7 +142,7 @@ export async function addColumnAction(
     const user = await requireUser("manage_workbooks");
     const col = await svcAddColumn(user, tableId, input);
     revalidatePath(`/workbooks/${workbookId}`);
-    return { ok: true, data: col };
+    return ok(col);
   } catch (e) {
     return fail(e);
   }
@@ -156,7 +157,7 @@ export async function deleteColumnAction(
     const user = await requireUser("manage_workbooks");
     await svcDeleteColumn(user, tableId, columnId);
     revalidatePath(`/workbooks/${workbookId}`);
-    return { ok: true } as ActionResult;
+    return ok();
   } catch (e) {
     return fail(e);
   }
@@ -169,7 +170,7 @@ export async function createRowAction(
   try {
     const user = await requireUser("manage_workbooks");
     const row = await svcCreateRow(user, tableId, input);
-    return { ok: true, data: { rowId: row.rowId } };
+    return ok({ rowId: row.rowId });
   } catch (e) {
     return fail(e);
   }
@@ -183,7 +184,7 @@ export async function updateCellsAction(
   try {
     const user = await requireUser("manage_workbooks");
     const row = await svcUpdateCells(user, tableId, rowId, changes);
-    return { ok: true, data: { rowId: row.rowId } };
+    return ok({ rowId: row.rowId });
   } catch (e) {
     return fail(e);
   }
@@ -193,7 +194,7 @@ export async function deleteRowAction(tableId: string, rowId: string): Promise<A
   try {
     const user = await requireUser("manage_workbooks");
     await svcDeleteRow(user, tableId, rowId);
-    return { ok: true } as ActionResult;
+    return ok();
   } catch (e) {
     return fail(e);
   }
@@ -204,7 +205,7 @@ export async function getTableGridDataAction(tableId: string): Promise<
 > {
   try {
     const user = await requireUser("view_workbooks");
-    return { ok: true, data: await svcGetTableGridData(user, tableId) };
+    return ok(await svcGetTableGridData(user, tableId));
   } catch (e) {
     return fail(e);
   }
@@ -228,7 +229,7 @@ async function requirePlatformUser(): Promise<PlatformUser> {
 export async function listReferenceTargetsAction(): Promise<ActionResult<ReferenceTarget[]>> {
   try {
     const user = await requirePlatformUser();
-    return { ok: true, data: listReferenceTargets(user) };
+    return ok(listReferenceTargets(user));
   } catch (e) {
     return fail(e);
   }
@@ -240,7 +241,7 @@ export async function searchReferencesAction(
 ): Promise<ActionResult<{ id: string; label: string }[]>> {
   try {
     const user = await requirePlatformUser();
-    return { ok: true, data: await searchPlatformReferences(user, referenceType, query) };
+    return ok(await searchPlatformReferences(user, referenceType, query));
   } catch (e) {
     return fail(e);
   }
@@ -252,7 +253,7 @@ export async function resolveReferenceAction(
 ): Promise<ActionResult<{ id: string; label: string } | null>> {
   try {
     const user = await requirePlatformUser();
-    return { ok: true, data: await resolvePlatformReference(user, referenceType, referenceId) };
+    return ok(await resolvePlatformReference(user, referenceType, referenceId));
   } catch (e) {
     return fail(e);
   }
@@ -263,7 +264,7 @@ export async function getReferenceTargetFieldsAction(
 ): Promise<ActionResult<ReferenceFieldOption[]>> {
   try {
     const user = await requirePlatformUser();
-    return { ok: true, data: await getReferenceTargetFields(user, referenceType) };
+    return ok(await getReferenceTargetFields(user, referenceType));
   } catch (e) {
     return fail(e);
   }
@@ -388,7 +389,7 @@ export async function startTeamSheetImportAction(
     }
     const imported = await importSheetAction(workbookId, formData);
     if (!imported.ok) return imported;
-    return { ok: true, data: { workbookId, tableId: imported.data.tableId } };
+    return ok({ workbookId, tableId: imported.data.tableId });
   } catch (e) {
     return fail(e);
   }

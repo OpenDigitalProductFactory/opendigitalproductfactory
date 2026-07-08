@@ -1,6 +1,7 @@
 // apps/web/lib/actions/leave.ts
 "use server";
 
+import { ROUTES } from "@/lib/routes";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
@@ -57,7 +58,7 @@ export async function submitLeaveRequest(input: {
     },
   });
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { success: true, requestId };
 }
 
@@ -111,7 +112,7 @@ export async function approveLeaveRequest(
     },
   });
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { success: true };
 }
 
@@ -140,7 +141,7 @@ export async function rejectLeaveRequest(
     },
   });
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { success: true };
 }
 
@@ -174,7 +175,7 @@ export async function createLeavePolicy(input: {
     },
   });
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { success: true, policyId };
 }
 
@@ -213,6 +214,6 @@ export async function allocateLeaveBalances(
     allocated++;
   }
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { success: true, allocated };
 }

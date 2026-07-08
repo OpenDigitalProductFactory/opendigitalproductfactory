@@ -10,16 +10,13 @@
  *  - normalization: reading WorkItem.evidence as JSON and projecting it to
  *    the closed JobEvidence wire shape (drops unknown keys, never throws).
  */
+import { isRecord } from "@/lib/shared/coerce";
 import type {
   JobEvidence,
   JobEvidencePhoto,
 } from "@dpf/types";
 
 const EMPTY: JobEvidence = { photos: [] };
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
 
 function isIsoDate(v: unknown): v is string {
   if (typeof v !== "string") return false;

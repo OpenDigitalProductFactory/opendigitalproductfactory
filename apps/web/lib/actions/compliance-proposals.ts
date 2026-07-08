@@ -1,5 +1,6 @@
 "use server";
 
+import { ROUTES } from "@/lib/routes";
 import * as crypto from "crypto";
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
@@ -51,7 +52,7 @@ export async function proposeComplianceChange(input: {
   await logComplianceAction("proposal", record.id, "created", employeeId, input.proposedByAgentId ?? null, {
     notes: `proposed ${input.kind}`,
   });
-  revalidatePath("/compliance");
+  revalidatePath(ROUTES.compliance);
   return { ok: true, message: "Change proposed for review.", id: record.id };
 }
 
@@ -105,7 +106,7 @@ export async function approveComplianceProposal(
     newValue: "approved",
     notes: reviewNotes ?? undefined,
   });
-  revalidatePath("/compliance");
+  revalidatePath(ROUTES.compliance);
   return { ok: true, message: "Proposal approved and committed.", id: committedEntityId ?? undefined };
 }
 
@@ -128,6 +129,6 @@ export async function rejectComplianceProposal(
     newValue: "rejected",
     notes: reviewNotes ?? undefined,
   });
-  revalidatePath("/compliance");
+  revalidatePath(ROUTES.compliance);
   return { ok: true, message: "Proposal rejected." };
 }

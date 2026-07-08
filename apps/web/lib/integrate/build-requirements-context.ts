@@ -1,3 +1,4 @@
+import { isRecord } from "@/lib/shared/coerce";
 import {
   buildRequirementsPacket,
   formatBuildRequirementsPacketForPrompt,
@@ -25,8 +26,4 @@ export function formatBuildRequirementsContextSection(ctx: BuildRequirementsCont
       runningSpec: ctx.plan,
     }),
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

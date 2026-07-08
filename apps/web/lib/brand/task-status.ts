@@ -1,3 +1,5 @@
+import { isRecord } from "@/lib/shared/coerce";
+
 type TaskPayload = {
   task?: {
     taskId?: string;
@@ -11,10 +13,6 @@ export type BrandExtractionTaskStatus =
   | { kind: "complete"; taskRunId: string; summary: string }
   | { kind: "failed"; taskRunId: string; error: string }
   | { kind: "queued"; taskRunId: string; message: string };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
 
 export function extractBrandExtractionStatusFromTaskResponse(
   payload: unknown,
