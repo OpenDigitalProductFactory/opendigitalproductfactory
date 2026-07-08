@@ -40,6 +40,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["kind", "key", "content"],
     },
+    requiredCapability: null,
     sideEffect: true,
   },
   {
@@ -47,6 +48,7 @@ const definitions: ToolDefinition[] = [
     description:
       "List YOUR OWN active working notes (the calling coworker's durable role-local memory), newest first.",
     inputSchema: { type: "object", properties: {} },
+    requiredCapability: null,
     sideEffect: false,
   },
 ];
