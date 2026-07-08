@@ -58,7 +58,15 @@ export async function seedOnboardingAgent(): Promise<void> {
     "portfolio_read",
     "email_config",
   ];
+  // BI-4FA040D5: honor durable revocation tombstones so a re-run of first-run
+  // bootstrap does not resurrect a grant the operator revoked.
+  const revoked = await prisma.agentToolGrantRevocation.findMany({
+    where: { agentId: agent.id },
+    select: { grantKey: true },
+  });
+  const revokedKeys = new Set(revoked.map((r) => r.grantKey));
   for (const grantKey of grants) {
+    if (revokedKeys.has(grantKey)) continue;
     await prisma.agentToolGrant.upsert({
       where: { agentId_grantKey: { agentId: agent.id, grantKey } },
       update: {},

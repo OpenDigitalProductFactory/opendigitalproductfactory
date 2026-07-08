@@ -4,6 +4,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     agent: { findFirst: vi.fn() },
     agentToolGrant: { upsert: vi.fn(), deleteMany: vi.fn() },
+    agentToolGrantRevocation: { upsert: vi.fn(), deleteMany: vi.fn() },
   },
 }));
 
@@ -11,6 +12,7 @@ import { prisma } from "@dpf/db";
 
 import {
   applyCoworkerToolGrant,
+  isGrantRevoked,
   isKnownGrantKey,
   manageCoworkerToolGrant,
   removeCoworkerToolGrant,
@@ -24,6 +26,7 @@ const SCOUT = { id: "cuid-scout", agentId: "AGT-WS-SCOUT", slugId: "external-cat
 beforeEach(() => {
   vi.clearAllMocks();
   asMock(prisma.agentToolGrant.deleteMany).mockResolvedValue({ count: 0 });
+  asMock(prisma.agentToolGrantRevocation.deleteMany).mockResolvedValue({ count: 0 });
 });
 
 describe("isKnownGrantKey", () => {
@@ -49,6 +52,20 @@ describe("applyCoworkerToolGrant", () => {
     expect(res).toEqual({ ok: false, error: expect.stringMatching(/unknown grant key/i) });
     expect(prisma.agentToolGrant.upsert).not.toHaveBeenCalled();
   });
+
+  // BI-4FA040D5: (re-)granting a key clears any durable revocation tombstone so
+  // the operator's re-grant survives the next boot's seed reconciliation.
+  it("clears a matching revocation tombstone so the re-grant is durable", async () => {
+    await applyCoworkerToolGrant("cuid-scout", "backlog_write", "user_1");
+    expect(prisma.agentToolGrantRevocation.deleteMany).toHaveBeenCalledWith({
+      where: { agentId: "cuid-scout", grantKey: "backlog_write" },
+    });
+  });
+
+  it("does not touch the tombstone table when the key is invalid", async () => {
+    await applyCoworkerToolGrant("cuid-scout", "not_a_real_grant", "user_1");
+    expect(prisma.agentToolGrantRevocation.deleteMany).not.toHaveBeenCalled();
+  });
 });
 
 describe("removeCoworkerToolGrant", () => {
@@ -58,6 +75,37 @@ describe("removeCoworkerToolGrant", () => {
     expect(prisma.agentToolGrant.deleteMany).toHaveBeenCalledWith({
       where: { agentId: "cuid-scout", grantKey: "backlog_write" },
     });
+  });
+
+  // BI-4FA040D5: revoking writes a durable tombstone so the boot seed does not
+  // resurrect an operator-revoked seed grant. Records revokedBy for audit.
+  it("writes a durable revocation tombstone with the revoker for audit", async () => {
+    await removeCoworkerToolGrant("cuid-scout", "backlog_write", "user_7");
+    expect(prisma.agentToolGrantRevocation.upsert).toHaveBeenCalledWith({
+      where: { agentId_grantKey: { agentId: "cuid-scout", grantKey: "backlog_write" } },
+      update: { revokedBy: "user_7" },
+      create: { agentId: "cuid-scout", grantKey: "backlog_write", revokedBy: "user_7" },
+    });
+  });
+
+  it("tombstones with a null revoker when no user is supplied (system revoke)", async () => {
+    await removeCoworkerToolGrant("cuid-scout", "backlog_write");
+    expect(prisma.agentToolGrantRevocation.upsert).toHaveBeenCalledWith({
+      where: { agentId_grantKey: { agentId: "cuid-scout", grantKey: "backlog_write" } },
+      update: { revokedBy: null },
+      create: { agentId: "cuid-scout", grantKey: "backlog_write", revokedBy: null },
+    });
+  });
+});
+
+// BI-4FA040D5: the pure predicate the seed/bootstrap paths use to skip
+// resurrecting a grant the operator durably revoked.
+describe("isGrantRevoked", () => {
+  it("matches on the agentId:grantKey composite and misses otherwise", () => {
+    const tombstones = new Set(["cuid-scout:backlog_write"]);
+    expect(isGrantRevoked(tombstones, "cuid-scout", "backlog_write")).toBe(true);
+    expect(isGrantRevoked(tombstones, "cuid-scout", "registry_read")).toBe(false);
+    expect(isGrantRevoked(tombstones, "cuid-other", "backlog_write")).toBe(false);
   });
 });
 

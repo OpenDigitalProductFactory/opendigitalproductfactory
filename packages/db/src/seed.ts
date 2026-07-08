@@ -160,8 +160,21 @@ interface RegistryAgent {
   };
 }
 
+/**
+ * BI-4FA040D5: load every durable revocation tombstone as a set of
+ * `${agentCuid}:${grantKey}` composite keys. The grant-apply loops below consult
+ * this so a seed grant an operator revoked is not resurrected on the next boot.
+ */
+async function loadRevokedGrantSet(): Promise<Set<string>> {
+  const rows = await prisma.agentToolGrantRevocation.findMany({
+    select: { agentId: true, grantKey: true },
+  });
+  return new Set(rows.map((r) => `${r.agentId}:${r.grantKey}`));
+}
+
 async function seedAgents(): Promise<void> {
   const registry = readJson<{ agents: RegistryAgent[] }>("agent_registry.json");
+  const revokedGrants = await loadRevokedGrantSet();
 
   // Build portfolio slug → cuid lookup (portfolios must already be seeded)
   const portfolios = await prisma.portfolio.findMany({ select: { id: true, slug: true } });
@@ -248,6 +261,7 @@ async function seedAgents(): Promise<void> {
       // Seed AgentToolGrant rows from tool_grants array
       if (cp.tool_grants) {
         for (const grantKey of cp.tool_grants) {
+          if (revokedGrants.has(`${agent.id}:${grantKey}`)) continue; // BI-4FA040D5: honor durable revocation
           await prisma.agentToolGrant.upsert({
             where: { agentId_grantKey: { agentId: agent.id, grantKey } },
             update: {},
@@ -1076,6 +1090,7 @@ async function seedCoworkerAgents(): Promise<void> {
   // EP-AI-WORKFORCE-001: Coworker roster and grants live in workforce-seed.ts
   // so profession coverage invariants can test the seed data directly.
 
+  const revokedGrants = await loadRevokedGrantSet(); // BI-4FA040D5
   let grantCount = 0;
   for (const cw of COWORKER_AGENT_SEEDS) {
     const { agentId, slugId, ...rest } = cw;
@@ -1097,6 +1112,7 @@ async function seedCoworkerAgents(): Promise<void> {
     const grants = HARDCODED_COWORKER_GRANTS[agentId];
     if (grants) {
       for (const grantKey of grants) {
+        if (revokedGrants.has(`${agent.id}:${grantKey}`)) continue; // BI-4FA040D5: honor durable revocation
         await prisma.agentToolGrant.upsert({
           where: { agentId_grantKey: { agentId: agent.id, grantKey } },
           update: {},
@@ -1110,8 +1126,12 @@ async function seedCoworkerAgents(): Promise<void> {
       // corrected, and those stale tier-1 tools crowded the per-turn tool budget
       // and pushed the CRM tools (create_quote) past the cap. A coworker's live
       // grants must equal its declared set.
+      //
+      // BI-4FA040D5: scope the reconcile to seed grants (grantedBy = null). An
+      // operator-added grant (grantedBy set) is a durable delta and must survive
+      // the boot; only stale SEED rows no longer in the declared set are pruned.
       await prisma.agentToolGrant.deleteMany({
-        where: { agentId: agent.id, grantKey: { notIn: [...grants] } },
+        where: { agentId: agent.id, grantKey: { notIn: [...grants] }, grantedBy: null },
       });
     }
   }
@@ -1121,6 +1141,7 @@ async function seedCoworkerAgents(): Promise<void> {
     const agent = await prisma.agent.findUnique({ where: { agentId } });
     if (!agent) continue; // Not yet bootstrapped — first-run flow will seed it with grants
     for (const grantKey of grants) {
+      if (revokedGrants.has(`${agent.id}:${grantKey}`)) continue; // BI-4FA040D5: honor durable revocation
       await prisma.agentToolGrant.upsert({
         where: { agentId_grantKey: { agentId: agent.id, grantKey } },
         update: {},

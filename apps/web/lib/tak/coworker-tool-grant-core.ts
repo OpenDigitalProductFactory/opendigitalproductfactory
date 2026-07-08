@@ -77,19 +77,41 @@ export async function applyCoworkerToolGrant(
     update: {}, // already held — keep the original grantedBy/grantedAt
     create: { agentId: agentCuid, grantKey, grantedBy },
   });
+  // BI-4FA040D5: a (re-)grant clears any durable revocation tombstone, so the
+  // key is no longer skipped by the boot seed and the grant survives restarts.
+  await prisma.agentToolGrantRevocation.deleteMany({ where: { agentId: agentCuid, grantKey } });
   return { ok: true };
 }
 
 /**
  * Revoke a tool-authority key from a coworker by Agent.id (cuid). No-throw when
  * the grant is absent (deleteMany returns count 0), so a double-call is safe.
+ *
+ * BI-4FA040D5: also writes a durable revocation tombstone so the boot seed does
+ * not resurrect an operator-revoked seed grant. `revokedBy` is recorded for
+ * audit (null = a system/non-user revoke).
  */
 export async function removeCoworkerToolGrant(
   agentCuid: string,
   grantKey: string,
+  revokedBy: string | null = null,
 ): Promise<{ ok: boolean; error?: string }> {
   await prisma.agentToolGrant.deleteMany({ where: { agentId: agentCuid, grantKey } });
+  await prisma.agentToolGrantRevocation.upsert({
+    where: { agentId_grantKey: { agentId: agentCuid, grantKey } },
+    update: { revokedBy },
+    create: { agentId: agentCuid, grantKey, revokedBy },
+  });
   return { ok: true };
+}
+
+/**
+ * BI-4FA040D5: pure predicate the seed/bootstrap grant-apply loops use to skip
+ * resurrecting a grant the operator durably revoked. `revoked` is a set of
+ * `${agentCuid}:${grantKey}` composite keys loaded from AgentToolGrantRevocation.
+ */
+export function isGrantRevoked(revoked: ReadonlySet<string>, agentCuid: string, grantKey: string): boolean {
+  return revoked.has(`${agentCuid}:${grantKey}`);
 }
 
 /** True iff two coworker references resolve to the same canonical identity. */
@@ -159,7 +181,7 @@ export async function manageCoworkerToolGrant(input: {
   const res =
     action === "grant"
       ? await applyCoworkerToolGrant(target.id, grantKey, input.grantedBy)
-      : await removeCoworkerToolGrant(target.id, grantKey);
+      : await removeCoworkerToolGrant(target.id, grantKey, input.grantedBy);
 
   if (!res.ok) {
     return { ok: false, code: "grant_write_failed", message: res.error ?? "Failed to update the grant." };
