@@ -15,6 +15,9 @@ vi.mock("@dpf/db", () => ({
     agentToolGrant: {
       upsert: vi.fn(),
     },
+    agentToolGrantRevocation: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     platformSetupProgress: {
       findFirst: vi.fn(),
       create: vi.fn(),
