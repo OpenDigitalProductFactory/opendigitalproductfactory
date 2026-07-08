@@ -9,6 +9,7 @@ import { can } from "@/lib/permissions";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { requestSelfUpgrade } from "@/lib/self-upgrade/request";
 import { getUpgradeVersionState, type UpgradeVersionState } from "@/lib/self-upgrade/version";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 async function requireSelfUpgradeOperator(
   capability: "view_operations" | "manage_provider_connections",
@@ -63,7 +64,7 @@ export type SelfUpgradeDashboard = {
 };
 
 function toOperatorVersionError(err: unknown): string {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = getErrorMessage(err);
   if (
     message.includes("not a git repository") ||
     message.includes("Command failed: git")

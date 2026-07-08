@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export async function POST(
   _req: NextRequest,
@@ -36,7 +37,7 @@ export async function POST(
   } catch (err) {
     console.warn(
       `[field-dispatch] failed to bridge booking ${id} to a dispatch job: ${
-        err instanceof Error ? err.message : String(err)
+        getErrorMessage(err)
       }`,
     );
   }

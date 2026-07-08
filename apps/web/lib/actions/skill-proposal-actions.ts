@@ -16,6 +16,7 @@ import {
   rejectSkillImprovementProposal as actionReject,
   rollbackSkillToRevision as actionRollback,
 } from "@/lib/skills/proposals";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 async function requireReviewer(): Promise<
   { ok: true; userId: string } | { ok: false; error: string }
@@ -47,7 +48,7 @@ export async function approveSkillProposalAction(
     const data = await actionApprove({ proposalId, reviewerId: auth.userId });
     return { ok: true, data };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -61,7 +62,7 @@ export async function rejectSkillProposalAction(
     await actionReject({ proposalId, reviewerId: auth.userId, rejectionReason });
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -75,6 +76,6 @@ export async function rollbackSkillAction(
     const data = await actionRollback({ skillId, targetVersion, reviewerId: auth.userId });
     return { ok: true, data };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: getErrorMessage(err) };
   }
 }

@@ -26,6 +26,7 @@ import { createMcpSessionToken } from "@/lib/mcp/session-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 import { withCliSlot } from "./cli-concurrency";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
@@ -402,7 +403,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
         // testable, where a hard fail strands the user mid-conversation.
         console.warn(
           `[cli-adapter] MCP session-token mint failed; falling back to text-tool mode: ${
-            err instanceof Error ? err.message : String(err)
+            getErrorMessage(err)
           }`,
         );
         mcpJwt = null;

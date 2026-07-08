@@ -19,6 +19,7 @@
  */
 import { prisma } from "@dpf/db";
 import { sanitizeForLog } from "@/lib/security/safe-log";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Quiescence level — runtime state, hot-read by middleware + gates ────
 
@@ -460,7 +461,7 @@ async function withSwapSignalRetry(
       // agent-coworker.ts / assurance.ts pattern). The printf-with-%s shape
       // splits args across multiple call-edges and CodeQL js/log-injection
       // does not propagate the sanitiser through them — alert #276.
-      const errMsg = err instanceof Error ? err.message : String(err);
+      const errMsg = getErrorMessage(err);
       console.warn(
         sanitizeForLog(`[quiescence] ${label} attempt ${i + 1}/${attempts} failed: ${errMsg}`),
       );
@@ -602,7 +603,7 @@ async function broadcastQuiescenceCleared(payload: {
       outcome: payload.outcome,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     console.warn(sanitizeForLog(`[quiescence-reconcile] broadcastSystem failed: ${msg}`));
   }
   const { inngest } = await import("@/lib/queue/inngest-client");

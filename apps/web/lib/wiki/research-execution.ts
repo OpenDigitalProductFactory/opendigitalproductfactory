@@ -13,6 +13,7 @@ import { prisma } from "@dpf/db";
 import { runMarketResearch } from "./market-research";
 import { enrichOrgCorpus } from "./enrich-org-corpus";
 import { createProductionInference } from "./inference-adapter";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type RunResearchExecutionInput = {
   proposalId: string;
@@ -100,7 +101,7 @@ export async function runResearchExecution(
     });
     return { status: "executed", pagesCommitted, summary };
   } catch (err) {
-    const summary = `Research execution failed: ${err instanceof Error ? err.message : String(err)}`;
+    const summary = `Research execution failed: ${getErrorMessage(err)}`;
     await db.researchProposal
       .update({
         where: { proposalId: input.proposalId },

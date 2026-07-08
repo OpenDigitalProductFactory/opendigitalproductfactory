@@ -23,6 +23,7 @@ import {
   deriveDeployedStamp,
 } from "./version";
 import type { UpgradeSourceMode } from "./config";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /** Result of running one git command. Never throws on non-zero exit. */
 export type GitResult = { stdout: string; stderr: string; code: number };
@@ -138,7 +139,7 @@ export async function prepareUpgradeSource(
 }
 
 function errMsg(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  return getErrorMessage(err);
 }
 
 // ─── BI-A8A7CCFD: workspace-isolated upstream merge ────────────────────────

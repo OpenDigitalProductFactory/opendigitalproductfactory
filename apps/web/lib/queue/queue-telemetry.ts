@@ -16,6 +16,7 @@
 // prom-client into the module graph — mirroring coworker-turn-metrics.ts.
 
 import type { QueueTransition, QueueOutcome } from "./flow-metrics";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export interface QueueTransitionInput {
   /** Stable queue identifier, e.g. "cwq:triage-default" | "compute:sandbox-pool". */
@@ -175,14 +176,14 @@ export async function recordQueueTransition(
     } catch (mirrorErr) {
       console.warn(
         `[queue-telemetry] metrics mirror failed: ${
-          mirrorErr instanceof Error ? mirrorErr.message : String(mirrorErr)
+          getErrorMessage(mirrorErr)
         }`,
       );
     }
   } catch (err) {
     console.warn(
       `[queue-telemetry] failed to record transition: ${
-        err instanceof Error ? err.message : String(err)
+        getErrorMessage(err)
       }`,
     );
   }

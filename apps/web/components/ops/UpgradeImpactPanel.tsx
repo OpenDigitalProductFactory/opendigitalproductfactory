@@ -16,6 +16,7 @@
 import { useState, useTransition } from "react";
 import type { SummaryResult, ImpactItem } from "@/lib/self-upgrade/impact/types";
 import { CollapsibleList } from "@/components/ui/report-kit";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const CATEGORY_LABEL: Record<ImpactItem["category"], string> = {
   breaking: "Breaking",
@@ -152,7 +153,7 @@ export default function UpgradeImpactPanel({
         const r = await fetchUpgradeImpactSummary(refresh);
         setResult(r);
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(getErrorMessage(err));
       }
     });
   }

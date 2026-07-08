@@ -9,6 +9,7 @@ import {
   type ProviderPolicyInfo,
   type RouteSensitivity,
 } from "@/lib/agent-sensitivity";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -426,7 +427,7 @@ export async function callWithFailover(
         downgradeMessage,
       };
     } catch (e) {
-      const errMsg = e instanceof Error ? e.message : String(e);
+      const errMsg = getErrorMessage(e);
       attempts.push({ providerId: entry.providerId, error: errMsg });
       console.warn(`[callWithFailover] ${entry.providerId} failed: ${errMsg}`);
 

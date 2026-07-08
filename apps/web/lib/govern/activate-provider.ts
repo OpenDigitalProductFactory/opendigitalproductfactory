@@ -8,6 +8,7 @@
 import { prisma } from "@dpf/db";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 import type { SensitivityLevel } from "@/lib/routing/types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -171,7 +172,7 @@ export async function activateProvider(
         );
       }
     } catch (err) {
-      warning = err instanceof Error ? err.message : String(err);
+      warning = getErrorMessage(err);
       // CodeQL #46 — format-arg form per #43 comment.
       console.warn(
         "[activateProvider] Discovery failed for %s (trigger=%s): %s",

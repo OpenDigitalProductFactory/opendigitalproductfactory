@@ -7,6 +7,7 @@
 
 import { markBrowserSessionCredentialStale } from "./credentials";
 import { setBrowserSessionStatus } from "./session-binding";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type ReauthState = "fresh" | "needs-reauth" | "unknown";
 
@@ -39,7 +40,7 @@ export async function checkSessionFreshness(params: {
   try {
     outcome = await params.probe(params.probeUrl);
   } catch (err) {
-    return { state: "unknown", reason: `freshness probe failed: ${err instanceof Error ? err.message : String(err)}` };
+    return { state: "unknown", reason: `freshness probe failed: ${getErrorMessage(err)}` };
   }
 
   if (outcome.authenticated) {

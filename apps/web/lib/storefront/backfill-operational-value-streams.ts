@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { projectOperationalValueStreamForArchetype } from "./project-operational-value-stream";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
  * Boot backfill for the operational value stream (OVSM) EA view.
@@ -83,7 +84,7 @@ export async function backfillOperationalValueStreamsOnBoot(
         // A missing template OVSM derivation or unseeded EA notation/types must
         // not crash boot — log loudly and move on (the next boot retries).
         skipped++;
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         logger.warn(
           `[ovsm-backfill] org ${config.organizationId} (${archetype.archetypeId}): projection failed — ${msg}`,
         );

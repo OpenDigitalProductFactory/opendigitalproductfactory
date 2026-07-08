@@ -15,6 +15,7 @@ import { scanDiffForSecurityIssues, formatScanForDisplay } from "@/lib/security-
 import { redactHostnames } from "@/lib/integrate/identity-privacy";
 import type { ChangeImpactReport } from "@/lib/change-impact";
 import type { SecurityScanResult } from "@/lib/security-scan";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -366,7 +367,7 @@ export async function submitBuildAsPR(
     } catch (err) {
       console.warn("[contribution-pipeline] GitHub API PR creation failed:", err);
       return buildLocalContribution(branchName, prTitle, prBody, securityScan, input.impactReport,
-        `GitHub API failed: ${err instanceof Error ? err.message : String(err)}`);
+        `GitHub API failed: ${getErrorMessage(err)}`);
     }
   }
 

@@ -43,6 +43,7 @@ import type {
   DecompositionOverrideSnapshot,
   SizeAssessmentSnapshot,
 } from "@/lib/explore/feature-build-types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type DecompositionCoordinatorProps = {
   buildId: string;
@@ -109,7 +110,7 @@ export function DecompositionCoordinator(props: DecompositionCoordinatorProps) {
         setFlight({ kind: "idle" });
       } catch (err) {
         setErrorMessage(
-          `Propose splits failed: ${err instanceof Error ? err.message : String(err)}`,
+          `Propose splits failed: ${getErrorMessage(err)}`,
         );
         setFlight({ kind: "idle" });
       }
@@ -163,7 +164,7 @@ export function DecompositionCoordinator(props: DecompositionCoordinatorProps) {
         setFlight({ kind: "idle" });
       } catch (err) {
         setErrorMessage(
-          `Approve decomposition failed: ${err instanceof Error ? err.message : String(err)}`,
+          `Approve decomposition failed: ${getErrorMessage(err)}`,
         );
         setFlight({ kind: "idle" });
       }
@@ -189,7 +190,7 @@ export function DecompositionCoordinator(props: DecompositionCoordinatorProps) {
         // banner to show the existing-override chip.
       } catch (err) {
         setErrorMessage(
-          `Record override failed: ${err instanceof Error ? err.message : String(err)}`,
+          `Record override failed: ${getErrorMessage(err)}`,
         );
         setFlight({ kind: "idle" });
       }

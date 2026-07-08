@@ -10,6 +10,7 @@ import {
   formatMessageForResponses,
 } from "@/lib/ai-inference";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type ResponsesOutputItem =
   | {
@@ -297,7 +298,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
       });
     } catch (e) {
       throw new InferenceError(
-        `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
+        `Network error calling ${providerId}: ${getErrorMessage(e)}`,
         "network",
         providerId,
       );

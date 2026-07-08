@@ -6,6 +6,7 @@ import { getProviderPriority } from "@/lib/ai-provider-priority";
 import { routeAndCall } from "@/lib/routed-inference";
 import type { FeatureBrief } from "@/lib/feature-build-types";
 import type { AgentEvent } from "@/lib/agent-event-bus";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -376,7 +377,7 @@ export async function runSandboxTests(
     const { typecheckPassedForChangedScope } = await import("@/lib/build/scoped-verification");
     typeCheckPassed = typecheckPassedForChangedScope(typeCheckOutput, opts?.changedFiles ?? []).passed;
   } catch (e) {
-    typeCheckOutput = e instanceof Error ? e.message : String(e);
+    typeCheckOutput = getErrorMessage(e);
   }
 
   // Scoped tests. Historically we gated on typecheck ONLY because "we don't have
@@ -431,7 +432,7 @@ export async function runSandboxTests(
       testOutput = await execInSandbox(containerId, `cd ${workdir} && pnpm test 2>&1 || true`);
       testPassed = testOutput.includes("Tests  ") && !testOutput.includes("FAIL");
     } catch (e) {
-      testOutput = e instanceof Error ? e.message : String(e);
+      testOutput = getErrorMessage(e);
       testPassed = false;
     }
   }
@@ -506,7 +507,7 @@ export async function executeBuildPlan(params: {
   } catch (err) {
     return {
       success: false, filesChanged: [], testResult: null,
-      summary: `Code generation failed: ${err instanceof Error ? err.message : String(err)}`,
+      summary: `Code generation failed: ${getErrorMessage(err)}`,
       providerId: readiness.bestProvider.providerId,
       modelId: readiness.bestProvider.modelId,
       error: String(err),

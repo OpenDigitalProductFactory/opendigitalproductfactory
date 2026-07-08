@@ -18,6 +18,7 @@ import { inferContract } from "@/lib/routing/request-contract";
 import { BUILT_IN_TASK_REQUIREMENTS } from "@/lib/routing/task-requirements";
 import { TIER_MINIMUM_DIMENSIONS } from "@/lib/routing/quality-tiers";
 import type { QualityTier } from "@/lib/routing/quality-tiers";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const TIER_ORDER: Record<QualityTier, number> = {
   basic: 0,
@@ -136,7 +137,7 @@ async function runProbe(): Promise<void> {
         }
       }
     } catch (err) {
-      violations.push(`EXCEPTION: ${err instanceof Error ? err.message : String(err)}`);
+      violations.push(`EXCEPTION: ${getErrorMessage(err)}`);
     }
 
     const result: CheckResult = {

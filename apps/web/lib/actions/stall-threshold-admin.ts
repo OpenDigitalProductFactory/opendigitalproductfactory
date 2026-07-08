@@ -2,6 +2,7 @@
 
 import { auth } from "@/lib/govern/auth";
 import { prisma } from "@dpf/db";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export interface StallThresholdRow {
   id: string;
@@ -94,6 +95,6 @@ export async function updateStallThreshold(
       },
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: getErrorMessage(err) };
   }
 }

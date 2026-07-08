@@ -24,6 +24,7 @@ import {
   shouldDegradeModelForInterfaceDrift,
   shouldReconcileProviderAfterError,
 } from "@/lib/inference/provider-reconciliation";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type RouteOutcomeAttribution = {
   agentId?: string | null;
@@ -314,7 +315,7 @@ export async function callWithFallbackChain(
         responseId: result.responseId,
       };
     } catch (e) {
-      const errMsg = e instanceof Error ? e.message : String(e);
+      const errMsg = getErrorMessage(e);
       attempts.push({ endpointId: entry.providerId, error: errMsg });
       console.warn(`[callWithFallbackChain] ${entry.providerId} failed: ${errMsg}`);
 

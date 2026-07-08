@@ -5,6 +5,7 @@ import { pruneStaleInfraCIs } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { computeNextRunAt } from "@/lib/ai-provider-types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const JOB_ID   = "infra-ci-prune";
 const JOB_NAME = "Infrastructure CI Prune";
@@ -69,7 +70,7 @@ export async function runInfraPruneNow(): Promise<{ ok: boolean; marked: number;
 
     return { ok: true, ...result };
   } catch (err: unknown) {
-    const error = err instanceof Error ? err.message : String(err);
+    const error = getErrorMessage(err);
     await prisma.scheduledJob.update({
       where: { jobId: JOB_ID },
       data:  { lastRunAt: new Date(), lastStatus: "error", lastError: error },

@@ -42,6 +42,7 @@ import {
   type BranchVote,
   type ConsensusDecision,
 } from "./consensus";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /* -------------------------------------------------------------------------- */
 /* Public shapes                                                              */
@@ -582,7 +583,7 @@ export async function orchestrateDeliberation(
           result = await dispatcher.dispatch(contract, br.branchNodeId);
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = getErrorMessage(err);
         br.status = "failed";
         br.failureReason = message;
         await prisma.taskNode.update({

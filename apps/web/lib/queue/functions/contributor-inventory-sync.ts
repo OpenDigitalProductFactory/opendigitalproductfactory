@@ -33,6 +33,7 @@ import {
 
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // Re-exported for callers and tests; mirrors the canonical seed-side constant
 // so the runner and seed cannot drift on the jobId string.
@@ -246,7 +247,7 @@ export async function runContributorInventorySync(
     // will retry, and the read path is unaffected by stale rows.
     console.warn(
       "[contributor-inventory-sync] retention sweep failed:",
-      err instanceof Error ? err.message : String(err),
+      getErrorMessage(err),
     );
   }
 
@@ -257,7 +258,7 @@ export async function runContributorInventorySync(
   } catch (err) {
     console.warn(
       "[contributor-inventory-sync] github notification sync failed:",
-      err instanceof Error ? err.message : String(err),
+      getErrorMessage(err),
     );
   }
 
@@ -271,7 +272,7 @@ export async function runContributorInventorySync(
   } catch (err) {
     console.warn(
       "[contributor-inventory-sync] cron heartbeat notification sync failed:",
-      err instanceof Error ? err.message : String(err),
+      getErrorMessage(err),
     );
   }
 

@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 /**
  * Enqueue the build/review.verify Inngest job for a build entering the
  * review phase.
@@ -18,14 +19,14 @@ export async function queueBuildReviewVerification(buildId: string): Promise<voi
     const { inngest } = await import("@/lib/queue/inngest-client");
     await inngest.send({ name: "build/review.verify", data: { buildId } });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     console.error(
       `[tool-trace] build/review.verify enqueue failed buildId=${JSON.stringify(buildId)} error=${JSON.stringify(message)}`,
     );
     await markVerificationEnqueueFailed(buildId, message).catch((persistErr) => {
       console.error(
         `[tool-trace] failed to mark uxVerificationStatus=failed buildId=${JSON.stringify(buildId)} error=${
-          JSON.stringify(persistErr instanceof Error ? persistErr.message : String(persistErr))
+          JSON.stringify(getErrorMessage(persistErr))
         }`,
       );
     });

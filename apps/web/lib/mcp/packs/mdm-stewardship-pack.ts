@@ -9,6 +9,7 @@
 import { prisma } from "@dpf/db";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const definitions: ToolDefinition[] = [
   {
@@ -151,7 +152,7 @@ async function mergeCustomerContactsTool(params: Record<string, unknown>): Promi
     if (err instanceof MergeValidationFailure) {
       return { success: false, error: "merge_rejected", message: `Merge rejected: ${err.reason}. Check both ids exist, differ, and neither is already merged away.` };
     }
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     return { success: false, error: "merge_failed", message: `merge_customer_contacts failed: ${msg}` };
   }
 }
@@ -270,7 +271,7 @@ async function unmergeCustomerAccountsTool(
         message: `Unmerge rejected: ${why[err.reason] ?? err.reason}`,
       };
     }
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     return { success: false, error: "unmerge_failed", message: `unmerge_customer_accounts failed: ${msg}` };
   }
 }
@@ -324,7 +325,7 @@ async function mergeCustomerAccountsTool(
         message: `Merge rejected: ${err.reason}. Check both ids exist, differ, and neither is already superseded.`,
       };
     }
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     return { success: false, error: "merge_failed", message: `merge_customer_accounts failed: ${msg}` };
   }
 }

@@ -9,6 +9,7 @@
  * must hold the external-access gate (web toggle + grant) before invoking.
  */
 import { prisma } from "@dpf/db";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type EnrichmentProposal = {
   accountId: string;
@@ -57,7 +58,7 @@ export async function proposeAccountEnrichment(
     }
     html = (await response.text()).slice(0, MAX_BYTES);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     return { ok: false, message: `Could not reach ${url}: ${msg}` };
   }
 

@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 // apps/web/lib/integrate/sandbox/sandbox-toolchain-health.ts
 //
 // Toolchain preflight for the build sandbox.
@@ -135,7 +136,7 @@ export async function probeSandboxToolchain(containerId: string): Promise<Toolch
   try {
     output = await execInSandbox(containerId, VERSION_PROBE_CMD);
   } catch (err) {
-    output = err instanceof Error ? err.message : String(err);
+    output = getErrorMessage(err);
   }
   return interpretVersionProbe(output);
 }

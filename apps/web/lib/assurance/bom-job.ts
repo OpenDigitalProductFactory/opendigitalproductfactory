@@ -2,6 +2,7 @@ import { lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 import type { Prisma } from "@dpf/db";
 import { generateCycloneDxBom } from "./cyclonedx-generator";
 import { persistGeneratedBom } from "./bom-persistence";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type BomJobDb = {
   featureBuild: {
@@ -205,7 +206,7 @@ export async function generateAndPersistBuildBom(input: GenerateAndPersistBuildB
     console.error(
       "[tool-trace] failed to auto-queue assurance scan buildId=%s error=%s",
       JSON.stringify(build.buildId),
-      JSON.stringify(err instanceof Error ? err.message : String(err)),
+      JSON.stringify(getErrorMessage(err)),
     );
   }
 

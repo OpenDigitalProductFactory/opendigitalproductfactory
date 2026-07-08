@@ -1,4 +1,5 @@
 import { executeTool } from "@/lib/mcp-tools";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type BuildStudioDecisionSource = "build-studio" | "claude" | "codex" | "coworker";
 export type BuildStudioDecisionStatus = "recommended" | "needs-human" | "captured-gap" | "blocked";
@@ -95,7 +96,7 @@ function hasCommandmentConflict(data: Record<string, unknown> | undefined): bool
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return getErrorMessage(error);
 }
 
 export async function evaluateBuildStudioDecision(input: {

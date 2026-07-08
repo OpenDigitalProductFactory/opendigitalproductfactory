@@ -40,6 +40,7 @@ import { inngest } from "@/lib/queue/inngest-client";
 import { readBuildPipelineLimit } from "@/lib/queue/admission";
 import { buildAdmissionSnapshot } from "@/lib/queue/admission-observability";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -851,7 +852,7 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     await failRun(run.runId, `queue-dispatch-failed: ${message}`);
     return { queued: false, reason: "queue-dispatch-failed", runId: run.runId } as const;
   }
@@ -958,7 +959,7 @@ export async function rollbackSelfUpgrade(
     ) {
       return { ok: false, error: err.message };
     }
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     return { ok: false, error: message };
   }
 }

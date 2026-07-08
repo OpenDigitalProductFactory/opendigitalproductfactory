@@ -16,6 +16,7 @@ import {
   type ScheduledActionKind,
   type ScheduledActionStatus,
 } from "./execution";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const ADVANCE_DAYS_FOR_DUE_WINDOW = 3;
 
@@ -102,7 +103,7 @@ export async function tickScheduler(input: { now?: Date } = {}): Promise<TickRes
       });
       fired++;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = getErrorMessage(err);
       await prisma.scheduledOutboundAction.update({
         where: { scheduleId: row.scheduleId },
         data: { status: "failed", lastError: message },

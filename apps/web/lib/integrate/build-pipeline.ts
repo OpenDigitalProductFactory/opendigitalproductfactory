@@ -10,6 +10,7 @@ import {
   RETRY_DELAYS_MS,
 } from "./build-exec-types";
 import type { AgentEvent } from "@/lib/agent-event-bus";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Pure State Functions (testable) ─────────────────────────────────────────
 
@@ -177,7 +178,7 @@ export async function runBuildPipeline(params: {
           break; // step succeeded — move on
         } catch (err) {
           attempt++;
-          const errorMsg = err instanceof Error ? err.message : String(err);
+          const errorMsg = getErrorMessage(err);
           if (attempt < maxAttempts) {
             const delay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
             await new Promise<void>((resolve) => setTimeout(resolve, delay));

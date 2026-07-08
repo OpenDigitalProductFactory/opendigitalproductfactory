@@ -7,6 +7,7 @@ import { resolveScheduledOwnerUserId } from "@/lib/queue/scheduled-owner";
 
 import { isReflectionLoopGuarded, type ReflectionDepthSource } from "./core";
 import { observeCoworkerPatterns } from "./observer";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export const PERIODIC_PATTERN_REVIEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export const PERIODIC_PATTERN_REVIEW_MIN_COMPLETED_RUNS = 10;
@@ -231,7 +232,7 @@ export async function runPeriodicPatternReview(
         type: "periodic-pattern-review",
         agentId: input.agentId,
         routeContext: window.routeContext,
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
       },
     });
     throw err;

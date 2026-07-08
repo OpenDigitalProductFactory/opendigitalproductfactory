@@ -6,6 +6,7 @@
 // is unit-tested without a DB.
 
 import { dispatchQueueId } from "@/lib/queue/bridges/booking-bridge";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export interface DispatchJobView {
   itemId: string;
@@ -119,7 +120,7 @@ export async function getDispatchBoard(
     return groupDispatchJobs(rows.map(toView));
   } catch (err) {
     console.warn(
-      `[dispatch-board] read failed: ${err instanceof Error ? err.message : String(err)}`,
+      `[dispatch-board] read failed: ${getErrorMessage(err)}`,
     );
     return groupDispatchJobs([]);
   }

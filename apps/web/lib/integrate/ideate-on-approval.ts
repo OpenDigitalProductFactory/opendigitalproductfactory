@@ -32,6 +32,7 @@
 //   the structural success to the functional dispatch.
 
 import { prisma } from "@dpf/db";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type DispatchOutcome =
   | { kind: "skipped-no-bi"; reason: string }
@@ -322,7 +323,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
   } catch (err) {
     // Belt-and-braces: never let an unexpected throw bubble out of a
     // fire-and-forget helper. Log and return a structured failure.
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     console.error("[ideate-on-approval] Unhandled error in auto-dispatch:", { buildId }, err);
     await logActivity(`Auto-dispatch threw unexpectedly: ${message.slice(0, 200)}`);
     return { kind: "dispatched-failure", error: message, durationMs: 0 };

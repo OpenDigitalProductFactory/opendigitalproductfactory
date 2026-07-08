@@ -17,6 +17,7 @@
  */
 
 import { lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -202,7 +203,7 @@ function explainBaseRefFailure(
   repo: string,
   baseBranch: string,
 ): Error {
-  const msg = err instanceof Error ? err.message : String(err);
+  const msg = getErrorMessage(err);
   const is404 = /:\s*404\b/.test(msg);
   const is401 = /:\s*401\b/.test(msg);
   const is403 = /:\s*403\b/.test(msg);

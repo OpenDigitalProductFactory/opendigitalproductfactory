@@ -33,6 +33,7 @@
 // the kernel principle `security-fix-needs-regression-test-first`.
 
 import type { ChildProcess, SpawnOptions } from "node:child_process";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
  * Loose spawn-like signature so callers can hand us the real
@@ -218,7 +219,7 @@ export function safeSpawn(
   try {
     validatedCommand = assertAllowedBinary(command);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     // Audit signal so reject reasons are greppable in logs.
     // eslint-disable-next-line no-console
     console.warn(`[safe-spawn] Rejected: ${JSON.stringify(message)}`);

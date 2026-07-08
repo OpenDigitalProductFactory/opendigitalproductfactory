@@ -11,6 +11,7 @@
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ export const embeddingAdapter: ExecutionAdapterHandler = {
       });
     } catch (e) {
       throw new InferenceError(
-        `Network error calling ${providerId} embedding: ${e instanceof Error ? e.message : String(e)}`,
+        `Network error calling ${providerId} embedding: ${getErrorMessage(e)}`,
         "network",
         providerId,
       );

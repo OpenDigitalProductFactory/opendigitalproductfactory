@@ -28,6 +28,7 @@ import type {
   DecisionPerspectiveProfile,
   DecisionRiskTier,
 } from "./types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type OrgBusinessGateClient = Parameters<typeof resolveProfileMaterialForOrg>[0]["db"] &
   Parameters<typeof persistDecisionInteraction>[0]["db"];
@@ -53,7 +54,7 @@ function errorClass(error: unknown): string {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return getErrorMessage(error);
 }
 
 function operatorMessageFor(evaluation: DecisionPerspectiveEvaluationResult, orgProfileSelected: boolean): string {

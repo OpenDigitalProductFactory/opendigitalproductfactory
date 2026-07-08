@@ -18,6 +18,7 @@
 // Spec: docs/superpowers/specs/2026-06-06-build-engine-provisioning-design.md (Phase 1a, slice B)
 
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const PROBE_TIMEOUT_MS = 10_000;
@@ -68,7 +69,7 @@ export async function probeEngineReadiness(engine: EngineProbeConfig): Promise<E
     })) as { stdout: string; stderr: string };
     stdout = result.stdout ?? "";
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     return {
       engineId: engine.engineId,
       present: false,

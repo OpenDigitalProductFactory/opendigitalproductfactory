@@ -310,6 +310,8 @@ jobs:
           node-version: 24
       - name: Run guard
         run: node scripts/check-no-raw-event-source.mjs
+      - name: Run error-message guard
+        run: node scripts/check-no-raw-error-message.mjs
 
   package-boundary-guard:
     name: Package Boundary Guard

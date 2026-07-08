@@ -3,6 +3,7 @@
 // for isolated code generation.
 
 import { lazyExec, lazyFs } from "@/lib/shared/lazy-node";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const exec = lazyExec();
 
@@ -380,7 +381,7 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
     `docker exec ${containerId} sh -c "cd /workspace && pnpm --filter @dpf/db exec prisma generate 2>&1"`,
     { timeout: 30_000 },
   ).catch((err: unknown) => {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     console.log(`[sandbox-init] prisma generate failed (non-fatal): ${message.slice(0, 200)}`);
   });
 

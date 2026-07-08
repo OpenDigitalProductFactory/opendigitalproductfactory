@@ -15,6 +15,7 @@ import {
   isSkillLifecycleState,
   type SkillLifecycleState,
 } from "@/lib/skills/lifecycle";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type AuthOk = { ok: true; userId: string };
 type AuthFail = { ok: false; error: string };
@@ -49,7 +50,7 @@ async function setSkillLifecycleState(
     });
     return { ok: true, lifecycleState: next };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -79,6 +80,6 @@ export async function runSkillCuratorAction(): Promise<
     const report = await runCurator({ invokedByUserId: a.userId });
     return { ok: true, report };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: getErrorMessage(err) };
   }
 }

@@ -7,6 +7,7 @@
 // queue. Spec §4.5.
 
 import { queueMetricPeriod } from "./flow-metrics";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /** One queue's most-recent rolled-up flow metrics (a QueueMetricSnapshot row). */
 export interface QueueSnapshotView {
@@ -145,7 +146,7 @@ export async function readQueueSnapshots(
   } catch (err) {
     console.warn(
       `[queue-snapshot-service] read failed: ${
-        err instanceof Error ? err.message : String(err)
+        getErrorMessage(err)
       }`,
     );
     return [];

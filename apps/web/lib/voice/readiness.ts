@@ -10,6 +10,7 @@
  */
 
 import { prisma } from "@dpf/db";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
  * Readiness status surfaced in the admin Communications hub card.
@@ -62,7 +63,7 @@ async function probeLocalTranscriptionEndpoint(
       : [];
     return { ok: true, modelIds };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     return { ok: false, reason: `health probe failed: ${message}` };
   }
 }

@@ -1,4 +1,5 @@
 import type { BackupTarget } from "@/lib/operate/backups/types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const RECOVERY_TRIGGER = "pre-upgrade-recovery" as const;
 
@@ -227,7 +228,7 @@ async function runMember(
       target,
       runId: null,
       status: "failed",
-      error: err instanceof Error ? err.message : String(err),
+      error: getErrorMessage(err),
     };
   }
 }

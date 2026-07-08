@@ -11,6 +11,7 @@ import {
   runJobNowAction,
 } from "@/lib/actions/scheduled-jobs";
 import type { ScheduledJobView } from "@/lib/operate/scheduled-jobs/core";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // Mirror of EDITABLE_SCHEDULE_OPTIONS — the server (core.ts) is the source of
 // truth and re-validates; this list only drives the dropdown UX.
@@ -130,7 +131,7 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledJob
           setBanner({ kind: "error", text: res.error ?? "Failed." });
         }
       } catch (err) {
-        setBanner({ kind: "error", text: err instanceof Error ? err.message : String(err) });
+        setBanner({ kind: "error", text: getErrorMessage(err) });
       } finally {
         setPendingJob(null);
       }

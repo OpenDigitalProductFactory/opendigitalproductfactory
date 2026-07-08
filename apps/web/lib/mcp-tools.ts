@@ -5045,6 +5045,7 @@ function redactFunctionalFailureText(text: string): string {
 // the why. Re-exported here so existing imports keep working; new callers
 // should import from "@/lib/build/ideate-build-resolution".
 import { resolveIdeateBuildForToolPure } from "@/lib/build/ideate-build-resolution";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export async function resolveIdeateBuildForTool(args: {
   contextBuildId?: string;
@@ -6265,7 +6266,7 @@ export async function executeTool(
           } catch (err) {
             console.warn(
               `[cwq-bridge] failed to bridge ${updated.itemId} to a work item: ${
-                err instanceof Error ? err.message : String(err)
+                getErrorMessage(err)
               }`,
             );
           }
@@ -6578,7 +6579,7 @@ export async function executeTool(
       } catch (captureError) {
         console.warn(
           "[record_external_development_evidence] auto-capsule capture failed:",
-          captureError instanceof Error ? captureError.message : String(captureError),
+          getErrorMessage(captureError),
         );
       }
 
@@ -9269,7 +9270,7 @@ export async function executeTool(
         return {
           success: false,
           error: "Dependency gate blocked.",
-          message: err instanceof Error ? err.message : String(err),
+          message: getErrorMessage(err),
         };
       }
 
@@ -11540,7 +11541,7 @@ export async function executeTool(
                   logBuildActivity(buildId, "contribution_review", `Merge readiness: ${reviewResult.mergeReadiness}. Verticals: ${reviewResult.verticals.applicableVerticals.filter((v) => v.relevance !== "unlikely").map((v) => v.category).join(", ") || "none"}`);
                 } catch (reviewErr) {
                   console.warn("[contribute_to_hive] contribution review failed:", reviewErr);
-                  prError = prError ?? `Contribution review failed: ${reviewErr instanceof Error ? reviewErr.message : String(reviewErr)}`;
+                  prError = prError ?? `Contribution review failed: ${getErrorMessage(reviewErr)}`;
                 }
               }
             } else {
@@ -11549,7 +11550,7 @@ export async function executeTool(
           }
         }
       } catch (err) {
-        prError = err instanceof Error ? err.message : String(err);
+        prError = getErrorMessage(err);
         console.warn("[contribute_to_hive] upstream PR creation failed:", err);
       }
 
@@ -11717,7 +11718,7 @@ export async function executeTool(
       } catch (e) {
         return {
           success: false,
-          error: e instanceof Error ? e.message : String(e),
+          error: getErrorMessage(e),
           message: "UX verification service (browser-use) is unreachable. Run 'docker compose up -d browser-use' or check the browser-use container logs. You can fall back to code-only analysis using read_project_file.",
         };
       }
@@ -15019,7 +15020,7 @@ export async function executeTool(
         }
         return { success: true, message: `Created customer account "${account.name}" (${account.accountId}). Use its id ${account.id} as accountId when creating an opportunity.`, data: { accountId: account.id, accountRef: account.accountId } };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         return { success: false, error: "create_failed", message: `create_customer_account failed: ${msg}` };
       }
     }
@@ -15044,7 +15045,7 @@ export async function executeTool(
         });
         return { success: true, message: `Created opportunity "${opp.title}" (${opp.opportunityId}) in ${opp.stage} for ${opp.account.name}. Use its id ${opp.id} as opportunityId when drafting a quote.`, data: { opportunityId: opp.id, opportunityRef: opp.opportunityId } };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         return { success: false, error: "create_failed", message: `create_opportunity failed: ${msg}` };
       }
     }
@@ -15085,7 +15086,7 @@ export async function executeTool(
         });
         return { success: true, message: `Drafted quote ${quote.quoteNumber} — ${quote.currency} ${Number(quote.totalAmount).toLocaleString()} (status ${quote.status}). It is a draft and has not been sent to the customer.`, data: { quoteId: quote.quoteId, quoteNumber: quote.quoteNumber, totalAmount: Number(quote.totalAmount) } };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         return { success: false, error: "create_failed", message: `create_quote failed: ${msg}` };
       }
     }
@@ -15112,7 +15113,7 @@ export async function executeTool(
           data: summary as unknown as Record<string, unknown>,
         };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         return { success: false, error: msg, message: `get_finance_period_summary failed: ${msg}` };
       }
     }
@@ -15977,7 +15978,7 @@ export async function executeTool(
           },
         };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         // CodeQL #52 (js/tainted-format-string): the error message ended up
         // being used as a format string downstream. Keep the diagnostic in
         // `error:` (raw value) and use a constant `message:` so downstream
@@ -16000,7 +16001,7 @@ export async function executeTool(
           data: result as unknown as Record<string, unknown>,
         };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         return { success: false, error: msg, message: `get_deliberation_status failed: ${msg}` };
       }
     }
@@ -16020,7 +16021,7 @@ export async function executeTool(
           data: result as unknown as Record<string, unknown>,
         };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         return { success: false, error: msg, message: `get_deliberation_outcome failed: ${msg}` };
       }
     }
@@ -16042,7 +16043,7 @@ export async function executeTool(
           data: { eventIds: result.ids, status: "queued" },
         };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         return {
           success: false,
           error: msg,
@@ -16078,7 +16079,7 @@ export async function executeTool(
           data: result.summary as unknown as Record<string, unknown>,
         };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         return {
           success: false,
           error: msg,
@@ -16320,7 +16321,7 @@ export async function executeTool(
           },
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         return {
           success: false,
           error: "envelope_create_failed",
@@ -16398,7 +16399,7 @@ export async function executeTool(
       try {
         envelope = await prisma.coworkerActionEnvelope.findUnique({ where: { id: envelopeId } });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         return {
           success: false,
           error: "envelope_load_failed",
@@ -16458,7 +16459,7 @@ export async function executeTool(
       try {
         toolResult = await executeTool(toolName, toolArgs, envelope.delegatingUserId, context);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         // The underlying tool threw — mark the envelope failed, then
         // return a structured tool_execution_threw response.
         await markEnvelopeFailed(envelopeId).catch(() => undefined);
@@ -16519,7 +16520,7 @@ export async function executeTool(
     }
   }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     // CodeQL #52 (js/tainted-format-string) + js/log-injection: keep the
     // format string constant so a `%s` inside an attacker-controlled
     // toolName cannot consume the next argument, AND JSON.stringify each

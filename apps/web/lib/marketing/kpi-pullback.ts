@@ -10,6 +10,7 @@ import { prisma } from "@dpf/db";
 import { decryptJson } from "@/lib/govern/credential-crypto";
 import { getAdapter } from "./channels/registry";
 import type { ChannelCredentialBundle } from "./channels/contracts";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const DEFAULT_ANALYTICS_WINDOW_DAYS = 30;
 
@@ -112,7 +113,7 @@ export async function pullChannelKpis(input: {
     } catch (err) {
       failures.push({
         publicationId: pub.publicationId,
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
       });
     }
   }
@@ -148,7 +149,7 @@ export async function pullChannelKpis(input: {
     } catch (err) {
       failures.push({
         publicationId: "checkpoint",
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
       });
     }
   }

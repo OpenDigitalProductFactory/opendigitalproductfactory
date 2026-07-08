@@ -47,6 +47,7 @@ import {
   signalSwapComplete,
   failQuiescenceSwap,
 } from "@/lib/self-upgrade/quiescence";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export const SELF_UPGRADE_FUNCTION_ID_SCHEDULED = "ops/self-upgrade-scheduled";
 export const SELF_UPGRADE_FUNCTION_ID_MANUAL = "ops/self-upgrade-manual";
@@ -589,7 +590,7 @@ export async function runSelfUpgrade(
     // The promoter failed to even spawn (e.g. docker missing). Without this
     // catch the rejection would bubble up as an Inngest function error and
     // leave the run stuck "running" — blocking every future trigger.
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, msg);
     await failRun(run.runId, `promoter-spawn-error: ${msg}`);
     await recordCooldown(now, cooldownMinutes);
@@ -685,7 +686,7 @@ export const selfUpgradeManual = inngest.createFunction(
       return await step.run("run-self-upgrade-manual", () => runSelfUpgrade(data));
     } catch (err) {
       if (data.runId) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         try {
           await failRun(data.runId, `worker-error: ${msg}`);
         } catch {
