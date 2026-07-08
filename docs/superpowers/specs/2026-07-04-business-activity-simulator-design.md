@@ -1,0 +1,69 @@
+# Business Activity Simulator — design spec
+
+**Status:** draft · 2026-07-04
+**Epic:** EP-BUSINESS-ACTIVITY-SIM (to be filed)
+**Author:** platform (via Claude Code, operator Mark)
+**Related:** [[living-business-workforce-activity]] concept (the read-side viz); EP-TRADES-FIELD-SERVICE; the finance spine (PRs #2546/#2548/#2559)
+
+## 1. Problem
+
+DPF targets **20 business archetypes** (`packages/storefront-templates/src/archetypes/`) — field-service/trades, software-platform, retail, MSP-shaped, professional services, etc. Each archetype exercises a different slice of the platform's operational surface: dispatch, invoicing, payments, AR/AP, GL. There are **not enough manual cycles to know the full functional surface is solid in every archetype**. A regression in, say, payment→GL settlement for retail could sit undetected because nobody ran that path this week.
+
+There is also no synthetic source of realistic operational activity to (a) populate demos and (b) drive the "living business" workforce-activity visualization.
+
+## 2. Goal
+
+A **Business Activity Simulator**: a test/dogfood harness that drives the *real* platform capabilities through end-to-end operational flows — *create customer → dispatch/subscribe/sell → invoice → send → payment → AR/AP → GL* — **parameterized by archetype**, producing:
+
+1. **A cross-archetype coverage report** (archetype × capability = pass/fail) so we gain re-runnable confidence.
+2. **Realistic activity** emitted to the observability substrate (the write-side of the living-business viz).
+3. A reusable **demo/seed + load** input.
+
+### Design principle (load-bearing)
+**Drive real capability paths; stub only the outer edges.** The confidence signal only exists if the harness exercises the *actual* domain logic (real GL postings that really balance, real lifecycle transitions), faking only what is genuinely external: the customer, the payment gateway, inbound demand. A harness that fakes the internals proves nothing.
+
+## 3. What already exists (reuse, do not rebuild)
+
+- **`packages/coworker-sim-harness`** — deterministic field-dispatch world + **oracles** (pure invariant predicates over a `WorldSnapshot`) + scenarios + virtual clock. Field-dispatch only; no invoice→payment→GL. The world+oracle *pattern* is the model to extend.
+- **`packages/validators/src/field-dispatch.ts`** — the job lifecycle enum (quoted→scheduled→confirmed→en-route→on-site→complete→invoiced→paid) + pure predicates (`isTerminalStatus`, `isWorkComplete`). No DB.
+- **`apps/web/lib/finance/ledger.ts`** — **pure, DB-free** GL: `buildInvoicePostingLines` (Dr AR/Cr Revenue/Cr Tax), `buildPaymentPostingLines` (inbound: Dr Bank/Cr AR), `validateJournalEntry` (balance rule), `computeTrialBalance` (→ `balanced`).
+- **`apps/web/lib/finance/ledger-service.ts`** — DB persistence: `postInvoiceIssued`, `postPaymentRecorded`, `seedChartOfAccounts`.
+- **Server actions** — `createCustomerAccount` (crm.ts), `createInvoice`/`sendInvoice`/`recordPayment` (finance.ts), `createSupplier`/`createBill` (ap.ts).
+- **`packages/finance-templates/src/profiles.ts`** — per-archetype chart-of-accounts templates.
+- **`apps/web/lib/tak/agent-event-bus.ts`** — the live event taxonomy (`tool:start`, `plan:update`, `collaboration:*`, `taskrun:stalled`) the sim emits to for the viz. (Recon missed this under the classifier outage; it exists.)
+
+## 4. The gap
+
+1. A **cross-flow orchestrator** chaining dispatch → invoice → payment → GL in one run (pieces exist; nothing runs them together end-to-end).
+2. **Archetype factories** generalizing beyond field-dispatch (SaaS subscription, retail POS…).
+3. A **coverage report** (archetype × capability) with **financial oracles** as the assertions.
+4. The **invocation seam** decision (see §6).
+
+## 5. Phases
+
+- **P1 — one archetype, end-to-end, real, DB-free (this PR).** Field-service: compose the *real* `field-dispatch` lifecycle with the *real* pure `ledger.ts` posting into a single orchestrated flow, with **financial oracles** (GL balanced, AR settles to zero, revenue recognized, cash received, no phantom billing, job terminal-paid). Deterministic, runs in CI, no DB, no auth. Proves the model + gives the first re-runnable confidence run. Ships with a self-test proving the oracles have teeth (a deliberately broken flow must fail them).
+- **P2 — generalize.** Archetype factories + scenario templates (software-platform subscriptions, retail POS) → the cross-archetype coverage matrix.
+- **P3 — DB-backed fidelity.** Drive the service layer (`ledger-service`, invoice/payment services) against a test Postgres with a real seeded COA, so persistence + account-resolution are covered too. Requires the auth-context shim (§6).
+- **P4 — observability + viz.** Emit business events to `agent-event-bus`/`TaskRun`; wire the test-only archetype toggle in the living-business viz (read-side).
+
+## 6. Invocation seam (the one real design question)
+
+Three seams to drive flows headlessly:
+- **Pure domain functions** (`ledger.ts`, `field-dispatch.ts`) — no DB, no auth. **Chosen for P1**: highest determinism, real invariants, CI-friendly.
+- **Service layer** (`ledger-service`, invoice/payment services) — real persistence + account resolution; needs a test DB + a thin auth/actor context shim. **P3.**
+- **Server actions** — full auth/capability path; highest fidelity but session-bound. Reserved for e2e.
+- Raw Prisma — rejected: bypasses business logic, proves nothing.
+
+## 7. P1 shape (this PR)
+
+`apps/web/lib/business-activity-sim/` (home is apps/web because the pure ledger layer lives there; P2 may extract a `packages/business-activity-sim` once the ledger pure layer is packaged):
+- `field-service-flow.ts` — `runFieldServiceFlow(scenario)`: advances a job through the lifecycle to `paid`, builds the real invoice + payment journal lines, accumulates the journal, computes the trial balance. Returns a `FlowResult` (job status, journal lines, trial balance, revenue recognized, AR balance, cash received).
+- `oracles.ts` — pure financial oracles over `FlowResult`.
+- `coverage.ts` — run N scenarios → a pass/fail coverage report.
+- `*.test.ts` — positive scenarios (with/without tax, multi-line) all-oracles-green **plus a negative test** (underpayment leaves AR ≠ 0) proving the oracles catch a broken flow.
+
+## 8. Non-goals (P1)
+No DB, no server actions, no UI, no non-field-service archetypes, no volume/load. Those are P2–P4.
+
+## 9. Test-only archetype toggle
+The multi-archetype toggle (in the viz) is **test-instance-only** — a real customer install is exactly one archetype. Gated so production single-archetype installs never see it. Lands in P4 alongside the observability wiring.
