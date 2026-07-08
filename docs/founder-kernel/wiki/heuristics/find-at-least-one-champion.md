@@ -11,9 +11,7 @@ sources:
 
 > Any standard or framework adoption needs **at least one internal champion** — preferably more — who will evangelise the standard between meetings. Without that, adoption stalls regardless of how good the standard is.
 
-## When it applies
-
-Adopting `[[entities/it4it]]`, TOGAF, `[[entities/csdm]]`, or any operating-model framework inside an organisation that doesn&#39;t yet use it. Also: introducing a new architectural pattern, a new tooling category, or a new portfolio discipline.
+This is a **human** adoption tactic — it governs how people take up a new way of working, not how an agent operates. It applies when adopting `[[entities/it4it]]`, TOGAF, `[[entities/csdm]]`, or any operating-model framework inside an organisation that doesn&#39;t yet use it; introducing a new architectural pattern, tooling category, or portfolio discipline; and — most concretely for DPF — **onboarding a company onto the platform**. Rolling out DPF is a standards adoption like any other: the champion is the operator who actually starts giving a coworker real work and comes back the next week, not the executive who approved the pilot. Find that person and the adoption has continuity between sessions.
 
 ## Why it works
 

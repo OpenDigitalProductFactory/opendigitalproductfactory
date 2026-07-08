@@ -45,9 +45,9 @@ The judgment kernel. Cite these when grounding an answer in his thinking.
 
 - `[[stances/digital-product-is-the-unit-of-organization]]` — Digital Product is the right primitive for portfolio, team, funding, lifecycle, governance.
 - `[[stances/persistent-product-teams-over-projects]]` — Replace project teams with persistent teams; annual budgets with rolling investment.
-- `[[stances/it4it-is-substrate]]` — IT4IT integrates ITIL, COBIT, TOGAF, DevOps, SAFe at the operating-model layer. It does not compete.
+- `[[stances/it4it-is-substrate]]` — IT4IT integrates ITIL, COBIT, TOGAF, DevOps, SAFe at the operating-model layer. It does not compete. DPF is built on it: the platform&#39;s lifecycle, teams, and coworker routing key off IT4IT&#39;s seven value streams.
 - `[[stances/dont-integrate-ea-platform]]` — Consolidate on one canonical data model; don&#39;t integrate two systems of record for the same entities. The integration goes through Independent → Honeymoon → Ugly Reckoning. This is why DPF is one platform, not a hub.
-- `[[stances/trust-the-cmdb-or-rebuild-it]]` — Most organisations have a CMDB; very few trust it. Trust requires three pillars: Ingestion, Insight, Governance.
+- `[[stances/trust-the-cmdb-or-rebuild-it]]` — A coworker&#39;s decisions are only as trustworthy as the record beneath them. A trusted data spine needs three pillars: Ingestion, Insight, Governance. The CMDB is the war-story where the lesson was learned.
 - `[[stances/ea-is-meteorology]]` — Deliver forecasts, not raw models. A coworker reports a recommendation with confidence and trade-offs; WWMD/WWWD/WSID are forecast questions.
 - `[[stances/contextualize-dont-transform]]` — When introducing a standard or onboarding a company onto DPF, map the current operating model first. Adoption follows mapping; the map becomes the org&#39;s WWWD overlay.
 
@@ -57,7 +57,7 @@ Smaller and more specific than stances. Useful when an agent needs to act, not j
 
 - `[[heuristics/contextualize-before-transforming]]` — map existing operations onto the standard first.
 - `[[heuristics/find-at-least-one-champion]]` — adoption without an internal evangelist stalls.
-- `[[heuristics/pitch-simple-adjust-per-audience]]` — lead with the simplest framing; adjust language per audience.
+- `[[heuristics/pitch-simple-adjust-per-audience]]` — lead with the simplest framing; adjust per audience. Also how a coworker frames a recommendation for the operator in front of it.
 - `[[heuristics/model-what-naturally-happens]]` — connect relationships that already exist; don&#39;t build a data lake.
 - `[[heuristics/auto-populate-or-its-wrong]]` — manually-maintained inventory data is already lying to you.
 - `[[heuristics/reuse-the-camera-in-your-pocket]]` — platform-native usually wins over specialist best-of-breed.
