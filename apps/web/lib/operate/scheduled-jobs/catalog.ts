@@ -281,6 +281,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "canonical-improvement-digest",
+    inngestId: "ops/canonical-improvement-digest",
+    name: "Canonical improvement digest",
+    purpose:
+      "Batches [reference-doc] ImprovementProposal rows into one doc chore BI for human-approved canonical-source PRs (process-spine §6.5).",
+    cron: "17 6 * * 1",
+    cadence: "Weekly (Mon 06:17)",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "coworker-regression-detect",
     inngestId: "quality/coworker-regression-detect",
     name: "Coworker regression detect",

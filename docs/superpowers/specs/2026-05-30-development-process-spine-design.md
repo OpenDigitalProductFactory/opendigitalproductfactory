@@ -307,3 +307,13 @@ precedent for the identical failure mode.
 promote/digest loop (§6.5), and the versioned-spine conformance test (§6.1)
 remain unbuilt and are filed as backlog items, not done here — this PR is the
 one enforcement edge that directly closes the "skipped specs/plans/docs" goal.
+
+## 13. Addendum (2026-07-09) — EP-5560770F completion slice
+
+Landed on `feat/process-spine-finish`:
+
+- **BI-C82D58A3** — `local-integration-ci.mjs` already runs `prisma generate` after merge (CI parity); test contract in `scripts/lib/local-integration-ci.test.mjs` asserts the step.
+- **BI-38578194** — `uncommitted-work-guard.mjs` on plugin `SessionEnd`/`Stop`, `.claude/settings.json` `SessionEnd`/`Stop`, and `.githooks/post-checkout`; escape hatch `DPF_SKIP_UNCOMMITTED_WORK_GUARD=1`.
+- **BI-8996BBBB** — Build Studio architecture review auto-files `[reference-doc]` findings via `promoteReferenceDocFindings`; weekly `ops/canonical-improvement-digest` Inngest cron batches process-category proposals into a doc chore BI.
+- **BI-C98D003B** — `bootstrap-worktree-deps.mjs` passes `--config.minimumReleaseAge=0` on the explicit worktree bootstrap path; `update_agent_toolchain.py` writes LF via `write_bytes` (no Python 3.10 `newline=` kwarg).
+- **BI-EF42607A** — `PROCESS_SPINE_VERSION` in `packages/dpf-skill-pack/process-spine-version.mjs`; `scripts/process-spine-conformance.test.mjs` + extended `plugin-hooks-wired.test.mjs`; worktree readiness records `processSpineVersion`.

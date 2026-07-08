@@ -20,3 +20,15 @@ try {
 } catch {
   // Same non-git / read-only contexts as above.
 }
+
+try {
+  const { ensurePostCheckoutHook } = await import('./lib/ensure-post-checkout-hook.mjs');
+  const result = ensurePostCheckoutHook(new URL('../.githooks/', import.meta.url).pathname);
+  if (result.action === 'written') {
+    console.log(`[set-hooks-path] converged .githooks/post-checkout (was: ${result.was}) → LFS + uncommitted-work guard chain`);
+  } else if (result.action === 'left-custom') {
+    console.warn('[set-hooks-path] .githooks/post-checkout is a custom hook — left untouched; chain .githooks/lib/post-checkout-chained.sh manually to keep the durable-artifact guard.');
+  }
+} catch {
+  // Same non-git / read-only contexts as above.
+}

@@ -8251,6 +8251,21 @@ export async function executeTool(
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
       const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
       const architectureAdvisory = architectureAdvisoryFromReview(archReview);
+      if (archReview?.issues?.length) {
+        try {
+          const { promoteReferenceDocFindings } = await import(
+            "@/lib/process-spine/canonical-improvement-digest"
+          );
+          await promoteReferenceDocFindings(prisma, archReview.issues, {
+            userId,
+            agentId: context?.agentId ?? null,
+            threadId: context?.threadId ?? null,
+            routeContext: context?.routeContext ?? "reviewDesignDoc",
+          });
+        } catch (err) {
+          console.error("[reference-doc-promotion] failed", err);
+        }
+      }
       const reviewBase = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
@@ -8708,6 +8723,21 @@ export async function executeTool(
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
       const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
       const architectureAdvisory = architectureAdvisoryFromReview(archReview);
+      if (archReview?.issues?.length) {
+        try {
+          const { promoteReferenceDocFindings } = await import(
+            "@/lib/process-spine/canonical-improvement-digest"
+          );
+          await promoteReferenceDocFindings(prisma, archReview.issues, {
+            userId,
+            agentId: context?.agentId ?? null,
+            threadId: context?.threadId ?? null,
+            routeContext: context?.routeContext ?? "reviewPlanDoc",
+          });
+        } catch (err) {
+          console.error("[reference-doc-promotion] failed", err);
+        }
+      }
       const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
         ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the plan before building — they do not block this gate.`
         : "";
