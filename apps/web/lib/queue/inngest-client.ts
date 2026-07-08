@@ -175,6 +175,14 @@ export interface PortalSelfUpgradeRequestedEvent {
   };
 }
 
+/** BI-0AB96FE7: operator "run now" / dry-run for the Inngest history-retention
+ *  + orphan-reaper sweep (handled by inngest-retention-sweep.ts). `dryRun`
+ *  counts eligible rows without deleting. */
+export interface OpsInngestRetentionRequestedEvent {
+  name: "ops/inngest-retention.requested";
+  data: { dryRun?: boolean };
+}
+
 // ─── Activity Quiescence Protocol events (BI-QUIESCE-002) ────────────────
 
 /** Sent by callers to start a quiescence drain. The coordinator function

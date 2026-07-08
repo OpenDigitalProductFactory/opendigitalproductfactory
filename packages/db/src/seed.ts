@@ -67,6 +67,7 @@ import { ensureSysmlProjectionScheduledTask } from "./seed-sysml-projection.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
 import { ensureAllBackupScheduledJobs } from "./seed-platform-backup.js";
 import { ensureDataRetentionScheduledJob } from "./seed-platform-retention.js";
+import { ensureInngestRetentionScheduledJob } from "./seed-platform-inngest-retention.js";
 import { ensureContributorInventoryScheduledJob } from "./seed-contributor-inventory.js";
 import { seedAgentControlPlaneMaturity } from "./seed-agent-control-plane-maturity.js";
 import { seedCoworkerServiceCatalog } from "./coworker-service-catalog-seed.js";
@@ -2419,6 +2420,7 @@ async function main(): Promise<void> {
   await step("hiveScoutScheduledTask", () => ensureHiveScoutScheduledTask(prisma));
   await step("allBackupScheduledJobs", () => ensureAllBackupScheduledJobs(prisma));
   await step("dataRetentionScheduledJob", () => ensureDataRetentionScheduledJob(prisma));
+  await step("inngestRetentionScheduledJob", () => ensureInngestRetentionScheduledJob(prisma));
   await step("contributorInventoryScheduledJob", () => ensureContributorInventoryScheduledJob(prisma));
   await step("mcpServers", () => seedMcpServers());
   await step("sandboxPool", () => seedSandboxPool());
