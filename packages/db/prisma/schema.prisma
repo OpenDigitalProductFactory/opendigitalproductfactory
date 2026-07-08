@@ -2306,6 +2306,7 @@ model Agent {
   toolGrants           AgentToolGrant[]
   toolGrantRevocations AgentToolGrantRevocation[]
   memoryNotes          CoworkerMemoryNote[]      @relation("CoworkerMemoryNoteAgent")
+  taskGoals            CoworkerTaskGoal[]        @relation("CoworkerTaskGoalAgent")
   coworkerServices     CoworkerService[]
   coworkerEngagements  CoworkerEngagement[]
   coworkerAssessments  CoworkerSelfAssessment[]    @relation("CoworkerSelfAssessmentAgent")
@@ -2479,6 +2480,30 @@ model AgentToolGrantRevocation {
 // prior active row so the note stays current instead of accumulating. Confirmed
 // durable learnings should be routed onward to WWMD/WWWD via
 // dpf-route-learning-to-commons; this store is the staging/working layer.
+// BI-D6F6A313 (EP-CLAUDE-INSIDE-OUT): a verifiable completion condition attached
+// to a coworker. The external harness /goal blocks stopping until a natural-
+// language condition holds and re-invokes; the DPF analog persists that condition
+// here so an autonomous run can be judged "met/unmet" against a real evaluation
+// (the coworker-inline-review judge shape) instead of self-declaring done. Slice 1
+// persists + evaluates goals on demand via the MCP door; Slice 2 wires the
+// completion seam to auto-evaluate and gate re-dispatch (see BI follow-up).
+model CoworkerTaskGoal {
+  id               String    @id @default(cuid())
+  agentId          String // Agent.id (cuid) — the coworker this goal is for
+  scheduledTaskId  String? // optional link to the ScheduledAgentTask this goal gates
+  condition        String // the natural-language verifiable completion condition
+  status           String    @default("active") // active|met|unmet|abandoned
+  createdBy        String? // userId if a human set it; null = the coworker itself
+  createdAt        DateTime  @default(now())
+  lastEvaluatedAt  DateTime?
+  verdictRationale String? // the judge's rationale from the most recent evaluation
+  resolvedAt       DateTime?
+  agent            Agent     @relation("CoworkerTaskGoalAgent", fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, status])
+  @@index([scheduledTaskId])
+}
+
 model CoworkerMemoryNote {
   id             String    @id @default(cuid())
   agentId        String // Agent.id (cuid) — the coworker this note belongs to
