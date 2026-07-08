@@ -22,7 +22,7 @@ import {
   type WikiPageStatus,
 } from "@dpf/db/wiki-store";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
+import { requireUser } from "@/lib/actions/shared/guards";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -59,13 +59,6 @@ export type PublishWikiOverlayPagesResult =
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-async function requireSessionUser(): Promise<{ id: string }> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    throw new Error("Not authenticated");
-  }
-  return { id: session.user.id };
-}
 
 async function requireOrganization(): Promise<{ id: string }> {
   const org = await prisma.organization.findFirst({ select: { id: true } });
@@ -93,7 +86,7 @@ export async function publishWikiOverlayPages(
   input: PublishWikiOverlayPagesInput,
 ): Promise<PublishWikiOverlayPagesResult> {
   try {
-    const user = await requireSessionUser();
+    const user = await requireUser();
     const org = await requireOrganization();
 
     if (!Array.isArray(input.pageIds) || input.pageIds.length === 0) {
@@ -205,7 +198,7 @@ export type DraftWikiPageSummary = {
  * session because it's read-only.
  */
 export async function listOverlayDrafts(): Promise<DraftWikiPageSummary[]> {
-  await requireSessionUser();
+  await requireUser();
   const org = await requireOrganization();
 
   const rows = (await prisma.wikiPage.findMany({

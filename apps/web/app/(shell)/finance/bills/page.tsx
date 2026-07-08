@@ -5,8 +5,7 @@ import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
-import { LocalTime } from "@/components/ui/LocalTime";
-import { EmptyState } from "@/components/ui/report-kit";
+import { BillsTable, type BillRow } from "./BillsTable";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -35,8 +34,14 @@ export default async function BillsPage({ searchParams }: Props) {
   ]);
   const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
-  const formatMoney = (amount: unknown) =>
-    Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 });
+  const rows: BillRow[] = bills.map((bill) => ({
+    id: bill.id,
+    billRef: bill.billRef,
+    supplierName: bill.supplier.name,
+    status: bill.status,
+    dueDateISO: new Date(bill.dueDate).toISOString(),
+    amount: Number(bill.totalAmount),
+  }));
 
   return (
     <div>
@@ -99,75 +104,7 @@ export default async function BillsPage({ searchParams }: Props) {
       </div>
 
       {/* Bills table */}
-      {bills.length === 0 ? (
-        <EmptyState title="No bills found." />
-      ) : (
-        <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--dpf-border)]">
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Ref
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Supplier
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Status
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Due Date
-                </th>
-                <th className="text-right text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Amount
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {bills.map((bill) => {
-                const colour = STATUS_COLOURS[bill.status] ?? "#6b7280";
-                return (
-                  <tr
-                    key={bill.id}
-                    className="border-b border-[var(--dpf-border)] last:border-0 hover:bg-[var(--dpf-surface-2)] transition-colors"
-                  >
-                    <td className="px-4 py-2.5">
-                      <Link
-                        href={`/finance/bills/${bill.id}`}
-                        className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
-                      >
-                        {bill.billRef}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Link
-                        href={`/finance/bills/${bill.id}`}
-                        className="text-[var(--dpf-text)] hover:underline"
-                      >
-                        {bill.supplier.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className="text-[9px] px-1.5 py-0.5 rounded-full"
-                        style={{ color: colour, backgroundColor: `${colour}20` }}
-                      >
-                        {bill.status.replace(/_/g, " ")}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      <LocalTime value={bill.dueDate} utc />
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      {sym}{formatMoney(bill.totalAmount)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <BillsTable rows={rows} currencySymbol={sym} />
       </>)}
     </div>
   );

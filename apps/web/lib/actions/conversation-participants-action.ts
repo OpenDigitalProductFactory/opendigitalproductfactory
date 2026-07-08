@@ -14,15 +14,8 @@
  * does not pick or task peers. The portal only SHOWS what the active coworker is
  * tasking and a summary of what each peer is doing.
  */
-import { auth } from "@/lib/auth";
+import { requireUserId } from "@/lib/actions/shared/guards";
 import { projectParticipants, type ConversationParticipant } from "@/lib/tak/conversation-participants";
-
-async function requireUserId(): Promise<string> {
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) throw new Error("Unauthorized");
-  return userId;
-}
 
 /**
  * Project the live participant roster for a conversation (owner + the

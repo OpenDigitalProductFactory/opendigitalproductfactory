@@ -4,8 +4,8 @@ import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
-import { EmptyState } from "@/components/ui/report-kit";
 import Link from "next/link";
+import { AssetsTable, type AssetRow } from "./AssetsTable";
 
 const CATEGORY_COLOURS: Record<string, string> = {
   equipment: "#38bdf8",
@@ -27,23 +27,6 @@ const ALL_CATEGORIES = ["equipment", "vehicle", "furniture", "IT", "property", "
 
 type Props = { searchParams: Promise<{ status?: string; category?: string; view?: string }> };
 
-function DepreciationBar({ pct }: { pct: number }) {
-  const colour = pct >= 80 ? "#ef4444" : pct >= 50 ? "#fbbf24" : "#4ade80";
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 rounded-full bg-[var(--dpf-border)] overflow-hidden">
-        <div
-          className="h-full rounded-full"
-          style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: colour }}
-        />
-      </div>
-      <span className="text-[9px] text-[var(--dpf-muted)] w-8 text-right">
-        {pct.toFixed(0)}%
-      </span>
-    </div>
-  );
-}
-
 export default async function AssetsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const { status, category } = sp;
@@ -58,8 +41,21 @@ export default async function AssetsPage({ searchParams }: Props) {
   ]);
   const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
-  const formatMoney = (amount: unknown) =>
-    Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 });
+  const rows: AssetRow[] = assets.map((asset) => {
+    const purchaseCost = Number(asset.purchaseCost);
+    const accumulatedDepreciation = Number(asset.accumulatedDepreciation);
+    return {
+      id: asset.id,
+      assetId: asset.assetId,
+      name: asset.name,
+      category: asset.category,
+      purchaseCost,
+      currentBookValue: Number(asset.currentBookValue),
+      pctDepreciated:
+        purchaseCost > 0 ? (accumulatedDepreciation / purchaseCost) * 100 : 0,
+      status: asset.status,
+    };
+  });
 
   return (
     <div>
@@ -162,107 +158,17 @@ export default async function AssetsPage({ searchParams }: Props) {
 
       {/* Assets table */}
       {assets.length === 0 ? (
-        <EmptyState
-          title="No assets found."
-          action={
-            <Link
-              href="/finance/assets/new"
-              className="text-xs text-[var(--dpf-accent)] hover:underline"
-            >
-              Register your first asset →
-            </Link>
-          }
-        />
-      ) : (
-        <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--dpf-border)]">
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Asset ID
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Name
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Category
-                </th>
-                <th className="text-right text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Purchase Cost
-                </th>
-                <th className="text-right text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Book Value
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal w-40">
-                  Depreciated
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map((asset) => {
-                const purchaseCost = Number(asset.purchaseCost);
-                const currentBookValue = Number(asset.currentBookValue);
-                const accumulatedDepreciation = Number(asset.accumulatedDepreciation);
-                const pctDepreciated =
-                  purchaseCost > 0 ? (accumulatedDepreciation / purchaseCost) * 100 : 0;
-                const categoryColour = CATEGORY_COLOURS[asset.category] ?? "#6b7280";
-                const statusColour = STATUS_COLOURS[asset.status] ?? "#6b7280";
-
-                return (
-                  <tr
-                    key={asset.id}
-                    className="border-b border-[var(--dpf-border)] last:border-0 hover:bg-[var(--dpf-surface-2)] transition-colors"
-                  >
-                    <td className="px-4 py-2.5">
-                      <Link
-                        href={`/finance/assets/${asset.id}`}
-                        className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
-                      >
-                        {asset.assetId}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Link
-                        href={`/finance/assets/${asset.id}`}
-                        className="text-[var(--dpf-text)] hover:underline"
-                      >
-                        {asset.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className="text-[9px] px-1.5 py-0.5 rounded-full"
-                        style={{ color: categoryColour, backgroundColor: `${categoryColour}20` }}
-                      >
-                        {asset.category}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      {sym}{formatMoney(purchaseCost)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      {sym}{formatMoney(currentBookValue)}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <DepreciationBar pct={pctDepreciated} />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className="text-[9px] px-1.5 py-0.5 rounded-full"
-                        style={{ color: statusColour, backgroundColor: `${statusColour}20` }}
-                      >
-                        {asset.status.replace(/_/g, " ")}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="p-8 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-center">
+          <p className="text-sm text-[var(--dpf-muted)] mb-3">No assets found.</p>
+          <Link
+            href="/finance/assets/new"
+            className="text-xs text-[var(--dpf-accent)] hover:underline"
+          >
+            Register your first asset →
+          </Link>
         </div>
+      ) : (
+        <AssetsTable rows={rows} currencySymbol={sym} />
       )}
       </>)}
     </div>

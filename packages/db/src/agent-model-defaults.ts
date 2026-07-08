@@ -29,6 +29,12 @@ export const AGENT_MODEL_CONFIG_DEFAULTS: AgentModelConfigDefault[] = [
   { agentId: "data-architect", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
   { agentId: "compliance-officer", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
   { agentId: "finance-controller", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+  // Floors added by the EP-COWORKER-LIFECYCLE conformance gate (LIFE-005):
+  // these three roster coworkers had no minimum tier at all, so a weak local
+  // model could serve confidential merge/dispatch/legal work.
+  { agentId: "data-steward", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+  { agentId: "dispatcher", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+  { agentId: "legal-operations-counsel", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   { agentId: "finance-agent", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   { agentId: "licensing-specialist", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
 ];

@@ -42,6 +42,9 @@
     "./capability-maturity": "./src/capability-maturity.ts",
     "./business-capability-perspectives": "./src/business-capability-perspectives.ts",
     "./workforce-portfolio": "./src/workforce-portfolio.ts",
+    "./workforce-seed": "./src/workforce-seed.ts",
+    "./agent-model-defaults": "./src/agent-model-defaults.ts",
+    "./seed-skills": "./src/seed-skills.ts",
     "./patch": "./src/patch/index.ts"
   },
   "scripts": {

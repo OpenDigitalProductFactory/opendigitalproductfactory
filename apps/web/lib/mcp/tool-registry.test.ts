@@ -18,6 +18,7 @@ import { activityRoutingPack } from "./packs/activity-routing-pack";
 import { selfUpgradePack } from "./packs/self-upgrade-pack";
 import { coworkerServiceCatalogPack } from "./packs/coworker-service-catalog-pack";
 import { coworkerToolGrantPack } from "./packs/coworker-tool-grant-pack";
+import { coworkerMemoryPack } from "./packs/coworker-memory-pack";
 import { composeToolPacks } from "./tool-registry";
 // The inline-case ratchet's extractor lives in the CI guard (scripts/), kept as
 // the single source of truth so this test and the guard can never disagree.
@@ -243,6 +244,33 @@ describe("coworker tool-grant pack", () => {
   it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
     const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
     for (const def of coworkerToolGrantPack.definitions) {
+      expect(platformNames.has(def.name), def.name).toBe(true);
+    }
+  });
+});
+
+describe("coworker memory pack", () => {
+  it("bundles the self-scoped working-note doors with a handler each", () => {
+    expect(coworkerMemoryPack.definitions.map((t) => t.name).sort()).toEqual([
+      "list_working_notes",
+      "record_working_note",
+    ]);
+    for (const def of coworkerMemoryPack.definitions) {
+      expect(coworkerMemoryPack.handlers[def.name], def.name).toBeTypeOf("function");
+    }
+  });
+
+  it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
+    // Ungated (self-scoped) — grants is empty, so nothing to drift against.
+    expect(coworkerMemoryPack.grants).toEqual({});
+    for (const [name, grants] of Object.entries(coworkerMemoryPack.grants)) {
+      expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
+    }
+  });
+
+  it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
+    const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
+    for (const def of coworkerMemoryPack.definitions) {
       expect(platformNames.has(def.name), def.name).toBe(true);
     }
   });

@@ -2,8 +2,8 @@
 import { listPaymentRuns, listBills } from "@/lib/actions/ap";
 import { PaymentRunBuilder } from "@/components/finance/PaymentRunBuilder";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
-import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
+import { PaymentRunsTable, type PaymentRunRow } from "./PaymentRunsTable";
 
 export default async function PaymentRunsPage() {
   const [runs, approvedBills] = await Promise.all([
@@ -11,8 +11,15 @@ export default async function PaymentRunsPage() {
     listBills({ status: "approved" }),
   ]);
 
-  const formatMoney = (amount: unknown) =>
-    Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 });
+  const runRows: PaymentRunRow[] = runs.map((run) => ({
+    id: run.id,
+    paymentRef: run.paymentRef,
+    receivedAtISO: run.receivedAt ? new Date(run.receivedAt).toISOString() : null,
+    status: run.status,
+    billCount: run.allocations.length,
+    currency: run.currency,
+    amount: Number(run.amount),
+  }));
 
   return (
     <div>
@@ -52,75 +59,7 @@ export default async function PaymentRunsPage() {
           Past Payment Runs
         </h2>
 
-        {runs.length === 0 ? (
-          <p className="text-sm text-[var(--dpf-muted)]">No payment runs yet.</p>
-        ) : (
-          <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[var(--dpf-border)]">
-                  <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                    Payment Ref
-                  </th>
-                  <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                    Date
-                  </th>
-                  <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                    Status
-                  </th>
-                  <th className="text-right text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                    Bills
-                  </th>
-                  <th className="text-right text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                    Amount
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((run) => {
-                  const statusColour =
-                    run.status === "completed"
-                      ? "#4ade80"
-                      : run.status === "failed"
-                        ? "#ef4444"
-                        : "#fbbf24";
-                  return (
-                    <tr
-                      key={run.id}
-                      className="border-b border-[var(--dpf-border)] last:border-0"
-                    >
-                      <td className="px-4 py-2.5">
-                        <span className="text-[9px] font-mono text-[var(--dpf-muted)]">
-                          {run.paymentRef}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                        <LocalTime value={run.receivedAt} mode="date" />
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span
-                          className="text-[9px] px-1.5 py-0.5 rounded-full"
-                          style={{
-                            color: statusColour,
-                            backgroundColor: `${statusColour}20`,
-                          }}
-                        >
-                          {run.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
-                        {run.allocations.length}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                        {run.currency} {formatMoney(run.amount)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <PaymentRunsTable rows={runRows} />
       </section>
     </div>
   );

@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { requireUserId } from "@/lib/actions/shared/guards";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
@@ -19,13 +19,6 @@ const CLOSED_DAY: DaySchedule = { enabled: false, open: "09:00", close: "17:00" 
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
-async function requireAccess(): Promise<string> {
-  const session = await auth();
-  const user = session?.user;
-  if (!user) throw new Error("Unauthorized");
-  // Any authenticated user can view/set operating hours during setup
-  return user.id!;
-}
 
 // ─── Helpers: BusinessProfile JSON <-> WeeklySchedule ────────────────────────
 
@@ -173,7 +166,7 @@ export async function getOperatingHours(opts?: {
   timezone: string;
   isConfirmed: boolean;
 }> {
-  await requireAccess();
+  await requireUserId();
 
   const profile = await prisma.businessProfile.findFirst({
     where: { isActive: true },
@@ -323,7 +316,7 @@ export async function saveOperatingHours(input: {
   timezone?: string;
   hasStorefront?: boolean;
 }): Promise<void> {
-  await requireAccess();
+  await requireUserId();
 
   const { schedule, timezone, hasStorefront } = input;
 

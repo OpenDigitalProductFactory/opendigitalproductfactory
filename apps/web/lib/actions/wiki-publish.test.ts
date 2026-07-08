@@ -39,7 +39,7 @@ describe("publishWikiOverlayPages — auth + validation", () => {
   it("rejects when not authenticated", async () => {
     (auth as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
     const r = await publishWikiOverlayPages({ pageIds: ["a"] });
-    expect(r).toEqual({ ok: false, error: expect.stringMatching(/not authenticated/i) });
+    expect(r).toEqual({ ok: false, error: expect.stringMatching(/unauthorized/i) });
   });
 
   it("rejects when no organization exists", async () => {
@@ -271,6 +271,6 @@ describe("listOverlayDrafts", () => {
 
   it("rejects when not authenticated", async () => {
     (auth as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
-    await expect(listOverlayDrafts()).rejects.toThrow(/not authenticated/i);
+    await expect(listOverlayDrafts()).rejects.toThrow(/unauthorized/i);
   });
 });

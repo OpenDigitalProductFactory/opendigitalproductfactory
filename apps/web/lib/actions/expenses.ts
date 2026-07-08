@@ -2,9 +2,8 @@
 
 import { nanoid } from "nanoid";
 import { prisma } from "@dpf/db";
-import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { requireCapability } from "@/lib/actions/shared/guards";
+import { requireCapability, requireUser } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
 import { sendEmail, composeExpenseApprovalEmail } from "@/lib/email";
 import { getOrgIdentity } from "@/lib/org-identity";
@@ -12,12 +11,6 @@ import { resolveAppBaseUrl } from "@/lib/app-url";
 import type { CreateExpenseClaimInput } from "@/lib/expense-validation";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
-
-async function getSessionUser() {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
-  return session.user;
-}
 
 async function requireManageFinance(): Promise<string> {
   return (await requireCapability("manage_finance")).userId;
@@ -35,7 +28,7 @@ async function generateClaimId(): Promise<string> {
 // ─── createExpenseClaim ───────────────────────────────────────────────────────
 
 export async function createExpenseClaim(input: CreateExpenseClaimInput) {
-  const user = await getSessionUser();
+  const user = await requireUser();
 
   // Look up employee profile by session userId
   const employeeProfile = await prisma.employeeProfile.findFirst({
@@ -83,7 +76,7 @@ export async function createExpenseClaim(input: CreateExpenseClaimInput) {
 // ─── getExpenseClaim ──────────────────────────────────────────────────────────
 
 export async function getExpenseClaim(id: string) {
-  await getSessionUser();
+  await requireUser();
 
   return prisma.expenseClaim.findUnique({
     where: { id },
@@ -107,7 +100,7 @@ interface ListExpenseClaimsFilters {
 }
 
 export async function listExpenseClaims(filters?: ListExpenseClaimsFilters) {
-  const user = await getSessionUser();
+  const user = await requireUser();
 
   const isManager = can(
     { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
@@ -145,7 +138,7 @@ export async function listExpenseClaims(filters?: ListExpenseClaimsFilters) {
 // ─── submitExpenseClaim ───────────────────────────────────────────────────────
 
 export async function submitExpenseClaim(id: string): Promise<void> {
-  const user = await getSessionUser();
+  const user = await requireUser();
 
   const claim = await prisma.expenseClaim.findUnique({
     where: { id },

@@ -28,7 +28,7 @@ import {
 } from "@dpf/db/wiki-store";
 import { extractWikilinks } from "@dpf/db/wiki-frontmatter";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
+import { requireUser } from "@/lib/actions/shared/guards";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -62,14 +62,6 @@ export type SaveWikiOverlayEditResult =
   | { ok: false; error: string };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-async function requireSessionUser(): Promise<{ id: string }> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    throw new Error("Not authenticated");
-  }
-  return { id: session.user.id };
-}
 
 async function requireOrganization(): Promise<{ id: string }> {
   // DPF runs single-org installs today — see (shell)/layout.tsx for the
@@ -160,7 +152,7 @@ export async function saveWikiOverlayEdit(
   input: SaveWikiOverlayEditInput,
 ): Promise<SaveWikiOverlayEditResult> {
   try {
-    const user = await requireSessionUser();
+    const user = await requireUser();
     const org = await requireOrganization();
 
     // Reject empty body / missing title at the action boundary so the form
