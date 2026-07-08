@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { requireUserId } from "@/lib/actions/shared/guards";
 import { isFeedbackEventDetail, type FeedbackEventDetail } from "@/lib/feedback/feedback-event";
 import { ISSUE_REPORT_STATUS } from "@/lib/quality/issue-report-status";
 import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
@@ -51,17 +51,6 @@ function requireValidDetail(detail: unknown): FeedbackEventDetail {
   }
 
   return detail;
-}
-
-async function requireAuthUserId(): Promise<string> {
-  const session = await auth();
-  const userId = session?.user?.id;
-
-  if (!userId) {
-    throw new Error("Unauthorized");
-  }
-
-  return userId;
 }
 
 function normalizeOptionalId(value: string | null | undefined, label: string): string | null {
@@ -243,7 +232,7 @@ async function enforceSupportStartRateLimit(userId: string): Promise<void> {
 }
 
 export async function startFeedbackSupport(input: StartFeedbackSupportInput): Promise<FeedbackSupportResult> {
-  const userId = await requireAuthUserId();
+  const userId = await requireUserId();
   const detail = requireValidDetail(input.detail);
   const threadId = normalizeOptionalId(input.threadId, "threadId");
   const requestedFeatureBuildId = normalizeOptionalId(input.featureBuildId, "featureBuildId");
@@ -301,7 +290,7 @@ export async function startFeedbackSupport(input: StartFeedbackSupportInput): Pr
 export async function reconcileFeedbackSupportFallback(
   input: ReconcileFeedbackSupportFallbackInput,
 ): Promise<FeedbackSupportResult> {
-  const userId = await requireAuthUserId();
+  const userId = await requireUserId();
   const detail = requireValidDetail(input.detail);
   const threadId = normalizeOptionalId(input.threadId, "threadId");
 
