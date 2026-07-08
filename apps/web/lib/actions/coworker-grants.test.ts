@@ -7,6 +7,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: {
     agentToolGrant: { upsert: vi.fn(), deleteMany: vi.fn() },
+    agentToolGrantRevocation: { upsert: vi.fn(), deleteMany: vi.fn() },
     skillAssignment: { upsert: vi.fn(), deleteMany: vi.fn() },
     skillDefinition: { findUnique: vi.fn() },
   },

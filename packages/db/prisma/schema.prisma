@@ -2303,6 +2303,7 @@ model Agent {
   executionConfig      AgentExecutionConfig?
   skills               AgentSkillAssignment[]
   toolGrants           AgentToolGrant[]
+  toolGrantRevocations AgentToolGrantRevocation[]
   coworkerServices     CoworkerService[]
   coworkerEngagements  CoworkerEngagement[]
   coworkerAssessments  CoworkerSelfAssessment[]    @relation("CoworkerSelfAssessmentAgent")
@@ -2442,6 +2443,26 @@ model AgentToolGrant {
   grantKey  String // e.g. "registry_read", "backlog_write"
   grantedAt DateTime @default(now())
   grantedBy String? // User ID who granted, null = seed
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, grantKey])
+  @@index([grantKey])
+}
+
+// BI-4FA040D5: durable revocation tombstone. The boot seed re-applies grants
+// from HARDCODED_COWORKER_GRANTS/ONBOARDING_AGENT_GRANTS on every start, which
+// silently resurrected any seed grant an operator had revoked. A revoke now
+// writes a tombstone here; the seed/bootstrap paths skip any (agentId, grantKey)
+// that carries one, so operator revocations of seed grants are durable. A
+// subsequent (re-)grant deletes the tombstone. Additive-only — the hot
+// authorization read path (AgentToolGrant rows) is untouched: a revoked grant is
+// still a deleted row, so nothing here can authorize.
+model AgentToolGrantRevocation {
+  id        String   @id @default(cuid())
+  agentId   String // Agent.id (cuid), matches AgentToolGrant.agentId
+  grantKey  String
+  revokedBy String? // User ID who revoked, null = system
+  revokedAt DateTime @default(now())
   agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@unique([agentId, grantKey])
