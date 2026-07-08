@@ -587,6 +587,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // out-of-band rather than waiting up to 10 minutes (BI-063BDF1B Phase 5).
   trigger_contributor_inventory_sync: ["admin_write"],
   request_self_upgrade: ["admin_write"],
+  // Governed self-heal for the "promoter image not built" self-upgrade skip.
+  // Same admin_write scope as request_self_upgrade so the platform-engineer
+  // ("AI Ops Engineer") coworker can build the promoter image on request.
+  repair_promoter_image: ["admin_write"],
   get_self_upgrade_queue_status: ["release_plan_read"],
 
   // Design intelligence (read-only references)

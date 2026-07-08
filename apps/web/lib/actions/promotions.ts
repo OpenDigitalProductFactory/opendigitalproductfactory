@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache";
 import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
 import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
+import { ensurePromoterImage } from "@/lib/self-upgrade/promoter";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
@@ -440,25 +441,16 @@ export async function executePromotionAction(
     await execAsync("docker info", { timeout: 5_000 });
     await execAsync("docker rm dpf-promoter-1 2>/dev/null || true");
 
-    // Build the promoter image just-in-time if it doesn't exist.
-    // The build files are baked into the portal image at /promoter/.
-    // Layout mirrors the repo root: Dockerfile (portal), Dockerfile.promoter,
-    // scripts/promote.sh — so the same Dockerfile.promoter works for both
-    // repo-root builds and JIT builds from the portal container.
-    try {
-      await execAsync("docker image inspect dpf-promoter", { timeout: 5_000 });
-    } catch {
-      await execAsync(
-        "sh -c '" +
-          "BDIR=$(mktemp -d) && " +
-          "cp /promoter/portal.Dockerfile $BDIR/Dockerfile && " +
-          "cp /promoter/Dockerfile.promoter $BDIR/Dockerfile.promoter && " +
-          "mkdir -p $BDIR/scripts && " +
-          "cp /promoter/promote.sh $BDIR/scripts/promote.sh && " +
-          "tar -C $BDIR -c . | docker build -t dpf-promoter -f Dockerfile.promoter - && " +
-          "rm -rf $BDIR" +
-          "'",
-        { timeout: 120_000 },
+    // Ensure the promoter image exists, building it just-in-time from the
+    // portal's baked-in /promoter/ files if missing. Shared with the
+    // self-upgrade auto-heal and the governed repair tool so there is one
+    // recipe. On failure, fall through to the outer catch → in-portal path.
+    const ensured = await ensurePromoterImage("dpf-promoter");
+    if (!ensured.ok) {
+      throw new Error(
+        `promoter image unavailable (${ensured.skipReason ?? "unknown"})${
+          ensured.detail ? `: ${ensured.detail}` : ""
+        }`,
       );
     }
 
@@ -890,6 +882,46 @@ export async function abortActiveRun(
     return { ok: false, error: err instanceof Error ? err.message : "abort failed" };
   }
   return { ok: true };
+}
+
+/**
+ * BI-F2C53237 — operator-visible "Build engine now" for the promoter-unavailable
+ * skip. Builds the promoter image in place from the portal's baked-in /promoter/
+ * files (the same recipe self-upgrade auto-heal and the repair_promoter_image
+ * MCP tool use), so a non-technical operator resolves "Upgrade engine not ready"
+ * with one click instead of a docker command. Idempotent; the next scheduled
+ * attempt resumes automatically once the image is present.
+ */
+export async function repairPromoterImage(): Promise<{
+  ok: boolean;
+  built?: boolean;
+  message: string;
+}> {
+  await requireOpsAccess();
+  const config = await getSelfUpgradeConfig();
+  const image = config.promoterImage ?? "dpf-promoter";
+  const result = await ensurePromoterImage(config.promoterImage);
+
+  if (result.ok) {
+    revalidatePath("/ops/self-upgrade");
+    return {
+      ok: true,
+      built: result.built,
+      message: result.alreadyPresent
+        ? `The promoter engine image (${image}) is already built — self-upgrade can proceed.`
+        : `Built the promoter engine image (${image}). The next upgrade attempt resumes automatically.`,
+    };
+  }
+
+  return {
+    ok: false,
+    message:
+      result.skipReason === "custom-image"
+        ? `A custom promoter image (${image}) is configured; it must be provided by the operator rather than built here.`
+        : `Could not build the promoter engine image${
+            result.detail ? `: ${result.detail.split("\n").pop()}` : "."
+          }`,
+  };
 }
 
 export async function rollbackSelfUpgrade(

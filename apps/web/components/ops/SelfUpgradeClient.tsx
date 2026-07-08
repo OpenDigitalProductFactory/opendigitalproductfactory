@@ -7,6 +7,7 @@ import {
   triggerSelfUpgrade,
   forceActiveRun,
   abortActiveRun,
+  repairPromoterImage,
 } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
@@ -329,6 +330,11 @@ export default function SelfUpgradeClient({
   // signature at swap time so we know when the new container has answered.
   const [restarting, setRestarting] = useState(false);
   const restartBaselineRef = useRef<string | null>(null);
+  const [isRepairPending, startRepairTransition] = useTransition();
+  const [repairResult, setRepairResult] = useState<{
+    status: "ok" | "error";
+    message: string;
+  } | null>(null);
   const [rollbackConfirmation, setRollbackConfirmation] = useState("");
   const [rollbackResult, setRollbackResult] = useState<{
     status: "idle" | "ok" | "error";
@@ -522,6 +528,25 @@ export default function SelfUpgradeClient({
         } else {
           setInFlightError(err instanceof Error ? err.message : "Abort failed");
         }
+      }
+    });
+  }
+
+  // BI-F2C53237: build the promoter engine image in place when self-upgrade
+  // skipped with promoter-unavailable, so the operator resolves "Upgrade engine
+  // not ready" with one click instead of a docker command.
+  function handleRepairPromoter() {
+    setRepairResult(null);
+    startRepairTransition(async () => {
+      try {
+        const r = await repairPromoterImage();
+        setRepairResult({ status: r.ok ? "ok" : "error", message: r.message });
+        if (r.ok) router.refresh();
+      } catch (err) {
+        setRepairResult({
+          status: "error",
+          message: getErrorMessage(err) || "Could not build the promoter engine image.",
+        });
       }
     });
   }
@@ -1180,6 +1205,31 @@ export default function SelfUpgradeClient({
                   <div className="text-[var(--dpf-muted)]">{explanation.detail}</div>
                   {explanation.remedy && (
                     <div className="text-[var(--dpf-muted)]">{explanation.remedy}</div>
+                  )}
+                  {(latestRun.reason ?? "").startsWith("promoter-unavailable") && (
+                    <div className="pt-1 space-y-1">
+                      <button
+                        type="button"
+                        onClick={handleRepairPromoter}
+                        disabled={isRepairPending}
+                        className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface)] px-2 py-1 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] disabled:opacity-60"
+                        data-testid="repair-promoter-button"
+                      >
+                        {isRepairPending ? "Building engine…" : "Build engine now"}
+                      </button>
+                      {repairResult && (
+                        <div
+                          className={
+                            repairResult.status === "ok"
+                              ? "text-[var(--dpf-success)]"
+                              : "text-[var(--dpf-destructive)]"
+                          }
+                          data-repair-status={repairResult.status}
+                        >
+                          {repairResult.message}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               );

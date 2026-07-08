@@ -21,6 +21,19 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "repair_promoter_image",
+    description:
+      "Build the promoter engine image on this host so the governed self-upgrade can swap the portal. This is the governed remedy for the 'Upgrade engine not ready — promoter image not built' skip: the build inputs are baked into the portal image, so the platform builds it in place instead of asking a human to run a docker command. Idempotent — if the image is already present it reports so without rebuilding. Only the default local image is buildable this way; a custom or registry-qualified promoter image is pull-based and must be provided by the operator.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "manage_provider_connections",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
     name: "get_self_upgrade_queue_status",
     description:
       "Read the release-batch queue state for the governed self-upgrade: how many merged updates (PRs) are pending since the deployed lineage, the batch threshold and max-wait valve, and whether a routine upgrade is currently eligible. Use it to decide whether an upgrade is imminent or more updates are still to be tallied — if not imminent, keep working and validate live after the batch deploys. Read-only.",
@@ -92,6 +105,45 @@ async function requestSelfUpgradeTool(
   };
 }
 
+async function repairPromoterImageTool(): Promise<ToolResult> {
+  const [{ ensurePromoterImage }, { getSelfUpgradeConfig }] = await Promise.all([
+    import("@/lib/self-upgrade/promoter"),
+    import("@/lib/self-upgrade/config"),
+  ]);
+  const config = await getSelfUpgradeConfig();
+  const image = config.promoterImage ?? "dpf-promoter";
+  const result = await ensurePromoterImage(config.promoterImage);
+
+  if (result.ok && result.alreadyPresent) {
+    return {
+      success: true,
+      message: `The promoter engine image (${image}) is already built — self-upgrade can swap the portal. Nothing to repair.`,
+      data: result as unknown as Record<string, unknown>,
+    };
+  }
+
+  if (result.ok && result.built) {
+    return {
+      success: true,
+      message: `Built the promoter engine image (${image}). The next self-upgrade attempt resumes automatically — no further action needed.`,
+      data: result as unknown as Record<string, unknown>,
+    };
+  }
+
+  const why =
+    result.skipReason === "custom-image"
+      ? `A custom promoter image (${image}) is configured; it must be pulled by the operator rather than built here.`
+      : `Could not build the promoter engine image${
+          result.detail ? `: ${result.detail.split("\n").pop()}` : "."
+        }`;
+  return {
+    success: false,
+    error: why,
+    message: why,
+    data: result as unknown as Record<string, unknown>,
+  };
+}
+
 async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
   const [{ resolveReleaseBatchStatus }, { getSelfUpgradeConfig }, { getLatestRun }] =
     await Promise.all([
@@ -130,10 +182,15 @@ export const selfUpgradePack: ToolPack = {
   definitions,
   handlers: {
     request_self_upgrade: requestSelfUpgradeTool,
+    repair_promoter_image: repairPromoterImageTool,
     get_self_upgrade_queue_status: getSelfUpgradeQueueStatusTool,
   },
   grants: {
     request_self_upgrade: ["admin_write"],
+    // Same scope as request_self_upgrade — the platform-engineer ("AI Ops
+    // Engineer") coworker already holds admin_write, so the repair is reachable
+    // by the ops coworker with no new grant.
+    repair_promoter_image: ["admin_write"],
     get_self_upgrade_queue_status: ["release_plan_read"],
   },
 };
