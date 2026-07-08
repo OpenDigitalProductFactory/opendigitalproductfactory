@@ -4,14 +4,9 @@ import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { SurfaceViewSwitcher } from "@/components/workbooks/SurfaceViewSwitcher";
 import { SurfacePlatformGrid } from "@/components/workbooks/SurfacePlatformGrid";
 import Link from "next/link";
+import { SuppliersTable, type SupplierRow } from "./SuppliersTable";
 
 export const dynamic = "force-dynamic";
-
-const SUPPLIER_STATUS_COLOURS: Record<string, string> = {
-  active: "#4ade80",
-  inactive: "#8888a0",
-  blocked: "#ef4444",
-};
 
 export default async function SuppliersPage({
   searchParams,
@@ -21,6 +16,15 @@ export default async function SuppliersPage({
   const sp = await searchParams;
   const view = sp?.view === "grid" || sp?.view === "board" ? sp.view : null;
   const suppliers = await listSuppliers();
+
+  const rows: SupplierRow[] = suppliers.map((s) => ({
+    id: s.id,
+    supplierId: s.supplierId,
+    name: s.name,
+    status: s.status,
+    paymentTerms: s.paymentTerms,
+    billCount: s._count.bills,
+  }));
 
   return (
     <div>
@@ -50,77 +54,8 @@ export default async function SuppliersPage({
 
       {view ? (
         <SurfacePlatformGrid entityType="supplier" view={view} />
-      ) : suppliers.length === 0 ? (
-        <p className="text-sm text-[var(--dpf-muted)]">No suppliers yet.</p>
       ) : (
-        <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--dpf-border)]">
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  ID
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Name
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Status
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Payment Terms
-                </th>
-                <th className="text-right text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Bills
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {suppliers.map((s) => {
-                const colour = SUPPLIER_STATUS_COLOURS[s.status] ?? "#6b7280";
-                return (
-                  <tr
-                    key={s.id}
-                    className="border-b border-[var(--dpf-border)] last:border-0 hover:bg-[var(--dpf-surface-2)] transition-colors"
-                  >
-                    <td className="px-4 py-2.5">
-                      <Link
-                        href={`/finance/suppliers/${s.id}`}
-                        className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
-                      >
-                        {s.supplierId}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Link
-                        href={`/finance/suppliers/${s.id}`}
-                        className="text-[var(--dpf-text)] hover:underline"
-                      >
-                        {s.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className="text-[9px] px-1.5 py-0.5 rounded-full"
-                        style={{
-                          color: colour,
-                          backgroundColor: `${colour}20`,
-                        }}
-                      >
-                        {s.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      {s.paymentTerms}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
-                      {s._count.bills}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <SuppliersTable rows={rows} />
       )}
     </div>
   );

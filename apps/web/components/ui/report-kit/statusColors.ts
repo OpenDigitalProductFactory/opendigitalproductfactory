@@ -91,6 +91,66 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     void: "neutral",
     written_off: "neutral",
   },
+  // Finance AP bill lifecycle (was app/(shell)/finance/bills STATUS_COLOURS).
+  financeBill: {
+    draft: "neutral",
+    awaiting_approval: "accent",
+    approved: "info",
+    partially_paid: "warning",
+    paid: "success",
+    void: "neutral",
+  },
+  // Finance supplier lifecycle (was app/(shell)/finance/suppliers SUPPLIER_STATUS_COLOURS).
+  financeSupplier: {
+    active: "success",
+    inactive: "neutral",
+    blocked: "danger",
+  },
+  // Finance purchase-order lifecycle (was app/(shell)/finance/purchase-orders STATUS_COLOURS).
+  financePurchaseOrder: {
+    draft: "neutral",
+    sent: "info",
+    acknowledged: "accent",
+    received: "success",
+    cancelled: "neutral",
+  },
+  // Finance expense-claim lifecycle (was app/(shell)/finance/expense-claims + my-expenses STATUS_COLOURS).
+  financeExpenseClaim: {
+    draft: "neutral",
+    submitted: "accent",
+    approved: "success",
+    rejected: "danger",
+    paid: "success",
+  },
+  // Finance recurring-schedule lifecycle (was app/(shell)/finance/recurring SCHEDULE_STATUS_COLOURS).
+  financeRecurring: {
+    active: "success",
+    paused: "warning",
+    cancelled: "danger",
+    completed: "neutral",
+  },
+  // Finance payment-run lifecycle (was inline ternary in app/(shell)/finance/payment-runs).
+  financePaymentRun: {
+    pending: "warning",
+    processing: "warning",
+    completed: "success",
+    failed: "danger",
+  },
+  // Finance fixed-asset lifecycle (was app/(shell)/finance/assets STATUS_COLOURS).
+  financeAsset: {
+    active: "success",
+    disposed: "neutral",
+    written_off: "danger",
+  },
+  // Finance fixed-asset category taxonomy (was app/(shell)/finance/assets CATEGORY_COLOURS).
+  financeAssetCategory: {
+    equipment: "info",
+    vehicle: "warning",
+    furniture: "accent",
+    IT: "success",
+    property: "warning",
+    other: "neutral",
+  },
   // Complaints (was raw hex in ComplaintsClient — now token-backed).
   complaintSeverity: {
     low: "success",

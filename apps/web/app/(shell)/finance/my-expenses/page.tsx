@@ -5,16 +5,8 @@ import { listExpenseClaims } from "@/lib/actions/expenses";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
-import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
-
-const STATUS_COLOURS: Record<string, string> = {
-  draft: "#8888a0",
-  submitted: "#a78bfa",
-  approved: "#4ade80",
-  rejected: "#ef4444",
-  paid: "#22c55e",
-};
+import { MyExpensesTable, type MyExpenseRow } from "./MyExpensesTable";
 
 export default async function MyExpensesPage() {
   const [claims, orgSettings] = await Promise.all([
@@ -23,8 +15,14 @@ export default async function MyExpensesPage() {
   ]);
   const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
-  const formatMoney = (amount: unknown) =>
-    Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 });
+  const rows: MyExpenseRow[] = claims.map((claim) => ({
+    id: claim.id,
+    claimId: claim.claimId,
+    title: claim.title,
+    status: claim.status,
+    submittedAtISO: claim.submittedAt ? new Date(claim.submittedAt).toISOString() : null,
+    amount: Number(claim.totalAmount),
+  }));
 
   return (
     <div>
@@ -58,75 +56,7 @@ export default async function MyExpensesPage() {
           </Link>
         </div>
       ) : (
-        <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--dpf-border)]">
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Claim ID
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Title
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Status
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Submitted
-                </th>
-                <th className="text-right text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Total
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {claims.map((claim) => {
-                const colour = STATUS_COLOURS[claim.status] ?? "#6b7280";
-                return (
-                  <tr
-                    key={claim.id}
-                    className="border-b border-[var(--dpf-border)] last:border-0 hover:bg-[var(--dpf-surface-2)] transition-colors"
-                  >
-                    <td className="px-4 py-2.5">
-                      <Link
-                        href={`/finance/my-expenses/${claim.id}`}
-                        className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
-                      >
-                        {claim.claimId}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Link
-                        href={`/finance/my-expenses/${claim.id}`}
-                        className="text-[var(--dpf-text)] hover:underline"
-                      >
-                        {claim.title}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className="text-[9px] px-1.5 py-0.5 rounded-full"
-                        style={{ color: colour, backgroundColor: `${colour}20` }}
-                      >
-                        {claim.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      {claim.submittedAt ? (
-                        <LocalTime value={claim.submittedAt} mode="date" />
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      {sym}{formatMoney(claim.totalAmount)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <MyExpensesTable rows={rows} currencySymbol={sym} />
       )}
     </div>
   );
