@@ -9,6 +9,7 @@ import {
   MailchimpConnectPanel,
   type MailchimpConnectionState,
 } from "@/components/integrations/MailchimpConnectPanel";
+import { Notice } from "@/components/ui/report-kit";
 
 export default async function MailchimpIntegrationPage() {
   const session = await auth();
@@ -138,19 +139,12 @@ function MailchimpPreviewSection({
 
   if (preview.state === "error") {
     return (
-      <section
-        className="rounded-lg border p-4 text-sm"
-        style={{
-          borderColor: "var(--dpf-warning)",
-          backgroundColor: "color-mix(in srgb, var(--dpf-warning) 10%, transparent)",
-        }}
-      >
-        <h2 className="font-semibold text-[var(--dpf-text)]">Preview unavailable</h2>
-        <p className="mt-1 text-[var(--dpf-muted)]">
+      <Notice variant="warn" title="Preview unavailable">
+        <p className="text-[var(--dpf-muted)]">
           DPF could not refresh Mailchimp preview data for this account.
         </p>
         <p className="mt-2 font-medium text-[var(--dpf-text)]">{preview.error}</p>
-      </section>
+      </Notice>
     );
   }
 

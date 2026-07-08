@@ -19,6 +19,7 @@ import {
   type PromotionSkipReason,
   type BlockedReasonGroup,
 } from "@/lib/discovery/promotion-audit";
+import { EmptyState, KpiCard } from "@/components/ui/report-kit";
 
 export default async function PromotionAuditPage() {
   // PrismaClient is a structural superset of PromotionAuditDb (the helper's
@@ -42,12 +43,12 @@ export default async function PromotionAuditPage() {
         {counts.discovered === 0 ? (
           <EmptyState
             title="Nothing discovered yet"
-            body="No InventoryEntity rows exist. Run discovery to populate the inventory before reviewing promotion."
+            description="No InventoryEntity rows exist. Run discovery to populate the inventory before reviewing promotion."
           />
         ) : counts.blocked === 0 ? (
           <EmptyState
             title="All discovered items are promoted"
-            body={`All ${counts.discovered} discovered ${
+            description={`All ${counts.discovered} discovered ${
               counts.discovered === 1 ? "entity is" : "entities are"
             } either promoted or attributed without any open blocking issues.`}
           />
@@ -82,15 +83,6 @@ export default async function PromotionAuditPage() {
 // Pieces
 // ---------------------------------------------------------------------------
 
-function EmptyState({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] rounded-lg p-8 text-center">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="text-[var(--dpf-muted)] text-sm mt-2 max-w-xl mx-auto">{body}</p>
-    </div>
-  );
-}
-
 function CountsStrip({ counts }: { counts: PromotionAuditCounts }) {
   const { discovered, attributed, promoted, blocked } = counts;
   const pct = (n: number) =>
@@ -98,59 +90,32 @@ function CountsStrip({ counts }: { counts: PromotionAuditCounts }) {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
-      <CountCard label="Discovered" value={discovered} sub={null} />
-      <CountCard
+      <KpiCard size="lg" label="Discovered" value={discovered} />
+      <KpiCard
+        size="lg"
         label="Attributed"
         value={attributed}
-        sub={pct(attributed) ? `${pct(attributed)} of discovered` : null}
+        hint={pct(attributed) ? `${pct(attributed)} of discovered` : undefined}
       />
-      <CountCard
+      <KpiCard
+        size="lg"
         label="Promoted"
         value={promoted}
-        sub={
-          pct(promoted) ? `${promoted} of ${discovered} (${pct(promoted)})` : null
+        intent="accent"
+        hint={
+          pct(promoted) ? `${promoted} of ${discovered} (${pct(promoted)})` : undefined
         }
-        emphasis="accent"
       />
-      <CountCard
+      <KpiCard
+        size="lg"
         label="Blocked"
         value={blocked}
-        sub={
+        hint={
           pct(blocked) && blocked > 0
             ? `${blocked} of ${discovered} (${pct(blocked)})`
-            : null
+            : undefined
         }
       />
-    </div>
-  );
-}
-
-function CountCard({
-  label,
-  value,
-  sub,
-  emphasis,
-}: {
-  label: string;
-  value: number;
-  sub: string | null;
-  emphasis?: "accent";
-}) {
-  return (
-    <div className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] rounded-lg p-5">
-      <div className="text-[var(--dpf-muted)] text-xs uppercase tracking-wide font-medium">
-        {label}
-      </div>
-      <div
-        className={`mt-2 text-4xl font-bold tabular-nums ${
-          emphasis === "accent" ? "text-[var(--dpf-accent)]" : ""
-        }`}
-      >
-        {value}
-      </div>
-      {sub ? (
-        <div className="text-[var(--dpf-muted)] text-xs mt-1">{sub}</div>
-      ) : null}
     </div>
   );
 }

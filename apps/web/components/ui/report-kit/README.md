@@ -23,7 +23,11 @@ import {
 | Primitive | Server-usable? | Use it for |
 |---|---|---|
 | `StatusBadge` | ✅ (pure) | status / severity / lifecycle pills |
-| `StatCard` | ✅ (pure) | KPI / metric tiles (value + delta + drill-down) |
+| `StatCard` | ✅ (pure) | labelled KPI tiles (label on top + delta + drill-down) |
+| `KpiCard` | ✅ (pure) | value-forward metric tiles (big number, caption below) |
+| `EmptyState` | ✅ (pure) | "No … found" / nothing-here-yet placeholders |
+| `Skeleton` | ✅ (pure) | loading shimmer bars (the one place `animate-pulse` lives) |
+| `Notice` | ✅ (pure) | inline callouts / banners (info · warn · success · error) |
 | `DataTable` | client¹ | tabular lists with sort, paging, empty/loading states |
 | `FilterBar` | client¹ | search + select + pill facets above a table |
 | `ExportButton` / `toCsv` | client | CSV export of rows (papaparse-backed) |
@@ -148,6 +152,67 @@ KPI tile — pure, server-usable. Delta intent auto-derives from direction
   delta={{ label: "+12%", direction: "up" }}
   href="/finance/invoices" />
 ```
+
+## KpiCard
+
+Value-forward metric tile — pure, server-usable. Where `StatCard` leads with a
+tiny uppercase label (dashboard tiles with a delta chip), `KpiCard` leads with
+the number (stat rows / hero figures — the shape the hand-rolled
+`text-3xl font-bold` blocks take). Both share the intent model.
+
+```tsx
+<KpiCard value={42} label="Open invoices" size="lg" intent="accent"
+  hint="12 of 30 (40%)" href="/finance/invoices" />
+```
+
+Sizes: `sm` (text-2xl) · `md` (text-3xl, default) · `lg` (text-4xl). `intent`
+colors the value text (and the left accent border when `bordered`). Pass
+`bordered={false}` for a chrome-less number in an existing card.
+
+## EmptyState
+
+Centered "nothing here yet" placeholder — pure, server-usable. Replaces the
+~40 hand-rolled `No … found` divs.
+
+```tsx
+<EmptyState
+  title="No invoices found"
+  description="Create your first invoice to get started."
+  icon={<span>📭</span>}
+  action={<Link href="/finance/invoices/new">New invoice →</Link>}
+/>
+```
+
+Pass `bordered={false}` for a bare inline message; `size="sm"` for compact.
+
+## Skeleton
+
+Loading shimmer — pure, server-usable. The one sanctioned home for
+`animate-pulse`; everything else should compose this.
+
+```tsx
+<Skeleton width={128} height={16} />      // one bar
+<Skeleton lines={4} />                    // paragraph (last line shortened)
+```
+
+`width` / `height` accept a number (px) or any CSS length. `rounded`:
+`sm · md · lg · full`.
+
+## Notice
+
+Inline callout / banner — pure, server-usable. Replaces the ~25 hand-rolled
+`border-l-4` callouts. Variant maps to an intent, so color still resolves
+through the one registry.
+
+```tsx
+<Notice variant="warn" title="Preview unavailable">
+  DPF could not refresh the preview for this account.
+</Notice>
+```
+
+Variants: `info · warn · success · error`. The left border + heading take the
+intent color; the background is a soft wash of the same token. Pass
+`icon={false}` to drop the leading glyph, or any node to override it.
 
 ## ExportButton
 

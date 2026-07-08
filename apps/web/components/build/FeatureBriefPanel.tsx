@@ -8,6 +8,7 @@ import { AgentAttachmentCard } from "@/components/agent/AgentAttachmentCard";
 import { DeliberationSummaryCard } from "@/components/deliberation/DeliberationSummaryCard";
 import { EvidenceSummary } from "./EvidenceSummary";
 import { safeRenderValue } from "@/lib/safe-render";
+import { Skeleton } from "@/components/ui/report-kit";
 
 type Props = {
   brief: FeatureBrief | null;
@@ -43,12 +44,12 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
   if (loading) {
     return (
       <div className="p-4 flex flex-col gap-3 animate-fade-in">
-        <div className="h-4 w-32 bg-[var(--dpf-surface-2)] rounded animate-pulse" />
+        <Skeleton width={128} height={16} />
         <div className="flex flex-col gap-3">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="flex flex-col gap-1.5">
-              <div className="h-2.5 w-20 bg-[var(--dpf-surface-2)] rounded animate-pulse" />
-              <div className="h-3.5 bg-[var(--dpf-surface-2)] rounded animate-pulse" style={{ width: `${60 + i * 8}%` }} />
+              <Skeleton width={80} height={10} />
+              <Skeleton height={14} width={`${60 + i * 8}%`} />
             </div>
           ))}
         </div>
