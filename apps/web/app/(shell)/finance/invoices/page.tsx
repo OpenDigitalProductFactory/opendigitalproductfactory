@@ -3,8 +3,8 @@ import { prisma } from "@dpf/db";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
-import { LocalTime } from "@/components/ui/LocalTime";
 import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
+import { InvoicesTable, type InvoiceRow } from "./InvoicesTable";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -57,8 +57,15 @@ export default async function InvoicesPage({ searchParams }: Props) {
   );
   const totalCount = statusCounts.reduce((sum, s) => sum + s._count, 0);
 
-  const formatMoney = (amount: number) =>
-    amount.toLocaleString("en-GB", { minimumFractionDigits: 2 });
+  const rows: InvoiceRow[] = invoices.map((inv) => ({
+    id: inv.id,
+    invoiceRef: inv.invoiceRef,
+    accountName: inv.account.name,
+    status: inv.status,
+    dueDateISO: inv.dueDate.toISOString(),
+    currencySymbol: getCurrencySymbol(inv.currency),
+    amount: Number(inv.totalAmount),
+  }));
 
   return (
     <div>
@@ -127,78 +134,7 @@ export default async function InvoicesPage({ searchParams }: Props) {
       </div>
 
       {/* Invoices table */}
-      {invoices.length === 0 ? (
-        <p className="text-sm text-[var(--dpf-muted)]">No invoices found.</p>
-      ) : (
-        <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--dpf-border)]">
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Ref
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Account
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Status
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Due Date
-                </th>
-                <th className="text-right text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Amount
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((inv) => {
-                const colour = STATUS_COLOURS[inv.status] ?? "#6b7280";
-                return (
-                  <tr
-                    key={inv.id}
-                    className="border-b border-[var(--dpf-border)] last:border-0 hover:bg-[var(--dpf-surface-2)] transition-colors"
-                  >
-                    <td className="px-4 py-2.5">
-                      <Link
-                        href={`/finance/invoices/${inv.id}`}
-                        className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
-                      >
-                        {inv.invoiceRef}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Link
-                        href={`/finance/invoices/${inv.id}`}
-                        className="text-[var(--dpf-text)] hover:underline"
-                      >
-                        {inv.account.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className="text-[9px] px-1.5 py-0.5 rounded-full"
-                        style={{
-                          color: colour,
-                          backgroundColor: `${colour}20`,
-                        }}
-                      >
-                        {inv.status.replace("_", " ")}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      <LocalTime value={inv.dueDate} utc />
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      {getCurrencySymbol(inv.currency)}{formatMoney(Number(inv.totalAmount))}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <InvoicesTable rows={rows} />
         </>
       )}
     </div>

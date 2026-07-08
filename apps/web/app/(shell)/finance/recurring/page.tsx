@@ -1,22 +1,14 @@
 // apps/web/app/(shell)/finance/recurring/page.tsx
 import { listRecurringSchedules } from "@/lib/actions/recurring";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
-import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
+import { RecurringTable, type RecurringRow } from "./RecurringTable";
 
 const SCHEDULE_STATUS_COLOURS: Record<string, string> = {
   active: "#4ade80",
   paused: "#fbbf24",
   cancelled: "#ef4444",
   completed: "#8888a0",
-};
-
-const FREQUENCY_LABELS: Record<string, string> = {
-  weekly: "Weekly",
-  fortnightly: "Fortnightly",
-  monthly: "Monthly",
-  quarterly: "Quarterly",
-  annually: "Annually",
 };
 
 const ALL_STATUSES = ["active", "paused", "cancelled", "completed"];
@@ -30,8 +22,17 @@ export default async function RecurringPage({ searchParams }: Props) {
     ? await listRecurringSchedules({ status })
     : await listRecurringSchedules();
 
-  const formatMoney = (amount: number) =>
-    amount.toLocaleString("en-GB", { minimumFractionDigits: 2 });
+  const rows: RecurringRow[] = schedules.map((sched) => ({
+    id: sched.id,
+    scheduleId: sched.scheduleId,
+    name: sched.name,
+    customerName: sched.account.name,
+    frequency: sched.frequency,
+    currency: sched.currency,
+    amount: Number(sched.amount),
+    nextInvoiceDateISO: new Date(sched.nextInvoiceDate).toISOString(),
+    status: sched.status,
+  }));
 
   return (
     <div>
@@ -101,87 +102,7 @@ export default async function RecurringPage({ searchParams }: Props) {
           No recurring schedules found. Create one to automate your invoicing.
         </p>
       ) : (
-        <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--dpf-border)]">
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Name
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Customer
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Frequency
-                </th>
-                <th className="text-right text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Amount
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Next Invoice
-                </th>
-                <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {schedules.map((sched) => {
-                const statusColour =
-                  SCHEDULE_STATUS_COLOURS[sched.status] ?? "#6b7280";
-                return (
-                  <tr
-                    key={sched.id}
-                    className="border-b border-[var(--dpf-border)] last:border-0 hover:bg-[var(--dpf-surface-2)] transition-colors"
-                  >
-                    <td className="px-4 py-2.5">
-                      <Link
-                        href={`/finance/recurring/${sched.id}`}
-                        className="text-[var(--dpf-text)] hover:underline font-medium"
-                      >
-                        {sched.name}
-                      </Link>
-                      <div className="text-[9px] font-mono text-[var(--dpf-muted)] mt-0.5">
-                        {sched.scheduleId}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      {sched.account.name}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className="text-[9px] px-1.5 py-0.5 rounded-full"
-                        style={{
-                          color: "#38bdf8",
-                          backgroundColor: "#38bdf820",
-                        }}
-                      >
-                        {FREQUENCY_LABELS[sched.frequency] ?? sched.frequency}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                      {sched.currency} {formatMoney(Number(sched.amount))}
-                    </td>
-                    <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      <LocalTime value={sched.nextInvoiceDate} utc />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className="text-[9px] px-1.5 py-0.5 rounded-full"
-                        style={{
-                          color: statusColour,
-                          backgroundColor: `${statusColour}20`,
-                        }}
-                      >
-                        {sched.status}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <RecurringTable rows={rows} />
       )}
     </div>
   );

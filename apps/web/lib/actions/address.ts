@@ -2,7 +2,7 @@
 
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
+import { requireUserId } from "@/lib/actions/shared/guards";
 import type { WorkforceActionResult } from "./workforce";
 
 // ---------------------------------------------------------------------------
@@ -25,10 +25,6 @@ const VALID_LABELS = ["home", "work", "billing", "shipping", "headquarters", "si
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function requireAuth(): Promise<void> {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error("Not authenticated");
-}
 
 function denied(message: string): WorkforceActionResult {
   return { ok: false, message };
@@ -43,7 +39,7 @@ function isValidLabel(label: string): boolean {
 // ---------------------------------------------------------------------------
 
 export async function createEmployeeAddress(input: AddressInput): Promise<WorkforceActionResult> {
-  await requireAuth();
+  await requireUserId();
   if (!isValidLabel(input.label)) {
     return denied(`Invalid label. Must be one of: ${VALID_LABELS.join(", ")}`);
   }
@@ -96,7 +92,7 @@ export async function updateAddress(
   addressId: string,
   data: Partial<Pick<AddressInput, "label" | "addressLine1" | "addressLine2" | "cityId" | "postalCode">>,
 ): Promise<WorkforceActionResult> {
-  await requireAuth();
+  await requireUserId();
   if (data.label !== undefined && !isValidLabel(data.label)) {
     return denied(`Invalid label. Must be one of: ${VALID_LABELS.join(", ")}`);
   }
@@ -115,7 +111,7 @@ export async function updateAddress(
 // ---------------------------------------------------------------------------
 
 export async function deleteEmployeeAddress(employeeAddressId: string): Promise<WorkforceActionResult> {
-  await requireAuth();
+  await requireUserId();
   const link = await prisma.employeeAddress.findUnique({
     where: { id: employeeAddressId },
     select: { id: true, addressId: true },
@@ -142,7 +138,7 @@ export async function deleteEmployeeAddress(employeeAddressId: string): Promise<
 // ---------------------------------------------------------------------------
 
 export async function setPrimaryAddress(employeeAddressId: string): Promise<WorkforceActionResult> {
-  await requireAuth();
+  await requireUserId();
   const link = await prisma.employeeAddress.findUnique({
     where: { id: employeeAddressId },
     select: { id: true, employeeProfileId: true },

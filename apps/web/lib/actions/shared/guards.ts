@@ -12,8 +12,48 @@
 // multi-capability OR logic, organization lookups) keep their bespoke bodies
 // and are intentionally NOT routed through here.
 
+import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
 import { can, type CapabilityKey } from "@/lib/permissions";
+
+/** The authenticated session user, exactly as `auth()` resolves it. */
+export type SessionUser = Session["user"];
+
+/**
+ * Resolve the current session and assert a signed-in user.
+ *
+ * The single authentication preamble for server actions: ~17 files had grown
+ * their own local `requireAuth` / `requireUser` / `requireAuthUser` copies that
+ * drifted on two axes — the null-check (`!user` vs `!user?.id`) and the error
+ * string (`"Unauthorized"` vs `"Not authenticated"`). This helper fixes ONE
+ * contract: the strict `!user?.id` check and `Error("Unauthorized")`.
+ *
+ * Use `requireUser` when the action needs fields off the user (role, email,
+ * accountId); use `requireUserId` when it only needs the id.
+ *
+ * @returns the authenticated session user.
+ * @throws Error("Unauthorized") when there is no user or the user has no id.
+ */
+export async function requireUser(): Promise<SessionUser> {
+  const session = await auth();
+  const user = session?.user;
+  if (!user?.id) {
+    throw new Error("Unauthorized");
+  }
+  return user;
+}
+
+/**
+ * Resolve the current session and assert a signed-in user, returning the id.
+ *
+ * The id-only companion to {@link requireUser} with the same error contract.
+ *
+ * @returns the authenticated user's id.
+ * @throws Error("Unauthorized") when there is no user or the user has no id.
+ */
+export async function requireUserId(): Promise<string> {
+  return (await requireUser()).id;
+}
 
 /**
  * Resolve the current session and assert it holds `capability`.

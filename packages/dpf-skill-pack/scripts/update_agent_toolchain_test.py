@@ -303,5 +303,94 @@ class GuardLivenessAdvisoryTest(unittest.TestCase):
         self.assertIn("block", text)
 
 
+class CodexHookTrustTest(unittest.TestCase):
+    def test_trust_pending_when_no_state_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home / ".codex").mkdir()
+            (home / ".codex" / "config.toml").write_text("[features]\nhooks = true\n", encoding="utf-8")
+            self.assertFalse(updater.codex_hook_trust_established(home))
+            self.assertTrue(updater.codex_hook_trust_pending(home, codex_present=True))
+
+    def test_trust_established_when_config_carries_trusted_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home / ".codex").mkdir()
+            (home / ".codex" / "config.toml").write_text(
+                '[hooks.state."~/.codex/hooks.json:PreToolUse:0:0"]\n'
+                'trusted_hash = "abc123"\n',
+                encoding="utf-8",
+            )
+            self.assertTrue(updater.codex_hook_trust_established(home))
+            self.assertFalse(updater.codex_hook_trust_pending(home, codex_present=True))
+
+    def test_install_codex_hooks_merges_without_clobbering_foreign_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = home / "managed"
+            hooks_dir = managed / "hooks"
+            hooks_dir.mkdir(parents=True)
+            for guard in updater.CODEX_BASH_GUARDS:
+                (hooks_dir / guard).write_text("// stub\n", encoding="utf-8")
+            for guard in updater.CODEX_ASK_GUARDS:
+                (hooks_dir / guard).write_text("// stub\n", encoding="utf-8")
+            (home / ".codex").mkdir()
+            foreign = {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "node /foreign/wrapper.js",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+            (home / ".codex" / "hooks.json").write_text(json.dumps(foreign), encoding="utf-8")
+            status = updater.install_codex_hooks(managed, home, dry_run=False)
+            self.assertIn("merged", status)
+            merged = json.loads((home / ".codex" / "hooks.json").read_text())
+            bash_group = next(
+                g for g in merged["hooks"]["PreToolUse"] if g.get("matcher") == "Bash"
+            )
+            commands = [h["command"] for h in bash_group["hooks"]]
+            self.assertIn("node /foreign/wrapper.js", commands)
+            self.assertTrue(any("lease-punt-guard.mjs" in c for c in commands))
+
+    def test_main_exits_2_when_trust_required_and_pending(self) -> None:
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home / ".codex").mkdir()
+            with patch.object(updater, "home_dir", return_value=home), patch.object(
+                updater, "resolve_codex_binary", return_value="/fake/codex"
+            ), patch.object(updater, "copy_skill_pack", return_value=True), patch.object(
+                updater, "ensure_codex_marketplace", return_value=True
+            ), patch.object(
+                updater, "ensure_codex_config", return_value=True
+            ), patch.object(
+                updater, "install_codex_hooks", return_value="merged"
+            ), patch.object(
+                updater, "install_grok_plugin", return_value="skipped"
+            ), patch.object(
+                updater, "install_grok_hooks", return_value="skipped"
+            ), patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("DPF_REQUIRE_CODEX_HOOK_TRUST", None)
+                code = updater.main(
+                    [
+                        "--skill-pack-path",
+                        str(skill_pack),
+                        "--skip-claude-cli-install",
+                        "--skip-grok-cli-install",
+                        "--require-codex-hook-trust",
+                    ]
+                )
+            self.assertEqual(code, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

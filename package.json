@@ -31,6 +31,7 @@
     "check:no-dialog-in-transition": "node scripts/check-no-dialog-in-transition.mjs",
     "check:no-raw-event-source": "node scripts/check-no-raw-event-source.mjs",
     "check:no-local-isrecord": "node scripts/check-no-local-isrecord.mjs",
+    "check:no-local-auth-guard": "node scripts/check-no-local-auth-guard.mjs",
     "check:architecture-parity": "pnpm --filter web exec tsx scripts/audit-architecture-parity.ts --baseline docs/superpowers/audits/2026-06-14-architecture-parity-baseline.json",
     "sbom": "node scripts/sbom/generate-platform-sbom.mjs",
     "check:sbom-drift": "node scripts/sbom/check-sbom-drift.mjs",
