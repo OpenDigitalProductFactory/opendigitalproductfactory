@@ -52,7 +52,6 @@ function main() {
   const argv = process.argv.slice(2);
   const gitHookIdx = argv.indexOf("--git-hook");
   const isGitHook = gitHookIdx >= 0;
-  const hookKind = isGitHook ? argv[gitHookIdx + 1] : null;
   const rootArgIdx = argv.indexOf("--repo-root");
   const baseDir = repoRoot(rootArgIdx >= 0 ? argv[rootArgIdx + 1] : null);
 

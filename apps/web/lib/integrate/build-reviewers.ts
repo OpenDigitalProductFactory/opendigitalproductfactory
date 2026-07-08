@@ -349,6 +349,34 @@ export function architectureAdvisoryFromReview(
   return { summary: arch.summary, issues: arch.issues };
 }
 
+/** Build the advisory and auto-file [reference-doc] findings (process-spine §6.5). */
+export async function finalizeArchitectureAdvisory(
+  prisma: { improvementProposal: { create: (args: unknown) => Promise<unknown> } },
+  arch: ReviewResult | null,
+  userId: string,
+  agentId: string | null | undefined,
+  threadId: string | null | undefined,
+  routeContext: string,
+): Promise<ArchitectureAdvisory | null> {
+  const advisory = architectureAdvisoryFromReview(arch);
+  if (arch?.issues?.length) {
+    try {
+      const { promoteReferenceDocFindings } = await import(
+        "@/lib/process-spine/canonical-improvement-digest"
+      );
+      await promoteReferenceDocFindings(prisma, arch.issues, {
+        userId,
+        agentId: agentId ?? null,
+        threadId: threadId ?? null,
+        routeContext,
+      });
+    } catch (err) {
+      console.error("[reference-doc-promotion] failed", err);
+    }
+  }
+  return advisory;
+}
+
 // ─── Per-reviewer verdicts ───────────────────────────────────────────────────
 
 /** The three reviewers a dual-review run produces, in deliberation-branch order.
