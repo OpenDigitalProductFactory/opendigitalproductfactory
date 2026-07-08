@@ -22,14 +22,34 @@
 - Begin the `catalog/agents.ts` single-source consolidation from the 2026-04-28 design, with the
   contract type as the catalog row type.
 
-## Phase 2 — Certification harness (BI-DE9CC88B)
-1. `goldenJourneys` on the contract (per coworker: prompt, mode, expected tool call(s), oracle).
-2. Runner: iterate roster → real chat/scheduled path → oracles (real-tool-call, no-false-refusal,
-   no-fabrication via detectFabrication patterns + sim-harness O1–O7, advise-no-side-effect).
-3. Persist as `AssuranceRun(scopeType='agent', adapterKey='coworker-cert')` + findings.
-4. Nightly + post-deploy trigger (scheduled-jobs catalog); inference budget via the existing
-   admission/budget gates; local-model floor respected via AgentModelConfig.
-5. Roster surface: certification state chip (certified/stale/failed/never) on WorkforceRosterPanel.
+## Phase 2 — Certification harness (BI-DE9CC88B) — SHIPPED (slice 1)
+
+As-built (apps/web/lib/coworker-lifecycle/):
+1. `golden-journeys.ts` — every roster coworker gets a DERIVED read-only probe automatically
+   (zero authoring for new coworkers); curated domain journeys replace it where richer
+   (marketing/inventory/ops seeded). Journeys are read-only by contract.
+2. `certification-oracles.ts` — pure verdicts per journey: ORACLE-SURFACE (non-empty read-only
+   tool surface), ORACLE-TOOL (≥1 successful call), ORACLE-PURITY (nothing ran outside the
+   surface), ORACLE-FABRICATE / ORACLE-REFUSAL (reuse the production `detectFabrication` /
+   `detectToolRefusedDespiteAvailability`); downgraded-provider runs skip prose oracles but
+   still require the tool call.
+3. `certification-runner.ts` — composes the REAL path (`resolveAutonomousWorkAgent` →
+   `resolveAutonomousWorkTools` post-filtered to `sideEffect=false` → `runAgenticLoop` with
+   `interactionMode:"chat"`, synthetic threadId, model floor via
+   `applyProviderRouteModelPreference`); persists one `AssuranceRun(scopeType='agent',
+   adapterKey='coworker-cert')` per coworker + oracle findings (prefix
+   `coworker-cert:<agent>:<journey>:<oracle>`, reopen-on-regress, absent-clean per agent —
+   patch-intel conventions). Runs as the first superuser; empty sweep on fresh installs.
+4. `certification-status.ts` — light reader deriving certified/failed/stale(>8d)/never;
+   consumed by the workforce roster without importing the loop.
+5. Nightly Inngest job `ops/coworker-certification-nightly` (04:40, quiescence-gated,
+   self-serialized) + `ops/coworker-certification.requested` run-now event; catalog entry
+   `coworker-certification`.
+6. Roster surface: `AgentNeeds.certification`/`certificationAt` + pill on WorkforceRosterPanel.
+
+Deferred to later Phase 2 slices: advise-mode journey variants, sim-harness O1–O7 composition
+for the dispatch domain, post-deploy trigger hook, per-coworker journey authoring in the
+Phase 1 contract file.
 
 ## Phase 3 — Enforced activation (BI-2C4056BF)
 1. lifecycleStage state machine + summonability gate in resolveAgentForRoute/summon_coworker.

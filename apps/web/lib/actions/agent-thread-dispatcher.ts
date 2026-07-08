@@ -4,6 +4,7 @@ import {
   prepareChildExecution,
   runChildThreadExecution,
 } from "./agent-thread-dispatcher-runtime";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export async function dispatchAgentThread(childThreadId: string, userId: string): Promise<void> {
   if (!childThreadId) throw new Error("childThreadId is required");
@@ -15,7 +16,7 @@ export async function dispatchAgentThread(childThreadId: string, userId: string)
     console.error("[agent-thread-dispatcher] background execution unhandled error", {
       threadId: context.threadId,
       taskRunId: context.taskRunId,
-      error: err instanceof Error ? err.message : String(err),
+      error: getErrorMessage(err),
     });
   });
 }

@@ -18,6 +18,7 @@ import { prisma } from "@dpf/db";
 
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { inngest } from "@/lib/queue/inngest-client";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const TRIGGER_EVENT = "ops/contributor-inventory-sync.run";
 // Permission reuse: refreshing the inventory cron is a platform-admin
@@ -51,7 +52,7 @@ export async function triggerContributorInventorySyncAction(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: getErrorMessage(err),
     };
   }
 }

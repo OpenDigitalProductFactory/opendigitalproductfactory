@@ -2,6 +2,7 @@
 
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -230,7 +231,7 @@ export async function ingestSkillsBulk(
     } catch (err) {
       result.errors.push({
         index: i,
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
       });
     }
   }

@@ -40,6 +40,7 @@ import {
   validateCandidate,
   type DecompositionCandidate,
 } from "./decomposition-candidates";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -190,7 +191,7 @@ export async function proposeDecomposition(
     return {
       ok: false,
       code: "agent-call-failed",
-      error: `Agent call failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Agent call failed: ${getErrorMessage(err)}`,
     };
   }
 

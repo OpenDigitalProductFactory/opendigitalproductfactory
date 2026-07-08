@@ -2,6 +2,7 @@
 // See: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
 
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
  * Logs a deprecation notice when HIVE_CONTRIBUTION_TOKEN is set in the
@@ -799,7 +800,7 @@ export async function enqueueFirstBootEvals(providerId: string): Promise<{
     );
     return { enqueued: profiles.length, error: null };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     console.warn(`[first-boot] Failed to enqueue evals for ${providerId}: ${msg}`);
     return { enqueued: 0, error: msg };
   }
@@ -1057,7 +1058,7 @@ export async function register() {
             }
             lastErr = `HTTP ${res.status}`;
           } catch (err) {
-            lastErr = err instanceof Error ? err.message : String(err);
+            lastErr = getErrorMessage(err);
           }
           await new Promise((r) => setTimeout(r, 2_000));
         }
@@ -1102,7 +1103,7 @@ export async function register() {
             } catch (err) {
               await recordInngestRegistration(
                 false,
-                `Inngest re-sync failed: ${err instanceof Error ? err.message : String(err)}`,
+                `Inngest re-sync failed: ${getErrorMessage(err)}`,
               );
             }
           })();

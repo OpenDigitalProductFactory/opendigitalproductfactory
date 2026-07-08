@@ -29,6 +29,7 @@ import {
   type SummaryResult,
   type UpgradeImpactSummary,
 } from "./types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type SummarizeOptions = {
   /** Force a fresh computation, bypassing the per-process cache. */
@@ -157,7 +158,7 @@ export async function summarizeUpgradeImpact(
   try {
     raw = await loadChangeSet({ currentLineageSha, targetSha });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
+    const detail = getErrorMessage(err);
     const result: SummaryResult = { ok: false, reason: "git-log-failed", detail };
     setCached(currentLineageSha, targetSha, result);
     return result;

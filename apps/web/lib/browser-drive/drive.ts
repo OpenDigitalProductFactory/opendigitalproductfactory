@@ -24,6 +24,7 @@ import { M2PluginDriver, type DriverAuditContext } from "./means-m2-plugin";
 import { makeSidecarTransport } from "./sidecar";
 import type { BrowserDriver } from "./driver";
 import { prisma } from "@dpf/db";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type DriveBrowserMode = "service-account" | "operator-live";
 
@@ -140,7 +141,7 @@ export async function driveBrowserTask(input: DriveBrowserTaskInput): Promise<Dr
       routeContext: "browser-drive",
     });
   } catch (err) {
-    return { status: "error", detail: err instanceof Error ? err.message : String(err) };
+    return { status: "error", detail: getErrorMessage(err) };
   }
 
   try {

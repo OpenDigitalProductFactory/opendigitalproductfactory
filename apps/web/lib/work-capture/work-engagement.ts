@@ -11,6 +11,7 @@
 import { prisma } from "@dpf/db";
 import { evaluateTransition, type TransitionMap } from "./transition-state-machine";
 import { expandOccurrences, type Occurrence } from "./recurrence-expander";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export const WORK_ENGAGEMENT_STATUS = [
   "planned",
@@ -71,7 +72,7 @@ export async function transitionWorkEngagement(
   try {
     outcome = evaluateTransition(WORK_ENGAGEMENT_TRANSITIONS, from, input.to, { label: "WorkEngagement" });
   } catch (e) {
-    return { error: "illegal-transition", message: e instanceof Error ? e.message : String(e) };
+    return { error: "illegal-transition", message: getErrorMessage(e) };
   }
   if (!outcome.changed) return { status: from, changed: false };
 

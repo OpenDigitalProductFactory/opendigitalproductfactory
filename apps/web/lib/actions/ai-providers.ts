@@ -29,6 +29,7 @@ import {
 import { activateProvider } from "@/lib/govern/activate-provider";
 import { seedAiProviderFinanceBridge } from "@/lib/finance/ai-provider-finance";
 import { autoConfigureBuildStudio } from "@/lib/ai-provider-build-studio-config";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
 const SHARED_ACCOUNT_LINKED_PROVIDERS = new Set(["zai"]);
@@ -299,7 +300,7 @@ export async function configureProvider(input: {
       usageUrl: providerForFinance.consoleUrl ?? providerForFinance.docsUrl ?? undefined,
     }).catch((error) => {
       console.warn(
-        `[ai-provider-finance] failed to seed finance bridge for ${JSON.stringify(input.providerId)}: ${JSON.stringify(error instanceof Error ? error.message : String(error))}`,
+        `[ai-provider-finance] failed to seed finance bridge for ${JSON.stringify(input.providerId)}: ${JSON.stringify(getErrorMessage(error))}`,
       );
     });
   }

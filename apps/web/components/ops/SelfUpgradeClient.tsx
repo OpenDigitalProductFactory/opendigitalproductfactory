@@ -13,6 +13,7 @@ import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 import type { SummaryResult } from "@/lib/self-upgrade/impact/types";
 import { StatusBadge } from "@/components/ui/report-kit";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type LatestRun = {
   runId: string;
@@ -278,7 +279,7 @@ export function isExpectedDuringSwap(err: unknown): boolean {
   // Next stamps server-action transport failures with a stable error code.
   const code = (err as { __NEXT_ERROR_CODE?: unknown }).__NEXT_ERROR_CODE;
   if (code === "E394") return true;
-  const message = err instanceof Error ? err.message : String(err);
+  const message = getErrorMessage(err);
   return /unexpected response was received|failed to fetch|fetch failed|load failed|networkerror|err_connection|connection (?:refused|reset|closed)|the operation was aborted/i.test(
     message,
   );

@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 // apps/web/lib/self-upgrade/version.ts
 // Version state helpers for the self-upgrade subsystem.
 
@@ -187,7 +188,7 @@ export async function resolveTargetSha(
     console.info("self-upgrade.no-target", {
       channel,
       reason: "target-resolution-failed",
-      message: err instanceof Error ? err.message : String(err),
+      message: getErrorMessage(err),
     });
     return null;
   }

@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { parseICal } from "@/lib/ical-parser";
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import * as crypto from "crypto";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Add iCal subscription ──────────────────────────────────────────────────
 
@@ -69,7 +70,7 @@ export async function addICalSubscription(input: {
     if (!res.ok) return { success: false, error: `Feed returned ${res.status}` };
     icsContent = await res.text();
   } catch (e) {
-    return { success: false, error: `Could not fetch feed: ${e instanceof Error ? e.message : String(e)}` };
+    return { success: false, error: `Could not fetch feed: ${getErrorMessage(e)}` };
   }
 
   const events = parseICal(icsContent);

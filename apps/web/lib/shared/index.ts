@@ -2,6 +2,7 @@
 // Barrel export for the shared module.
 export * from "./action-result";
 export * from "./coerce";
+export * from "./get-error-message";
 export * from "./slugify";
 export * from "./csv";
 export * from "./csv-parser";

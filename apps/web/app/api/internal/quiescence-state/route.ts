@@ -21,6 +21,7 @@
 import { NextResponse } from "next/server";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export const runtime = "nodejs";
 // Always evaluate at request time — quiescence state changes during the
@@ -55,7 +56,7 @@ export async function GET() {
     // known non-normal).
     return NextResponse.json(
       {
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
         // Default-to-normal on the wire; the Proxy's policy is the
         // authority on what fail-open vs fail-closed means in context.
         level: "normal",

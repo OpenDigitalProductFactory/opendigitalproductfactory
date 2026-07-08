@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 // apps/web/lib/embedding.ts
 // Generate text embeddings via local LLM inference (Docker Model Runner or compatible).
 // Uses OpenAI-compatible /v1/embeddings endpoint.
@@ -57,7 +58,7 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
 
     return embedding;
   } catch (e) {
-    console.warn("[embedding] Failed:", e instanceof Error ? e.message : String(e));
+    console.warn("[embedding] Failed:", getErrorMessage(e));
     return null;
   }
 }

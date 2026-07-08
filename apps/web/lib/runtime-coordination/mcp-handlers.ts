@@ -20,6 +20,7 @@ import {
   type RuntimeCoordinationDb,
 } from "./runtime-targets";
 import type { RuntimeTargetInput, RuntimeTargetKind, RuntimeTargetStatus, RuntimeVerificationInput } from "./types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type ToolContext = {
   routeContext?: string;
@@ -203,7 +204,7 @@ export async function registerRuntimeTargetTool(
     return {
       success: false,
       error: "invalid_input",
-      message: error instanceof Error ? error.message : String(error),
+      message: getErrorMessage(error),
     };
   }
 }
@@ -228,7 +229,7 @@ export async function heartbeatRuntimeTargetTool(params: Record<string, unknown>
     return {
       success: false,
       error: "invalid_input",
-      message: error instanceof Error ? error.message : String(error),
+      message: getErrorMessage(error),
     };
   }
 }
@@ -258,7 +259,7 @@ export async function releaseRuntimeTargetTool(
     return {
       success: false,
       error: "invalid_input",
-      message: error instanceof Error ? error.message : String(error),
+      message: getErrorMessage(error),
     };
   }
 }
@@ -321,7 +322,7 @@ export async function recordRuntimeVerificationTool(
     return {
       success: false,
       error: "invalid_input",
-      message: error instanceof Error ? error.message : String(error),
+      message: getErrorMessage(error),
     };
   }
 }

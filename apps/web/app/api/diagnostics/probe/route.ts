@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -138,7 +139,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         agentId: agent.agentId,
         agentName: agent.agentName,
         status: "fail",
-        message: err instanceof Error ? err.message : String(err),
+        message: getErrorMessage(err),
         durationMs: Date.now() - start,
         error: err instanceof Error ? err.constructor.name : "Unknown",
       });
@@ -188,7 +189,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         agentId: buildAgent.agentId,
         agentName: "Build Studio (tool probe)",
         status: "fail",
-        message: err instanceof Error ? err.message : String(err),
+        message: getErrorMessage(err),
         durationMs: Date.now() - start,
         error: err instanceof Error ? err.constructor.name : "Unknown",
       });

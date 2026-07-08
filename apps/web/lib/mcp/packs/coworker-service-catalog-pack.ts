@@ -6,6 +6,7 @@
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const definitions: ToolDefinition[] = [
   {
@@ -246,7 +247,7 @@ async function requestCoworkerEngagement(
       data: { engagement },
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     return { success: false, error: "engagement_failed", message: msg };
   }
 }

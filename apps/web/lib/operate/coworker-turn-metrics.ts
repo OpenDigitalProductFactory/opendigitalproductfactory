@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 /**
  * Coworker turn-metric writer — Task 2: persist one durable rollup per coworker
  * turn so the regression detector can compute nudge-rate windows without
@@ -135,7 +136,7 @@ export async function recordCoworkerTurnMetric(
     // Fire-and-forget: turn observability must never break a coworker turn.
     console.warn(
       `[coworker-turn-metrics] failed to record turn metric: ${
-        err instanceof Error ? err.message : String(err)
+        getErrorMessage(err)
       }`,
     );
   }

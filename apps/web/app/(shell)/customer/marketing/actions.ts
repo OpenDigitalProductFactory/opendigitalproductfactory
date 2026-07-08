@@ -13,6 +13,7 @@ import {
   type OutboundApprovalDecisionValue,
   type OutboundDraftStatus,
 } from "@/lib/marketing/execution";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type ActionResult =
   | { ok: true; draftId: string; status: OutboundDraftStatus }
@@ -45,7 +46,7 @@ async function decideOnDraft(
   try {
     assertDraftTransition(currentStatus, nextStatus);
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: getErrorMessage(err) };
   }
 
   await prisma.$transaction([

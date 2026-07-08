@@ -5,6 +5,7 @@ import { prisma } from "@dpf/db";
 import { resolve } from "../deliberation/activation";
 import { orchestrateDeliberation } from "../deliberation/orchestrator";
 import { inngest } from "../queue/inngest-client";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type StartDeliberationInput = {
   userId: string;
@@ -221,7 +222,7 @@ export async function startDeliberation(input: StartDeliberationInput) {
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     throw new Error(
       `DeliberationRun ${orchestration.deliberationRunId} created but queue dispatch failed: ${message}`,
     );

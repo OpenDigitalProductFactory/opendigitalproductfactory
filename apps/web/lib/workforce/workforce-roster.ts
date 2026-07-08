@@ -21,6 +21,10 @@
 // Pure projection: no schema change, no mutation.
 
 import { prisma } from "@dpf/db";
+import {
+  loadCertificationStates,
+  type CoworkerCertificationState,
+} from "@/lib/coworker-lifecycle/certification-status";
 
 export type WorkforceMemberKind = "human" | "agent";
 
@@ -72,6 +76,13 @@ export type AgentNeeds = {
   skillCount: number;
   /** Capability needs the agent has flagged that are not yet resolved. */
   unmetNeedCount: number;
+  /**
+   * Behavioral certification state from the nightly coworker-cert sweep
+   * (EP-COWORKER-LIFECYCLE Phase 2): certified | failed | stale | never.
+   * "never" for agents outside the certified roster or before the first sweep.
+   */
+  certification: "certified" | "failed" | "stale" | "never";
+  certificationAt: Date | null;
 };
 
 export type WorkforceMember = {
@@ -107,6 +118,8 @@ export type WorkforceRosterClient = {
   agent: { findMany: (args: unknown) => Promise<unknown> };
   /** Optional — resolves the specific/broad approval owner for supervising roles. */
   platformRole?: { findMany: (args: unknown) => Promise<unknown> };
+  /** Optional — latest coworker-cert AssuranceRuns for certification status. */
+  assuranceRun?: { findMany: (args: unknown) => Promise<unknown> };
 };
 
 /**
@@ -206,7 +219,11 @@ function resolveParityAndOwner(
   };
 }
 
-function agentToMember(row: AgentRow, roles: Map<string, RoleResolution>): WorkforceMember {
+function agentToMember(
+  row: AgentRow,
+  roles: Map<string, RoleResolution>,
+  certification: CoworkerCertificationState | undefined,
+): WorkforceMember {
   const unmetNeedCount = row.coworkerNeeds.filter(
     (n) => !RESOLVED_NEED_STATUSES.has(n.status),
   ).length;
@@ -236,6 +253,8 @@ function agentToMember(row: AgentRow, roles: Map<string, RoleResolution>): Workf
       toolGrantCount: row._count.toolGrants,
       skillCount: row._count.skills,
       unmetNeedCount,
+      certification: certification?.status ?? "never",
+      certificationAt: certification?.lastRunAt ?? null,
     },
   };
 }
@@ -334,9 +353,15 @@ export async function loadWorkforceRoster(input?: {
     ),
   ];
   const roles = await resolveSupervisingRoles(db, supervisorIds);
+  const certificationStates = await loadCertificationStates(
+    agents.map((a) => a.agentId),
+    db,
+  );
 
   const humanMembers = employees.map(humanToMember);
-  const agentMembers = agents.map((a) => agentToMember(a, roles));
+  const agentMembers = agents.map((a) =>
+    agentToMember(a, roles, certificationStates.get(a.agentId)),
+  );
   const members = [...humanMembers, ...agentMembers];
 
   return {

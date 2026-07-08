@@ -2,11 +2,17 @@ import { describe, expect, it, vi } from "vitest";
 
 import { loadWorkforceRoster } from "./workforce-roster";
 
-function makeDb(opts: { employees?: unknown[]; agents?: unknown[]; roles?: unknown[] }) {
+function makeDb(opts: {
+  employees?: unknown[];
+  agents?: unknown[];
+  roles?: unknown[];
+  certificationRuns?: unknown[];
+}) {
   return {
     employeeProfile: { findMany: vi.fn().mockResolvedValue(opts.employees ?? []) },
     agent: { findMany: vi.fn().mockResolvedValue(opts.agents ?? []) },
     platformRole: { findMany: vi.fn().mockResolvedValue(opts.roles ?? []) },
+    assuranceRun: { findMany: vi.fn().mockResolvedValue(opts.certificationRuns ?? []) },
   };
 }
 
@@ -101,7 +107,27 @@ describe("loadWorkforceRoster (BI-554E1A14, BI-9A5F0EA3)", () => {
       skillCount: 3,
       // 2 of 3 needs are not resolved (submitted + in-progress)
       unmetNeedCount: 2,
+      // No coworker-cert AssuranceRuns in the fixture → never certified.
+      certification: "never",
+      certificationAt: null,
     });
+  });
+
+  it("surfaces certification state from the latest coworker-cert run (EP-COWORKER-LIFECYCLE P2)", async () => {
+    const recent = new Date();
+    const db = makeDb({
+      employees: [],
+      agents: [AGENT],
+      certificationRuns: [
+        { scopeId: "AGT-COO", status: "passed", startedAt: recent },
+        { scopeId: "AGT-COO", status: "failed", startedAt: new Date(recent.getTime() - 86400000) },
+      ],
+    });
+
+    const { members } = await loadWorkforceRoster({ db: db as never });
+
+    expect(members[0].agentNeeds?.certification).toBe("certified");
+    expect(members[0].agentNeeds?.certificationAt).toEqual(recent);
   });
 
   it("resolves the human-role parity anchor from the supervising role's name", async () => {

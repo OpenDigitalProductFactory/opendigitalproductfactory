@@ -23,6 +23,7 @@ import type {
 
 import { RestoreConfirmModal } from "./RestoreConfirmModal";
 import { RestoreHistorySection } from "./RestoreHistorySection";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 interface AllReadiness {
   postgres: ReadinessSummary;
@@ -189,7 +190,7 @@ export function BackupsClient({
       const preview = await previewRestoreAction(runId);
       setRestorePreview(preview);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getErrorMessage(e));
     } finally {
       setLoadingPreview(null);
     }
@@ -198,7 +199,7 @@ export function BackupsClient({
   function handleRestoreConfirmed() {
     setRestorePreview(null);
     refresh().catch((e: unknown) =>
-      setError(e instanceof Error ? e.message : String(e)),
+      setError(getErrorMessage(e)),
     );
   }
 
@@ -214,7 +215,7 @@ export function BackupsClient({
       }
       setTimeout(() => {
         refresh().catch((e: unknown) =>
-          setError(e instanceof Error ? e.message : String(e)),
+          setError(getErrorMessage(e)),
         );
       }, 1500);
     });
@@ -237,7 +238,7 @@ export function BackupsClient({
       // before refreshing so the BackupRestore row is likely visible.
       setTimeout(() => {
         refresh().catch((e: unknown) =>
-          setError(e instanceof Error ? e.message : String(e)),
+          setError(getErrorMessage(e)),
         );
       }, 5000);
     });
@@ -250,7 +251,7 @@ export function BackupsClient({
       const data = await readBackupRunLogAction(runId);
       setOpenLog({ runId, data });
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getErrorMessage(e));
     } finally {
       setLoadingLog(false);
     }

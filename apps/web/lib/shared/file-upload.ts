@@ -1,6 +1,7 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { parseFileContent, capParsedContentSize, type ParsedFileContent } from "./file-parsers";
 import { lazyFsPromises, lazyPath, lazyCrypto } from "./lazy-node";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const ALLOWED_EXTENSIONS = new Set(["csv", "xlsx", "pdf", "doc", "docx", "txt", "json", "md", "xml", "yaml", "yml", "tsv", "log", "ppt", "pptx", "rtf", "png", "jpg", "jpeg", "gif", "webp"]);
 const DEFAULT_MAX_SIZE_MB = 10;
@@ -87,7 +88,7 @@ export async function handleFileUpload(file: File, threadId: string, userId: str
     parsedContent = await parseFileContent(buffer, file.type, file.name);
     if (parsedContent) parsedContent = capParsedContentSize(parsedContent);
   } catch (err) {
-    console.warn(`[file-upload] parse failed for ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(`[file-upload] parse failed for ${file.name}: ${getErrorMessage(err)}`);
     parsedContent = null;
   }
 

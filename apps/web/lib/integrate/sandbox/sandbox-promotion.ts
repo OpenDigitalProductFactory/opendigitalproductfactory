@@ -7,6 +7,7 @@ import * as os from "os";
 import { prisma } from "@dpf/db";
 import { extractDiff } from "@/lib/sandbox";
 import { isInWindow } from "@/lib/deployment-window-utils";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const exec = lazyExec();
 
@@ -216,7 +217,7 @@ export async function executePromotion(
         data: { diffPatch, diffSummary: diffPatch.slice(0, 500) },
       });
     } catch (err) {
-      return { success: false, step: "extract_diff", message: `Failed to extract diff from sandbox: ${err instanceof Error ? err.message : String(err)}` };
+      return { success: false, step: "extract_diff", message: `Failed to extract diff from sandbox: ${getErrorMessage(err)}` };
     }
   }
 
@@ -263,7 +264,7 @@ export async function executePromotion(
       data: { backupId: backup.id },
     });
   } catch (err) {
-    return { success: false, step: "backup", message: `Database backup failed: ${err instanceof Error ? err.message : String(err)}. Cannot proceed without backup.` };
+    return { success: false, step: "backup", message: `Database backup failed: ${getErrorMessage(err)}. Cannot proceed without backup.` };
   }
 
   // ─── Step 6: Update RFC to in-progress ────────────────────────────────────
@@ -505,7 +506,7 @@ export async function applyPromotionPatch(
 
     return { success: true };
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
+    const error = getErrorMessage(err);
     return { success: false, error };
   } finally {
     // Clean up temp file

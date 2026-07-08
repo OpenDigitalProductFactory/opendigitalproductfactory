@@ -16,6 +16,7 @@ import {
 } from "@/lib/operate/backups/constants";
 import { getAllBackupReadiness, getPostgresBackupReadiness } from "@/lib/operate/backups/readiness";
 import type { BackupTarget, ReadinessSummary } from "@/lib/operate/backups/types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const BACKUPS_ROOT = "/backups";
 const MAX_LOG_BYTES = 64 * 1024;
@@ -96,7 +97,7 @@ export async function triggerBackupNowAction(
     });
     return { ok: true, eventIds: result.ids };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     return { ok: false, error: message };
   }
 }
@@ -127,7 +128,7 @@ export async function triggerTrialRestoreNowAction(
     });
     return { ok: true, eventIds: result.ids };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     return { ok: false, error: message };
   }
 }

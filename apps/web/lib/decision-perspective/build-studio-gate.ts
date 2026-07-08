@@ -19,6 +19,7 @@ import type {
 } from "./types";
 import { PLAN_READINESS_DOMAIN_CLASS } from "./types";
 import { runVoiceSynthesisJob } from "../voice-synthesis/synthesis-job";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type BuildStudioGateClient = Parameters<typeof resolveProfileMaterial>[0]["db"]
   & Parameters<typeof persistDecisionInteraction>[0]["db"]
@@ -83,7 +84,7 @@ function errorClass(error: unknown): string {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return getErrorMessage(error);
 }
 
 function failClosedEvaluation(input: {
