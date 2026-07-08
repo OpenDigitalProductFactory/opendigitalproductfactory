@@ -53,6 +53,7 @@ import { crmContactsPack } from "@/lib/mcp/packs/crm-contacts-pack";
 import { selfUpgradePack } from "@/lib/mcp/packs/self-upgrade-pack";
 import { coworkerServiceCatalogPack } from "@/lib/mcp/packs/coworker-service-catalog-pack";
 import { coworkerToolGrantPack } from "@/lib/mcp/packs/coworker-tool-grant-pack";
+import { coworkerEstablishPack } from "@/lib/mcp/packs/coworker-establish-pack";
 import { coworkerMemoryPack } from "@/lib/mcp/packs/coworker-memory-pack";
 import { coworkerGoalPack } from "@/lib/mcp/packs/coworker-goal-pack";
 import { subagentFanoutPack } from "@/lib/mcp/packs/subagent-fanout-pack";
@@ -453,7 +454,7 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 // ─── Tool Registry ───────────────────────────────────────────────────────────
 // Scoped tool packs compose into the registry; mcp-tools.ts is the thin layer
 // over them (definitions spread into PLATFORM_TOOLS below; dispatch in executeTool).
-const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack, coworkerToolGrantPack, coworkerMemoryPack, coworkerGoalPack, subagentFanoutPack, mdmStewardshipPack, crmContactsPack, queueAwarenessPack]);
+const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack, coworkerToolGrantPack, coworkerEstablishPack, coworkerMemoryPack, coworkerGoalPack, subagentFanoutPack, mdmStewardshipPack, crmContactsPack, queueAwarenessPack]);
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,

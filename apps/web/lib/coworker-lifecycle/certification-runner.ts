@@ -144,6 +144,9 @@ async function executeJourney(
       agentId: journey.agentId,
       routeContext,
       userContext,
+      // Bypass the Phase 3 lifecycle gate: certification is how a draft or
+      // failed coworker earns activation — gating it would deadlock.
+      purpose: "certification",
     });
     const resolved = await deps.resolveTools({
       userContext,

@@ -582,6 +582,18 @@ export async function sendMessage(input: {
     isSuperuser: user.isSuperuser,
   }, useUnified);
 
+  // Lifecycle gate (EP-COWORKER-LIFECYCLE Phase 3, BI-2C4056BF): a draft or
+  // retired coworker — and, under COWORKER_LIFECYCLE_STRICT, one that failed
+  // its last behavioral certification — is not summonable in chat. The error
+  // surfaces to the panel via the normal { error } path.
+  if (agent.agentId) {
+    const { evaluateLifecycleGate } = await import("@/lib/coworker-lifecycle/lifecycle-gate");
+    const gateVerdict = await evaluateLifecycleGate(agent.agentId, { purpose: "chat" });
+    if (!gateVerdict.allowed) {
+      return { error: gateVerdict.reason };
+    }
+  }
+
   // Track build ID at function scope — used in both prompt assembly and post-inference research dispatch
   let resolvedBuildId = input.buildId;
   const portalContextPromptContext = await buildPortalContextPromptSection(

@@ -51,10 +51,34 @@ Deferred to later Phase 2 slices: advise-mode journey variants, sim-harness O1�
 for the dispatch domain, post-deploy trigger hook, per-coworker journey authoring in the
 Phase 1 contract file.
 
-## Phase 3 — Enforced activation (BI-2C4056BF)
-1. lifecycleStage state machine + summonability gate in resolveAgentForRoute/summon_coworker.
-2. Factory door: server action + MCP tool `establish_coworker` instantiating the template;
-   Build Studio + seed converge on it. Grandfather existing agents to `defined`.
+## Phase 3 — Enforced activation (BI-2C4056BF) — SHIPPED (slice 1)
+
+As-built. `Agent.lifecycleStage` becomes load-bearing over its EXISTING vocabulary — "draft"
+and "production" are the stored load-bearing states; "defined" and "certified" are derived
+facts (roster membership, coworker-cert AssuranceRuns), not new stored stages. Every seeded
+agent is already "production", so nothing is grandfathered by migration — the gate simply
+blocks states no live agent is in yet:
+
+1. `apps/web/lib/coworker-lifecycle/lifecycle-gate.ts` — `evaluateLifecycleGate(agentRef,
+   {purpose})`: draft + retirement always blocked; certification-`failed` blocked only under
+   the `COWORKER_LIFECYCLE_STRICT` PlatformConfig flag (seeded off — never/stale-certified
+   grandfathered agents keep working); purpose "certification" bypasses (no deadlock);
+   unknown agentIds allowed (route-synthetic personas); fail-open on infra errors.
+2. Wired at the three resolution chokepoints: `resolveAutonomousWorkAgent` (scheduled tasks,
+   spawned child threads, remote MCP task submission — throws `COWORKER_NOT_SUMMONABLE`),
+   `sendMessage` in agent-coworker.ts (chat — returns `{error}` to the panel), and
+   `resolveTargetOrThrow` in coworker-collaboration.ts (summon/handoff targeting). The
+   certification runner passes purpose "certification".
+3. Factory door: `establish-coworker.ts` (`establishCoworker` validates slug/fields/known
+   grant keys, creates the Agent row at lifecycleStage "draft" + tombstone-honoring grants +
+   model floor + principal link, returns the code-side definition checklist;
+   `promoteCoworker` flips draft → production only when the agent is in
+   COWORKER_AGENT_SEEDS AND holds a passing certification) exposed as the
+   `establish_coworker` MCP tool (coworker-establish-pack, `manage_platform` capability,
+   `agent_control_read` grant tier, actions establish|promote).
+
+Deferred to later slices: Build Studio + seed converging on the factory door, a server
+action UI surface, strict-mode default-on once sweeps are established on live installs.
 
 ## Phase 4 — Template/skill/docs (BI-14E4F9AF)
 1. Starter template + `dpf-establish-coworker` skill (dual-surface, dpf-skill-pack).

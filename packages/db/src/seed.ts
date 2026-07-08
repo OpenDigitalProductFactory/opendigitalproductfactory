@@ -1287,6 +1287,15 @@ async function seedPlatformConfig(): Promise<void> {
     update: {},
     create: { key: "USE_UNIFIED_COWORKER", value: { enabled: false } },
   });
+  // EP-COWORKER-LIFECYCLE Phase 3: when enabled, the lifecycle gate also
+  // blocks coworkers whose last behavioral certification FAILED (draft and
+  // retirement stages are always blocked). Ships off so grandfathered agents
+  // keep working until certification sweeps are established on the install.
+  await prisma.platformConfig.upsert({
+    where: { key: "COWORKER_LIFECYCLE_STRICT" },
+    update: {},
+    create: { key: "COWORKER_LIFECYCLE_STRICT", value: { enabled: false } },
+  });
   await prisma.platformConfig.upsert({
     where: { key: "self_upgrade" },
     update: {},
