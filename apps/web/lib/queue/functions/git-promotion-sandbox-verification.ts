@@ -1,5 +1,4 @@
 import { inngest } from "../inngest-client";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
@@ -105,7 +104,7 @@ export const gitPromotionSandboxVerification = inngest.createFunction(
           where: { candidateId },
           data: {
             status: "failed",
-            statusReason: `Sandbox provisioning failed: ${getErrorMessage(err)}`,
+            statusReason: `Sandbox provisioning failed: ${err instanceof Error ? err.message : String(err)}`,
             verificationCompletedAt: new Date(),
           },
         });

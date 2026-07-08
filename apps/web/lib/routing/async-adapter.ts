@@ -14,7 +14,6 @@
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -77,7 +76,7 @@ export const asyncAdapter: ExecutionAdapterHandler = {
       });
     } catch (e) {
       throw new InferenceError(
-        `Network error starting async operation on ${providerId}: ${getErrorMessage(e)}`,
+        `Network error starting async operation on ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
         "network",
         providerId,
       );

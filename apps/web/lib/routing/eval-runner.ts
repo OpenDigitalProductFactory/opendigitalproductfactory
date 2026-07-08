@@ -19,7 +19,6 @@ import {
   scoreDimension,
 } from "./eval-scoring";
 import { BACKGROUND_EVAL_ENDPOINT_TYPES } from "./provider-eligibility";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ── Infrastructure Error Classifier (BI-INST-008 circuit breaker) ──────────
 //
@@ -203,13 +202,13 @@ async function runGoldenTest(
       try {
         return await attempt();
       } catch (e2) {
-        const msg = getErrorMessage(e2);
+        const msg = e2 instanceof Error ? e2.message : String(e2);
         console.error(`[eval-runner] test ${test.id} failed after retry on ${endpointId}/${modelId}: ${msg}`);
         return { testId: test.id, version: test.version, scoring: test.scoring, score: 0, response: "", error: msg || "unknown error" };
       }
     }
 
-    const errorMessage = getErrorMessage(e);
+    const errorMessage = e instanceof Error ? e.message : String(e);
     console.error(`[eval-runner] test ${test.id} failed on ${endpointId}/${modelId} (model: ${modelId}): ${errorMessage}`);
     return {
       testId: test.id,

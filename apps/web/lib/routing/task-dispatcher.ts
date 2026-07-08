@@ -14,7 +14,6 @@ import {
   type ChatMessage,
 } from "@/lib/ai-inference";
 import { normalizeRouteDecisionActor } from "./route-decision-attribution";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** The payload passed to callProvider for each attempt. */
@@ -105,7 +104,7 @@ export async function callWithFallbackChain(
     } catch (error) {
       fallbacksUsed.push({
         endpointId,
-        error: getErrorMessage(error),
+        error: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString(),
       });
 

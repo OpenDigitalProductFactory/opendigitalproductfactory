@@ -18,7 +18,6 @@
 
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /* -------------------------------------------------------------------------- */
 /* Public input                                                               */
@@ -247,7 +246,7 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
         budgetHalted = true;
       }
     } catch (err) {
-      const message = getErrorMessage(err);
+      const message = err instanceof Error ? err.message : String(err);
       console.warn(
         `[deliberation/runner] branch dispatch failed run=${run.id} branch=${branch.id}: ${message}`,
       );
@@ -343,7 +342,7 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
     }
   } catch (err) {
     console.warn(
-      `[deliberation-run] failed to mark TaskRun ${input.taskRunId} completed: ${getErrorMessage(err)}`,
+      `[deliberation-run] failed to mark TaskRun ${input.taskRunId} completed: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }

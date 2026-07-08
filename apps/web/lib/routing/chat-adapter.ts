@@ -33,7 +33,6 @@ import {
 } from "@/lib/queue/resource-lane";
 import type { QueueTransitionInput } from "@/lib/queue/queue-telemetry";
 import { buildAnthropicSystem } from "./anthropic-cache";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // A hung local Docker Model Runner endpoint must fail fast so callWithFallbackChain
@@ -383,7 +382,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       res = providerId === "local" ? await withLocalInferenceLock(doFetch) : await doFetch();
     } catch (e) {
       throw new InferenceError(
-        `Network error calling ${providerId}: ${getErrorMessage(e)}`,
+        `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
         "network",
         providerId,
       );

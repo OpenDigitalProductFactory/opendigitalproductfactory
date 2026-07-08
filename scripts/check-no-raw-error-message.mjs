@@ -27,6 +27,22 @@ const SCAN_DIRS = [
   join(ROOT, "apps", "web", "hooks"),
 ];
 
+// Directories NOT yet migrated to getErrorMessage: these are the cross-epic
+// collision hot-zones owned by EP-CLAUDE-INSIDE-OUT's active work (routing =
+// BET-8, tak/govern = BET-2, queue = BET-11). They adopt getErrorMessage when
+// those bets land, coordinated per
+// docs/superpowers/plans/2026-07-08-cross-epic-coordination-vertint-vs-insideout.md
+// — kept out of this PR to avoid stepping on that thread. The guard skips them
+// until then; extend the guard to cover them when their bets migrate.
+const SKIP_DIRS = new Set(
+  [
+    ["apps", "web", "lib", "tak"],
+    ["apps", "web", "lib", "govern"],
+    ["apps", "web", "lib", "routing"],
+    ["apps", "web", "lib", "queue"],
+  ].map((p) => join(ROOT, ...p))
+);
+
 // `VAR instanceof Error ? VAR.message : String(VAR)` — the exact backreferenced
 // idiom the helper replaces. Precise: the same identifier in all three slots.
 const RAW = /\b([A-Za-z_$][\w$]*)\s+instanceof\s+Error\s*\?\s*\1\.message\s*:\s*String\(\s*\1\s*\)/;
@@ -57,6 +73,7 @@ function* walk(dir) {
     }
     if (st.isDirectory()) {
       if (name === "node_modules" || name === ".next") continue;
+      if (SKIP_DIRS.has(p)) continue;
       yield* walk(p);
     } else if (/\.(ts|tsx)$/.test(name)) {
       yield p;

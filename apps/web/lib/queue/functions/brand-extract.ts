@@ -1,5 +1,4 @@
 import { inngest } from "../inngest-client";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type RunBrandExtractionInput = {
   organizationId: string;
@@ -114,7 +113,7 @@ export async function runBrandExtraction(input: RunBrandExtractionInput): Promis
       emit,
     );
   } catch (err) {
-    const message = getErrorMessage(err);
+    const message = err instanceof Error ? err.message : String(err);
     await pushThreadProgress(input.threadId, input.taskRunId, {
       type: "brand:extract.failed",
       taskRunId: input.taskRunId,

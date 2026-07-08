@@ -39,7 +39,6 @@ import { buildDockerExecSandboxCommand } from "@/lib/integrate/sandbox/sandbox";
 import { lazyExec } from "@/lib/shared/lazy-node";
 import { clampToolResultForModel } from "@/lib/tak/tool-result-budget";
 import type { ToolResult } from "@/lib/mcp-tools";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Feature flag (default OFF) — mirrors lib/self-upgrade/config.ts ──────────
 
@@ -254,7 +253,7 @@ export async function runToolScript(
     const { getAgentToolGrantsAsync } = await import("@/lib/tak/agent-grants");
     scopes = deriveReadOnlyScopes(await getAgentToolGrantsAsync(ctx.agentId));
   } catch (err) {
-    return { success: false, error: "grant_resolution_failed", message: `Could not resolve agent grants: ${getErrorMessage(err)}` };
+    return { success: false, error: "grant_resolution_failed", message: `Could not resolve agent grants: ${err instanceof Error ? err.message : String(err)}` };
   }
 
   let token: string;
@@ -268,7 +267,7 @@ export async function runToolScript(
       capability: "read",
     });
   } catch (err) {
-    return { success: false, error: "token_mint_failed", message: `Could not mint a scoped token: ${getErrorMessage(err)}` };
+    return { success: false, error: "token_mint_failed", message: `Could not mint a scoped token: ${err instanceof Error ? err.message : String(err)}` };
   }
 
   const container = resolveSandboxContainer();
@@ -306,7 +305,7 @@ export async function runToolScript(
       ? { success: true, message: clamped.text }
       : { success: false, error: "script_failed", message: clamped.text };
   } catch (err) {
-    const msg = getErrorMessage(err);
+    const msg = err instanceof Error ? err.message : String(err);
     return { success: false, error: "sandbox_exec_failed", message: `Sandbox script execution failed: ${msg}` };
   } finally {
     // Best-effort wipe — the token must not outlive the call.

@@ -12,7 +12,6 @@ import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./a
 import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
 import { isOpenAI } from "./provider-utils";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -80,7 +79,7 @@ export const imageGenAdapter: ExecutionAdapterHandler = {
       });
     } catch (e) {
       throw new InferenceError(
-        `Network error calling ${providerId} image gen: ${getErrorMessage(e)}`,
+        `Network error calling ${providerId} image gen: ${e instanceof Error ? e.message : String(e)}`,
         "network",
         providerId,
       );

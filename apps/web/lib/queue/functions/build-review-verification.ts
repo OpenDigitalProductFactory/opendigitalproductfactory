@@ -27,7 +27,6 @@
 import { inngest } from "../inngest-client";
 import { buildPipelineConcurrency } from "../admission";
 import { shouldRunBrowserUxVerification } from "@/lib/build/ui-surface";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export const buildReviewVerification = inngest.createFunction(
   {
@@ -165,7 +164,7 @@ export const buildReviewVerification = inngest.createFunction(
       try {
         return await runBrowserUseTests(sandboxUrl, testCases, { buildId });
       } catch (err) {
-        const message = getErrorMessage(err);
+        const message = err instanceof Error ? err.message : String(err);
         // Return one failed step describing the infra failure so the
         // user sees WHY verification didn't run rather than a silent zero-step
         // "failed" state.

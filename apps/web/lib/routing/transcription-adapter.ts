@@ -17,7 +17,6 @@ import {
   voiceSttErrors,
 } from "@/lib/operate/metrics";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -138,7 +137,7 @@ export const transcriptionAdapter: ExecutionAdapterHandler = {
       voiceSttCallsTotal.inc({ provider: providerId, model: modelId, outcome: "error" });
       voiceSttErrors.inc({ provider: providerId, error_type: "network" });
       throw new InferenceError(
-        `Network error calling ${providerId} transcription: ${getErrorMessage(e)}`,
+        `Network error calling ${providerId} transcription: ${e instanceof Error ? e.message : String(e)}`,
         "network",
         providerId,
       );

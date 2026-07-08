@@ -36,7 +36,6 @@ import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } 
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern
@@ -1570,7 +1569,7 @@ export async function runAgenticLoop(params: {
         );
       }
     } catch (routeErr) {
-      const msg = getErrorMessage(routeErr);
+      const msg = routeErr instanceof Error ? routeErr.message : String(routeErr);
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       logTurnSummary("unknown", "unknown");
       return {
