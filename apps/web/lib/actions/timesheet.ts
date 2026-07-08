@@ -1,6 +1,7 @@
 // apps/web/lib/actions/timesheet.ts
 "use server";
 
+import { ROUTES } from "@/lib/routes";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
@@ -136,7 +137,7 @@ export async function saveTimesheetEntries(input: {
     });
   }
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { success: true, periodId: period.periodId };
 }
 
@@ -162,7 +163,7 @@ export async function submitTimesheet(
     data: { status: "submitted", submittedAt: new Date() },
   });
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { success: true };
 }
 
@@ -192,7 +193,7 @@ export async function approveTimesheet(
     },
   });
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { success: true };
 }
 
@@ -223,6 +224,6 @@ export async function rejectTimesheet(
     },
   });
 
-  revalidatePath("/employee");
+  revalidatePath(ROUTES.employee);
   return { success: true };
 }

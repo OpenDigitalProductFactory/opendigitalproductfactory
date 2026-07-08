@@ -186,6 +186,11 @@ Before adding any large feature, audit the existing schema for refactoring oppor
 
 The `Organization.address` JSON has one canonical shape + helpers in [`apps/web/lib/shared/org-address.ts`](apps/web/lib/shared/org-address.ts) (`OrgAddress`, `parseOrgAddress` / `serializeOrgAddress` / `formatOrgAddressLines`, `resolveTimezoneFromAddress`). Read and write the address through those — do **not** hand-roll a parallel address field or shape. It is captured at setup via the business-context step (`/storefront/settings/business`) and is the precise source for state-accurate timezone derivation (BI-AAAA0691).
 
+**Shared micro-primitives (BET-6, BI-6A505BFF).** Cross-cutting helpers that were hand-inlined at hundreds of sites now have one home each — import them, do **not** re-copy:
+- Server-action result: [`apps/web/lib/shared/action-result.ts`](apps/web/lib/shared/action-result.ts) — `ActionResult<T>` (`{ ok: true; data: T } | { ok: false; error: string }`) with `ok(data?)` / `err(message)` constructors. The canonical shape for a server action's return.
+- JSON coercion: [`apps/web/lib/shared/coerce.ts`](apps/web/lib/shared/coerce.ts) — `isRecord(v)` (object guard), `asString(v, fallback?)`, `asNumber(v, fallback?)` for narrowing `Prisma.JsonValue` / `unknown`. A CI ratchet (`scripts/check-no-local-isrecord.mjs`) freezes the count of legacy local `isRecord` copies; new code must import this one.
+- Route paths: [`apps/web/lib/routes.ts`](apps/web/lib/routes.ts) — `ROUTES.*` named constants for the high-frequency section roots passed to `revalidatePath` / `redirect` / `<Link>`, so a rename is a single compiler-checked edit.
+
 **Principal convergence (2026-05-09).** Per the addendum on `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`, any new identity-bearing entity introduced after 2026-05-09 must be modeled as a `PrincipalAlias` linked to a single `Principal`, not as a parallel identity table. The convergence target covers `User`, `CustomerContact`, `Agent`, `EdgeNode`, `MobileDevice`, and `ServiceAccount`. Authorization decisions resolve on the `Principal`; alias kind tells the platform which surface authenticated the request. → [kernel principle](docs/founder-kernel/wiki/principles/principal-convergence.md)
 
 ## 12. UI — Theme-Aware Styling (mandatory)

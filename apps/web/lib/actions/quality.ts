@@ -12,6 +12,8 @@ import {
   type IssueReportStatus,
 } from "@/lib/quality/issue-report-status";
 import { LEGACY_ISSUE_REPORT_STATUS, type LegacyIssueReportStatus } from "@/lib/quality/issue-report-queue";
+import { ok, err, type ActionResult } from "@/lib/shared/action-result";
+import { ROUTES } from "@/lib/routes";
 
 export async function reportQualityIssue(input: {
   type: "runtime_error" | "user_report" | "feedback";
@@ -183,24 +185,22 @@ export async function updateIssueReportStatus(
  * disposed of. Replaces the degenerate WWMD consult that scored every option at
  * composite 0.000 and only ever recommended "ask a human".
  */
-export async function dismissEscalation(
-  reportId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function dismissEscalation(reportId: string): Promise<ActionResult> {
   const session = await auth();
   const user = session?.user;
   if (
     !user?.id ||
     !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_platform")
   ) {
-    return { ok: false, error: "Not authorized." };
+    return err("Not authorized.");
   }
 
   try {
     await updateIssueReportStatus(reportId, ISSUE_REPORT_STATUS.RESOLVED_LOCALLY);
-    revalidatePath("/ops");
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Dismiss failed." };
+    revalidatePath(ROUTES.ops);
+    return ok();
+  } catch (e) {
+    return err(e instanceof Error ? e.message : "Dismiss failed.");
   }
 }
 

@@ -1,3 +1,4 @@
+import { isRecord } from "@/lib/shared/coerce";
 import type { AgenticResult } from "@/lib/tak/agentic-loop";
 
 type DiscoveryTriageSummaryPayload = {
@@ -63,10 +64,6 @@ type HiveScoutSummaryPayload = {
   };
   createdItemIds?: string[];
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;

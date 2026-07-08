@@ -10,6 +10,7 @@
  * (mobile-manifest.ts); this module owns only the projection logic.
  * Spec: docs/superpowers/specs/2026-06-14-native-mobile-archetype-apps-design.html (§3).
  */
+import { isRecord } from "@/lib/shared/coerce";
 import type {
   AppConfigManifest,
   AppNavigation,
@@ -29,10 +30,6 @@ const PALETTE_KEYS: (keyof BrandingPalette)[] = [
   "muted",
   "border",
 ];
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
 function str(v: unknown): string | undefined {
   return typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined;
 }

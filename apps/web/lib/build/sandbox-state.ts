@@ -1,3 +1,4 @@
+import { isRecord } from "@/lib/shared/coerce";
 import { getTruthSourceAge } from "./progress-visibility-types";
 import type { SandboxSourceCurrencySnapshot } from "@/lib/integrate/sandbox/sandbox-source-currency";
 
@@ -263,8 +264,4 @@ function extractSourceCurrency(value: unknown): SandboxSourceCurrencySnapshot | 
     return null;
   }
   return sourceCurrency as SandboxSourceCurrencySnapshot;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

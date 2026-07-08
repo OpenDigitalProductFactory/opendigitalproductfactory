@@ -30,6 +30,7 @@ import {
   applyCoworkerToolGrant,
   removeCoworkerToolGrant,
 } from "@/lib/tak/coworker-tool-grant-core";
+import { ok, err, type ActionResult } from "@/lib/shared/action-result";
 
 /** Revalidate every path the coworker record renders under, after a mutation. */
 function revalidateRecord(agentBusinessId: string, slugId?: string | null): void {
@@ -58,14 +59,14 @@ export async function grantCoworkerTool(
   grantKey: string,
   agentBusinessId: string,
   slugId?: string | null,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const { userId } = await requireCapability("manage_platform");
 
   const res = await applyCoworkerToolGrant(agentCuid, grantKey, userId);
-  if (!res.ok) return res;
+  if (!res.ok) return err(res.error ?? "Failed to apply tool grant");
 
   revalidateRecord(agentBusinessId, slugId);
-  return { ok: true };
+  return ok();
 }
 
 /**
@@ -80,13 +81,13 @@ export async function revokeCoworkerTool(
   grantKey: string,
   agentBusinessId: string,
   slugId?: string | null,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const { userId } = await requireCapability("manage_platform");
 
   await removeCoworkerToolGrant(agentCuid, grantKey, userId);
 
   revalidateRecord(agentBusinessId, slugId);
-  return { ok: true };
+  return ok();
 }
 
 // ─── Catalog skills (SkillAssignment, keyed by business agentId) ─────────────
@@ -104,7 +105,7 @@ export async function grantCoworkerSkill(
   agentBusinessId: string,
   skillId: string,
   slugId?: string | null,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const { userId } = await requireCapability("manage_platform");
 
   const skill = await prisma.skillDefinition.findUnique({
@@ -112,7 +113,7 @@ export async function grantCoworkerSkill(
     select: { skillId: true },
   });
   if (!skill) {
-    return { ok: false, error: `Unknown skill: ${skillId}` };
+    return err(`Unknown skill: ${skillId}`);
   }
 
   await prisma.skillAssignment.upsert({
@@ -122,7 +123,7 @@ export async function grantCoworkerSkill(
   });
 
   revalidateRecord(agentBusinessId, slugId);
-  return { ok: true };
+  return ok();
 }
 
 /**
@@ -135,7 +136,7 @@ export async function revokeCoworkerSkill(
   agentBusinessId: string,
   skillId: string,
   slugId?: string | null,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   await requireCapability("manage_platform");
 
   await prisma.skillAssignment.deleteMany({
@@ -143,5 +144,5 @@ export async function revokeCoworkerSkill(
   });
 
   revalidateRecord(agentBusinessId, slugId);
-  return { ok: true };
+  return ok();
 }

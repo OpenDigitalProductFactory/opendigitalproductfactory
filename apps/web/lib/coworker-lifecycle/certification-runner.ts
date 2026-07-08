@@ -34,6 +34,7 @@ import {
 } from "./certification-oracles";
 
 import { COWORKER_CERT_ADAPTER_KEY } from "./certification-status";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export { COWORKER_CERT_ADAPTER_KEY };
 export const COWORKER_CERT_ADAPTER_VERSION = "1.0.0";
@@ -190,7 +191,7 @@ async function executeJourney(
       durationMs: deps.now().getTime() - startedAt,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     const verdicts = evaluateJourneyOracles({
       content: "",
       executedTools: [],

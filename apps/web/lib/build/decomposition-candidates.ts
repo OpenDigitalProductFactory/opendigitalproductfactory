@@ -21,6 +21,7 @@
 // violate the Phase 1 invariants downstream). Both are pure — caller passes
 // the parent design and the candidate; we never read from Prisma here.
 
+import { isRecord } from "@/lib/shared/coerce";
 import type { BuildDesignDoc } from "@/lib/explore/feature-build-types";
 
 // ---------------------------------------------------------------------------
@@ -319,10 +320,6 @@ function stripCodeFences(s: string): string {
   // Strip ```json\n ... \n``` or ```\n ... \n``` wrappers.
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/m.exec(s);
   return fenced ? fenced[1]!.trim() : s;
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 function numberOr(v: unknown, fallback: number): number {

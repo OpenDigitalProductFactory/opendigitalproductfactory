@@ -1,3 +1,4 @@
+import { isRecord } from "@/lib/shared/coerce";
 import { prisma } from "@dpf/db";
 
 import type { BuildDesignDoc, BuildPhase } from "@/lib/feature-build-types";
@@ -471,10 +472,6 @@ function formatQuiescenceFailure(outcome: AmendmentQuiescenceReadyOutcome): stri
     return `Quiescence ${outcome.outcome}: ${outcome.reason}`;
   }
   return `Quiescence ${outcome.outcome}; parent design was not amended.`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function stringValue(value: unknown): string | null {

@@ -30,6 +30,7 @@
     "check:no-native-dialogs": "node scripts/check-no-native-dialogs.mjs",
     "check:no-dialog-in-transition": "node scripts/check-no-dialog-in-transition.mjs",
     "check:no-raw-event-source": "node scripts/check-no-raw-event-source.mjs",
+    "check:no-local-isrecord": "node scripts/check-no-local-isrecord.mjs",
     "check:no-raw-error-message": "node scripts/check-no-raw-error-message.mjs",
     "check:no-local-auth-guard": "node scripts/check-no-local-auth-guard.mjs",
     "check:architecture-parity": "pnpm --filter web exec tsx scripts/audit-architecture-parity.ts --baseline docs/superpowers/audits/2026-06-14-architecture-parity-baseline.json",
