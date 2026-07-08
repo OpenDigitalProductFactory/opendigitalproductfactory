@@ -6,6 +6,7 @@ import Link from "next/link";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { EmptyState } from "@/components/ui/report-kit";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -99,7 +100,7 @@ export default async function BillsPage({ searchParams }: Props) {
 
       {/* Bills table */}
       {bills.length === 0 ? (
-        <p className="text-sm text-[var(--dpf-muted)]">No bills found.</p>
+        <EmptyState title="No bills found." />
       ) : (
         <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
           <table className="w-full text-xs">

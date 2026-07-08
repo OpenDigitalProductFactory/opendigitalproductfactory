@@ -4,6 +4,7 @@ import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
+import { EmptyState } from "@/components/ui/report-kit";
 import Link from "next/link";
 
 const CATEGORY_COLOURS: Record<string, string> = {
@@ -161,15 +162,17 @@ export default async function AssetsPage({ searchParams }: Props) {
 
       {/* Assets table */}
       {assets.length === 0 ? (
-        <div className="p-8 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-center">
-          <p className="text-sm text-[var(--dpf-muted)] mb-3">No assets found.</p>
-          <Link
-            href="/finance/assets/new"
-            className="text-xs text-[var(--dpf-accent)] hover:underline"
-          >
-            Register your first asset →
-          </Link>
-        </div>
+        <EmptyState
+          title="No assets found."
+          action={
+            <Link
+              href="/finance/assets/new"
+              className="text-xs text-[var(--dpf-accent)] hover:underline"
+            >
+              Register your first asset →
+            </Link>
+          }
+        />
       ) : (
         <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
           <table className="w-full text-xs">

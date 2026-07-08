@@ -4,6 +4,7 @@ import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { EmptyState } from "@/components/ui/report-kit";
 import Link from "next/link";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -92,7 +93,7 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
 
       {/* PO table */}
       {orders.length === 0 ? (
-        <p className="text-sm text-[var(--dpf-muted)]">No purchase orders found.</p>
+        <EmptyState title="No purchase orders found." />
       ) : (
         <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
           <table className="w-full text-xs">

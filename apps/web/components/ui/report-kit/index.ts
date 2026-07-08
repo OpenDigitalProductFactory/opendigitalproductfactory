@@ -48,6 +48,27 @@ export {
   type CollapsibleListProps,
 } from "./CollapsibleList";
 
+export {
+  EmptyState,
+  type EmptyStateProps,
+} from "./EmptyState";
+
+export {
+  Skeleton,
+  type SkeletonProps,
+} from "./Skeleton";
+
+export {
+  Notice,
+  type NoticeProps,
+  type NoticeVariant,
+} from "./Notice";
+
+export {
+  KpiCard,
+  type KpiCardProps,
+} from "./KpiCard";
+
 // NOTE: Chart is intentionally NOT re-exported here. It pulls in recharts
 // (client-only, heavy), so it is imported via subpath to keep this barrel
 // — and every server component that uses it — recharts-free:
