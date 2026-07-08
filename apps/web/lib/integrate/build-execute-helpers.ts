@@ -14,6 +14,7 @@ import type { BuildExecStep, BuildExecutionState } from "@/lib/build-exec-types"
 import { STEP_ORDER, MAX_RETRIES, RETRY_DELAYS_MS } from "@/lib/build-exec-types";
 import { buildFailedState } from "@/lib/integrate/build-pipeline";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Pure decision logic (unit-tested) ───────────────────────────────────────
 
@@ -233,7 +234,7 @@ export async function runPipelineStepDurable(params: {
       return state;
     } catch (err) {
       attempt++;
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = getErrorMessage(err);
       if (attempt < maxAttempts) {
         const delay =
           RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;

@@ -12,6 +12,7 @@ import {
   normaliseModelId,
   type HostMemory,
 } from "./local-model-policy";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /** Check if first-run bootstrap is needed. */
 export async function checkBootstrapNeeded(): Promise<boolean> {
@@ -263,7 +264,7 @@ export async function executeFirstRunBootstrap(
     onStatus?.({ phase: "ready" });
     return { setupId: progress.id };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     onStatus?.({ phase: "failed", error: msg });
     return { error: msg };
   }

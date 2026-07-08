@@ -15,6 +15,7 @@ import type {
   QueueHealthAssessment,
   QueueSnapshotReadDeps,
 } from "@/lib/queue/queue-snapshot-service";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /** Map a single at-risk queue to one attention signal. Pure. */
 export function atRiskQueueToSignal(
@@ -59,7 +60,7 @@ export async function resolveQueueAttention(
   } catch (err) {
     console.warn(
       `[queue-awareness-resolver] failed: ${
-        err instanceof Error ? err.message : String(err)
+        getErrorMessage(err)
       }`,
     );
     return [];

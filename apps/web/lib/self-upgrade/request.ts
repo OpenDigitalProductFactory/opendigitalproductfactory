@@ -6,6 +6,7 @@ import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { createRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type RequestActorKind = "human" | "agent";
 
@@ -165,7 +166,7 @@ export async function requestSelfUpgrade(
       eventIds: result.ids,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     const failure = `queue-dispatch-failed: ${message}`;
     await failRun(run.runId, failure);
     return {

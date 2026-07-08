@@ -5,6 +5,7 @@ import {
   getStallEventsForBuild,
   type StallEventHistoryEntry,
 } from "@/lib/actions/stall-event-history";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
  * Build Studio phase panel — StallEvent history strip (BI-4ab6be39 F3).
@@ -36,7 +37,7 @@ export function StallEventHistoryStrip({ buildId }: { buildId: string | null | u
         if (!cancelled) setEvents(rows);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled) setError(getErrorMessage(err));
       });
     return () => {
       cancelled = true;

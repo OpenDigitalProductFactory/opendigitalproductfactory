@@ -7,6 +7,7 @@ import { getPlatformDevPolicyState, type PlatformDevPolicyState } from "@/lib/pl
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import { lazyChildProcess, lazyFs, lazyPath, lazyUtil } from "@/lib/shared/lazy-node";
 import { revalidatePath } from "next/cache";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
 
@@ -656,7 +657,7 @@ export async function configureForkSetup(input: {
   } catch (err) {
     return {
       success: false,
-      error: `Could not check for an existing fork: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Could not check for an existing fork: ${getErrorMessage(err)}`,
     };
   }
 
@@ -688,7 +689,7 @@ export async function configureForkSetup(input: {
     } catch (err) {
       return {
         success: false,
-        error: `Fork creation failed: ${err instanceof Error ? err.message : String(err)}`,
+        error: `Fork creation failed: ${getErrorMessage(err)}`,
       };
     }
   }
@@ -892,7 +893,7 @@ async function gitBranchExists(
 
 function gitErrorText(err: unknown): string {
   if (!err || typeof err !== "object") {
-    return err instanceof Error ? err.message : String(err);
+    return getErrorMessage(err);
   }
   const record = err as { message?: unknown; stderr?: unknown; stdout?: unknown };
   return [record.message, record.stderr, record.stdout]
@@ -1323,7 +1324,7 @@ async function legacyApplyPlatformUpdateImpl(): Promise<ApplyPlatformUpdateResul
     }
     return {
       kind: "error",
-      message: `Platform update failed: ${err instanceof Error ? err.message : String(err)}`,
+      message: `Platform update failed: ${getErrorMessage(err)}`,
     };
   }
 }

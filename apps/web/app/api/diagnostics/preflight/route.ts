@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { isModelRoutingProvider, MODEL_ROUTING_ENDPOINT_TYPES } from "@/lib/routing/provider-eligibility";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ async function runStep(
     return {
       step,
       status: "fail",
-      message: err instanceof Error ? err.message : String(err),
+      message: getErrorMessage(err),
       durationMs: Date.now() - start,
     };
   }

@@ -18,6 +18,7 @@ import {
   type ActiveAssuranceFindingRow,
 } from "@/lib/assurance/finding-read";
 import type { AssuranceFindingStatus } from "@/lib/assurance/types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 async function requirePlatformUser(): Promise<string> {
   return (await requireCapability("view_platform")).userId;
@@ -41,7 +42,7 @@ export async function getBuildBomSummary(buildId: string): Promise<BomSummary> {
   } catch (err) {
     console.error(
       `[tool-trace] failed to load build BOM summary buildId=${JSON.stringify(buildId)} error=${
-        JSON.stringify(err instanceof Error ? err.message : String(err))
+        JSON.stringify(getErrorMessage(err))
       }`,
     );
     return missingBomSummary();
@@ -63,7 +64,7 @@ export async function getBuildAssuranceFindings(
     console.error(
       "[tool-trace] failed to load build assurance findings buildId=%s error=%s",
       JSON.stringify(buildId),
-      JSON.stringify(err instanceof Error ? err.message : String(err)),
+      JSON.stringify(getErrorMessage(err)),
     );
     return [];
   }
@@ -79,7 +80,7 @@ export async function getProductAssuranceFindings(
     console.error(
       "[tool-trace] failed to load product assurance findings productId=%s error=%s",
       JSON.stringify(digitalProductId),
-      JSON.stringify(err instanceof Error ? err.message : String(err)),
+      JSON.stringify(getErrorMessage(err)),
     );
     return [];
   }

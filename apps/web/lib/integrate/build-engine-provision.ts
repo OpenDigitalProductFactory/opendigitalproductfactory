@@ -26,6 +26,7 @@ import {
   type EngineProbeConfig,
 } from "@/lib/routing/capability-probes/probe-engine-readiness";
 import { persistEngineReadiness } from "@/lib/routing/persist-engine-readiness";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -156,7 +157,7 @@ export async function provisionBuildEngine(
     return {
       kind: "error",
       engineId,
-      error: `provision command failed in sandbox: ${err instanceof Error ? err.message : String(err)}`,
+      error: `provision command failed in sandbox: ${getErrorMessage(err)}`,
     };
   }
 

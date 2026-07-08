@@ -15,6 +15,7 @@ import type {
   SandboxHandle,
   SandboxSpec,
 } from "../provider-types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const exec = lazyExec();
 
@@ -83,7 +84,7 @@ export const localDockerProvider: BuildExecutionProvider = {
       return {
         exitCode: 1,
         stdout: "",
-        stderr: err instanceof Error ? err.message : String(err),
+        stderr: getErrorMessage(err),
         durationMs: Date.now() - startMs,
       };
     }

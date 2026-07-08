@@ -10,6 +10,7 @@ import {
   resolveAutonomousWorkTools,
   type AutonomousWorkUserContext,
 } from "@/lib/tak/autonomous-work-run";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
  * EP-A2A: when a collaboration child thread reaches a terminal state, emit
@@ -283,7 +284,7 @@ async function markChildThreadFailed(
     .catch((err) => {
       console.error("[agent-thread-dispatcher] failed to mark TaskRun failed", {
         taskRunId: context.taskRunId,
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
       });
     });
 
@@ -300,7 +301,7 @@ async function markChildThreadFailed(
     .catch((err) => {
       console.error("[agent-thread-dispatcher] failed to record terminalError", {
         threadId: context.threadId,
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
       });
     });
 

@@ -11,6 +11,7 @@
 import { useState, useTransition } from "react";
 import { XOctagon } from "lucide-react";
 import { vetoGraduation } from "@/lib/actions/gear-interface-veto";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export function GraduationVetoButton({ graduationRowId }: { graduationRowId: string }) {
   const [open, setOpen] = useState(false);
@@ -72,7 +73,7 @@ export function GraduationVetoButton({ graduationRowId }: { graduationRowId: str
               await vetoGraduation({ graduationRowId, rationale });
               setDone(true);
             } catch (err) {
-              setError(err instanceof Error ? err.message : String(err));
+              setError(getErrorMessage(err));
             }
           });
         }}

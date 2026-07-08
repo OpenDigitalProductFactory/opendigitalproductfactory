@@ -11,6 +11,7 @@
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const definitions: ToolDefinition[] = [
   {
@@ -204,7 +205,7 @@ async function recordOrgBusinessAnswer(
     return {
       success: false,
       error: "enrichment_failed",
-      message: `Could not capture the answer: ${e instanceof Error ? e.message : String(e)}`,
+      message: `Could not capture the answer: ${getErrorMessage(e)}`,
     };
   }
 }

@@ -8,6 +8,7 @@ import {
   resolveServiceAccountPrincipal,
 } from "@/lib/browser-drive/identity";
 import type { BrowserCredentialFields } from "@/lib/browser-drive/credentials";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // Persist a freshly bootstrapped service-account profile (EP-BROWSER-DRIVE §9.2).
 // The attended login that produces `credential` (Playwright storageState, or
@@ -42,7 +43,7 @@ export async function provisionServiceAccountAction(input: {
     });
     return { ok: true, ...res };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -83,6 +84,6 @@ export async function beginServiceAccountSetupAction(input: {
       loginUrl: input.loginUrl?.trim() || null,
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: getErrorMessage(err) };
   }
 }

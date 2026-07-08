@@ -15,6 +15,7 @@ exports[`shared barrel export > exports all public symbols 1`] = `
   "escapeCsvField",
   "extractHeadings",
   "getEmployeeAddresses",
+  "getErrorMessage",
   "handleFileUpload",
   "isEmailConfigured",
   "isStallWatchdogEnabled",

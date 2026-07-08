@@ -38,6 +38,7 @@ import type {
   BuildAgentRunnerCapabilities,
 } from "../agent-runner-types";
 import type { BuildExecutionProvider, SandboxHandle } from "../provider-types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // dpf-native's capability profile is the inverse of the mode-4 CLI runners:
 // the loop lives in the portal, so it needs no persistent in-sandbox session,
@@ -193,7 +194,7 @@ export const dpfNativeAgentRunner: BuildAgentRunner = {
       success = true;
     } catch (err) {
       success = false;
-      stderr = err instanceof Error ? err.message : String(err);
+      stderr = getErrorMessage(err);
       spec.onProgress?.(`[dpf-native] dispatch failed: ${stderr}`);
     }
 
@@ -239,7 +240,7 @@ export const dpfNativeAgentRunner: BuildAgentRunner = {
       toolExecutionId = row.id;
     } catch (err) {
       // Audit-row write failed — surface in stderr but don't fail the dispatch.
-      const auditErr = err instanceof Error ? err.message : String(err);
+      const auditErr = getErrorMessage(err);
       stderr = stderr ? `${stderr}\n[audit] ${auditErr}` : `[audit] ${auditErr}`;
     }
 

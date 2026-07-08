@@ -18,6 +18,7 @@ import {
   getCatalogEntry,
   type JobCategory,
 } from "./catalog";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /** Named cadences an operator may pick for an editable job. Mirrors the
  *  keys computeNextRunAt understands, plus "disabled" (nextRunAt = null). */
@@ -326,7 +327,7 @@ export async function runJobNow(jobId: string, actor: string): Promise<MutationR
       message: `Dispatched ${entry.runNowEvent} for '${jobId}' (event ${result.ids.join(", ")}).`,
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 

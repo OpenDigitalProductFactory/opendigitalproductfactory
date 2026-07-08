@@ -85,6 +85,7 @@ import {
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
 import { filterToolsForCoworkerRuntime, adviseHeldBackTools } from "./coworker-tool-filter";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { requireUser } from "./shared/guards";
 export { filterToolsForCoworkerRuntime };
 
@@ -2283,13 +2284,13 @@ export async function sendMessage(input: {
     const isSubstantive = (text: string) => text.length > 15 && !/^(?:ok|yes|no|thanks|thank you|sure|got it|hello|hi|hey)$/i.test(text.trim());
     if (isSubstantive(trimmedContent)) {
       storeConversationMemory({ ...memBase, messageId: userMsg.id, content: trimmedContent, role: "user" })
-        .catch((e) => console.warn("[memory-store] user:", e instanceof Error ? e.message : String(e)));
+        .catch((e) => console.warn("[memory-store] user:", getErrorMessage(e)));
     }
     if (isSubstantive(responseContent)) {
       storeConversationMemory({ ...memBase, messageId: agentMsg.id, content: responseContent, role: "assistant" })
-        .catch((e) => console.warn("[memory-store] assistant:", e instanceof Error ? e.message : String(e)));
+        .catch((e) => console.warn("[memory-store] assistant:", getErrorMessage(e)));
     }
-  }).catch((e) => console.warn("[memory-store] import failed:", e instanceof Error ? e.message : String(e)));
+  }).catch((e) => console.warn("[memory-store] import failed:", getErrorMessage(e)));
 
   // Fire-and-forget: extract user facts from substantive user messages
   if (trimmedContent.length > 30) {
@@ -2301,8 +2302,8 @@ export async function sendMessage(input: {
         messageId: userMsg.id,
         sourceAgentId: agent.agentId,
         operatingProfileFingerprint: memoryOperatingProfileFingerprint,
-      }).catch((e) => console.warn("[user-facts] extract failed:", e instanceof Error ? e.message : String(e)));
-    }).catch((e) => console.warn("[user-facts] import failed:", e instanceof Error ? e.message : String(e)));
+      }).catch((e) => console.warn("[user-facts] extract failed:", getErrorMessage(e)));
+    }).catch((e) => console.warn("[user-facts] import failed:", getErrorMessage(e)));
   }
 
   // Fire-and-forget: process observer

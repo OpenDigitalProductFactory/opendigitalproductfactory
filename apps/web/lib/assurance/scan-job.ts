@@ -11,6 +11,7 @@ import { autoFileFindingsFromScan } from "./auto-file-findings";
 import { loadReconcileContext } from "./advisory-context";
 import { emptyDispositionTotals, type ReconcileContext } from "./finding-reconcile";
 import type { BacklogIngestInput, BacklogIngestResult } from "@/lib/operate/backlog-ingest";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export interface ScanJobBomDocumentRow {
   id: string;
@@ -213,7 +214,7 @@ export async function runBuildAssuranceScan(input: RunBuildScanInput): Promise<R
   try {
     auditResult = await runAudit({ projectRoot: input.projectRoot });
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = getErrorMessage(err);
     console.error(`[tool-trace] pnpm audit failed buildId=${build.buildId} reason=${reason}`);
     return { skipped: true, reason: `pnpm-audit-failed:${reason.slice(0, 200)}` };
   }

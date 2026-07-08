@@ -18,6 +18,7 @@ import {
 } from "@/lib/operate/backups/postgres-restore-runner";
 import { runNeo4jRestore } from "@/lib/operate/backups/neo4j-restore-runner";
 import { runQdrantRestore } from "@/lib/operate/backups/qdrant-restore-runner";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 async function requireBackupAdmin(): Promise<string | null> {
   return (await requireCapability("manage_provider_connections")).userId;
@@ -97,7 +98,7 @@ export async function confirmRestoreAction(
     if (err instanceof RestoreIntegrityError) {
       return { ok: false, error: err.message, errorClass: "integrity" };
     }
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     return { ok: false, error: message, errorClass: "unknown" };
   }
 }

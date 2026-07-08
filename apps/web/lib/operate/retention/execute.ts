@@ -20,6 +20,7 @@ import {
   RETENTION_PER_POLICY_CAP,
   cutoffForDays,
 } from "./constants";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export interface PolicyResult {
   model: string;
@@ -205,7 +206,7 @@ export async function runRetentionSweep(
         affected: 0,
         capped: false,
         durationMs: Date.now() - policyStart,
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
       });
       // Continue: one policy failing must not strand the rest of the sweep.
     }

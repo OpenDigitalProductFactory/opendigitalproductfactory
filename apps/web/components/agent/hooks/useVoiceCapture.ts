@@ -30,6 +30,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { selectSupportedMimeType } from "./mime-probe";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type VoiceCaptureState =
   | "idle"
@@ -155,7 +156,7 @@ export function useVoiceCapture(options: UseVoiceCaptureOptions): UseVoiceCaptur
       try {
         res = await fetch("/api/transcribe", { method: "POST", body: form });
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = getErrorMessage(e);
         fail(`Transcription request failed: ${msg}`, "network");
         return;
       }
@@ -221,7 +222,7 @@ export function useVoiceCapture(options: UseVoiceCaptureOptions): UseVoiceCaptur
       } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
         fail("No microphone found.", "no_microphone");
       } else {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = getErrorMessage(e);
         fail(`Could not access microphone: ${msg}`, "unknown");
       }
       return;

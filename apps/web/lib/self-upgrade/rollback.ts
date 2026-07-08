@@ -9,6 +9,7 @@ import {
 } from "@/lib/operate/backups/postgres-restore-runner";
 import { runNeo4jRestore } from "@/lib/operate/backups/neo4j-restore-runner";
 import { runQdrantRestore } from "@/lib/operate/backups/qdrant-restore-runner";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export const SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT = "ROLLBACK";
 const ROLLBACK_TRIGGER = "self-upgrade-rollback";
@@ -314,7 +315,7 @@ async function runRestoreMember(args: {
       sourceBackupRunId: args.sourceBackupRunId,
       restoreId: null,
       status: "failed",
-      error: err instanceof Error ? err.message : String(err),
+      error: getErrorMessage(err),
     };
   }
 }

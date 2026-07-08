@@ -17,6 +17,7 @@ import {
   type CodeGraphNodeKind,
   type CodeGraphNodeFact,
 } from "./types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const STRUCTURAL_NODE_LABELS = [
   "CodeSymbol",
@@ -293,7 +294,7 @@ async function extractStructuralFacts(
         graphKey,
         filePath,
         extractor: extractor.name,
-        message: error instanceof Error ? error.message : String(error),
+        message: getErrorMessage(error),
         observedAt: new Date(),
       });
     }

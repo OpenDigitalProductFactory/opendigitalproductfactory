@@ -26,6 +26,7 @@ import type {
   TranscribeInput,
 } from "@/lib/voice/types";
 import type { BiasClassificationToken } from "@/lib/voice/bias-classification-gate";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
  * Single-org-per-install resolver (per project_single_org_per_install.md).
@@ -214,7 +215,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return jsonError(502, "tool-error", `STT provider error: ${e.message}`);
     }
     // Unknown error — preserve message for debugging, 500.
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     return jsonError(500, "tool-error", `Transcription failed: ${message}`);
   }
 }

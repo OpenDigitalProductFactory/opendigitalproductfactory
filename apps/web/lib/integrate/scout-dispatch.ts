@@ -7,6 +7,7 @@
 
 import type { ScoutResult } from "@/lib/explore/feature-build-types";
 import { searchProjectFiles } from "./codebase-tools";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
  * Extract keywords from feature title and description.
@@ -324,7 +325,7 @@ async function runScoutResearch(params: {
       },
     };
   } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
+    const errorMsg = getErrorMessage(err);
     return {
       success: false,
       error: `Scout dispatch failed: ${errorMsg}`,

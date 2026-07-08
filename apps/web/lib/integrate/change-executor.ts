@@ -5,6 +5,7 @@ import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import { executeRollback, type RollbackResult } from "@/lib/rollback-strategies";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
@@ -82,7 +83,7 @@ export async function runHealthCheck(
       message: `Health check failed: HTTP ${response.status}`,
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = getErrorMessage(error);
     return {
       healthy: false,
       message: `Health check error: ${msg}`,
@@ -199,7 +200,7 @@ export async function executeChangeItems(
       }
     } catch (error) {
       const errorMsg =
-        error instanceof Error ? error.message : String(error);
+        getErrorMessage(error);
 
       results.push({
         changeItemId: item.id,

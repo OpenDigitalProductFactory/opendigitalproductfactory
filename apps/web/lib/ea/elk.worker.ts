@@ -10,6 +10,7 @@
 // we reply `{ id, result }` on success or `{ id, error }` on failure. ELK graphs and results
 // are plain JSON-able objects, so they structured-clone across the worker boundary cleanly.
 import ELK from "elkjs/lib/elk.bundled.js";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const elk = new ELK();
 const ctx = self as unknown as Worker;
@@ -20,6 +21,6 @@ ctx.onmessage = async (event: MessageEvent) => {
     const result = await elk.layout(graph as Parameters<typeof elk.layout>[0]);
     ctx.postMessage({ id, result });
   } catch (err) {
-    ctx.postMessage({ id, error: err instanceof Error ? err.message : String(err) });
+    ctx.postMessage({ id, error: getErrorMessage(err) });
   }
 };

@@ -21,6 +21,7 @@ import {
   getProviderExtraHeaders,
   getProviderBearerToken,
 } from "@/lib/ai-provider-internals";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -185,7 +186,7 @@ export async function pollAsyncOperation(opId: string): Promise<AsyncOpStatus> {
 
     return "running";
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
+    const errorMessage = getErrorMessage(err);
     await prisma.asyncInferenceOp.update({
       where: { id: opId },
       data: {
