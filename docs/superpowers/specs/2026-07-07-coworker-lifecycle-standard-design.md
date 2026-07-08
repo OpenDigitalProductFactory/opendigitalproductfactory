@@ -70,7 +70,7 @@ Slice 1 also fixes drift the gate exposed:
   legal-operations-counsel) — route placement is a UX decision handled in the epic, not silently
   invented by the gate.
 
-### Phase 2 — Behavioral certification harness (BI-DE9CC88B)
+### Phase 2 — Behavioral certification harness (BI-DE9CC88B) — slice 1 shipped 2026-07-08
 
 Per-coworker certification runs hosted on the **existing** `AssuranceRun`/`AssuranceFinding`
 substrate (`scopeType='agent'`, `adapterKey='coworker-cert'` — today used only by

@@ -35,6 +35,8 @@ const roster: WorkforceRoster = {
         toolGrantCount: 5,
         skillCount: 3,
         unmetNeedCount: 2,
+        certification: "certified" as const,
+        certificationAt: new Date("2026-07-08T04:40:00Z"),
       },
     },
   ],
