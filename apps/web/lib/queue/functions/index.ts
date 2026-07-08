@@ -55,6 +55,10 @@ import {
   dataRetentionSweepScheduled,
   dataRetentionSweepRequested,
 } from "./data-retention-sweep";
+import {
+  inngestRetentionSweepScheduled,
+  inngestRetentionSweepRequested,
+} from "./inngest-retention-sweep";
 import { logSignatureScanner } from "./log-signature-scanner";
 import { edgeIncidentCorrelation } from "./edge-incident-correlation";
 import { remoteActionClaimTimeout } from "./remote-action-claim-timeout";
@@ -94,6 +98,7 @@ export const scheduledFunctions = [
   selfUpgradeScheduled,
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
+  inngestRetentionSweepScheduled, // BI-0AB96FE7: bound db=inngest history + reap Redis-TTL orphans that wedge the executor, every 6h
   mdmStewardSweepScheduled, // EP-4A12A7CB slice 4: autonomous Data Steward — sweep + auto-resolve account dupes, daily 05:00
   logSignatureScanner,   // BI-5FE8656F: EP-FULL-OBS Tier 2 novel-signature log scan, every 15m
   edgeIncidentCorrelation, // EP-MSP-FEDERATION A2+A3: correlate edge alerts->incidents->customer tickets, every 10m (flag-gated)
@@ -132,6 +137,7 @@ export const eventFunctions = [
   selfUpgradeManual,
   quiescenceRun,
   dataRetentionSweepRequested, // EP-DATA-RETENTION: operator "run now" / dry-run
+  inngestRetentionSweepRequested, // BI-0AB96FE7: operator "run now" / dry-run for the Inngest retention sweep
   mdmStewardSweepRequested, // EP-4A12A7CB slice 4: Data Steward "run now" / dry-run
 ];
 

@@ -213,6 +213,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: "ops/data-retention.requested",
   },
   {
+    jobId: "inngest-retention-sweep",
+    inngestId: "ops/inngest-retention-sweep-scheduled",
+    name: "Inngest retention sweep",
+    purpose:
+      "Bounds the self-hosted Inngest history database (function_runs, spans, traces, …) and reaps runs orphaned when their Redis state TTL-expires. Without it the orphans accumulate unbounded until the single executor chokes and drives ZERO executions — a silent, total outage of all scheduled and autonomous dispatch (BI-0AB96FE7). Editable so an operator can disable or run-now this maintenance sweep.",
+    cron: "17 */6 * * *",
+    cadence: "Every 6 hours",
+    category: "editable",
+    tracksRunData: true,
+    runNowEvent: "ops/inngest-retention.requested",
+  },
+  {
     jobId: "mdm-steward-sweep",
     inngestId: "ops/mdm-steward-sweep-scheduled",
     name: "MDM Data Steward sweep",
