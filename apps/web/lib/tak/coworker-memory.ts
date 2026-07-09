@@ -88,6 +88,28 @@ export async function recordCoworkerNote(params: {
     return { ok: true, status: "unchanged" };
   }
 
+  // BI-840FDD43 (EP-8C706944 P2): when there is no exact-key match, consult the
+  // write-time consolidation gate against active notes of the same kind so a
+  // different-key near-duplicate supersedes rather than piles up.
+  let nearNeighborTargetId: string | null = null;
+  if (!existing) {
+    const { classifyConsolidation } = await import("./memory-consolidation");
+    const siblings = await prisma.coworkerMemoryNote.findMany({
+      where: { agentId: params.agentCuid, noteKind: params.noteKind, supersededAt: null },
+      select: { id: true, noteKey: true, content: true },
+    });
+    const decision = classifyConsolidation(
+      { key: noteKey, value: content },
+      siblings.map((s) => ({ id: s.id, key: s.noteKey, value: s.content })),
+    );
+    if (decision.action === "noop") {
+      return { ok: true, status: "unchanged" };
+    }
+    if (decision.action === "supersede") {
+      nearNeighborTargetId = decision.targetId;
+    }
+  }
+
   const created = await prisma.coworkerMemoryNote.create({
     data: {
       agentId: params.agentCuid,
@@ -99,9 +121,10 @@ export async function recordCoworkerNote(params: {
     },
   });
 
-  if (existing) {
+  const supersedeTargetId = existing?.id ?? nearNeighborTargetId;
+  if (supersedeTargetId) {
     await prisma.coworkerMemoryNote.update({
-      where: { id: existing.id },
+      where: { id: supersedeTargetId },
       data: { supersededAt: new Date(), supersededById: created.id },
     });
     return { ok: true, status: "updated" };

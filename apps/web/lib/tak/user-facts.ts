@@ -374,8 +374,30 @@ export async function upsertUserFact(params: {
       },
     });
   } else {
-    // New fact
-    await prisma.userFact.create({
+    // No exact-key match. BI-840FDD43 (EP-8C706944 P2): before blindly adding,
+    // consult the write-time consolidation gate against other active facts in
+    // this category — a different-key near-duplicate ("meeting_time" vs
+    // "preferred_meeting_time") should supersede rather than pile up.
+    const { classifyConsolidation } = await import("./memory-consolidation");
+    const siblings = await prisma.userFact.findMany({
+      where: {
+        userId: params.userId,
+        category: params.category,
+        supersededAt: null,
+      },
+      select: { id: true, key: true, value: true },
+    });
+    const decision = classifyConsolidation(
+      { key: params.key, value: params.value },
+      siblings,
+    );
+
+    if (decision.action === "noop") {
+      // A near-duplicate already states this — nothing to persist.
+      return;
+    }
+
+    const newFact = await prisma.userFact.create({
       data: {
         userId: params.userId,
         category: params.category,
@@ -390,6 +412,14 @@ export async function upsertUserFact(params: {
         lastValidatedAt: params.sourceOperatingProfileFingerprint ? new Date() : null,
       },
     });
+
+    if (decision.action === "supersede") {
+      // Retire the superseded near-duplicate, preserving the provenance chain.
+      await prisma.userFact.update({
+        where: { id: decision.targetId },
+        data: { supersededAt: new Date(), supersededById: newFact.id },
+      });
+    }
   }
 }
 

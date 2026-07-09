@@ -26,6 +26,10 @@ const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 beforeEach(() => {
   vi.clearAllMocks();
   asMock(prisma.coworkerMemoryNote.create).mockResolvedValue({ id: "note-new" });
+  // BI-840FDD43: the consolidation gate loads sibling notes when there is no
+  // exact-key match; default to an empty store so the exact-key/no-match cases
+  // behave as before unless a test seeds siblings.
+  asMock(prisma.coworkerMemoryNote.findMany).mockResolvedValue([]);
 });
 
 describe("isKnownNoteKind", () => {
@@ -110,6 +114,42 @@ describe("recordCoworkerNote", () => {
       where: { id: "note-old" },
       data: { supersededAt: expect.any(Date), supersededById: "note-new" },
     });
+  });
+
+  it("supersedes a different-key near-duplicate via the consolidation gate (BI-840FDD43)", async () => {
+    // No exact-key match, but an active sibling states the same concept under a
+    // different key with a changed value → the gate supersedes the sibling.
+    asMock(prisma.coworkerMemoryNote.findFirst).mockResolvedValueOnce(null);
+    asMock(prisma.coworkerMemoryNote.findMany).mockResolvedValueOnce([
+      { id: "note-near", noteKey: "preferred_review_style", content: "terse bullet points" },
+    ]);
+    const res = await recordCoworkerNote({
+      agentCuid: "cuid-scout",
+      noteKind: "preference",
+      noteKey: "review_style_preferred",
+      content: "detailed prose",
+    });
+    expect(res).toEqual({ ok: true, status: "updated" });
+    expect(prisma.coworkerMemoryNote.create).toHaveBeenCalledTimes(1);
+    expect(prisma.coworkerMemoryNote.update).toHaveBeenCalledWith({
+      where: { id: "note-near" },
+      data: { supersededAt: expect.any(Date), supersededById: "note-new" },
+    });
+  });
+
+  it("no-ops a different-key near-duplicate that restates the same content", async () => {
+    asMock(prisma.coworkerMemoryNote.findFirst).mockResolvedValueOnce(null);
+    asMock(prisma.coworkerMemoryNote.findMany).mockResolvedValueOnce([
+      { id: "note-near", noteKey: "preferred_review_style", content: "terse bullet points" },
+    ]);
+    const res = await recordCoworkerNote({
+      agentCuid: "cuid-scout",
+      noteKind: "preference",
+      noteKey: "review_style_preferred",
+      content: "Terse bullet points",
+    });
+    expect(res).toEqual({ ok: true, status: "unchanged" });
+    expect(prisma.coworkerMemoryNote.create).not.toHaveBeenCalled();
   });
 });
 
