@@ -21,6 +21,7 @@ import type {
   DeliberationConsensusState,
   DeliberationActivatedRiskLevel,
 } from "@/lib/deliberation/types";
+import type { PrismaClient } from "@dpf/db";
 
 // ─── Prompt Templates ────────────────────────────────────────────────────────
 
@@ -351,7 +352,7 @@ export function architectureAdvisoryFromReview(
 
 /** Build the advisory and auto-file [reference-doc] findings (process-spine §6.5). */
 export async function finalizeArchitectureAdvisory(
-  prisma: { improvementProposal: { create: (args: unknown) => Promise<unknown> } },
+  prisma: PrismaClient,
   arch: ReviewResult | null,
   userId: string,
   agentId: string | null | undefined,
