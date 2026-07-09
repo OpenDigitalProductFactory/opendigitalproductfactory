@@ -238,6 +238,7 @@ export {
 } from "./schema-source";
 export { DATA_MODEL_MIRROR_TASK_ID } from "./data-model-mirror-config";
 export { SYSML_PROJECTION_TASK_ID } from "./sysml-projection-config";
+export { SELF_OPTIMIZATION_SWEEP_TASK_ID } from "./self-optimization-sweep-config";
 // Canonical SysML projection applier — shared by seed-time views (packages/db
 // seed-ea-sysml-*.ts) and runtime extractors (apps/web/lib/ea, via this barrel).
 export {

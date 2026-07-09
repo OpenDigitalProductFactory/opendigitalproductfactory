@@ -68,6 +68,21 @@ silent completion). It runs piggybacked on the scheduled SysML parity sweep
 (`agent-task-scheduler.ts`, `SYSML_PROJECTION_TASK_ID` branch) — no new
 cron/task surface.
 
+## BET-0e — weekly self-optimization sweep (BI-F95222FA)
+
+Landed as `apps/web/lib/optimization/self-optimization-sweep.ts` + the third
+deterministic scheduled task (`self-optimization-sweep-weekly`, config/seed in
+`packages/db/src/self-optimization-sweep-config.ts` /
+`seed-self-optimization-sweep.ts`, scheduler branch in
+`agent-task-scheduler.ts` — no LLM loop, mirroring the SysML/mirror tasks).
+Each run reconciles consolidation parity (BET-0b steward), re-measures bet
+blast radius via the cockpit loader, derives STALLED bets (outstanding with no
+in-progress item), and persists the summary to the platformConfig singleton
+(`optimization.selfSweep.lastRun`). The deep 8-way mining fan-out stays a
+session-scale activity; the sweep keeps its outputs honest between runs
+(plan §6 standing discipline). Kernel-scored: third-task shape, HIGH
+confidence, composite 9.76.
+
 ## Research & benchmarking
 
 Composition follows the in-repo precedents rather than external dashboards:

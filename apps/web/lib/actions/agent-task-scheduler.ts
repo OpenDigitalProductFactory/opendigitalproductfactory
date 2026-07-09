@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID } from "@dpf/db";
+import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID, SELF_OPTIMIZATION_SWEEP_TASK_ID } from "@dpf/db";
 import {
   scheduleAgentTaskFor,
   getScheduledAgentTasksFor,
@@ -167,6 +167,42 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         consolidation.created,
         consolidation.updated,
         consolidation.resolved,
+      );
+      const nextRunAt = computeNextCronRun(task.schedule, startedAt);
+      await prisma.scheduledAgentTask.update({
+        where: { taskId },
+        data: { lastRunAt: startedAt, lastStatus: "ok", lastError: null, nextRunAt },
+      });
+      await prisma.scheduledJob
+        .update({ where: { jobId: taskId }, data: { lastRunAt: startedAt, lastStatus: "ok", lastError: null, nextRunAt } })
+        .catch(() => {});
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "unknown error";
+      const nextRunAt = computeNextCronRun(task.schedule, startedAt);
+      await prisma.scheduledAgentTask.update({
+        where: { taskId },
+        data: { lastRunAt: startedAt, lastStatus: "error", lastError: errMsg, nextRunAt },
+      });
+      await prisma.scheduledJob
+        .update({ where: { jobId: taskId }, data: { lastRunAt: startedAt, lastStatus: "error", lastError: errMsg, nextRunAt } })
+        .catch(() => {});
+    }
+    return;
+  }
+
+  // Self-optimization sweep (BET-0e): deterministic — reconcile consolidation
+  // parity, re-measure bet blast radius, derive stalled bets, persist the
+  // summary. No LLM loop; mirrors the SysML projection branch above.
+  if (task.taskId === SELF_OPTIMIZATION_SWEEP_TASK_ID) {
+    const startedAt = new Date();
+    try {
+      const { runSelfOptimizationSweep } = await import("@/lib/optimization/self-optimization-sweep");
+      const summary = await runSelfOptimizationSweep();
+      console.info(
+        "[agent-task-scheduler] self-optimization sweep outstanding=%d stalled=%d graph=%s",
+        summary.outstandingBets.length,
+        summary.stalledBets.length,
+        summary.graphAvailable,
       );
       const nextRunAt = computeNextCronRun(task.schedule, startedAt);
       await prisma.scheduledAgentTask.update({

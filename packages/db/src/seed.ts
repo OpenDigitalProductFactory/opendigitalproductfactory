@@ -64,6 +64,7 @@ import { seedStallThresholds } from "./seed-stall-thresholds.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureDataModelMirrorScheduledTask } from "./seed-data-model-mirror.js";
 import { ensureSysmlProjectionScheduledTask } from "./seed-sysml-projection.js";
+import { ensureSelfOptimizationSweepScheduledTask } from "./seed-self-optimization-sweep.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
 import { ensureAllBackupScheduledJobs } from "./seed-platform-backup.js";
 import { ensureDataRetentionScheduledJob } from "./seed-platform-retention.js";
@@ -2426,6 +2427,7 @@ async function main(): Promise<void> {
   await step("discoveryTriageScheduledTask", () => ensureDiscoveryTriageScheduledTask(prisma));
   await step("dataModelMirrorScheduledTask", () => ensureDataModelMirrorScheduledTask(prisma));
   await step("sysmlProjectionScheduledTask", () => ensureSysmlProjectionScheduledTask(prisma));
+  await step("selfOptimizationSweepScheduledTask", () => ensureSelfOptimizationSweepScheduledTask(prisma));
   await step("hiveScoutScheduledTask", () => ensureHiveScoutScheduledTask(prisma));
   await step("allBackupScheduledJobs", () => ensureAllBackupScheduledJobs(prisma));
   await step("dataRetentionScheduledJob", () => ensureDataRetentionScheduledJob(prisma));
