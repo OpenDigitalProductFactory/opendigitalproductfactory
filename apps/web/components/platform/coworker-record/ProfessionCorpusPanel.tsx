@@ -15,6 +15,7 @@ const REASON_INTENT: Record<string, Intent> = {
   "empty-corpus": "danger",
   "low-relevance": "warning",
   deferred: "info",
+  "bet-completed": "success",
 };
 
 const REASON_LABEL: Record<string, string> = {
@@ -22,6 +23,7 @@ const REASON_LABEL: Record<string, string> = {
   "empty-corpus": "Empty corpus",
   "low-relevance": "Not covered",
   deferred: "Deferred",
+  "bet-completed": "Bet learning",
 };
 
 const GAP_COLUMNS: Column<CorpusGapRow>[] = [

@@ -100,6 +100,24 @@ session-scale activity; the sweep keeps its outputs honest between runs
 (plan §6 standing discipline). Kernel-scored: third-task shape, HIGH
 confidence, composite 9.76.
 
+## BET-0f — WSID feedback loop (BI-5C01F920)
+
+Closes the self-optimization loop: a completed consolidation bet's technique is
+a learning the professions that worked it (`bet-professions.ts`) do not yet
+hold in their WSID corpus. `apps/web/lib/optimization/bet-completion-feedback.ts`
+(`recordBetCompletionLearnings`) records a deterministic, deduped
+`ProfessionCorpusGap` (new reason `bet-completed`) per mapped profession —
+query "capture the technique from completed BET-N", `suggestedSource` = the
+bet's spec + anchor files — routed through the SAME governed corpus-growth
+surface operators already review (coworker-record `ProfessionCorpusPanel`). No
+craft content is fabricated: the sweep only flags *that* a learning is
+available and *where*. The BET-0e sweep computes bets that completed since its
+prior run (diffing `completedBets` in the `optimization.selfSweep.lastRun`
+singleton) and drives the recorder; the gap fingerprint coalesces re-runs. UI
+label/tone for the new reason added in both corpus panels. This addresses the
+under-exercised-substrate root cause (plan §9): optimization work makes the
+WSID coworkers measurably better-sourced for the next round.
+
 ## Research & benchmarking
 
 Composition follows the in-repo precedents rather than external dashboards:
