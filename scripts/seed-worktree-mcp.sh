@@ -202,11 +202,19 @@ elif [ "$pnpm_on_path" != true ] && [ "$corepack_on_path" != true ]; then
     readiness_reason="pnpm_corepack_missing"
 fi
 
+process_spine_version="unknown"
+version_file="$target_abs/packages/dpf-skill-pack/process-spine-version.mjs"
+if [ -f "$version_file" ]; then
+  process_spine_version="$(sed -n 's/^export const PROCESS_SPINE_VERSION = "\(.*\)".*/\1/p' "$version_file" | head -n 1)"
+  [ -z "$process_spine_version" ] && process_spine_version="unknown"
+fi
+
 cat > "$target_abs/.dpf-worktree-readiness.json" <<EOF
 {
   "schemaVersion": 1,
   "state": "$readiness_state",
   "reason": "$readiness_reason",
+  "processSpineVersion": "$process_spine_version",
   "checkedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "checks": {
     "pnpmOnPath": $pnpm_on_path,

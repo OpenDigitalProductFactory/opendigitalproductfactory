@@ -87,7 +87,7 @@ Measure the spec against these reference standards. They are the curated DPF set
 
 5. **Propose concrete spec edits.** Every finding gets a `suggestion`: the exact change to the spec (which section, what to write), not just "this is wrong".
 
-6. **Capture reference-doc feedback.** If your research surfaced a standard worth keeping that the reference docs don't yet capture, record one `[reference-doc]` finding naming the doc and the gap. This is how architectural learning flows back into the standards — propose the doc edit as a follow-up (it is advisory, not part of this review's gate).
+6. **Capture reference-doc feedback.** If your research surfaced a standard worth keeping that the reference docs don't yet capture, record one `[reference-doc]` finding naming the doc and the gap. Build Studio auto-files each `[reference-doc]` finding as an `ImprovementProposal` (category `process`) via `promoteReferenceDocFindings`; on external surfaces, call `mcp__dpf__propose_improvement` with the same shape so the finding becomes a row, not prose buried in a review. The weekly canonical-improvement digest batches those rows into a single doc chore for human-approved AGENTS.md / principle / SKILL.md PRs (process-spine §6.5).
 
 ## Output template
 

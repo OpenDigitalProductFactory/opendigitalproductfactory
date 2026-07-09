@@ -60,7 +60,14 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
     if (!existsSync(`${worktreePath}/node_modules`)) {
       // Managed install via the shared store; --frozen-lockfile keeps it honest
       // to the worktree's lockfile (a worktree off main carries main's lockfile).
-      run(pkgMgr, ["install", "--prefer-offline", "--frozen-lockfile"], worktreePath);
+      // Worktree-only bootstrap may hit pnpm minimumReleaseAge on fresh lockfile
+      // pins (BI-C98D003B). Scoped to this explicit bootstrap path — fleet
+      // install policy is unchanged.
+      run(
+        pkgMgr,
+        ["install", "--prefer-offline", "--frozen-lockfile", "--config.minimumReleaseAge=0"],
+        worktreePath,
+      );
     }
     const hasNodeModules = existsSync(`${worktreePath}/node_modules`);
     const depProbeOk = hasNodeModules && run(pkgMgr, ["ls", "--depth", "-1"], worktreePath);

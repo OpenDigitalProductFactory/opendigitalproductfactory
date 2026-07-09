@@ -607,6 +607,7 @@ HOOK_PURPOSES = {
     "tool-economy-precheck.mjs": "reminds about tool-economy budget when adding tool surface",
     "worktree-create.mjs": "seeds a new worktree with MCP config on WorktreeCreate",
     "governance-freshness-check.mjs": "SessionStart: warns if governance guard wiring is stale",
+    "uncommitted-work-guard.mjs": "SessionEnd/Stop/post-checkout: warns before uncommitted spec/plan loss",
 }
 
 

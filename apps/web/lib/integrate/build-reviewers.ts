@@ -21,6 +21,7 @@ import type {
   DeliberationConsensusState,
   DeliberationActivatedRiskLevel,
 } from "@/lib/deliberation/types";
+import type { PrismaClient } from "@dpf/db";
 
 // ─── Prompt Templates ────────────────────────────────────────────────────────
 
@@ -347,6 +348,34 @@ export function architectureAdvisoryFromReview(
 ): ArchitectureAdvisory | null {
   if (!arch || arch.parseError) return null;
   return { summary: arch.summary, issues: arch.issues };
+}
+
+/** Build the advisory and auto-file [reference-doc] findings (process-spine §6.5). */
+export async function finalizeArchitectureAdvisory(
+  prisma: PrismaClient,
+  arch: ReviewResult | null,
+  userId: string,
+  agentId: string | null | undefined,
+  threadId: string | null | undefined,
+  routeContext: string,
+): Promise<ArchitectureAdvisory | null> {
+  const advisory = architectureAdvisoryFromReview(arch);
+  if (arch?.issues?.length) {
+    try {
+      const { promoteReferenceDocFindings } = await import(
+        "@/lib/process-spine/canonical-improvement-digest"
+      );
+      await promoteReferenceDocFindings(prisma, arch.issues, {
+        userId,
+        agentId: agentId ?? null,
+        threadId: threadId ?? null,
+        routeContext,
+      });
+    } catch (err) {
+      console.error("[reference-doc-promotion] failed", err);
+    }
+  }
+  return advisory;
 }
 
 // ─── Per-reviewer verdicts ───────────────────────────────────────────────────

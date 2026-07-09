@@ -75,6 +75,32 @@ test("hooks.json wires the WorktreeCreate hook and worktree-create.mjs exists (B
   );
 });
 
+test("hooks.json wires uncommitted-work guard on SessionEnd and Stop (BI-38578194)", () => {
+  const cfg = loadHooksJson();
+  for (const event of ["SessionEnd", "Stop"]) {
+    const groups = cfg?.hooks?.[event] ?? [];
+    assert.ok(Array.isArray(groups) && groups.length > 0, `expected ${event} in plugin hooks.json`);
+    const cmds = [];
+    for (const entry of groups) {
+      for (const h of entry?.hooks ?? []) {
+        if (typeof h?.command === "string") cmds.push(h.command);
+      }
+    }
+    assert.ok(
+      cmds.some((c) => c.includes("uncommitted-work-guard.mjs")),
+      `${event} must run uncommitted-work-guard.mjs`,
+    );
+    assert.ok(
+      cmds.filter((c) => c.includes("uncommitted-work-guard.mjs")).every((c) => c.includes("CLAUDE_PLUGIN_ROOT")),
+      `${event} uncommitted-work guard must load from \${CLAUDE_PLUGIN_ROOT}`,
+    );
+  }
+  assert.ok(
+    existsSync(join(here, "uncommitted-work-guard.mjs")),
+    "uncommitted-work-guard.mjs referenced by hooks.json is missing",
+  );
+});
+
 test("hooks.json wires the SessionStart governance-freshness self-check via CLAUDE_PLUGIN_ROOT (BI-3260D977)", () => {
   const cfg = loadHooksJson();
   const ss = cfg?.hooks?.SessionStart ?? [];

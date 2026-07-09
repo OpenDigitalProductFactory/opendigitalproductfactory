@@ -8203,7 +8203,7 @@ export async function executeTool(
       }
 
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
-      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
+      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, finalizeArchitectureAdvisory, parseReviewResponse, mergeReviews, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
       const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
       // BI-CE49D82E — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
@@ -8252,7 +8252,7 @@ export async function executeTool(
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
       const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
-      const architectureAdvisory = architectureAdvisoryFromReview(archReview);
+      const architectureAdvisory = await finalizeArchitectureAdvisory(prisma, archReview, userId, context?.agentId, context?.threadId, "reviewDesignDoc");
       const reviewBase = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
@@ -8665,7 +8665,7 @@ export async function executeTool(
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
-      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews, applyTestFirstLenienceForKind, relaxTestFirstAfterRounds, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
+      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, finalizeArchitectureAdvisory, parseReviewResponse, mergeReviews, applyTestFirstLenienceForKind, relaxTestFirstAfterRounds, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
       // BI-4396EFEC (D38) — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
       // ReviewResult.iteration on the output. Round is 1-based: first
@@ -8709,7 +8709,7 @@ export async function executeTool(
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
       const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
-      const architectureAdvisory = architectureAdvisoryFromReview(archReview);
+      const architectureAdvisory = await finalizeArchitectureAdvisory(prisma, archReview, userId, context?.agentId, context?.threadId, "reviewPlanDoc");
       const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
         ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the plan before building — they do not block this gate.`
         : "";
