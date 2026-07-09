@@ -80,9 +80,21 @@ blocks states no live agent is in yet:
 Deferred to later slices: Build Studio + seed converging on the factory door, a server
 action UI surface, strict-mode default-on once sweeps are established on live installs.
 
-## Phase 4 — Template/skill/docs (BI-14E4F9AF)
-1. Starter template + `dpf-establish-coworker` skill (dual-surface, dpf-skill-pack).
-2. AGENTS.md lifecycle contract section; retire the deferred HS-D716F1D52EB3E69F archetype item.
+## Phase 4 — Template/skill/docs (BI-14E4F9AF) — SHIPPED
+
+As-built:
+1. `packages/dpf-skill-pack/skills/dpf-establish-coworker/SKILL.md` — dual-surface skill
+   (Claude/Codex plugin + in-portal seed; validated against
+   `validateDpfPlatformSkillFrontmatter`, zero issues). Walks: substrate-verify → establish
+   draft via the factory door → complete the definition checklist via PR (the checklist the
+   door returns IS the starter template) → certify via the nightly sweep / run-now event →
+   promote. Assigned to platform-engineer, admin-assistant, build-specialist, coo.
+2. AGENTS.md §8 "Coworker lifecycle contract (mandatory for new AI coworkers)" — the
+   four-step enforced contract with pointers to the gate, the conformance test, the sweep,
+   and the skill.
+3. The deferred HS-D716F1D52EB3E69F archetype item is superseded by the checklist-as-template
+   + skill (noted here rather than a separate template file — the door's checklist is
+   generated, so a static template would drift).
 
 ## Verification
 - Phase 1: gate runs in required Unit Tests; new-coworker simulation test proves all axes flag.
