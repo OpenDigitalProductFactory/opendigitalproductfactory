@@ -922,6 +922,21 @@ export async function sendMessage(input: {
       });
     }
 
+    // BI-15FE2F07 (working-memory Slice 2): surface the coworker's own durable
+    // working notes into the prompt. Fail-open — notes must never break a reply,
+    // and a coworker with no notes yields null (a strict no-op in the assembler).
+    let workingNotes: string | null = null;
+    try {
+      const { resolveCoworkerAgent } = await import("@/lib/tak/coworker-tool-grant-core");
+      const { loadCoworkerNotes, formatNotesAsContext } = await import("@/lib/tak/coworker-memory");
+      const resolvedCoworker = await resolveCoworkerAgent(agent.agentId);
+      if (resolvedCoworker) {
+        workingNotes = formatNotesAsContext(await loadCoworkerNotes(resolvedCoworker.id));
+      }
+    } catch (err) {
+      console.warn("[coworker-memory] working-note injection failed (fail-open):", err);
+    }
+
     populatedPrompt = await assembleSystemPrompt({
       hrRole: user.platformRole ?? "none",
       grantedCapabilities: granted,
@@ -934,6 +949,7 @@ export async function sendMessage(input: {
       attachmentContext: selectedAttachments,
       professionContext: selectedProfessionContext,
       wikiContext,
+      workingNotes,
       skills: skillSummaries,
       questionPacket: input.questionPacket ?? null,
       // BI-8F8C5F28: on customer-copy surfaces, hold the coworker to the org's
