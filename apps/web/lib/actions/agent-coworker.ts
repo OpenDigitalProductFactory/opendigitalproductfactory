@@ -646,6 +646,20 @@ export async function sendMessage(input: {
     const { applyRollingCompaction } = await import("@/lib/actions/thread-compaction");
     chatHistory = await applyRollingCompaction(chatHistory);
   }
+
+  // BI-FDECBE0A (EP-8C706944 P1): prepend the thread's durable rolling checkpoint
+  // — a persisted running summary of every turn older than the recency window —
+  // so long threads keep continuity that does not depend on vector recall. Strict
+  // no-op until a checkpoint exists; non-fatal on any error.
+  try {
+    const { loadThreadCheckpointMessage } = await import("@/lib/tak/thread-checkpoint-runner");
+    const checkpointMessage = await loadThreadCheckpointMessage(input.threadId);
+    if (checkpointMessage) {
+      chatHistory = [checkpointMessage, ...chatHistory];
+    }
+  } catch (err) {
+    console.warn("[thread-checkpoint] inject failed:", getErrorMessage(err));
+  }
   const recentContentForClassification = chatHistory
     .slice(-3)
     .map((m) => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
@@ -2316,6 +2330,20 @@ export async function sendMessage(input: {
         operatingProfileFingerprint: memoryOperatingProfileFingerprint,
       }).catch((e) => console.warn("[user-facts] extract failed:", getErrorMessage(e)));
     }).catch((e) => console.warn("[user-facts] import failed:", getErrorMessage(e)));
+  }
+
+  // BI-FDECBE0A (EP-8C706944 P1): fire-and-forget advance of the durable rolling
+  // checkpoint. Folds turns that have just aged out of the recency window into the
+  // persisted summary (a no-op until a batch has accumulated), so the fold is paid
+  // once per batch instead of re-summarized every turn. keepRecentCount mirrors the
+  // window this route loads above.
+  {
+    const keepRecentCount = isBuildPhase ? 20 : 8;
+    import("@/lib/tak/thread-checkpoint-runner")
+      .then(({ advanceThreadCheckpointForThread }) =>
+        advanceThreadCheckpointForThread(input.threadId, keepRecentCount),
+      )
+      .catch((e) => console.warn("[thread-checkpoint] advance failed:", getErrorMessage(e)));
   }
 
   // Fire-and-forget: process observer
