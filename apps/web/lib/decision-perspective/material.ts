@@ -350,6 +350,64 @@ export async function resolveOrgProfileId(input: {
 }
 
 /**
+ * Resolve decision material for a profession (BI-9900B365, EP-8DC217EB BET-0c).
+ *
+ * The WSID sibling of {@link resolveProfileMaterialForOrg}: the entry point is
+ * the coworker's profession profile (`wsid-<professionKey>`, bound
+ * registry-driven via docs/professions/registry.json), and the resolution
+ * enters the same chain-walk. `professionProfileSelected` records whether the
+ * coworker's OWN craft profile decided (vs a platform fallback) — the same
+ * non-inherit boundary the org gate enforces for WWWD.
+ */
+export async function resolveProfileMaterialForProfession(input: {
+  db: PerspectiveMaterialClient;
+  agentIdentity: {
+    agentId?: string | null;
+    agentName?: string | null;
+    roleSlug?: string | null;
+    slugId?: string | null;
+  };
+  domainClass: DecisionDomainClass;
+  fallbackProfileId?: string;
+  maxDepth?: number;
+}): Promise<
+  ResolvedProfileMaterial & { professionProfileSelected: boolean; professionKey: string | null }
+> {
+  const { findProfessionFamilyForAgentIdentity, professionProfileId } = await import(
+    "./resolve-profession-profile"
+  );
+
+  const family = findProfessionFamilyForAgentIdentity({
+    agentId: input.agentIdentity.agentId ?? null,
+    name: input.agentIdentity.agentName ?? null,
+    roleSlug: input.agentIdentity.roleSlug ?? null,
+    slugId: input.agentIdentity.slugId ?? null,
+  });
+
+  const professionKey = family?.professionKey ?? null;
+  const entryProfileId = professionKey
+    ? professionProfileId(professionKey)
+    : (input.fallbackProfileId ?? MARK_DPF_PLATFORM_PROFILE.profileId);
+
+  const resolved = await resolveProfileMaterial({
+    db: input.db,
+    profileId: entryProfileId,
+    domainClass: input.domainClass,
+    maxDepth: input.maxDepth,
+  });
+
+  // The profession profile "decided" only when the coworker maps to a family
+  // AND the material that resolved came from that profile itself (not a
+  // fallback further down the chain, and not the coverage-gap path).
+  const professionProfileSelected =
+    professionKey !== null &&
+    !resolved.coverageGap &&
+    resolved.selectedProfileId === entryProfileId;
+
+  return { ...resolved, professionProfileSelected, professionKey };
+}
+
+/**
  * Resolve decision material for an organization (BI-230C9EF7).
  *
  * Convenience composition of {@link resolveOrgProfileId} +
