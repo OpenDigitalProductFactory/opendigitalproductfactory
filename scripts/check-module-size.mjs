@@ -28,7 +28,12 @@ import { dirname, join, relative } from "node:path";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SCAN_DIRS = ["apps", "packages", "scripts"].map((d) => join(REPO_ROOT, d));
-const BASELINE_PATH = join(REPO_ROOT, "scripts", "module-size-baseline.json");
+// Line-oriented `<path>\t<loc>` baseline, merged with git's built-in
+// `merge=union` driver (.gitattributes) so concurrent PRs that each re-baseline
+// never conflict (BI-3B0AD9CF). A union merge can leave duplicate paths; the
+// parser resolves a duplicate to the LARGEST recorded LOC (never falsely red
+// after a merge — the next --update rewrites sorted + deduped and retightens).
+const BASELINE_PATH = join(REPO_ROOT, "scripts", "module-size-baseline.txt");
 
 // New files must stay under this; existing large files are carried in the
 // baseline and ratcheted down. Hard cap applies only to NEW files.
@@ -100,6 +105,28 @@ function scan() {
 
 const sizes = scan();
 
+function serializeBaseline(baseline) {
+  const lines = Object.keys(baseline)
+    .sort()
+    .map((k) => `${k}\t${baseline[k]}`);
+  return `${lines.join("\n")}\n`;
+}
+
+/** Parse `<path>\t<loc>` lines; duplicates (from a union merge) resolve to max. */
+function parseBaseline(text) {
+  const baseline = {};
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const m = line.match(/^(.+?)\s+(\d+)$/);
+    if (!m) continue;
+    const [, file, locStr] = m;
+    const loc = Number(locStr);
+    if (!(file in baseline) || loc > baseline[file]) baseline[file] = loc;
+  }
+  return baseline;
+}
+
 if (process.argv.includes("--update")) {
   // Snapshot every file currently OVER the soft ceiling. Files at or under the
   // ceiling are not baselined — they are simply held to the ceiling as "new".
@@ -107,7 +134,7 @@ if (process.argv.includes("--update")) {
     .filter((k) => sizes[k] > SOFT_CEILING)
     .sort();
   const baseline = Object.fromEntries(over.map((k) => [k, sizes[k]]));
-  writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
+  writeFileSync(BASELINE_PATH, serializeBaseline(baseline));
   console.log(
     `Wrote module-size baseline: ${over.length} files over ${SOFT_CEILING} LOC (ratchet-down set).`,
   );
@@ -116,7 +143,7 @@ if (process.argv.includes("--update")) {
 
 let baseline = {};
 try {
-  baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8"));
+  baseline = parseBaseline(readFileSync(BASELINE_PATH, "utf8"));
 } catch {
   console.error(
     `Missing baseline ${relative(REPO_ROOT, BASELINE_PATH)} — run: node scripts/check-module-size.mjs --update`,
