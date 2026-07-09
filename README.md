@@ -251,7 +251,7 @@ Durable governance also lives as tiered principles under [`docs/founder-kernel/w
 | **Analyze (actions / go / javascript-typescript / python)** | CodeQL across the multi-language tree | The Go agent under `services/edge-node-go/` is in scope. |
 | **Routing Invariants Audit** | Re-runs seed + invariant guards against the PR's merge-base | Failure typically means a seed contract drifted; rebase onto current `main` if a fix has since landed. |
 | **Routing Tier Contract** | Verifies `ModelTierPolicy` cost-tier → model bindings are consistent | Touches anything under `packages/db/data/`? Expect this gate. |
-| **Stall Detection Write Guard** | Asserts stall-detection invariants for Build Studio recovery | Touches `apps/web/lib/build-studio/`? Expect this gate. |
+| **Repo Guard Loop** | Runs every `scripts/check-no-*.mjs` ratchet guard via `scripts/check-guards.mjs` | Add a new ratchet as one `check-no-*.mjs` script — no ci.yml/package.json edit. `pnpm check:guards` runs it locally. |
 | **Dockerfile Node Version** | Asserts the Node version in `Dockerfile*` matches the workspace | Bumping Node? Update all three Dockerfiles. |
 
 ### Code standards

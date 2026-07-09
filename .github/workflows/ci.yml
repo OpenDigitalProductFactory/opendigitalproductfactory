@@ -98,61 +98,23 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm typecheck
 
-  stall-detection-write-guard:
-    name: Stall Detection Write Guard
+  repo-guard-loop:
+    name: Repo Guard Loop
     runs-on: ubuntu-latest
-    # BI-4ab6be39 Phase I. Catches new code that writes status: "working" to
-    # TaskRun directly instead of going through markTaskRunWorking(). The
-    # helper sets lastHeartbeatAt atomically so the watchdog cron doesn't
-    # false-positive on the gap between transition and first work.
+    # BI-3B0AD9CF (EP-8DC217EB). ONE job discovers and runs every
+    # scripts/check-no-*.mjs ratchet guard (each sibling *.test.mjs self-test
+    # runs first). Adding a new ratchet = adding one script file — no ci.yml or
+    # package.json edit — which is what stopped concurrent consolidation PRs
+    # from mutually conflicting on this workflow. Each guard's rationale lives
+    # in its own script header, not here.
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
         uses: actions/setup-node@v6.4.0
         with:
           node-version: 24
-      - name: Run guard
-        run: node scripts/check-no-bare-working-write.mjs
-
-  system-user-sentinel-guard:
-    name: System User Sentinel Guard
-    runs-on: ubuntu-latest
-    # BI-170E99A9. Catches new code that uses a "system" sentinel as a User
-    # principal id. There is no User row with id "system", so a value that
-    # becomes a User-FK column (e.g. TaskRun.userId, a NOT NULL FK -> User)
-    # fails the FK with Prisma P2003 at runtime. This bug shipped twice — #1925
-    # (skill curator) and #1926 (auto-ship) — both on rare null-owner edges the
-    # happy-path tests never hit. The fix is to resolve a real principal via
-    # resolveScheduledOwnerUserId() (apps/web/lib/queue/scheduled-owner.ts).
-    steps:
-      - uses: actions/checkout@v7
-      - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-      - name: Test guard logic
-        run: node --test scripts/check-no-system-user-sentinel.test.mjs
-      - name: Run guard
-        run: node scripts/check-no-system-user-sentinel.mjs
-
-  local-isrecord-guard:
-    name: Local isRecord Duplication Guard
-    runs-on: ubuntu-latest
-    # BI-6A505BFF (EP-8DC217EB BET-6). Freezes the count of hand-copied
-    # `isRecord(v): v is Record<string, unknown>` object-guards. There is one
-    # canonical home — `import { isRecord } from "@/lib/shared/coerce"` — so new
-    # code must import it instead of spawning copy #21. Pre-existing copies are
-    # allowlisted as a migration backlog inside the guard.
-    steps:
-      - uses: actions/checkout@v7
-      - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-      - name: Test guard logic
-        run: node --test scripts/check-no-local-isrecord.test.mjs
-      - name: Run guard
-        run: node scripts/check-no-local-isrecord.mjs
+      - name: Run guard loop
+        run: node scripts/check-guards.mjs
 
   pr-health-test:
     name: PR Health Logic
@@ -246,7 +208,7 @@ jobs:
     # BI-OPT-RATCHETS. No size guard existed, which is how mcp-tools.ts grew past
     # 15k LOC unnoticed. This ratchet holds NEW files to an 800-LOC ceiling (1000
     # hard cap) and lets the already-large files (frozen in
-    # scripts/module-size-baseline.json) only SHRINK — no blind mass split.
+    # scripts/module-size-baseline.txt) only SHRINK — no blind mass split.
     # Refactor a file smaller, then `--update` the baseline to retighten.
     steps:
       - uses: actions/checkout@v7
@@ -273,71 +235,6 @@ jobs:
           node-version: 24
       - name: Run guard
         run: node scripts/check-mcp-tool-pack.mjs
-
-  native-dialog-guard:
-    name: Native Dialog Guard
-    runs-on: ubuntu-latest
-    # BI-B0E4F3F1. Native window.confirm/alert/prompt block ALL browser
-    # automation — CDP times out while the dialog is open, so an agent literally
-    # cannot complete a flow gated behind one (proven live: an operator had to
-    # click OK twice to abandon two builds, BI-297863B2). This guard fails any PR
-    # that (re)introduces a native dialog in apps/web; the in-app primitive at
-    # components/ui/Dialog.tsx renders real DOM an agent can find and click.
-    steps:
-      - uses: actions/checkout@v7
-      - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-      - name: Run guard
-        run: node scripts/check-no-native-dialogs.mjs
-
-  dialog-in-transition-guard:
-    name: Dialog-in-Transition Guard
-    runs-on: ubuntu-latest
-    # BI-FE7C543C. confirmDialog/alertDialog/promptDialog dispatch a DialogHost
-    # state update to render; deferred inside a React transition it never renders
-    # interactively, so the dialog silently never appears and the triggering
-    # button wedges in its isPending/disabled state (bit EP-LABOR-ECONOMICS
-    # Phase 4 live, fixed in PR #2649). This guard fails any apps/web PR that
-    # calls a dialog helper inside a startTransition(...) callback; the correct
-    # pattern is to await the dialog FIRST, then run the work inside the
-    # transition (see components/storefront-admin/ItemsManager.tsx handleDelete).
-    steps:
-      - uses: actions/checkout@v7
-      - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-      - name: Run guard
-        run: node scripts/check-no-dialog-in-transition.mjs
-
-  raw-event-source-guard:
-    name: Raw EventSource Guard
-    runs-on: ubuntu-latest
-    # BI-1AFF530D. A raw `new EventSource(...)` has no liveness watchdog, so a
-    # self-upgrade that recreates the portal container leaves a silent zombie
-    # socket holding one of the browser's ~6 HTTP/1.1 slots per origin; enough
-    # zombies wedge the whole portal until the browser is restarted
-    # (BI-864E83B0). This guard fails any PR that (re)introduces one outside the
-    # resilient wrapper at apps/web/lib/hooks/useResilientEventSource.ts.
-    steps:
-      - uses: actions/checkout@v7
-      - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-      - name: Run guard
-        run: node scripts/check-no-raw-event-source.mjs
-      - name: Run error-message guard
-        run: node scripts/check-no-raw-error-message.mjs
-      # BI-991D4DC8 (EP-8DC217EB, BET-2): server actions must use the canonical
-      # requireUser/requireUserId from apps/web/lib/actions/shared/guards.ts
-      # rather than re-implementing the session-auth preamble locally (which
-      # drifted on both the null-check and the error string). This guard fails
-      # any PR that (re)introduces a local requireAuth/requireUser guard.
-      - name: Run local auth-guard ratchet
-        run: node scripts/check-no-local-auth-guard.mjs
 
   package-boundary-guard:
     name: Package Boundary Guard

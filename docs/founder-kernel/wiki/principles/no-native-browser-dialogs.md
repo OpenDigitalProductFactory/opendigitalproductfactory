@@ -45,7 +45,7 @@ In-platform coworkers building portal components, external coding agents (Claude
 
 ## How To Apply
 
-Reach for `confirmDialog` / `alertDialog` / `promptDialog` from `@/components/ui/Dialog` anywhere you would have written `confirm` / `alert` / `prompt`. They are async (`await` the result) — convert the enclosing handler to `async` and the call shape is otherwise identical. Destructive confirms pass `tone: "danger"`; required prompts pass `required: true`. Never re-introduce a native dialog "just this once" — the static guard (`scripts/check-no-native-dialogs.mjs`, CI job "Native Dialog Guard") fails any PR under `apps/web` that does, on every surface.
+Reach for `confirmDialog` / `alertDialog` / `promptDialog` from `@/components/ui/Dialog` anywhere you would have written `confirm` / `alert` / `prompt`. They are async (`await` the result) — convert the enclosing handler to `async` and the call shape is otherwise identical. Destructive confirms pass `tone: "danger"`; required prompts pass `required: true`. Never re-introduce a native dialog "just this once" — the static guard (`scripts/check-no-native-dialogs.mjs`, CI job "Repo Guard Loop") fails any PR under `apps/web` that does, on every surface.
 
 ## Decision Dimensions
 
@@ -58,4 +58,4 @@ Reach for `confirmDialog` / `alertDialog` / `promptDialog` from `@/components/ui
 ## Examples
 
 - **Positive:** A new "Delete provider" action calls `await confirmDialog({ title: "Delete provider", message: "…cannot be undone.", tone: "danger", confirmLabel: "Delete" })`. An agent finds `[data-dialog-action="confirm"]`, clicks it, and the delete completes — no human, no native dialog. A unit test asserts the same path.
-- **Counterexample:** A new admin page guards a destructive action with `if (!confirm("Are you sure?")) return;`. The CI Native Dialog Guard fails the PR; even if it slipped through, an agent driving that page would hang on the native dialog forever, and the only way to complete the flow would be a human clicking OK.
+- **Counterexample:** A new admin page guards a destructive action with `if (!confirm("Are you sure?")) return;`. The CI Repo Guard Loop (native-dialog guard) fails the PR; even if it slipped through, an agent driving that page would hang on the native dialog forever, and the only way to complete the flow would be a human clicking OK.

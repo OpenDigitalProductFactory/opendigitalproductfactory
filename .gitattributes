@@ -32,3 +32,10 @@ docker-entrypoint.sh text eol=lf
 # copy stays byte-identical to upstream and refresh diffs are clean.
 docs/Reference/mcp/spec/** text eol=lf
 docs/Reference/mcp/schema/** text eol=lf
+
+# Ratchet baselines are line-oriented (one `<path>\t<value>` entry per line,
+# sorted) precisely so concurrent PRs that each re-baseline merge cleanly with
+# the built-in union driver instead of conflicting (BI-3B0AD9CF). The guard
+# parsers tolerate union-merge duplicates (max wins) and --update rewrites
+# sorted + deduped.
+scripts/module-size-baseline.txt merge=union

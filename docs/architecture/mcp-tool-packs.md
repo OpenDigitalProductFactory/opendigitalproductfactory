@@ -115,6 +115,6 @@ no-new-case invariant), so the guard and the test can never disagree. The baseli
 This composes with a companion **module-size ratchet** from the same BI
 ([`scripts/check-module-size.mjs`](../../scripts/check-module-size.mjs) + `Module Size Guard`):
 new files are held to an 800-LOC ceiling (1000 hard cap) and the already-large files are frozen
-in [`scripts/module-size-baseline.json`](../../scripts/module-size-baseline.json) and may only
+in [`scripts/module-size-baseline.txt`](../../scripts/module-size-baseline.txt) and may only
 shrink. No size guard existed before, which is how this very module grew past 15k LOC unnoticed —
 the two ratchets together keep the consolidation gains from being silently undone.
