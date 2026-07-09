@@ -340,7 +340,9 @@ describe.each(ENGINES)(
           expect.objectContaining({ where: { id: "safety-1" } }),
         );
         expect(spec.metrics?.runsTotal.inc).toHaveBeenCalledWith({ status: "ok" });
-        expect(spec.metrics?.durationSeconds.observe).toHaveBeenCalledWith(0);
+        // Duration is wall-clock; assert it was observed as a number, not a
+        // pinned 0 (a fast-but-nonzero run yields 0.001 and flakes).
+        expect(spec.metrics?.durationSeconds.observe).toHaveBeenCalledWith(expect.any(Number));
       } else {
         // Neo4j/Qdrant never touch Postgres audit rows nor restore metrics.
         expect(prisma.backupRun.upsert).not.toHaveBeenCalled();

@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID } from "@dpf/db";
+import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID, SELF_OPTIMIZATION_SWEEP_TASK_ID } from "@dpf/db";
 import {
   scheduleAgentTaskFor,
   getScheduledAgentTasksFor,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/operate/scheduled-jobs/agent-task-core";
 import { runDataModelMirror } from "@/lib/ea/run-data-model-mirror";
 import { runArchitectureParitySteward } from "@/lib/ea/architecture-parity-steward";
+import { runConsolidationParitySteward } from "@/lib/ea/consolidation-parity-steward";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import {
@@ -154,6 +155,54 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         result.projections.mcpAuthority.toolCount,
         result.projections.coworkerAuthority.created + result.projections.coworkerAuthority.updated,
         result.steward.created + result.steward.updated + result.steward.resolved,
+      );
+      // BET-0b: the same parity sweep reconciles the consolidation-bet
+      // conformance issues, so duplication drift-reduces on the same cadence
+      // projection health does.
+      const consolidation = await runConsolidationParitySteward();
+      console.info(
+        "[agent-task-scheduler] consolidation parity outstanding=%d completed=%d (created=%d updated=%d resolved=%d)",
+        consolidation.outstandingBets.length,
+        consolidation.completedBets.length,
+        consolidation.created,
+        consolidation.updated,
+        consolidation.resolved,
+      );
+      const nextRunAt = computeNextCronRun(task.schedule, startedAt);
+      await prisma.scheduledAgentTask.update({
+        where: { taskId },
+        data: { lastRunAt: startedAt, lastStatus: "ok", lastError: null, nextRunAt },
+      });
+      await prisma.scheduledJob
+        .update({ where: { jobId: taskId }, data: { lastRunAt: startedAt, lastStatus: "ok", lastError: null, nextRunAt } })
+        .catch(() => {});
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "unknown error";
+      const nextRunAt = computeNextCronRun(task.schedule, startedAt);
+      await prisma.scheduledAgentTask.update({
+        where: { taskId },
+        data: { lastRunAt: startedAt, lastStatus: "error", lastError: errMsg, nextRunAt },
+      });
+      await prisma.scheduledJob
+        .update({ where: { jobId: taskId }, data: { lastRunAt: startedAt, lastStatus: "error", lastError: errMsg, nextRunAt } })
+        .catch(() => {});
+    }
+    return;
+  }
+
+  // Self-optimization sweep (BET-0e): deterministic — reconcile consolidation
+  // parity, re-measure bet blast radius, derive stalled bets, persist the
+  // summary. No LLM loop; mirrors the SysML projection branch above.
+  if (task.taskId === SELF_OPTIMIZATION_SWEEP_TASK_ID) {
+    const startedAt = new Date();
+    try {
+      const { runSelfOptimizationSweep } = await import("@/lib/optimization/self-optimization-sweep");
+      const summary = await runSelfOptimizationSweep();
+      console.info(
+        "[agent-task-scheduler] self-optimization sweep outstanding=%d stalled=%d graph=%s",
+        summary.outstandingBets.length,
+        summary.stalledBets.length,
+        summary.graphAvailable,
       );
       const nextRunAt = computeNextCronRun(task.schedule, startedAt);
       await prisma.scheduledAgentTask.update({

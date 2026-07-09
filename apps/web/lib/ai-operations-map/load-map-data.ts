@@ -24,6 +24,14 @@ import {
   projectDeliberations,
   type DeliberationSourceRow,
 } from "./project-deliberations";
+import {
+  extractBranchModelProvider,
+  getActivationProfileType,
+  mergeCoworkersById,
+  mergeTaskRunsDedupeById,
+  resolveEvidenceRange,
+  resolveGateResult,
+} from "./load-map-support";
 import type {
   OperationsMapRoutingTopology,
   OperationsMapAgent,
@@ -38,6 +46,25 @@ import type {
 } from "./types";
 
 export const RECENT_TOOL_LIMIT = 40;
+
+/**
+ * Per-source row budget when the caller scopes the load to an explicit
+ * evidence window (BI-40EFC7DE). The flat RECENT_TOOL_LIMIT cap silently
+ * discarded months of routing history — a 37-day timeline rendered only the
+ * newest 40 rows of each source. Windowed loads trade the global cap for a
+ * bounded per-window budget: newest-first within [start, end], so a dense
+ * window degrades to "most recent N inside the window" rather than an
+ * unbounded payload. Raw route-decision traces never leave the server (the
+ * projectors distill them into markers), so the budget bounds marker count,
+ * not trace bytes.
+ */
+export const WINDOWED_SOURCE_LIMIT = 400;
+
+export type OperationsMapEvidenceWindow = { start: Date; end: Date };
+
+export type LoadOperationsMapDataOptions = {
+  window?: OperationsMapEvidenceWindow | null;
+};
 
 /**
  * Cap on how many stalled TaskRuns are lifted into the projection set
@@ -60,9 +87,32 @@ export type OperationsMapData = {
   projections: OperationsMapProjection[];
   routingTopology: OperationsMapRoutingTopology;
   recentWindowLabel: string;
+  /**
+   * Global min/max evidence timestamps across the routing evidence tables,
+   * independent of the queried window. The timeline anchors its base range
+   * to this so windowed refetches can't shrink the scrubber's span, and the
+   * "data begins here" boundary marker is honest about how far back this
+   * install's history actually goes.
+   */
+  evidenceRange: { earliest: string | null; latest: string | null };
+  queriedWindow: { start: string; end: string } | null;
 };
 
-export async function loadOperationsMapData(): Promise<OperationsMapData> {
+export async function loadOperationsMapData(
+  options?: LoadOperationsMapDataOptions,
+): Promise<OperationsMapData> {
+  const evidenceWindow = options?.window ?? null;
+  const evidenceTake = evidenceWindow ? WINDOWED_SOURCE_LIMIT : RECENT_TOOL_LIMIT;
+  const createdAtWindow = evidenceWindow
+    ? { createdAt: { gte: evidenceWindow.start, lte: evidenceWindow.end } }
+    : {};
+  const startedAtWindow = evidenceWindow
+    ? { startedAt: { gte: evidenceWindow.start, lte: evidenceWindow.end } }
+    : {};
+  const recordedAtWindow = evidenceWindow
+    ? { recordedAt: { gte: evidenceWindow.start, lte: evidenceWindow.end } }
+    : {};
+
   const [
     storefrontConfig,
     agents,
@@ -85,6 +135,7 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     deliberationRuns,
     activityHarnessApprovalProposals,
     phaseModelSelection,
+    evidenceRange,
   ] = await Promise.all([
     prisma.storefrontConfig.findFirst({
       include: {
@@ -124,9 +175,10 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       where: {
         archivedAt: null,
         source: "proactive",
+        ...startedAtWindow,
       },
       orderBy: { startedAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
+      take: evidenceTake,
       select: {
         id: true,
         taskRunId: true,
@@ -170,8 +222,9 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       },
     }),
     prisma.toolExecution.findMany({
+      where: { ...createdAtWindow },
       orderBy: { createdAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
+      take: evidenceTake,
       select: {
         id: true,
         threadId: true,
@@ -189,8 +242,9 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       },
     }),
     prisma.toolExecutionReceipt.findMany({
+      where: { ...createdAtWindow },
       orderBy: { createdAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
+      take: evidenceTake,
       select: {
         id: true,
         toolExecutionId: true,
@@ -220,9 +274,9 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       },
     }),
     prisma.backlogItemActivity.findMany({
-      where: { kind: "evidence" },
+      where: { kind: "evidence", ...recordedAtWindow },
       orderBy: { recordedAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
+      take: evidenceTake,
       select: {
         id: true,
         backlogItemId: true,
@@ -241,8 +295,9 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       },
     }),
     prisma.externalEvidenceRecord.findMany({
+      where: { ...createdAtWindow },
       orderBy: { createdAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
+      take: evidenceTake,
       select: {
         id: true,
         actorUserId: true,
@@ -255,8 +310,9 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       },
     }),
     prisma.routeDecisionLog.findMany({
+      where: { ...createdAtWindow },
       orderBy: { createdAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
+      take: evidenceTake,
       select: {
         id: true,
         agentMessageId: true,
@@ -303,8 +359,9 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       },
     }),
     prisma.tokenUsage.findMany({
+      where: { ...createdAtWindow },
       orderBy: { createdAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
+      take: evidenceTake,
       select: {
         id: true,
         agentId: true,
@@ -323,9 +380,10 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
           { providerErrorCode: { not: null } },
           { fallbackOccurred: true },
         ],
+        ...createdAtWindow,
       },
       orderBy: { createdAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
+      take: evidenceTake,
       select: {
         id: true,
         agentId: true,
@@ -370,8 +428,9 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     // Deliberation fan-out is deferred until branch-persona identity is
     // captured (TaskNode has no agentId column today) — see Slice 4.
     prisma.delegationChain.findMany({
+      where: { ...startedAtWindow },
       orderBy: { startedAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
+      take: evidenceTake,
       select: {
         id: true,
         chainId: true,
@@ -387,8 +446,9 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       },
     }),
     prisma.phaseHandoff.findMany({
+      where: { ...createdAtWindow },
       orderBy: { createdAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
+      take: evidenceTake,
       select: {
         id: true,
         buildId: true,
@@ -414,9 +474,10 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
             ],
           },
         ],
+        ...startedAtWindow,
       },
       orderBy: { startedAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
+      take: evidenceTake,
       select: {
         id: true,
         taskRunId: true,
@@ -435,8 +496,9 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     // provider from each branch's routeDecision) rather than A2A edges. The
     // coordinator is the parent TaskRun's current/initiating agent.
     prisma.deliberationRun.findMany({
+      where: { ...startedAtWindow },
       orderBy: { startedAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
+      take: evidenceTake,
       select: {
         id: true,
         diversityMode: true,
@@ -466,6 +528,33 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       },
     }),
     resolveModelSelectionByPhase(),
+    // Global evidence bounds (window-independent): anchors the client
+    // timeline's base range so windowed refetches can't shrink the scrubber,
+    // and powers the "data begins here" boundary marker (BI-40EFC7DE).
+    Promise.all([
+      prisma.routeDecisionLog.aggregate({ _min: { createdAt: true }, _max: { createdAt: true } }),
+      prisma.tokenUsage.aggregate({ _min: { createdAt: true }, _max: { createdAt: true } }),
+      prisma.routeOutcome.aggregate({ _min: { createdAt: true }, _max: { createdAt: true } }),
+      prisma.toolExecution.aggregate({ _min: { createdAt: true }, _max: { createdAt: true } }),
+      prisma.taskRun.aggregate({
+        _min: { startedAt: true },
+        _max: { startedAt: true },
+        where: { archivedAt: null },
+      }),
+    ]).then((aggregates) =>
+      resolveEvidenceRange(
+        aggregates.map((aggregate) => {
+          const bounds = aggregate as {
+            _min: Record<string, Date | null>;
+            _max: Record<string, Date | null>;
+          };
+          return {
+            min: Object.values(bounds._min)[0] ?? null,
+            max: Object.values(bounds._max)[0] ?? null,
+          };
+        }),
+      ),
+    ),
   ]);
 
   const routeDecisionAgentMessageIds = [
@@ -663,112 +752,14 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       deliberations,
       timeline: mergedTimeline,
     },
-    recentWindowLabel: `Last ${RECENT_TOOL_LIMIT} records per evidence source`,
+    recentWindowLabel: evidenceWindow
+      ? `Up to ${WINDOWED_SOURCE_LIMIT} records per evidence source in the selected window`
+      : `Last ${RECENT_TOOL_LIMIT} records per evidence source`,
+    evidenceRange,
+    queriedWindow: evidenceWindow
+      ? { start: evidenceWindow.start.toISOString(), end: evidenceWindow.end.toISOString() }
+      : null,
   };
 }
 
-/**
- * Recover a deliberation branch's model/provider from its persisted
- * `TaskNode.routeDecision` JSON. Provider falls back to the endpoint-id prefix
- * ("provider:model") when not stored explicitly — consistent with the routing
- * topology projector's provider resolution. Returns nulls for non-diverse runs
- * (single-model-multi-persona branches share one model and may carry neither).
- */
-function extractBranchModelProvider(value: unknown): { modelId: string | null; providerId: string | null } {
-  const parsed = typeof value === "string" ? safeJsonObject(value) : value;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { modelId: null, providerId: null };
-  }
-  const record = parsed as Record<string, unknown>;
-  const modelId = typeof record.selectedModelId === "string" ? record.selectedModelId : null;
-  let providerId = typeof record.providerId === "string" ? record.providerId : null;
-  if (!providerId && typeof record.selectedEndpoint === "string" && record.selectedEndpoint.includes(":")) {
-    providerId = record.selectedEndpoint.split(":")[0] || null;
-  }
-  return { modelId, providerId };
-}
-
-function safeJsonObject(value: string): unknown {
-  try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Resolve a PhaseHandoff.gateResult JSON blob into a pass/fail signal + a
- * short label. Conservative: an explicit boolean wins; otherwise a status
- * string is pattern-matched; otherwise the gate state is unknown (null).
- */
-function resolveGateResult(value: unknown): { passed: boolean | null; label: string | null } {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return { passed: null, label: null };
-  }
-  const record = value as Record<string, unknown>;
-  const explicit = record.passed ?? record.allowed ?? record.advanced;
-  const statusText = [record.result, record.status, record.outcome, record.decision]
-    .find((entry): entry is string => typeof entry === "string");
-
-  let passed: boolean | null = null;
-  if (typeof explicit === "boolean") {
-    passed = explicit;
-  } else if (statusText) {
-    if (/pass|advanc|approv|ok|success/i.test(statusText)) passed = true;
-    else if (/fail|block|reject|deny|error/i.test(statusText)) passed = false;
-  }
-
-  return { passed, label: statusText ?? null };
-}
-
-/**
- * Union two coworker-node lists by agentId, preserving the provider-topology
- * entry when an agent appears in both. Keeps a stable label sort.
- */
-function mergeCoworkersById<T extends { agentId: string; label: string }>(
-  primary: T[],
-  secondary: T[],
-): T[] {
-  const byId = new Map<string, T>();
-  for (const coworker of primary) byId.set(coworker.agentId, coworker);
-  for (const coworker of secondary) {
-    if (!byId.has(coworker.agentId)) byId.set(coworker.agentId, coworker);
-  }
-  return [...byId.values()].sort((left, right) => left.label.localeCompare(right.label));
-}
-
-function getActivationProfileType(value: unknown): string | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const profileType = (value as { profileType?: unknown }).profileType;
-  return typeof profileType === "string" ? profileType : null;
-}
-
-/**
- * Merge the recent-40 task-run window with the stalled-200 window,
- * keeping each cuid id once. Exported so the unit test can lock in the
- * dedup behavior — the AI Operations Map's correctness depends on a row
- * appearing exactly once in the projection set.
- *
- * Both inputs share the same row shape (the Prisma select clauses match).
- * Recent rows are inserted first, then stalled rows that haven't already
- * appeared — this keeps existing test snapshots stable and matches the
- * mental model "stalled is added on top of recent."
- */
-export function mergeTaskRunsDedupeById<T extends { id: string }>(
-  recent: T[],
-  stalled: T[],
-): T[] {
-  const seen = new Set<string>();
-  const merged: T[] = [];
-  for (const row of recent) {
-    if (seen.has(row.id)) continue;
-    seen.add(row.id);
-    merged.push(row);
-  }
-  for (const row of stalled) {
-    if (seen.has(row.id)) continue;
-    seen.add(row.id);
-    merged.push(row);
-  }
-  return merged;
-}
+export { mergeTaskRunsDedupeById, resolveEvidenceRange } from "./load-map-support";

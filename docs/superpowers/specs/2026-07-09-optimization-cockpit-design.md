@@ -53,6 +53,36 @@ architecture-parity baseline so duplication becomes a measurable conformance
 issue; BET-0d/0e route bets to WSID-profiled coworkers — they consume this
 registry and MUST NOT grow a parallel one.
 
+## BET-0b — consolidation bets as architecture-parity targets (BI-ED9AC5A6)
+
+Landed as `apps/web/lib/ea/consolidation-parity-steward.ts`:
+`runConsolidationParitySteward` reads the bet registry, joins live
+`BacklogItem` status, and reconciles one `eaConformanceIssue` per bet with
+outstanding delivery work (stable key `consolidation-parity:<betKey>`,
+severity = leverage: H→warn, M→info) through the shared
+`reconcileConformanceIssues` contract — so the issue auto-resolves the moment
+every item delivering the bet reaches a terminal state, and duplication is a
+measurable, drift-reducing conformance signal on the EA surface. A registry
+item id missing from the live backlog counts as outstanding drift (never a
+silent completion). It runs piggybacked on the scheduled SysML parity sweep
+(`agent-task-scheduler.ts`, `SYSML_PROJECTION_TASK_ID` branch) — no new
+cron/task surface.
+
+## BET-0e — weekly self-optimization sweep (BI-F95222FA)
+
+Landed as `apps/web/lib/optimization/self-optimization-sweep.ts` + the third
+deterministic scheduled task (`self-optimization-sweep-weekly`, config/seed in
+`packages/db/src/self-optimization-sweep-config.ts` /
+`seed-self-optimization-sweep.ts`, scheduler branch in
+`agent-task-scheduler.ts` — no LLM loop, mirroring the SysML/mirror tasks).
+Each run reconciles consolidation parity (BET-0b steward), re-measures bet
+blast radius via the cockpit loader, derives STALLED bets (outstanding with no
+in-progress item), and persists the summary to the platformConfig singleton
+(`optimization.selfSweep.lastRun`). The deep 8-way mining fan-out stays a
+session-scale activity; the sweep keeps its outputs honest between runs
+(plan §6 standing discipline). Kernel-scored: third-task shape, HIGH
+confidence, composite 9.76.
+
 ## Research & benchmarking
 
 Composition follows the in-repo precedents rather than external dashboards:

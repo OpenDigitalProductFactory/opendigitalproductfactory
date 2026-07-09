@@ -211,9 +211,11 @@ describe.each(ENGINES)("runManagedBackup — $spec.target", ({ spec, failLine, e
       status: "ok",
       trigger: "scheduled",
     });
+    // Duration is wall-clock; assert it was observed as a number, not a pinned
+    // 0 (a fast-but-nonzero run yields 0.001 and flakes).
     expect(spec.metrics.durationSeconds.observe).toHaveBeenCalledWith(
       { trigger: "scheduled" },
-      0,
+      expect.any(Number),
     );
     expect(spec.metrics.lastSuccessSeconds.set).toHaveBeenCalledWith(
       Math.floor(FIXED_NOW.getTime() / 1000),
