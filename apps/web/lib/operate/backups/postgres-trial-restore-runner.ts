@@ -29,6 +29,7 @@ import {
   TRIAL_RESTORE_DEFAULT_ASSERT_TABLES,
   TRIAL_RESTORE_TRIGGER,
 } from "./constants";
+import { recordJobHeartbeat } from "./managed-backup";
 import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 
 const BACKUPS_ROOT = "/backups";
@@ -181,22 +182,19 @@ export async function runPostgresTrialRestore(
 
   // Update the heartbeat row so the readiness card shows last-attempt-at
   // even when we skip (e.g., no eligible backup yet on a fresh install).
-  await prisma.scheduledJob
-    .update({
-      where: { jobId: POSTGRES_TRIAL_RESTORE_JOB_ID },
-      data: { lastRunAt: startedAt, lastStatus: "running", lastError: null },
-    })
-    .catch(() => {});
+  await recordJobHeartbeat(prisma, POSTGRES_TRIAL_RESTORE_JOB_ID, {
+    lastRunAt: startedAt,
+    lastStatus: "running",
+    lastError: null,
+  });
 
   const source = await findLatestEligibleBackup(prisma, backupsRoot);
   if (!source) {
     trialTraceLog("skip reason=no eligible backup found");
-    await prisma.scheduledJob
-      .update({
-        where: { jobId: POSTGRES_TRIAL_RESTORE_JOB_ID },
-        data: { lastStatus: "skipped", lastError: "no eligible backup" },
-      })
-      .catch(() => {});
+    await recordJobHeartbeat(prisma, POSTGRES_TRIAL_RESTORE_JOB_ID, {
+      lastStatus: "skipped",
+      lastError: "no eligible backup",
+    });
     return { status: "skipped", restoreId: null, reason: "no eligible backup found on disk" };
   }
 
@@ -278,16 +276,11 @@ export async function runPostgresTrialRestore(
       .catch(() => {});
   }
 
-  await prisma.scheduledJob
-    .update({
-      where: { jobId: POSTGRES_TRIAL_RESTORE_JOB_ID },
-      data: {
-        lastRunAt: startedAt,
-        lastStatus: finalStatus,
-        lastError: errorMessage,
-      },
-    })
-    .catch(() => {});
+  await recordJobHeartbeat(prisma, POSTGRES_TRIAL_RESTORE_JOB_ID, {
+    lastRunAt: startedAt,
+    lastStatus: finalStatus,
+    lastError: errorMessage,
+  });
 
   trialTraceLog(
     `run done status=${finalStatus} restoreId=${created.id} duration_ms=${durationMs}`,
