@@ -1,5 +1,6 @@
 import type { BusinessCapabilityNode } from "./data";
 import type { CapabilityOverlayMode, CapabilityOverlayTone } from "./types";
+import { CONSOLIDATION_BET_ITEM_IDS } from "@/lib/optimization/consolidation-bets";
 
 export type CapabilityEvidenceSummary = {
   taxonomyCount: number;
@@ -101,6 +102,46 @@ export function deriveCapabilityOverlayState(
       label: "Aligned without active work",
       shortLabel: "Aligned",
       description: "Capability is at target state and has no active backlog trace.",
+      sortWeight: 0,
+    };
+  }
+
+  if (mode === "optimization") {
+    // Backlog trace labels are `${itemId} ${title}` (see data.ts), so a
+    // capability is "in a consolidation bet's path" when a linked backlog
+    // item belongs to the EP-8DC217EB bet registry.
+    const betLinks = node.traceGroups.backlog_item.filter((link) =>
+      CONSOLIDATION_BET_ITEM_IDS.has(link.label.split(" ")[0] ?? ""),
+    );
+    const activeBetLinks = betLinks.filter(
+      (link) => link.status === "open" || link.status === "in-progress" || link.status === "triaging",
+    );
+
+    if (activeBetLinks.length > 0) {
+      return {
+        tone: "active",
+        label: `${activeBetLinks.length} active consolidation bet link${activeBetLinks.length === 1 ? "" : "s"}`,
+        shortLabel: `${activeBetLinks.length} bet${activeBetLinks.length === 1 ? "" : "s"}`,
+        description: "Capability is in the blast path of an in-flight consolidation bet.",
+        sortWeight: activeBetLinks.length + betLinks.length,
+      };
+    }
+
+    if (betLinks.length > 0) {
+      return {
+        tone: "covered",
+        label: `${betLinks.length} completed consolidation bet link${betLinks.length === 1 ? "" : "s"}`,
+        shortLabel: `${betLinks.length} done`,
+        description: "Linked consolidation work on this capability has completed.",
+        sortWeight: betLinks.length,
+      };
+    }
+
+    return {
+      tone: "neutral",
+      label: "No consolidation bet link",
+      shortLabel: "None",
+      description: "No EP-8DC217EB consolidation bet is traced to this capability.",
       sortWeight: 0,
     };
   }

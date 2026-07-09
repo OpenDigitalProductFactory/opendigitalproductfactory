@@ -35,6 +35,7 @@ export const CAPABILITY_OVERLAY_MODES = [
   { value: "coverage", label: "Operational Coverage" },
   { value: "planning", label: "Planning Impact" },
   { value: "it4it", label: "IT4IT Alignment" },
+  { value: "optimization", label: "Optimization Impact" },
 ] as const;
 
 export type It4itValueStream = (typeof IT4IT_VALUE_STREAMS)[number]["slug"];
