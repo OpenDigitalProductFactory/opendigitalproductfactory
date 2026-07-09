@@ -53,6 +53,23 @@ architecture-parity baseline so duplication becomes a measurable conformance
 issue; BET-0d/0e route bets to WSID-profiled coworkers — they consume this
 registry and MUST NOT grow a parallel one.
 
+## BET-0d — dispatch harness (BI-C350F8B0)
+
+Landed as `apps/web/lib/optimization/dispatch-bet.ts` +
+`dispatch_consolidation_bet` (pack `optimization`). Route: bet →
+primary profession (`bet-professions.ts`) → live coworker (profession
+registry `roles[]` walked in order against the Agent table) → each open,
+build-triaged backlog item promoted through the SAME governed core as
+`promote_to_build_studio` (`promoteBacklogItemToBuildDraft`: WIP cap
+re-checked per item, governed auto-approve, Ideate auto-dispatch).
+Ineligible items are reported with reasons (`not-open` /
+`not-triaged-build` / `already-has-active-build` / `promotion-error`),
+never silently dropped. Deliberately THIN per the cross-epic
+build-it-once rule: when the Inside-Out workflow primitive
+(BI-8E07CCA5 / BI-D80D16C4) lands, this harness becomes an instance of it.
+Kernel-scored shape: lib + one pack tool + third scheduled task for the
+sweep (HIGH confidence, composite 9.76, margin 0.35).
+
 ## Research & benchmarking
 
 Composition follows the in-repo precedents rather than external dashboards:
