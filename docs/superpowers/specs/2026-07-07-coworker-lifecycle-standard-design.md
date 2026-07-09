@@ -101,13 +101,20 @@ working while never/stale-certified. The `establish_coworker` MCP tool (actions
 `establish`/`promote`) is the factory door; it returns the code-side definition checklist the
 Phase 1 conformance gate enforces.
 
-### Phase 4 — Template, skill, docs (BI-14E4F9AF)
+### Phase 4 — Template, skill, docs (BI-14E4F9AF) — shipped 2026-07-09
 
 Coworker starter template (supersedes deferred HS-D716F1D52EB3E69F), a `dpf-establish-coworker`
 skill walking the factory door + certification, and the AGENTS.md lifecycle contract section.
 Convention backed by the gates, not by trust.
 
-## 3. The de-facto creation checklist (until Phases 3–4 replace it)
+As-built: skill at `packages/dpf-skill-pack/skills/dpf-establish-coworker/SKILL.md`
+(dual-surface); AGENTS.md §8 lifecycle contract; the door-returned checklist serves as the
+starter template (generated, so it cannot drift the way a static template file would).
+**With this, all four phases of the epic have shipped their first slices** — the lifecycle is
+enforced end to end: definition-conformance CI gate (#2696) → nightly behavioral certification
+(#2709) → summonability gating + factory door (#2718) → paved-road skill + contract (this PR).
+
+## 3. The de-facto creation checklist (superseded by the establish_coworker door + skill)
 
 A new coworker today touches, in order: `COWORKER_AGENT_SEEDS` → `HARDCODED_COWORKER_GRANTS`
 (keys must be honored by `TOOL_TO_GRANTS`) → `agent_registry.json` mirror (if EA/exec profile

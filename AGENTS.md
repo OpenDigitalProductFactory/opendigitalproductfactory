@@ -163,6 +163,15 @@ Every tool call writes to `ToolExecution` (`agentId`, `userId`, `toolName`, `par
 
 **Code graph first (mandatory for code work).** Before broad text search or any symbol-level blast-radius claim, consult the committed code graph the way Build Studio agents already do: call `get_code_graph_freshness`, then `search_code_graph` / `trace_code_surface` to locate symbols, routes, Prisma models, MCP tools, and prompt sources, and confirm exact code with `read_project_file`; call `find_related_tests` for changed source files. **Do not assert symbol-level blast radius unless `trace_code_surface` returns structural edges.** `get_code_graph_freshness` reports index staleness and a dirty workspace; when the graph is stale or a result is empty, fall back to grep + file reads. This discipline is wired into the Build Studio agent prompts (`apps/web/lib/integrate/build-agent-prompts.ts`) — it applies identically to direct Claude Code / Codex / Grok sessions, which otherwise never learn the graph exists.
 
+**Coworker lifecycle contract (mandatory for new AI coworkers).** A coworker's lifecycle is `draft → defined → certified → active`, and it is enforced, not conventional (EP-COWORKER-LIFECYCLE; spec: `docs/superpowers/specs/2026-07-07-coworker-lifecycle-standard-design.md`):
+
+1. **Create only through the factory door** — the `establish_coworker` MCP tool (`action: "establish"`) creates the draft Agent row + grants + model floor + principal, and returns the definition checklist. Never create an Agent row by hand or in an ad-hoc seed; that recreates the multi-population drift this lifecycle closed. Draft coworkers are NOT summonable — the lifecycle gate (`apps/web/lib/coworker-lifecycle/lifecycle-gate.ts`) blocks them at chat, scheduled/autonomous dispatch, and summon/handoff.
+2. **Complete the definition via PR** — roster entry, durable grants map, route binding + sensitivity mirror, model floor, profession family (the checklist the door returns). The coworker-definition conformance gate in the required Unit Tests job fails on any missing axis; do not extend its baseline for a new coworker.
+3. **Earn certification** — the nightly golden-journey sweep (`ops/coworker-certification-nightly`; run-now event `ops/coworker-certification.requested`) exercises every roster coworker through the real execution path with evidence-based oracles; results surface on the workforce roster.
+4. **Promote** — `establish_coworker` `action: "promote"` flips draft → production only when the definition landed AND a passing certification exists.
+
+The paved-road walkthrough is the `dpf-establish-coworker` skill (`packages/dpf-skill-pack/skills/dpf-establish-coworker/SKILL.md`).
+
 ## 9. External Tools
 
 → [kernel principle](docs/founder-kernel/wiki/principles/tool-evaluation-pipeline.md)
