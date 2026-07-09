@@ -106,6 +106,9 @@ describe("agent coworker thread scoping", () => {
           createdAt: "2026-03-14T10:00:00.000Z",
         },
       ],
+      // BI-DED493BA: briefing is best-effort — with no attention mocks wired
+      // in this scoping test it degrades to null rather than failing the load.
+      openingBriefing: null,
     });
   });
 

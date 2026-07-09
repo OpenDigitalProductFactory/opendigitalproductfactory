@@ -4,7 +4,10 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 import { validateMessageInput } from "@/lib/agent-coworker-types";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
-import { generateCannedResponse } from "@/lib/agent-routing";
+import { generateCannedResponse, resolveAgentForRoute } from "@/lib/agent-routing";
+import { composeOpeningBriefing } from "@/lib/agent/opening-briefing";
+import type { OpeningBriefingPayload } from "@/lib/agent/opening-briefing";
+import { loadAttentionItems, filterAttentionForAudience } from "@/lib/attention/aggregate";
 import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
 import { serializeMessage, loadProviderInfo } from "@/lib/agent-coworker-data";
 import {
@@ -356,7 +359,11 @@ export async function getThreadSnapshotById(input: {
 
 export async function getOrCreateThreadSnapshot(input: {
   routeContext: string;
-}): Promise<{ threadId: string; messages: AgentMessageRow[] } | null> {
+}): Promise<{
+  threadId: string;
+  messages: AgentMessageRow[];
+  openingBriefing?: OpeningBriefingPayload | null;
+} | null> {
   const user = await requireUser();
 
   // Verify user exists in DB (JWT may reference a stale user after re-seed)
@@ -396,10 +403,56 @@ export async function getOrCreateThreadSnapshot(input: {
 
   // BI-1D0B5308: attach per-turn provider/model attribution on initial load.
   const providerInfo = await loadProviderInfo(messages);
+
+  // BI-DED493BA: proactive on-load briefing — the panel must not open silent.
+  // Best-effort: a briefing failure never breaks thread load.
+  const openingBriefing = await buildOpeningBriefingPayload(user, input.routeContext).catch(
+    () => null,
+  );
+
   return {
     threadId: thread.id,
     messages: messages.reverse().map((m) => serializeMessage(m, undefined, providerInfo.get(m.id))),
+    openingBriefing,
   };
+}
+
+/**
+ * Compose the ephemeral opening briefing for a panel load (BI-DED493BA).
+ * Deterministic — grounded in the attention read-model, no LLM call — and
+ * gated by the employee's Proactivity choice for the route's coworker
+ * (quiet = silent; balanced = speak when something needs the human;
+ * assertive = always present). Kernel decision: deterministic-ephemeral-
+ * briefing; the row is returned to the client but never written to the
+ * thread, so it is recomputed fresh on every open and cannot go stale.
+ */
+async function buildOpeningBriefingPayload(
+  user: Awaited<ReturnType<typeof requireUser>>,
+  routeContext: string,
+): Promise<OpeningBriefingPayload | null> {
+  const useUnified = await isUnifiedCoworkerEnabled();
+  const agent = resolveAgentForRoute(
+    routeContext,
+    { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
+    useUnified,
+  );
+
+  const proactivityLevel = agent.agentId
+    ? await getCoworkerProactivityPreference(agent.agentId).catch(() => null)
+    : null;
+  // Quiet means quiet — skip the attention fan-out entirely.
+  if ((proactivityLevel ?? "balanced") === "quiet") return null;
+
+  const { items } = await loadAttentionItems(prisma, { aiReadinessUserId: user.id });
+  // V1 operator-view, matching /workspace/inbox; worker scoping is BI-AS-4.
+  const visible = filterAttentionForAudience(items, { operator: true });
+
+  const briefing = composeOpeningBriefing({
+    routeContext,
+    proactivityLevel,
+    items: visible,
+  });
+  return briefing ? { content: briefing.content, agentId: agent.agentId ?? null } : null;
 }
 
 export async function getOrCreateThread(input?: {
