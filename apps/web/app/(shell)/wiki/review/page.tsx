@@ -5,7 +5,7 @@
 // plain-language action. Server component; queries Prisma directly.
 
 import Link from "next/link";
-import { prisma } from "@dpf/db";
+import { prisma, Prisma } from "@dpf/db";
 
 import {
   buildReviewFindings,
@@ -13,6 +13,7 @@ import {
   type GapCluster,
   type ReviewFinding,
 } from "@/lib/wiki/decision-review-findings";
+import { GapAnswerForm } from "./gap-answer-form";
 
 export const dynamic = "force-dynamic";
 
@@ -36,49 +37,72 @@ const CLASS_ACCENT: Record<ReviewFinding["findingClass"], string> = {
 };
 
 function toGapClusters(
-  rows: { domainClass: string; question: string }[],
+  rows: { domainClass: string; question: string; profileId: string }[],
+  orgProfileId: string | null,
 ): GapCluster[] {
-  const byDomain = new Map<string, { count: number; sampleQuestion: string }>();
+  const byDomain = new Map<
+    string,
+    { count: number; sampleQuestion: string; scope: "org" | "kernel" }
+  >();
   for (const row of rows) {
+    const scope: "org" | "kernel" =
+      orgProfileId && row.profileId === orgProfileId ? "org" : "kernel";
     const existing = byDomain.get(row.domainClass);
     if (existing) {
       existing.count += 1;
+      // A domain is answerable if any of its deferrals were the org's own call.
+      if (scope === "org") existing.scope = "org";
     } else {
-      byDomain.set(row.domainClass, { count: 1, sampleQuestion: row.question });
+      byDomain.set(row.domainClass, {
+        count: 1,
+        sampleQuestion: row.question,
+        scope,
+      });
     }
   }
   return [...byDomain.entries()].map(([domainClass, v]) => ({
     domainClass,
     count: v.count,
     sampleQuestion: v.sampleQuestion,
+    scope: v.scope,
   }));
 }
 
 export default async function DecisionReviewPage() {
-  const [conflictRows, unresolvedRows, staleCount] = await Promise.all([
-    prisma.decisionInteraction.findMany({
-      where: { principleConflict: true },
-      orderBy: { createdAt: "desc" },
-      take: 25,
-      select: {
-        interactionId: true,
-        question: true,
-        riskTier: true,
-        createdAt: true,
-      },
-    }),
-    prisma.decisionInteraction.findMany({
-      where: { outcomeType: { in: UNRESOLVED } },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-      select: { domainClass: true, question: true },
-    }),
-    prisma.perspectiveMaterial.count({ where: { freshness: "stale" } }),
-  ]);
+  const [conflictRows, unresolvedRows, staleCount, orgProfile] =
+    await Promise.all([
+      prisma.decisionInteraction.findMany({
+        where: { principleConflict: true },
+        orderBy: { createdAt: "desc" },
+        take: 25,
+        select: {
+          interactionId: true,
+          question: true,
+          riskTier: true,
+          createdAt: true,
+        },
+      }),
+      prisma.decisionInteraction.findMany({
+        // Only rows the operator hasn't already answered (humanOutcome null) —
+        // once answered via the loop below they resolve and drop off.
+        where: {
+          outcomeType: { in: UNRESOLVED },
+          humanOutcome: { equals: Prisma.DbNull },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+        select: { domainClass: true, question: true, profileId: true },
+      }),
+      prisma.perspectiveMaterial.count({ where: { freshness: "stale" } }),
+      prisma.decisionPerspectiveProfile.findFirst({
+        where: { kind: "organization" },
+        select: { profileId: true },
+      }),
+    ]);
 
   const findings = buildReviewFindings({
     conflicts: conflictRows as ConflictRow[],
-    gapClusters: toGapClusters(unresolvedRows),
+    gapClusters: toGapClusters(unresolvedRows, orgProfile?.profileId ?? null),
     staleMaterial: { count: staleCount },
   });
 
@@ -134,15 +158,23 @@ export default async function DecisionReviewPage() {
                     {f.postureLabel}
                   </span>
                 )}
-                <Link
-                  href={f.actionHref}
-                  className="rounded-md border border-[var(--dpf-border)] px-2.5 py-1 text-xs text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] shrink-0"
-                >
-                  {f.actionLabel} →
-                </Link>
+                {!f.answer && (
+                  <Link
+                    href={f.actionHref}
+                    className="rounded-md border border-[var(--dpf-border)] px-2.5 py-1 text-xs text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] shrink-0"
+                  >
+                    {f.actionLabel} →
+                  </Link>
+                )}
               </div>
               {f.detail && (
                 <p className="text-xs text-[var(--dpf-muted)] mt-1.5 ml-1">{f.detail}</p>
+              )}
+              {f.answer && (
+                <GapAnswerForm
+                  domainClass={f.answer.domainClass}
+                  question={f.answer.question}
+                />
               )}
             </li>
           ))}

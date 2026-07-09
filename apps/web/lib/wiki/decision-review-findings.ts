@@ -31,6 +31,15 @@ export type ReviewFinding = {
   actionLabel: string;
   /** Where the action goes (e.g. the review queue, the stance editor). */
   actionHref: string;
+  /**
+   * When set, the finding is answerable inline: the operator answers the
+   * representative question once on /wiki/review and it flows through the qa
+   * enricher (the record_org_business_answer path) into the org's WWWD corpus
+   * as draft — closing the ask-when-silent loop instead of dead-ending at the
+   * manual stance editor. Only org-business gaps (the org's own profile) are
+   * answerable; kernel/WWMD gaps keep the stance-editor action.
+   */
+  answer?: { domainClass: string; question: string };
 };
 
 /** A single gate decision the ledger flagged as a principle conflict. */
@@ -47,6 +56,12 @@ export type GapCluster = {
   count: number;
   /** A representative question from the cluster, for human context. */
   sampleQuestion: string;
+  /**
+   * "org" when the deferrals were recorded against the organization's own WWWD
+   * profile (the org was silent on a business call) — answerable inline. "kernel"
+   * for platform/WWMD deferrals, which route to the stance editor as before.
+   */
+  scope: "org" | "kernel";
 };
 
 /** How much decision material has aged out of its freshness window but still governs. */
@@ -88,18 +103,38 @@ export function buildConflictFindings(rows: ConflictRow[]): ReviewFinding[] {
 export function buildGapFindings(clusters: GapCluster[]): ReviewFinding[] {
   return clusters
     .filter((c) => c.count > 0)
-    .map((cluster) => ({
-      id: `gap:${cluster.domainClass}`,
-      findingClass: "gap",
-      title: `No settled answer for ${humanDomain(cluster.domainClass)}`,
-      detail: truncate(cluster.sampleQuestion),
-      postureLabel:
-        cluster.count === 1 ? "1 unresolved" : `${cluster.count} unresolved`,
-      count: cluster.count,
-      href: null,
-      actionLabel: "Add a stance",
-      actionHref: "/wiki/stance",
-    }));
+    .map((cluster) => {
+      const base = {
+        id: `gap:${cluster.domainClass}`,
+        findingClass: "gap" as const,
+        detail: truncate(cluster.sampleQuestion),
+        postureLabel:
+          cluster.count === 1 ? "1 unresolved" : `${cluster.count} unresolved`,
+        count: cluster.count,
+        href: null,
+      };
+      if (cluster.scope === "org") {
+        // The org itself is silent here — invite a one-time answer that feeds
+        // the qa enricher, rather than sending the operator to hand-author a
+        // whole stance. This is the ask-when-silent loop closing (BI-3AAB96E9).
+        return {
+          ...base,
+          title: `Your business hasn't weighed in on ${humanDomain(cluster.domainClass)}`,
+          actionLabel: "Answer this once",
+          actionHref: "",
+          answer: {
+            domainClass: cluster.domainClass,
+            question: cluster.sampleQuestion,
+          },
+        };
+      }
+      return {
+        ...base,
+        title: `No settled answer for ${humanDomain(cluster.domainClass)}`,
+        actionLabel: "Add a stance",
+        actionHref: "/wiki/stance",
+      };
+    });
 }
 
 export function buildStalenessFindings(
