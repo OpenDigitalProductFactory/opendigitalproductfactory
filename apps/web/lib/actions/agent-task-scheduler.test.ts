@@ -48,6 +48,7 @@ const mocks = vi.hoisted(() => ({
   governedExecuteTool: vi.fn(),
   runArchitectureParitySteward: vi.fn(),
   runConsolidationParitySteward: vi.fn(),
+  runSelfOptimizationSweep: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
@@ -59,6 +60,7 @@ vi.mock("@dpf/db", () => ({
   // these tests use the mirror task id, so any non-matching value is fine.
   DATA_MODEL_MIRROR_TASK_ID: "data-model-mirror-nightly",
   SYSML_PROJECTION_TASK_ID: "sysml-projection-nightly",
+  SELF_OPTIMIZATION_SWEEP_TASK_ID: "self-optimization-sweep-weekly",
 }));
 vi.mock("@/lib/tak/agent-routing-server", () => ({
   resolveAgentForRouteWithPrompts: mocks.resolveAgentForRouteWithPrompts,
@@ -80,6 +82,9 @@ vi.mock("@/lib/ea/architecture-parity-steward", () => ({
 }));
 vi.mock("@/lib/ea/consolidation-parity-steward", () => ({
   runConsolidationParitySteward: mocks.runConsolidationParitySteward,
+}));
+vi.mock("@/lib/optimization/self-optimization-sweep", () => ({
+  runSelfOptimizationSweep: mocks.runSelfOptimizationSweep,
 }));
 
 import { executeScheduledAgentTask, scheduleAgentTask } from "./agent-task-scheduler";
@@ -1021,5 +1026,57 @@ describe("scheduleAgentTask UTC-only timezone", () => {
       error: expect.stringMatching(/Non-UTC timezones are not yet supported/),
     });
     expect(mocks.prisma.scheduledAgentTask.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("executeScheduledAgentTask — self-optimization sweep branch", () => {
+  it("runs the deterministic sweep directly (no LLM loop) and records ok status", async () => {
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: "self-optimization-sweep-weekly",
+      isActive: true,
+      schedule: "0 5 * * 1",
+    });
+    mocks.runSelfOptimizationSweep.mockResolvedValue({
+      ranAt: "2026-07-09T05:00:00.000Z",
+      graphAvailable: true,
+      outstandingBets: ["BET-11"],
+      completedBets: ["BET-6"],
+      stalledBets: [],
+      parity: { created: 0, updated: 0, resolved: 0 },
+      blastRadius: { implementationFileCount: 1, relatedTestCount: 1 },
+    });
+    mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
+    mocks.prisma.scheduledJob.update.mockResolvedValue({});
+
+    await executeScheduledAgentTask("self-optimization-sweep-weekly");
+
+    expect(mocks.runSelfOptimizationSweep).toHaveBeenCalledOnce();
+    expect(mocks.runAgenticLoop).not.toHaveBeenCalled();
+    expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { taskId: "self-optimization-sweep-weekly" },
+        data: expect.objectContaining({ lastStatus: "ok", lastError: null }),
+      }),
+    );
+  });
+
+  it("records error status when the sweep throws", async () => {
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: "self-optimization-sweep-weekly",
+      isActive: true,
+      schedule: "0 5 * * 1",
+    });
+    mocks.runSelfOptimizationSweep.mockRejectedValue(new Error("graph store down"));
+    mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
+    mocks.prisma.scheduledJob.update.mockResolvedValue({});
+
+    await executeScheduledAgentTask("self-optimization-sweep-weekly");
+
+    expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { taskId: "self-optimization-sweep-weekly" },
+        data: expect.objectContaining({ lastStatus: "error", lastError: "graph store down" }),
+      }),
+    );
   });
 });
