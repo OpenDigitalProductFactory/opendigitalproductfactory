@@ -4,17 +4,17 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     storefrontConfig: { findFirst: vi.fn() },
     agent: { findMany: vi.fn() },
-    taskRun: { findMany: vi.fn() },
-    toolExecution: { findMany: vi.fn() },
+    taskRun: { findMany: vi.fn(), aggregate: vi.fn() },
+    toolExecution: { findMany: vi.fn(), aggregate: vi.fn() },
     toolExecutionReceipt: { findMany: vi.fn() },
     backlogItemActivity: { findMany: vi.fn() },
     externalEvidenceRecord: { findMany: vi.fn() },
-    routeDecisionLog: { findMany: vi.fn() },
-    routeOutcome: { findMany: vi.fn() },
+    routeDecisionLog: { findMany: vi.fn(), aggregate: vi.fn() },
+    routeOutcome: { findMany: vi.fn(), aggregate: vi.fn() },
     agentMessage: { findMany: vi.fn() },
     modelProvider: { findMany: vi.fn() },
     modelProfile: { findMany: vi.fn() },
-    tokenUsage: { findMany: vi.fn() },
+    tokenUsage: { findMany: vi.fn(), aggregate: vi.fn() },
     scheduledAgentTask: { findMany: vi.fn() },
     scheduledJob: { findMany: vi.fn() },
     delegationChain: { findMany: vi.fn() },
@@ -134,10 +134,18 @@ describe("AI operations map page", () => {
     vi.mocked(prisma.phaseHandoff.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.deliberationRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
+    const emptyCreatedBounds = { _min: { createdAt: null }, _max: { createdAt: null } };
+    vi.mocked(prisma.routeDecisionLog.aggregate).mockResolvedValue(emptyCreatedBounds as never);
+    vi.mocked(prisma.tokenUsage.aggregate).mockResolvedValue(emptyCreatedBounds as never);
+    vi.mocked(prisma.routeOutcome.aggregate).mockResolvedValue(emptyCreatedBounds as never);
+    vi.mocked(prisma.toolExecution.aggregate).mockResolvedValue(emptyCreatedBounds as never);
+    vi.mocked(prisma.taskRun.aggregate).mockResolvedValue({ _min: { startedAt: null }, _max: { startedAt: null } } as never);
 
     const { default: OperationsMapPage } = await import("./page");
     const element = await OperationsMapPage();
-    const props = element.props;
+    // The page now renders the live-refresh shell (BI-44D3203D); the loaded
+    // snapshot arrives as its initialData prop.
+    const props = element.props.initialData;
 
     expect(props.template.label).toBe("Generic Value Chain");
     expect(props.template.stations.map((station: { label: string }) => station.label)).toContain("Demand");
