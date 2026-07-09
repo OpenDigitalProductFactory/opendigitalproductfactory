@@ -73,6 +73,7 @@ import {
   coworkerCertificationNightly,
   coworkerCertificationRunNow,
 } from "./coworker-certification";
+import { memoryConsolidationNightly } from "./memory-consolidation-nightly";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 export const scheduledFunctions = [
@@ -116,6 +117,7 @@ export const scheduledFunctions = [
   remoteActionClaimTimeout,   // EP-REMOTE-ACTION P2: time out stale claimed RemoteActions so the pull queue can't wedge, every 10m (flag-gated)
   coworkerCertificationNightly, // EP-COWORKER-LIFECYCLE P2 (BI-DE9CC88B): nightly golden-journey certification of every roster coworker, 04:40
   canonicalImprovementDigest, // BI-8996BBBB: weekly [reference-doc] proposal digest -> canonical-source chore BI
+  memoryConsolidationNightly, // BI-907C4327: EP-8C706944 P2 autoDream — nightly batch-dedupe + expire coworker notes / user facts, 04:20
 ];
 
 export const eventFunctions = [
