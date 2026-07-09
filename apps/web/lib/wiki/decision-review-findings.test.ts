@@ -19,6 +19,7 @@ const gap: GapCluster = {
   domainClass: "vendor-selection",
   count: 9,
   sampleQuestion: "Which observability vendor should we standardize on?",
+  scope: "kernel",
 };
 
 describe("buildConflictFindings", () => {
@@ -49,10 +50,35 @@ describe("buildGapFindings", () => {
   it("drops empty clusters and singularizes a lone unresolved", () => {
     const findings = buildGapFindings([
       { ...gap, count: 0 },
-      { domainClass: "pricing", count: 1, sampleQuestion: "q" },
+      { domainClass: "pricing", count: 1, sampleQuestion: "q", scope: "kernel" },
     ]);
     expect(findings).toHaveLength(1);
     expect(findings[0].postureLabel).toBe("1 unresolved");
+  });
+
+  it("makes an org-scoped gap answerable inline instead of routing to the stance editor", () => {
+    const [f] = buildGapFindings([
+      {
+        domainClass: "risk-assessment",
+        count: 3,
+        sampleQuestion: "Should we waive a lapsed fee after our own billing error?",
+        scope: "org",
+      },
+    ]);
+    expect(f.title).toBe("Your business hasn't weighed in on risk assessment");
+    expect(f.actionLabel).toBe("Answer this once");
+    expect(f.answer).toEqual({
+      domainClass: "risk-assessment",
+      question: "Should we waive a lapsed fee after our own billing error?",
+    });
+    // Answerable findings carry no stance-editor link.
+    expect(f.actionHref).toBe("");
+  });
+
+  it("leaves kernel/WWMD gaps pointing at the manual stance editor", () => {
+    const [f] = buildGapFindings([gap]);
+    expect(f.answer).toBeUndefined();
+    expect(f.actionHref).toBe("/wiki/stance");
   });
 });
 
@@ -61,7 +87,7 @@ describe("buildReviewFindings", () => {
     const findings = buildReviewFindings({
       conflicts: [conflict],
       gapClusters: [
-        { domainClass: "small", count: 2, sampleQuestion: "q" },
+        { domainClass: "small", count: 2, sampleQuestion: "q", scope: "kernel" },
         gap, // count 9
       ],
     });

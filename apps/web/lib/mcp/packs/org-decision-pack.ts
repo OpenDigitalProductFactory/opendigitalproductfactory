@@ -157,7 +157,7 @@ async function recordOrgBusinessAnswer(
   userId: string,
   agentId?: string | null,
 ): Promise<ToolResult> {
-  const { enrichOrgCorpus } = await import("@/lib/wiki/enrich-org-corpus");
+  const { captureOrgBusinessAnswer } = await import("@/lib/wiki/capture-org-answer");
   const { createProductionInference } = await import("@/lib/wiki/inference-adapter");
   const { prisma } = await import("@dpf/db");
 
@@ -176,12 +176,11 @@ async function recordOrgBusinessAnswer(
   }
 
   try {
-    const result = await enrichOrgCorpus({
+    const result = await captureOrgBusinessAnswer({
       organizationId: org.id,
-      text: `Question: ${question}\n\nConfirmed answer: ${answer}`,
-      title: topic || question,
-      provenance: { sourceType: "qa", sourceRef: { question, askedBy: userId } },
-      trust: "first-party",
+      question,
+      answer,
+      topic,
       agentId: agentId ?? null,
       userId,
       infer: createProductionInference({ taskType: "wiki_proposal" }),
