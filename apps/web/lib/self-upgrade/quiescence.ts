@@ -20,6 +20,7 @@
 import { prisma } from "@dpf/db";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 
 // ─── Quiescence level — runtime state, hot-read by middleware + gates ────
 
@@ -270,7 +271,7 @@ export async function heartbeatQuiescenceRun(
  */
 export async function flipActiveTaskRunsToQuiescing(now: Date = new Date()): Promise<number> {
   const result = await prisma.taskRun.updateMany({
-    where: { status: { in: ["working", "active"] } },
+    where: { status: { in: [...TASK_LIVE_STATES] } },
     data: { status: "quiescing", quiescedAt: now },
   });
   return result.count;
@@ -965,7 +966,7 @@ export async function captureActiveSessionBlockers(opts?: {
 
   // A-class: coworker reasoning loops (TaskRun in working/active)
   const activeTaskRuns = await prisma.taskRun.findMany({
-    where: { status: { in: ["working", "active"] } },
+    where: { status: { in: [...TASK_LIVE_STATES] } },
     select: {
       taskRunId: true,
       title: true,
@@ -1023,7 +1024,7 @@ export async function captureActiveSessionBlockers(opts?: {
     // transition (e.g. the stall watchdog racing this capture).
     try {
       await prisma.taskRun.updateMany({
-        where: { taskRunId: { in: reapedTaskRuns }, status: { in: ["working", "active"] } },
+        where: { taskRunId: { in: reapedTaskRuns }, status: { in: [...TASK_LIVE_STATES] } },
         data: { status: "stalled", completedAt: now },
       });
     } catch (err) {

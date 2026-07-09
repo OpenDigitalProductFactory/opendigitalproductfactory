@@ -24,7 +24,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { TASK_IN_FLIGHT_STATES, TASK_STATES, type TaskState } from "./task-states";
+import {
+  TASK_IN_FLIGHT_STATES,
+  TASK_LIVE_STATES,
+  TASK_STATES,
+  isLiveStatus,
+  type TaskState,
+} from "./task-states";
 
 const QUIESCENCE_STATES = [
   "quiescing",
@@ -94,6 +100,10 @@ describe("watchdog active-set assumption (spec §5.7)", () => {
     // The list is duplicated here intentionally (mirrors the SQL); the
     // test's purpose is to catch the SQL drift, not import from it.
     const watchdogActiveSet = ["working", "active"];
+    // BI-B6157FB7 (BET-10): that duplicated set is now the shared
+    // TASK_LIVE_STATES constant — assert they stay identical so the constant
+    // and the (still hardcoded) watchdog SQL cannot silently diverge.
+    expect([...TASK_LIVE_STATES]).toEqual(watchdogActiveSet);
     for (const value of watchdogActiveSet) {
       // 'working' is in TASK_STATES; 'active' is legacy and intentionally
       // NOT in TASK_STATES (it's only ever written by unmigrated paths).
@@ -105,6 +115,27 @@ describe("watchdog active-set assumption (spec §5.7)", () => {
     // None of the quiescence values may appear in this set.
     for (const state of QUIESCENCE_STATES) {
       expect(watchdogActiveSet).not.toContain(state);
+    }
+  });
+});
+
+describe("TASK_LIVE_STATES / isLiveStatus (BI-B6157FB7)", () => {
+  it("is exactly the working/active liveness set", () => {
+    expect([...TASK_LIVE_STATES]).toEqual(["working", "active"]);
+  });
+
+  it("isLiveStatus matches only the live states", () => {
+    expect(isLiveStatus("working")).toBe(true);
+    expect(isLiveStatus("active")).toBe(true);
+    expect(isLiveStatus("quiescing")).toBe(false);
+    expect(isLiveStatus("stalled")).toBe(false);
+    expect(isLiveStatus(null)).toBe(false);
+    expect(isLiveStatus(undefined)).toBe(false);
+  });
+
+  it("excludes every quiescence value (drain semantics regression)", () => {
+    for (const state of QUIESCENCE_STATES) {
+      expect(isLiveStatus(state)).toBe(false);
     }
   });
 });

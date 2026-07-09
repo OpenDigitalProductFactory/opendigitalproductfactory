@@ -8,6 +8,7 @@
  * See docs/superpowers/specs/2026-05-19-build-studio-stall-detection.md §5.7, §5.8.
  */
 import type { ResolvedThreshold } from "./threshold-lookup";
+import { isStale } from "./staleness";
 
 export interface WatchdogCandidate {
   taskRunId: string;
@@ -42,18 +43,17 @@ export function decideStall(
   threshold: ResolvedThreshold,
   now: Date,
 ): StallDecision | null {
-  const ageMs = now.getTime() - candidate.startedAt.getTime();
-  if (ageMs > threshold.totalPhaseTimeoutSeconds * 1000) {
+  if (isStale(now, candidate.startedAt, threshold.totalPhaseTimeoutSeconds * 1000)) {
     return { candidate, threshold, reason: "total_timeout" };
   }
+  const heartbeatMs = threshold.heartbeatTimeoutSeconds * 1000;
   if (candidate.lastHeartbeatAt === null) {
-    if (ageMs > threshold.heartbeatTimeoutSeconds * 1000) {
+    if (isStale(now, candidate.startedAt, heartbeatMs)) {
       return { candidate, threshold, reason: "never_started" };
     }
     return null;
   }
-  const silenceMs = now.getTime() - candidate.lastHeartbeatAt.getTime();
-  if (silenceMs > threshold.heartbeatTimeoutSeconds * 1000) {
+  if (isStale(now, candidate.lastHeartbeatAt, heartbeatMs)) {
     return { candidate, threshold, reason: "heartbeat_timeout" };
   }
   return null;

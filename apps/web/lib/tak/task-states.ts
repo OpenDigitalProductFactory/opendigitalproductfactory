@@ -41,3 +41,21 @@ export const TASK_IN_FLIGHT_STATES = [
   "input-required",
   "auth-required",
 ] as const satisfies readonly TaskState[];
+
+// The "loop is actively executing and heartbeating" set — the states the
+// stall watchdog, quiescence flip, inert-build reaper and heartbeat filter all
+// query as `status IN (...)`. This literal was hand-copied to 6 sites
+// (BI-B6157FB7, EP-8DC217EB BET-10); this is its single home. `"active"` is a
+// LEGACY value that predates the closed TASK_STATES enum (it is intentionally
+// NOT a TaskState) but still exists on old rows and in the heartbeat SQL, so
+// the liveness query must keep matching it — hence a plain string tuple, not
+// `satisfies readonly TaskState[]`. Distinct from TASK_IN_FLIGHT_STATES, which
+// is the broader "scheduling in-flight" set (adds submitted/input/auth).
+export const TASK_LIVE_STATES = ["working", "active"] as const;
+
+export type TaskLiveState = (typeof TASK_LIVE_STATES)[number];
+
+/** True when a status means the loop is live and expected to heartbeat. */
+export function isLiveStatus(status: string | null | undefined): boolean {
+  return status === "working" || status === "active";
+}

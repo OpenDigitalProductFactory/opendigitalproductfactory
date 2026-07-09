@@ -18,6 +18,7 @@
  * See docs/superpowers/specs/2026-05-19-build-studio-stall-detection.md §5.6, §6.1.
  */
 import { prisma } from "@dpf/db";
+import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 import { resolveThresholdForTaskRun } from "./threshold-lookup";
 
 export async function heartbeat(taskRunId: string): Promise<boolean> {
@@ -31,7 +32,7 @@ export async function heartbeat(taskRunId: string): Promise<boolean> {
   // haven't been migrated). The watchdog uses the same dual-state filter.
   try {
     const result = await prisma.taskRun.updateMany({
-      where: { taskRunId, status: { in: ["working", "active"] } },
+      where: { taskRunId, status: { in: [...TASK_LIVE_STATES] } },
       data: { lastHeartbeatAt: new Date() },
     });
     return result.count > 0;
