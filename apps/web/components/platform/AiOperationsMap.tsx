@@ -51,12 +51,29 @@ type SelectedItem =
   | { kind: "agent"; id: string }
   | { kind: "projection"; id: string };
 
+export type OperationsMapEvidenceRange = {
+  earliest: string | null;
+  latest: string | null;
+};
+
 type Props = {
   template: OperationsMapTemplate;
   agents: StationedOperationsMapAgent[];
   projections: OperationsMapProjection[];
   routingTopology: OperationsMapRoutingTopology;
   recentWindowLabel: string;
+  /**
+   * Global evidence bounds (window-independent). When provided, the replay
+   * timeline anchors its base range to these instead of only the loaded
+   * events, so a windowed refetch can't shrink the scrubber, and a
+   * "data begins" boundary marker renders at the earliest timestamp.
+   */
+  evidenceRange?: OperationsMapEvidenceRange | null;
+  /**
+   * Publishes the provider panel's visible replay window upward (live-shell
+   * refresh loop, BI-44D3203D) alongside the existing internal A2A share.
+   */
+  onReplayWindowChange?: (window: { time: number; start: number; end: number }) => void;
 };
 
 const SEVERITY_CLASS: Record<OperationsMapProjection["severity"], string> = {
@@ -206,7 +223,7 @@ const PROVIDER_LOGO_MATCHERS: Array<{ match: RegExp; logo: ProviderLogoDefinitio
   { match: /portkey/, logo: { key: "portkey", mark: "P", wordmark: "Portkey" } },
 ];
 
-export function AiOperationsMap({ template, agents, projections, routingTopology, recentWindowLabel }: Props) {
+export function AiOperationsMap({ template, agents, projections, routingTopology, recentWindowLabel, evidenceRange, onReplayWindowChange }: Props) {
   const [selected, setSelected] = useState<SelectedItem>({ kind: "station", id: template.stations[0]?.id ?? "" });
   const [activeQuickViewId, setActiveQuickViewId] = useState<OperationsMapStoredQuickViewId>(
     DEFAULT_QUICK_VIEW_ID,
@@ -261,8 +278,11 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
   // publishes its playhead here so the A2A interaction band scrubs in step.
   const [sharedReplay, setSharedReplay] = useState<{ time: number; range: RoutingTimelineRange } | null>(null);
   const handleReplayChange = useCallback(
-    (time: number, range: RoutingTimelineRange) => setSharedReplay({ time, range }),
-    [],
+    (time: number, range: RoutingTimelineRange) => {
+      setSharedReplay({ time, range });
+      onReplayWindowChange?.({ time, start: range.start, end: range.end });
+    },
+    [onReplayWindowChange],
   );
 
   // Stage D temporary preview switch: render the unified OperationsTopologyCanvas
@@ -391,6 +411,7 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
         {showProvider ? (
           <RoutingTopologyPanel
             routingTopology={routingTopology}
+            evidenceRange={evidenceRange ?? null}
             onReplayChange={handleReplayChange}
             onControlFilterChange={handleRoutingControlChange}
           />
@@ -604,10 +625,12 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
 
 function RoutingTopologyPanel({
   routingTopology,
+  evidenceRange,
   onReplayChange,
   onControlFilterChange,
 }: {
   routingTopology: OperationsMapRoutingTopology;
+  evidenceRange?: OperationsMapEvidenceRange | null;
   onReplayChange?: (selectedTime: number, range: RoutingTimelineRange) => void;
   onControlFilterChange?: (criteria: RoutingControlCriteria) => void;
 }) {
@@ -625,7 +648,11 @@ function RoutingTopologyPanel({
   const [symbolDetailAnchor, setSymbolDetailAnchor] = useState<RoutingSymbolAnchor | null>(null);
   const zoomLevel = ROUTING_ZOOM_LEVELS[zoomIndex] ?? 1;
   const timelineZoomLevel = ROUTING_TIMELINE_ZOOM_LEVELS[timelineZoomIndex] ?? 1;
-  const baseTimelineRange = useMemo(() => buildTimelineRange(routingTopology), [routingTopology]);
+  const baseTimelineRange = useMemo(
+    () => buildTimelineRange(routingTopology, evidenceRange ?? null),
+    [routingTopology, evidenceRange],
+  );
+  const historyBoundary = parseRoutingTimestamp(evidenceRange?.earliest ?? null);
   const selectedReplayTime = clampTimelineTimestamp(replayTimestamp ?? baseTimelineRange.current, baseTimelineRange);
   const timelineWindowAnchor = clampTimelineTimestamp(timelineCenterTimestamp ?? baseTimelineRange.current, baseTimelineRange);
   const timelineRange = useMemo(
@@ -1310,6 +1337,7 @@ function RoutingTopologyPanel({
           </div>
           <RoutingReplayTimeline
             markers={routingTopology.timeline}
+            historyBoundary={historyBoundary}
             range={timelineRange}
             selectedTime={selectedReplayTime}
             value={selectedTimelinePercent}
@@ -1512,6 +1540,7 @@ function RoutingReplayTimeline({
   canResetZoom,
   canZoomIn,
   canZoomOut,
+  historyBoundary,
   markers,
   onChange,
   onResetZoom,
@@ -1525,6 +1554,7 @@ function RoutingReplayTimeline({
   canResetZoom: boolean;
   canZoomIn: boolean;
   canZoomOut: boolean;
+  historyBoundary?: number | null;
   markers: OperationsMapRoutingTopology["timeline"];
   onChange: (value: number) => void;
   onResetZoom: () => void;
@@ -1543,6 +1573,10 @@ function RoutingReplayTimeline({
     () => markers.filter((marker) => timelineMarkerInRange(marker.occurredAt, range)),
     [markers, range],
   );
+  const boundaryVisible = typeof historyBoundary === "number"
+    && historyBoundary >= range.start
+    && historyBoundary <= range.end;
+  const boundaryPosition = boundaryVisible ? timelineMarkerPosition(historyBoundary, range) : null;
 
   return (
     <div
@@ -1589,6 +1623,23 @@ function RoutingReplayTimeline({
             className="absolute top-1 h-11 w-px bg-[var(--dpf-muted)]"
             style={{ left: `${currentPosition}%` }}
           />
+          {boundaryPosition !== null ? (
+            <span
+              data-routing-history-boundary
+              role="img"
+              aria-label={`Data begins ${formatReplayTime(historyBoundary as number)} — no evidence recorded before this point`}
+              title={`Data begins ${formatReplayTime(historyBoundary as number)} — no evidence recorded before this point`}
+              className="absolute top-1 z-30 h-11 w-0 border-l border-dashed border-[var(--dpf-warning)]"
+              style={{ left: `${boundaryPosition}%` }}
+            >
+              <span
+                aria-hidden="true"
+                className="absolute -top-0.5 left-0 -translate-x-1/2 whitespace-nowrap rounded bg-[color-mix(in_srgb,var(--dpf-warning)_18%,var(--dpf-surface-1))] px-1 text-[9px] font-semibold text-[var(--dpf-warning)]"
+              >
+                Data begins
+              </span>
+            </span>
+          ) : null}
           <span
             data-routing-playhead
             aria-label="Selected replay time"
@@ -2001,12 +2052,20 @@ function anchorSymbolDetail(event: RoutingSymbolEvent, container: HTMLDivElement
   };
 }
 
-function buildTimelineRange(topology: OperationsMapRoutingTopology): RoutingTimelineRange {
+function buildTimelineRange(
+  topology: OperationsMapRoutingTopology,
+  evidenceRange?: OperationsMapEvidenceRange | null,
+): RoutingTimelineRange {
   const fallbackNow = Date.now();
+  // Global evidence bounds pin the base range so a windowed refetch (which
+  // only carries events inside the fetched window) can't shrink the scrubber
+  // — that would feedback-loop: shrink → narrower window fetch → shrink.
   const timestamps = [
     ...topology.timeline.map((marker) => parseRoutingTimestamp(marker.occurredAt)),
     ...topology.routes.map((route) => parseRoutingTimestamp(route.occurredAt)),
     ...topology.markers.map((marker) => parseRoutingTimestamp(marker.occurredAt)),
+    parseRoutingTimestamp(evidenceRange?.earliest ?? null),
+    parseRoutingTimestamp(evidenceRange?.latest ?? null),
   ].filter((timestamp): timestamp is number => timestamp !== null);
   const currentTimelineMarker = topology.timeline.find((marker) => marker.lane === "current");
   const current = parseRoutingTimestamp(currentTimelineMarker?.occurredAt ?? null) ?? fallbackNow;

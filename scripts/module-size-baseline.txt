@@ -8,7 +8,7 @@ apps/web/components/ea/EaCanvas.tsx	1047
 apps/web/components/inventory/TopologyGraph.tsx	1031
 apps/web/components/ops/SelfUpgradeClient.test.tsx	997
 apps/web/components/ops/SelfUpgradeClient.tsx	1377
-apps/web/components/platform/AiOperationsMap.tsx	2790
+apps/web/components/platform/AiOperationsMap.tsx	2849
 apps/web/components/platform/EffectivePermissionsPanel.tsx	851
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985
 apps/web/components/storefront/SlotBookingFlow.tsx	919
@@ -30,7 +30,7 @@ apps/web/lib/actions/promotions.self-upgrade.test.ts	1021
 apps/web/lib/actions/promotions.ts	998
 apps/web/lib/actions/tax-remittance.test.ts	1080
 apps/web/lib/actions/tax-remittance.ts	1788
-apps/web/lib/ai-operations-map/load-map-data.test.ts	813
+apps/web/lib/ai-operations-map/load-map-data.test.ts	943
 apps/web/lib/explore/build-process-matrix.ts	811
 apps/web/lib/explore/feature-build-types.ts	1106
 apps/web/lib/finance/ai-provider-finance.ts	1309

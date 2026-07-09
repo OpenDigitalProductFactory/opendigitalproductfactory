@@ -14,12 +14,14 @@ vi.mock("@dpf/db", () => ({
     },
     toolExecution: {
       findMany: vi.fn(),
+      aggregate: vi.fn(),
     },
     toolExecutionReceipt: {
       findMany: vi.fn(),
     },
     taskRun: {
       findMany: vi.fn(),
+      aggregate: vi.fn(),
     },
     backlogItemActivity: {
       findMany: vi.fn(),
@@ -29,6 +31,7 @@ vi.mock("@dpf/db", () => ({
     },
     routeDecisionLog: {
       findMany: vi.fn(),
+      aggregate: vi.fn(),
     },
     agentMessage: {
       findMany: vi.fn(),
@@ -41,9 +44,11 @@ vi.mock("@dpf/db", () => ({
     },
     tokenUsage: {
       findMany: vi.fn(),
+      aggregate: vi.fn(),
     },
     routeOutcome: {
       findMany: vi.fn(),
+      aggregate: vi.fn(),
     },
     scheduledAgentTask: {
       findMany: vi.fn(),
@@ -70,7 +75,12 @@ vi.mock("@/lib/inference/phase-model-resolution", () => ({
 }));
 
 import { prisma } from "@dpf/db";
-import { loadOperationsMapData } from "./load-map-data";
+import {
+  RECENT_TOOL_LIMIT,
+  WINDOWED_SOURCE_LIMIT,
+  loadOperationsMapData,
+  resolveEvidenceRange,
+} from "./load-map-data";
 
 describe("loadOperationsMapData", () => {
   beforeEach(() => {
@@ -78,6 +88,12 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.agentMessage.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.modelProfile.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
+    // Evidence-range aggregates default to an empty install.
+    vi.mocked(prisma.routeDecisionLog.aggregate).mockResolvedValue({ _min: { createdAt: null }, _max: { createdAt: null } } as never);
+    vi.mocked(prisma.tokenUsage.aggregate).mockResolvedValue({ _min: { createdAt: null }, _max: { createdAt: null } } as never);
+    vi.mocked(prisma.routeOutcome.aggregate).mockResolvedValue({ _min: { createdAt: null }, _max: { createdAt: null } } as never);
+    vi.mocked(prisma.toolExecution.aggregate).mockResolvedValue({ _min: { createdAt: null }, _max: { createdAt: null } } as never);
+    vi.mocked(prisma.taskRun.aggregate).mockResolvedValue({ _min: { startedAt: null }, _max: { startedAt: null } } as never);
     mockResolveModelSelectionByPhase.mockResolvedValue({
       generatedAt: "2026-06-28T20:00:00.000Z",
       phases: [],
@@ -203,6 +219,7 @@ describe("loadOperationsMapData", () => {
       },
     });
     expect(prisma.toolExecutionReceipt.findMany).toHaveBeenCalledWith({
+      where: {},
       orderBy: { createdAt: "desc" },
       take: 40,
       select: {
@@ -255,6 +272,7 @@ describe("loadOperationsMapData", () => {
       },
     });
     expect(prisma.externalEvidenceRecord.findMany).toHaveBeenCalledWith({
+      where: {},
       orderBy: { createdAt: "desc" },
       take: 40,
       select: {
@@ -581,7 +599,119 @@ describe("loadOperationsMapData", () => {
       expect.objectContaining({ orderBy: { startedAt: "desc" }, take: 40 }),
     );
     });
+
+  it("windows every evidence source and raises the per-source cap when a window is provided (BI-40EFC7DE)", async () => {
+    mockEmptySources();
+    const window = {
+      start: new Date("2026-06-01T00:00:00.000Z"),
+      end: new Date("2026-06-15T00:00:00.000Z"),
+    };
+
+    const data = await loadOperationsMapData({ window });
+
+    const createdAtWindow = { createdAt: { gte: window.start, lte: window.end } };
+    expect(prisma.toolExecution.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: createdAtWindow, take: WINDOWED_SOURCE_LIMIT }),
+    );
+    expect(prisma.routeDecisionLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: createdAtWindow, take: WINDOWED_SOURCE_LIMIT }),
+    );
+    expect(prisma.tokenUsage.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: createdAtWindow, take: WINDOWED_SOURCE_LIMIT }),
+    );
+    expect(prisma.routeOutcome.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining(createdAtWindow),
+        take: WINDOWED_SOURCE_LIMIT,
+      }),
+    );
+    expect(prisma.taskRun.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          source: "proactive",
+          startedAt: { gte: window.start, lte: window.end },
+        }),
+        take: WINDOWED_SOURCE_LIMIT,
+      }),
+    );
+    // The stalled lift stays unwindowed: operator recovery (Retry/Abandon/
+    // Escalate) must see every stalled row regardless of the viewed window.
+    expect(prisma.taskRun.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { archivedAt: null, status: "stalled" },
+      }),
+    );
+    expect(data.queriedWindow).toEqual({
+      start: "2026-06-01T00:00:00.000Z",
+      end: "2026-06-15T00:00:00.000Z",
+    });
+    expect(data.recentWindowLabel).toBe(
+      `Up to ${WINDOWED_SOURCE_LIMIT} records per evidence source in the selected window`,
+    );
   });
+
+  it("keeps the newest-N default without a window and reports global evidence bounds", async () => {
+    mockEmptySources();
+    vi.mocked(prisma.routeDecisionLog.aggregate).mockResolvedValue({
+      _min: { createdAt: new Date("2026-06-08T00:00:00.000Z") },
+      _max: { createdAt: new Date("2026-07-01T00:00:00.000Z") },
+    } as never);
+    vi.mocked(prisma.toolExecution.aggregate).mockResolvedValue({
+      _min: { createdAt: new Date("2026-06-10T00:00:00.000Z") },
+      _max: { createdAt: new Date("2026-07-09T06:00:00.000Z") },
+    } as never);
+
+    const data = await loadOperationsMapData();
+
+    expect(prisma.toolExecution.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: {}, take: RECENT_TOOL_LIMIT }),
+    );
+    expect(data.evidenceRange).toEqual({
+      earliest: "2026-06-08T00:00:00.000Z",
+      latest: "2026-07-09T06:00:00.000Z",
+    });
+    expect(data.queriedWindow).toBeNull();
+    expect(data.recentWindowLabel).toBe("Last 40 records per evidence source");
+  });
+  });
+
+describe("resolveEvidenceRange", () => {
+  it("folds per-table bounds into the global min/max", () => {
+    expect(
+      resolveEvidenceRange([
+        { min: new Date("2026-06-10T00:00:00.000Z"), max: new Date("2026-07-01T00:00:00.000Z") },
+        { min: new Date("2026-06-08T00:00:00.000Z"), max: new Date("2026-06-20T00:00:00.000Z") },
+        { min: null, max: null },
+      ]),
+    ).toEqual({
+      earliest: "2026-06-08T00:00:00.000Z",
+      latest: "2026-07-01T00:00:00.000Z",
+    });
+  });
+
+  it("returns nulls for a fully empty install", () => {
+    expect(resolveEvidenceRange([{ min: null, max: null }])).toEqual({
+      earliest: null,
+      latest: null,
+    });
+  });
+});
+
+function mockEmptySources() {
+  vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null);
+  vi.mocked(prisma.agent.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.externalEvidenceRecord.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.routeDecisionLog.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+}
 
 function makeAgentRow() {
   return {
