@@ -19,6 +19,7 @@ const GAP_REASON_LABEL: Record<string, string> = {
   "empty-corpus": "Empty corpus",
   "low-relevance": "Not covered",
   deferred: "Deferred",
+  "bet-completed": "Bet learning",
 };
 
 // ─── Shared primitives ───────────────────────────────────────────────────────

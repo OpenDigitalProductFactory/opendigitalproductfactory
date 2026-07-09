@@ -28,7 +28,11 @@ export type ProfessionCorpusGapReason =
   | "unmapped"
   | "empty-corpus"
   | "low-relevance"
-  | "deferred";
+  | "deferred"
+  // A consolidation bet this profession worked has completed; its technique is
+  // a learning the corpus does not yet capture (BI-5C01F920, EP-8DC217EB
+  // BET-0f). Recorded by the self-optimization sweep, not a coworker turn.
+  | "bet-completed";
 
 // ─── Structural DB client (satisfied by PrismaClient + test fakes) ────────────
 

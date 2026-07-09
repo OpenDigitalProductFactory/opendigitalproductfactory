@@ -50,6 +50,9 @@ function cockpitResult(bets: Array<{ betKey: string; statuses: Array<string | nu
   };
 }
 
+const noPriorCompleted = () => Promise.resolve<string[]>([]);
+const noopRecordLearnings = vi.fn().mockResolvedValue({ learnings: [], recordedCount: 0 });
+
 describe("runSelfOptimizationSweep", () => {
   it("derives stalled bets (outstanding with no in-progress item) and persists the summary", async () => {
     const written: SelfOptimizationSweepSummary[] = [];
@@ -62,6 +65,8 @@ describe("runSelfOptimizationSweep", () => {
           { betKey: "BET-6", statuses: ["done"] }, // completed
         ]),
       ) as never,
+      readPriorCompleted: noPriorCompleted,
+      recordLearnings: noopRecordLearnings as never,
       writeSummary: async (entry) => {
         written.push(entry);
       },
@@ -86,11 +91,56 @@ describe("runSelfOptimizationSweep", () => {
     const summary = await runSelfOptimizationSweep({
       steward: vi.fn().mockResolvedValue(stewardResult({ outstandingBets: ["BET-11"] })) as never,
       loadCockpit: vi.fn().mockResolvedValue(cockpit) as never,
+      readPriorCompleted: noPriorCompleted,
+      recordLearnings: noopRecordLearnings as never,
       writeSummary: async () => {},
       now: () => new Date("2026-07-09T05:00:00Z"),
     });
 
     expect(summary.graphAvailable).toBe(false);
     expect(summary.blastRadius.implementationFileCount).toBe(0);
+  });
+
+  it("records learnings only for bets that completed since the prior sweep (BET-0f)", async () => {
+    const recordLearnings = vi.fn().mockResolvedValue({ learnings: [], recordedCount: 3 });
+    const summary = await runSelfOptimizationSweep({
+      steward: vi.fn().mockResolvedValue(
+        stewardResult({ completedBets: ["BET-6", "BET-3"], outstandingBets: [] }),
+      ) as never,
+      loadCockpit: vi.fn().mockResolvedValue(
+        cockpitResult([
+          { betKey: "BET-6", statuses: ["done"] },
+          { betKey: "BET-3", statuses: ["done"] },
+        ]),
+      ) as never,
+      // BET-6 was already completed last run; only BET-3 is newly completed.
+      readPriorCompleted: async () => ["BET-6"],
+      recordLearnings: recordLearnings as never,
+      writeSummary: async () => {},
+      now: () => new Date("2026-07-09T05:00:00Z"),
+    });
+
+    expect(recordLearnings).toHaveBeenCalledWith(["BET-3"]);
+    expect(summary.newlyCompletedBets).toEqual(["BET-3"]);
+    expect(summary.learningsRecorded).toBe(3);
+  });
+
+  it("first-ever run (no prior summary) treats the whole completed set as newly completed", async () => {
+    const recordLearnings = vi.fn().mockResolvedValue({ learnings: [], recordedCount: 2 });
+    const summary = await runSelfOptimizationSweep({
+      steward: vi.fn().mockResolvedValue(
+        stewardResult({ completedBets: ["BET-6"], outstandingBets: [] }),
+      ) as never,
+      loadCockpit: vi.fn().mockResolvedValue(
+        cockpitResult([{ betKey: "BET-6", statuses: ["done"] }]),
+      ) as never,
+      readPriorCompleted: noPriorCompleted,
+      recordLearnings: recordLearnings as never,
+      writeSummary: async () => {},
+      now: () => new Date("2026-07-09T05:00:00Z"),
+    });
+
+    expect(recordLearnings).toHaveBeenCalledWith(["BET-6"]);
+    expect(summary.newlyCompletedBets).toEqual(["BET-6"]);
   });
 });
