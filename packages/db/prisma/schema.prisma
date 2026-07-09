@@ -4435,6 +4435,18 @@ model AgentThread {
   parent         AgentThread?  @relation("AgentThreadChildren", fields: [parentThreadId], references: [id], onDelete: Restrict)
   children       AgentThread[] @relation("AgentThreadChildren")
 
+  // BI-FDECBE0A (EP-8C706944 P1): durable rolling compaction checkpoint.
+  // `compactedSummary` is a persisted running summary of every turn OLDER than
+  // the live recency window, so long-thread continuity does not depend solely
+  // on vector recall. `compactionWatermarkAt` is the createdAt of the newest
+  // message already folded into the summary — the advance job only summarizes
+  // messages strictly newer than it, so a span is never re-summarized (the old
+  // in-flight compaction recomputed the same span every turn). `compactedTurnCount`
+  // is how many messages the summary condenses (display + refold heuristics).
+  compactedSummary      String?
+  compactionWatermarkAt DateTime?
+  compactedTurnCount    Int       @default(0)
+
   @@unique([userId, contextKey])
   @@index([cliSessionLastUsedAt])
   @@index([parentThreadId])
