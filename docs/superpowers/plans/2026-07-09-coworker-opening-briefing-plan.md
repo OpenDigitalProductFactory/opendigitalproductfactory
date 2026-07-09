@@ -38,12 +38,16 @@ not generated, so it cannot invent state.
      a type export there 500'd before, fixed in #2707).
 
 2. **Server** — `getOrCreateThreadSnapshot` (apps/web/lib/actions/agent-coworker.ts)
-   returns `openingBriefing: { content, agentId } | null` alongside messages:
-   resolve route agent (`resolveAgentForRoute` + unified flag) → read the per-user
-   proactivity UserFact → early-exit on quiet → `loadAttentionItems` +
+   returns `openingBriefing: { content, agentId } | null` alongside messages. The
+   composition lives in `apps/web/lib/agent/opening-briefing-loader.ts` (split out to
+   respect the module-size ratchet on the action file; agent-coworker.ts adds only the
+   call + field): resolve route agent (`resolveAgentForRoute` + unified flag) → read the
+   per-user proactivity UserFact → early-exit on quiet → `loadAttentionItems` +
    `filterAttentionForAudience({ operator: true })` (V1 operator-view, parity with
    /workspace/inbox; worker scoping is BI-AS-4) → compose. Wrapped in catch → null so a
    briefing failure never breaks thread load. Never persisted to `AgentMessage`.
+   Module-size baseline re-ratcheted 2638→2651 for the residual wiring growth
+   (union-merge baseline, concurrent with BI-FDECBE0A's 2666 — MAX wins on merge).
 
 3. **Client** — `AgentCoworkerShell` appends the briefing as an ephemeral assistant
    bubble (`withOpeningBriefing`, id `opening-briefing:<threadContext>` so load retries
