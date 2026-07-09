@@ -34,6 +34,15 @@ export type PromptInput = {
    */
   wikiContext?: string | null;
   /**
+   * BI-15FE2F07 (working-memory Slice 2): the calling coworker's durable
+   * role-local working notes, pre-rendered by the caller via
+   * `formatNotesAsContext(await loadCoworkerNotes(agentCuid))`
+   * (apps/web/lib/tak/coworker-memory.ts). Injected into Block 5 below wiki
+   * recall — role-local memory grounds the coworker's own prior learning.
+   * Null/empty when the coworker has no notes, so the block is a strict no-op.
+   */
+  workingNotes?: string | null;
+  /**
    * WSID Phase 3: the coworker's profession corpus — graded, cited excerpts of
    * its professional knowledge base, resolved from the agent's profession family
    * (apps/web/lib/decision-perspective/profession-corpus.ts). Rendered at the TOP
@@ -211,6 +220,12 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
   }
   if (input.wikiContext) {
     domainBlock += `\n\n${input.wikiContext}`;
+  }
+  // BI-15FE2F07: the coworker's own durable working notes — role-local memory,
+  // below generic recall. formatNotesAsContext returns null when there are no
+  // notes, so this is a strict no-op for coworkers without memory.
+  if (input.workingNotes) {
+    domainBlock += `\n\n${input.workingNotes}`;
   }
   if (input.domainTools.length > 0) {
     domainBlock += `\nAvailable domain tools: ${input.domainTools.join(", ")}`;

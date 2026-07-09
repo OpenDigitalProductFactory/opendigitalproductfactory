@@ -71,6 +71,28 @@ describe("assembleSystemPrompt", () => {
     expect(routeIdx).toBeLessThan(attachIdx);
   });
 
+  // BI-15FE2F07 (working-memory Slice 2): pre-rendered working notes land in
+  // Block 5 (domain), after wiki recall and before route data.
+  it("injects working notes into Block 5 when present", async () => {
+    const notes = "\nYOUR WORKING NOTES:\n- [technique] retry-flow: escalate after 2 failures";
+    const prompt = await assembleSystemPrompt({ ...fullInput, wikiContext: "WIKI CONTEXT HERE", workingNotes: notes });
+
+    const wikiIdx = indexOf(prompt, "WIKI CONTEXT HERE");
+    const notesIdx = indexOf(prompt, "YOUR WORKING NOTES:");
+    const routeIdx = indexOf(prompt, "--- PAGE DATA ---");
+    expect(notesIdx).toBeGreaterThanOrEqual(0);
+    expect(wikiIdx).toBeLessThan(notesIdx); // below wiki recall
+    expect(notesIdx).toBeLessThan(routeIdx); // still within Block 5, before route data
+  });
+
+  it("is a strict no-op when workingNotes is null or omitted", async () => {
+    const withNull = await assembleSystemPrompt({ ...minimalInput, workingNotes: null });
+    const without = await assembleSystemPrompt(minimalInput);
+    expect(withNull).not.toContain("YOUR WORKING NOTES:");
+    // Omitting the field produces the identical prompt as passing null.
+    expect(withNull).toBe(without);
+  });
+
   // Test 2: Advise mode text is injected correctly
   it("injects advise mode text when mode is 'advise'", async () => {
     const prompt = await assembleSystemPrompt(minimalInput);
