@@ -58,10 +58,10 @@ function* walk(dir) {
 }
 
 /** Per-file count of raw route-error literals under apps/web/app. */
-export function scan(root = REPO_ROOT) {
+export function scan() {
   const counts = {};
-  for (const file of walk(join(root, "apps", "web", "app"))) {
-    const rel = relative(root, file).replace(/\\/g, "/");
+  for (const file of walk(SCAN_DIR)) {
+    const rel = relative(REPO_ROOT, file).replace(/\\/g, "/");
     const body = readFileSync(file, "utf8");
     const n = (body.match(RAW_ERROR_RE) ?? []).length;
     if (n > 0) counts[rel] = n;
