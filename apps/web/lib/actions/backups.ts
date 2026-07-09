@@ -15,6 +15,7 @@ import {
   QDRANT_BACKUP_EVENT,
 } from "@/lib/operate/backups/constants";
 import { getAllBackupReadiness, getPostgresBackupReadiness } from "@/lib/operate/backups/readiness";
+import { nextDailyRunAt } from "@/lib/operate/backups/managed-backup";
 import type { BackupTarget, ReadinessSummary } from "@/lib/operate/backups/types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
@@ -190,15 +191,4 @@ export async function refreshBackupScheduleHeartbeatAction(): Promise<void> {
     },
     update: {},
   });
-}
-
-function nextDailyRunAt(from: Date): Date {
-  const next = new Date(from);
-  next.setUTCSeconds(0, 0);
-  next.setUTCMinutes(0);
-  next.setUTCHours(3);
-  if (next <= from) {
-    next.setUTCDate(next.getUTCDate() + 1);
-  }
-  return next;
 }
