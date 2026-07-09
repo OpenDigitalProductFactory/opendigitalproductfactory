@@ -12,6 +12,7 @@ import {
 } from "@/lib/operate/scheduled-jobs/agent-task-core";
 import { runDataModelMirror } from "@/lib/ea/run-data-model-mirror";
 import { runArchitectureParitySteward } from "@/lib/ea/architecture-parity-steward";
+import { runConsolidationParitySteward } from "@/lib/ea/consolidation-parity-steward";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import {
@@ -154,6 +155,18 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         result.projections.mcpAuthority.toolCount,
         result.projections.coworkerAuthority.created + result.projections.coworkerAuthority.updated,
         result.steward.created + result.steward.updated + result.steward.resolved,
+      );
+      // BET-0b: the same parity sweep reconciles the consolidation-bet
+      // conformance issues, so duplication drift-reduces on the same cadence
+      // projection health does.
+      const consolidation = await runConsolidationParitySteward();
+      console.info(
+        "[agent-task-scheduler] consolidation parity outstanding=%d completed=%d (created=%d updated=%d resolved=%d)",
+        consolidation.outstandingBets.length,
+        consolidation.completedBets.length,
+        consolidation.created,
+        consolidation.updated,
+        consolidation.resolved,
       );
       const nextRunAt = computeNextCronRun(task.schedule, startedAt);
       await prisma.scheduledAgentTask.update({
