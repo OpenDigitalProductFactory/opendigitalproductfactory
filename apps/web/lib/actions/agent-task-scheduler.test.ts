@@ -47,6 +47,7 @@ const mocks = vi.hoisted(() => ({
   executeTool: vi.fn(),
   governedExecuteTool: vi.fn(),
   runArchitectureParitySteward: vi.fn(),
+  runConsolidationParitySteward: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
@@ -76,6 +77,9 @@ vi.mock("@/lib/mcp-governed-execute", () => ({
 }));
 vi.mock("@/lib/ea/architecture-parity-steward", () => ({
   runArchitectureParitySteward: mocks.runArchitectureParitySteward,
+}));
+vi.mock("@/lib/ea/consolidation-parity-steward", () => ({
+  runConsolidationParitySteward: mocks.runConsolidationParitySteward,
 }));
 
 import { executeScheduledAgentTask, scheduleAgentTask } from "./agent-task-scheduler";
@@ -903,12 +907,16 @@ describe("executeScheduledAgentTask — SysML projection reconcile branch", () =
       },
       steward: { created: 1, updated: 0, resolved: 0 },
     });
+    mocks.runConsolidationParitySteward.mockResolvedValue({
+      created: 0, updated: 0, resolved: 0, outstandingBets: [], completedBets: [],
+    });
     mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
     mocks.prisma.scheduledJob.update.mockResolvedValue({});
 
     await executeScheduledAgentTask("sysml-projection-nightly");
 
     expect(mocks.runArchitectureParitySteward).toHaveBeenCalledOnce();
+    expect(mocks.runConsolidationParitySteward).toHaveBeenCalledOnce();
     expect(mocks.runAgenticLoop).not.toHaveBeenCalled();
     expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(
       expect.objectContaining({

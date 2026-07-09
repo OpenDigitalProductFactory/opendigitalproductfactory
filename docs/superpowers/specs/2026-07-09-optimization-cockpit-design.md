@@ -53,6 +53,21 @@ architecture-parity baseline so duplication becomes a measurable conformance
 issue; BET-0d/0e route bets to WSID-profiled coworkers — they consume this
 registry and MUST NOT grow a parallel one.
 
+## BET-0b — consolidation bets as architecture-parity targets (BI-ED9AC5A6)
+
+Landed as `apps/web/lib/ea/consolidation-parity-steward.ts`:
+`runConsolidationParitySteward` reads the bet registry, joins live
+`BacklogItem` status, and reconciles one `eaConformanceIssue` per bet with
+outstanding delivery work (stable key `consolidation-parity:<betKey>`,
+severity = leverage: H→warn, M→info) through the shared
+`reconcileConformanceIssues` contract — so the issue auto-resolves the moment
+every item delivering the bet reaches a terminal state, and duplication is a
+measurable, drift-reducing conformance signal on the EA surface. A registry
+item id missing from the live backlog counts as outstanding drift (never a
+silent completion). It runs piggybacked on the scheduled SysML parity sweep
+(`agent-task-scheduler.ts`, `SYSML_PROJECTION_TASK_ID` branch) — no new
+cron/task surface.
+
 ## Research & benchmarking
 
 Composition follows the in-repo precedents rather than external dashboards:
