@@ -2,6 +2,7 @@ import { lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 import type { Prisma } from "@dpf/db";
 import { generateCycloneDxBom } from "./cyclonedx-generator";
 import { persistGeneratedBom } from "./bom-persistence";
+import { createAssuranceRun } from "./with-assurance-run";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type BomJobDb = {
@@ -74,12 +75,6 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
-function createRunId(buildId: string, toolExecutionId: string): string {
-  const buildPart = buildId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
-  const executionPart = toolExecutionId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
-  return `assurance_bom_${buildPart}_${executionPart}`;
-}
-
 export async function generateAndPersistBuildBom(input: GenerateAndPersistBuildBomInput): Promise<GenerateAndPersistBuildBomResult> {
   const build = await input.db.featureBuild.findUnique({
     where: { buildId: input.buildId },
@@ -150,25 +145,20 @@ export async function generateAndPersistBuildBom(input: GenerateAndPersistBuildB
     },
   });
 
-  const assuranceRun = await db.assuranceRun.create({
-    data: {
-      runId: createRunId(build.buildId, toolExecution.id),
-      scopeType: "build",
-      scopeId: build.buildId,
-      adapterKey: "cyclonedx-pnpm-lock",
-      adapterVersion: "1.0.0",
-      status: "passed",
-      summary: {
-        documentDigest: generatedBom.documentDigest,
-        componentCount: generatedBom.components.length,
-      } satisfies Prisma.InputJsonValue,
-      startedAt: input.now,
-      completedAt: input.now,
-      buildId: build.buildId,
-      digitalProductId: build.digitalProductId,
-      toolExecutionId: toolExecution.id,
-      toolExecutionReceiptId: receipt.id,
-    },
+  const assuranceRun = await createAssuranceRun(db, {
+    prefix: "assurance_bom_",
+    buildId: build.buildId,
+    digitalProductId: build.digitalProductId,
+    adapterKey: "cyclonedx-pnpm-lock",
+    adapterVersion: "1.0.0",
+    status: "passed",
+    summary: {
+      documentDigest: generatedBom.documentDigest,
+      componentCount: generatedBom.components.length,
+    } satisfies Prisma.InputJsonValue,
+    toolExecutionId: toolExecution.id,
+    toolExecutionReceiptId: receipt.id,
+    now: input.now,
   });
 
   const persisted = await persistGeneratedBom(db, {
