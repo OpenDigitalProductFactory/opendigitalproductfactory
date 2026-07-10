@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 
 export async function GET() {
   const session = await auth();
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
   const provider = await prisma.serviceProvider.create({
     data: {
-      providerId: `SP-${nanoid(6).toUpperCase()}`,
+      providerId: `SP-${newId(6).toUpperCase()}`,
       storefrontId,
       name,
       email: email ?? null,

@@ -3,7 +3,7 @@
 import { prisma } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { signInvoiceSchema } from "@/lib/finance-validation";
 import type { CreateInvoiceInput, RecordPaymentInput, SignInvoiceInput } from "@/lib/finance-validation";
 import type { INVOICE_STATUSES } from "@/lib/finance-validation";
@@ -380,7 +380,7 @@ export async function generateInvoiceFromStorefrontOrder(orderId: string) {
     const accountName = order.customerEmail.split("@")[0] ?? "Customer";
     const account = await prisma.customerAccount.create({
       data: {
-        accountId: `CA-${nanoid(8)}`,
+        accountId: `CA-${newId(8)}`,
         name: accountName,
         ...customerAccountNormalizedColumns({ name: accountName }),
         status: "prospect",
@@ -431,7 +431,7 @@ export async function sendInvoice(invoiceId: string): Promise<{ payToken: string
   });
   if (!invoice) throw new Error("Invoice not found");
 
-  const payToken = invoice.payToken ?? nanoid(32);
+  const payToken = invoice.payToken ?? newId(32);
 
   await prisma.invoice.update({
     where: { id: invoiceId },

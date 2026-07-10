@@ -3,7 +3,7 @@
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { readActivationProfile, mergeActivationProfiles } from "@dpf/storefront-templates";
 
 const MAX_SECONDARY_LINES = 2;
@@ -103,7 +103,7 @@ export async function addStorefrontServiceLine(
   if (itemTemplates.length > 0) {
     await prisma.storefrontItem.createMany({
       data: itemTemplates.map((t, i) => ({
-        itemId: `itm-${nanoid(8)}`,
+        itemId: `itm-${newId(8)}`,
         storefrontId,
         name: t.name,
         description: t.description ?? null,

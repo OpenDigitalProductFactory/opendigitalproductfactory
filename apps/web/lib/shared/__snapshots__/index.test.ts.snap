@@ -27,6 +27,7 @@ exports[`shared barrel export > exports all public symbols 1`] = `
   "isUnifiedCoworkerEnabled",
   "loadAllDocs",
   "loadDocPage",
+  "newId",
   "newestSignal",
   "ok",
   "parseCSV",

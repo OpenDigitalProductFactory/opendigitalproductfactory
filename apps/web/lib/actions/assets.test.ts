@@ -8,8 +8,8 @@ vi.mock("@/lib/permissions", () => ({
   can: vi.fn(),
 }));
 
-vi.mock("nanoid", () => ({
-  nanoid: vi.fn().mockReturnValue("ABC12345"),
+vi.mock("@/lib/shared/new-id", () => ({
+  newId: vi.fn().mockReturnValue("ABC12345"),
 }));
 
 vi.mock("@dpf/db", () => ({

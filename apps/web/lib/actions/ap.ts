@@ -1,6 +1,6 @@
 "use server";
 
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { prisma } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
@@ -24,7 +24,7 @@ async function requireManageFinance(): Promise<string> {
 export async function createSupplier(input: CreateSupplierInput) {
   await requireManageFinance();
 
-  const supplierId = `SUP-${nanoid(8)}`;
+  const supplierId = `SUP-${newId(8)}`;
 
   const supplier = await prisma.supplier.create({
     data: {
@@ -337,7 +337,7 @@ export async function submitBillForApproval(billId: string): Promise<void> {
   const baseUrl = resolveAppBaseUrl();
 
   for (const rule of rules) {
-    const token = nanoid(32);
+    const token = newId(32);
     await prisma.billApproval.create({
       data: {
         billId,

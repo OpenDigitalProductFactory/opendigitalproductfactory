@@ -97,7 +97,7 @@ describe("createRecurringSchedule", () => {
     expect(mockPrisma.recurringSchedule.create).toHaveBeenCalledOnce();
     const createCall = mockPrisma.recurringSchedule.create.mock.calls[0][0];
     expect(createCall.data.scheduleId).toMatch(/^REC-/);
-    expect(createCall.data.scheduleId.length).toBe(12); // REC- (4) + nanoid(8) (8)
+    expect(createCall.data.scheduleId.length).toBe(12); // REC- (4) + newId(8) (8)
   });
 
   it("calculates amount from line items including tax", async () => {
