@@ -103,13 +103,20 @@ function collect(dir: string, match: (p: string) => boolean): string[] {
     .filter((p) => match(p) && !p.endsWith(".test.ts") && !p.endsWith(".test.tsx"));
 }
 
+function isAppServerEntrypoint(path: string): boolean {
+  return /\/(?:page|layout|route)\.(?:ts|tsx)$/.test(path.replace(/\\/g, "/"));
+}
+
 describe("server entrypoints do not statically import host-only modules (real tree)", () => {
-  it("no route.ts or Inngest function pulls the promoter/dockerode graph into the bundle", () => {
-    const routeFiles = collect(join(WEB_ROOT, "app", "api"), (p) => p.endsWith("route.ts"));
+  it("no route/page/action/Inngest entrypoint pulls the promoter/dockerode graph into the bundle", () => {
+    const appServerFiles = collect(join(WEB_ROOT, "app"), isAppServerEntrypoint);
+    const actionFiles = collect(join(WEB_ROOT, "lib", "actions"), (p) =>
+      /\.(?:ts|tsx)$/.test(p),
+    );
     const inngestFiles = collect(join(WEB_ROOT, "lib", "queue", "functions"), (p) =>
       p.endsWith(".ts"),
     );
-    const files = [...routeFiles, ...inngestFiles];
+    const files = [...appServerFiles, ...actionFiles, ...inngestFiles];
     // Sanity: the globs actually matched something (guards against a silently
     // empty pass if the tree layout changes).
     expect(files.length).toBeGreaterThan(0);
