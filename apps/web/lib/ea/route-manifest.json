@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 543,
+  "routeCount": 544,
   "routes": [
     {
       "routePath": "/",
@@ -4722,6 +4722,17 @@
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/platform/ai/history/page.tsx",
       "redirectTo": "/platform/audit/ledger"
+    },
+    {
+      "routePath": "/platform/ai/memory",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "memory"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/memory/page.tsx"
     },
     {
       "routePath": "/platform/ai/model-assignment",
