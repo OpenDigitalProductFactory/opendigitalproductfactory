@@ -70,6 +70,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       { label: "Priority & Models", href: "/platform/ai/assignments" },
       { label: "Prompts", href: "/platform/ai/prompts" },
       { label: "Skills", href: "/platform/ai/skills" },
+      { label: "Coworker Memory", href: "/platform/ai/memory" },
       // No "Capability Needs" tab: coworker capability needs converged into the Backlog
       // (EP-INTAKE-UNIFY) and /platform/ai/capability-needs now redirects to
       // /ops?origin=capability-need. A secondary-nav tab that redirects to /ops is a

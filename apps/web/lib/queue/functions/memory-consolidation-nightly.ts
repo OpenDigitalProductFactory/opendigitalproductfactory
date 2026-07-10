@@ -18,6 +18,7 @@ import { dedupeCoworkerNotes, dedupeUserFacts } from "@/lib/tak/memory-consolida
 import {
   expireStaleCoworkerNotes,
   expireStaleUserFacts,
+  pruneSummarizedThreadMessages,
 } from "@/lib/tak/memory-expiry-runner";
 
 /** 04:20 UTC daily — off-peak, clear of the 03:00 backup + 04:00 retention slots. */
@@ -30,6 +31,8 @@ export interface MemoryConsolidationResult {
   factsDeduped: number;
   notesExpired: number;
   factsExpired: number;
+  threadsPruned: number;
+  messagesPruned: number;
 }
 
 /**
@@ -45,6 +48,8 @@ export async function runMemoryConsolidationSweep(): Promise<MemoryConsolidation
     factsDeduped: 0,
     notesExpired: 0,
     factsExpired: 0,
+    threadsPruned: 0,
+    messagesPruned: 0,
   };
 
   // Coworkers with at least one active note.
@@ -76,6 +81,25 @@ export async function runMemoryConsolidationSweep(): Promise<MemoryConsolidation
       result.usersSwept += 1;
     } catch (err) {
       console.warn(`[autoDream] user ${userId} sweep failed:`, err);
+    }
+  }
+
+  // Prune raw messages already folded into a durable checkpoint and older than
+  // the retention window (BI-153F7E4A). Only threads that HAVE a checkpoint
+  // watermark are candidates — the content survives in the summary.
+  const checkpointedThreads = await prisma.agentThread.findMany({
+    where: { compactionWatermarkAt: { not: null } },
+    select: { id: true },
+  });
+  for (const { id } of checkpointedThreads) {
+    try {
+      const pruned = await pruneSummarizedThreadMessages(id);
+      if (pruned > 0) {
+        result.messagesPruned += pruned;
+        result.threadsPruned += 1;
+      }
+    } catch (err) {
+      console.warn(`[autoDream] thread ${id} prune failed:`, err);
     }
   }
 
