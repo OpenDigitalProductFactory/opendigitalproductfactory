@@ -8,6 +8,7 @@ import {
 } from "./pnpm-audit-adapter";
 import { persistAssuranceFindings, type AssuranceFindingPersistenceDb } from "./finding-persistence";
 import { createAssuranceRun } from "./with-assurance-run";
+import { recordAssuranceRunEvidence } from "./assurance-evidence";
 import { autoFileFindingsFromScan } from "./auto-file-findings";
 import { loadReconcileContext } from "./advisory-context";
 import { emptyDispositionTotals, type ReconcileContext } from "./finding-reconcile";
@@ -272,6 +273,27 @@ export async function runBuildAssuranceScan(input: RunBuildScanInput): Promise<R
     toolExecutionReceiptId: receipt.id,
     now: input.now,
   });
+
+  // EP-8DC217EB BET-12: feed the run into GRC as continuous ComplianceEvidence.
+  // Best-effort — an evidence-write hiccup must NEVER fail the scan job.
+  try {
+    await recordAssuranceRunEvidence({
+      runId: assuranceRun.runId,
+      adapterKey: PNPM_AUDIT_ADAPTER_KEY,
+      status,
+      scopeType: "build",
+      scopeId: build.buildId,
+      summary: `${adapterOutput.findings.length} findings (${Number(adapterOutput.summary.blockingCount ?? 0)} blocking)`,
+      startedAt: input.now,
+      completedAt: input.now,
+    });
+  } catch (err) {
+    console.warn(
+      "[assurance-evidence] failed to record scan run evidence runId=%s error=%s",
+      assuranceRun.runId,
+      getErrorMessage(err),
+    );
+  }
 
   const persistResult = await persistAssuranceFindings(input.db, {
     assuranceRunId: assuranceRun.id,

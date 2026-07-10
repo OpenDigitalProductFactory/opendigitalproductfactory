@@ -55,16 +55,29 @@ tests stayed green and new unit tests cover the helpers:
    their duplicated local `createRunId` copies; the runId strings, field values,
    and `summary as Prisma.InputJsonValue` cast are byte-for-byte preserved.
 
+## Landed in increment 3 (case→evidence generalization · BI-7CD647B0)
+
+The generic idempotent upsert now lives source-neutral at
+`lib/governance/compliance-evidence.ts` as `recordComplianceEvidence` +
+`ComplianceEvidenceInput`. `lib/security/compliance.ts` keeps its case-specific
+`securityCaseToEvidenceInput` projector and delegates the write. A new
+`lib/assurance/assurance-evidence.ts` mirrors it for `AssuranceRun` completions
+(`assurance-run:${runId}`, `evidenceType: "supply-chain-assurance"`), and
+`scan-job.ts` + `bom-job.ts` record it **best-effort** (try/catch →
+`console.warn`, never fails a scan/bom job). `ComplianceEvidence` is now fed by
+assurance runs, not security alone — closing the "only from security" gap.
+
 ## Deliberately deferred (later BET-12 increments)
 
 Per the plan's land-order and the Inside-Out hot-zone rule, these are **not** yet
 built:
 
-3. **case→evidence generalization** — mirror `securityCaseToEvidenceInput` for
-   assurance runs so `ComplianceEvidence` is fed by more than security.
-4. **detector → `ingestBacklogItem` fan-in** — route SOC cases (which today
-   never become BIs) and wiki lint through the front door. **Touches
-   `lib/queue`** (`siem-correlation-sweep.ts`) → coordinate with the Inside-Out
+1. **detector → `ingestBacklogItem` fan-in** — route SOC cases (which today
+   never become BIs) and wiki lint through the front door. This is the remaining
+   tail: increments 1–3 landed the contract, the keyed-findings reconciler, the
+   AssuranceRun ledger, and the case→`ComplianceEvidence` half; but the
+   case→backlog fan-in stays deferred because it **touches `lib/queue`**
+   (`siem-correlation-sweep.ts`) → gated on the Inside-Out
    notification substrate (BI-997503EC) before building, so the two epics don't
    grow parallel dispatchers.
 

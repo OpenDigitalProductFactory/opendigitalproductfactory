@@ -3,6 +3,7 @@ import type { Prisma } from "@dpf/db";
 import { generateCycloneDxBom } from "./cyclonedx-generator";
 import { persistGeneratedBom } from "./bom-persistence";
 import { createAssuranceRun } from "./with-assurance-run";
+import { recordAssuranceRunEvidence } from "./assurance-evidence";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type BomJobDb = {
@@ -160,6 +161,27 @@ export async function generateAndPersistBuildBom(input: GenerateAndPersistBuildB
     toolExecutionReceiptId: receipt.id,
     now: input.now,
   });
+
+  // EP-8DC217EB BET-12: feed the run into GRC as continuous ComplianceEvidence.
+  // Best-effort — an evidence-write hiccup must NEVER fail the BOM job.
+  try {
+    await recordAssuranceRunEvidence({
+      runId: assuranceRun.runId,
+      adapterKey: "cyclonedx-pnpm-lock",
+      status: "passed",
+      scopeType: "build",
+      scopeId: build.buildId,
+      summary: `${generatedBom.components.length} components`,
+      startedAt: input.now,
+      completedAt: input.now,
+    });
+  } catch (err) {
+    console.warn(
+      "[assurance-evidence] failed to record bom run evidence runId=%s error=%s",
+      assuranceRun.runId,
+      getErrorMessage(err),
+    );
+  }
 
   const persisted = await persistGeneratedBom(db, {
     buildId: build.buildId,

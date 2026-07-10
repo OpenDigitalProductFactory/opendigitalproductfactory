@@ -1,4 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
+
+// EP-8DC217EB BET-12: the BOM job now feeds a completed run into GRC via
+// recordAssuranceRunEvidence → prisma.complianceEvidence.upsert (best-effort).
+// Override only that delegate so the write resolves and is observable; keep all
+// other real @dpf/db exports intact.
+const complianceEvidenceUpsert = vi.fn(async () => ({}));
+vi.mock("@dpf/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dpf/db")>();
+  return {
+    ...actual,
+    prisma: new Proxy(actual.prisma as object, {
+      get(target, prop, receiver) {
+        if (prop === "complianceEvidence") return { upsert: complianceEvidenceUpsert };
+        return Reflect.get(target, prop, receiver);
+      },
+    }),
+  };
+});
+
 import { generateAndPersistBuildBom } from "./bom-job";
 
 const packageJson = JSON.stringify({ name: "web", version: "0.1.0" });
@@ -113,6 +132,14 @@ describe("generateAndPersistBuildBom", () => {
       }),
     }));
     expect(db.buildActivity.create).toHaveBeenCalled();
+
+    // BET-12: the run was fed into GRC as continuous ComplianceEvidence.
+    expect(complianceEvidenceUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { evidenceId: "assurance-run:run-1" },
+        create: expect.objectContaining({ evidenceType: "supply-chain-assurance" }),
+      }),
+    );
   });
 
   it("still returns success when the auto-scan trigger fails (best-effort)", async () => {
