@@ -1,4 +1,5 @@
-import { Agent, request, type Dispatcher } from "undici";
+import { exchangeClientCredentials } from "@dpf/integration-shared";
+import { Agent, type Dispatcher } from "undici";
 
 export type AdpEnvironment = "sandbox" | "production";
 
@@ -38,6 +39,9 @@ export function resolveTokenEndpoint(env: AdpEnvironment): string {
   return "https://accounts.sandbox.api.adp.com/auth/oauth/v2/token";
 }
 
+// ADP-specific: build the mTLS transport from the partner cert + key. This stays
+// in the ADP wrapper (the shared helper is transport-agnostic) and is handed to
+// the shared exchange via `dispatcher`.
 function buildMtlsDispatcher(certPem: string, privateKeyPem: string): Agent {
   return new Agent({
     connect: {
@@ -54,95 +58,34 @@ function buildMtlsDispatcher(certPem: string, privateKeyPem: string): Agent {
  * includes clientSecret, clientId, cert bytes, or raw server responses).
  */
 export async function exchangeToken(params: ExchangeTokenParams): Promise<ExchangeTokenResult> {
-  const url = resolveTokenEndpoint(params.environment);
-  const dispatcher = params.dispatcher ?? buildMtlsDispatcher(params.certPem, params.privateKeyPem);
+  const dispatcher =
+    params.dispatcher ?? buildMtlsDispatcher(params.certPem, params.privateKeyPem);
 
-  const body = new URLSearchParams({
-    grant_type: "client_credentials",
-    client_id: params.clientId,
-    client_secret: params.clientSecret,
-  }).toString();
-
-  let response: Dispatcher.ResponseData;
-  try {
-    response = await request(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-        accept: "application/json",
-      },
-      body,
-      dispatcher,
-    });
-  } catch (err) {
-    // Network-layer failure (mTLS handshake, DNS, timeout). Do not include
-    // the underlying error's stringification — it may contain cert bytes.
-    const code = err instanceof Error && "code" in err ? String((err as { code: unknown }).code) : undefined;
-    throw new AdpAuthError(
+  const result = await exchangeClientCredentials({
+    endpoint: resolveTokenEndpoint(params.environment),
+    clientId: params.clientId,
+    clientSecret: params.clientSecret,
+    // ADP sends no scope param.
+    dispatcher,
+    makeError: (message, opts) => new AdpAuthError(message, opts),
+    // Preserve historic behavior: only 401/403 were treated as invalid creds
+    // (the shared default of [400,401,403] would newly capture 400).
+    authErrorStatuses: [401, 403],
+    serverErrorMessage: "ADP token endpoint returned a server error — retry later",
+    // The shared helper forwards the network error's `code` (e.g. ECONNREFUSED)
+    // through makeError as errorCode — preserving AdpAuthError.errorCode on the
+    // mTLS-handshake path.
+    networkErrorMessage:
       "mTLS handshake failed — verify cert matches the one registered in ADP Partner Self-Service",
-      { errorCode: code },
-    );
-  }
-
-  const { statusCode, body: responseBody } = response;
-
-  if (statusCode === 401 || statusCode === 403) {
-    // Drain the body without inspecting it; the response may echo our client_id.
-    await safelyDrainBody(responseBody);
-    throw new AdpAuthError("invalid client credentials", { statusCode });
-  }
-
-  if (statusCode >= 500) {
-    await safelyDrainBody(responseBody);
-    throw new AdpAuthError("ADP token endpoint returned a server error — retry later", {
-      statusCode,
-    });
-  }
-
-  if (statusCode !== 200) {
-    await safelyDrainBody(responseBody);
-    throw new AdpAuthError(`unexpected token exchange failed with status ${statusCode}`, {
-      statusCode,
-    });
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = await responseBody.json();
-  } catch {
-    throw new AdpAuthError("ADP token response was not valid JSON", { statusCode });
-  }
-
-  if (!isTokenResponse(parsed)) {
-    throw new AdpAuthError("ADP token response missing access_token", { statusCode });
-  }
-
-  const expiresInSec = typeof parsed.expires_in === "number" && parsed.expires_in > 0
-    ? parsed.expires_in
-    : 3600; // ADP default
+    invalidCredsMessage: "invalid client credentials",
+    missingTokenMessage: "ADP token response missing access_token",
+    invalidJsonMessage: "ADP token response was not valid JSON",
+    unexpectedStatusMessage: (statusCode) =>
+      `unexpected token exchange failed with status ${statusCode}`,
+  });
 
   return {
-    accessToken: parsed.access_token,
-    expiresAt: new Date(Date.now() + expiresInSec * 1000),
+    accessToken: result.accessToken,
+    expiresAt: result.expiresAt,
   };
-}
-
-interface TokenResponse {
-  access_token: string;
-  expires_in?: number;
-  token_type?: string;
-}
-
-function isTokenResponse(value: unknown): value is TokenResponse {
-  if (typeof value !== "object" || value === null) return false;
-  const v = value as Record<string, unknown>;
-  return typeof v.access_token === "string" && v.access_token.length > 0;
-}
-
-async function safelyDrainBody(body: { text: () => Promise<string> }): Promise<void> {
-  try {
-    await body.text();
-  } catch {
-    // ignore — we don't care about the content, just need to release the socket
-  }
 }
