@@ -133,6 +133,8 @@ Mark's reframe: "Employees" is too narrow because it excludes the AI agent workf
 
 **2026-07-06 terminology amendment.** The `for_employees` root now renders as **Workforce** in the portfolio registry. "For Employees" remains a legacy alias and standards cross-reference only; the canonical slug stays `for_employees` to avoid data churn. This aligns the platform with the standards-facing proposal in [`docs/architecture/2026-07-06-it4it-dppm-workforce-portfolio-white-paper.md`](../../architecture/2026-07-06-it4it-dppm-workforce-portfolio-white-paper.md): the internal portfolio should account for employees, contractors, AI coworkers, robots, non-human identities, and any other accountable actor that performs or approves work.
 
+**2026-07-10 seed invariant.** Root taxonomy-node display names are seeded from `portfolio_registry.json`, not from the legacy `taxonomy_v3.json` row label. The taxonomy keeps stable `for_employees` paths and the legacy "For Employees" cross-reference, while the platform-facing root renders as **Workforce** after self-upgrade reseeds the live install.
+
 ### 4.3 Facets C & D — Foundational and Manufacturing & Delivery (the dependency floor)
 
 Out of primary scope for this spec, but named because the two business facets **decompose into them** (the DPPM dependency chain). Each offering in Facet A and each workforce capability in Facet B declares what Foundational and Manufacturing & Delivery elements it depends on. This reuses the maturity spec's `dependsOn` DAG discipline (§10.3) at the *business* layer: an offer's effective deliverability is bounded by the maturity of the foundational + delivery elements it rests on.
