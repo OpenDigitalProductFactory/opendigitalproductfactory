@@ -5,6 +5,7 @@ import { prisma } from "@dpf/db";
 import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, groupByEndpointTypeAndCategory, getProviderModelSummaries } from "@/lib/ai-provider-data";
 import { syncProviderRegistry, detectMcpServers, runProviderCatalogReconciliationIfDue } from "@/lib/actions/ai-providers";
 import { DetectedServicesBanner } from "@/components/platform/DetectedServicesBanner";
+import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 import { checkBundledProviders } from "@/lib/ollama";
 import { TokenSpendPanel } from "@/components/platform/TokenSpendPanel";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
@@ -217,7 +218,18 @@ function ProviderCatalogStatus({ lastSyncAt }: { lastSyncAt: Date | null }) {
           "Updates automatically"
         )}
       </div>
-      <div>Ask AI Coworker if this status looks wrong.</div>
+      <div>
+        <AskCoworkerButton
+          prompt={`I'm on the AI Providers page. The provider catalog shows ${
+            lastSyncAt
+              ? `it was last updated ${lastSyncAt.toISOString()}`
+              : "no recorded catalog sync"
+          }. Please check the provider/catalog status, tell me in plain language whether anything is wrong, and give me the exact next step if action is needed.`}
+          routeContext="/platform"
+          label="Ask AI Coworker if this status looks wrong."
+          className="text-[var(--dpf-accent)] hover:underline underline-offset-2"
+        />
+      </div>
     </div>
   );
 }
