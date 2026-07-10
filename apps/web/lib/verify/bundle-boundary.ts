@@ -5,9 +5,9 @@
 // BI-98AF1066.
 //
 // The §2.1 trace's two bundle-boundary violations were found one-at-a-time across
-// two Docker builds: a route/Inngest entrypoint STATICALLY imported the promoter
-// (which spawns docker), dragging its host-only graph into the server bundle and
-// triggering a Turbopack duplicate-emitted-asset collision. A static import is the
+// two Docker builds: a route/Inngest/page/action entrypoint STATICALLY imported
+// the promoter (which spawns docker), dragging its host-only graph into the
+// server bundle and triggering Turbopack/NFT failures. A static import is the
 // problem; a dynamic `import()` (the fix) is fine. This module provides the pure
 // detectors; the guard test runs them over the real entrypoint set.
 

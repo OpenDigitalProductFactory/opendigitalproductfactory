@@ -10,7 +10,6 @@ import { revalidatePath } from "next/cache";
 import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
 import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
-import { ensurePromoterImage } from "@/lib/self-upgrade/promoter";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
@@ -445,7 +444,7 @@ export async function executePromotionAction(
     // portal's baked-in /promoter/ files if missing. Shared with the
     // self-upgrade auto-heal and the governed repair tool so there is one
     // recipe. On failure, fall through to the outer catch → in-portal path.
-    const ensured = await ensurePromoterImage("dpf-promoter");
+    const ensured = await (await import("@/lib/self-upgrade/promoter")).ensurePromoterImage("dpf-promoter");
     if (!ensured.ok) {
       throw new Error(
         `promoter image unavailable (${ensured.skipReason ?? "unknown"})${
@@ -900,7 +899,7 @@ export async function repairPromoterImage(): Promise<{
   await requireOpsAccess();
   const config = await getSelfUpgradeConfig();
   const image = config.promoterImage ?? "dpf-promoter";
-  const result = await ensurePromoterImage(config.promoterImage);
+  const result = await (await import("@/lib/self-upgrade/promoter")).ensurePromoterImage(config.promoterImage);
 
   if (result.ok) {
     revalidatePath("/ops/self-upgrade");

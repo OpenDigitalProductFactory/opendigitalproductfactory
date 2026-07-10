@@ -22,10 +22,10 @@ export type BuildFailureClass =
   // many output assets onto a shared chunk). Usually a small number of source
   // root causes re-emitted per asset.
   | "turbopack-nft-duplicate-asset"
-  // A route / Inngest entrypoint statically imports Docker-only / host-only code
-  // (promoter, child_process, the self-upgrade barrel), dragging it into the
-  // server bundle and colliding chunks. The specific cause behind many of the
-  // duplicate-asset symptoms; fixed by a lazy import boundary (see PR #1555).
+  // A route / page / server-action / Inngest entrypoint statically imports
+  // Docker-only / host-only code (promoter, child_process, the self-upgrade
+  // barrel), dragging it into the server bundle. The specific cause behind many
+  // Turbopack/NFT symptoms; fixed by a lazy import boundary (see PR #1555).
   | "bundle-boundary-static-import"
   // `pnpm install --frozen-lockfile` failed inside the Docker build. Two
   // sub-causes with opposite ownership: a lockfile/manifest mismatch
@@ -65,10 +65,11 @@ const SPEC = "docs/superpowers/specs/2026-06-06-procedural-functional-verificati
 const HOIST_PLAYBOOK = "docs/triage/2026-05-24-portal-prisma-generate-rebuild-failure.md";
 
 // Docker-only / host-only modules that must never be statically imported into a
-// route or Inngest bundle. Their presence in a duplicate-asset trace is the
-// bundle-boundary fingerprint.
+// route/page/action/Inngest bundle. Their presence in a Turbopack/NFT trace is
+// the bundle-boundary fingerprint.
 const HOST_ONLY_MODULE = /(promoter|self-upgrade|child_process|node:child_process|dockerode|\/queue\/functions\/|api\/inngest)/i;
 const DUPLICATE_ASSET = /(duplicate\s+emitted\s+asset|multiple\s+assets\s+emit|conflict:.*emit|emit[^\n]*to the same (file|filename))/i;
+const UNEXPECTED_NFT_PROJECT_TRACE = /encountered unexpected file in NFT list|whole project was traced unintentionally/i;
 const MODULE_NOT_FOUND = /(cannot find module ['"]([^'"]+)['"]|module not found:\s*can't resolve ['"]([^'"]+)['"])/i;
 
 // The Dockerfile RUN line for a dependency install that exited non-zero —
@@ -96,15 +97,22 @@ export function classifyBuildFailure(
 ): BuildFailureClassification {
   const log = input.log ?? "";
 
-  // Most specific first: a duplicate-asset error whose trace fingerprints a
-  // host-only module is a bundle-boundary violation, not a generic NFT cascade.
-  if (DUPLICATE_ASSET.test(log) && HOST_ONLY_MODULE.test(log)) {
+  // Most specific first: a Turbopack/NFT error whose trace fingerprints a
+  // host-only module is a bundle-boundary violation, not a generic NFT cascade
+  // or hoist divergence that happens to appear later in the same build log.
+  const nftBoundaryMatch = DUPLICATE_ASSET.test(log)
+    ? DUPLICATE_ASSET
+    : UNEXPECTED_NFT_PROJECT_TRACE;
+  if (
+    (DUPLICATE_ASSET.test(log) || UNEXPECTED_NFT_PROJECT_TRACE.test(log)) &&
+    HOST_ONLY_MODULE.test(log)
+  ) {
     return {
       class: "bundle-boundary-static-import",
       summary:
-        "A route/Inngest entrypoint statically imports Docker-only/host-only code (promoter/child_process/self-upgrade), dragging it into the server bundle and colliding chunks. Fix with a lazy import boundary — see PR #1555.",
+        "A route/page/action/Inngest entrypoint statically imports Docker-only/host-only code (promoter/child_process/self-upgrade), dragging it into the server bundle. Fix with a lazy import boundary — see PR #1555.",
       playbookLink: SPEC,
-      failingTrace: traceAround(log, DUPLICATE_ASSET),
+      failingTrace: traceAround(log, nftBoundaryMatch),
       isMainDefectVsEnvironment: "main-defect",
     };
   }

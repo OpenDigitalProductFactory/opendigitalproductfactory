@@ -8,7 +8,7 @@
  * EP-VERIFY-PROC: move this from "a human eventually notices in production" to a
  * deterministic procedure the pipeline runs up front.
  *
- * Two checks (both pure string scans — no deps, runs with plain node):
+ * Three checks (all pure string scans — no deps, runs with plain node):
  *
  *   1. BUNDLE-HOSTILE DYNAMIC REQUIRE: `new Function(... return require ...)`.
  *      This shim is invisible to the bundler's static analysis and is undefined
@@ -17,6 +17,10 @@
  *   2. NODE BUILT-INS IN A "use client" COMPONENT: fs / child_process / path /
  *      crypto / etc. don't exist in the browser bundle and break the client
  *      build. Server-only code must live in a server module / route / action.
+ *   3. HOST-ONLY STATIC IMPORTS IN SERVER ENTRYPOINTS: route/page/action/Inngest
+ *      modules must not statically import Docker-only promoter code. Use a
+ *      dynamic import() boundary so Next/Turbopack does not trace that graph at
+ *      page-load or route-build time.
  *
  * Run: node scripts/check-bundle-boundaries.mjs
  * Exit 0 = clean; exit 1 = violations (with a clear, actionable report).
@@ -45,6 +49,10 @@ const DYNAMIC_REQUIRE_ALLOW = new Set([
 // `new Function(` ... `require` on the same construct — catches
 // new Function("mod", "return require(mod)") and minor variants.
 const DYN_REQUIRE = /new\s+Function\s*\([^)]*require/;
+const HOST_ONLY_IMPORTS = [
+  /self-upgrade\/promoter(?:\.[tj]s)?$/,
+  /(?:^|\/)dockerode$/,
+];
 
 function* walk(dir) {
   let entries;
@@ -91,8 +99,28 @@ function clientNodeBuiltinImports(body) {
   return hits;
 }
 
+function extractStaticImports(body) {
+  const noType = body.replace(
+    /\b(?:import|export)\s+type\b[\s\S]*?from\s*["'][^"']+["']/g,
+    "",
+  );
+  const specs = new Set();
+  for (const m of noType.matchAll(/\bfrom\s*["']([^"']+)["']/g)) specs.add(m[1]);
+  for (const m of noType.matchAll(/\bimport\s+["']([^"']+)["']/g)) specs.add(m[1]);
+  return [...specs];
+}
+
+function isServerBundleEntrypoint(rel) {
+  return (
+    /^apps\/web\/app\/.*\/(?:page|layout|route)\.(?:ts|tsx)$/.test(rel) ||
+    /^apps\/web\/lib\/actions\/.*\.(?:ts|tsx)$/.test(rel) ||
+    /^apps\/web\/lib\/queue\/functions\/.*\.ts$/.test(rel)
+  );
+}
+
 const dynViolations = [];
 const clientViolations = [];
+const hostOnlyStaticViolations = [];
 
 for (const baseDir of SCAN_DIRS) {
   for (const file of walk(baseDir)) {
@@ -110,6 +138,13 @@ for (const baseDir of SCAN_DIRS) {
     if (isUseClient(body)) {
       const hits = clientNodeBuiltinImports(body);
       if (hits.length) clientViolations.push(`${rel}  (imports: ${hits.join(", ")})`);
+    }
+    if (isServerBundleEntrypoint(rel)) {
+      for (const specifier of extractStaticImports(body)) {
+        if (HOST_ONLY_IMPORTS.some((re) => re.test(specifier))) {
+          hostOnlyStaticViolations.push(`${rel} -> ${specifier}`);
+        }
+      }
     }
   }
 }
@@ -143,6 +178,19 @@ if (clientViolations.length > 0) {
   console.error("");
 }
 
+if (hostOnlyStaticViolations.length > 0) {
+  failed = true;
+  console.error("");
+  console.error("ERROR: BI-98AF1066 — host-only module statically imported into a server bundle entrypoint.");
+  console.error("");
+  console.error("Routes, pages, server actions, and Inngest functions must not statically import");
+  console.error("Docker-only promoter code. Use a dynamic import() boundary at the call site so");
+  console.error("Next/Turbopack does not trace the host-only graph during page-load or route builds.");
+  console.error("");
+  for (const v of hostOnlyStaticViolations) console.error("  " + v);
+  console.error("");
+}
+
 if (failed) {
   console.error("These are caught statically here so they don't surface as a slow Docker build");
   console.error("failure or a corrupt runtime in production. Fix at the source above.");
@@ -150,4 +198,4 @@ if (failed) {
   process.exit(1);
 }
 
-console.log("✓ Bundle boundaries clean: no bundle-hostile dynamic requires, no Node built-ins in client components.");
+console.log("✓ Bundle boundaries clean: no bundle-hostile dynamic requires, no Node built-ins in client components, no static host-only imports in server entrypoints.");
