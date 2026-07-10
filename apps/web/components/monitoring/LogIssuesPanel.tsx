@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { TONE_COLOR, type Tone } from "./health-summary";
+import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 import { getLogSignatureIssues } from "@/lib/actions/quality";
 
 interface LogIssue {
@@ -48,6 +49,18 @@ function lokiExploreUrl(service: string | null): string {
     },
   };
   return `${GRAFANA_BASE}/explore?schemaVersion=1&orgId=1&panes=${encodeURIComponent(JSON.stringify(panes))}`;
+}
+
+// Handoff prompt carrying the issue's own facts — the alternative was handing
+// a business user a raw Loki Explore link as the only "action".
+function buildLogIssuePrompt(issue: LogIssue, service: string | null): string {
+  return [
+    `I'm looking at the System Health "Log issues" panel. This issue needs a diagnosis:`,
+    `- [${issue.severity}] ${issue.title}${service ? ` (service: ${service})` : ""}, first seen ${issue.createdAt}${
+      issue.description ? ` — ${issue.description}` : ""
+    }`,
+    "Please check the recent logs for this service, explain what's failing and its impact in plain language, and either fix it if you have a safe way to do so or give me the exact next step.",
+  ].join("\n");
 }
 
 export function LogIssuesPanel() {
@@ -117,6 +130,11 @@ export function LogIssuesPanel() {
                     </td>
                     <td className="px-2 py-1.5 text-[var(--dpf-text)]">{issue.title}</td>
                     <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                      <AskCoworkerButton
+                        prompt={buildLogIssuePrompt(issue, service)}
+                        routeContext="/admin"
+                        className="text-[var(--dpf-accent)] hover:underline mr-3"
+                      />
                       <a
                         href={lokiExploreUrl(service)}
                         target="_blank"

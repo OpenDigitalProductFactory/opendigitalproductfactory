@@ -2374,7 +2374,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "admin_restart_service",
-    description: "Restart a Docker Compose service. Equivalent to 'docker compose restart <service>'.",
+    description: "Restart a platform service's container. Use when a service is down or unhealthy and a restart is the indicated remediation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -15146,20 +15146,19 @@ export async function executeTool(
 
     case "admin_restart_service": {
       const service = String(params.service ?? "");
-      const ALLOWED = ["portal", "sandbox", "postgres", "neo4j", "qdrant"];
-      if (!ALLOWED.includes(service)) {
-        return { success: false, error: `Invalid service. Allowed: ${ALLOWED.join(", ")}`, message: `Unknown service "${service}".` };
-      }
+      // Label-resolved `docker restart` — the runtime image ships no compose
+      // file, so `docker compose restart` always failed here (BI-01EA3EBE).
+      const { restartPlatformService } = await import("@/lib/operate/service-restart");
       try {
         const { exec: execCb } = lazyChildProcess();
         const { promisify } = lazyUtil();
         const execAsync = promisify(execCb);
         await logAdminActivity(userId, "admin_restart_service", { service }, "success", 2, `Restarting ${service}`);
-        const { stdout } = await execAsync(`docker compose restart ${service} 2>&1`, {
-          cwd: process.env.PROJECT_ROOT || "/app",
-          timeout: 60_000,
-        });
-        return { success: true, message: `Restarted ${service}.`, data: { service, output: stdout.slice(0, 2000) } };
+        const result = await restartPlatformService(service, execAsync);
+        if (!result.success) {
+          return { success: false, error: result.error ?? result.message, message: result.message };
+        }
+        return { success: true, message: result.message, data: { service, container: result.container } };
       } catch (err) {
         const msg = (err as Error).message?.slice(0, 500) ?? "Restart failed";
         return { success: false, error: msg, message: `Failed to restart ${service}: ${msg}` };

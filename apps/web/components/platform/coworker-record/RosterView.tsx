@@ -7,6 +7,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 import type { RosterRow, RosterFacets } from "@/lib/coworker-record/roster";
 import { matchesFilters, kindOptions, EMPTY_FILTERS, type RosterFilters } from "@/lib/coworker-record/roster-filter";
 import { computeWorkforceSummary } from "@/lib/coworker-record/workforce-summary";
@@ -172,7 +173,16 @@ function RosterRowCard({ row }: { row: RosterRow }) {
           </Badge>
         )}
         {row.emptyCorpus && row.familyKey && <Badge tone="warning">empty corpus</Badge>}
-        {!row.providerHealthy && <Badge tone="warning">provider down</Badge>}
+        {!row.providerHealthy && (
+          <AskCoworkerButton
+            prompt={`The AI workforce roster shows "${row.displayName}" with a "provider down" warning — its AI provider isn't healthy, so this coworker may not respond. Please check the provider status, explain what's wrong in plain language, and give me the exact next step (or fix it if you have a safe way to do so).`}
+            routeContext="/platform"
+            title="This coworker's AI provider isn't healthy — click to ask what's wrong and how to fix it"
+            className=""
+          >
+            <Badge tone="warning">provider down — ask</Badge>
+          </AskCoworkerButton>
+        )}
         {row.openBlockers > 0 && <Badge tone="error">{row.openBlockers} blocker{row.openBlockers !== 1 ? "s" : ""}</Badge>}
         {row.deferRate > 0.25 && <Badge tone="warning">defer {Math.round(row.deferRate * 100)}%</Badge>}
       </span>
