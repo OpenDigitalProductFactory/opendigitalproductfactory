@@ -22,6 +22,8 @@ import {
   type SeedContributionFitReport,
 } from "./seed-contribution-fit";
 
+export { evaluateSeedContributionFit };
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export type SanitizationFinding = {

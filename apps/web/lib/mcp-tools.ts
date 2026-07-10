@@ -10672,11 +10672,11 @@ export async function executeTool(
         contributionReadiness?: string;
       } | null;
       const {
+        evaluateSeedContributionFit,
         runSanitizationScan,
         tagBusinessVerticals,
         verifyParameterization,
       } = await import("@/lib/integrate/contribution-review");
-      const { evaluateSeedContributionFit } = await import("@/lib/integrate/seed-contribution-fit");
       const securityScan = (await import("@/lib/security-scan")).scanDiffForSecurityIssues(shareableDiff);
       const preliminarySanitization = await runSanitizationScan(shareableDiff);
       const preliminaryParameterization = verifyParameterization(shareableDiff, reusability);

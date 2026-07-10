@@ -35,7 +35,7 @@ describe("getHiveContributionsView seed reviews", () => {
   });
 
   it("maps reviewed seed-fit evidence from FeaturePack.reviewReport", async () => {
-    featurePackFindMany.mockResolvedValue([{ 
+    featurePackFindMany.mockResolvedValue([{
       packId: "FP-1",
       title: "Shared banking defaults",
       prUrl: "https://github.com/example/repo/pull/42",
