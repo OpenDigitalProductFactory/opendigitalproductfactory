@@ -61,6 +61,12 @@ vi.mock("@/lib/ai-provider-internals", () => ({
   autoDiscoverAndProfile: vi.fn(),
 }));
 
+// fallback.ts dynamically imports refreshOAuthToken to self-heal a lapsed OAuth
+// token on an auth error before disabling the provider.
+vi.mock("@/lib/provider-oauth", () => ({
+  refreshOAuthToken: vi.fn(),
+}));
+
 vi.mock("./route-outcome", () => ({
   recordRouteOutcome: vi.fn(() => Promise.resolve()),
 }));
@@ -81,6 +87,7 @@ import { scheduleRecovery } from "./rate-recovery";
 import { invalidateRoutingLoaderCache } from "./loader";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 import { recordRouteOutcome } from "./route-outcome";
+import { refreshOAuthToken } from "@/lib/provider-oauth";
 import type { RouteDecision } from "./types";
 import type { SensitivityLevel } from "./types";
 
@@ -136,6 +143,7 @@ const mockRecordRouteOutcome = recordRouteOutcome as ReturnType<typeof vi.fn>;
 const mockMarkEndpointUnavailable = markEndpointUnavailable as ReturnType<typeof vi.fn>;
 const mockClearEndpointUnavailable = clearEndpointUnavailable as ReturnType<typeof vi.fn>;
 const mockInvalidateRoutingLoaderCache = invalidateRoutingLoaderCache as ReturnType<typeof vi.fn>;
+const mockRefreshOAuthToken = refreshOAuthToken as ReturnType<typeof vi.fn>;
 
 // ── Setup ────────────────────────────────────────────────────────────────────
 
@@ -160,6 +168,9 @@ beforeEach(() => {
 
   // Default: extractRetryAfterMs returns undefined (fallback to 60s)
   mockExtractRetryAfterMs.mockReturnValue(undefined);
+
+  // Default: OAuth token refresh succeeds
+  mockRefreshOAuthToken.mockResolvedValue({ token: "fresh-token" });
 });
 
 afterEach(() => {
@@ -532,6 +543,80 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockPrisma.modelProfile.updateMany).not.toHaveBeenCalled();
+    });
+
+    // ── OAuth self-heal: a lapsed subscription token must not permanently
+    //    disable the provider on the first 401 (BI-EC4A5E7C). ────────────────
+    it("refreshes the token and retries once for an OAuth provider — does NOT disable", async () => {
+      mockPrisma.modelProvider.findUnique.mockResolvedValue({
+        providerId: "prov1",
+        name: "Claude Subscription",
+        authMethod: "oauth2_authorization_code",
+      });
+      // First call auth-fails (stale token); the refresh-retry succeeds.
+      mockCallProvider
+        .mockRejectedValueOnce(new InferenceError("Invalid API key", "auth", "prov1", 401))
+        .mockResolvedValueOnce({ content: "hello", inferenceMs: 100 });
+
+      const result = await callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+
+      expect(mockRefreshOAuthToken).toHaveBeenCalledWith("prov1");
+      expect(mockCallProvider).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(result.content).toBe("hello");
+    });
+
+    it("disables the OAuth provider when the token refresh fails", async () => {
+      mockPrisma.modelProvider.findUnique.mockResolvedValue({
+        providerId: "prov1",
+        name: "Claude Subscription",
+        authMethod: "oauth2_authorization_code",
+      });
+      mockRefreshOAuthToken.mockResolvedValue({ error: "refresh token expired" });
+      throwAuth();
+
+      await expect(
+        callWithFallbackChain(
+          makeDecision("prov1", "model1"),
+          [{ role: "user", content: "hi" }],
+          "system",
+        ),
+      ).rejects.toThrow();
+
+      expect(mockRefreshOAuthToken).toHaveBeenCalledWith("prov1");
+      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
+        where: { providerId: "prov1" },
+        data: { status: "disabled" },
+      });
+    });
+
+    it("disables the OAuth provider if the retry still auth-fails (refresh once, then give up)", async () => {
+      mockPrisma.modelProvider.findUnique.mockResolvedValue({
+        providerId: "prov1",
+        name: "Claude Subscription",
+        authMethod: "oauth2_authorization_code",
+      });
+      // Refresh succeeds but the retried call still auth-fails → disable.
+      throwAuth();
+
+      await expect(
+        callWithFallbackChain(
+          makeDecision("prov1", "model1"),
+          [{ role: "user", content: "hi" }],
+          "system",
+        ),
+      ).rejects.toThrow();
+
+      expect(mockRefreshOAuthToken).toHaveBeenCalledTimes(1);
+      expect(mockCallProvider).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
+        where: { providerId: "prov1" },
+        data: { status: "disabled" },
+      });
     });
   });
 

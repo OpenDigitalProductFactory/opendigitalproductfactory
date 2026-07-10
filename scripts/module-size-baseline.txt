@@ -45,7 +45,7 @@ apps/web/lib/navigation/portal-navigation-model.ts	936
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1328
 apps/web/lib/routing/chat-adapter.test.ts	820
-apps/web/lib/routing/fallback.test.ts	953
+apps/web/lib/routing/fallback.test.ts	1038
 apps/web/lib/self-upgrade/quiescence.test.ts	842
 apps/web/lib/self-upgrade/quiescence.ts	1462
 apps/web/lib/skills/evidence-search.ts	803

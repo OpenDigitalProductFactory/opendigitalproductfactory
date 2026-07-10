@@ -204,6 +204,7 @@ export async function callWithFallbackChain(
   let rateLimitRetried = false;
   let overloadRetried = false;
   let transientRetried = false;
+  let authRefreshRetried = false;
   const agentId = outcomeAttribution?.agentId?.trim() || mcpSession?.agentId?.trim() || null;
   const agentMessageId = outcomeAttribution?.agentMessageId?.trim() || null;
 
@@ -241,9 +242,11 @@ export async function callWithFallbackChain(
     }
 
     // Look up the provider row to get its display name for downgrade messages
+    // and its auth method (so an auth error on a refreshable OAuth provider can
+    // be self-healed rather than permanently disabling the provider).
     const provider = await prisma.modelProvider.findUnique({
       where: { providerId: entry.providerId },
-      select: { providerId: true, name: true },
+      select: { providerId: true, name: true, authMethod: true },
     });
 
     if (!provider) {
@@ -422,7 +425,32 @@ export async function callWithFallbackChain(
           }
 
         } else if (e.code === "auth") {
-          // Auth errors remain at provider level — credentials are shared
+          // Auth errors are provider-level (credentials are shared). But an
+          // OAuth-subscription provider whose access token merely lapsed is
+          // REFRESHABLE — permanently disabling it on the first 401 takes the
+          // whole provider dark (e.g. the paid Claude subscription that is the
+          // only endpoint eligible for the Build code-generation phase, which
+          // then silently breaks Build Studio). So for OAuth providers, attempt
+          // a token refresh and retry the same entry once before disabling;
+          // only disable if the refresh fails or the retry still auth-fails.
+          const isOAuth = provider.authMethod?.startsWith("oauth2") ?? false;
+          if (isOAuth && !authRefreshRetried) {
+            authRefreshRetried = true;
+            const { refreshOAuthToken } = await import("@/lib/provider-oauth");
+            const refreshed = await refreshOAuthToken(entry.providerId);
+            if ("token" in refreshed) {
+              console.log(
+                `[callWithFallbackChain] Auth error on OAuth provider ${entry.providerId}; refreshed token, retrying once before disabling.`,
+              );
+              i--;
+              continue;
+            }
+            console.warn(
+              `[callWithFallbackChain] Auth error on OAuth provider ${entry.providerId}; token refresh failed (${refreshed.error}). Disabling provider.`,
+            );
+          }
+          // Non-OAuth provider, refresh failed, or refresh-retry already
+          // attempted: the credentials are genuinely bad — disable the provider.
           await prisma.modelProvider
             .update({
               where: { providerId: entry.providerId },
