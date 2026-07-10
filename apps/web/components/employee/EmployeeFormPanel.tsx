@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import {
   createEmployeeProfile,
   updateEmployeeProfile,
-  type EmployeeProfileInput,
 } from "@/lib/actions/workforce";
-import type { WorkforceStatus, EmployeeProfileRecord } from "@/lib/workforce-types";
+// EmployeeProfileInput comes from the type module, not the "use server" action
+// module — a "use server" file cannot export types (they leak into the runtime
+// server-reference registry and 500 at request time).
+import type { WorkforceStatus, EmployeeProfileRecord, EmployeeProfileInput } from "@/lib/workforce-types";
 import type { AddressWithHierarchy } from "@/lib/address-types";
 import AddressSection from "@/components/employee/AddressSection";
 import { DatePicker } from "@/components/ui/DatePicker";

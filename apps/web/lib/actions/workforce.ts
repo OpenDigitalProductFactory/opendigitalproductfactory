@@ -23,8 +23,12 @@ type SessionUserContext = {
   isSuperuser: boolean;
 };
 
-// EmployeeProfileInput type moved to workforce-types.ts
-export type { EmployeeProfileInput } from "@/lib/workforce-types";
+// EmployeeProfileInput lives in workforce-types.ts; it is imported above for
+// internal use. Do NOT re-export it from this "use server" module — turbopack
+// enumerates every export of a "use server" file into the runtime
+// server-reference registry, so a type re-export becomes a `ReferenceError` at
+// module eval (500 at request time, invisible to the build gate). Callers
+// import the type from @/lib/workforce-types directly.
 
 export type AssignEmployeeOrgInput = {
   employeeProfileId: string;
