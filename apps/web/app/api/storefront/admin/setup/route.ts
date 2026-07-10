@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { generateDesignSystem } from "@/lib/design-intelligence";
 import { seedBookingScheduleDefaults } from "@/lib/storefront/seed-booking-defaults";
 import {
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
             priceAmount?: number | null;
           }>
         ).map((t, i) => ({
-          itemId: `itm-${nanoid(8)}`,
+          itemId: `itm-${newId(8)}`,
           name: t.name,
           description: t.description ?? null,
           priceType: t.priceType,

@@ -1,6 +1,6 @@
 "use server";
 
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { prisma } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
@@ -19,7 +19,7 @@ async function requireManageFinance(): Promise<string> {
 export async function createBankAccount(input: CreateBankAccountInput) {
   await requireManageFinance();
 
-  const bankAccountId = `BA-${nanoid(8)}`;
+  const bankAccountId = `BA-${newId(8)}`;
   const openingBalance = input.openingBalance ?? 0;
 
   const account = await prisma.bankAccount.create({
@@ -95,7 +95,7 @@ export async function importTransactions(
   await requireManageFinance();
 
   const parseResult = parseCSV(csvContent);
-  const batchId = nanoid(12);
+  const batchId = newId(12);
 
   // Load active bank rules for auto-categorization
   const rules = await prisma.bankRule.findMany({

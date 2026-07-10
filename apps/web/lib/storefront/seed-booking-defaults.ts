@@ -1,4 +1,4 @@
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 
 /**
@@ -107,7 +107,7 @@ export async function seedBookingScheduleDefaults(
   if (providers.length === 0) {
     const provider = await db.serviceProvider.create({
       data: {
-        providerId: `SP-${nanoid(6).toUpperCase()}`,
+        providerId: `SP-${newId(6).toUpperCase()}`,
         storefrontId,
         name: providerName,
         isActive: true,

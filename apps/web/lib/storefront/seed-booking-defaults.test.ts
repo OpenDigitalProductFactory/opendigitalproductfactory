@@ -44,7 +44,7 @@ const { FIXTURE_ARCHETYPES } = vi.hoisted(() => ({
 vi.mock("@dpf/storefront-templates", () => ({ ALL_ARCHETYPES: FIXTURE_ARCHETYPES }));
 
 const mockNanoid = vi.hoisted(() => vi.fn());
-vi.mock("nanoid", () => ({ nanoid: mockNanoid }));
+vi.mock("@/lib/shared/new-id", () => ({ newId: mockNanoid }));
 
 import { seedBookingScheduleDefaults } from "./seed-booking-defaults";
 

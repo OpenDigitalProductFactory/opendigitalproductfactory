@@ -4,7 +4,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 
 type ComplianceActionResult = { ok: boolean; message: string; id?: string };
 
@@ -164,23 +164,23 @@ function numberValue(value?: string | null) {
 }
 
 function organizationLicenseRecordId() {
-  return `LIC-ORG-${nanoid(8).toUpperCase()}`;
+  return `LIC-ORG-${newId(8).toUpperCase()}`;
 }
 
 function personLicenseRecordId() {
-  return `LIC-PER-${nanoid(8).toUpperCase()}`;
+  return `LIC-PER-${newId(8).toUpperCase()}`;
 }
 
 function displayObligationId() {
-  return `LIC-DIS-${nanoid(8).toUpperCase()}`;
+  return `LIC-DIS-${newId(8).toUpperCase()}`;
 }
 
 function feeScheduleId() {
-  return `LIC-FEE-${nanoid(8).toUpperCase()}`;
+  return `LIC-FEE-${newId(8).toUpperCase()}`;
 }
 
 function readinessIssueId() {
-  return `LIC-ISS-${nanoid(8).toUpperCase()}`;
+  return `LIC-ISS-${newId(8).toUpperCase()}`;
 }
 
 function revalidateLicensingRoutes() {

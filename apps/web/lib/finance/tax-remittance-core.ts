@@ -7,7 +7,7 @@
 // unit-testable on its own. Behavior-preserving relocation — identical bodies.
 
 import { createHash } from "crypto";
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 
 export const MANAGED_TAX_ISSUE_TYPES = new Set([
   "tax_setup_mode_unknown",
@@ -35,31 +35,31 @@ export function appendNote(existing: string | null, incoming?: string | null) {
 }
 
 export function registrationPublicId() {
-  return `TAX-REG-${nanoid(8).toUpperCase()}`;
+  return `TAX-REG-${newId(8).toUpperCase()}`;
 }
 
 export function issuePublicId() {
-  return `TAX-ISS-${nanoid(8).toUpperCase()}`;
+  return `TAX-ISS-${newId(8).toUpperCase()}`;
 }
 
 export function periodPublicId() {
-  return `TAX-PER-${nanoid(8).toUpperCase()}`;
+  return `TAX-PER-${newId(8).toUpperCase()}`;
 }
 
 export function taxMonitorTaskId() {
-  return `tax-monitor-${nanoid(8).toLowerCase()}`;
+  return `tax-monitor-${newId(8).toLowerCase()}`;
 }
 
 export function credentialPublicId() {
-  return `TAX-CRED-${nanoid(8).toUpperCase()}`;
+  return `TAX-CRED-${newId(8).toUpperCase()}`;
 }
 
 export function remittanceRunPublicId() {
-  return `TAX-RUN-${nanoid(8).toUpperCase()}`;
+  return `TAX-RUN-${newId(8).toUpperCase()}`;
 }
 
 export function taxExecutionTaskId() {
-  return `tax-run-${nanoid(8).toLowerCase()}`;
+  return `tax-run-${newId(8).toLowerCase()}`;
 }
 
 export function stableTaxEntityId(prefix: string, ...parts: Array<string | number | Date | null | undefined>) {

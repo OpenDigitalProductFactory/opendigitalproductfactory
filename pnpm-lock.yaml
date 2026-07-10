@@ -276,9 +276,6 @@ importers:
       mammoth:
         specifier: ^1.12.0
         version: 1.12.0
-      nanoid:
-        specifier: ^5.1.16
-        version: 5.1.16
       next:
         specifier: ^16.2.9
         version: 16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.61.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

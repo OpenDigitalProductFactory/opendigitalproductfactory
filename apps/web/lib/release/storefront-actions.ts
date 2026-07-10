@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { generateInvoiceFromStorefrontOrder } from "@/lib/actions/finance";
 import { isExclusionViolation } from "@/lib/db/exclusion-violation";
 
@@ -19,7 +19,7 @@ async function getPublishedStorefront(slug: string) {
 }
 
 function makeRef(prefix: string) {
-  return `${prefix}-${nanoid(8).toUpperCase()}`;
+  return `${prefix}-${newId(8).toUpperCase()}`;
 }
 
 type ActionResult =

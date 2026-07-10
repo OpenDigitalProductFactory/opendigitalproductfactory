@@ -14,8 +14,8 @@ vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
 }));
 
-vi.mock("nanoid", () => ({
-  nanoid: mockNanoid,
+vi.mock("@/lib/shared/new-id", () => ({
+  newId: mockNanoid,
 }));
 
 // The OVSM projection is covered by its own tests; mock it here so the reset
