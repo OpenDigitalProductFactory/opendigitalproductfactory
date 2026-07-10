@@ -10,6 +10,7 @@ import type {
   OperationsMapRoutingTopology,
 } from "./types";
 import { A2A_INTERACTION_LEGEND } from "./project-a2a-interactions";
+import { titleize } from "./projection-helpers";
 import { parseActivityHarnessAudit } from "@/lib/routing/activity-harness-audit";
 
 export type RoutingCoworkerSourceRow = {
@@ -760,14 +761,6 @@ function usageTrafficWeight(tokens: number): number {
 
 function sortByLabel<T extends { label: string }>(items: T[]): T[] {
   return [...items].sort((left, right) => left.label.localeCompare(right.label));
-}
-
-function titleize(value: string): string {
-  return value
-    .split(/[-_:.\s]+/)
-    .filter(Boolean)
-    .map(capitalize)
-    .join(" ") || "Unknown";
 }
 
 function capitalize(value: string): string {

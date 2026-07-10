@@ -2,6 +2,7 @@ import type { AuditClass } from "@/lib/audit-classes";
 import { slugify } from "@/lib/shared/slugify";
 import type { TaskState } from "@/lib/tak/task-states";
 import { SOFTWARE_PLATFORM_MAP_TEMPLATE } from "./templates";
+import { classifyRunStatus } from "./operations-run-read-model";
 import type {
   OperationsMapAgent,
   OperationsMapBacklogEvidence,
@@ -136,39 +137,14 @@ export function getOperationsMapQuickViewFilters(viewId: OperationsMapQuickViewI
   };
 }
 
+// EP-8DC217EB BET-10 — the TaskRun-status → severity map now lives in the
+// operations-run read-model (classifyRunStatus). This TaskState-typed wrapper
+// is retained for callers that hold a narrowed TaskState; behavior is identical
+// (failed/rejected → critical; input/auth-required, stalled, and the
+// quiescence-related pauses → attention per BI-4ab6be39 §9.1 + BI-QUIESCE-001;
+// everything else → normal).
 export function deriveProjectionSeverityFromTaskState(state: TaskState): OperationsMapSeverity {
-  switch (state) {
-    case "failed":
-    case "rejected":
-      return "critical";
-    case "input-required":
-    case "auth-required":
-      // Stalled is recoverable (operator can Retry/Abandon) — treat as
-      // attention-grade, not critical. See BI-4ab6be39 §9.1.
-      return "attention";
-    case "stalled":
-      return "attention";
-    case "quiescing":
-    case "paused-for-upgrade":
-    case "paused-for-upgrade-forced":
-      // BI-QUIESCE-001 — quiescence-related pauses surface in the AI
-      // Operations Map attention bucket alongside stalled/input-required.
-      // Operator-actionable: the thread either has a Resume button (the
-      // "paused-for-upgrade*" variants) or is mid cooperative cancel
-      // ("quiescing") and will transition shortly. Forced-pause carries a
-      // truncated-response warning at the Resume site, not here.
-      return "attention";
-    case "submitted":
-    case "working":
-    case "completed":
-    case "canceled":
-    case "archived":
-      return "normal";
-    default: {
-      const exhaustive: never = state;
-      return exhaustive;
-    }
-  }
+  return classifyRunStatus(state);
 }
 
 export function deriveProjectionSeverityFromToolExecution(

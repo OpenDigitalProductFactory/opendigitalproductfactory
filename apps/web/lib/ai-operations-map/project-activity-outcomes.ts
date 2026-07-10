@@ -1,4 +1,5 @@
 import { parseActivityHarnessAudit } from "@/lib/routing/activity-harness-audit";
+import { providerFromEndpoint } from "./projection-helpers";
 import type {
   RoutingDecisionSourceRow,
   RoutingRouteOutcomeSourceRow,
@@ -42,7 +43,7 @@ export function projectActivityOutcomes(
     const harness = parseActivityHarnessAudit(selectedCandidate?.activityHarness);
     if (!selectedCandidate || !harness) return [];
 
-    const providerId = selectedCandidate.providerId ?? providerFromEndpoint(decision.selectedEndpointId);
+    const providerId = selectedCandidate.providerId ?? providerFromEndpoint(decision.selectedEndpointId, "unrouted");
     const modelId = selectedCandidate.modelId ?? decision.selectedModelId;
     const tokenUsage = findMatchingTokenUsage(decision, providerId, input.tokenUsage);
     const routeOutcome = findMatchingRouteOutcome(decision, providerId, modelId, input.routeOutcomes);
@@ -174,6 +175,3 @@ function findMatchingEvaluationSignal(
   ) ?? null;
 }
 
-function providerFromEndpoint(endpointId: string): string {
-  return endpointId.split(":")[0] || "unrouted";
-}

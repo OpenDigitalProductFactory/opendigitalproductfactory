@@ -32,6 +32,7 @@ import {
   resolveEvidenceRange,
   resolveGateResult,
 } from "./load-map-support";
+import { OPERATIONS_RUN_SELECT } from "./operations-run-read-model";
 import type {
   OperationsMapRoutingTopology,
   OperationsMapAgent,
@@ -179,19 +180,7 @@ export async function loadOperationsMapData(
       },
       orderBy: { startedAt: "desc" },
       take: evidenceTake,
-      select: {
-        id: true,
-        taskRunId: true,
-        status: true,
-        source: true,
-        currentAgentId: true,
-        routeContext: true,
-        title: true,
-        startedAt: true,
-        completedAt: true,
-        a2aMetadata: true,
-        repeatedPatternKey: true,
-      },
+      select: OPERATIONS_RUN_SELECT,
     }),
     // BI-OPS-MAP-STALLED-WINDOW (2026-05-21): lift stalled rows into the
     // projection set independently of the recent-40 cap. The operator
@@ -207,19 +196,7 @@ export async function loadOperationsMapData(
       },
       orderBy: { startedAt: "desc" },
       take: STALLED_TASK_RUN_LIMIT,
-      select: {
-        id: true,
-        taskRunId: true,
-        status: true,
-        source: true,
-        currentAgentId: true,
-        routeContext: true,
-        title: true,
-        startedAt: true,
-        completedAt: true,
-        a2aMetadata: true,
-        repeatedPatternKey: true,
-      },
+      select: OPERATIONS_RUN_SELECT,
     }),
     prisma.toolExecution.findMany({
       where: { ...createdAtWindow },
