@@ -4547,6 +4547,26 @@ model EffortContext {
   @@index([backlogItemId])
 }
 
+// BI-A9052DCB (EP-8C706944 P3): session-start projection briefing. A precomputed,
+// refreshable "what you should know" block distilled offline from governed records
+// (BusinessContext, top UserFacts, CoworkerMemoryNotes, recent decisions, thread
+// spend) — injected at session start instead of RAG over transcripts (ChatGPT's
+// reference-chat-history model). scope="user" keys on the userId; scope="org"
+// keys on the organizationId. sourceDigest lets the refresh skip regen when the
+// inputs are unchanged.
+model CoworkerBriefing {
+  id           String   @id @default(cuid())
+  agentId      String // Agent.id (cuid) — the coworker the briefing is for
+  scope        String // "user" | "org"
+  scopeKey     String // userId (scope=user) or organizationId (scope=org)
+  content      String
+  sourceDigest String
+  generatedAt  DateTime @default(now())
+
+  @@unique([agentId, scope, scopeKey])
+  @@index([agentId, scope])
+}
+
 model AgentActionProposal {
   id               String          @id @default(cuid())
   proposalId       String          @unique
