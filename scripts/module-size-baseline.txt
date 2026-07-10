@@ -40,7 +40,7 @@ apps/web/lib/integrate/build-orchestrator.ts	1780
 apps/web/lib/integrate/sandbox/build-branch.ts	854
 apps/web/lib/marketing.ts	1367
 apps/web/lib/mcp-tools-backlog.test.ts	901
-apps/web/lib/mcp-tools.ts	14847
+apps/web/lib/mcp-tools.ts	14848
 apps/web/lib/navigation/portal-navigation-model.ts	936
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1328
@@ -50,12 +50,12 @@ apps/web/lib/self-upgrade/quiescence.test.ts	842
 apps/web/lib/self-upgrade/quiescence.ts	1460
 apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	903
-apps/web/lib/tak/agent-grants.ts	801
+apps/web/lib/tak/agent-grants.ts	807
 apps/web/lib/tak/agent-routing.ts	965
 apps/web/lib/tak/agentic-loop.test.ts	2113
 apps/web/lib/tak/agentic-loop.ts	2440
 apps/web/lib/tak/route-context-map.ts	1226
-apps/web/lib/tak/route-context.ts	1189
+apps/web/lib/tak/route-context.ts	1320
 apps/web/lib/work-capsules/work-capsule-store.test.ts	943
 apps/web/lib/work-capsules/work-capsule-store.ts	932
 apps/web/lib/workbooks/platform-tables.ts	892
