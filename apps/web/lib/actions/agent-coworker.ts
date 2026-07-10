@@ -674,6 +674,22 @@ export async function sendMessage(input: {
   } catch (err) {
     console.warn("[thread-checkpoint] inject failed:", getErrorMessage(err));
   }
+
+  // BI-A9052DCB (EP-8C706944 P3): prepend the session-start projection briefing —
+  // a precomputed "what you already know about this user" block distilled offline
+  // from governed records — ahead of the recency window. Strict no-op until a
+  // briefing exists; the read lazily fire-and-forget refreshes it when stale.
+  if (user.id) {
+    try {
+      const { loadUserBriefingMessage } = await import("@/lib/tak/coworker-briefing-runner");
+      const briefingMessage = await loadUserBriefingMessage(agent.agentId, user.id);
+      if (briefingMessage) {
+        chatHistory = [briefingMessage, ...chatHistory];
+      }
+    } catch (err) {
+      console.warn("[coworker-briefing] inject failed:", getErrorMessage(err));
+    }
+  }
   const recentContentForClassification = chatHistory
     .slice(-3)
     .map((m) => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
