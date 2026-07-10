@@ -1,6 +1,6 @@
 # Governance findings plane — one contract + one severity ladder (opener)
 
-_Status: implemented with BI-7CD647B0 · EP-8DC217EB BET-12 (opener) · 2026-07-09_
+_Status: opener + increment 2 landed under BI-7CD647B0 · EP-8DC217EB BET-12 · 2026-07-09_
 _Parent plan: [`2026-07-07-vertical-integration-inward-plan.md`](../plans/2026-07-07-vertical-integration-inward-plan.md) §4 BET-12_
 
 ## The gap
@@ -29,17 +29,37 @@ can render or roll them up together.
   persistence/detector modules), so this stays a leaf with no new deps and no
   hot-zone touch.
 
+## Landed in increment 2 (BI-7CD647B0 · behavior-preserving)
+
+Two duplication-collapsing extractions, no observable-behavior change; existing
+tests stayed green and new unit tests cover the helpers:
+
+1. **`lib/governance/reconcile-keyed-findings.ts`** — the generic keyed-upsert +
+   auto-resolve loop (`reconcileKeyedFindings<TRow, TFinding>` +
+   `stableStringify`), storage-agnostic via caller-supplied
+   `loadOpen` / `keyOf` / `hasChanged` / `create` / `update` / `resolve`.
+   `ea/conformance-issue-reconciler.ts` is now a **thin adapter** over it —
+   plugging in the `eaConformanceIssue` delegate, the `detailsJson.issueKey` key
+   extraction, and the message/severity/detailsJson change detection. Its
+   exported signature and `{created, updated, resolved}` return shape are
+   unchanged, so **the stewards that call it need zero changes** (architecture-
+   parity, data-architecture-steward-apply, consolidation-parity). The other
+   streams (wiki-lint, assurance, security) can adopt the loop later without
+   touching it. (`reconcile-it4it-coverage.ts` keeps its own parallel
+   `detailsJson.key` loop for now — a future adoption candidate, left untouched.)
+2. **`lib/assurance/with-assurance-run.ts`** — `assuranceRunId(prefix, buildId,
+   toolExecutionId)` (shared sanitize + `slice(0,64)`) and `createAssuranceRun`,
+   which applies the fixed AssuranceRun contract (scopeType `build`,
+   scopeId = buildId, startedAt = completedAt = injected `now`) and takes the
+   varying fields as params. `scan-job.ts` and `bom-job.ts` call it and deleted
+   their duplicated local `createRunId` copies; the runId strings, field values,
+   and `summary as Prisma.InputJsonValue` cast are byte-for-byte preserved.
+
 ## Deliberately deferred (later BET-12 increments)
 
-Per the plan's land-order and the Inside-Out hot-zone rule, these are **not** in
-this PR:
+Per the plan's land-order and the Inside-Out hot-zone rule, these are **not** yet
+built:
 
-1. **`reconcile-keyed-findings` extraction** — generalize the keyed-upsert +
-   auto-resolve loop out of `ea/conformance-issue-reconciler.ts` (a live file
-   used by 3 stewards) into a reusable helper, refactoring the reconciler as a
-   thin adapter. Behavior-preserving refactor of a live path → its own increment.
-2. **`withAssuranceRun` wrapper** — collapse the duplicated `AssuranceRun` ledger
-   block in `assurance/scan-job.ts` + `bom-job.ts`.
 3. **case→evidence generalization** — mirror `securityCaseToEvidenceInput` for
    assurance runs so `ComplianceEvidence` is fed by more than security.
 4. **detector → `ingestBacklogItem` fan-in** — route SOC cases (which today
@@ -61,6 +81,6 @@ foundation, unit-tested against each source shape.
 The single-ladder + per-source mapper approach matches how SIEM/GRC tools
 (e.g. DefectDojo's unified finding model) normalize heterogeneous scanner
 severities onto one ordinal scale before dedup/rollup, rather than rendering
-each tool's native scale. The `reconcile-keyed-findings` target already exists
-in-repo as `reconcileConformanceIssues` — increment 1 generalizes it rather
-than inventing a parallel loop.
+each tool's native scale. The `reconcile-keyed-findings` target already existed
+in-repo as `reconcileConformanceIssues` — increment 2 generalized it in place
+rather than inventing a parallel loop.

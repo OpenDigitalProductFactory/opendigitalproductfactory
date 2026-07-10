@@ -7,6 +7,7 @@ import {
   type PnpmAuditComponentLookup,
 } from "./pnpm-audit-adapter";
 import { persistAssuranceFindings, type AssuranceFindingPersistenceDb } from "./finding-persistence";
+import { createAssuranceRun } from "./with-assurance-run";
 import { autoFileFindingsFromScan } from "./auto-file-findings";
 import { loadReconcileContext } from "./advisory-context";
 import { emptyDispositionTotals, type ReconcileContext } from "./finding-reconcile";
@@ -165,12 +166,6 @@ function deriveStatus(findingCount: number, blockingCount: number): "passed" | "
   return "passed";
 }
 
-function createRunId(buildId: string, toolExecutionId: string): string {
-  const buildPart = buildId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
-  const executionPart = toolExecutionId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
-  return `assurance_scan_${buildPart}_${executionPart}`;
-}
-
 function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setUTCDate(result.getUTCDate() + days);
@@ -265,22 +260,17 @@ export async function runBuildAssuranceScan(input: RunBuildScanInput): Promise<R
     },
   });
 
-  const assuranceRun = await input.db.assuranceRun.create({
-    data: {
-      runId: createRunId(build.buildId, toolExecution.id),
-      scopeType: "build",
-      scopeId: build.buildId,
-      adapterKey: PNPM_AUDIT_ADAPTER_KEY,
-      adapterVersion: PNPM_AUDIT_ADAPTER_VERSION,
-      status,
-      summary: adapterOutput.summary as Prisma.InputJsonValue,
-      startedAt: input.now,
-      completedAt: input.now,
-      buildId: build.buildId,
-      digitalProductId: build.digitalProductId,
-      toolExecutionId: toolExecution.id,
-      toolExecutionReceiptId: receipt.id,
-    },
+  const assuranceRun = await createAssuranceRun(input.db, {
+    prefix: "assurance_scan_",
+    buildId: build.buildId,
+    digitalProductId: build.digitalProductId,
+    adapterKey: PNPM_AUDIT_ADAPTER_KEY,
+    adapterVersion: PNPM_AUDIT_ADAPTER_VERSION,
+    status,
+    summary: adapterOutput.summary as Prisma.InputJsonValue,
+    toolExecutionId: toolExecution.id,
+    toolExecutionReceiptId: receipt.id,
+    now: input.now,
   });
 
   const persistResult = await persistAssuranceFindings(input.db, {
