@@ -84,8 +84,51 @@ export async function getRouteDataContext(routeContext: string, userId: string):
     }
   }
 
+  // Default provider: any route with no bespoke provider (the vast majority —
+  // only ~18 of ~286 shell routes are enrolled above) would otherwise leave the
+  // coworker with just the generic business blurb, so it could not even name the
+  // page the user is on. This guarantees perception by construction: the coworker
+  // always knows which page the user is viewing and is steered to read via tools
+  // rather than ask the user to paste the screen. BI-F2AFD796 / EP-8C706944.
+  if (!routeSpecific && routeContext) {
+    routeSpecific = buildDefaultRouteContext(routeContext);
+  }
+
   if (!businessContextBlock && !routeSpecific) return null;
   return [businessContextBlock, routeSpecific].filter(Boolean).join("\n");
+}
+
+// ─── Default Route Context (fallback for unenrolled routes) ──────────────────
+
+/** Turn a route like "/compliance/risks/[id]" into "Compliance › Risks › Detail". */
+function humanizeRoute(routeContext: string): string {
+  const segments = routeContext.split("/").filter(Boolean);
+  if (segments.length === 0) return "Home";
+  return segments
+    .map((seg) => {
+      // Dynamic segment (e.g. [id], [capsuleId]) → "Detail".
+      if (/^\[.*\]$/.test(seg)) return "Detail";
+      return seg
+        .replace(/[-_]/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+    })
+    .join(" › ");
+}
+
+/**
+ * Minimal page-identity context for a route with no bespoke provider. It does not
+ * fabricate page data — it names the page and steers the coworker to its read
+ * tools. The explicit "do not tell the user you cannot see the page" line is the
+ * behavioral fix for the reported failure: a coworker on an unenrolled route used
+ * to ask the user to paste the screen instead of acting.
+ */
+function buildDefaultRouteContext(routeContext: string): string {
+  const label = humanizeRoute(routeContext);
+  return [
+    `\nPAGE DATA — ${label}:`,
+    `The user is viewing the "${label}" page (route ${routeContext}).`,
+    "No bespoke data summary is wired for this route yet, but you DO know which page the user is on. To answer questions about what is on it, use your available read tools (e.g. query_backlog, list_open_decision_reviews, wiki_query, get_runtime_coordination_map, and any domain read tools you hold) rather than asking the user to paste or screenshot the screen. Only ask the user to describe the page as a last resort, after your tools cannot supply the answer.",
+  ].join("\n");
 }
 
 // ─── Route Context Providers ────────────────────────────────────────────────
