@@ -11,11 +11,14 @@ import {
   type EmailProviderSuggestion,
 } from "@/lib/shared/email-config-core";
 
-// Re-export the input/result types for the settings panel + callers. The
-// auth-free logic lives in the server-only core (lib/shared/email-config-core);
-// this module is the "use server" surface that adds the operator-capability
-// guard so the client-callable actions can't bypass authorization.
-export type { EmailConfigInput, EmailProviderSuggestion };
+// NOTE: every export of a "use server" module must be an async function — the
+// server-action compiler collects ALL exports into ensureServerEntryExports([...])
+// as runtime values, so a re-exported *type* (erased at runtime) becomes a
+// `ReferenceError: X is not defined` that poisons the whole co-bundled actions
+// chunk. Callers import EmailConfigInput/EmailProviderSuggestion directly from
+// the server-only core (lib/shared/email-config-core) instead. The core holds
+// the auth-free logic; this module is the "use server" surface that adds the
+// operator-capability guard so the client-callable actions can't bypass authz.
 
 // Admin → Settings → Email. Same guard the adjacent platform-key / social-auth
 // panels use (manage_provider_connections) — SMTP is an outbound-email provider
