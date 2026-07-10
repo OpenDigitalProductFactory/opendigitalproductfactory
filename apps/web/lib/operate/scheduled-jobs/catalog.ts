@@ -525,6 +525,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: "ops/coworker-certification.requested",
   },
+  {
+    jobId: "memory-consolidation-nightly",
+    inngestId: "coworker/memory-consolidation-nightly",
+    name: "Coworker memory consolidation",
+    purpose:
+      "EP-8C706944 Phase 2 (BI-907C4327): the sleep-time 'autoDream' pass — batch-collapses near-duplicate coworker working notes and user facts to one canonical each, then expires entries unused past the retention window (supersession, never a hard delete). If it stops, the memory stores accumulate near-duplicates and stale facts.",
+    cron: "20 4 * * *",
+    cadence: "Daily at 04:20",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
 ] as const;
 
 const CATALOG_BY_JOB_ID = new Map<string, ScheduledJobCatalogEntry>(
