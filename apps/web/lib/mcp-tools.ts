@@ -64,6 +64,7 @@ import { queueAwarenessPack } from "@/lib/mcp/packs/queue-awareness-pack";
 import { documentPack } from "@/lib/mcp/packs/document-pack";
 import { screenPack } from "@/lib/mcp/packs/screen-pack";
 import { nonprodLeasePack } from "@/lib/mcp/packs/nonprod-lease-pack";
+import { demandScoringPack } from "@/lib/mcp/packs/demand-scoring-pack";
 import { composeToolPacks } from "@/lib/mcp/tool-registry";
 import {
   createLicenseReadinessIssue,
@@ -450,7 +451,7 @@ function stringArray(value: unknown): string[] {
 // ─── Tool Registry ───────────────────────────────────────────────────────────
 // Scoped tool packs compose into the registry; mcp-tools.ts is the thin layer
 // over them (definitions spread into PLATFORM_TOOLS below; dispatch in executeTool).
-const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, professionDecisionPack, optimizationPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack, coworkerToolGrantPack, coworkerEstablishPack, coworkerMemoryPack, effortContextPack, coworkerGoalPack, subagentFanoutPack, mdmStewardshipPack, crmContactsPack, queueAwarenessPack, documentPack, screenPack, nonprodLeasePack]);
+const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, professionDecisionPack, optimizationPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack, coworkerToolGrantPack, coworkerEstablishPack, coworkerMemoryPack, effortContextPack, coworkerGoalPack, subagentFanoutPack, mdmStewardshipPack, crmContactsPack, queueAwarenessPack, documentPack, screenPack, nonprodLeasePack, demandScoringPack]);
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,
@@ -5531,6 +5532,9 @@ export async function executeTool(
           source: true,
           priority: true,
           effortSize: true,
+          demandStage: true,
+          demandScore: true,
+          demandScoreFramework: true,
           activeBuildId: true,
           updatedAt: true,
           triageOutcome: true,
@@ -5548,6 +5552,9 @@ export async function executeTool(
         source: i.source,
         priority: i.priority,
         effortSize: i.effortSize,
+        demandStage: i.demandStage,
+        demandScore: i.demandScore,
+        demandScoreFramework: i.demandScoreFramework,
         triageOutcome: i.triageOutcome,
         epicId: i.epic?.epicId ?? null,
         hasActiveBuild: i.activeBuildId != null,

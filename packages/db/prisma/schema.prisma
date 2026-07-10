@@ -1313,6 +1313,24 @@ model BacklogItem {
   triageOutcome           String?
   effortSize              String?
   proposedOutcome         String?
+  // Demand-management scoring (EP-DEMAND-MGMT Phase 1). Store the scoring
+  // INPUTS as first-class nullable fields; the score is COMPUTED by a pluggable
+  // framework (apps/web/lib/demand/scoring.ts). null = not yet scored. reach
+  // seeds from occurrenceCount and jobSize from effortSize when the explicit
+  // field is absent. demandStage is an additive funnel facet orthogonal to
+  // status (which continues to gate work-claims). Spec:
+  // docs/superpowers/specs/2026-07-10-demand-management-design.md §5.
+  demandStage             String?
+  reach                   Int?
+  impact                  Float?
+  confidence              Float?
+  businessValue           Int?
+  timeCriticality         Int?
+  riskOpportunity         Int?
+  jobSize                 Float?
+  demandScore             Float?
+  demandScoreFramework    String?
+  demandScoreComputedAt   DateTime?
   activeBuildId           String?                       @unique
   activeEpicId            String?                       @unique
   duplicateOfId           String?
@@ -1350,6 +1368,8 @@ model BacklogItem {
   @@index([portfolioId])
   @@index([status])
   @@index([status, updatedAt])
+  @@index([portfolioId, demandScore])
+  @@index([demandStage])
 }
 
 // Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is

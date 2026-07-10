@@ -19,6 +19,7 @@ import { selfUpgradePack } from "./packs/self-upgrade-pack";
 import { coworkerServiceCatalogPack } from "./packs/coworker-service-catalog-pack";
 import { coworkerToolGrantPack } from "./packs/coworker-tool-grant-pack";
 import { coworkerMemoryPack } from "./packs/coworker-memory-pack";
+import { demandScoringPack } from "./packs/demand-scoring-pack";
 import { composeToolPacks } from "./tool-registry";
 // The inline-case ratchet's extractor lives in the CI guard (scripts/), kept as
 // the single source of truth so this test and the guard can never disagree.
@@ -272,6 +273,28 @@ describe("coworker memory pack", () => {
   it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
     const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
     for (const def of coworkerMemoryPack.definitions) {
+      expect(platformNames.has(def.name), def.name).toBe(true);
+    }
+  });
+});
+
+describe("demand-scoring tool pack", () => {
+  it("bundles the score_demand_item door with a handler", () => {
+    expect(demandScoringPack.definitions.map((t) => t.name)).toEqual(["score_demand_item"]);
+    for (const def of demandScoringPack.definitions) {
+      expect(demandScoringPack.handlers[def.name], def.name).toBeTypeOf("function");
+    }
+  });
+
+  it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
+    for (const [name, grants] of Object.entries(demandScoringPack.grants)) {
+      expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
+    }
+  });
+
+  it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
+    const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
+    for (const def of demandScoringPack.definitions) {
       expect(platformNames.has(def.name), def.name).toBe(true);
     }
   });

@@ -27,6 +27,12 @@ export type GovernedBacklogTeeUpCandidate = {
   digitalProductId: string | null;
   epicId: string | null;
   createdAt: Date;
+  // Demand-management ordering signals. `priority` is the manual operator pin
+  // (lower = higher) that trumps the computed rank; `demandScore` is the
+  // computed value rank (higher = pull first). Optional/nullable — the sweep
+  // query selects both; callers that pre-date scoring simply omit them.
+  priority?: number | null;
+  demandScore?: number | null;
   epic: { status: string } | null;
 };
 
@@ -134,15 +140,40 @@ export function selectGovernedBacklogTeeUpCandidates(
   return items
     .filter(isEligibleCandidate)
     .sort((left, right) => {
+      // 1. Active-epic work floors ahead of unattached work (unchanged).
       const priorityDiff = candidatePriority(left) - candidatePriority(right);
       if (priorityDiff !== 0) return priorityDiff;
 
+      // 2. Manual operator pin (`priority`, lower = higher) trumps the computed
+      //    rank. A pinned item jumps ahead of unpinned ones; among pinned, lower
+      //    wins; unpinned items defer to the value rank below. Equality-guarded
+      //    so two unpinned items (both +Infinity) don't yield NaN.
+      const leftPin = manualPinRank(left);
+      const rightPin = manualPinRank(right);
+      if (leftPin !== rightPin) return leftPin - rightPin;
+
+      // 3. Computed value rank — highest demandScore pulled first (nulls last).
+      const leftScore = demandScoreRank(left);
+      const rightScore = demandScoreRank(right);
+      if (leftScore !== rightScore) return rightScore - leftScore;
+
+      // 4. Oldest first, then stable by id.
       const createdAtDiff = left.createdAt.getTime() - right.createdAt.getTime();
       if (createdAtDiff !== 0) return createdAtDiff;
 
       return left.itemId.localeCompare(right.itemId);
     })
     .slice(0, limit);
+}
+
+/** Manual pins sort ahead of unpinned items; unpinned map to +Infinity. */
+function manualPinRank(item: GovernedBacklogTeeUpCandidate): number {
+  return typeof item.priority === "number" ? item.priority : Number.POSITIVE_INFINITY;
+}
+
+/** demandScore for descending sort; unscored items map to -Infinity (last). */
+function demandScoreRank(item: GovernedBacklogTeeUpCandidate): number {
+  return typeof item.demandScore === "number" ? item.demandScore : Number.NEGATIVE_INFINITY;
 }
 
 export async function promoteBacklogItemToBuildDraft(
@@ -456,6 +487,8 @@ export async function runGovernedBacklogTeeUp(input: {
       digitalProductId: true,
       epicId: true,
       createdAt: true,
+      priority: true,
+      demandScore: true,
       epic: {
         select: {
           status: true,
