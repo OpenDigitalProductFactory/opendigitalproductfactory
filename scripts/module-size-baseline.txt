@@ -21,13 +21,13 @@ apps/web/lib/actions/agent-task-scheduler.test.ts	1083
 apps/web/lib/actions/ai-providers.ts	915
 apps/web/lib/actions/build-governed.test.ts	1134
 apps/web/lib/actions/build.ts	1785
-apps/web/lib/actions/compliance.ts	1064
+apps/web/lib/actions/compliance.ts	1068
 apps/web/lib/actions/crm.ts	1423
 apps/web/lib/actions/ea.ts	1055
 apps/web/lib/actions/mcp-tokens.test.ts	1254
 apps/web/lib/actions/platform-dev-config.ts	1331
 apps/web/lib/actions/promotions.self-upgrade.test.ts	1021
-apps/web/lib/actions/promotions.ts	998
+apps/web/lib/actions/promotions.ts	997
 apps/web/lib/actions/tax-remittance.test.ts	1080
 apps/web/lib/actions/tax-remittance.ts	1788
 apps/web/lib/ai-operations-map/load-map-data.test.ts	943
@@ -40,8 +40,7 @@ apps/web/lib/integrate/build-orchestrator.ts	1780
 apps/web/lib/integrate/sandbox/build-branch.ts	854
 apps/web/lib/marketing.ts	1367
 apps/web/lib/mcp-tools-backlog.test.ts	901
-apps/web/lib/mcp-tools.ts	15440
-apps/web/lib/mcp-tools.ts	15654
+apps/web/lib/mcp-tools.ts	15447
 apps/web/lib/navigation/portal-navigation-model.ts	936
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1328
