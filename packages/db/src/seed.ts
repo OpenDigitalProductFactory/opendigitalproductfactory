@@ -74,6 +74,7 @@ import { seedAgentControlPlaneMaturity } from "./seed-agent-control-plane-maturi
 import { seedCoworkerServiceCatalog } from "./coworker-service-catalog-seed.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
+import { buildTaxonomyNodeEntries, type TaxonomySeedRow } from "./taxonomy-seed-entries.js";
 import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
 import { toModelProfileSeedCreateData } from "./model-profile-seed.js";
 import { deriveLocalModelCapabilityPrior, localInputModalities } from "./local-model-capabilities.js";
@@ -382,75 +383,9 @@ async function seedPortfolios(): Promise<void> {
 
 async function seedTaxonomyNodes(): Promise<void> {
   const DATA_PATH = join(__dirname, "..", "data", "taxonomy_v3.json");
-  type Row = {
-    portfolio: string;
-    portfolio_id: string;
-    level_1: string;
-    level_2: string;
-    level_3: string;
-    definition?: string;
-    notes?: string;
-    enrichment?: Record<string, unknown>;
-  };
-  const rows: Row[] = JSON.parse(readFileSync(DATA_PATH, "utf-8"));
-
-  function slugify(s: string): string {
-    return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-  }
-
-  // Collect all unique nodes in insertion order (root → L1 → L2 → L3)
-  const seen = new Set<string>();
-  type NodeEntry = {
-    nodeId: string;
-    name: string;
-    parentNodeId: string | null;
-    portfolioId: string;
-    description: string | null;
-    enrichment: Record<string, unknown> | null;
-  };
-
-  const entries: NodeEntry[] = [];
-
-  for (const row of rows) {
-    const pid = row.portfolio_id;
-    if (!seen.has(pid)) {
-      seen.add(pid);
-      entries.push({ nodeId: pid, name: row.portfolio, parentNodeId: null, portfolioId: pid, description: null, enrichment: null });
-    }
-    if (!row.level_1) continue;
-    const l1id = `${pid}/${slugify(row.level_1)}`;
-    if (!seen.has(l1id)) {
-      seen.add(l1id);
-      // L1 nodes get description/enrichment only if this row IS an L1 leaf (no L2)
-      const isL1Leaf = !row.level_2;
-      entries.push({
-        nodeId: l1id, name: row.level_1, parentNodeId: pid, portfolioId: pid,
-        description: isL1Leaf ? (row.definition || null) : null,
-        enrichment: isL1Leaf && row.enrichment && Object.keys(row.enrichment).length > 0 ? row.enrichment : null,
-      });
-    }
-    if (!row.level_2) continue;
-    const l2id = `${l1id}/${slugify(row.level_2)}`;
-    if (!seen.has(l2id)) {
-      seen.add(l2id);
-      const isL2Leaf = !row.level_3;
-      entries.push({
-        nodeId: l2id, name: row.level_2, parentNodeId: l1id, portfolioId: pid,
-        description: isL2Leaf ? (row.definition || null) : null,
-        enrichment: isL2Leaf && row.enrichment && Object.keys(row.enrichment).length > 0 ? row.enrichment : null,
-      });
-    }
-    if (!row.level_3) continue;
-    const l3id = `${l2id}/${slugify(row.level_3)}`;
-    if (!seen.has(l3id)) {
-      seen.add(l3id);
-      entries.push({
-        nodeId: l3id, name: row.level_3, parentNodeId: l2id, portfolioId: pid,
-        description: row.definition || null,
-        enrichment: row.enrichment && Object.keys(row.enrichment).length > 0 ? row.enrichment : null,
-      });
-    }
-  }
+  const rows: TaxonomySeedRow[] = JSON.parse(readFileSync(DATA_PATH, "utf-8"));
+  const registry = readJson<{ portfolios: Array<{ id: string; name: string }> }>("portfolio_registry.json");
+  const entries = buildTaxonomyNodeEntries(rows, registry.portfolios);
 
   // Look up Portfolio.id values by portfolioId slug
   const portfolios = await prisma.portfolio.findMany({ select: { id: true, slug: true } });
