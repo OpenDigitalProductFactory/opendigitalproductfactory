@@ -154,7 +154,7 @@ async function createKnowledgeArticleHandler(params: Record<string, unknown>, us
   const valueStreams = Array.isArray(params["valueStreams"]) ? params["valueStreams"].map(String) : [];
   const tags = Array.isArray(params["tags"]) ? params["tags"].map(String) : [];
 
-  const article = await prisma.knowledgeArticle.create({
+  await prisma.knowledgeArticle.create({
     data: {
       articleId,
       title,
