@@ -77,15 +77,20 @@ describe("PlatformTabNav", () => {
     expect(html).not.toContain(">Capability Needs<");
   });
 
-  it("shows Readiness as the first AI Operations sub-item without an Overview peer", () => {
+  it("shows Workforce as the first AI Operations sub-item without a generic Overview peer", () => {
+    // EP-26E528F5: the workforce directory is the family front door; Readiness
+    // stays one tab away. The label is "Workforce" — a generic "Overview" tab
+    // remains banned (it competed with Readiness before EP-COWORKER-RT).
     pathname = "/platform/ai/readiness";
     const html = renderToStaticMarkup(<PlatformTabNav />);
 
     const aiFamily = PLATFORM_FAMILIES.find((family) => family.key === "ai")!;
 
-    expect(aiFamily.subItems[0]).toEqual({ label: "Readiness", href: "/platform/ai/readiness" });
+    expect(aiFamily.subItems[0]).toEqual({ label: "Workforce", href: "/platform/ai/overview" });
+    expect(aiFamily.subItems[1]).toEqual({ label: "Readiness", href: "/platform/ai/readiness" });
     expect(aiFamily.subItems.some((item) => item.label === "Overview")).toBe(false);
     expect(html).toContain(">Readiness<");
+    expect(html).toContain(">Workforce<");
   });
 
   it("uses compact chrome on the operations map so the visual route map starts sooner", () => {

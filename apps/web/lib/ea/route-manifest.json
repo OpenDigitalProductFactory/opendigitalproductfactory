@@ -4564,7 +4564,7 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/platform/ai/page.tsx",
-      "redirectTo": "/platform/ai/readiness"
+      "redirectTo": "/platform/ai/overview"
     },
     {
       "routePath": "/platform/ai/agent/[agentId]",
