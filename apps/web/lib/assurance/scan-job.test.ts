@@ -1,4 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
+
+// EP-8DC217EB BET-12: the scan job now feeds a completed run into GRC via
+// recordAssuranceRunEvidence → prisma.complianceEvidence.upsert (best-effort).
+// Override only that delegate so the write resolves and is observable; keep all
+// other real @dpf/db exports intact.
+const complianceEvidenceUpsert = vi.fn(async () => ({}));
+vi.mock("@dpf/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dpf/db")>();
+  return {
+    ...actual,
+    prisma: new Proxy(actual.prisma as object, {
+      get(target, prop, receiver) {
+        if (prop === "complianceEvidence") return { upsert: complianceEvidenceUpsert };
+        return Reflect.get(target, prop, receiver);
+      },
+    }),
+  };
+});
+
 import { runBuildAssuranceScan } from "./scan-job";
 
 const SAMPLE_AUDIT_JSON = JSON.stringify({
@@ -150,6 +169,14 @@ describe("runBuildAssuranceScan", () => {
         buildId: "BUILD-1",
       }),
     });
+
+    // BET-12: the run was fed into GRC as continuous ComplianceEvidence.
+    expect(complianceEvidenceUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { evidenceId: "assurance-run:run-1" },
+        create: expect.objectContaining({ evidenceType: "supply-chain-assurance" }),
+      }),
+    );
   });
 
   it("returns skipped with a categorised reason when pnpm audit exits with an unexpected code", async () => {

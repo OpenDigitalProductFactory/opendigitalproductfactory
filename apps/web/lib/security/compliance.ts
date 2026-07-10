@@ -8,7 +8,18 @@
 //     CMMC, DORA), evidencing "we detect and respond".
 //   • securityCaseToEvidenceInput / recordSecurityCaseEvidence — turn a resolved
 //     SecurityCase into continuous ComplianceEvidence (the detect-&-respond proof).
-// Reporting is pure; persistence is a thin idempotent upsert keyed on the case.
+// Reporting is pure; persistence delegates to the generic, source-neutral
+// recordComplianceEvidence in lib/governance/compliance-evidence.ts (EP-8DC217EB
+// BET-12), so ComplianceEvidence is no longer fed from security alone.
+
+import {
+  recordComplianceEvidence,
+  type ComplianceEvidenceInput,
+} from "@/lib/governance/compliance-evidence";
+
+// Re-export so existing importers of ComplianceEvidenceInput from this module
+// keep working after the generic contract moved to lib/governance.
+export type { ComplianceEvidenceInput };
 
 export type ComplianceFramework =
   | "NIST-CSF"
@@ -111,14 +122,6 @@ export interface SecurityCaseEvidenceView {
   resolvedAt?: Date | null;
 }
 
-export interface ComplianceEvidenceInput {
-  evidenceId: string;
-  title: string;
-  evidenceType: string;
-  description: string;
-  status: string;
-}
-
 /** Project a SecurityCase into a ComplianceEvidence input (pure). The evidenceId
  *  is keyed on the case so re-recording is idempotent. */
 export function securityCaseToEvidenceInput(
@@ -137,22 +140,11 @@ export function securityCaseToEvidenceInput(
   };
 }
 
-/** Idempotently record the evidence for one case (upsert on evidenceId). */
+/** Idempotently record the evidence for one case (upsert on evidenceId). Thin
+ *  wrapper over the generic recordComplianceEvidence — the security projector
+ *  supplies the case-specific shape. */
 export async function recordSecurityCaseEvidence(
   c: SecurityCaseEvidenceView,
 ): Promise<{ evidenceId: string }> {
-  const { prisma } = await import("@dpf/db");
-  const input = securityCaseToEvidenceInput(c);
-  await prisma.complianceEvidence.upsert({
-    where: { evidenceId: input.evidenceId },
-    update: { title: input.title, description: input.description, status: input.status },
-    create: {
-      evidenceId: input.evidenceId,
-      title: input.title,
-      evidenceType: input.evidenceType,
-      description: input.description,
-      status: input.status,
-    },
-  });
-  return { evidenceId: input.evidenceId };
+  return recordComplianceEvidence(securityCaseToEvidenceInput(c));
 }
