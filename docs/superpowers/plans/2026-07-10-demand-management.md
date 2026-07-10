@@ -25,9 +25,9 @@ The backlog is raw: DPF sizes the *cost* of work (`effortSize`) but never its *v
 
 ## Slices
 
-### Phase 1 — Scoring foundation (BI-0D49B4D8) · *thin end-to-end vertical, no new UI*
+### Phase 1 — Scoring foundation (BI-0D49B4D8) · *thin end-to-end vertical, no new UI* — ✅ LANDED
 
-The keystone. Everything downstream depends on a computed, explainable score existing.
+The keystone. Everything downstream depends on a computed, explainable score existing. **Landed** in migration `20260710120000_add_demand_management_scoring` (additive/nullable — fleet-safe), `apps/web/lib/demand/scoring.ts` (pure engine, RICE default), the `score_demand_item` MCP tool, `demandScore`/`demandStage` on `list_backlog_items`, and the value-ranked promote sweep in `governed-backlog-tee-up.ts` (active-epic → manual pin → `demandScore` desc → recency). Unit-tested: 10 scoring + 2 ordering cases. Note: `recommend.ts` retune and `create/update_backlog_item` input passthrough are folded forward into a follow-up (score is settable via `score_demand_item` today).
 
 1. **Schema (additive, fleet-safe).** Add nullable columns to `BacklogItem`: `reach Int?`, `impact Float?`, `confidence Float?`, `businessValue Int?`, `timeCriticality Int?`, `riskOpportunity Int?`, `jobSize Float?`, `demandScore Float?`, `demandScoreFramework String?`, `demandScoreComputedAt DateTime?`, `demandStage String?`. One migration; all nullable → passes the migration-safety guard (no tightening on existing rows). `prisma migrate dev` on a throwaway Postgres, trim to these columns.
 2. **Enums.** Add `DEMAND_STAGE_VALUES` (`raw|screened|shaped|ready`) and `DEMAND_SCORE_FRAMEWORKS` (`rice|wsjf|value_effort|weighted`) to `apps/web/lib/explore/backlog.ts`, mirrored in the `mcp-tools.ts` tool schemas in the **same commit** (AGENTS.md §3).

@@ -153,6 +153,39 @@ describe("governed backlog tee-up", () => {
     ]);
   });
 
+  it("draws highest demandScore first, with a manual priority pin trumping the computed rank", async () => {
+    const { selectGovernedBacklogTeeUpCandidates } = await import("./governed-backlog-tee-up");
+    const base = {
+      body: null,
+      status: "open",
+      triageOutcome: "build",
+      effortSize: "medium",
+      activeBuildId: null,
+      digitalProductId: null,
+      epicId: null,
+      createdAt: new Date("2026-07-10T10:00:00.000Z"),
+      epic: null,
+    } as const;
+
+    const selected = selectGovernedBacklogTeeUpCandidates(
+      [
+        { ...base, id: "a", itemId: "BI-SCORE-10", title: "score 10", demandScore: 10 },
+        { ...base, id: "b", itemId: "BI-SCORE-50", title: "score 50", demandScore: 50 },
+        { ...base, id: "c", itemId: "BI-PINNED", title: "pinned low score", demandScore: 5, priority: 1 },
+        { ...base, id: "d", itemId: "BI-UNSCORED", title: "no score", demandScore: null },
+      ],
+      4,
+    );
+
+    // Pin first (trumps score), then descending demandScore, unscored last.
+    expect(selected.map((i) => i.itemId)).toEqual([
+      "BI-PINNED",
+      "BI-SCORE-50",
+      "BI-SCORE-10",
+      "BI-UNSCORED",
+    ]);
+  });
+
   it("creates draft builds for the selected items and auto-approves them under governed flow (BI-52022707 axis D)", async () => {
     mockPrisma.backlogItem.findMany.mockResolvedValue([
       {
