@@ -8,6 +8,7 @@ import type {
   OperationsMapRoutingTimelineMarker,
 } from "./types";
 import type { RoutingCoworkerSourceRow } from "./project-routing-topology";
+import { normalizeAgentId, titleize } from "./projection-helpers";
 
 /**
  * Coworker-to-coworker (A2A) interaction projection.
@@ -338,12 +339,6 @@ function branchRoleSummary(branches: A2aDeliberationBranchRow[]): string {
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
-function normalizeAgentId(agentId: string): string {
-  const normalized = agentId.trim();
-  if (!normalized || /^unknown$/i.test(normalized)) return "";
-  return normalized;
-}
-
 function isDistinctPair(from: string, to: string): boolean {
   return Boolean(from) && Boolean(to) && from !== to;
 }
@@ -385,16 +380,6 @@ function ensureCoworker(
 
 function sortByLabel<T extends { label: string }>(items: T[]): T[] {
   return [...items].sort((left, right) => left.label.localeCompare(right.label));
-}
-
-function titleize(value: string): string {
-  return (
-    value
-      .split(/[-_:.\s]+/)
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ") || "Unknown"
-  );
 }
 
 const _edgeKindGuard: Record<OperationsMapA2aEdgeKind, true> = {

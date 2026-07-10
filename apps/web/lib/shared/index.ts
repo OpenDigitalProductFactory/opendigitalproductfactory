@@ -18,3 +18,4 @@ export * from "./address-validation";
 export * from "./address-data";
 export * from "./address-types";
 export * from "./email";
+export * from "./staleness";

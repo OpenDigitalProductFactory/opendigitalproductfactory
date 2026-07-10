@@ -24,7 +24,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { TASK_IN_FLIGHT_STATES, TASK_STATES, type TaskState } from "./task-states";
+import {
+  TASK_IN_FLIGHT_STATES,
+  TASK_LIVE_STATES,
+  TASK_STATES,
+  isLiveStatus,
+  type TaskState,
+} from "./task-states";
 
 const QUIESCENCE_STATES = [
   "quiescing",
@@ -72,6 +78,39 @@ describe("TASK_IN_FLIGHT_STATES", () => {
     expect(TASK_IN_FLIGHT_STATES).toContain("working");
     expect(TASK_IN_FLIGHT_STATES).toContain("input-required");
     expect(TASK_IN_FLIGHT_STATES).toContain("auth-required");
+  });
+});
+
+describe("TASK_LIVE_STATES / isLiveStatus (EP-8DC217EB BET-10)", () => {
+  it("is exactly the canonical ['working', 'active'] liveness set", () => {
+    // The single home for the six liveness sites the watchdog/reaper/heartbeat
+    // paths inlined. Locked so a future edit can't silently narrow/widen it.
+    expect([...TASK_LIVE_STATES]).toEqual(["working", "active"]);
+  });
+
+  it("is narrower than TASK_IN_FLIGHT_STATES — does not include submitted/input/auth", () => {
+    // A run waiting on input is not emitting heartbeats; the liveness set must
+    // stay distinct from the scheduling in-flight set.
+    expect(TASK_LIVE_STATES).not.toContain("submitted" as never);
+    expect(TASK_LIVE_STATES).not.toContain("input-required" as never);
+    expect(TASK_LIVE_STATES).not.toContain("auth-required" as never);
+  });
+
+  it("excludes every quiescence/terminal value (drain semantics)", () => {
+    for (const state of QUIESCENCE_STATES) {
+      expect(TASK_LIVE_STATES).not.toContain(state as never);
+    }
+    expect(TASK_LIVE_STATES).not.toContain("stalled" as never);
+  });
+
+  it("isLiveStatus is true only for working/active", () => {
+    expect(isLiveStatus("working")).toBe(true);
+    expect(isLiveStatus("active")).toBe(true);
+    expect(isLiveStatus("quiescing")).toBe(false);
+    expect(isLiveStatus("stalled")).toBe(false);
+    expect(isLiveStatus("submitted")).toBe(false);
+    expect(isLiveStatus(null)).toBe(false);
+    expect(isLiveStatus(undefined)).toBe(false);
   });
 });
 

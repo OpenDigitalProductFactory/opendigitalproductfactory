@@ -41,3 +41,28 @@ export const TASK_IN_FLIGHT_STATES = [
   "input-required",
   "auth-required",
 ] as const satisfies readonly TaskState[];
+
+/**
+ * EP-8DC217EB BET-10 — the canonical "loop is alive" status set.
+ *
+ * "working" is the canonical A2A running state; "active" is a legacy value
+ * still written by deliberation-run.ts and a couple of unmigrated paths that
+ * means the same thing (work in flight, not terminal). Six liveness sites
+ * (heartbeat, watchdog SQL, the quiescence flip + dead-loop reap, the inert
+ * build reaper) each hardcoded the literal `["working","active"]` / `IN
+ * ('working','active')`; this is the single home. The CI ratchet
+ * scripts/check-no-local-liveness-literal.mjs bans re-inlining the literal.
+ *
+ * NOTE — deliberately NARROWER than TASK_IN_FLIGHT_STATES: "active" is not a
+ * member of the closed TaskState enum (it is the legacy alias), and the liveness
+ * filter must NOT include "submitted"/"input-required"/"auth-required" (a run
+ * waiting on input is not emitting heartbeats). Keep the two sets distinct.
+ */
+export const TASK_LIVE_STATES = ["working", "active"] as const;
+
+export type TaskLiveState = (typeof TASK_LIVE_STATES)[number];
+
+/** True when a status counts as a live/running loop (working or legacy active). */
+export function isLiveStatus(status: string | null | undefined): boolean {
+  return status === "working" || status === "active";
+}

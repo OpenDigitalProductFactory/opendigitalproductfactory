@@ -24,6 +24,8 @@
 // BuildActivity and is therefore never touched. Re-promoting the backlog item
 // restarts the work cleanly.
 
+import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
+
 /** Default inert threshold: 3h with zero activity = dead-on-arrival. Override with BUILD_INERT_REAP_MS. */
 export const INERT_BUILD_REAP_MS = Number(process.env.BUILD_INERT_REAP_MS) || 3 * 60 * 60 * 1000;
 
@@ -83,7 +85,7 @@ export async function reapInertStuckBuilds(
   for (const c of candidates) {
     const [activityCount, liveTaskRunCount] = await Promise.all([
       prisma.buildActivity.count({ where: { buildId: c.buildId } }),
-      prisma.taskRun.count({ where: { buildId: c.buildId, status: { in: ["working", "active"] } } }),
+      prisma.taskRun.count({ where: { buildId: c.buildId, status: { in: [...TASK_LIVE_STATES] } } }),
     ]);
     if (
       !isInertBuildReapable({

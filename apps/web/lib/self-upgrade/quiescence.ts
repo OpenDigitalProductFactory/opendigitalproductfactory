@@ -20,6 +20,8 @@
 import { prisma } from "@dpf/db";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
+import { newestSignal, isStale } from "@/lib/shared/staleness";
 
 // ─── Quiescence level — runtime state, hot-read by middleware + gates ────
 
@@ -270,7 +272,7 @@ export async function heartbeatQuiescenceRun(
  */
 export async function flipActiveTaskRunsToQuiescing(now: Date = new Date()): Promise<number> {
   const result = await prisma.taskRun.updateMany({
-    where: { status: { in: ["working", "active"] } },
+    where: { status: { in: [...TASK_LIVE_STATES] } },
     data: { status: "quiescing", quiescedAt: now },
   });
   return result.count;
@@ -871,11 +873,9 @@ export function isBuildPhaseReapable(args: {
   thresholdMs: number;
 }): boolean {
   const { phaseStartedAt, buildLastHeartbeatAt, now, thresholdMs } = args;
-  const lastSignal =
-    buildLastHeartbeatAt && buildLastHeartbeatAt.getTime() > phaseStartedAt.getTime()
-      ? buildLastHeartbeatAt
-      : phaseStartedAt;
-  return now.getTime() - lastSignal.getTime() > thresholdMs;
+  // phaseStartedAt is always present, so newestSignal never returns null here.
+  const lastSignal = newestSignal(buildLastHeartbeatAt, phaseStartedAt);
+  return isStale(now, lastSignal, thresholdMs);
 }
 
 /**
@@ -892,11 +892,9 @@ export function isTaskRunReapable(args: {
   thresholdMs: number;
 }): boolean {
   const { startedAt, lastHeartbeatAt, now, thresholdMs } = args;
-  const lastSignal =
-    lastHeartbeatAt && lastHeartbeatAt.getTime() > startedAt.getTime()
-      ? lastHeartbeatAt
-      : startedAt;
-  return now.getTime() - lastSignal.getTime() > thresholdMs;
+  // startedAt is always present, so newestSignal never returns null here.
+  const lastSignal = newestSignal(lastHeartbeatAt, startedAt);
+  return isStale(now, lastSignal, thresholdMs);
 }
 
 /**
@@ -965,7 +963,7 @@ export async function captureActiveSessionBlockers(opts?: {
 
   // A-class: coworker reasoning loops (TaskRun in working/active)
   const activeTaskRuns = await prisma.taskRun.findMany({
-    where: { status: { in: ["working", "active"] } },
+    where: { status: { in: [...TASK_LIVE_STATES] } },
     select: {
       taskRunId: true,
       title: true,
@@ -1023,7 +1021,7 @@ export async function captureActiveSessionBlockers(opts?: {
     // transition (e.g. the stall watchdog racing this capture).
     try {
       await prisma.taskRun.updateMany({
-        where: { taskRunId: { in: reapedTaskRuns }, status: { in: ["working", "active"] } },
+        where: { taskRunId: { in: reapedTaskRuns }, status: { in: [...TASK_LIVE_STATES] } },
         data: { status: "stalled", completedAt: now },
       });
     } catch (err) {

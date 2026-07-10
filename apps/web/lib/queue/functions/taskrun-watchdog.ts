@@ -22,6 +22,10 @@ import { decideStall, type WatchdogCandidate, type StallDecision } from "@/lib/o
 import { buildStallSurface, mergeVerificationPatch } from "@/lib/observability/stall-surface";
 import { isStallWatchdogEnabled } from "@/lib/shared/feature-flags";
 import { reapInertStuckBuilds } from "@/lib/build/inert-build-reaper";
+import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
+import { newestSignal, isStale } from "@/lib/shared/staleness";
+import { reap } from "@/lib/operations-run/reap";
+import { Prisma } from "@dpf/db";
 
 // QUIESCENCE EXEMPTION (BI-QUIESCE-004a + spec §6.1 extension): this
 // function is intentionally NOT wrapped with gateAtEntry. The watchdog
@@ -159,59 +163,58 @@ export function isStuckQuiescingTaskRun(args: {
   thresholdMs: number;
 }): boolean {
   const { quiescedAt, lastHeartbeatAt, now, thresholdMs } = args;
-  const newestSignal = Math.max(
-    quiescedAt?.getTime() ?? 0,
-    lastHeartbeatAt?.getTime() ?? 0,
-  );
-  if (newestSignal === 0) return false; // no observable signal — do not guess
-  return now.getTime() - newestSignal > thresholdMs;
+  const newest = newestSignal(quiescedAt, lastHeartbeatAt);
+  if (newest === null) return false; // no observable signal — do not guess
+  return isStale(now, newest, thresholdMs);
 }
 
 export async function recoverStuckQuiescingTaskRuns(now: Date): Promise<number> {
   const { prisma } = await import("@dpf/db");
   const cutoff = new Date(now.getTime() - STUCK_QUIESCING_TASKRUN_MS);
-  // Coarse SQL filter (mirrors the stall-detection pattern: cheap WHERE, then a
-  // precise pure check in app code). `quiescedAt` is set the instant the row is
-  // flipped, so it is the primary signal; fall back to startedAt for legacy rows.
-  const candidates = await prisma.taskRun.findMany({
-    where: {
-      status: "quiescing",
-      OR: [
-        { quiescedAt: { lt: cutoff } },
-        { AND: [{ quiescedAt: null }, { startedAt: { lt: cutoff } }] },
-      ],
-    },
-    select: { taskRunId: true, quiescedAt: true, lastHeartbeatAt: true },
-    take: 100,
-  });
-  if (candidates.length === 0) return 0;
 
-  let recovered = 0;
-  for (const c of candidates) {
-    if (
-      !isStuckQuiescingTaskRun({
+  // EP-8DC217EB BET-10: this reaper is the canonical fit for the shared reap()
+  // skeleton — coarse indexed scan → pure per-candidate gate → per-row settle
+  // with error isolation → count. Behavior is unchanged; only the control flow
+  // is consolidated into lib/operations-run/reap.
+  const { reaped: recovered } = await reap({
+    // Coarse SQL filter (mirrors the stall-detection pattern: cheap WHERE, then
+    // a precise pure check in app code). `quiescedAt` is set the instant the
+    // row is flipped, so it is the primary signal; fall back to startedAt for
+    // legacy rows.
+    scan: () =>
+      prisma.taskRun.findMany({
+        where: {
+          status: "quiescing",
+          OR: [
+            { quiescedAt: { lt: cutoff } },
+            { AND: [{ quiescedAt: null }, { startedAt: { lt: cutoff } }] },
+          ],
+        },
+        select: { taskRunId: true, quiescedAt: true, lastHeartbeatAt: true },
+        take: 100,
+      }),
+    isReapable: (c) =>
+      isStuckQuiescingTaskRun({
         quiescedAt: c.quiescedAt,
         lastHeartbeatAt: c.lastHeartbeatAt,
         now,
         thresholdMs: STUCK_QUIESCING_TASKRUN_MS,
-      })
-    ) {
-      continue; // a recent heartbeat means the loop is alive and mid-exit
-    }
-    try {
-      // Guard against a race: only transition if it is STILL quiescing.
+      }),
+    // Guard against a race: only transition if it is STILL quiescing.
+    transition: async (c) => {
       const res = await prisma.taskRun.updateMany({
         where: { taskRunId: c.taskRunId, status: "quiescing" },
         data: { status: "stalled", completedAt: now },
       });
-      recovered += res.count;
-    } catch (err) {
+      return res.count;
+    },
+    onError: (c, err) =>
       console.warn(
         `[taskrun-watchdog] failed to recover orphaned quiescing TaskRun ${c.taskRunId}:`,
         err,
-      );
-    }
-  }
+      ),
+  });
+
   if (recovered > 0) {
     console.warn(
       `[taskrun-watchdog] recovered ${recovered} orphaned quiescing TaskRun(s) → stalled ` +
@@ -287,8 +290,9 @@ export const taskrunWatchdog = inngest.createFunction(
       -- Catches both the canonical "working" state AND the legacy "active"
       -- value still written by deliberation-run.ts and any other paths that
       -- haven't been migrated. They mean the same thing semantically (work
-      -- in flight, not terminal). Audited 2026-05-20.
-      WHERE tr.status IN ('working', 'active')
+      -- in flight, not terminal). Audited 2026-05-20. The IN-list is built
+      -- from the canonical TASK_LIVE_STATES constant (EP-8DC217EB BET-10).
+      WHERE tr.status IN (${Prisma.join([...TASK_LIVE_STATES])})
         AND (
           tr."lastHeartbeatAt" IS NULL
           OR now() - tr."lastHeartbeatAt" > make_interval(secs => ${minHeartbeatS})

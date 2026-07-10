@@ -3,6 +3,7 @@ import type {
   OperationsMapDeliberationBranch,
 } from "./types";
 import type { RoutingCoworkerSourceRow } from "./project-routing-topology";
+import { normalizeAgentId, titleize } from "./projection-helpers";
 
 /**
  * Deliberation lens projection (Option B — coordinator-internal fan).
@@ -70,24 +71,8 @@ export function projectDeliberations(input: DeliberationProjectionInput): Operat
     .sort((left, right) => occurredAtMs(right.occurredAt) - occurredAtMs(left.occurredAt));
 }
 
-function normalizeAgentId(agentId: string): string {
-  const normalized = agentId.trim();
-  if (!normalized || /^unknown$/i.test(normalized)) return "";
-  return normalized;
-}
-
 function occurredAtMs(value: string | null): number {
   if (!value) return 0;
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? ms : 0;
-}
-
-function titleize(value: string): string {
-  return (
-    value
-      .split(/[-_:.\s]+/)
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ") || "Unknown"
-  );
 }
