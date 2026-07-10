@@ -39,3 +39,5 @@ docs/Reference/mcp/schema/** text eol=lf
 # parsers tolerate union-merge duplicates (max wins) and --update rewrites
 # sorted + deduped.
 scripts/module-size-baseline.txt merge=union
+
+scripts/route-error-baseline.txt merge=union
