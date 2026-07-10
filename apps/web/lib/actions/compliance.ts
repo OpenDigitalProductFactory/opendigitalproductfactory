@@ -11,7 +11,11 @@ import {
   requireViewCompliance, requireManageCompliance,
   getSessionEmployeeId, logComplianceAction, ensureComplianceCalendarEvent,
 } from "@/lib/actions/compliance-helpers";
-export type { ComplianceActionResult } from "@/lib/actions/compliance-helpers";
+// Do NOT re-export ComplianceActionResult from this "use server" module — a type
+// re-export is enumerated into the runtime server-reference registry and throws
+// `ReferenceError` at module eval (request-time 500, invisible to the build
+// gate). It is imported above for internal use; callers import it from
+// @/lib/actions/compliance-helpers directly.
 import {
   generateRegulationId, generateObligationId, generateControlId,
   generateAssessmentId, generateIncidentId, generateActionId,
