@@ -158,6 +158,7 @@ function collectState() {
     actualSha: git(rootDir, ["rev-parse", "HEAD"]),
     nodeModulesPresent: fs.existsSync(path.join(rootDir, "node_modules")),
     installedLockPresent: fs.existsSync(installedLockPath),
+    lockfilesDiffer: Boolean(installedLockText) && installedLockText !== lockfileText,
     packages,
     installProcesses,
   };

@@ -1,5 +1,6 @@
 import type { prisma as defaultPrisma } from "@dpf/db";
 import type { TileStatus } from "@/components/shell/WorkspaceTiles";
+import { resolveApplicableRegulationDbIds } from "@/lib/compliance-library";
 
 export type SixCKey =
   | "context"
@@ -290,6 +291,10 @@ export async function loadWorkspaceCommandCenter(
 ): Promise<WorkspaceCommandCenterSummary> {
   const now = new Date();
   const recentSince = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  // Governance readiness counts only the obligations that APPLY to this
+  // install's archetype — the wholesale-seeded library would otherwise read
+  // as noise on the workspace tiles.
+  const applicableRegulationIds = await resolveApplicableRegulationDbIds(prismaClient);
 
   const [
     activeProductCount,
@@ -350,7 +355,9 @@ export async function loadWorkspaceCommandCenter(
     prismaClient.eaView.count(),
     prismaClient.featureBuild.count(),
     prismaClient.document.count(),
-    prismaClient.obligation.count({ where: { status: "active" } }),
+    prismaClient.obligation.count({
+      where: { status: "active", regulationId: { in: applicableRegulationIds } },
+    }),
     prismaClient.complianceIncident.count({ where: { status: { in: ["open", "investigating"] } } }),
     prismaClient.control.count({ where: { implementationStatus: "implemented", status: "active" } }),
     prismaClient.control.count({ where: { status: "active" } }),

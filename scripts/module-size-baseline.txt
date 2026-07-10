@@ -60,6 +60,6 @@ apps/web/lib/tak/route-context.ts	1189
 apps/web/lib/work-capsules/work-capsule-store.test.ts	943
 apps/web/lib/work-capsules/work-capsule-store.ts	932
 apps/web/lib/workbooks/platform-tables.ts	892
-apps/web/lib/workforce/calendar-data.ts	1127
-apps/web/lib/workspace/command-center.ts	1111
+apps/web/lib/workforce/calendar-data.ts	1134
+apps/web/lib/workspace/command-center.ts	1118
 packages/db/src/wiki-store.test.ts	824

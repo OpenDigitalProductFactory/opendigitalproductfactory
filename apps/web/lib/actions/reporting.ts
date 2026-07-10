@@ -12,14 +12,18 @@ import {
   isValidSubmissionTransition,
   type RegulationGapSummary, type ObligationGap, type ObligationGapStatus,
 } from "@/lib/reporting-types";
+import { resolveApplicableRegulationDbIds } from "@/lib/compliance-library";
 
 // ─── Gap Assessment ─────────────────────────────────────────────────────────
 
 export async function getGapAssessment(): Promise<RegulationGapSummary[]> {
   await requireViewCompliance();
 
+  // Assess only the regulations that APPLY to this install's archetype —
+  // scoring an out-of-scope regulation is noise (regulation-applicability.ts).
+  const applicableRegulationIds = await resolveApplicableRegulationDbIds();
   const regulations = await prisma.regulation.findMany({
-    where: { status: "active" },
+    where: { status: "active", id: { in: applicableRegulationIds } },
     include: {
       obligations: {
         where: { status: "active" },

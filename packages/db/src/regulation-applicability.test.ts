@@ -162,3 +162,65 @@ describe("parseApplicability — tolerant parser for the stored JSON spec", () =
     expect(parseApplicability({ jurisdictions: ["uk"] })).toBeNull(); // missing basis
   });
 });
+
+describe("archetypeGate — matches archetype id OR category (BI-9DED0CE8)", () => {
+  const ncua: RegulationApplicability = {
+    basis: ["operating"],
+    jurisdictions: ["us"],
+    archetypes: ["credit-union"],
+  };
+  const bsa: RegulationApplicability = {
+    basis: ["operating"],
+    jurisdictions: ["us"],
+    archetypes: ["banking-financial-services"],
+  };
+  const creditUnion: RegionProfile = {
+    ...empty,
+    operatesIn: ["us"],
+    archetype: "banking-financial-services",
+    archetypeId: "credit-union",
+  };
+  const communityBank: RegionProfile = { ...creditUnion, archetypeId: "community-bank" };
+
+  it("an id-scoped regime applies only to the matching archetype id", () => {
+    expect(regulationApplies(ncua, creditUnion).applies).toBe(true);
+    const miss = regulationApplies(ncua, communityBank);
+    expect(miss.applies).toBe(false);
+    expect(miss.undeclared).toBe(false); // declared mismatch → reference, not review
+  });
+
+  it("a category-scoped regime applies to every archetype id in the category", () => {
+    expect(regulationApplies(bsa, creditUnion).applies).toBe(true);
+    expect(regulationApplies(bsa, communityBank).applies).toBe(true);
+  });
+
+  it("law-enforcement-agency matches by id even though its category is public-sector", () => {
+    const post: RegulationApplicability = {
+      basis: ["operating"],
+      jurisdictions: ["us"],
+      archetypes: ["law-enforcement-agency"],
+    };
+    const agency: RegionProfile = {
+      ...empty,
+      operatesIn: ["us"],
+      archetype: "public-sector",
+      archetypeId: "law-enforcement-agency",
+    };
+    const town: RegionProfile = { ...agency, archetypeId: "small-town-municipality" };
+    expect(regulationApplies(post, agency).applies).toBe(true);
+    expect(regulationApplies(post, town).applies).toBe(false);
+    // ...and the category-wide public-body regime still applies to the agency.
+    const openMeetings: RegulationApplicability = {
+      basis: ["operating"],
+      jurisdictions: ["us"],
+      archetypes: ["public-sector"],
+    };
+    expect(regulationApplies(openMeetings, agency).applies).toBe(true);
+  });
+
+  it("no archetype declared at all stays reviewable (undeclared)", () => {
+    const r = regulationApplies(ncua, { ...empty, operatesIn: ["us"] });
+    expect(r.applies).toBe(false);
+    expect(r.undeclared).toBe(true);
+  });
+});

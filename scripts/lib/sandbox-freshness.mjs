@@ -150,6 +150,7 @@ export function parseEtimeMinutes(etime) {
  *   requestedBranch?, actualBranch?, requestedSha?, actualSha?,
  *   nodeModulesPresent: boolean,
  *   installedLockPresent: boolean,
+ *   lockfilesDiffer?: boolean,
  *   packages: [{ name, importer, lockedVersion, installedLockVersion, resolvedVersion, linkTarget, missing }],
  *   installProcesses: [{ pid, etime, etimeMinutes, command }],
  * }
@@ -189,6 +190,19 @@ export function evaluateFreshness(state) {
     failures.push({ kind: "not_installed", message: "node_modules is missing; sandbox has no installed dependency graph" });
   } else if (!state.installedLockPresent) {
     failures.push({ kind: "not_installed", message: "node_modules/.pnpm/lock.yaml is missing; cannot prove the installed graph matches pnpm-lock.yaml" });
+  } else if (state.lockfilesDiffer) {
+    // The sentinel packages below catch version drift on the load-bearing
+    // deps, but a branch that ADDS a dependency (new package in an importer)
+    // leaves every sentinel green while the installed graph predates the
+    // lockfile — the merged branch then fails typecheck/build on the missing
+    // module, which reads as product evidence when it is sandbox staleness.
+    // pnpm writes the exact lockfile it installed to node_modules/.pnpm/lock.yaml;
+    // any difference from the checked-in pnpm-lock.yaml means the install is
+    // stale. Convergence is a cheap frozen-lockfile no-op when spurious.
+    failures.push({
+      kind: "installed_lock_stale",
+      message: "node_modules/.pnpm/lock.yaml differs from pnpm-lock.yaml (install ran against an older lockfile)",
+    });
   }
 
   for (const pkg of state.packages ?? []) {

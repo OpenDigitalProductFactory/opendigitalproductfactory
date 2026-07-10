@@ -1,9 +1,13 @@
-import type { PrismaClient } from "../generated/client/client";
+import type { PrismaClient, Prisma } from "../generated/client/client";
 import * as crypto from "crypto";
+import { type RegulationApplicability } from "./regulation-applicability";
 
 // BI-AFC178F3 — cooperative compliance pack (civic spec §10).
 // Same global-Regulation pattern as the public-sector pack, industry
 // "cooperative": Subchapter T patronage mechanics + member-governance duties.
+// Data-driven applicability (BI-9DED0CE8): gates on the cooperative archetype
+// ids — credit unions are NOT in scope (exempt from Subchapter T; they answer
+// to the banking pack's NCUA regime instead).
 
 function makeId(prefix: string): string {
   const hex = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
@@ -26,10 +30,18 @@ type RegulationSeed = {
   shortName: string;
   jurisdiction: string;
   industry: string;
+  /** Data-driven applicability spec — scopes the regime to matching archetypes. */
+  applicability: RegulationApplicability;
   sourceType: "external";
   sourceUrl: string | null;
   notes: string;
   obligations: ObligationSeed[];
+};
+
+const COOPERATIVE_APPLICABILITY: RegulationApplicability = {
+  basis: ["operating"],
+  jurisdictions: ["us"],
+  archetypes: ["cooperative", "agricultural-cooperative"],
 };
 
 export const COOPERATIVE_REGULATIONS: RegulationSeed[] = [
@@ -39,6 +51,7 @@ export const COOPERATIVE_REGULATIONS: RegulationSeed[] = [
     shortName: "Subchapter T",
     jurisdiction: "US-federal",
     industry: "cooperative",
+    applicability: COOPERATIVE_APPLICABILITY,
     sourceType: "external",
     sourceUrl: "https://uscode.house.gov/view.xhtml?edition=prelim&path=%2Fprelim%40title26%2FsubtitleA%2Fchapter1%2FsubchapterT",
     notes:
@@ -101,6 +114,7 @@ export const COOPERATIVE_REGULATIONS: RegulationSeed[] = [
     shortName: "Co-op Governance",
     jurisdiction: "US-state",
     industry: "cooperative",
+    applicability: COOPERATIVE_APPLICABILITY,
     sourceType: "external",
     sourceUrl: null,
     notes:
@@ -207,6 +221,7 @@ export async function seedCooperativeCompliance(prisma: PrismaClient): Promise<v
 
   for (const reg of COOPERATIVE_REGULATIONS) {
     const { obligations, ...regData } = reg;
+    const applicability = regData.applicability as unknown as Prisma.InputJsonValue;
     const regulation = await prisma.regulation.upsert({
       where: { regulationId: regData.regulationId },
       update: {
@@ -217,8 +232,9 @@ export async function seedCooperativeCompliance(prisma: PrismaClient): Promise<v
         sourceType: regData.sourceType,
         sourceUrl: regData.sourceUrl,
         notes: regData.notes,
+        applicability,
       },
-      create: regData,
+      create: { ...regData, applicability },
     });
     regUpserts++;
 
