@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   addObligationApplicability,
   addRegulationApplicability,
+  applicableRegulationDbIds,
   classifyRegulationForInstall,
   complianceLibraryContextLabel,
   countByComplianceLibraryScope,
@@ -240,5 +241,93 @@ describe("compliance library applicability", () => {
       expect(classifyRegulationForInstall(legacyBanking, bankingContext).scope).toBe("applies");
       expect(classifyRegulationForInstall(legacyBanking, softwareContext).scope).toBe("reference");
     });
+  });
+
+  describe("archetype-id-gated pack specs (BI-9DED0CE8)", () => {
+    const creditUnionContext: ComplianceLibraryContext = {
+      ...bankingContext,
+      archetype: {
+        archetypeId: "credit-union",
+        name: "Credit Union",
+        category: "banking-financial-services",
+      },
+      regional: {
+        ...bankingContext.regional,
+        archetype: "banking-financial-services",
+        archetypeId: "credit-union",
+        operatesIn: ["us"],
+      },
+    };
+    const ncua = regulation({
+      regulationId: "REG-US-NCUA",
+      shortName: "NCUA",
+      applicability: { basis: ["operating"], jurisdictions: ["us"], archetypes: ["credit-union"] },
+    });
+
+    it("an id-scoped regime applies to the matching archetype id", () => {
+      expect(classifyRegulationForInstall(ncua, creditUnionContext).scope).toBe("applies");
+    });
+
+    it("an id-scoped regime is reference for a sibling archetype in the same category", () => {
+      const communityBankContext: ComplianceLibraryContext = {
+        ...creditUnionContext,
+        regional: { ...creditUnionContext.regional, archetypeId: "community-bank" },
+      };
+      expect(classifyRegulationForInstall(ncua, communityBankContext).scope).toBe("reference");
+    });
+
+    it("a pack spec is reference for an unrelated archetype (the noise case)", () => {
+      const hvacContext: ComplianceLibraryContext = {
+        ...softwareContext,
+        archetype: {
+          archetypeId: "hvac-contractor",
+          name: "HVAC Contractor",
+          category: "trades-maintenance",
+        },
+        regional: {
+          ...softwareContext.regional,
+          archetype: "trades-maintenance",
+          archetypeId: "hvac-contractor",
+          operatesIn: ["us"],
+        },
+      };
+      expect(classifyRegulationForInstall(ncua, hvacContext).scope).toBe("reference");
+    });
+  });
+});
+
+describe("applicableRegulationDbIds — the applies-scope filter for aggregating surfaces", () => {
+  const creditUnionContext: ComplianceLibraryContext = {
+    ...bankingContext,
+    regional: {
+      ...bankingContext.regional,
+      archetypeId: "credit-union",
+      operatesIn: ["us"],
+    },
+  };
+
+  it("returns only the DB ids of regulations that apply to the install", () => {
+    const rows = [
+      {
+        ...regulation({
+          regulationId: "REG-US-NCUA",
+          applicability: { basis: ["operating"], jurisdictions: ["us"], archetypes: ["credit-union"] },
+        }),
+        id: "db-ncua",
+      },
+      {
+        ...regulation({
+          regulationId: "REG-US-STATE-POST",
+          industry: "public-safety",
+          applicability: {
+            basis: ["operating"],
+            jurisdictions: ["us"],
+            archetypes: ["law-enforcement-agency"],
+          },
+        }),
+        id: "db-post",
+      },
+    ];
+    expect(applicableRegulationDbIds(rows, creditUnionContext)).toEqual(["db-ncua"]);
   });
 });

@@ -1,5 +1,6 @@
-import type { PrismaClient } from "../generated/client/client";
+import type { PrismaClient, Prisma } from "../generated/client/client";
 import * as crypto from "crypto";
+import { type RegulationApplicability } from "./regulation-applicability";
 
 // BI-D9ACE184 + BI-E677F250 — banking deltas compliance pack (civic spec §10).
 // industry "financial". The recurring-obligation regimes the BIAN leaf work
@@ -7,6 +8,10 @@ import * as crypto from "crypto";
 // licensing substrate; recurring obligations live here. BSA/AML is a SINGLE
 // shared regulation both bank and credit union answer to (not double-seeded);
 // NCUA is credit-union-specific; FDIC/CRA is community-bank-specific.
+// Each regulation carries a data-driven applicability spec (BI-9DED0CE8) so an
+// install is only in scope when its setup-chosen archetype matches — NCUA gates
+// on the `credit-union` archetype id, FDIC/CRA on `community-bank`, BSA/AML on
+// the whole banking-financial-services category.
 
 function makeId(prefix: string): string {
   const hex = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
@@ -29,6 +34,8 @@ type RegulationSeed = {
   shortName: string;
   jurisdiction: string;
   industry: string;
+  /** Data-driven applicability spec — scopes the regime to matching archetypes. */
+  applicability: RegulationApplicability;
   sourceType: "external";
   sourceUrl: string | null;
   notes: string;
@@ -42,6 +49,7 @@ export const BANKING_REGULATIONS: RegulationSeed[] = [
     shortName: "BSA/AML",
     jurisdiction: "US-federal",
     industry: "financial",
+    applicability: { basis: ["operating"], jurisdictions: ["us"], archetypes: ["banking-financial-services"] },
     sourceType: "external",
     sourceUrl: "https://www.fincen.gov/resources/statutes-and-regulations/bank-secrecy-act",
     notes:
@@ -114,6 +122,7 @@ export const BANKING_REGULATIONS: RegulationSeed[] = [
     shortName: "NCUA",
     jurisdiction: "US-federal",
     industry: "financial",
+    applicability: { basis: ["operating"], jurisdictions: ["us"], archetypes: ["credit-union"] },
     sourceType: "external",
     sourceUrl: "https://ncua.gov/regulation-supervision/manuals-guides",
     notes:
@@ -173,6 +182,7 @@ export const BANKING_REGULATIONS: RegulationSeed[] = [
     shortName: "Bank Supervision",
     jurisdiction: "US-federal",
     industry: "financial",
+    applicability: { basis: ["operating"], jurisdictions: ["us"], archetypes: ["community-bank"] },
     sourceType: "external",
     sourceUrl: "https://www.ffiec.gov/resources/reporting-forms",
     notes:
@@ -300,6 +310,7 @@ export async function seedBankingCompliance(prisma: PrismaClient): Promise<void>
 
   for (const reg of BANKING_REGULATIONS) {
     const { obligations, ...regData } = reg;
+    const applicability = regData.applicability as unknown as Prisma.InputJsonValue;
     const regulation = await prisma.regulation.upsert({
       where: { regulationId: regData.regulationId },
       update: {
@@ -310,8 +321,9 @@ export async function seedBankingCompliance(prisma: PrismaClient): Promise<void>
         sourceType: regData.sourceType,
         sourceUrl: regData.sourceUrl,
         notes: regData.notes,
+        applicability,
       },
-      create: regData,
+      create: { ...regData, applicability },
     });
     regUpserts++;
 

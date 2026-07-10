@@ -42,8 +42,16 @@ export interface RegionProfile {
   sellsTo: string[];
   employsIn: string[];
   dataResidency: string[];
-  /** Business archetype slug (storefront/archetype), when known. */
+  /** Business archetype CATEGORY slug (StorefrontArchetype.category), when known. */
   archetype?: string;
+  /**
+   * Specific archetype id (StorefrontArchetype.archetypeId), when known. Some
+   * regimes bind finer than the category: NCUA binds a `credit-union` but not a
+   * `community-bank` (both category banking-financial-services); POST/CJIS bind
+   * a `law-enforcement-agency` but not a `small-town-municipality` (both
+   * category public-sector).
+   */
+  archetypeId?: string;
   /** Market-listing / legal-form status (LISTING_STATUSES), when declared. */
   listingStatus?: string;
 }
@@ -53,7 +61,12 @@ export interface RegulationApplicability {
   basis: ProfessionJurisdictionBasis[];
   /** Jurisdiction bloc slugs that trigger it on those bases (ignored for `global`). */
   jurisdictions: string[];
-  /** If set, only these business archetypes are in scope; otherwise archetype-agnostic. */
+  /**
+   * If set, only these business archetypes are in scope; otherwise
+   * archetype-agnostic. Entries may be archetype ids (`credit-union`) or
+   * category slugs (`banking-financial-services`) — the gate matches either,
+   * so a spec can bind a whole category or a single archetype.
+   */
   archetypes?: string[];
   /**
    * If set, only these listing statuses are in scope (e.g. `["premium-listed"]`
@@ -101,12 +114,15 @@ type GateResult =
 
 function archetypeGate(spec: RegulationApplicability, profile: RegionProfile): GateResult {
   if (!spec.archetypes || spec.archetypes.length === 0) return { pass: true };
-  const a = profile.archetype;
-  if (a && spec.archetypes.includes(a)) return { pass: true };
+  const declared = [profile.archetypeId, profile.archetype].filter(
+    (v): v is string => typeof v === "string" && v.length > 0,
+  );
+  if (declared.some((v) => spec.archetypes!.includes(v))) return { pass: true };
+  const label = declared.length > 0 ? `'${declared.join("' / '")}'` : "(undeclared)";
   return {
     pass: false,
-    undeclared: !a, // no archetype declared at all → reviewable, not a definitive miss
-    reason: `business archetype ${a ? `'${a}'` : "(undeclared)"} is out of scope (applies to: ${spec.archetypes.join(", ")})`,
+    undeclared: declared.length === 0, // no archetype declared at all → reviewable, not a definitive miss
+    reason: `business archetype ${label} is out of scope (applies to: ${spec.archetypes.join(", ")})`,
   };
 }
 

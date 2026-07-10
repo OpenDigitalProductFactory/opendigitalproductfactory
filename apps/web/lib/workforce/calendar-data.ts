@@ -4,6 +4,7 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type { WeeklySchedule, DaySchedule } from "@/lib/operating-hours-types";
+import { resolveApplicableRegulationDbIds } from "@/lib/compliance-library";
 import { buildWorkbookEvents, type WorkbookEventInput } from "./workbook-calendar-events";
 
 // ─── Unified Event Type ─────────────────────────────────────────────────────
@@ -205,6 +206,11 @@ async function projectLifecycleEvents(rangeStart: Date, rangeEnd: Date): Promise
 async function projectComplianceEvents(rangeStart: Date, rangeEnd: Date): Promise<CalendarEventView[]> {
   const events: CalendarEventView[] = [];
 
+  // Only obligations from regulations that APPLY to this install's archetype
+  // project review deadlines onto the calendar — the wholesale-seeded packs
+  // outside the archetype would otherwise flood it.
+  const applicableRegulationIds = await resolveApplicableRegulationDbIds();
+
   const [incidents, actions, findings, audits, obligations, submissions] = await Promise.all([
     prisma.complianceIncident.findMany({
       where: {
@@ -237,6 +243,7 @@ async function projectComplianceEvents(rangeStart: Date, rangeEnd: Date): Promis
     prisma.obligation.findMany({
       where: {
         status: "active",
+        regulationId: { in: applicableRegulationIds },
         reviewDate: { gte: rangeStart, lte: rangeEnd },
       },
       select: { id: true, obligationId: true, title: true, reviewDate: true },

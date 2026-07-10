@@ -337,6 +337,69 @@ export function complianceLibraryContextLabel(context: ComplianceLibraryContext)
   return category && label !== category ? `${label} (${category})` : label;
 }
 
+export type ApplicableRegulationRow = ClassifiableRegulation & { id: string };
+
+/** Pure core: the DB ids (Regulation.id) of regulations classified "applies" for this install. */
+export function applicableRegulationDbIds(
+  regulations: ApplicableRegulationRow[],
+  context: ComplianceLibraryContext,
+): string[] {
+  return regulations
+    .filter((reg) => classifyRegulationForInstall(reg, context).scope === "applies")
+    .map((reg) => reg.id);
+}
+
+export type ApplicableRegulationClient = ComplianceLibraryClient & {
+  regulation: {
+    findMany(args: {
+      where: { status: "active" };
+      select: {
+        id: true;
+        regulationId: true;
+        name: true;
+        shortName: true;
+        jurisdiction: true;
+        industry: true;
+        sourceType: true;
+        sourceUrl: true;
+        applicability: true;
+      };
+    }): Promise<(ApplicableRegulationRow & { applicability: unknown })[]>;
+  };
+};
+
+/**
+ * DB ids of the regulations that currently APPLY to this install — the same
+ * classification the compliance library pages use (data-driven applicability
+ * spec when present, legacy industry heuristics otherwise), resolved from the
+ * setup-chosen archetype + business context. Non-library surfaces that
+ * aggregate obligations (dashboard counts, workspace command center, workforce
+ * calendar, gap assessment) filter on this so wholesale-seeded packs outside
+ * the installed archetype don't surface as obligation noise.
+ */
+export async function resolveApplicableRegulationDbIds(
+  db: ApplicableRegulationClient = prisma,
+): Promise<string[]> {
+  const [context, regulations] = await Promise.all([
+    resolveComplianceLibraryContext(db),
+    db.regulation.findMany({
+      where: { status: "active" },
+      select: {
+        id: true,
+        regulationId: true,
+        name: true,
+        shortName: true,
+        jurisdiction: true,
+        industry: true,
+        sourceType: true,
+        sourceUrl: true,
+        applicability: true,
+      },
+    }),
+  ]);
+  return applicableRegulationDbIds(regulations, context);
+}
+
 export async function resolveComplianceLibraryContext(
   db: ComplianceLibraryClient = prisma,
 ): Promise<ComplianceLibraryContext> {
@@ -369,6 +432,7 @@ export async function resolveComplianceLibraryContext(
     },
     regional: {
       archetype: storefront?.archetype?.category ?? undefined,
+      archetypeId: storefront?.archetype?.archetypeId ?? undefined,
       operatesIn: businessContext?.operatesIn ?? [],
       sellsTo: businessContext?.sellsTo ?? [],
       employsIn: businessContext?.employsIn ?? [],
