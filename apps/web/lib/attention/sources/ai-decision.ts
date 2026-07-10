@@ -46,13 +46,36 @@ function residueFor(row: DecisionInteractionRow): ResidueReason {
   return "high-risk-gate"; // escalate: the cascade escalated on risk/low-confidence
 }
 
+// Some escalated/deferred decisions reach founder-review with an empty
+// `question` (the cascade recorded the residue but not a prose prompt). Without
+// a fallback the attention row renders with a BLANK title — an un-triageable
+// "high risk · Open →" the operator cannot act on (BI-D35DE119, F1). Derive a
+// short, honest title from the residue reason + blast radius so every row says
+// what it is and where it came from.
+function titleFor(row: DecisionInteractionRow): string {
+  const q = row.question?.trim();
+  if (q) return clip(q);
+  const reasonLabel =
+    residueFor(row) === "principle-conflict"
+      ? "a principle conflict"
+      : row.outcomeType === "defer"
+        ? "a coverage gap"
+        : "a high-risk gate";
+  const where = row.buildId
+    ? ` on build ${row.buildId}`
+    : row.taskRunId
+      ? " on a coworker task"
+      : "";
+  return `AI decision needs your review — ${reasonLabel}${where}`;
+}
+
 /** Pure projection of one unresolved decision into an attention item. */
 export function aiDecisionToAttentionItem(row: DecisionInteractionRow): AttentionItem {
   const blast = row.buildId ? `build ${row.buildId}` : row.taskRunId ? "a coworker task" : undefined;
   return {
     id: `ai-decision:${row.interactionId}`,
     source: "ai-decision",
-    title: clip(row.question),
+    title: titleFor(row),
     context: row.rationale ?? "The governed scopes could not resolve this decision.",
     decisionClass: { scorability: "unscorable" },
     riskClass: riskFromTier(row.riskTier),
