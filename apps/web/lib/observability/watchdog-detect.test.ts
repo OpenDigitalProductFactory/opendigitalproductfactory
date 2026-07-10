@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideStall, type WatchdogCandidate } from "./watchdog-detect";
+import { decideStall, shouldSurfaceBuildFailure, type WatchdogCandidate } from "./watchdog-detect";
 import type { ResolvedThreshold } from "./threshold-lookup";
 
 const NOW = new Date("2026-05-20T00:00:00Z");
@@ -9,7 +9,11 @@ const TH: ResolvedThreshold = {
   totalPhaseTimeoutSeconds: 900,
 };
 
-function candidate(opts: { startedAgoMs: number; heartbeatAgoMs: number | null }): WatchdogCandidate {
+function candidate(opts: {
+  startedAgoMs: number;
+  heartbeatAgoMs: number | null;
+  source?: string | null;
+}): WatchdogCandidate {
   return {
     taskRunId: "TR-X",
     buildId: "FB-X",
@@ -17,8 +21,40 @@ function candidate(opts: { startedAgoMs: number; heartbeatAgoMs: number | null }
     startedAt: new Date(NOW.getTime() - opts.startedAgoMs),
     lastHeartbeatAt:
       opts.heartbeatAgoMs === null ? null : new Date(NOW.getTime() - opts.heartbeatAgoMs),
+    source: opts.source ?? "build",
   };
 }
+
+describe("shouldSurfaceBuildFailure", () => {
+  const base = { buildId: "FB-1", phase: "build", source: "build" };
+
+  it("surfaces a build failure for the real build-execution run (source=build) in the build phase", () => {
+    expect(shouldSurfaceBuildFailure(base, true)).toBe(true);
+  });
+
+  it("does NOT fail the build when a leaked deliberation run stalls (source=proactive)", () => {
+    // The exact FB-B7BA303E regression: codex finished correct code, but a
+    // leaked "Deliberation: review" run (source=proactive, same buildId) stalled
+    // while the build was in phase=build. It must NOT mark the build failed.
+    expect(shouldSurfaceBuildFailure({ ...base, source: "proactive" }, true)).toBe(false);
+  });
+
+  it("does NOT fail the build for a null-source run", () => {
+    expect(shouldSurfaceBuildFailure({ ...base, source: null }, true)).toBe(false);
+  });
+
+  it("does NOT surface for non-build phases even for a build-source run", () => {
+    expect(shouldSurfaceBuildFailure({ ...base, phase: "ideate" }, true)).toBe(false);
+  });
+
+  it("does NOT surface when the FeatureBuild row is gone (buildId dangling)", () => {
+    expect(shouldSurfaceBuildFailure(base, false)).toBe(false);
+  });
+
+  it("does NOT surface when buildId is null", () => {
+    expect(shouldSurfaceBuildFailure({ ...base, buildId: null }, true)).toBe(false);
+  });
+});
 
 describe("decideStall", () => {
   it("returns null when heartbeat is recent and wall-clock is within budget", () => {
