@@ -1,10 +1,15 @@
-import type { PrismaClient } from "../generated/client/client";
+import type { PrismaClient, Prisma } from "../generated/client/client";
 import * as crypto from "crypto";
+import { type RegulationApplicability } from "./regulation-applicability";
 
 // BI-C1578821 — law-enforcement compliance pack (civic spec §10).
 // industry "public-safety". Phase 1 is NO-CJI by design: this pack covers POST
 // training, policy attestation, and a CJIS READINESS GATE that is an explicit
 // Phase-2 prerequisite, NOT a satisfied control.
+// Data-driven applicability (BI-9DED0CE8): gates on the specific
+// `law-enforcement-agency` archetype id — its category is public-sector, so the
+// category-wide public-body pack also applies to an agency, but POST/CJIS bind
+// no other public body.
 
 function makeId(prefix: string): string {
   const hex = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
@@ -27,10 +32,18 @@ type RegulationSeed = {
   shortName: string;
   jurisdiction: string;
   industry: string;
+  /** Data-driven applicability spec — scopes the regime to matching archetypes. */
+  applicability: RegulationApplicability;
   sourceType: "external";
   sourceUrl: string | null;
   notes: string;
   obligations: ObligationSeed[];
+};
+
+const LAW_ENFORCEMENT_APPLICABILITY: RegulationApplicability = {
+  basis: ["operating"],
+  jurisdictions: ["us"],
+  archetypes: ["law-enforcement-agency"],
 };
 
 export const LAW_ENFORCEMENT_REGULATIONS: RegulationSeed[] = [
@@ -40,6 +53,7 @@ export const LAW_ENFORCEMENT_REGULATIONS: RegulationSeed[] = [
     shortName: "POST",
     jurisdiction: "US-state",
     industry: "public-safety",
+    applicability: LAW_ENFORCEMENT_APPLICABILITY,
     sourceType: "external",
     sourceUrl: null,
     notes:
@@ -103,6 +117,7 @@ export const LAW_ENFORCEMENT_REGULATIONS: RegulationSeed[] = [
     shortName: "LE Policy",
     jurisdiction: "US-state",
     industry: "public-safety",
+    applicability: LAW_ENFORCEMENT_APPLICABILITY,
     sourceType: "external",
     sourceUrl: null,
     notes:
@@ -153,6 +168,7 @@ export const LAW_ENFORCEMENT_REGULATIONS: RegulationSeed[] = [
     shortName: "CJIS Gate",
     jurisdiction: "US-federal",
     industry: "public-safety",
+    applicability: LAW_ENFORCEMENT_APPLICABILITY,
     sourceType: "external",
     sourceUrl: "https://le.fbi.gov/cjis-division/cjis-security-policy-resource-center",
     notes:
@@ -232,6 +248,7 @@ export async function seedLawEnforcementCompliance(prisma: PrismaClient): Promis
 
   for (const reg of LAW_ENFORCEMENT_REGULATIONS) {
     const { obligations, ...regData } = reg;
+    const applicability = regData.applicability as unknown as Prisma.InputJsonValue;
     const regulation = await prisma.regulation.upsert({
       where: { regulationId: regData.regulationId },
       update: {
@@ -242,8 +259,9 @@ export async function seedLawEnforcementCompliance(prisma: PrismaClient): Promis
         sourceType: regData.sourceType,
         sourceUrl: regData.sourceUrl,
         notes: regData.notes,
+        applicability,
       },
-      create: regData,
+      create: { ...regData, applicability },
     });
     regUpserts++;
 

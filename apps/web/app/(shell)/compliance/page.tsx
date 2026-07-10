@@ -1,10 +1,15 @@
 // apps/web/app/(shell)/compliance/page.tsx
 import { prisma } from "@dpf/db";
+import { resolveApplicableRegulationDbIds } from "@/lib/compliance-library";
 import { RegulatoryAlerts } from "@/components/compliance/RegulatoryAlerts";
 import { ScanStatus } from "@/components/compliance/ScanStatus";
 import { LocalTime } from "@/components/ui/LocalTime";
 
 export default async function CompliancePage() {
+  // Scope the dashboard to the regulations that APPLY to this install's
+  // setup-chosen archetype — the full seeded library (with its review /
+  // reference tri-state) lives on /compliance/regulations.
+  const applicableRegulationIds = await resolveApplicableRegulationDbIds();
   const [
     regulationCount,
     activeObligationCount,
@@ -20,14 +25,14 @@ export default async function CompliancePage() {
     pendingAlerts,
     latestScan,
   ] = await Promise.all([
-    prisma.regulation.count({ where: { status: "active" } }),
-    prisma.obligation.count({ where: { status: "active" } }),
+    prisma.regulation.count({ where: { status: "active", id: { in: applicableRegulationIds } } }),
+    prisma.obligation.count({ where: { status: "active", regulationId: { in: applicableRegulationIds } } }),
     prisma.control.count({ where: { implementationStatus: "implemented", status: "active" } }),
     prisma.control.count({ where: { status: "active" } }),
     prisma.complianceIncident.count({ where: { status: { in: ["open", "investigating"] } } }),
     prisma.correctiveAction.count({ where: { status: { in: ["open", "in-progress"] }, dueDate: { lt: new Date() } } }),
     prisma.regulation.findMany({
-      where: { status: "active" },
+      where: { status: "active", id: { in: applicableRegulationIds } },
       include: { _count: { select: { obligations: true } } },
       orderBy: { shortName: "asc" },
     }),
@@ -122,7 +127,10 @@ export default async function CompliancePage() {
       <section>
         <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">By Regulation</h2>
         {regulations.length === 0
-          ? <p className="text-sm text-[var(--dpf-muted)]">No regulations registered yet. Add your first regulation to get started.</p>
+          ? <p className="text-sm text-[var(--dpf-muted)]">
+              No regulations apply to this business yet. Review the full library on the{" "}
+              <a href="/compliance/regulations" className="text-[var(--dpf-accent)] hover:underline">Regulations</a> page.
+            </p>
           : <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {regulations.map((r) => (
                 <a key={r.id} href={`/compliance/regulations/${r.id}`}

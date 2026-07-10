@@ -77,6 +77,47 @@ if ($composeEnvFile) {
   $composeArgs += @("--env-file", $composeEnvFile)
 }
 
+function Assert-NoActiveSelfUpgrade {
+  if ($env:DPF_ALLOW_REDEPLOY_DURING_SELF_UPGRADE -eq "1") {
+    Write-Warning "[redeploy-portal] Bypassing active self-upgrade guard via DPF_ALLOW_REDEPLOY_DURING_SELF_UPGRADE=1"
+    return
+  }
+
+  $psArgs = $composeArgs + @("ps", "-q", "postgres")
+  $postgresContainer = (& docker @psArgs 2>$null | Select-Object -First 1)
+  if ($null -eq $postgresContainer) {
+    $postgresContainer = ""
+  } else {
+    $postgresContainer = $postgresContainer.Trim()
+  }
+  if (-not $postgresContainer) {
+    $postgresContainer = (& docker ps --filter "name=dpf-postgres-1" --filter "status=running" --format "{{.ID}}" 2>$null | Select-Object -First 1)
+    if ($null -eq $postgresContainer) {
+      $postgresContainer = ""
+    } else {
+      $postgresContainer = $postgresContainer.Trim()
+    }
+  }
+  if (-not $postgresContainer) {
+    Write-Error "Could not find postgres container; refusing to redeploy without the self-upgrade coordination check. Set DPF_ALLOW_REDEPLOY_DURING_SELF_UPGRADE=1 only for an intentional recovery override."
+    exit 1
+  }
+
+  $sql = "SELECT COALESCE(string_agg(""runId"" || ':' || status, ', ' ORDER BY ""createdAt""), '') FROM ""SelfUpgradeRun"" WHERE status IN ('queued','pending','running','completing');"
+  $activeRuns = (& docker exec $postgresContainer psql -U dpf -d dpf -Atqc $sql 2>$null)
+  if ($LASTEXITCODE -ne 0) {
+    Write-Error "Could not query SelfUpgradeRun; refusing to redeploy without the self-upgrade coordination check. Set DPF_ALLOW_REDEPLOY_DURING_SELF_UPGRADE=1 only for an intentional recovery override."
+    exit 1
+  }
+  $activeRuns = (($activeRuns -join "`n").Trim())
+  if ($activeRuns) {
+    Write-Error "Active self-upgrade run(s) detected: $activeRuns. Refusing to recreate portal while self-upgrade owns the swap. Wait for it to finish/fail, or set DPF_ALLOW_REDEPLOY_DURING_SELF_UPGRADE=1 for an intentional recovery override."
+    exit 1
+  }
+}
+
+Assert-NoActiveSelfUpgrade
+
 $sha = git rev-parse HEAD
 if (-not $sha) {
   Write-Error "Failed to resolve git HEAD."

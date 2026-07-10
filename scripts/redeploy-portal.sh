@@ -58,6 +58,38 @@ if [ -n "$compose_env_file" ]; then
   compose_args+=(--env-file "$compose_env_file")
 fi
 
+assert_no_active_self_upgrade() {
+  if [ "${DPF_ALLOW_REDEPLOY_DURING_SELF_UPGRADE:-}" = "1" ]; then
+    echo "[redeploy-portal] WARNING: bypassing active self-upgrade guard via DPF_ALLOW_REDEPLOY_DURING_SELF_UPGRADE=1" >&2
+    return 0
+  fi
+
+  local postgres_container active_runs
+  postgres_container="$(docker compose ${compose_args[@]+"${compose_args[@]}"} ps -q postgres 2>/dev/null | head -n 1 || true)"
+  if [ -z "$postgres_container" ]; then
+    postgres_container="$(docker ps --filter "name=dpf-postgres-1" --filter "status=running" --format "{{.ID}}" 2>/dev/null | head -n 1 || true)"
+  fi
+  if [ -z "$postgres_container" ]; then
+    echo "[redeploy-portal] Could not find postgres container; refusing to redeploy without the self-upgrade coordination check." >&2
+    echo "[redeploy-portal] Set DPF_ALLOW_REDEPLOY_DURING_SELF_UPGRADE=1 only for an intentional recovery override." >&2
+    exit 1
+  fi
+
+  if ! active_runs="$(docker exec "$postgres_container" psql -U dpf -d dpf -Atqc "SELECT COALESCE(string_agg(\"runId\" || ':' || status, ', ' ORDER BY \"createdAt\"), '') FROM \"SelfUpgradeRun\" WHERE status IN ('queued','pending','running','completing');" 2>/dev/null)"; then
+    echo "[redeploy-portal] Could not query SelfUpgradeRun; refusing to redeploy without the self-upgrade coordination check." >&2
+    echo "[redeploy-portal] Set DPF_ALLOW_REDEPLOY_DURING_SELF_UPGRADE=1 only for an intentional recovery override." >&2
+    exit 1
+  fi
+  active_runs="$(printf "%s" "$active_runs" | tr -d '\r' | xargs)"
+  if [ -n "$active_runs" ]; then
+    echo "[redeploy-portal] Active self-upgrade run(s) detected: $active_runs" >&2
+    echo "[redeploy-portal] Refusing to recreate portal while self-upgrade owns the swap. Wait for it to finish/fail, or set DPF_ALLOW_REDEPLOY_DURING_SELF_UPGRADE=1 for an intentional recovery override." >&2
+    exit 1
+  fi
+}
+
+assert_no_active_self_upgrade
+
 sha="$(git rev-parse HEAD)"
 export DPF_VERSION="$sha"
 echo "[redeploy-portal] Building portal and portal-init with DPF_VERSION=$sha"

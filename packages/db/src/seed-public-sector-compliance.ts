@@ -1,5 +1,6 @@
-import type { PrismaClient } from "../generated/client/client";
+import type { PrismaClient, Prisma } from "../generated/client/client";
 import * as crypto from "crypto";
+import { type RegulationApplicability } from "./regulation-applicability";
 
 // BI-8D477188 Phase 2 — town/public-body compliance pack (civic spec §10).
 // Seeds the universal state-law FAMILIES as global Regulation rows (industry
@@ -7,6 +8,10 @@ import * as crypto from "crypto";
 // statutory deadlines and retention periods vary by state, so obligations carry
 // org-configurable cadence notes rather than 50 per-state seed variants —
 // BusinessContext.stateCode selects the defaults at onboarding.
+// Data-driven applicability (BI-9DED0CE8): open-meetings/public-records bind
+// every public body (the public-sector category); municipal finance and the
+// EPA water regimes bind only the archetypes that run a municipality or a
+// water/wastewater system.
 
 function makeId(prefix: string): string {
   const hex = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
@@ -29,10 +34,26 @@ type RegulationSeed = {
   shortName: string;
   jurisdiction: string;
   industry: string;
+  /** Data-driven applicability spec — scopes the regime to matching archetypes. */
+  applicability: RegulationApplicability;
   sourceType: "external";
   sourceUrl: string | null;
   notes: string;
   obligations: ObligationSeed[];
+};
+
+/** Every public body: the whole public-sector category (municipality, utility, LE agency). */
+const PUBLIC_BODY_APPLICABILITY: RegulationApplicability = {
+  basis: ["operating"],
+  jurisdictions: ["us"],
+  archetypes: ["public-sector"],
+};
+
+/** Archetypes that run a municipality or a public water/wastewater system. */
+const MUNICIPAL_APPLICABILITY: RegulationApplicability = {
+  basis: ["operating"],
+  jurisdictions: ["us"],
+  archetypes: ["small-town-municipality", "municipal-utility"],
 };
 
 export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
@@ -42,6 +63,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
     shortName: "Open Meetings",
     jurisdiction: "US-state",
     industry: "public-sector",
+    applicability: PUBLIC_BODY_APPLICABILITY,
     sourceType: "external",
     sourceUrl: null,
     notes:
@@ -104,6 +126,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
     shortName: "Public Records",
     jurisdiction: "US-state",
     industry: "public-sector",
+    applicability: PUBLIC_BODY_APPLICABILITY,
     sourceType: "external",
     sourceUrl: null,
     notes:
@@ -156,6 +179,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
     shortName: "Municipal Finance",
     jurisdiction: "US-state",
     industry: "public-sector",
+    applicability: MUNICIPAL_APPLICABILITY,
     sourceType: "external",
     sourceUrl: null,
     notes:
@@ -229,6 +253,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
     shortName: "SDWA",
     jurisdiction: "US-federal",
     industry: "public-sector",
+    applicability: MUNICIPAL_APPLICABILITY,
     sourceType: "external",
     sourceUrl: "https://www.epa.gov/sdwa",
     notes:
@@ -293,6 +318,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
     shortName: "NPDES",
     jurisdiction: "US-federal",
     industry: "public-sector",
+    applicability: MUNICIPAL_APPLICABILITY,
     sourceType: "external",
     sourceUrl: "https://www.epa.gov/npdes/npdes-permit-basics",
     notes:
@@ -410,6 +436,7 @@ export async function seedPublicSectorCompliance(prisma: PrismaClient): Promise<
 
   for (const reg of PUBLIC_SECTOR_REGULATIONS) {
     const { obligations, ...regData } = reg;
+    const applicability = regData.applicability as unknown as Prisma.InputJsonValue;
     const regulation = await prisma.regulation.upsert({
       where: { regulationId: regData.regulationId },
       update: {
@@ -420,8 +447,9 @@ export async function seedPublicSectorCompliance(prisma: PrismaClient): Promise<
         sourceType: regData.sourceType,
         sourceUrl: regData.sourceUrl,
         notes: regData.notes,
+        applicability,
       },
-      create: regData,
+      create: { ...regData, applicability },
     });
     regUpserts++;
 

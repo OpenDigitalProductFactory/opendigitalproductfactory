@@ -7,6 +7,10 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: {
     regulation: { findMany: vi.fn(), count: vi.fn() },
+    // Applicability scoping (resolveApplicableRegulationDbIds) resolves the
+    // install context before the gap assessment queries run.
+    storefrontConfig: { findFirst: vi.fn() },
+    businessContext: { findFirst: vi.fn() },
     obligation: { count: vi.fn() },
     control: { count: vi.fn() },
     complianceIncident: { count: vi.fn() },
@@ -35,6 +39,8 @@ beforeEach(() => {
   vi.mocked(can).mockReturnValue(true);
   vi.mocked(prisma.employeeProfile.findUnique).mockResolvedValue({ id: "emp-1" } as never);
   vi.mocked(prisma.complianceAuditLog.create).mockResolvedValue({} as never);
+  vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null as never);
+  vi.mocked(prisma.businessContext.findFirst).mockResolvedValue(null as never);
 });
 
 describe("takeComplianceSnapshot", () => {

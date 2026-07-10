@@ -3,6 +3,11 @@
 import { useState } from "react";
 
 import { TONE_COLOR, getActiveAlerts } from "./health-summary";
+import {
+  HEALTH_COWORKER_ROUTE_CONTEXT,
+  buildHealthAlertCoworkerPrompt,
+  humanizeHealthAlert,
+} from "./alert-humanize";
 import { useAlertQuery } from "./useAlertQuery";
 
 type Props = {
@@ -31,7 +36,7 @@ export function AlertBanner({ className = "", suppressSummaries = [] }: Props) {
       {visibleAlerts.map((alert) => {
         const name = alert.labels.alertname ?? "Unknown";
         const severity = alert.labels.severity ?? "warning";
-        const summary = alert.annotations.summary ?? name;
+        const humanized = humanizeHealthAlert(alert);
         const isCritical = severity === "critical";
         const tone = isCritical ? "critical" : "warning";
         const color = TONE_COLOR[tone];
@@ -48,14 +53,32 @@ export function AlertBanner({ className = "", suppressSummaries = [] }: Props) {
           >
             <span>
               <span className="font-semibold uppercase mr-2">{severity}</span>
-              {summary}
+              <span className="font-medium">{humanized.title}</span>
+              <span className="opacity-80"> — {humanized.explanation}</span>
             </span>
-            <button
-              onClick={() => setDismissed((prev) => new Set(prev).add(name))}
-              className="ml-2 opacity-60 hover:opacity-100 transition-opacity"
-            >
-              Dismiss
-            </button>
+            <span className="ml-2 flex shrink-0 items-center gap-2">
+              <button
+                onClick={() =>
+                  document.dispatchEvent(
+                    new CustomEvent("open-agent-panel", {
+                      detail: {
+                        autoMessage: buildHealthAlertCoworkerPrompt([alert]),
+                        routeContext: HEALTH_COWORKER_ROUTE_CONTEXT,
+                      },
+                    }),
+                  )
+                }
+                className="font-medium underline-offset-2 hover:underline"
+              >
+                Ask coworker
+              </button>
+              <button
+                onClick={() => setDismissed((prev) => new Set(prev).add(name))}
+                className="opacity-60 hover:opacity-100 transition-opacity"
+              >
+                Dismiss
+              </button>
+            </span>
           </div>
         );
       })}

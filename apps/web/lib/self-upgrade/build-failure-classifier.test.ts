@@ -24,6 +24,21 @@ const BUNDLE_BOUNDARY_LOG = `Tracing apps/web/next.config.mjs
   -> api/inngest/route.ts
 Error: duplicate emitted asset static/chunks/self-upgrade.js (conflict)`;
 
+const BUNDLE_BOUNDARY_UNEXPECTED_NFT_LOG = `./apps/web/next.config.mjs
+Encountered unexpected file in NFT list
+A file was traced that indicates that the whole project was traced unintentionally.
+Import trace:
+  Server Component:
+    ./apps/web/next.config.mjs
+    ./apps/web/lib/self-upgrade/promoter.ts
+    ./apps/web/lib/actions/promotions.ts
+    ./apps/web/app/(shell)/ops/self-upgrade/page.tsx
+
+> Build error occurred
+Error: Turbopack build failed with 2 errors:
+./packages/integration-shared/src/oauth-refresh.ts:1:1
+Module not found: Can't resolve 'undici'`;
+
 const UNKNOWN_LOG = `error: connect ECONNREFUSED 127.0.0.1:5432
 prisma migrate failed`;
 
@@ -65,6 +80,14 @@ describe("classifyBuildFailure", () => {
     const c = classifyBuildFailure({ log: BUNDLE_BOUNDARY_LOG });
     expect(c.class).toBe("bundle-boundary-static-import");
     expect(c.summary).toContain("#1555");
+    expect(c.isMainDefectVsEnvironment).toBe("main-defect");
+  });
+
+  it("prefers bundle-boundary when an unexpected-NFT trace fingerprints a page/action host-only import", () => {
+    const c = classifyBuildFailure({ log: BUNDLE_BOUNDARY_UNEXPECTED_NFT_LOG });
+    expect(c.class).toBe("bundle-boundary-static-import");
+    expect(c.summary).toContain("route/page/action/Inngest");
+    expect(c.failingTrace).toContain("Encountered unexpected file");
     expect(c.isMainDefectVsEnvironment).toBe("main-defect");
   });
 

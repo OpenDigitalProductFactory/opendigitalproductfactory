@@ -159,6 +159,22 @@ export type BacklogWorkType = (typeof BACKLOG_WORK_TYPE_VALUES)[number];
 export const BACKLOG_EFFORT_SIZES = ["small", "medium", "large", "xlarge"] as const;
 export type BacklogEffortSize = (typeof BACKLOG_EFFORT_SIZES)[number];
 
+// Demand-management funnel + scoring (EP-DEMAND-MGMT Phase 1).
+// The graded demand funnel — a facet orthogonal to `status` (which gates
+// work-claims). raw -> screened -> shaped -> ready, then promote. WWMD-confirmed
+// four-stage shape (ledger DI-5CB3AFE78912). Adding a value requires updating
+// this enum AND the mirror in apps/web/lib/mcp-tools.ts in the same commit.
+export const DEMAND_STAGE_VALUES = ["raw", "screened", "shaped", "ready"] as const;
+export type DemandStage = (typeof DEMAND_STAGE_VALUES)[number];
+
+// The pluggable scoring frameworks. Inputs are stored; the score is computed by
+// the active framework (apps/web/lib/demand/scoring.ts). RICE is the seeded
+// default (WWMD ledger DI-4CEA0F5FACCE); the others are presets an org selects
+// via WWWD doctrine. Adding a value requires updating this enum AND the mirror
+// in apps/web/lib/mcp-tools.ts in the same commit.
+export const DEMAND_SCORE_FRAMEWORKS = ["rice", "wsjf", "value_effort", "weighted"] as const;
+export type DemandScoreFramework = (typeof DEMAND_SCORE_FRAMEWORKS)[number];
+
 /** Returns null if valid, or an error message if invalid. */
 export function validateEpicInput(input: EpicInput): string | null {
   if (!input.title.trim()) return "Title is required";

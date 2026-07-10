@@ -146,6 +146,17 @@ test("evaluateFreshness flags the incident shape: stale next link vs newer lockf
   assert.match(failures[0].message, /next@16\.2\.7/);
 });
 
+test("evaluateFreshness flags a whole-lockfile mismatch the sentinels can't see (new dep added)", () => {
+  // A branch that ADDS a dependency leaves every sentinel package green while
+  // the installed graph predates the lockfile — the undici/integration-shared
+  // incident shape (BI-9DED0CE8 gate runs).
+  const { verdict, failures } = evaluateFreshness(baseState({ lockfilesDiffer: true }));
+  assert.equal(verdict, "sandbox_drift");
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].kind, "installed_lock_stale");
+  assert.match(failures[0].message, /older lockfile/);
+});
+
 test("evaluateFreshness flags a missing workspace link", () => {
   const state = baseState();
   state.packages[0] = { name: "next", importer: "apps/web", lockedVersion: "16.2.9", installedLockVersion: "", resolvedVersion: "", linkTarget: "", missing: true };
