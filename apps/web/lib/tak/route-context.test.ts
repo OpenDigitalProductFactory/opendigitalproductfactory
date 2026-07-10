@@ -410,4 +410,28 @@ describe("getRouteDataContext", () => {
     expect(context).toContain("/platform/ai/decisions/DI-ABC123");
     expect(context).toContain("list_open_decision_reviews");
   });
+
+  it("gives an unenrolled route a default page-identity block instead of leaving the coworker blind (BI-F2AFD796)", async () => {
+    // /admin/backups has no bespoke provider — before the default provider it
+    // returned only the generic business blurb, so the coworker could not name it.
+    const context = await getRouteDataContext("/admin/backups", "user-1");
+
+    expect(context).toContain("PAGE DATA — Admin › Backups:");
+    expect(context).toContain("route /admin/backups");
+    expect(context).toMatch(/rather than asking the user to paste/i);
+    // It must NOT have matched a bespoke provider.
+    expect(context).not.toContain("PAGE DATA — Operations Backlog:");
+  });
+
+  it("humanizes a dynamic segment as Detail", async () => {
+    const context = await getRouteDataContext("/some/unmapped/[entryId]", "user-1");
+    expect(context).toContain("PAGE DATA — Some › Unmapped › Detail:");
+  });
+
+  it("never leaves a coworker fully blind — returns page identity even with no business context", async () => {
+    mockPrisma.businessContext.findFirst.mockResolvedValue(null);
+    const context = await getRouteDataContext("/admin/scheduled-jobs", "user-1");
+    expect(context).not.toBeNull();
+    expect(context).toContain("PAGE DATA — Admin › Scheduled Jobs:");
+  });
 });
