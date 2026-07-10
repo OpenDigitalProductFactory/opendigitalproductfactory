@@ -5,6 +5,8 @@ import { prisma } from "@dpf/db";
 import { validateMessageInput } from "@/lib/agent-coworker-types";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
 import { generateCannedResponse } from "@/lib/agent-routing";
+import { loadOpeningBriefingPayload } from "@/lib/agent/opening-briefing-loader";
+import type { OpeningBriefingPayload } from "@/lib/agent/opening-briefing";
 import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
 import { serializeMessage, loadProviderInfo } from "@/lib/agent-coworker-data";
 import {
@@ -356,7 +358,11 @@ export async function getThreadSnapshotById(input: {
 
 export async function getOrCreateThreadSnapshot(input: {
   routeContext: string;
-}): Promise<{ threadId: string; messages: AgentMessageRow[] } | null> {
+}): Promise<{
+  threadId: string;
+  messages: AgentMessageRow[];
+  openingBriefing?: OpeningBriefingPayload | null;
+} | null> {
   const user = await requireUser();
 
   // Verify user exists in DB (JWT may reference a stale user after re-seed)
@@ -396,9 +402,17 @@ export async function getOrCreateThreadSnapshot(input: {
 
   // BI-1D0B5308: attach per-turn provider/model attribution on initial load.
   const providerInfo = await loadProviderInfo(messages);
+
+  // BI-DED493BA: proactive on-load briefing — the panel must not open silent.
+  // Best-effort: a briefing failure never breaks thread load.
+  const openingBriefing = await loadOpeningBriefingPayload(user, input.routeContext).catch(
+    () => null,
+  );
+
   return {
     threadId: thread.id,
     messages: messages.reverse().map((m) => serializeMessage(m, undefined, providerInfo.get(m.id))),
+    openingBriefing,
   };
 }
 

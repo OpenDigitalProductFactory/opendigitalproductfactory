@@ -80,6 +80,31 @@ function getShellContentTop(): number {
   return shellContent?.getBoundingClientRect().top ?? 16;
 }
 
+// BI-DED493BA: proactive on-load briefing. Ephemeral assistant bubble appended
+// to the loaded history — server-composed from the attention read-model, never
+// persisted, so it is fresh on every open. Id is stable per thread context so a
+// load retry doesn't duplicate it.
+function withOpeningBriefing(
+  messages: AgentMessageRow[],
+  briefing: { content: string; agentId: string | null } | null | undefined,
+  threadContext: string,
+): AgentMessageRow[] {
+  if (!briefing?.content) return messages;
+  const id = `opening-briefing:${threadContext}`;
+  if (messages.some((message) => message.id === id)) return messages;
+  return [
+    ...messages,
+    {
+      id,
+      role: "assistant",
+      content: briefing.content,
+      createdAt: new Date().toISOString(),
+      agentId: briefing.agentId,
+      routeContext: threadContext,
+    },
+  ];
+}
+
 function withSupportWelcomeMessage(messages: AgentMessageRow[]): AgentMessageRow[] {
   if (messages.some((message) => message.content === SUPPORT_WELCOME_MESSAGE)) {
     return messages;
@@ -274,10 +299,11 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
       setThreadLoadState("ready");
       threadAutoRetryUsedRef.current = false;
       const hasPendingSupport = pendingSupportSessionsRef.current.size > 0;
+      const baseMessages = hasPendingSupport
+        ? withSupportWelcomeMessage(snapshot.messages ?? [])
+        : snapshot.messages ?? [];
       setInitialMessages(
-        hasPendingSupport
-          ? withSupportWelcomeMessage(snapshot.messages ?? [])
-          : snapshot.messages ?? [],
+        withOpeningBriefing(baseMessages, snapshot.openingBriefing, threadContext),
       );
 
       for (const session of Array.from(pendingSupportSessionsRef.current.values())) {

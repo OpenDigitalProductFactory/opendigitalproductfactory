@@ -455,3 +455,73 @@ describe("AgentCoworkerShell support entry", () => {
     });
   });
 });
+
+describe("AgentCoworkerShell opening briefing (BI-DED493BA)", () => {
+  beforeEach(() => {
+    pathname = "/customer/marketing";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) }),
+    );
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("renders the server-composed briefing as an ephemeral bubble on open", async () => {
+    getOrCreateThreadSnapshotMock.mockResolvedValue({
+      threadId: "thread-brief",
+      messages: [],
+      openingBriefing: {
+        content:
+          "**Most pressing:** [Launch email awaits your approval](/customer/marketing) — pending review",
+        agentId: "marketing-specialist",
+      },
+    });
+
+    renderShell();
+    fireEvent.click(screen.getByText("Open coworker"));
+    await settleShellThread();
+
+    expect(
+      await screen.findByText(/Most pressing:.*Launch email awaits your approval/),
+    ).toBeInTheDocument();
+  });
+
+  it("does not duplicate the briefing across load retries of the same context", async () => {
+    getOrCreateThreadSnapshotMock.mockResolvedValue({
+      threadId: "thread-brief",
+      messages: [],
+      openingBriefing: { content: "**Most pressing:** one thing", agentId: null },
+    });
+
+    renderShell();
+    fireEvent.click(screen.getByText("Open coworker"));
+    await settleShellThread();
+
+    const latestProps = agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as {
+      initialMessages?: Array<{ id: string }>;
+    };
+    const briefingRows = (latestProps.initialMessages ?? []).filter((row) =>
+      row.id.startsWith("opening-briefing:"),
+    );
+    expect(briefingRows).toHaveLength(1);
+  });
+
+  it("stays silent when the snapshot carries no briefing (quiet / nothing pending)", async () => {
+    getOrCreateThreadSnapshotMock.mockResolvedValue({
+      threadId: "thread-silent",
+      messages: [],
+      openingBriefing: null,
+    });
+
+    renderShell();
+    fireEvent.click(screen.getByText("Open coworker"));
+    await settleShellThread();
+
+    expect(screen.queryByText(/Most pressing/)).not.toBeInTheDocument();
+  });
+});
