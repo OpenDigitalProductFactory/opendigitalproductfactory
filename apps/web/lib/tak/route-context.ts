@@ -10,6 +10,15 @@ import {
   isManagedServiceProviderProfile,
   readActivationProfile,
 } from "@/lib/storefront/archetype-activation";
+import {
+  WWMD_PLATFORM_PROFILE_ID,
+  WWWD_ORGANIZATION_PROFILE_ID,
+} from "@/lib/decision/caller-context";
+import { resolveOrgProfileId } from "@/lib/decision-perspective/material";
+import {
+  projectFounderReviewCandidate,
+  type DecisionInteractionQueueRow,
+} from "@/lib/founder-review/queue";
 
 type RouteContextResult = string | null;
 
@@ -35,6 +44,12 @@ const ROUTE_CONTEXT_PROVIDERS: Record<string, (userId: string, routeContext: str
   "/build": getBuildContext,
   "/storefront": getStorefrontMarketingContext,
   "/customer/funnel": getCustomerFunnelContext,
+  // /wiki is the Decision Governance hub (WWMD/WWWD/WSID). Without its own
+  // provider the coworker fell outside this allow-list and saw only the generic
+  // business blurb — so asked "what should we do about these open reviews?" it
+  // had no idea the page even showed reviews and told the user to paste the
+  // screen (BI-C888E1B6 / EP-0AF96937).
+  "/wiki": getWikiGovernanceContext,
 };
 
 export async function getRouteDataContext(routeContext: string, userId: string): Promise<RouteContextResult> {
@@ -1096,6 +1111,122 @@ async function getStorefrontMarketingContext(): Promise<string> {
     `Engagements: ${engagementSummary || "none"}`,
     `Opportunities: ${opportunitySummary || "none"}`,
   ].join("\n");
+}
+
+// ─── Decision Governance Context (/wiki) ─────────────────────────────────
+
+// EP-0AF96937 / BI-C888E1B6. The /wiki landing is the Decision Governance hub:
+// WWMD (platform doctrine), WWWD (this business's stance), WSID (each role's
+// craft), each carrying a count of "open reviews" — unresolved DecisionInteraction
+// rows (outcomeType defer/escalate) awaiting a human. This mirrors the counts the
+// hub renders (see apps/web/lib/wiki/decision-governance-hub.ts and the /wiki
+// page query) AND lists the most recent open reviews via the shared founder-review
+// projector, so the coworker can name and deep-link each one — and act on them via
+// the list_open_decision_reviews / resolve_decision_review tools — instead of
+// asking the user to paste the screen.
+const WIKI_UNRESOLVED_OUTCOMES = ["defer", "escalate"];
+
+async function getWikiGovernanceContext(): Promise<string> {
+  const decisionWindow = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  // WWWD health reads off the org's OWN profile (seeded at onboarding) plus the
+  // platform fallback id — mirror /wiki page.tsx so the counts match the screen.
+  const organization = await prisma.organization.findFirst({ select: { id: true } });
+  const organizationId = organization?.id ?? null;
+  const orgProfileId = organizationId
+    ? await resolveOrgProfileId({ db: prisma, organizationId })
+    : null;
+  const wwwdProfileIds = orgProfileId
+    ? [orgProfileId, WWWD_ORGANIZATION_PROFILE_ID]
+    : [WWWD_ORGANIZATION_PROFILE_ID];
+
+  const [
+    kernelPrincipleCount,
+    kernelHeuristicCount,
+    wsidActiveProfiles,
+    wwmdOpenReviews,
+    wwwdOpenReviews,
+    wsidOpenReviews,
+    wwmdDecisions30d,
+    wwwdDecisions30d,
+    wsidDecisions30d,
+    topOpenReviews,
+  ] = await Promise.all([
+    prisma.wikiPage.count({
+      where: { organizationId: null, pageKind: "principle", status: "published" },
+    }),
+    prisma.wikiPage.count({
+      where: { organizationId: null, pageKind: "heuristic", status: "published" },
+    }),
+    prisma.decisionPerspectiveProfile.count({
+      where: { kind: "profession", status: "active" },
+    }),
+    prisma.decisionInteraction.count({
+      where: { outcomeType: { in: WIKI_UNRESOLVED_OUTCOMES }, profileId: WWMD_PLATFORM_PROFILE_ID },
+    }),
+    prisma.decisionInteraction.count({
+      where: { outcomeType: { in: WIKI_UNRESOLVED_OUTCOMES }, profileId: { in: wwwdProfileIds } },
+    }),
+    prisma.decisionInteraction.count({
+      where: { outcomeType: { in: WIKI_UNRESOLVED_OUTCOMES }, profileId: { startsWith: "wsid-" } },
+    }),
+    prisma.decisionInteraction.count({
+      where: { profileId: WWMD_PLATFORM_PROFILE_ID, createdAt: { gte: decisionWindow } },
+    }),
+    prisma.decisionInteraction.count({
+      where: { profileId: { in: wwwdProfileIds }, createdAt: { gte: decisionWindow } },
+    }),
+    prisma.decisionInteraction.count({
+      where: { profileId: { startsWith: "wsid-" }, createdAt: { gte: decisionWindow } },
+    }),
+    prisma.decisionInteraction.findMany({
+      where: { outcomeType: { in: WIKI_UNRESOLVED_OUTCOMES } },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      select: {
+        interactionId: true,
+        question: true,
+        options: true,
+        outcomeType: true,
+        outcomePayload: true,
+        buildId: true,
+        taskRunId: true,
+        routeContext: true,
+        createdAt: true,
+        profile: { select: { profileId: true, name: true, kind: true } },
+      },
+    }),
+  ]);
+
+  const totalOpenReviews = wwmdOpenReviews + wwwdOpenReviews + wsidOpenReviews;
+  const plural = (n: number) => `${n} open review${n === 1 ? "" : "s"}`;
+
+  const reviewLines = (topOpenReviews as DecisionInteractionQueueRow[]).map((row) => {
+    const c = projectFounderReviewCandidate(row);
+    return `- [${c.profileLabel}] "${c.question}" — ${c.unresolvedReasonLabel}; suggested action: ${c.primaryActionLabel}; open at ${c.links.decisionCanvasHref}`;
+  });
+
+  return [
+    "\nPAGE DATA — Decision Governance (/wiki):",
+    "This page is the decision-governance hub. Three disciplines govern every call your AI workforce makes: WWMD (What Would Mark Do — platform doctrine), WWWD (What Would We Do — this business's own stance), and WSID (What Should I Do — each role's craft). An \"open review\" is an unresolved decision (deferred or escalated) awaiting a human.",
+    "",
+    `OPEN REVIEWS awaiting a human: ${totalOpenReviews} total`,
+    `- WWMD (platform): ${plural(wwmdOpenReviews)}`,
+    `- WWWD (business): ${plural(wwwdOpenReviews)}`,
+    `- WSID (craft): ${plural(wsidOpenReviews)}`,
+    "",
+    `DECISIONS RECORDED (last 30 days): WWMD ${wwmdDecisions30d}, WWWD ${wwwdDecisions30d}, WSID ${wsidDecisions30d}`,
+    `GOVERNING MATERIAL: ${kernelPrincipleCount} kernel principles, ${kernelHeuristicCount} heuristics, ${wsidActiveProfiles} active role families.`,
+    "",
+    totalOpenReviews > 0
+      ? "TOP OPEN REVIEWS (most recent unresolved — you can act on these, do NOT ask the user to paste them):"
+      : "There are no open reviews right now.",
+    ...reviewLines,
+    "",
+    "To act: call list_open_decision_reviews for the full queue with each item's unresolved reason and gap detail, read them, and recommend a resolution. Resolving a review is a human action taken in the Founder Review workspace (/platform/ai/founder-review); each item's decision canvas is /platform/ai/decisions/<interactionId>.",
+  ]
+    .filter((line) => line !== null && line !== undefined)
+    .join("\n");
 }
 
 // ─── Universal Business Context ───────────────────────────────────────────

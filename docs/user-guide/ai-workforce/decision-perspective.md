@@ -182,6 +182,13 @@ A **material backlink** is supporting context, not a second decision. It answers
 
 Use **founder review** when a WWMD platform decision needs a missing principle, a founder judgment call, or a platform-governance resolution. Use **owner/operator review** when a WWWD or custom profile needs organization-local policy, customer-commitment guidance, or an accountable business owner.
 
+## Coworker Awareness of the Governance Hub
+
+A coworker chat opened alongside `/wiki` can now read the same governance state the page renders, so "what should we do about these open reviews?" is answered from data rather than a request to paste the screen:
+
+- **Page context.** When the user is on `/wiki`, the coworker's prompt is injected with the Decision Governance summary — open-review counts per discipline (WWMD / WWWD / WSID), decisions recorded in the last 30 days, governing-material counts, and the most recent unresolved reviews with their questions and decision-canvas links. This is the `/wiki` route-context provider in `apps/web/lib/tak/route-context.ts`.
+- **The `list_open_decision_reviews` tool.** A read-only, `registry_read`-baseline tool (so every coworker inherits it) that returns the full open-review queue — each item's discipline, unresolved reason, gap detail, suggested action, and decision-canvas link — projected through the same `apps/web/lib/founder-review/queue.ts` the Founder Review workspace uses. A coworker reads the queue and **recommends** a resolution; **resolving** a deferred/escalated review stays a human action taken in the Founder Review workspace (Human-in-the-Loop at Phase Boundaries).
+
 ## Boundaries
 
 Three constraints are non-negotiable:

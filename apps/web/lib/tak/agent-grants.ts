@@ -221,6 +221,12 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // draft WikiPage/WikiPageRevision rows under the org's overlay.
   record_org_business_answer: ["registry_write"],
 
+  // Open decision reviews — the /wiki governance hub's queue of deferred/escalated
+  // decisions awaiting a human. Read-only tool on the `registry_read` baseline: any
+  // coworker may read and recommend on the queue; resolving stays a human action in
+  // the Founder Review workspace (Human-in-the-Loop at Phase Boundaries).
+  list_open_decision_reviews: ["registry_read"],
+
   // Backlog triage and Build Studio promotion (spec 2026-04-21)
   // These were defined in PLATFORM_TOOLS but missing here, so every call was
   // denied by the default-deny rule below. That broke the entire backlog →

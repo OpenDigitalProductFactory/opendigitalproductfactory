@@ -4,8 +4,13 @@ const {
   mockPrisma,
   mockGetPlaybook,
   mockGetVocabulary,
+  mockResolveOrgProfileId,
 } = vi.hoisted(() => ({
   mockPrisma: {
+    organization: { findFirst: vi.fn() },
+    decisionInteraction: { count: vi.fn(), findMany: vi.fn() },
+    decisionPerspectiveProfile: { count: vi.fn() },
+    wikiPage: { count: vi.fn() },
     businessContext: { findFirst: vi.fn() },
     storefrontConfig: { findFirst: vi.fn() },
     organizationLicenseProfile: { findFirst: vi.fn() },
@@ -33,11 +38,13 @@ const {
   },
   mockGetPlaybook: vi.fn(),
   mockGetVocabulary: vi.fn(),
+  mockResolveOrgProfileId: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/tak/marketing-playbooks", () => ({ getPlaybook: mockGetPlaybook }));
 vi.mock("@/lib/storefront/archetype-vocabulary", () => ({ getVocabulary: mockGetVocabulary }));
+vi.mock("@/lib/decision-perspective/material", () => ({ resolveOrgProfileId: mockResolveOrgProfileId }));
 
 import { getRouteDataContext } from "./route-context";
 
@@ -68,6 +75,18 @@ beforeEach(() => {
   mockPrisma.taxJurisdictionReference.findMany.mockReset();
   mockGetPlaybook.mockReset();
   mockGetVocabulary.mockReset();
+  mockResolveOrgProfileId.mockReset();
+  mockPrisma.organization.findFirst.mockReset();
+  mockPrisma.decisionInteraction.count.mockReset();
+  mockPrisma.decisionInteraction.findMany.mockReset();
+  mockPrisma.decisionPerspectiveProfile.count.mockReset();
+  mockPrisma.wikiPage.count.mockReset();
+  mockPrisma.organization.findFirst.mockResolvedValue({ id: "org-1" });
+  mockResolveOrgProfileId.mockResolvedValue(null);
+  mockPrisma.decisionInteraction.count.mockResolvedValue(0);
+  mockPrisma.decisionInteraction.findMany.mockResolvedValue([]);
+  mockPrisma.decisionPerspectiveProfile.count.mockResolvedValue(0);
+  mockPrisma.wikiPage.count.mockResolvedValue(0);
 
   mockPrisma.businessContext.findFirst.mockResolvedValue({
     industry: "professional-services",
@@ -336,5 +355,59 @@ describe("getRouteDataContext", () => {
     // It must NOT have fallen back to the /ops backlog provider.
     expect(context).not.toContain("PAGE DATA — Operations Backlog:");
     expect(mockPrisma.runtimeTarget.findMany).toHaveBeenCalled();
+  });
+
+  it("gives /wiki the decision-governance open-review counts + named reviews, not a generic blurb (BI-C888E1B6)", async () => {
+    // Counts keyed off the where clause so each discipline gets a distinct number.
+    mockPrisma.decisionInteraction.count.mockImplementation(async (args: {
+      where: { outcomeType?: unknown; profileId?: unknown };
+    }) => {
+      const { where } = args;
+      const pid = where.profileId;
+      const isWsid = typeof pid === "object" && pid !== null && "startsWith" in pid;
+      const isWwmd = pid === "mark-dpf-platform";
+      if (where.outcomeType) {
+        // open-review counts
+        if (isWwmd) return 17;
+        if (isWsid) return 0;
+        return 1; // wwwd
+      }
+      // 30-day decision counts
+      if (isWwmd) return 46;
+      if (isWsid) return 0;
+      return 3;
+    });
+    mockPrisma.wikiPage.count.mockImplementation(async (args: { where: { pageKind?: string } }) =>
+      args.where.pageKind === "principle" ? 158 : 33,
+    );
+    mockPrisma.decisionPerspectiveProfile.count.mockResolvedValue(23);
+    mockPrisma.decisionInteraction.findMany.mockResolvedValue([
+      {
+        interactionId: "DI-ABC123",
+        question: "Should we prioritize the migration or the new feature?",
+        options: [{ id: "migrate" }, { id: "feature" }],
+        outcomeType: "escalate",
+        outcomePayload: { unresolvedReason: "principle-gap" },
+        buildId: null,
+        taskRunId: null,
+        routeContext: "/build",
+        createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        profile: { profileId: "mark-dpf-platform", name: "WWMD Platform", kind: "platform" },
+      },
+    ]);
+
+    const context = await getRouteDataContext("/wiki", "user-1");
+
+    expect(context).toContain("PAGE DATA — Decision Governance (/wiki):");
+    expect(context).toContain("OPEN REVIEWS awaiting a human: 18 total");
+    expect(context).toContain("WWMD (platform): 17 open reviews");
+    expect(context).toContain("WWWD (business): 1 open review");
+    expect(context).toContain("WSID (craft): 0 open reviews");
+    expect(context).toContain("DECISIONS RECORDED (last 30 days): WWMD 46, WWWD 3, WSID 0");
+    expect(context).toContain("158 kernel principles, 33 heuristics, 23 active role families");
+    // The coworker can now NAME a specific review and deep-link it — no "paste the screen".
+    expect(context).toContain("Should we prioritize the migration or the new feature?");
+    expect(context).toContain("/platform/ai/decisions/DI-ABC123");
+    expect(context).toContain("list_open_decision_reviews");
   });
 });

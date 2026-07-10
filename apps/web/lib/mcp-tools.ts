@@ -47,6 +47,7 @@ import { feedbackPack } from "@/lib/mcp/packs/feedback-pack";
 import { marketingPack } from "@/lib/mcp/packs/marketing-pack";
 import { workCapturePack } from "@/lib/mcp/packs/work-capture-pack";
 import { orgDecisionPack } from "@/lib/mcp/packs/org-decision-pack";
+import { founderReviewPack } from "@/lib/mcp/packs/founder-review-pack";
 import { professionDecisionPack } from "@/lib/mcp/packs/profession-decision-pack";
 import { optimizationPack } from "@/lib/mcp/packs/optimization-pack";
 import { activityRoutingPack } from "@/lib/mcp/packs/activity-routing-pack";
@@ -453,7 +454,7 @@ function stringArray(value: unknown): string[] {
 // ─── Tool Registry ───────────────────────────────────────────────────────────
 // Scoped tool packs compose into the registry; mcp-tools.ts is the thin layer
 // over them (definitions spread into PLATFORM_TOOLS below; dispatch in executeTool).
-const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, professionDecisionPack, optimizationPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack, coworkerToolGrantPack, coworkerEstablishPack, coworkerMemoryPack, effortContextPack, coworkerGoalPack, subagentFanoutPack, mdmStewardshipPack, crmContactsPack, queueAwarenessPack, documentPack, screenPack, nonprodLeasePack, knowledgePack, demandScoringPack, workforcePack]);
+const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, founderReviewPack, professionDecisionPack, optimizationPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack, coworkerToolGrantPack, coworkerEstablishPack, coworkerMemoryPack, effortContextPack, coworkerGoalPack, subagentFanoutPack, mdmStewardshipPack, crmContactsPack, queueAwarenessPack, documentPack, screenPack, nonprodLeasePack, knowledgePack, demandScoringPack, workforcePack]);
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,
