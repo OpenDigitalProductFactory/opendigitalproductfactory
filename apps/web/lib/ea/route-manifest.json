@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 544,
+  "routeCount": 545,
   "routes": [
     {
       "routePath": "/",
@@ -4474,6 +4474,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/changes/page.tsx"
+    },
+    {
+      "routePath": "/ops/demand",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "demand"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/demand/page.tsx"
     },
     {
       "routePath": "/ops/dev-loop",

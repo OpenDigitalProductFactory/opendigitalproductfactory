@@ -39,7 +39,9 @@ The keystone. Everything downstream depends on a computed, explainable score exi
 
 **Acceptance:** every build-eligible item can carry a computed, explainable `demandScore`; the promote sweep orders by it; `priority` still overrides; no UI yet (surfaces via existing `/ops` list sorted by score). Verify on live install per `dpf-verify-on-live-install`.
 
-### Phase 2 — Demand board (BI-A2705E51) · *UX-Fit gated*
+### Phase 2 — Demand board (BI-A2705E51) · *UX-Fit gated* — ✅ LANDED
+
+**Landed:** `/ops/demand` route + `DemandBoard` client (Funnel kanban `raw/screened/shaped/ready` + Value×Effort matrix with median-split quadrants), pure `lib/demand/board.ts` (grouping, matrix, value/size bands) unit-tested (5), server loader `demand-data.ts`, "Demand" tab added to the Delivery nav group, route-manifest regenerated. Progressive disclosure: card front shows value band + effort with a "Why this score?" drill-in. `var(--dpf-*)` tokens only; existing `/ops` list retained.
 
 `dpf-ux-fit-review` first. A `/ops` Demand view (progressive disclosure): **Funnel** kanban (`raw→screened→shaped→ready`, drag advances, gate rules server-enforced), **Matrix** (value×effort 2×2 with quadrant labels), card front = "how valuable" + "how big" with a "Why this score" drill-in showing the formula + per-input contribution. `var(--dpf-*)` tokens only; existing `/ops` list retained as flat fallback. Playwright e2e.
 
