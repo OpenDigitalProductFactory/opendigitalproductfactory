@@ -92,6 +92,47 @@ export async function loadUserFacts(
   return [...domainFacts, ...otherFacts].slice(0, limit) as UserFactRecord[];
 }
 
+const USER_FACT_SELECT = {
+  id: true,
+  category: true,
+  key: true,
+  value: true,
+  confidence: true,
+  sourceRoute: true,
+  sourceMessageId: true,
+  sourceAgentId: true,
+  sourceOperatingProfileFingerprint: true,
+  lastValidatedAt: true,
+  validatedAgainstFingerprint: true,
+  createdAt: true,
+} as const;
+
+/**
+ * BI-1772D0B7 (EP-8C706944 P4): load ORG-shared facts — durable business facts
+ * (scope="org", non-sensitive) learned in ANY employee's session with a coworker,
+ * so a coworker serving ten employees carries org-relevant context between them.
+ * Excludes the current user's own facts (they arrive via loadUserFacts) and never
+ * returns sensitive facts (those stay with their originating user). One DPF
+ * install = one organization, so "org" is install-wide.
+ */
+export async function loadOrgSharedFacts(
+  excludeUserId: string,
+  limit = 10,
+): Promise<UserFactRecord[]> {
+  const facts = await prisma.userFact.findMany({
+    where: {
+      scope: "org",
+      sensitivity: "normal",
+      supersededAt: null,
+      userId: { not: excludeUserId },
+    },
+    orderBy: [{ confidence: "desc" }, { createdAt: "desc" }],
+    take: limit,
+    select: USER_FACT_SELECT,
+  });
+  return facts as UserFactRecord[];
+}
+
 // ─── Format Facts as Context Block ─────────────────────────────────────────
 
 /**
@@ -233,7 +274,13 @@ export async function loadGovernedUserFacts(params: {
   currentOperatingProfileFingerprint?: string | null;
   actionRisk?: MemoryActionRisk;
 }): Promise<GovernedUserFactsResult> {
-  const facts = await loadUserFacts(params.userId, params.routeDomain, params.limit);
+  const ownFacts = await loadUserFacts(params.userId, params.routeDomain, params.limit);
+  // BI-1772D0B7 (EP-8C706944 P4): also inject org-shared business facts learned in
+  // other employees' sessions, so the coworker carries org context across the
+  // team. Deduped by id; the user's own facts take precedence.
+  const orgFacts = await loadOrgSharedFacts(params.userId);
+  const ownIds = new Set(ownFacts.map((f) => f.id));
+  const facts = [...ownFacts, ...orgFacts.filter((f) => !ownIds.has(f.id))];
   const currentOperatingProfileFingerprint = params.currentOperatingProfileFingerprint ?? null;
   const actionRisk = params.actionRisk ?? "advisory";
 
@@ -327,6 +374,16 @@ export async function upsertUserFact(params: {
   sourceAgentId?: string;
   sourceOperatingProfileFingerprint?: string | null;
 }): Promise<void> {
+  // BI-1772D0B7 (EP-8C706944 P4): decide at write time whether this fact is an
+  // org-shared business fact or private relationship memory, and whether it is
+  // sensitive (sensitive never leaves its user). Tagged on every create below.
+  const { classifyMemoryScope } = await import("./memory-scope");
+  const scopeDecision = classifyMemoryScope({
+    category: params.category,
+    key: params.key,
+    value: params.value,
+  });
+
   // Check for existing active fact with same key
   const existing = await prisma.userFact.findFirst({
     where: {
@@ -371,6 +428,8 @@ export async function upsertUserFact(params: {
         sourceOperatingProfileFingerprint: params.sourceOperatingProfileFingerprint ?? null,
         validatedAgainstFingerprint: params.sourceOperatingProfileFingerprint ?? null,
         lastValidatedAt: params.sourceOperatingProfileFingerprint ? new Date() : null,
+        scope: scopeDecision.scope,
+        sensitivity: scopeDecision.sensitivity,
       },
     });
 
@@ -418,6 +477,8 @@ export async function upsertUserFact(params: {
         sourceOperatingProfileFingerprint: params.sourceOperatingProfileFingerprint ?? null,
         validatedAgainstFingerprint: params.sourceOperatingProfileFingerprint ?? null,
         lastValidatedAt: params.sourceOperatingProfileFingerprint ? new Date() : null,
+        scope: scopeDecision.scope,
+        sensitivity: scopeDecision.sensitivity,
       },
     });
 
