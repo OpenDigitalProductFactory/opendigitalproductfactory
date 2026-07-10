@@ -10575,7 +10575,7 @@ export async function executeTool(
           id: true, title: true, brief: true, diffPatch: true, diffSummary: true,
           sandboxId: true, portfolioId: true, createdById: true,
           buildBranch: true, gitCommitHashes: true, updatedAt: true, buildPlan: true,
-          description: true, buildExecState: true,
+          description: true, designDoc: true, buildExecState: true,
           disposition: true, dispositionSuggestionReason: true,
           createdBy: { select: { email: true } },
         },
@@ -10662,11 +10662,38 @@ export async function executeTool(
       const includeMigrations = params.include_migrations !== false;
       const brief = build.brief as Record<string, unknown> | null;
 
+      // Analyze seed fit before opening the PR so the first CI run already has
+      // governed review metadata. runContributionReview repeats the same
+      // deterministic analysis after PR creation and persists the full report.
+      const designDoc = build.designDoc as Record<string, unknown> | null;
+      const reusability = designDoc?.reusabilityAnalysis as {
+        scope?: string;
+        domainEntities?: Array<{ hardcodedValue: string; parameterName: string }>;
+        contributionReadiness?: string;
+      } | null;
+      const {
+        runSanitizationScan,
+        tagBusinessVerticals,
+        verifyParameterization,
+      } = await import("@/lib/integrate/contribution-review");
+      const { evaluateSeedContributionFit } = await import("@/lib/integrate/seed-contribution-fit");
+      const securityScan = (await import("@/lib/security-scan")).scanDiffForSecurityIssues(shareableDiff);
+      const preliminarySanitization = await runSanitizationScan(shareableDiff);
+      const preliminaryParameterization = verifyParameterization(shareableDiff, reusability);
+      const preliminaryVerticals = await tagBusinessVerticals(brief, shareableDiff);
+
       // Parse files from diff
       const allFiles = [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((m) => m[1]);
       const migrationFiles = allFiles.filter((f) => f.startsWith("prisma/migrations/"));
       const codeFiles = allFiles.filter((f) => !f.startsWith("prisma/migrations/"));
       const schemaFiles = allFiles.filter((f) => f.includes("schema.prisma"));
+      const seedFit = evaluateSeedContributionFit({
+        changedFiles: allFiles,
+        sanitization: preliminarySanitization,
+        parameterization: preliminaryParameterization,
+        verticals: preliminaryVerticals,
+        securityPassed: securityScan.passed,
+      });
 
       // Build manifest
       const manifest = {
@@ -10764,7 +10791,6 @@ export async function executeTool(
 
             const prTitle = `feat: ${build.title}`;
             const { submitBuildAsPR } = await import("@/lib/contribution-pipeline");
-            const securityScan = (await import("@/lib/security-scan")).scanDiffForSecurityIssues(shareableDiff);
             const prBody = [
               "## Summary",
               "",
@@ -10778,10 +10804,12 @@ export async function executeTool(
               "---",
               `License: Apache-2.0 (inbound=outbound)`,
               platformId.dcoSignoff,
+              ...(seedFit.decision ? ["", `Seed-Fit-Decision: ${seedFit.decision}`] : []),
             ].join("\n");
 
             const labels = ["ai-contributed", "build-studio"];
             if (!securityScan.passed) labels.push("security-review-needed");
+            if (seedFit.decision) labels.push(`seed-fit:${seedFit.decision}`);
 
             const prResult = await createBranchAndPR({
               // Phase 3: caller still passes head === base. Phase 4 will switch
@@ -10820,7 +10848,7 @@ export async function executeTool(
                     token: hiveToken,
                     diff: shareableDiff,
                   });
-                  logBuildActivity(buildId, "contribution_review", `Merge readiness: ${reviewResult.mergeReadiness}. Verticals: ${reviewResult.verticals.applicableVerticals.filter((v) => v.relevance !== "unlikely").map((v) => v.category).join(", ") || "none"}`);
+                  logBuildActivity(buildId, "contribution_review", `Merge readiness: ${reviewResult.mergeReadiness}. Seed fit: ${reviewResult.seedFit.decision ?? "not-applicable"}. Verticals: ${reviewResult.verticals.applicableVerticals.filter((v) => v.relevance !== "unlikely").map((v) => v.category).join(", ") || "none"}`);
                 } catch (reviewErr) {
                   console.warn("[contribute_to_hive] contribution review failed:", reviewErr);
                   prError = `Contribution review failed: ${getErrorMessage(reviewErr)}`;

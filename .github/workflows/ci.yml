@@ -399,6 +399,32 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node scripts/check-ux-fit-decision.mjs
 
+  seed-fit-gate:
+    name: Seed Contribution Fit Gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    # Canonical seed sources are fleet defaults, so a PR that changes them must
+    # carry one reviewed applicability decision. The gate reads evidence from
+    # the PR body/labels and the changed paths; it does not trust contributor
+    # provenance or infer approval from a successful build.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Test seed-fit decision contract
+        run: node --test scripts/check-seed-fit-decision.test.mjs
+      - name: Enforce seed-fit evidence
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: node scripts/check-seed-fit-decision.mjs
+
   spec-plan-doc-gate:
     name: Spec/Plan/Doc Gate
     runs-on: ubuntu-latest

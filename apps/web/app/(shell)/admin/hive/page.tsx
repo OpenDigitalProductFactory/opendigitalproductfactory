@@ -1,13 +1,15 @@
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { HiveContributionsPanel } from "@/components/admin/HiveContributionsPanel";
+import { SeedContributionReviewTable } from "@/components/admin/SeedContributionReviewTable";
+import { StatusBadge, type Intent } from "@/components/ui/report-kit";
 import { getHiveContributionsView } from "@/lib/actions/hive-contributions";
 
-const STATUS_COLORS: Record<string, string> = {
-  submitted: "var(--dpf-muted)",
-  curating: "var(--dpf-accent)",
-  accepted: "var(--dpf-success, #15803d)",
-  rejected: "var(--dpf-warning, #b45309)",
-  withdrawn: "var(--dpf-muted)",
+const STATUS_INTENTS: Record<string, Intent> = {
+  submitted: "neutral",
+  curating: "accent",
+  accepted: "success",
+  rejected: "warning",
+  withdrawn: "neutral",
 };
 
 export default async function AdminHiveContributionsPage() {
@@ -46,6 +48,15 @@ export default async function AdminHiveContributionsPage() {
         </section>
 
         <section>
+          <h2 className="text-lg font-semibold text-[var(--dpf-text)] mb-1">Seed contribution review</h2>
+          <p className="text-sm text-[var(--dpf-muted)] mb-3">
+            Seed changes are approved only for the installs, archetypes, or business verticals they actually fit.
+            Local defaults and changes that still need parameterization cannot become fleet defaults.
+          </p>
+          <SeedContributionReviewTable rows={view.seedReviews} />
+        </section>
+
+        <section>
           <h2 className="text-lg font-semibold text-[var(--dpf-text)] mb-1">Contribution ledger</h2>
           <p className="text-sm text-[var(--dpf-muted)] mb-3">
             What was shared, when, and its curation status.
@@ -75,8 +86,13 @@ export default async function AdminHiveContributionsPage() {
                       <td className="px-3 py-2 text-[var(--dpf-text)] whitespace-nowrap">{e.contributionType}</td>
                       <td className="px-3 py-2 text-[var(--dpf-text)]">{e.summary}</td>
                       <td className="px-3 py-2 text-[var(--dpf-muted)] whitespace-nowrap">{e.redactionStatus ?? "—"}</td>
-                      <td className="px-3 py-2 whitespace-nowrap" style={{ color: STATUS_COLORS[e.status] ?? "var(--dpf-muted)" }}>
-                        {e.status}
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <StatusBadge
+                          intent={STATUS_INTENTS[e.status] ?? "neutral"}
+                          label={e.status}
+                          uppercase={false}
+                          variant="soft"
+                        />
                       </td>
                       <td className="px-3 py-2 text-[var(--dpf-muted)] whitespace-nowrap">
                         {new Date(e.createdAt).toLocaleDateString()}

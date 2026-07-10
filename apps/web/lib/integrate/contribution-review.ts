@@ -15,6 +15,12 @@
 
 import { prisma } from "@dpf/db";
 import { scanDiffForSecurityIssues } from "./security-scan";
+import {
+  buildContributionSeedDeltaManifest,
+  evaluateSeedContributionFit,
+  formatSeedContributionFitMarkdown,
+  type SeedContributionFitReport,
+} from "./seed-contribution-fit";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -68,10 +74,27 @@ export type ContributionReviewResult = {
   sanitization: SanitizationReport;
   parameterization: ParameterizationReport;
   verticals: VerticalReport;
+  seedFit: SeedContributionFitReport;
   securityPassed: boolean;
   evidenceChain: Record<string, string>;
   reviewedAt: string;
 };
+
+export function determineContributionMergeReadiness(input: {
+  securityPassed: boolean;
+  sanitization: SanitizationReport;
+  parameterization: ParameterizationReport;
+  seedFit: SeedContributionFitReport;
+}): MergeReadiness {
+  if (!input.securityPassed) return "blocked";
+  if (!input.sanitization.passed || input.parameterization.overallVerdict === "fail") {
+    return "needs-work";
+  }
+  if (input.seedFit.touchesSeededContent && !input.seedFit.mergeEligible) {
+    return input.seedFit.decision === "reject-as-seed" ? "blocked" : "needs-work";
+  }
+  return "ready";
+}
 
 type ReviewInput = {
   buildId: string;
@@ -367,6 +390,7 @@ export function generateReviewReport(
   sanitization: SanitizationReport,
   parameterization: ParameterizationReport,
   verticals: VerticalReport,
+  seedFit: SeedContributionFitReport,
   securityPassed: boolean,
   evidenceChain: Record<string, string>,
   mergeReadiness: MergeReadiness,
@@ -405,6 +429,8 @@ export function generateReviewReport(
     }
   }
   sections.push("");
+
+  sections.push(...formatSeedContributionFitMarkdown(seedFit));
 
   // Parameterization
   sections.push("### Parameterization");
@@ -462,6 +488,7 @@ export function generateReviewReport(
   if (applicable.length > 0) labels.push(...applicable.map((v) => `vertical:${v.category}`));
   labels.push(mergeReadiness === "ready" ? "merge-ready" : mergeReadiness === "needs-work" ? "needs-work" : "blocked");
   if (parameterization.scope !== "one_off") labels.push(`reuse:${parameterization.scope}`);
+  if (seedFit.decision) labels.push(`seed-fit:${seedFit.decision}`);
 
   sections.push("### Suggested Labels");
   sections.push("");
@@ -555,6 +582,7 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: {
+      id: true,
       title: true,
       brief: true,
       designDoc: true,
@@ -586,6 +614,17 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
   // Security scan (reuse existing)
   const securityResult = scanDiffForSecurityIssues(diff);
 
+  // Step 4: Seed contribution fit. This is derived from the evidence above,
+  // never from the contributor's desired outcome.
+  const changedFiles = [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((match) => match[1]);
+  const seedFit = evaluateSeedContributionFit({
+    changedFiles,
+    sanitization,
+    parameterization,
+    verticals,
+    securityPassed: securityResult.passed,
+  });
+
   // Build evidence chain
   const evidenceChain: Record<string, string> = {};
   if (build?.designReview) {
@@ -607,18 +646,17 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
   }
 
   // Determine merge readiness
-  let mergeReadiness: MergeReadiness;
-  if (!securityResult.passed) {
-    mergeReadiness = "blocked";
-  } else if (!sanitization.passed || parameterization.overallVerdict === "fail") {
-    mergeReadiness = "needs-work";
-  } else {
-    mergeReadiness = "ready";
-  }
+  const mergeReadiness = determineContributionMergeReadiness({
+    securityPassed: securityResult.passed,
+    sanitization,
+    parameterization,
+    seedFit,
+  });
 
   // Step 4: Generate report
   const reportMarkdown = generateReviewReport(
     sanitization, parameterization, verticals,
+    seedFit,
     securityResult.passed, evidenceChain, mergeReadiness,
   );
 
@@ -638,6 +676,7 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
     labels.push(...applicable.map((v) => `vertical:${v.category}`));
     labels.push(mergeReadiness === "ready" ? "merge-ready" : mergeReadiness === "needs-work" ? "needs-work" : "blocked");
     if (!securityResult.passed) labels.push("security-review-needed");
+    if (seedFit.decision) labels.push(`seed-fit:${seedFit.decision}`);
     await setPRLabels(repoOwner, repoName, prNumber, labels, token);
   } catch (err) {
     console.warn("[contribution-review] Failed to set PR labels:", err);
@@ -662,7 +701,9 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
           : mergeReadiness === "needs-work" ? "failure" as const
           : "failure" as const;
         const statusDesc = mergeReadiness === "ready"
-          ? "Contribution review passed"
+          ? seedFit.decision
+            ? `Contribution review passed; seed fit: ${seedFit.decision}`
+            : "Contribution review passed"
           : `Contribution review: ${mergeReadiness}`;
         await setCommitStatus(repoOwner, repoName, commitSha, statusState, statusDesc, token);
       }
@@ -672,14 +713,16 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
   }
 
   // Step 7: Update FeaturePack
+  const reviewedAt = new Date().toISOString();
   const reviewResult: ContributionReviewResult = {
     mergeReadiness,
     sanitization,
     parameterization,
     verticals,
+    seedFit,
     securityPassed: securityResult.passed,
     evidenceChain,
-    reviewedAt: new Date().toISOString(),
+    reviewedAt,
   };
 
   try {
@@ -687,8 +730,28 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
     const applicable = verticals.applicableVerticals.filter((v) => v.relevance === "applicable");
     const allVerticals = [...primary, ...applicable].map((v) => v.category);
 
-    await prisma.featurePack.updateMany({
-      where: { buildId: build ? (await prisma.featureBuild.findUnique({ where: { buildId }, select: { id: true } }))?.id : undefined },
+    const pack = build ? await prisma.featurePack.findFirst({
+      where: { buildId: build.id },
+      orderBy: { createdAt: "desc" },
+      select: { packId: true, manifest: true },
+    }) : null;
+    if (!pack) return reviewResult;
+
+    const manifest = pack.manifest && typeof pack.manifest === "object" && !Array.isArray(pack.manifest)
+      ? pack.manifest as Record<string, unknown>
+      : {};
+    const seedDeltaManifest = seedFit.touchesSeededContent
+      ? buildContributionSeedDeltaManifest(seedFit, {
+        packId: pack.packId,
+        buildId,
+        prNumber,
+        prUrl,
+        reviewedAt,
+      })
+      : null;
+
+    await prisma.featurePack.update({
+      where: { packId: pack.packId },
       data: {
         mergeReadiness,
         applicableVerticals: allVerticals,
@@ -696,8 +759,12 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
         reusabilityScope: parameterization.scope,
         prUrl,
         prNumber,
+        manifest: {
+          ...manifest,
+          seedDeltaManifest,
+        } as unknown as import("@dpf/db").Prisma.InputJsonValue,
         reviewReport: reviewResult as unknown as import("@dpf/db").Prisma.InputJsonValue,
-        reviewedAt: new Date(),
+        reviewedAt: new Date(reviewedAt),
       },
     });
   } catch (err) {
