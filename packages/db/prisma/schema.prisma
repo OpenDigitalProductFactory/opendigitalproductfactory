@@ -4501,6 +4501,14 @@ model UserFact {
   // unused past the retention window via supersession (never a hard delete).
   lastAccessedAt                    DateTime?
   useCount                          Int        @default(0)
+  // BI-1772D0B7 (EP-8C706944 P4): two-scope memory. `scope` = "user" (private
+  // relationship memory, the default) or "org" (a durable business fact that
+  // belongs to the organization and is readable across every employee's session
+  // with the coworker). `sensitivity` = "normal" or "sensitive" (a sensitive fact
+  // never leaves its originating user, regardless of scope). Set at write time by
+  // the memory-scope classifier.
+  scope                             String     @default("user")
+  sensitivity                       String     @default("normal")
   createdAt                         DateTime   @default(now())
   updatedAt                         DateTime   @updatedAt
   user                              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -4510,6 +4518,7 @@ model UserFact {
   @@index([userId, category, key])
   @@index([userId, supersededAt])
   @@index([sourceAgentId, supersededAt])
+  @@index([scope, sensitivity, supersededAt])
 }
 
 // BI-23A65B81 (EP-8C706944 P3): shared working context for a multi-coworker,
