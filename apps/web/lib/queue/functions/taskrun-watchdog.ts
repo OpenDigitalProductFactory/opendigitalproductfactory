@@ -18,7 +18,12 @@
  */
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
-import { decideStall, type WatchdogCandidate, type StallDecision } from "@/lib/observability/watchdog-detect";
+import {
+  decideStall,
+  shouldSurfaceBuildFailure,
+  type WatchdogCandidate,
+  type StallDecision,
+} from "@/lib/observability/watchdog-detect";
 import { buildStallSurface, mergeVerificationPatch } from "@/lib/observability/stall-surface";
 import { isStallWatchdogEnabled } from "@/lib/shared/feature-flags";
 import { reapInertStuckBuilds } from "@/lib/build/inert-build-reaper";
@@ -284,7 +289,8 @@ export const taskrunWatchdog = inngest.createFunction(
              tr."buildId" AS "buildId",
              fb.phase AS "phase",
              tr."startedAt" AS "startedAt",
-             tr."lastHeartbeatAt" AS "lastHeartbeatAt"
+             tr."lastHeartbeatAt" AS "lastHeartbeatAt",
+             tr."source" AS "source"
       FROM "TaskRun" tr
       LEFT JOIN "FeatureBuild" fb ON tr."buildId" = fb."buildId"
       -- Catches both the canonical "working" state AND the legacy "active"
@@ -356,8 +362,18 @@ export const taskrunWatchdog = inngest.createFunction(
       // checkpoint + failureAxis) so the build no longer sits silently quiet —
       // the FB-69231490 symptom. Only the build phase: other phases own their
       // own recovery flows.
+      //
+      // GUARD (shouldSurfaceBuildFailure): only the actual build-execution
+      // TaskRun (source="build") may fail the build. Deliberation runs
+      // (source="proactive", "Deliberation: review") carry the same buildId and
+      // leak in the `working` state after the review passes; while the build is
+      // in phase="build" they would otherwise trip this surface and mark a
+      // HEALTHY build failed — after codegen but before commit — which stranded
+      // builds with correct-but-uncommitted code (the empty-diff symptom). The
+      // stalled deliberation run is still marked stalled + audited below; it
+      // just no longer corrupts the build's exec state.
       const stallSurface =
-        d.candidate.buildId && buildRow && d.candidate.phase === "build"
+        buildRow && shouldSurfaceBuildFailure(d.candidate, true)
           ? buildStallSurface({
               reason: d.reason as import("@/lib/observability/stall-surface").StallReason,
               phase: d.candidate.phase,
