@@ -14,6 +14,7 @@ import {
   type FlagSeverity,
 } from "@/lib/inference/phase-model-resolution";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 import { AiReadinessHeaderLink } from "@/components/platform/AiReadinessHeaderLink";
 import { QueueHealthSection } from "@/components/queue/QueueHealthSection";
 import { readQueueSnapshots } from "@/lib/queue/queue-snapshot-service";
@@ -26,6 +27,17 @@ const SEVERITY_STYLE: Record<FlagSeverity, { bg: string; fg: string; label: stri
   warning: { bg: "var(--dpf-state-warning)", fg: "var(--dpf-warning)", label: "Warning" },
   info: { bg: "var(--dpf-state-info)", fg: "var(--dpf-info)", label: "Info" },
 };
+
+// Server-composed handoff prompt: carries the error flags' own messages and
+// remediations so the coworker starts from the facts, not a screenshot.
+function buildRuntimeHealthPrompt(overview: ModelSelectionOverview): string {
+  const errors = overview.flags.filter((f) => f.severity === "error").slice(0, 8);
+  return [
+    `I'm on the AI Runtime Health page. Verdict: "${overview.summary}" with ${errors.length} error flag(s):`,
+    ...errors.map((f) => `- [${f.phase}] ${f.code}: ${f.message} (suggested: ${f.remediation})`),
+    "Please diagnose what's actually wrong, explain the impact in plain language, and either fix it if you have a safe way to do so or walk me through the exact next step.",
+  ].join("\n");
+}
 
 const VERDICT_COPY: Record<ModelSelectionOverview["verdict"], { tone: string; title: string }> = {
   "all-local": { tone: "var(--dpf-success)", title: "All phases run locally" },
@@ -164,6 +176,14 @@ export default async function RuntimeHealthPage() {
                 <Chip bg={SEVERITY_STYLE.error.bg} fg={SEVERITY_STYLE.error.fg}>
                   {errorCount} error(s)
                 </Chip>
+              )}
+              {errorCount > 0 && (
+                <AskCoworkerButton
+                  prompt={buildRuntimeHealthPrompt(overview)}
+                  routeContext="/platform"
+                  label="Ask coworker to investigate"
+                  className="text-[var(--dpf-accent)] hover:underline underline-offset-2 text-xs"
+                />
               )}
             </div>
             <p style={{ fontSize: 12, color: "var(--dpf-text)", marginTop: 8, marginBottom: 0 }}>

@@ -69,15 +69,33 @@ deep-link to System Health). Wired into `aggregate.ts`, so:
 - the Needs-you inbox lists it under a "Platform health" chip;
 - customer-scoped (MSP) rows stay in the customer estate queue.
 
-### Phase 4 — follow-ups (deliberately out of scope)
+### Phase 4 — completion slice (BI-01EA3EBE, second PR)
 
-- Governed remediation actuation: surface `recover_sandbox`-class actions
-  (today fenced inside Build Studio) as operator one-click + coworker act-mode
-  tools — needs its own grants/boundary decision (the voice self-heal was
-  deferred BY DESIGN for the same host-exec boundary, BI-264565A4).
-- Wire the unwired "Ask AI Coworker…" text on `/platform/ai/providers` and the
-  Loki-jargon `LogIssuesPanel` to the same handoff.
+Delivered:
+
+- **Actuation fixed, not added.** `admin_restart_service` was already granted
+  to the admin-assistant (`admin_write`) and reachable from the Phase-2
+  handoff — but silently broken: the portal image ships no docker-compose.yml,
+  so `docker compose restart` failed on every call (verified live). Kernel
+  decision `label-resolve-restart` (margin 1.07, high confidence; shipping
+  compose files into the image and adding a separate one-click UI button both
+  rejected): `apps/web/lib/operate/service-restart.ts` resolves the target by
+  compose labels scoped to the portal's own compose project (self-inspected
+  via `$(hostname)`), then plain `docker restart` — refusing ambiguous matches
+  when project scope can't be resolved. The coworker asked via "Ask coworker
+  for help" can now actually restart a down service.
+- **Remaining tell-only surfaces wired** through a shared
+  `AskCoworkerButton` (`components/agent/AskCoworkerButton.tsx`, the canonical
+  `open-agent-panel` dispatcher): `LogIssuesPanel` rows (was Loki-link-only),
+  `/platform/ai/providers` (its "Ask AI Coworker…" text was literally unwired),
+  the runtime-health error banner, and the roster "provider down" badge.
+
+Still open (follow-up candidates):
+
 - `notifyAttentionLive` push for newly-opened critical health alerts.
+- Whether `admin_restart_service` should stay `sideEffect: false` ("Tier 2:
+  reversible" convention) — a restart survives advise-mode tool-stripping;
+  revisit if the advise/act boundary tightens.
 
 ## Verification
 
