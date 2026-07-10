@@ -4512,6 +4512,32 @@ model UserFact {
   @@index([sourceAgentId, supersededAt])
 }
 
+// BI-23A65B81 (EP-8C706944 P3): shared working context for a multi-coworker,
+// multi-session EFFORT outside Build Studio. Substrate-verify finding: PhaseHandoff
+// is build-phase-scoped (FK to a FeatureBuild) and actively used by the BS phase
+// machine; WorkCapsule is a single-executor, single-lease unit of WIP. Neither
+// models context shared across many coworkers over an effort's lifetime, so the
+// kernel decision (DI-F69AE978B70C) sanctioned exactly this one new concept.
+// Keyed by a free effortKey (e.g. "epic:EP-XXX", "bi:BI-YYY"); any participating
+// coworker appends decisions / open questions / notes, and each session reads the
+// context to rehydrate (Linear's artifact-as-memory).
+model EffortContext {
+  id                  String   @id @default(cuid())
+  effortKey           String   @unique
+  title               String?
+  epicId              String?
+  backlogItemId       String?
+  decisions           String[] @default([])
+  openQuestions       String[] @default([])
+  notes               String[] @default([])
+  participantAgentIds String[] @default([])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([epicId])
+  @@index([backlogItemId])
+}
+
 model AgentActionProposal {
   id               String          @id @default(cuid())
   proposalId       String          @unique
