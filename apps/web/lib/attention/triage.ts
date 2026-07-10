@@ -104,6 +104,7 @@ const RESIDUE_LABEL: Record<ResidueReason, string> = {
   "input-required": "a coworker needs your input to continue",
   "needs-credential": "a credential or authority is missing",
   "policy-approval": "an agent action is awaiting your approval",
+  "no-self-heal": "a platform service is degraded and cannot repair itself",
 };
 
 /** Human label for the residue reason — the honest "why it's here" line. Pure. */

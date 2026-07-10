@@ -11,6 +11,7 @@ import { loadAiDecisionItems } from "./sources/ai-decision";
 import { loadPausedAiItems } from "./sources/paused-ai";
 import { loadScheduledTaskItems } from "./sources/scheduled-task";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
+import { loadPlatformHealthItems } from "./sources/platform-health";
 import {
   loadOutboundItems,
   loadBillItems,
@@ -87,6 +88,7 @@ export async function loadAttentionItems(
     { source: "approval-expense", load: () => loadExpenseItems(db) },
     { source: "compliance-submission", load: () => loadRegulatoryItems(db) },
     { source: "research-proposal", load: () => loadResearchItems(db) },
+    { source: "platform-health", load: () => loadPlatformHealthItems(db) },
   ];
   if (opts.aiReadinessUserId) {
     loaders.push({

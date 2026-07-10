@@ -20,7 +20,8 @@ export type AttentionSource =
   | "approval-expense" // ExpenseClaim submitted
   | "compliance-submission" // RegulatorySubmission draft (carries a dueDate)
   | "research-proposal" // ResearchProposal pending
-  | "ai-readiness-blocker"; // AI Readiness blocked domain requiring operator action
+  | "ai-readiness-blocker" // AI Readiness blocked domain requiring operator action
+  | "platform-health"; // PortfolioQualityIssue issueType=health_alert, status=open (BI-2F778C13)
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";
@@ -39,7 +40,8 @@ export type ResidueReason =
   | "self-fix-exhausted" // Build Studio could not self-repair (escalation)
   | "input-required" // a coworker needs human input to continue (TaskRun)
   | "needs-credential" // missing credential / authority, NOT judgment (TaskRun auth-required)
-  | "policy-approval"; // an agent action awaits approval (AgentActionProposal)
+  | "policy-approval" // an agent action awaits approval (AgentActionProposal)
+  | "no-self-heal"; // a platform service is degraded and has no automated repair path (health_alert)
 
 /** How much the human must do. The human_cognitive_load cost axis. */
 export type DecideEffort = "one-tap" | "review" | "judgment";
