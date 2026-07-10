@@ -38,6 +38,13 @@ export function findCanonicalSeedContentPaths(paths) {
   return [...new Set(paths.map(normalizeRepoPath).filter(isCanonicalSeedContentPath))];
 }
 
+export function normalizeGithubLabels(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((label) => typeof label === "string" ? label : label?.name)
+    .filter((label) => typeof label === "string");
+}
+
 function collectDecisionTokens(prBody, labels) {
   const bodyMatches = [...String(prBody).matchAll(/Seed-Fit-Decision:\s*([^\s`]+)/gi)]
     .map((match) => match[1].toLowerCase());

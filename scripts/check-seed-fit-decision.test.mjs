@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { evaluateSeedFitGate } from "./lib/seed-fit-gate.mjs";
+import { evaluateSeedFitGate, normalizeGithubLabels } from "./lib/seed-fit-gate.mjs";
 
 describe("seed-fit PR gate", () => {
+  it("normalizes GitHub label objects without workflow wildcards", () => {
+    assert.deepEqual(normalizeGithubLabels([
+      { id: 1, name: "seed-fit:vertical-scoped", color: "123456" },
+      "merge-ready",
+      { id: 2 },
+    ]), ["seed-fit:vertical-scoped", "merge-ready"]);
+  });
+
   it("passes code-only changes without seed-fit metadata", () => {
     assert.deepEqual(evaluateSeedFitGate({
       changedFiles: ["apps/web/components/CustomerTable.tsx"],

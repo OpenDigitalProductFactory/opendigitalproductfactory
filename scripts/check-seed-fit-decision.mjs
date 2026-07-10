@@ -2,7 +2,11 @@
 
 import { execFileSync } from "node:child_process";
 
-import { evaluateSeedFitGate, SEED_FIT_DECISIONS } from "./lib/seed-fit-gate.mjs";
+import {
+  evaluateSeedFitGate,
+  normalizeGithubLabels,
+  SEED_FIT_DECISIONS,
+} from "./lib/seed-fit-gate.mjs";
 
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
 
@@ -36,7 +40,7 @@ const changedFiles = git("diff", "--name-only", `${base}...HEAD`)
 let labels = [];
 try {
   const parsed = JSON.parse(process.env.PR_LABELS_JSON || "[]");
-  labels = Array.isArray(parsed) ? parsed.map(String) : [];
+  labels = normalizeGithubLabels(parsed);
 } catch {
   console.error("[seed-fit-gate] PR_LABELS_JSON is not a JSON array.");
   process.exit(1);

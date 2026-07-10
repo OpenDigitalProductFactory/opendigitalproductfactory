@@ -6,7 +6,6 @@ import {
   EmptyState,
   StatusBadge,
   type Column,
-  type Intent,
 } from "@/components/ui/report-kit";
 
 const DECISION_LABELS: Record<string, string> = {
@@ -16,15 +15,6 @@ const DECISION_LABELS: Record<string, string> = {
   "parameterize-first": "Parameterize first",
   "install-local-only": "Install local only",
   "reject-as-seed": "Reject as seed",
-};
-
-const DECISION_INTENTS: Record<string, Intent> = {
-  "global-default": "success",
-  "archetype-scoped": "accent",
-  "vertical-scoped": "info",
-  "parameterize-first": "warning",
-  "install-local-only": "neutral",
-  "reject-as-seed": "danger",
 };
 
 function scopeLabel(row: SeedContributionReviewRow): string {
@@ -51,7 +41,8 @@ const columns: Column<SeedContributionReviewRow>[] = [
     header: "Seed fit",
     cell: (row) => row.decision ? (
       <StatusBadge
-        intent={DECISION_INTENTS[row.decision] ?? "warning"}
+        domain="seedContributionFit"
+        status={row.decision}
         label={DECISION_LABELS[row.decision] ?? row.decision}
         uppercase={false}
         variant="soft"

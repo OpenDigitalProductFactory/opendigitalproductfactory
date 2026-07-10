@@ -422,7 +422,7 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_BODY: ${{ github.event.pull_request.body }}
-          PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels) }}
         run: node scripts/check-seed-fit-decision.mjs
 
   spec-plan-doc-gate:
