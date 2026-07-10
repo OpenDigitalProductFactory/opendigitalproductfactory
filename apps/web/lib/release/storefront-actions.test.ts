@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("nanoid", () => ({ nanoid: vi.fn(() => "TESTREF") }));
+vi.mock("@/lib/shared/new-id", () => ({ newId: vi.fn(() => "TESTREF") }));
 vi.mock("@/lib/actions/finance", () => ({
   generateInvoiceFromStorefrontOrder: vi.fn().mockResolvedValue(undefined),
 }));

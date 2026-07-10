@@ -3,6 +3,18 @@
 // Steward-style detectors should emit stable issue keys. This helper owns the
 // create/update/auto-resolve contract so each steward does not re-implement the
 // same fragile persistence loop.
+//
+// It is now a thin adapter over the generic `governance/reconcile-keyed-findings`
+// loop: this file only plugs in the `eaConformanceIssue` delegate, the
+// `detailsJson.issueKey` key extraction, and the message/severity/detailsJson
+// change detection. The exported signature and `{created, updated, resolved}`
+// return shape are unchanged, so the stewards that call it need no changes.
+
+import {
+  reconcileKeyedFindings,
+  stableStringify,
+  type ReconcileKeyedFindingsResult,
+} from "@/lib/governance/reconcile-keyed-findings";
 
 export type ConformanceIssueClient = {
   eaConformanceIssue: {
@@ -30,10 +42,14 @@ export type ConformanceFinding = {
   elementId?: string | null;
 };
 
-export type ConformanceIssueReconcileResult = {
-  created: number;
-  updated: number;
-  resolved: number;
+export type ConformanceIssueReconcileResult = ReconcileKeyedFindingsResult;
+
+type ConformanceRow = {
+  id: string;
+  issueType: string;
+  message: string;
+  severity: string;
+  detailsJson: unknown;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -45,18 +61,13 @@ function issueKeyOf(detailsJson: unknown): string | null {
   return typeof key === "string" ? key : null;
 }
 
-function stable(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stable);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, item]) => [key, stable(item)]),
-  );
+/** The stored details always carry the stable issueKey alongside the finding detail. */
+function effectiveDetails(finding: ConformanceFinding): Record<string, unknown> {
+  return { ...(finding.detailsJson ?? {}), issueKey: finding.issueKey };
 }
 
 function detailsChanged(a: unknown, b: Record<string, unknown>): boolean {
-  return JSON.stringify(stable(asRecord(a))) !== JSON.stringify(stable(b));
+  return stableStringify(asRecord(a)) !== stableStringify(b);
 }
 
 export async function reconcileConformanceIssues(
@@ -66,62 +77,44 @@ export async function reconcileConformanceIssues(
     findings: ConformanceFinding[];
   },
 ): Promise<ConformanceIssueReconcileResult> {
-  const existing = await db.eaConformanceIssue.findMany({
-    where: { issueType: { in: opts.issueTypes }, status: "open" },
-    select: { id: true, issueType: true, message: true, severity: true, detailsJson: true },
-  });
+  const keyed = opts.findings.map((finding) => ({ ...finding, key: finding.issueKey }));
 
-  const existingByKey = new Map<string, (typeof existing)[number]>();
-  for (const row of existing) {
-    const key = issueKeyOf(row.detailsJson);
-    if (key) existingByKey.set(key, row);
-  }
-
-  const findingByKey = new Map<string, ConformanceFinding>(opts.findings.map((f) => [f.issueKey, f]));
-  let created = 0;
-  let updated = 0;
-  let resolved = 0;
-
-  for (const finding of opts.findings) {
-    const match = existingByKey.get(finding.issueKey);
-    const detailsJson = { ...(finding.detailsJson ?? {}), issueKey: finding.issueKey };
-    if (!match) {
+  return reconcileKeyedFindings<ConformanceRow, (typeof keyed)[number]>({
+    loadOpen: () =>
+      db.eaConformanceIssue.findMany({
+        where: { issueType: { in: opts.issueTypes }, status: "open" },
+        select: { id: true, issueType: true, message: true, severity: true, detailsJson: true },
+      }),
+    keyOf: (row) => issueKeyOf(row.detailsJson),
+    findings: keyed,
+    hasChanged: (row, finding) =>
+      row.message !== finding.message ||
+      row.severity !== finding.severity ||
+      detailsChanged(row.detailsJson, effectiveDetails(finding)),
+    create: async (finding) => {
       const data: Record<string, unknown> = {
         issueType: finding.issueType,
         severity: finding.severity,
         status: "open",
         message: finding.message,
-        detailsJson,
+        detailsJson: effectiveDetails(finding),
       };
       if ("viewId" in finding) data.viewId = finding.viewId;
       if ("elementId" in finding) data.elementId = finding.elementId;
-      await db.eaConformanceIssue.create({
-        data,
-      });
-      created += 1;
-    } else if (
-      match.message !== finding.message ||
-      match.severity !== finding.severity ||
-      detailsChanged(match.detailsJson, detailsJson)
-    ) {
+      await db.eaConformanceIssue.create({ data });
+    },
+    update: async (row, finding) => {
       await db.eaConformanceIssue.update({
-        where: { id: match.id },
+        where: { id: row.id },
         data: {
           message: finding.message,
           severity: finding.severity,
-          detailsJson,
+          detailsJson: effectiveDetails(finding),
         },
       });
-      updated += 1;
-    }
-  }
-
-  for (const [key, row] of existingByKey) {
-    if (!findingByKey.has(key)) {
+    },
+    resolve: async (row) => {
       await db.eaConformanceIssue.update({ where: { id: row.id }, data: { status: "resolved" } });
-      resolved += 1;
-    }
-  }
-
-  return { created, updated, resolved };
+    },
+  });
 }

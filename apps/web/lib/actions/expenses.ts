@@ -1,6 +1,6 @@
 "use server";
 
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { prisma } from "@dpf/db";
 import { can } from "@/lib/permissions";
 import { requireCapability, requireUser } from "@/lib/actions/shared/guards";
@@ -159,7 +159,7 @@ export async function submitExpenseClaim(id: string): Promise<void> {
     throw new Error("Unauthorized");
   }
 
-  const approvalToken = nanoid(32);
+  const approvalToken = newId(32);
 
   // Find a user with manage_finance to be the approver (MVP: first match)
   const managers = await prisma.user.findMany({

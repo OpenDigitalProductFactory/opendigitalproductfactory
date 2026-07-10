@@ -1,6 +1,6 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { projectOperationalValueStreamForArchetype } from "./project-operational-value-stream";
 import { seedBookingScheduleDefaults } from "./seed-booking-defaults";
 
@@ -209,7 +209,7 @@ export async function resetStorefrontArchetype(input: {
       const itemResult = await tx.storefrontItem.createMany({
         data: itemTemplates.map((item, index) => ({
           storefrontId: storefront.id,
-          itemId: `itm-${nanoid(8)}`,
+          itemId: `itm-${newId(8)}`,
           name: item.name,
           description: item.description ?? null,
           category: item.category ?? null,

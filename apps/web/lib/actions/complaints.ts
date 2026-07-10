@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { revalidatePath } from "next/cache";
 
 export type ComplaintSeverity = "low" | "medium" | "high" | "critical";
@@ -85,7 +85,7 @@ export async function createComplaint(input: {
 
   const created = await prisma.complaint.create({
     data: {
-      reference: `C-${nanoid(8).toUpperCase()}`,
+      reference: `C-${newId(8).toUpperCase()}`,
       customerName,
       description,
       severity,

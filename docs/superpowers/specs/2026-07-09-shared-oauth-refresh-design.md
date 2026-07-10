@@ -98,11 +98,67 @@ The `client_credentials` grant and `fetch`-based refresh are not matched. The
 The BI-3B0AD9CF guard loop auto-discovers `scripts/check-no-*.mjs`; no ci.yml or
 package.json edit is needed.
 
+## Landed in increment 2 (BI-ABC88965) — `client_credentials` consolidation
+
+The two-legged `client_credentials` grant now has its own canonical home,
+mirroring the opener:
+
+```ts
+import { exchangeClientCredentials } from "@dpf/integration-shared";
+```
+
+`packages/integration-shared/src/client-credentials.ts` (+ `.test.ts`) reproduces
+the opener's structure and invariants exactly — same status ladder (network →
+auth → ≥500 → non-200 → JSON → payload), `safelyDrainBody` on every status-based
+error path, tolerant `expires_in` (`number` | numeric-string | default `3600`,
+`Math.max(1, …)`), default `token_type` `"Bearer"` — differing only where the
+grant differs: credentials are always in the body (no Basic-header variant), an
+optional `scope` param replaces `refresh_token`, and the network-error path
+forwards the caught error's `code` as `errorCode` (for ADP's mTLS-handshake
+message). The auth-status default is `[400, 401, 403]`.
+
+Migrated onto it as thin wrappers (exported names, param/result interfaces, error
+classes, and `resolveXTokenEndpoint()` unchanged — callers untouched):
+
+- `apps/web/lib/integrate/microsoft365-communications/token-client.ts` — keeps
+  its `scope` default (`https://graph.microsoft.com/.default`), tenant-scoped
+  endpoint resolver, `Microsoft365CommunicationsAuthError`, and `tokenType` in
+  the result.
+- `apps/web/lib/integrate/adp/token-client.ts` — **keeps its mTLS `undici.Agent`
+  construction** (built from `certPem`+`privateKeyPem`) in the wrapper and passes
+  it as `dispatcher`; keeps `AdpAuthError` with its `errorCode` (populated on the
+  handshake path via the shared helper's forwarded network `code`); maps the
+  generic result down to `{ accessToken, expiresAt }`.
+
+Both wrappers pass `authErrorStatuses: [401, 403]` explicitly to preserve their
+historic behavior (only 401/403 were invalid-creds; the shared default of
+`[400,401,403]` would newly capture 400). Two intentional leniency unifications,
+unreachable in tested/realistic inputs: under the shared helper an absent
+`token_type` defaults to `"Bearer"` (ms365 previously required it), and a
+non-positive `expires_in` clamps to 1s rather than ADP's 3600 default. No caller
+or test exercises these edges. All existing ms365/ADP `token-client.test.ts` +
+connect-action/preview suites stay green untouched.
+
+The ratchet `scripts/check-no-local-client-credentials.mjs` (+ `.test.mjs`, +
+guard-loop auto-discovery) freezes the copy count: a violation builds a
+`grant_type=client_credentials` body AND calls undici `request` outside the
+canonical home.
+
+**Documented follow-on (allowlisted with rationale):**
+`services/adp/src/lib/token-client.ts` — the standalone service port — is NOT
+migrated in this increment. It injects a harness-transport header
+(`X-DPF-Harness-Session` via `getHarnessRequestHeaders`) and selects its
+dispatcher through `isHarnessTransport(url)`. The harness *header* has no
+representation in `ClientCredentialsConfig` (which exposes only extra *body*
+params), so migrating it would either expand the increment-2 contract or drop
+the header — a behavior change to the integration harness. It is left as a
+documented follow-on to be migrated when the shared helper grows an
+extra-headers axis.
+
 ## Remaining BET-3 tail (later increments under BI-ABC88965)
 
-- **`client_credentials` consolidation** — a sibling `exchangeClientCredentials`
-  helper absorbing `microsoft365-communications`, `apps/web` ADP, and the
-  `services/adp` port (the latter carries mTLS + harness-transport specifics).
+- **`services/adp` port** — migrate once the shared helper grows an extra-header
+  axis for the `X-DPF-Harness-Session` harness transport (see above).
 - **~16 `*ApiError` classes** — the per-vendor error class is itself a clone
   family; a shared base (still per-vendor `name`) is a candidate.
 - **~20 undici clients** — the accounting/probe/list clients repeat the same

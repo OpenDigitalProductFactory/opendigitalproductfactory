@@ -1,4 +1,5 @@
-import { request, type Dispatcher } from "undici";
+import { exchangeClientCredentials } from "@dpf/integration-shared";
+import { type Dispatcher } from "undici";
 
 export interface ExchangeMicrosoftGraphClientCredentialsParams {
   tenantId: string;
@@ -34,98 +35,29 @@ export function resolveMicrosoftTokenEndpoint(tenantId: string): string {
 export async function exchangeMicrosoftGraphClientCredentials(
   params: ExchangeMicrosoftGraphClientCredentialsParams,
 ): Promise<ExchangeMicrosoftGraphClientCredentialsResult> {
-  let response: Dispatcher.ResponseData;
-
-  try {
-    response = await request(resolveMicrosoftTokenEndpoint(params.tenantId), {
-      method: "POST",
-      dispatcher: params.dispatcher,
-      headers: {
-        accept: "application/json",
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: params.clientId,
-        client_secret: params.clientSecret,
-        scope: params.scope ?? "https://graph.microsoft.com/.default",
-      }).toString(),
-    });
-  } catch {
-    throw new Microsoft365CommunicationsAuthError(
+  const result = await exchangeClientCredentials({
+    endpoint: resolveMicrosoftTokenEndpoint(params.tenantId),
+    clientId: params.clientId,
+    clientSecret: params.clientSecret,
+    scope: params.scope ?? "https://graph.microsoft.com/.default",
+    dispatcher: params.dispatcher,
+    makeError: (message, opts) => new Microsoft365CommunicationsAuthError(message, opts),
+    // Preserve historic behavior: only 401/403 were treated as invalid creds
+    // (the shared default of [400,401,403] would newly capture 400).
+    authErrorStatuses: [401, 403],
+    serverErrorMessage: "Microsoft token endpoint returned a server error — retry later.",
+    networkErrorMessage:
       "Microsoft token exchange failed — check network reachability and try again.",
-    );
-  }
-
-  const { statusCode, body } = response;
-
-  if (statusCode === 401 || statusCode === 403) {
-    await safelyDrainBody(body);
-    throw new Microsoft365CommunicationsAuthError("invalid Microsoft 365 credentials", {
-      statusCode,
-    });
-  }
-
-  if (statusCode >= 500) {
-    await safelyDrainBody(body);
-    throw new Microsoft365CommunicationsAuthError(
-      "Microsoft token endpoint returned a server error — retry later.",
-      { statusCode },
-    );
-  }
-
-  if (statusCode !== 200) {
-    await safelyDrainBody(body);
-    throw new Microsoft365CommunicationsAuthError(
+    invalidCredsMessage: "invalid Microsoft 365 credentials",
+    missingTokenMessage: "Microsoft token response missing access_token",
+    invalidJsonMessage: "Microsoft token response was not valid JSON",
+    unexpectedStatusMessage: (statusCode) =>
       `Microsoft token exchange failed with status ${statusCode}`,
-      { statusCode },
-    );
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = await body.json();
-  } catch {
-    throw new Microsoft365CommunicationsAuthError(
-      "Microsoft token response was not valid JSON",
-      { statusCode },
-    );
-  }
-
-  if (!isTokenResponse(parsed)) {
-    throw new Microsoft365CommunicationsAuthError(
-      "Microsoft token response missing access_token",
-      { statusCode },
-    );
-  }
+  });
 
   return {
-    accessToken: parsed.access_token,
-    tokenType: parsed.token_type,
-    expiresAt: new Date(Date.now() + parsed.expires_in * 1000),
+    accessToken: result.accessToken,
+    tokenType: result.tokenType,
+    expiresAt: result.expiresAt,
   };
-}
-
-interface TokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-}
-
-function isTokenResponse(value: unknown): value is TokenResponse {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.access_token === "string" &&
-    typeof candidate.token_type === "string" &&
-    typeof candidate.expires_in === "number"
-  );
-}
-
-async function safelyDrainBody(body: { text: () => Promise<string> }): Promise<void> {
-  try {
-    await body.text();
-  } catch {
-    // ignore
-  }
 }

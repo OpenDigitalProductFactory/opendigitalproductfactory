@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { hashPassword } from "@/lib/password";
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import {
   customerAccountNormalizedColumns,
   customerContactNormalizedColumns,
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   const createdAccountId = await prisma.$transaction(async (tx) => {
     const account = await tx.customerAccount.create({
       data: {
-        accountId: `CA-${nanoid(10)}`,
+        accountId: `CA-${newId(10)}`,
         name: name ?? email,
         ...customerAccountNormalizedColumns({ name: name ?? email }),
         status: "prospect",

@@ -3,7 +3,7 @@
 import { prisma } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { createInvoice, sendInvoice } from "@/lib/actions/finance";
 import type { CreateRecurringScheduleInput } from "@/lib/recurring-validation";
 
@@ -26,7 +26,7 @@ export async function createRecurringSchedule(
 ): Promise<{ id: string; scheduleId: string }> {
   const userId = await requireManageFinance();
 
-  const scheduleId = `REC-${nanoid(8)}`;
+  const scheduleId = `REC-${newId(8)}`;
 
   // Calculate total amount from line items (qty * unitPrice * (1 + taxRate/100))
   const amount = input.lineItems.reduce((sum, item) => {

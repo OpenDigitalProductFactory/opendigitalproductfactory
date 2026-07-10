@@ -45,9 +45,14 @@ import { importRoster } from "@/lib/onboarding/roster-import-actions";
 import type { CellValue, ColumnDefinition, FieldType, FieldConfig, GridRow } from "@/lib/workbooks/types";
 import { ok, err, type ActionResult } from "@/lib/shared/action-result";
 
-// Re-exported for backwards compatibility with callers that imported the type
-// from this module before it was hoisted to the shared primitive.
-export type { ActionResult };
+// NOTE: do NOT `export type { ActionResult }` from this "use server" module.
+// Next/turbopack enumerates EVERY export of a "use server" file into the
+// runtime server-reference registry (ensureServerEntryExports /
+// registerServerReference); a type export therefore compiles to a reference to
+// an identifier that doesn't exist at runtime → `ReferenceError: ActionResult
+// is not defined` at module eval → 500 on every importing route (e.g. the
+// coworker conversation load on /ops and /employee, which pull in the Grid).
+// The type has no importers here; callers import it from @/lib/shared/action-result.
 
 async function requireUser(capability: "view_workbooks" | "manage_workbooks"): Promise<ServiceUser> {
   const session = await auth();

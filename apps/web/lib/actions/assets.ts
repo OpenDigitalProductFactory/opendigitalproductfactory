@@ -1,6 +1,6 @@
 "use server";
 
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { prisma } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import type { CreateAssetInput, DisposeAssetInput } from "@/lib/asset-validation";
@@ -84,7 +84,7 @@ export async function calculateDepreciation(
 export async function createAsset(input: CreateAssetInput) {
   await requireManageFinance();
 
-  const assetId = `FA-${nanoid(8)}`;
+  const assetId = `FA-${newId(8)}`;
 
   const asset = await prisma.fixedAsset.create({
     data: {

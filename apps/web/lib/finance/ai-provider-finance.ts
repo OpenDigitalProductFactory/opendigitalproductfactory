@@ -1,4 +1,4 @@
-import { nanoid } from "nanoid";
+import { newId } from "@/lib/shared/new-id";
 import { prisma, type Prisma } from "@dpf/db";
 import {
   recordAiProviderSubscriptionPaymentSchema,
@@ -229,7 +229,7 @@ async function ensureSupplier(input: SeedAiProviderFinanceBridgeInput) {
 
   return prisma.supplier.create({
     data: {
-      supplierId: `SUP-${nanoid(8)}`,
+      supplierId: `SUP-${newId(8)}`,
       name: supplierName,
       paymentTerms: "Net 30",
       defaultCurrency: input.currency ?? "USD",
@@ -243,7 +243,7 @@ async function ensureSupplier(input: SeedAiProviderFinanceBridgeInput) {
 async function createFinanceWorkItem(input: CreateFinanceWorkItemInput) {
   return prisma.financeWorkItem.create({
     data: {
-      workItemId: `FWI-${nanoid(8)}`,
+      workItemId: `FWI-${newId(8)}`,
       profileId: input.profileId ?? null,
       contractId: input.contractId ?? null,
       supplierId: input.supplierId ?? null,
@@ -352,7 +352,7 @@ export async function seedAiProviderFinanceBridge(input: SeedAiProviderFinanceBr
 
   const contract = existingContract ?? sharedContract ?? (await prisma.supplierContract.create({
     data: {
-      contractId: `AIC-${nanoid(8)}`,
+      contractId: `AIC-${newId(8)}`,
       profileId: profile.id,
       supplierId: supplier.id,
       accountableEmployeeId: input.accountableEmployeeId ?? null,
@@ -429,7 +429,7 @@ export async function ensureFinanceCommitment(input: EnsureFinanceCommitmentInpu
     select: { id: true, supplierId: true },
   }) ?? await prisma.supplier.create({
     data: {
-      supplierId: `SUP-${nanoid(8)}`,
+      supplierId: `SUP-${newId(8)}`,
       name: input.supplierName,
       paymentTerms: "Net 30",
       defaultCurrency: input.currency ?? "USD",
@@ -447,7 +447,7 @@ export async function ensureFinanceCommitment(input: EnsureFinanceCommitmentInpu
   const contract = await prisma.supplierContract.upsert({
     where: { externalReference: input.externalReference },
     create: {
-      contractId: `FNC-${nanoid(8)}`,
+      contractId: `FNC-${newId(8)}`,
       profileId: input.profileId ?? null,
       supplierId: supplier.id,
       accountableEmployeeId: input.accountableEmployeeId ?? null,
@@ -551,7 +551,7 @@ export async function recordAiProviderSubscriptionPayment(input: RecordAiProvide
     select: { id: true, supplierId: true },
   }) ?? await prisma.supplier.create({
     data: {
-      supplierId: `SUP-${nanoid(8)}`,
+      supplierId: `SUP-${newId(8)}`,
       name: parsed.supplierName,
       paymentTerms: "Card on file",
       defaultCurrency: parsed.currency ?? "USD",
@@ -597,7 +597,7 @@ export async function recordAiProviderSubscriptionPayment(input: RecordAiProvide
   const contract = await prisma.supplierContract.upsert({
     where: { externalReference },
     create: {
-      contractId: `AIS-${nanoid(8)}`,
+      contractId: `AIS-${newId(8)}`,
       profileId: primaryProfile.id,
       supplierId: supplier.id,
       commitmentKind: "ai_provider",
@@ -673,7 +673,7 @@ export async function recordAiProviderSubscriptionPayment(input: RecordAiProvide
 
   const bill = existingBill ?? await prisma.bill.create({
     data: {
-      billRef: `BILL-${new Date().getUTCFullYear()}-${nanoid(6).toUpperCase()}`,
+      billRef: `BILL-${new Date().getUTCFullYear()}-${newId(6).toUpperCase()}`,
       supplierId: supplier.id,
       supplierContractId: contract.id,
       status: "paid",
@@ -1270,7 +1270,7 @@ export async function generateDraftBillForAiContract(input: {
   const totalAmount = Number(input.contract.monthlyCommittedAmount ?? 0);
   const bill = await prisma.bill.create({
     data: {
-      billRef: `BILL-${new Date().getUTCFullYear()}-${nanoid(6).toUpperCase()}`,
+      billRef: `BILL-${new Date().getUTCFullYear()}-${newId(6).toUpperCase()}`,
       supplierId: input.contract.supplierId,
       supplierContractId: input.contract.id,
       status: "draft",
