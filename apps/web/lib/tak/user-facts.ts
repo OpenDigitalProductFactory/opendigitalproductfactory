@@ -287,6 +287,14 @@ export async function loadGovernedUserFacts(params: {
       ? governedFacts.filter((fact) => fact.freshnessState !== "current")
       : [];
 
+  // BI-153F7E4A (EP-8C706944 P2): a fact injected into context counts as used —
+  // reset its expiry clock. Fire-and-forget so recall is never slowed or broken.
+  if (includedFacts.length > 0) {
+    import("./memory-expiry-runner")
+      .then(({ bumpUserFactUsage }) => bumpUserFactUsage(includedFacts.map((f) => f.id)))
+      .catch(() => {});
+  }
+
   return {
     facts: governedFacts,
     includedFacts,

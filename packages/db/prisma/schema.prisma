@@ -2515,6 +2515,11 @@ model CoworkerMemoryNote {
   createdAt      DateTime  @default(now())
   supersededAt   DateTime?
   supersededById String?
+  // BI-153F7E4A (EP-8C706944 P2): usage-based expiry. lastAccessedAt/useCount are
+  // bumped when a note is recalled into context; the nightly pass expires notes
+  // unused past the retention window (LRU decay, supersede-don't-delete).
+  lastAccessedAt DateTime?
+  useCount       Int       @default(0)
   agent          Agent     @relation("CoworkerMemoryNoteAgent", fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([agentId, supersededAt])
@@ -4491,6 +4496,11 @@ model UserFact {
   validatedAgainstFingerprint       String?
   supersededAt                      DateTime?
   supersededById                    String?
+  // BI-153F7E4A (EP-8C706944 P2): usage-based expiry. lastAccessedAt/useCount are
+  // bumped when a fact is recalled into context; the nightly pass expires facts
+  // unused past the retention window via supersession (never a hard delete).
+  lastAccessedAt                    DateTime?
+  useCount                          Int        @default(0)
   createdAt                         DateTime   @default(now())
   updatedAt                         DateTime   @updatedAt
   user                              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
