@@ -543,7 +543,15 @@ export function BuildStudio({
     setCreateError(null);
     setCreating(true);
     try {
-      const { buildId } = await createFeatureBuild({ title });
+      const result = await createFeatureBuild({ title });
+      if (!result.ok) {
+        // Expected domain error (e.g. WIP cap reached) — the action returns it as
+        // a value so the plain-English message survives to here instead of being
+        // stripped to a generic production digest.
+        setCreateError(result.error);
+        return;
+      }
+      const { buildId } = result;
       setActiveBuild({
         id: "",
         buildId,

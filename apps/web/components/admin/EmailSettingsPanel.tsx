@@ -6,8 +6,8 @@ import {
   saveEmailConfig,
   sendTestEmail,
   suggestEmailProvider,
-  type EmailProviderSuggestion,
 } from "@/lib/actions/email-config";
+import type { EmailProviderSuggestion } from "@/lib/shared/email-config-core";
 
 type Props = {
   status: {

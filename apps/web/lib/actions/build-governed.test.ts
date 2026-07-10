@@ -254,6 +254,7 @@ describe("governed build start approvals", () => {
       description: "Keep portal-started development inside governed work.",
     });
 
+    if (!result.ok) throw new Error(`expected success, got: ${result.error}`);
     expect(result.buildId).toMatch(/^FB-[A-F0-9]{8}$/);
     expect(mockPrisma.workCapsule.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -298,6 +299,7 @@ describe("governed build start approvals", () => {
     process.on("unhandledRejection", onUnhandled);
     try {
       const result = await createFeatureBuild({ title: "Drain-safe build" });
+      if (!result.ok) throw new Error(`expected success, got: ${result.error}`);
       expect(result.buildId).toMatch(/^FB-[A-F0-9]{8}$/);
       // Flush microtasks + one macrotask so that, were the `.catch` missing, the
       // QuiescingError would surface as an unhandledRejection here before we
@@ -311,6 +313,24 @@ describe("governed build start approvals", () => {
     // The drain gate refuses the start before any DB write — the cost-tracking
     // upsert never runs.
     expect(mockPrisma.buildPhaseRun.upsert).not.toHaveBeenCalled();
+  });
+
+  it("createFeatureBuild RETURNS (not throws) the WIP-cap error so its message reaches the client", async () => {
+    // In production, a thrown Server-Action error has its message stripped to a
+    // generic digest, so the operator would never see "you already have 3 builds
+    // in progress" — they'd see a scary render error. Locking in the returned-value
+    // contract keeps the plain-English message intact across the RSC boundary.
+    mockPrisma.featureBuild.count.mockResolvedValue(3); // at the cap (BUILD_WIP_CAP)
+
+    const result = await createFeatureBuild({ title: "One build too many" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected the WIP cap to reject the build");
+    expect(result.code).toBe("BUILD_WIP_CAP_REACHED");
+    expect(result.error).toContain("3 builds in progress");
+    // Rejected before any DB write — no build row, no work capsule.
+    expect(mockPrisma.featureBuild.create).not.toHaveBeenCalled();
+    expect(mockPrisma.workCapsule.create).not.toHaveBeenCalled();
   });
 
   it("updateFeatureBrief writes the legacy brief and backfills the BusinessBuildBrief contract", async () => {

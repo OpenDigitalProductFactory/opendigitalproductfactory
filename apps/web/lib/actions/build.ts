@@ -64,22 +64,37 @@ function businessBriefJsonPayload(
 
 // ─── Create Feature Build ────────────────────────────────────────────────────
 
+// Discriminated result so EXPECTED domain errors (empty title, WIP cap) carry a
+// plain-English message all the way to the client. A thrown Error would have its
+// message stripped at the Server-Action boundary in production ("An error
+// occurred in the Server Components render … message omitted in production"),
+// so the operator would see a scary generic digest instead of "you already have
+// 3 builds in progress". Unexpected failures (DB errors) still throw.
+export type CreateFeatureBuildResult =
+  | { ok: true; buildId: string }
+  | { ok: false; error: string; code?: string };
+
 export async function createFeatureBuild(input: {
   title: string;
   description?: string;
   portfolioId?: string;
-}): Promise<{ buildId: string }> {
+}): Promise<CreateFeatureBuildResult> {
   const userId = await requireBuildAccess();
 
-  if (!input.title.trim()) throw new Error("Title is required");
+  if (!input.title.trim()) return { ok: false, error: "Title is required" };
 
   // WIP cap: don't let a new build start while too many are unfinished
-  // (all builds share one sandbox). Surfaces a plain-English message.
-  const { assertWipCapacity, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
+  // (all builds share one sandbox). Returned (not thrown) so the plain-English
+  // message survives the Server-Action → client boundary in production.
+  const { wipCapReached, BUILD_WIP_CAP, BuildWipCapError, TERMINAL_BUILD_PHASES } =
+    await import("@/lib/build/wip-cap");
   const activeBuilds = await prisma.featureBuild.count({
     where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
   });
-  assertWipCapacity(activeBuilds);
+  if (wipCapReached(activeBuilds)) {
+    const err = new BuildWipCapError(activeBuilds, BUILD_WIP_CAP);
+    return { ok: false, error: err.message, code: err.code };
+  }
 
   const buildId = generateBuildId();
 
@@ -113,7 +128,7 @@ export async function createFeatureBuild(input: {
   const { startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
   void startBuildPhaseRun(result.buildId, "ideate").catch(() => {});
 
-  return result;
+  return { ok: true, buildId: result.buildId };
 }
 
 export async function approveBuildStart(buildId: string): Promise<{ approvedAt: Date }> {
