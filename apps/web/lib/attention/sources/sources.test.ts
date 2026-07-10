@@ -72,6 +72,27 @@ describe("aiDecisionToAttentionItem", () => {
     expect(item.triage.residueReason).toBe("coverage-gap");
     expect(item.riskClass).toBe("bounded-write");
   });
+
+  it("uses the verbatim question as the title when present", () => {
+    expect(aiDecisionToAttentionItem(base).title).toBe(base.question);
+  });
+
+  it("never renders a blank title — falls back to residue + blast when question is empty (BI-D35DE119)", () => {
+    // escalate on a build with no prose question → high-risk-gate fallback
+    const onBuild = aiDecisionToAttentionItem({ ...base, question: "   " });
+    expect(onBuild.title).toBe("AI decision needs your review — a high-risk gate on build FB-3");
+
+    // defer with no build/task and no question → coverage-gap, no location suffix
+    const bare = aiDecisionToAttentionItem({
+      ...base,
+      question: "",
+      outcomeType: "defer",
+      buildId: null,
+      taskRunId: null,
+    });
+    expect(bare.title).toBe("AI decision needs your review — a coverage gap");
+    expect(bare.title.trim().length).toBeGreaterThan(0);
+  });
 });
 
 describe("pausedAiToAttentionItem", () => {
