@@ -22,8 +22,6 @@ import {
   type SeedContributionFitReport,
 } from "./seed-contribution-fit";
 
-export { evaluateSeedContributionFit };
-
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export type SanitizationFinding = {
@@ -67,6 +65,12 @@ export type VerticalApplicability = {
 export type VerticalReport = {
   sourceVertical: string;
   applicableVerticals: VerticalApplicability[];
+};
+
+type ReusabilityAnalysis = {
+  scope?: string;
+  domainEntities?: Array<{ hardcodedValue: string; parameterName: string }>;
+  contributionReadiness?: string;
 };
 
 export type MergeReadiness = "ready" | "needs-work" | "blocked";
@@ -577,6 +581,28 @@ async function setCommitStatus(
 
 // ─── Main Entry Point ───────────────────────────────────────────────────────
 
+export async function analyzeContributionSeedFit(
+  diff: string,
+  brief: Record<string, unknown> | null,
+  designDocValue: unknown,
+) {
+  const designDoc = designDocValue as Record<string, unknown> | null;
+  const reusability = designDoc?.reusabilityAnalysis as ReusabilityAnalysis | null;
+  const sanitization = await runSanitizationScan(diff);
+  const parameterization = verifyParameterization(diff, reusability);
+  const verticals = await tagBusinessVerticals(brief, diff);
+  const securityScan = scanDiffForSecurityIssues(diff);
+  const allFiles = [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((match) => match[1]);
+  const seedFit = evaluateSeedContributionFit({
+    changedFiles: allFiles,
+    sanitization,
+    parameterization,
+    verticals,
+    securityPassed: securityScan.passed,
+  });
+  return { allFiles, sanitization, parameterization, verticals, securityScan, seedFit };
+}
+
 export async function runContributionReview(input: ReviewInput): Promise<ContributionReviewResult> {
   const { buildId, prUrl, prNumber, repoOwner, repoName, token, diff } = input;
 
@@ -597,35 +623,8 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
   });
 
   const brief = build?.brief as Record<string, unknown> | null;
-  const designDoc = build?.designDoc as Record<string, unknown> | null;
-  const reusability = designDoc?.reusabilityAnalysis as {
-    scope?: string;
-    domainEntities?: Array<{ hardcodedValue: string; parameterName: string }>;
-    contributionReadiness?: string;
-  } | null;
-
-  // Step 1: Sanitization scan
-  const sanitization = await runSanitizationScan(diff);
-
-  // Step 2: Parameterization verification
-  const parameterization = verifyParameterization(diff, reusability);
-
-  // Step 3: Business vertical tagging
-  const verticals = await tagBusinessVerticals(brief, diff);
-
-  // Security scan (reuse existing)
-  const securityResult = scanDiffForSecurityIssues(diff);
-
-  // Step 4: Seed contribution fit. This is derived from the evidence above,
-  // never from the contributor's desired outcome.
-  const changedFiles = [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((match) => match[1]);
-  const seedFit = evaluateSeedContributionFit({
-    changedFiles,
-    sanitization,
-    parameterization,
-    verticals,
-    securityPassed: securityResult.passed,
-  });
+  const { sanitization, parameterization, verticals, securityScan, seedFit } =
+    await analyzeContributionSeedFit(diff, brief, build?.designDoc);
 
   // Build evidence chain
   const evidenceChain: Record<string, string> = {};
@@ -649,7 +648,7 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
 
   // Determine merge readiness
   const mergeReadiness = determineContributionMergeReadiness({
-    securityPassed: securityResult.passed,
+    securityPassed: securityScan.passed,
     sanitization,
     parameterization,
     seedFit,
@@ -659,7 +658,7 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
   const reportMarkdown = generateReviewReport(
     sanitization, parameterization, verticals,
     seedFit,
-    securityResult.passed, evidenceChain, mergeReadiness,
+    securityScan.passed, evidenceChain, mergeReadiness,
   );
 
   // Step 5: Post PR comment
@@ -677,7 +676,7 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
     labels.push(...primary.map((v) => `vertical:${v.category}`));
     labels.push(...applicable.map((v) => `vertical:${v.category}`));
     labels.push(mergeReadiness === "ready" ? "merge-ready" : mergeReadiness === "needs-work" ? "needs-work" : "blocked");
-    if (!securityResult.passed) labels.push("security-review-needed");
+    if (!securityScan.passed) labels.push("security-review-needed");
     if (seedFit.decision) labels.push(`seed-fit:${seedFit.decision}`);
     await setPRLabels(repoOwner, repoName, prNumber, labels, token);
   } catch (err) {
@@ -722,7 +721,7 @@ export async function runContributionReview(input: ReviewInput): Promise<Contrib
     parameterization,
     verticals,
     seedFit,
-    securityPassed: securityResult.passed,
+    securityPassed: securityScan.passed,
     evidenceChain,
     reviewedAt,
   };
