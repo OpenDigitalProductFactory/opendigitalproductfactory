@@ -53,6 +53,12 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
     description: "Manage coworkers, assignments, skills, providers, routing, and build runtime from one AI operations surface.",
     matchPrefixes: ["/platform/ai"],
     subItems: [
+      // EP-26E528F5 (coworker UX carry-through): the workforce directory is the
+      // family's front door — the AppRail "AI Workforce" entry lands on the
+      // actual workforce (roster → per-coworker record), with the health
+      // altitudes (Readiness, Operations Map) one tab away. /platform/ai
+      // redirects here for the same reason.
+      { label: "Workforce", href: "/platform/ai/overview" },
       { label: "Readiness", href: "/platform/ai/readiness" },
       { label: "Operations Map", href: "/platform/ai/operations-map" },
       { label: "Capacity Continuity", href: "/platform/ai/capacity-continuity" },

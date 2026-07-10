@@ -26,6 +26,7 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     openBlockers: 0,
     deferRate: 0,
     unmapped: false,
+    lastActiveAt: null,
     ...over,
   };
 }

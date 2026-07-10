@@ -7,10 +7,10 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("PlatformAiPage", () => {
-  it("resolves the AI section default to readiness", async () => {
+  it("resolves the AI section default to the workforce directory", async () => {
     const { default: PlatformAiPage } = await import("./page");
     await PlatformAiPage();
 
-    expect(redirectMock).toHaveBeenCalledWith("/platform/ai/readiness");
+    expect(redirectMock).toHaveBeenCalledWith("/platform/ai/overview");
   });
 });
