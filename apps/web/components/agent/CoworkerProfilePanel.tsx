@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";
-import { getCoworkerProactivityPreference } from "@/lib/actions/proactivity";
-import { getProactivityLevelCopy } from "@/lib/proactivity/proactivity-copy";
+import { getCoworkerProactivityPreference, saveCoworkerProactivityPreference } from "@/lib/actions/proactivity";
+import { ProactivityLevelControl } from "@/components/proactivity/ProactivityLevelControl";
 import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "@/lib/proactivity/proactivity-resolver";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 
@@ -95,7 +95,6 @@ export function CoworkerProfilePanel({ agent, onClose }: Props) {
   const proactivityPlan = savedProactivityLevel
     ? resolveProactivityPlanForLevel(proactivityInput, savedProactivityLevel, "user-override")
     : resolveProactivityPlan(proactivityInput);
-  const proactivityCopy = getProactivityLevelCopy(proactivityPlan.resolvedLevel);
 
   useEffect(() => {
     let alive = true;
@@ -145,7 +144,7 @@ export function CoworkerProfilePanel({ agent, onClose }: Props) {
           <div style={{ fontSize: 11, color: "var(--dpf-text-secondary)", marginTop: 4, marginLeft: 14 }}>
             {agent.agentDescription}
           </div>
-          <div style={{ display: "flex", gap: 4, marginTop: 6, marginLeft: 14 }}>
+          <div style={{ display: "flex", gap: 4, marginTop: 6, marginLeft: 14, alignItems: "center" }}>
             <span style={{
               ...tagStyle,
               color: "var(--dpf-accent)",
@@ -156,6 +155,14 @@ export function CoworkerProfilePanel({ agent, onClose }: Props) {
             <span style={tagStyle}>
               {agent.agentId}
             </span>
+            {/* EP-26E528F5: the chat → record bridge. The record is the ONE
+                per-coworker home; this panel is its quick view. */}
+            <a
+              href={`/platform/ai/agent/${encodeURIComponent(agent.agentId)}`}
+              style={{ ...tagStyle, color: "var(--dpf-accent)", borderColor: "color-mix(in srgb, var(--dpf-accent) 40%, transparent)", textDecoration: "none" }}
+            >
+              Open full record →
+            </a>
           </div>
         </div>
         <button
@@ -192,10 +199,17 @@ export function CoworkerProfilePanel({ agent, onClose }: Props) {
               background: "color-mix(in srgb, var(--dpf-surface-2) 70%, transparent)",
             }}
           >
+            {/* EP-26E528F5 P1: editable here with the SAME shared control the
+                composer dock uses — this panel used to show the level read-only
+                while the dock 20px below edited it. One behavior, one component. */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-text)" }}>
-                {proactivityCopy.label}
-              </span>
+              <ProactivityLevelControl
+                value={proactivityPlan.resolvedLevel}
+                onChange={(next) => {
+                  setSavedProactivityLevel(next);
+                  saveCoworkerProactivityPreference(agent.agentId, next).catch(() => {});
+                }}
+              />
               <span style={{ ...tagStyle, fontSize: 10 }}>Effective now</span>
             </div>
             <div style={{ fontSize: 10, color: "var(--dpf-muted)", marginTop: 6, lineHeight: 1.45 }}>

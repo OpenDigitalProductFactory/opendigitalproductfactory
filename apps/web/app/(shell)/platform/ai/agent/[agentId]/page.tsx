@@ -14,6 +14,7 @@ import { AgentModelRoutingCard } from "@/components/platform/AgentModelRoutingCa
 import { CapabilitiesEditor } from "@/components/platform/coworker-record/CapabilitiesEditor";
 import { RecordActionsMenu } from "@/components/platform/coworker-record/RecordActionsMenu";
 import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPriorityControl";
+import { CoworkerProactivitySetting } from "@/components/platform/coworker-record/CoworkerProactivitySetting";
 import { getCoworkerPostureInheritance } from "@/lib/actions/golden-triangle";
 import { loadCoworkerRecord } from "@/lib/coworker-record/load-record";
 import { loadFamilyCorpusSignals } from "@/lib/coworker-record/corpus-signals";
@@ -261,7 +262,7 @@ export default async function AgentDetailPage({
     { id: "overview", label: "Overview" },
     { id: "profession", label: "Profession & Knowledge", badge: coveragePct !== null ? `${coveragePct}%` : profession.family ? null : "unmapped" },
     { id: "capabilities", label: "Capabilities", badge: String(agent.toolGrants.length) },
-    { id: "priority", label: "Priority", badge: priorityBadge },
+    { id: "priority", label: "Priority & Autonomy", badge: priorityBadge },
     { id: "governance", label: "Governance" },
     { id: "performance", label: "Performance" },
     { id: "needs-playbooks", label: "Needs & Playbooks", badge: needsAndPlaybooksCount > 0 ? String(needsAndPlaybooksCount) : null },
@@ -294,7 +295,7 @@ export default async function AgentDetailPage({
             { label: "Edit persona prompt", href: "/platform/ai/prompts" },
             { label: "Skills catalog", href: "/platform/ai/skills" },
             { label: "Model & priority grid", href: "/platform/ai/assignments" },
-            { label: "Authority & tool grants", href: "/platform/ai" },
+            { label: "Authority & audit", href: "/platform/audit" },
             ...(profession.profileId
               ? [{ label: "Decision review inbox", href: `/platform/ai/founder-review?profile=${profession.profileId}` }]
               : []),
@@ -316,7 +317,10 @@ export default async function AgentDetailPage({
         <OverviewPanel record={record} summary={summary} />
         <ProfessionPanel record={record} corpusSignals={corpusSignals} installArchetype={installVariant.archetype ?? null} />
         <CapabilitiesPanel record={record} routingCard={routingCard} capabilitiesEditor={capabilitiesEditor} />
-        <PriorityPanel priorityControl={priorityControl} />
+        <PriorityPanel
+          priorityControl={priorityControl}
+          proactivitySection={<CoworkerProactivitySetting agentId={agent.agentId} />}
+        />
         <GovernancePanel record={record} />
         <PerformancePanel record={record} />
         <NeedsAndPlaybooksPanel

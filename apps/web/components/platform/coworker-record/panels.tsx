@@ -492,7 +492,13 @@ export function CapabilitiesPanel({
  *  The interactive control (presets/triangle, save/reset, read-only fallback) is
  *  the client `CoworkerPriorityControl`, built page-side and passed in so this
  *  stays a pure presentational panel. */
-export function PriorityPanel({ priorityControl }: { priorityControl: React.ReactNode }) {
+export function PriorityPanel({
+  priorityControl,
+  proactivitySection,
+}: {
+  priorityControl: React.ReactNode;
+  proactivitySection?: React.ReactNode;
+}) {
   return (
     <div>
       <Section title="Cost / Quality / Time priority">
@@ -504,6 +510,24 @@ export function PriorityPanel({ priorityControl }: { priorityControl: React.Reac
         </p>
         {priorityControl}
       </Section>
+      {proactivitySection && (
+        <>
+          <Section title="Proactivity">
+            <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: -4, marginBottom: 12, maxWidth: 680, lineHeight: 1.5 }}>
+              How persistently this coworker follows up with <em>you</em> — your setting for this coworker, and the
+              same dial shown beside the chat composer. Changing it in either place changes the other.
+            </p>
+            {proactivitySection}
+          </Section>
+          <Section title="In the chat">
+            <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: -4, maxWidth: 680, lineHeight: 1.5 }}>
+              Three switches are deliberately <strong>per-conversation</strong> and live in the chat composer, not
+              here: Advise/Act mode, page editing, and web access. They reset each session so a broad permission never
+              lingers silently — open the coworker chat to set them for the conversation you&apos;re in.
+            </p>
+          </Section>
+        </>
+      )}
     </div>
   );
 }
