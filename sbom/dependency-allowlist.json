@@ -854,7 +854,8 @@
       "added": "2026-06-21",
       "workspaces": [
         "apps/web",
-        "packages/db"
+        "packages/db",
+        "services/adp"
       ],
       "kinds": [
         "prod"
@@ -888,16 +889,6 @@
       ],
       "kinds": [
         "dev"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
-    "postgres": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "services/adp"
-      ],
-      "kinds": [
-        "prod"
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },

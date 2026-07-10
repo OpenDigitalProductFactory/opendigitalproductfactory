@@ -1,13 +1,19 @@
 // Thin Postgres accessor for the adp service.
 //
-// services/adp is a standalone Node app (not a pnpm workspace member), so it
-// doesn't share Prisma with the portal. We only touch three tables and only
-// a handful of columns, so raw SQL via `postgres` is simpler than bundling a
-// duplicate Prisma schema. All writes are additive (UPDATE tokenCacheEnc,
-// INSERT audit rows) — the portal's /api/integrations/adp/connect still owns
-// credential creation and error-state writes.
+// services/adp is a pnpm workspace member but does not share Prisma with the
+// portal. We only touch three tables and a handful of columns, so raw SQL is
+// simpler than bundling a duplicate Prisma schema. All writes are additive
+// (UPDATE tokenCacheEnc, INSERT audit rows) — the portal's
+// /api/integrations/adp/connect still owns credential creation and
+// error-state writes.
+//
+// Uses `pg` (node-postgres), the platform's single canonical Postgres driver
+// (apps/web + packages/db), rather than a second driver — EP-8DC217EB BET-14
+// dep dedup (BI-C0CEB377). `pg` parameterizes with positional `$n`
+// placeholders; column identifiers keep their quoted camelCase so the returned
+// row objects match the interfaces below.
 
-import postgres from "postgres";
+import { Pool } from "pg";
 
 export interface IntegrationCredentialRow {
   id: string;
@@ -32,7 +38,8 @@ export interface IntegrationToolCallLogInsert {
   errorMessage: string | null;
 }
 
-export type Sql = ReturnType<typeof postgres>;
+/** The service's Postgres handle. A `pg` connection pool. */
+export type Sql = Pool;
 
 let _sql: Sql | null = null;
 
@@ -46,22 +53,23 @@ function getConnectionString(): string {
 
 export function getSql(): Sql {
   if (_sql) return _sql;
-  _sql = postgres(getConnectionString(), {
+  _sql = new Pool({
+    connectionString: getConnectionString(),
     max: 4,
-    idle_timeout: 30,
-    connect_timeout: 10,
-    prepare: false,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 10_000,
   });
   return _sql;
 }
 
-// For tests: inject a mock sql instance.
+// For tests: inject a mock pool instance.
 export function setSqlForTesting(sql: Sql | null): void {
   _sql = sql;
 }
 
 export async function loadAdpCredential(sql: Sql): Promise<IntegrationCredentialRow | null> {
-  const rows = await sql<IntegrationCredentialRow[]>`
+  const result = await sql.query<IntegrationCredentialRow>(
+    `
     SELECT
       id,
       "integrationId",
@@ -73,8 +81,9 @@ export async function loadAdpCredential(sql: Sql): Promise<IntegrationCredential
     FROM "IntegrationCredential"
     WHERE "integrationId" = 'adp-workforce-now'
     LIMIT 1
-  `;
-  return rows[0] ?? null;
+  `,
+  );
+  return result.rows[0] ?? null;
 }
 
 export async function updateTokenCache(
@@ -82,38 +91,43 @@ export async function updateTokenCache(
   id: string,
   tokenCacheEnc: string,
 ): Promise<void> {
-  await sql`
+  await sql.query(
+    `
     UPDATE "IntegrationCredential"
-    SET "tokenCacheEnc" = ${tokenCacheEnc}, "updatedAt" = NOW()
-    WHERE id = ${id}
-  `;
+    SET "tokenCacheEnc" = $1, "updatedAt" = NOW()
+    WHERE id = $2
+  `,
+    [tokenCacheEnc, id],
+  );
 }
 
 export async function insertToolCallLog(
   sql: Sql,
   row: IntegrationToolCallLogInsert,
 ): Promise<void> {
-  await sql`
+  await sql.query(
+    `
     INSERT INTO "IntegrationToolCallLog" (
       id, "calledAt", integration, "coworkerId", "userId", "toolName",
       "argsHash", "responseKind", "resultCount", "durationMs",
       "errorCode", "errorMessage"
     )
-    VALUES (
-      ${cuid()},
-      NOW(),
-      ${row.integration},
-      ${row.coworkerId},
-      ${row.userId},
-      ${row.toolName},
-      ${row.argsHash},
-      ${row.responseKind},
-      ${row.resultCount},
-      ${row.durationMs},
-      ${row.errorCode},
-      ${row.errorMessage}
-    )
-  `;
+    VALUES ($1, NOW(), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+  `,
+    [
+      cuid(),
+      row.integration,
+      row.coworkerId,
+      row.userId,
+      row.toolName,
+      row.argsHash,
+      row.responseKind,
+      row.resultCount,
+      row.durationMs,
+      row.errorCode,
+      row.errorMessage,
+    ],
+  );
 }
 
 // Minimal cuid-style ID generator. Real cuids are 25 chars starting with 'c'.
