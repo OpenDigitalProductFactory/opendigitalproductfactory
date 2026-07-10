@@ -10,6 +10,11 @@ import {
   type MonitoringAlert,
   type Tone,
 } from "./health-summary";
+import {
+  HEALTH_COWORKER_ROUTE_CONTEXT,
+  buildHealthAlertCoworkerPrompt,
+  humanizeHealthAlert,
+} from "./alert-humanize";
 import { useAlertQuery } from "./useAlertQuery";
 
 type HealthState = "healthy" | "warning" | "critical" | "offline";
@@ -80,6 +85,7 @@ export function PlatformHealthIndicator() {
                 {alerts.map((alert, i) => {
                   const severity = alertDisplaySeverity(alert);
                   const tone = severity === "critical" ? "critical" : "warning";
+                  const humanized = humanizeHealthAlert(alert);
                   return (
                     <div
                       key={i}
@@ -93,16 +99,38 @@ export function PlatformHealthIndicator() {
                           {severity}
                         </span>
                         <span className="text-xs text-[var(--dpf-text)]">
-                          {alert.labels.alertname}
+                          {humanized.title}
                         </span>
                       </div>
                       <p className="text-[10px] text-[var(--dpf-muted)] mt-0.5">
-                        {alert.annotations.summary ?? ""}
+                        {humanized.explanation}
+                      </p>
+                      <p className="text-[9px] text-[var(--dpf-muted)] opacity-60 mt-0.5">
+                        {humanized.alertName}
                       </p>
                     </div>
                   );
                 })}
               </div>
+            )}
+
+            {alerts.length > 0 && (
+              <button
+                onClick={() => {
+                  document.dispatchEvent(
+                    new CustomEvent("open-agent-panel", {
+                      detail: {
+                        autoMessage: buildHealthAlertCoworkerPrompt(alerts),
+                        routeContext: HEALTH_COWORKER_ROUTE_CONTEXT,
+                      },
+                    }),
+                  );
+                  setOpen(false);
+                }}
+                className="block w-full text-left px-3 py-2 text-xs font-medium text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)] border-t border-[var(--dpf-border)]"
+              >
+                Ask coworker for help
+              </button>
             )}
 
             <a
