@@ -10,7 +10,14 @@ import { notFound } from "next/navigation";
 
 import { auth } from "@/lib/auth";
 import { BusinessStanceForm } from "@/components/wiki/BusinessStanceForm";
+import { HowYouDecideCards, type StanceCard } from "@/components/onboarding/HowYouDecideCards";
 import { BUSINESS_STANCE_SLUG_PREFIX } from "@/lib/wiki/business-stance";
+import {
+  resolveStanceVectors,
+  STANCE_VECTOR_KEYS,
+} from "@/lib/onboarding/archetype-business-context";
+import { stanceVectorSlug } from "@/lib/onboarding/seed-org-wwwd-corpus";
+import { resolveOrgProfileId } from "@/lib/decision-perspective/material";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +52,59 @@ export default async function BusinessStancePage() {
       })
     : [];
 
+  // "How you decide" cards (BI-D6DC2432): archetype-prefilled stance vectors,
+  // shown until the owner confirms them. Confirmed = the vector's primary
+  // material sits at the owner-confirmed tier (A / >=0.9).
+  let cards: StanceCard[] = [];
+  if (organizationId) {
+    const [storefront, profileId] = await Promise.all([
+      prisma.storefrontConfig.findFirst({
+        select: { archetypeId: true, archetype: { select: { category: true } } },
+      }),
+      resolveOrgProfileId({ db: prisma, organizationId }),
+    ]);
+    const defaults = resolveStanceVectors({
+      archetypeId: storefront?.archetypeId ?? null,
+      industry: storefront?.archetype?.category ?? null,
+    });
+    const vectorSlugs = STANCE_VECTOR_KEYS.map((key) => stanceVectorSlug(key));
+    const [vectorPages, vectorMaterials] = await Promise.all([
+      prisma.wikiPage.findMany({
+        where: { organizationId, slug: { in: vectorSlugs } },
+        select: { slug: true, abstract: true, body: true },
+      }),
+      profileId
+        ? prisma.perspectiveMaterial.findMany({
+            where: { materialId: { in: vectorSlugs.map((slug) => `${profileId}:${slug}`) } },
+            select: { materialId: true, evidenceGrade: true, confidenceWeight: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const pageBySlug = new Map(vectorPages.map((page) => [page.slug, page]));
+    const materialById = new Map(vectorMaterials.map((m) => [m.materialId, m]));
+
+    cards = STANCE_VECTOR_KEYS.map((key) => {
+      const slug = stanceVectorSlug(key);
+      const page = pageBySlug.get(slug);
+      const material = profileId ? materialById.get(`${profileId}:${slug}`) : undefined;
+      const stance = page?.abstract?.trim() || defaults[key].stance;
+      // The ceiling is stance content, not schema: read it back from the page
+      // body when present, else the archetype default.
+      const ceilingMatch = page?.body?.match(/up to \$(\d+) per case/i);
+      const ceilingUsd = ceilingMatch
+        ? Number(ceilingMatch[1])
+        : defaults[key].ceilingUsd ?? null;
+      return {
+        key,
+        title: defaults[key].title,
+        stance,
+        ceilingUsd,
+        confirmed:
+          material?.evidenceGrade === "A" && (material?.confidenceWeight ?? 0) >= 0.9,
+      };
+    });
+  }
+
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
       <nav className="mb-6 flex items-center gap-2 text-sm text-[var(--dpf-muted)]">
@@ -67,6 +127,8 @@ export default async function BusinessStancePage() {
           coworker decides on your behalf.
         </p>
       </header>
+
+      <HowYouDecideCards cards={cards} />
 
       <section className="mb-8">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--dpf-muted)] mb-3">
