@@ -17,6 +17,8 @@ import { realEstateConstructionArchetypes } from "./real-estate-construction";
 import { automotiveServicesArchetypes } from "./automotive-services";
 import { movingAndLogisticsArchetypes } from "./moving-and-logistics";
 import { securityServicesArchetypes } from "./security-services";
+import { mediaProductionArchetypes } from "./media-production";
+import { liveEventsVenuesArchetypes } from "./live-events-venues";
 
 export const ALL_ARCHETYPES = [
   ...healthcareWellnessArchetypes,
@@ -38,4 +40,6 @@ export const ALL_ARCHETYPES = [
   ...automotiveServicesArchetypes,
   ...movingAndLogisticsArchetypes,
   ...securityServicesArchetypes,
+  ...mediaProductionArchetypes,
+  ...liveEventsVenuesArchetypes,
 ];

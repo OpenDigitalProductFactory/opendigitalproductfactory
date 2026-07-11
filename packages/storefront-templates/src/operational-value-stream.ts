@@ -144,6 +144,10 @@ const CATEGORY_DEFAULT_COMMERCIAL_MODEL: Partial<Record<ArchetypeCategory, Comme
   "automotive-services": "appointment-checkout",
   "moving-and-logistics": "transactional",
   "security-services": "recurring-agreement",
+  // Production is one-off project engagements captured as deals; live events and
+  // venues capture the ticket sale. Per-leaf axes still override this default.
+  "media-production": "transactional",
+  "live-events-venues": "transactional",
 };
 
 function resolveCommercialModel(a: ArchetypeDefinition): CommercialModel {
@@ -179,6 +183,10 @@ const CATEGORY_DEFAULT_DEMAND: Partial<Record<ArchetypeCategory, DemandSignature
   "moving-and-logistics": "seasonal",
   // Guard contracts and monitoring are steady recurring coverage.
   "security-services": "steady",
+  // Production work follows campaign / commissioning cycles.
+  "media-production": "seasonal",
+  // On-sale spikes and event dates make live-events demand event-driven.
+  "live-events-venues": "event-driven",
 };
 
 const CATEGORY_DEFAULT_CAPACITY: Partial<Record<ArchetypeCategory, CapacityUnitType>> = {
@@ -198,6 +206,10 @@ const CATEGORY_DEFAULT_CAPACITY: Partial<Record<ArchetypeCategory, CapacityUnitT
   "automotive-services": "slot-hours",
   "moving-and-logistics": "slot-hours",
   "security-services": "slot-hours",
+  // Production is bounded by crew / project throughput (billable days).
+  "media-production": "billable-hours",
+  // Venue and event capacity is a physical hard cap (seats / room).
+  "live-events-venues": "physical-hard-cap",
 };
 
 // ── Derivation ───────────────────────────────────────────────────────────────

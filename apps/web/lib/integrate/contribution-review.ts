@@ -127,14 +127,16 @@ const VERTICAL_CATEGORIES = [
   { value: "nonprofit-community", label: "Nonprofit & Community", keywords: ["nonprofit", "charity", "donation", "volunteer", "community", "cause", "fundraising"] },
   { value: "hoa-property-management", label: "HOA & Property Management", keywords: ["hoa", "property", "tenant", "landlord", "rental", "lease", "building", "apartment"] },
   { value: "banking-financial-services", label: "Banking & Financial Services", keywords: ["bank", "banking", "credit union", "deposit", "loan", "mortgage", "lending", "bian", "member", "branch", "underwriting"] },
+  { value: "media-production", label: "Media & Production", keywords: ["film", "video", "production", "commercial", "post-production", "vfx", "editing", "studio", "crew", "staging", "av", "documentary"] },
+  { value: "live-events-venues", label: "Live Events & Venues", keywords: ["venue", "ticket", "box office", "concert", "tour", "promoter", "booking", "talent", "festival", "theatre", "gig", "event"] },
 ];
 
 // CTA type to vertical affinity — features using booking, purchase, etc.
 // tend to be relevant to verticals with the same CTA pattern
 const CTA_VERTICAL_MAP: Record<string, string[]> = {
   booking: ["healthcare-wellness", "beauty-personal-care", "pet-services", "fitness-recreation", "professional-services"],
-  purchase: ["retail-goods", "food-hospitality"],
-  inquiry: ["trades-maintenance", "professional-services"],
+  purchase: ["retail-goods", "food-hospitality", "live-events-venues"],
+  inquiry: ["trades-maintenance", "professional-services", "media-production"],
   donation: ["nonprofit-community"],
 };
 

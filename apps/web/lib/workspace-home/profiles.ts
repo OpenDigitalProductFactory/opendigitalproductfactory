@@ -132,6 +132,65 @@ export const DEFAULT_WORKSPACE_HOME_CONTRIBUTIONS: WorkspaceHomeContribution[] =
     ],
   }),
   profile({
+    id: "home-media-production",
+    label: "Production pipeline home",
+    description:
+      "Project, deliverable, schedule, and client-approval attention for film, video, and event production teams.",
+    primaryOperatingQuestion: "which production or deliverable needs a decision or handoff today?",
+    topConcerns: [
+      "projects waiting on a decision or approval",
+      "upcoming shoots, sessions, and delivery deadlines",
+      "crew and vendor handoffs",
+      "client communication gaps",
+      "revenue-impacting follow-up",
+    ],
+    archetypeCategories: ["media-production"],
+    primitives: [
+      "case-board",
+      "decision-queue",
+      "appointment-schedule",
+      "communication-exceptions",
+      "handoff-queue",
+    ],
+    requiredCanonicalData: ["customer-account", "work-item", "calendar-event"],
+    requiredSignals: ["scheduled-work", "urgent-exception", "communication-failed", "coworker-handoff"],
+    components: [
+      { key: "today-schedule", slotId: "today-now", primitiveKey: "appointment-schedule", title: "Shoots, sessions, and deadlines", dataRefs: [calendarEvent, scheduledWork] },
+      { key: "unassigned-work", slotId: "exceptions-needs-review", primitiveKey: "case-board", title: "Projects needing review or approval", dataRefs: [workItem, customerAccount] },
+      { key: "notification-status", slotId: "exceptions-needs-review", primitiveKey: "communication-exceptions", title: "Client communication exceptions", dataRefs: [failedCommunication] },
+      { key: "coworker-handoffs", slotId: "coworker-handoffs", primitiveKey: "handoff-queue", title: "Crew and vendor handoffs", dataRefs: [coworkerHandoff] },
+    ],
+  }),
+  profile({
+    id: "home-live-events-venues",
+    label: "Show-day command home",
+    description:
+      "Event schedule, sales momentum, guest communication, and team handoffs for venues, promoters, and booking agencies.",
+    primaryOperatingQuestion: "what needs attention before the next show or on-sale?",
+    topConcerns: [
+      "upcoming events and on-sale moments",
+      "ticket sales and capacity risk",
+      "guest and booking communication exceptions",
+      "staff and production coverage",
+      "handoffs before show day",
+    ],
+    archetypeCategories: ["live-events-venues"],
+    primitives: [
+      "appointment-schedule",
+      "decision-queue",
+      "communication-exceptions",
+      "handoff-queue",
+    ],
+    requiredCanonicalData: ["customer-account", "work-item", "calendar-event"],
+    requiredSignals: ["scheduled-work", "urgent-exception", "communication-failed", "coworker-handoff"],
+    components: [
+      { key: "today-schedule", slotId: "today-now", primitiveKey: "appointment-schedule", title: "Events and on-sale moments", dataRefs: [calendarEvent, scheduledWork] },
+      { key: "unassigned-work", slotId: "exceptions-needs-review", primitiveKey: "decision-queue", title: "Bookings and exceptions needing action", dataRefs: [workItem, urgentException] },
+      { key: "customer-callbacks", slotId: "exceptions-needs-review", primitiveKey: "communication-exceptions", title: "Guest and booking follow-up", dataRefs: [customerAccount, failedCommunication] },
+      { key: "coworker-handoffs", slotId: "coworker-handoffs", primitiveKey: "handoff-queue", title: "Show-day handoffs", dataRefs: [coworkerHandoff] },
+    ],
+  }),
+  profile({
     id: "home-retail-goods",
     label: "Retail operations home",
     description:

@@ -144,4 +144,75 @@ export const assetRentalArchetypes: ArchetypeDefinition[] = [
       ],
     },
   },
+  {
+    // Production-equipment rental (camera / lighting / grip / audio) is one of the
+    // businesses that support film, commercial, and event production. It is a
+    // clean reuse of the asset-rental value stream (reserve → hand out → use →
+    // return → inspect → re-pool) rather than a new category — the kernel's
+    // reusability axis and the verify-substrate-first commandment both point here
+    // instead of inventing a bespoke rental type under media-production.
+    archetypeId: "production-equipment-rental",
+    name: "Film & Production Equipment Rental",
+    category: "asset-rental",
+    ctaType: "rental",
+    tags: ["rental", "film", "production", "camera", "lighting", "grip", "audio", "asset-pool", "reservation"],
+    itemTemplates: [
+      { name: "Camera Package", description: "Cinema camera body, lenses, and media — daily/weekly hire", priceType: "from", ctaType: "rental", ctaLabel: "Reserve" },
+      { name: "Lighting Kit", description: "LED / HMI lighting package with stands and control", priceType: "from", ctaType: "rental", ctaLabel: "Reserve" },
+      { name: "Grip & Rigging", description: "Dolly, tripods, rigging, and grip stands", priceType: "from", ctaType: "rental", ctaLabel: "Reserve" },
+      { name: "Audio Package", description: "Boom, radio mics, recorder, and monitoring", priceType: "from", ctaType: "rental", ctaLabel: "Reserve" },
+      { name: "Drone / Aerial Kit", description: "Aerial platform with camera — operator optional", priceType: "from", ctaType: "rental", ctaLabel: "Reserve" },
+      { name: "Check Availability", description: "Tell us your kit list and shoot dates — we'll confirm availability", priceType: "free", ctaType: "inquiry" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "about", title: "About the Rental House", sortOrder: 1 },
+      { type: "items", title: "Kit & Rates", sortOrder: 2 },
+      { type: "team", title: "Our Team", sortOrder: 3 },
+      { type: "contact", title: "Reserve or Ask", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...RENTER_CONTACT_FIELDS,
+      { name: "kit", label: "What kit do you need?", type: "text" as const, required: true },
+      { name: "pickupDate", label: "Shoot / pickup date", type: "text" as const, required: true, placeholder: "e.g. 2026-09-15" },
+      { name: "returnDate", label: "Return date", type: "text" as const, required: true, placeholder: "e.g. 2026-09-17" },
+      { name: "notes", label: "Production / project details", type: "textarea" as const, required: false },
+    ],
+    vocabulary: {
+      itemsLabel: "Kit & Rates",
+      portalLabel: "Rental Portal",
+      stakeholderLabel: "Productions",
+      inboxLabel: "Reservations",
+      agentName: "Rental Desk",
+    },
+    activationProfile: {
+      profileType: "standard",
+      modules: ["rental-fleet", "rental-agreements", "billing-readiness", "lifecycle-signals"],
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "business",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "usage-based",
+        provisioning: "reservation-and-return",
+        platform: "no",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "primary", it4itStages: ["request-to-fulfill", "detect-to-correct"] },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+      seededServiceCategories: [
+        "Camera",
+        "Lighting",
+        "Grip",
+        "Audio",
+        "Aerial",
+      ],
+    },
+  },
 ];

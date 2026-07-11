@@ -310,4 +310,50 @@ describe("archetype catalog", () => {
     );
     expect(getCapabilityApplicability(guard, "service-agreements")).toBe("required");
   });
+
+  it("ships the two entertainment categories with project-based and ticketed value streams (EP-ENTERTAINMENT)", () => {
+    const media = ALL_ARCHETYPES.filter((a) => a.category === "media-production");
+    const live = ALL_ARCHETYPES.filter((a) => a.category === "live-events-venues");
+
+    expect(media.map((a) => a.archetypeId).sort()).toEqual([
+      "event-production-staging",
+      "film-video-production",
+      "post-production-studio",
+    ]);
+    expect(live.map((a) => a.archetypeId).sort()).toEqual([
+      "event-venue",
+      "talent-booking-agency",
+      "tour-promoter",
+    ]);
+
+    // Media & production is project-based: services form, projects module, and
+    // milestone billing prepared-not-prescribed.
+    for (const a of media) {
+      expect(a.activationProfile?.axes?.form, `${a.archetypeId} form`).toBe("services");
+      expect(a.activationProfile?.axes?.commercialModel, `${a.archetypeId} model`).toBe("transactional");
+      expect(a.activationProfile?.modules, `${a.archetypeId} modules`).toContain("projects");
+      expect(a.activationProfile?.billingReadinessMode, `${a.archetypeId} billing`).toBe("prepared-not-prescribed");
+    }
+
+    // Live events & venues sell the show; the venue and promoter lead with ticket
+    // purchases and every leaf carries a bookable/enquiry item with scheduling.
+    const venue = live.find((a) => a.archetypeId === "event-venue");
+    expect(venue?.ctaType).toBe("purchase");
+    expect(venue?.itemTemplates.some((i) => i.ctaType === "purchase" && (i.priceAmount ?? 0) > 0)).toBe(true);
+
+    // Every entertainment leaf with a booking item carries schedulingDefaults.
+    for (const a of [...media, ...live]) {
+      const hasBookingItem =
+        a.ctaType === "booking" ||
+        a.itemTemplates.some((t) => (t.ctaType ?? a.ctaType) === "booking");
+      if (hasBookingItem) {
+        expect(a.schedulingDefaults, `${a.archetypeId} needs schedulingDefaults`).toBeDefined();
+      }
+    }
+
+    // Production-equipment rental is a REUSED asset-rental leaf, not a new category.
+    const kit = ALL_ARCHETYPES.find((a) => a.archetypeId === "production-equipment-rental");
+    expect(kit?.category).toBe("asset-rental");
+    expect(kit?.activationProfile?.axes?.provisioning).toBe("reservation-and-return");
+  });
 });

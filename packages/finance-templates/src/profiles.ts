@@ -554,6 +554,73 @@ const PROFILES: Record<string, FinancialProfileSeed> = {
       { code: "5030", name: "General & Administrative", type: "expense" },
     ],
   },
+
+  media_production: {
+    archetypeCategory: "media-production",
+    displayName: "Media & Production",
+    defaultPaymentTerms: "Net 30",
+    defaultCurrency: "GBP",
+    vatRegistered: true,
+    defaultTaxRate: 20,
+    dunningEnabled: true,
+    dunningStyle: "standard",
+    // Project engagements bill against milestones; recurring is optional.
+    billingPatternProfile: AD_HOC_INVOICE_PATTERN,
+    invoiceTemplateStyle: "creative",
+    expenseCategories: [
+      "Crew & Talent Fees",
+      "Equipment Hire",
+      "Location & Studio",
+      "Post-Production & Software",
+      "Travel & Logistics",
+      "Insurance & Permits",
+      "Marketing & Business Development",
+    ],
+    purchaseOrdersEnabled: true,
+    chartOfAccountsSeed: [
+      { code: "4000", name: "Production Revenue", type: "revenue" },
+      { code: "4010", name: "Post-Production Revenue", type: "revenue" },
+      { code: "4020", name: "Licensing & Usage Fees", type: "revenue" },
+      { code: "5000", name: "Crew & Talent Costs", type: "expense" },
+      { code: "5010", name: "Equipment & Location", type: "expense" },
+      { code: "5020", name: "Post & Software", type: "expense" },
+      { code: "5030", name: "Travel & Logistics", type: "expense" },
+    ],
+  },
+
+  live_events_venues: {
+    archetypeCategory: "live-events-venues",
+    displayName: "Live Events & Venues",
+    defaultPaymentTerms: "Due on receipt",
+    defaultCurrency: "GBP",
+    vatRegistered: true,
+    defaultTaxRate: 20,
+    dunningEnabled: false,
+    dunningStyle: "off",
+    // Ticket revenue is transactional point-of-sale; hire/booking is ad-hoc.
+    billingPatternProfile: POINT_OF_SALE_PATTERN,
+    invoiceTemplateStyle: "minimal",
+    expenseCategories: [
+      "Artist & Talent Guarantees",
+      "Venue & Facility Costs",
+      "Production & Staging",
+      "Marketing & Ticketing Fees",
+      "Staffing & Security",
+      "Licences & Insurance",
+      "Hospitality & Catering",
+    ],
+    purchaseOrdersEnabled: true,
+    chartOfAccountsSeed: [
+      { code: "4000", name: "Ticket Sales", type: "revenue" },
+      { code: "4010", name: "Venue Hire Income", type: "revenue" },
+      { code: "4020", name: "Bar, Merch & Hospitality", type: "revenue" },
+      { code: "4030", name: "Sponsorship Income", type: "revenue" },
+      { code: "5000", name: "Artist & Talent Costs", type: "expense" },
+      { code: "5010", name: "Production & Staging", type: "expense" },
+      { code: "5020", name: "Marketing & Ticketing Fees", type: "expense" },
+      { code: "5030", name: "Staffing & Security", type: "expense" },
+    ],
+  },
 };
 
 // ─── Exported functions ───────────────────────────────────────────────────────
