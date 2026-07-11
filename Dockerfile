@@ -43,6 +43,15 @@ COPY scripts/set-hooks-path.mjs ./scripts/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY docs/professions/ ./docs/professions/
+# Root-level config data statically imported at build time — e.g.
+# apps/web/lib/integrate/seed-contribution-fit.ts imports
+# ../../../../config/seed-content-paths.json. Without this COPY the Next.js build
+# fails "Module not found" inside the image even though plain `next build` (CI)
+# passes, because CI builds the full checkout while the image build only sees this
+# narrow allowlist. This detonated self-upgrade SUR-BCFB72BB (BI-062CFB41); the
+# dockerfile-build-context.guard.test.ts guard now fails CI if any build-time
+# import escapes into a repo dir this stage doesn't COPY. Mirrors docs/professions.
+COPY config/ ./config/
 COPY docker-entrypoint.sh ./
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
@@ -88,6 +97,11 @@ COPY docs/founder-kernel/ ./docs/founder-kernel/
 # lib/decision-perspective/resolve-profession-profile.ts (WSID/EP-WSID corpus).
 # Without this COPY the Next.js build fails: "Cannot find module docs/professions/registry.json".
 COPY docs/professions/ ./docs/professions/
+# Root-level config data statically imported by the tool graph loaded at build
+# time here — generate-tools-snapshot.js → mcp-tools.ts → contribution-review.ts
+# → seed-contribution-fit.ts → config/seed-content-paths.json. Mirrors the build
+# stage; see the dockerfile-build-context guard note there.
+COPY config/ ./config/
 # IT4IT functional criteria workbook is read at seed time by
 # seed-ea-reference-models.ts. The rest of docs/Reference/ is large
 # binary content not needed in the image.
