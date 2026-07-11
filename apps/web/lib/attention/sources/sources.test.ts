@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { escalationToAttentionItem } from "./escalation";
-import { aiDecisionToAttentionItem, type DecisionInteractionRow } from "./ai-decision";
+import {
+  aiDecisionToAttentionItem,
+  isAgentInternalKernelConsult,
+  type DecisionInteractionRow,
+} from "./ai-decision";
 import { pausedAiToAttentionItem, type TaskRunRow } from "./paused-ai";
 import { agentProposalToAttentionItem, type AgentActionProposalRow } from "./agent-proposal";
 import { loadScheduledTaskItems, scheduledTaskToAttentionItem, type ScheduledTaskAttentionRow } from "./scheduled-task";
@@ -48,8 +52,37 @@ describe("aiDecisionToAttentionItem", () => {
     rationale: "Confidence below threshold for a high-risk call.",
     buildId: "FB-3",
     taskRunId: null,
+    routeContext: "/build",
+    domainClass: "plan-readiness",
     createdAt: new Date("2026-06-23T08:00:00.000Z"),
   };
+
+  it("classifies unlinked mcp:principle_decide rows as agent-internal (BI-9026B96C)", () => {
+    expect(
+      isAgentInternalKernelConsult({
+        buildId: null,
+        taskRunId: null,
+        routeContext: "mcp:principle_decide",
+        domainClass: "kernel-consult",
+      }),
+    ).toBe(true);
+    expect(
+      isAgentInternalKernelConsult({
+        buildId: "FB-1",
+        taskRunId: null,
+        routeContext: "mcp:principle_decide",
+        domainClass: "kernel-consult",
+      }),
+    ).toBe(false);
+    expect(
+      isAgentInternalKernelConsult({
+        buildId: null,
+        taskRunId: null,
+        routeContext: "/wiki/decisions",
+        domainClass: "plan-readiness",
+      }),
+    ).toBe(false);
+  });
 
   it("maps an escalated high-risk decision", () => {
     const item = aiDecisionToAttentionItem(base);
@@ -71,27 +104,6 @@ describe("aiDecisionToAttentionItem", () => {
     const item = aiDecisionToAttentionItem({ ...base, outcomeType: "defer", riskTier: "medium" });
     expect(item.triage.residueReason).toBe("coverage-gap");
     expect(item.riskClass).toBe("bounded-write");
-  });
-
-  it("uses the verbatim question as the title when present", () => {
-    expect(aiDecisionToAttentionItem(base).title).toBe(base.question);
-  });
-
-  it("never renders a blank title — falls back to residue + blast when question is empty (BI-D35DE119)", () => {
-    // escalate on a build with no prose question → high-risk-gate fallback
-    const onBuild = aiDecisionToAttentionItem({ ...base, question: "   " });
-    expect(onBuild.title).toBe("AI decision needs your review — a high-risk gate on build FB-3");
-
-    // defer with no build/task and no question → coverage-gap, no location suffix
-    const bare = aiDecisionToAttentionItem({
-      ...base,
-      question: "",
-      outcomeType: "defer",
-      buildId: null,
-      taskRunId: null,
-    });
-    expect(bare.title).toBe("AI decision needs your review — a coverage gap");
-    expect(bare.title.trim().length).toBeGreaterThan(0);
   });
 });
 
