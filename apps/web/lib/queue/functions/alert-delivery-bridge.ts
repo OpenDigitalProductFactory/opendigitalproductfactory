@@ -122,8 +122,12 @@ export async function runAlertDeliveryScan(): Promise<AlertDeliveryResult> {
   return { firing: firingAll.length, delivered, resolved, capped, sourcesReached: reached };
 }
 
+// BI-915C40C6: every-minute crons multiply orphan accumulation (1440 runs/day).
+// Alert delivery does not need 60s latency — Prometheus/Loki already debounce
+// with `for:` windows — so poll every 5 minutes. taskrun-watchdog remains the
+// sole deliberate every-minute liveness guard (see catalog allowlist test).
 export const alertDeliveryBridge = inngest.createFunction(
-  { id: "ops/alert-delivery-bridge", retries: 2, triggers: [cron("*/1 * * * *")] },
+  { id: "ops/alert-delivery-bridge", retries: 2, triggers: [cron("*/5 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };

@@ -41,12 +41,25 @@ const MS_PER_DAY = 86_400_000;
 const SIX_HOURS_MS = 6 * MS_PER_HOUR;
 
 /**
+ * Observed ceiling for self-hosted Inngest Redis {estate} run-state TTL
+ * (BI-915C40C6 / BI-0AB96FE7). Inngest owns this TTL internally — DPF cannot
+ * set it from portal env without forking the server image. The durable bound
+ * is therefore the orphan reap below: once Redis state is gone, Postgres rows
+ * that still claim the run are corpses and must be deleted so the executor
+ * stops retrying them.
+ */
+export const INNGEST_REDIS_RUN_STATE_TTL_HOURS_CEILING = 16;
+
+/**
  * Age past which an UNFINISHED function_runs row is a genuine orphan: its Redis
  * {estate} state has certainly TTL-expired (observed TTLs ~12–16h), so the run
  * can never complete and the executor is only retrying a corpse. 24h sits
  * comfortably above the TTL ceiling AND above any legitimate long-running
  * function (self-upgrade < 1h; quiescence waits are budget-bounded), so nothing
  * live is ever reaped.
+ *
+ * Invariant (enforced by constants.test): ORPHAN_REAP_AGE_HOURS >
+ * INNGEST_REDIS_RUN_STATE_TTL_HOURS_CEILING.
  */
 export const ORPHAN_REAP_AGE_HOURS = 24;
 

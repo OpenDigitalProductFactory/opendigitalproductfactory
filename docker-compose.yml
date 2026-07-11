@@ -804,19 +804,19 @@ services:
     # validated on a throwaway DB copy (v7→v10, clean). Pin to keep :latest
     # from silently regressing again. BI-C8164664.
     #
+    # BI-915C40C6 (2026-07-11): bump pin 1.30 → 1.36 for orphan-reconciliation
+    # / dup-span handling improvements in newer releases. Redis {estate} TTL is
+    # still server-internal (~12–16h observed); DPF bounds corpses via the
+    # retention/orphan janitor (ORPHAN_REAP_AGE_HOURS=24), not by setting Redis.
+    #
     # IMPORTANT (2026-06-18): the version bump only stops NEW poison items from
     # being enqueued (1.28+ sets envID). It does NOT drain items already enqueued
     # by the 1.26-era bug — those live in the Redis queue store (INNGEST_REDIS_URI
     # below), not Postgres, so the goose history migration never touched them.
-    # v1.30 still rejects them at the lease-constraint check (nil wsID/envID), and
-    # because the failure is PRE-attempt the items never increment `atts`, never
-    # exhaust maxAtts, and never dead-letter — the scanner re-reads them forever.
-    # A backlog of ~22k such items re-scanned at ~135 lines/sec grew the container
-    # log to 5.8 GB ("logs scrolling like crazy"). One-time remediation after this
-    # pin: drain the stuck `{queue}:queue:sorted:<fnID>` partitions from the
-    # Inngest-dedicated Redis (see scripts/drain-inngest-poison-queue.sh). The
-    # `<<: *default-logging` cap below bounds the blast radius if it ever recurs.
-    image: inngest/inngest:v1.30.0
+    # Pre-1.28 poison items still need a one-time drain of stuck
+    # `{queue}:queue:sorted:<fnID>` partitions (scripts/drain-inngest-poison-queue.sh).
+    # The `<<: *default-logging` cap below bounds the blast radius if it ever recurs.
+    image: inngest/inngest:v1.36.0
     restart: unless-stopped
     logging: *default-logging
     command: "inngest start"

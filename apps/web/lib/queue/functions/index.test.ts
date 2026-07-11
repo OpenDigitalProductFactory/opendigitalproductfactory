@@ -47,3 +47,24 @@ describe("scheduled cron <-> catalog parity (drift guard)", () => {
     expect(orphaned).toEqual([]);
   });
 });
+
+describe("every-minute cron allowlist (BI-915C40C6)", () => {
+  // 1440 runs/day each is the orphan-accumulation multiplier. Only deliberate
+  // liveness guards may stay every-minute; everything else must be wider.
+  const EVERY_MINUTE = new Set(["* * * * *", "*/1 * * * *"]);
+  const ALLOWED_EVERY_MINUTE_INNGEST_IDS = new Set([
+    "ops/taskrun-watchdog", // deliberate stall/liveness guard — do not widen
+  ]);
+
+  it("catalog has no every-minute cron outside the deliberate allowlist", () => {
+    const offenders = SCHEDULED_JOB_CATALOG.filter(
+      (e) => EVERY_MINUTE.has(e.cron) && !ALLOWED_EVERY_MINUTE_INNGEST_IDS.has(e.inngestId),
+    ).map((e) => e.inngestId);
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps the taskrun-watchdog on the every-minute liveness cadence", () => {
+    const watchdog = SCHEDULED_JOB_CATALOG.find((e) => e.inngestId === "ops/taskrun-watchdog");
+    expect(watchdog?.cron).toBe("* * * * *");
+  });
+});
