@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "directoryPrefixes": [
+    "prompts/",
+    "skills/",
+    "docs/founder-kernel/wiki/",
+    "packages/dpf-skill-pack/skills/",
+    "packages/db/data/",
+    "packages/db/src/seed/",
+    "packages/storefront-templates/src/archetypes/",
+    "packages/finance-templates/src/"
+  ],
+  "filePatterns": [
+    "^packages/db/src/(?:seed(?:[-/].*)?\\.ts|.*-seed(?:-entries)?\\.ts)$",
+    "^packages/db/prisma/seed-.*\\.ts$",
+    "^apps/web/lib/(?:onboarding|storefront)/seed-.*\\.ts$",
+    "^apps/web/lib/routing/.*-seeder\\.ts$",
+    "^apps/web/lib/.*/.*-seed\\.ts$"
+  ],
+  "excludePatterns": [
+    "\\.(?:test|spec|stories)\\.[cm]?[jt]sx?$",
+    "(?:^|/)__tests__/"
+  ]
+}

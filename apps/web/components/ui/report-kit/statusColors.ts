@@ -440,6 +440,15 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     high: "warning",
     critical: "danger",
   },
+  // Hive contribution applicability for canonical seeded content.
+  seedContributionFit: {
+    "global-default": "success",
+    "archetype-scoped": "accent",
+    "vertical-scoped": "info",
+    "parameterize-first": "warning",
+    "install-local-only": "neutral",
+    "reject-as-seed": "danger",
+  },
 };
 
 /**

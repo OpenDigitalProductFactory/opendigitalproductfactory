@@ -28,6 +28,7 @@
     "check:module-size": "node scripts/check-module-size.mjs",
     "check:mcp-tool-pack": "node scripts/check-mcp-tool-pack.mjs",
     "check:guards": "node scripts/check-guards.mjs",
+    "check:seed-fit": "node scripts/check-seed-fit-decision.mjs",
     "check:architecture-parity": "pnpm --filter web exec tsx scripts/audit-architecture-parity.ts --baseline docs/superpowers/audits/2026-06-14-architecture-parity-baseline.json",
     "sbom": "node scripts/sbom/generate-platform-sbom.mjs",
     "check:sbom-drift": "node scripts/sbom/check-sbom-drift.mjs",
