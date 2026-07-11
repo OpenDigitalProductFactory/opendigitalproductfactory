@@ -524,7 +524,26 @@
     demand: "--dpf-info", service: "--dpf-accent", attention: "--dpf-warning",
     settled: "--dpf-success", exception: "--dpf-error",
   };
-  function cssVar(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+  // Canvas 2D cannot parse color-mix()/var(); our --vs-* tokens are color-mix
+  // expressions, so resolve each to a concrete rgb() via a probe element (the
+  // browser computes color-mix when it computes `color`). Without this the
+  // canvas silently falls back to black — invisible on the dark ground.
+  const _probe = document.createElement("span");
+  _probe.setAttribute("aria-hidden", "true");
+  _probe.style.cssText = "position:absolute;left:-9999px;top:-9999px;width:0;height:0;pointer-events:none";
+  document.body.appendChild(_probe);
+  const _colorCache = new Map();
+  function cssVar(v){
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    const themed = document.documentElement.getAttribute("data-theme") || "";
+    const key = v + "|" + themed + "|" + raw;
+    if (_colorCache.has(key)) return _colorCache.get(key);
+    _probe.style.color = "rgb(0,0,0)";
+    _probe.style.color = raw || "rgb(0,0,0)";
+    const resolved = getComputedStyle(_probe).color || raw || "#000";
+    _colorCache.set(key, resolved);
+    return resolved;
+  }
 
   /* ---------- layout ---------- */
   function resize() {
