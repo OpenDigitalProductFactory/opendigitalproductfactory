@@ -19,6 +19,16 @@ describe("coworker interaction contract", () => {
     expect(twice.match(new RegExp(COWORKER_INTERACTION_CONTRACT_HEADING, "g"))).toHaveLength(1);
   });
 
+  it("carries the clarify-vs-proceed / ask-less discipline (BI-0806FFF5)", () => {
+    const prompt = withCoworkerInteractionContract("Base prompt");
+    expect(prompt).toContain("Clarify vs proceed");
+    // Ask-less: prefer a stated assumption; at most one focused question.
+    expect(prompt).toMatch(/at most ONE focused question/i);
+    expect(prompt).toMatch(/reasonable assumption/i);
+    // Act on your own recommendation instead of handing back a menu.
+    expect(prompt).toMatch(/Act on your own recommendation/i);
+  });
+
   it("formats deterministic closeouts with the required four fields", () => {
     expect(formatCoworkerOperationalCloseout({
       status: "ready for PR",

@@ -144,6 +144,21 @@ export type ToolDefinition = {
    * memory; this flag only exempts it from the advise-mode runtime filter.
    */
   coworkerArtifact?: boolean;
+  /**
+   * Tool hands a scoped sub-task to a NAMED peer coworker (delegation /
+   * summon). Like `coworkerArtifact`, this is an advise-safe exemption: it
+   * remains `sideEffect: true` for MCP annotations and tool-execution memory,
+   * but is NOT stripped by the advise-mode runtime filter. Rationale
+   * (BI-7EB4AE2C): naming the right peer and handing off a scoped sub-task —
+   * with a visible handoff card the user sees inline — is COORDINATION, not an
+   * irreversible action on the outside world. The advise/act line guards
+   * against acting externally; routing work to a teammate is how an advisor
+   * gets the user a better answer. Without this flag an advise-mode coworker
+   * can NAME the right peer but the delegation is muzzled, so the sub-task
+   * dead-ends back to the human. Genuinely destructive writes stay
+   * `sideEffect: true` WITHOUT this flag and remain stripped in advise mode.
+   */
+  adviseCoordination?: boolean;
   /** When set, tool is only available during these build phases.
    *  Null/undefined = available in all phases (non-build tools). */
   buildPhases?: BuildPhaseTag[] | null;
@@ -2384,14 +2399,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
   },
   {
-    name: "apply_platform_update",
-    description: "Merge the new platform version into your customised source. Returns a clean merge or a list of conflicts for the AI coworker to resolve with you.",
-    inputSchema: { type: "object", properties: {} },
-    requiredCapability: "manage_platform",
-    executionMode: "immediate",
-    sideEffect: true,
-  },
-  {
     name: "evaluate_page",
     description: "Evaluate a live page for UX and accessibility issues using AI-powered browser automation (browser-use). Navigates to the page, analyzes layout, interactions, and accessibility, and returns structured findings. Works on production pages (default) or sandbox pages (if URL provided).",
     inputSchema: {
@@ -3285,6 +3292,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null,
     sideEffect: true,
+    // Delegation is advise-safe coordination — an advisor may route a scoped
+    // sub-task to a named peer with a visible handoff without leaving advise
+    // mode. Kept sideEffect:true for annotations; adviseCoordination exempts it
+    // from the advise-mode runtime filter (BI-7EB4AE2C).
+    adviseCoordination: true,
   },
   {
     name: "summon_coworker",
@@ -3301,6 +3313,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null,
     sideEffect: true,
+    // Bringing a named peer into the conversation is advise-safe coordination —
+    // the advisor decides which teammate to pull in; the handoff is visible and
+    // reversible. Kept sideEffect:true for annotations; adviseCoordination
+    // exempts it from the advise-mode runtime filter (BI-7EB4AE2C).
+    adviseCoordination: true,
   },
   {
     name: "trigger_contributor_inventory_sync",
@@ -3318,32 +3335,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
-  },
-  {
-    name: "summarize_upgrade_impact",
-    description:
-      "On-demand, install-tailored \"What's in this update?\" summary. Compares the upstream lineage marker (latest succeeded SelfUpgradeRun.targetSha) to the resolved upstream HEAD, classifies the change set by Conventional Commit type, scores each commit's relevance to this install (archetype, industry, customization paths, open quality-issue themes), and returns a headline + ordered top-N items (most impactful first) plus the full list and a 'touches your customizations' callout that doubles as a §5.0 merge-conflict early warning. Advisory only — never queues or applies an upgrade. Cacheable per (currentLineageSha, targetSha); set refresh=true to bypass.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        refresh: {
-          type: "boolean",
-          description: "Bypass the per-process cache and recompute. Default false.",
-        },
-        topN: {
-          type: "number",
-          description: "Cap on items in the headline list (default 8). The full list is always returned alongside.",
-        },
-        skipPhrasing: {
-          type: "boolean",
-          description: "Return only the deterministic shape (no LLM phrasing). Default false. Useful when an external client wants to render its own copy.",
-        },
-      },
-      required: [],
-    },
-    requiredCapability: "view_operations",
-    executionMode: "immediate",
-    sideEffect: false,
   },
 ];
 
@@ -5204,6 +5195,29 @@ export async function executeTool(
           "[record_external_development_evidence] auto-capsule capture failed:",
           getErrorMessage(captureError),
         );
+      }
+
+      // Bind the evidence record to the capsule the capture just resolved so it
+      // rolls up onto the capsule timeline with producer identity
+      // (EP-WORK-CONVERGENCE Phase 1 / BI-D6FA8641). The record was written
+      // before capture (order preserved for back-compat); patch it here.
+      // Best-effort — a link failure must never fail the evidence write.
+      if (capturedCapsuleId) {
+        try {
+          await prisma.externalEvidenceRecord.update({
+            where: { id: evidence.id },
+            data: {
+              workCapsuleId: capturedCapsuleId,
+              executorKind: provider,
+              ...(context?.agentId ? { recordedByAgentId: context.agentId } : {}),
+            },
+          });
+        } catch (linkError) {
+          console.warn(
+            "[record_external_development_evidence] capsule link failed:",
+            getErrorMessage(linkError),
+          );
+        }
       }
 
       return {
@@ -11878,49 +11892,6 @@ export async function executeTool(
       };
     }
 
-    case "apply_platform_update": {
-      // Delegates to the shared server action in lib/actions/platform-dev-config.ts.
-      // The same code path backs the in-portal Apply Update UI added in
-      // BI-9B77E247, so both surfaces produce identical merge behavior and
-      // identical structured results — single source of truth.
-      const { applyPlatformUpdate } = await import("@/lib/actions/platform-dev-config");
-      const result = await applyPlatformUpdate();
-
-      switch (result.kind) {
-        case "engine-retired":
-          // BI-5B6C1C35: the /workspace merge engine is retired; the install
-          // advances only via the Self-Upgrade pipeline (governed-upgrade §5.0).
-          return { success: false, message: result.message, error: "Engine retired — use Self-Upgrade" };
-        case "no-update-pending":
-          return { success: false, message: result.message, error: "No update pending" };
-        case "invalid-version":
-          return { success: false, message: result.message, error: "Invalid version" };
-        case "conflicts":
-          return {
-            success: true,
-            message: result.message,
-            data: {
-              clean: false,
-              resumedMerge: result.resumedMerge,
-              conflicts: result.conflicts,
-              version: result.version,
-            } as unknown as Record<string, unknown>,
-          };
-        case "clean-merge":
-          return {
-            success: true,
-            message: result.message,
-            data: {
-              clean: true,
-              filesUpdated: result.filesUpdated,
-              version: result.version,
-            },
-          };
-        case "error":
-          return { success: false, message: result.message, error: result.message };
-      }
-    }
-
     case "get_finance_period_summary": {
       const { formatFinancePeriodSummary, getFinancePeriodSummary } = await import("@/lib/finance/period-summary");
       const periodInput: Parameters<typeof getFinancePeriodSummary>[0] = {};
@@ -12788,42 +12759,6 @@ export async function executeTool(
           success: false,
           error: msg,
           message: `trigger_contributor_inventory_sync failed: ${msg}`,
-        };
-      }
-    }
-
-    case "summarize_upgrade_impact": {
-      // BI-C26F7EE1 — on-demand install-tailored upgrade impact summary.
-      // Read-only, advisory; does not queue or apply anything.
-      const refresh = params["refresh"] === true;
-      const skipPhrasing = params["skipPhrasing"] === true;
-      const topNRaw = params["topN"];
-      const topN =
-        typeof topNRaw === "number" && Number.isFinite(topNRaw) && topNRaw > 0
-          ? Math.floor(topNRaw)
-          : undefined;
-      try {
-        const { summarizeUpgradeImpact } = await import("@/lib/self-upgrade/impact");
-        const result = await summarizeUpgradeImpact({ refresh, skipPhrasing, topN });
-        if (!result.ok) {
-          return {
-            success: true,
-            message: result.detail,
-            data: { ok: false, reason: result.reason, detail: result.detail },
-          };
-        }
-        return {
-          success: true,
-          message: result.summary.phrased?.headline
-            ?? `Upgrade impact summary: ${result.summary.counts.total} commit(s) since the last lineage marker.`,
-          data: result.summary as unknown as Record<string, unknown>,
-        };
-      } catch (err) {
-        const msg = getErrorMessage(err);
-        return {
-          success: false,
-          error: msg,
-          message: `summarize_upgrade_impact failed: ${msg}`,
         };
       }
     }

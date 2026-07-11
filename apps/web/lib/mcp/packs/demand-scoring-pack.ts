@@ -60,6 +60,38 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
+  {
+    name: "find_duplicate_candidates",
+    description:
+      "Find open backlog items that look like near-duplicates of a given item (by title/body similarity), so demand can be merged instead of fragmenting reach across duplicates. Read-only — returns ranked candidates; use merge_backlog_items to actually merge.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "The item to find duplicates of." },
+        threshold: { type: "number", description: "Similarity cutoff 0..1 (default 0.5). Higher = stricter." },
+        limit: { type: "number", description: "Max candidates to return (default 10)." },
+      },
+      required: ["itemId"],
+    },
+    requiredCapability: "view_operations",
+    sideEffect: false,
+  },
+  {
+    name: "merge_backlog_items",
+    description:
+      "Merge a duplicate backlog item into a canonical one: the duplicate's reach (occurrenceCount) is added to the canonical item so signal concentrates rather than fragments, and the duplicate is retired (status=deferred, duplicateOfId set to the canonical item). Audited.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        canonicalItemId: { type: "string", description: "The surviving item that absorbs the duplicate." },
+        duplicateItemId: { type: "string", description: "The item to retire into the canonical one." },
+        rationale: { type: "string", description: "Short reason for the merge." },
+      },
+      required: ["canonicalItemId", "duplicateItemId"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
 ];
 
 async function scoreDemandItemHandler(params: Record<string, unknown>): Promise<ToolResult> {
@@ -192,15 +224,86 @@ async function setDemandPolicyHandler(params: Record<string, unknown>): Promise<
   };
 }
 
+async function findDuplicateCandidatesHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const itemId = String(params["itemId"] ?? "");
+  const target = await prisma.backlogItem.findUnique({
+    where: { itemId },
+    select: { itemId: true, title: true, body: true, portfolioId: true },
+  });
+  if (!target) return { success: false, error: "not_found", message: `Item ${itemId} not found` };
+  const threshold = typeof params["threshold"] === "number" ? (params["threshold"] as number) : 0.5;
+  const limit = typeof params["limit"] === "number" ? Math.max(1, Math.min(50, params["limit"] as number)) : 10;
+  // Compare against open, non-terminal items (optionally same portfolio).
+  const pool = await prisma.backlogItem.findMany({
+    where: {
+      status: { notIn: ["done", "deferred"] },
+      itemId: { not: itemId },
+      ...(target.portfolioId ? { portfolioId: target.portfolioId } : {}),
+    },
+    select: { itemId: true, title: true, body: true },
+    take: 500,
+  });
+  const { findDuplicateCandidates } = await import("@/lib/demand/dedup");
+  const candidates = findDuplicateCandidates(target, pool, threshold).slice(0, limit);
+  return {
+    success: true,
+    entityId: itemId,
+    message:
+      candidates.length > 0
+        ? `${candidates.length} possible duplicate(s) of ${itemId}.`
+        : `No open items above similarity ${threshold} for ${itemId}.`,
+    data: { candidates },
+  };
+}
+
+async function mergeBacklogItemsHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const canonicalItemId = String(params["canonicalItemId"] ?? "");
+  const duplicateItemId = String(params["duplicateItemId"] ?? "");
+  if (canonicalItemId === duplicateItemId) {
+    return { success: false, error: "same_item", message: "Cannot merge an item into itself." };
+  }
+  const [canonical, duplicate] = await Promise.all([
+    prisma.backlogItem.findUnique({ where: { itemId: canonicalItemId }, select: { id: true, occurrenceCount: true } }),
+    prisma.backlogItem.findUnique({ where: { itemId: duplicateItemId }, select: { id: true, occurrenceCount: true, status: true } }),
+  ]);
+  if (!canonical) return { success: false, error: "not_found", message: `Canonical ${canonicalItemId} not found` };
+  if (!duplicate) return { success: false, error: "not_found", message: `Duplicate ${duplicateItemId} not found` };
+  const { computeMerge } = await import("@/lib/demand/dedup");
+  const { mergedOccurrenceCount } = computeMerge({
+    survivorOccurrenceCount: canonical.occurrenceCount,
+    duplicateOccurrenceCount: duplicate.occurrenceCount,
+  });
+  await prisma.$transaction([
+    prisma.backlogItem.update({
+      where: { itemId: canonicalItemId },
+      data: { occurrenceCount: mergedOccurrenceCount, lastSeenAt: new Date() },
+    }),
+    prisma.backlogItem.update({
+      where: { itemId: duplicateItemId },
+      data: { status: "deferred", triageOutcome: "duplicate", duplicateOfId: canonical.id },
+    }),
+  ]);
+  return {
+    success: true,
+    entityId: canonicalItemId,
+    message: `Merged ${duplicateItemId} into ${canonicalItemId}; reach now ${mergedOccurrenceCount}.`,
+    data: { canonicalItemId, duplicateItemId, mergedOccurrenceCount },
+  };
+}
+
 export const demandScoringPack: ToolPack = {
   packId: "demand-scoring",
   definitions,
   handlers: {
     score_demand_item: (params) => scoreDemandItemHandler(params),
     set_demand_policy: (params) => setDemandPolicyHandler(params),
+    find_duplicate_candidates: (params) => findDuplicateCandidatesHandler(params),
+    merge_backlog_items: (params) => mergeBacklogItemsHandler(params),
   },
   grants: {
     score_demand_item: ["backlog_write"],
     set_demand_policy: ["backlog_write"],
+    find_duplicate_candidates: ["backlog_read"],
+    merge_backlog_items: ["backlog_write"],
   },
 };
