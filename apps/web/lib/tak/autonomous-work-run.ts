@@ -219,6 +219,8 @@ export async function executeAutonomousAgenticLoop(input: {
   threadId: string;
   taskRunId?: string | null;
   taskType?: string;
+  /** EP-27FD96BC · P1 — unified per-turn effort warrant, forwarded to the loop. */
+  effortWarrant?: import("@/lib/tak/effort-warrant").EffortWarrant;
   agentDisplayName?: string;
   buildPhase?: string | null;
   featureBuildId?: string | null;
@@ -277,6 +279,7 @@ export async function executeAutonomousAgenticLoop(input: {
       taskRunId: input.taskRunId,
       apiTokenId: input.apiTokenId,
       taskType: input.taskType,
+      effortWarrant: input.effortWarrant,
       agentDisplayName: input.agentDisplayName,
       buildPhase: input.buildPhase,
       featureBuildId: input.featureBuildId,

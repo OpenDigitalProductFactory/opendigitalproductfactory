@@ -35,6 +35,15 @@ export type BuildFailureClass =
   // upgrade before diagnosing anything (SUR-73668D5C, 2026-07-05: one flaky
   // smol-toml fetch failed the upgrade; the identical tree built clean on retry).
   | "pnpm-install-failure"
+  // A build-time import uses a RELATIVE path that climbs OUT of apps/web into a
+  // repo-root directory (config/, docs/, packages/ data JSON, …) that the
+  // production Dockerfile's narrow COPY allowlist never copies into the build
+  // context. The file resolves on the full host/CI checkout (plain `next build`
+  // → green) but 404s inside the narrower Docker image — only exercised at
+  // self-upgrade / tag-release. Distinct from a bare-specifier hoist and from a
+  // bundle-boundary lazy-import issue; fixed by adding the missing `COPY <dir>/`
+  // (see PR #2786 + the dockerfile-build-context guard).
+  | "docker-build-context-missing-path"
   | "unknown";
 
 export type BuildFailureClassification = {
@@ -63,6 +72,10 @@ export type BuildFailureInput = {
 
 const SPEC = "docs/superpowers/specs/2026-06-06-procedural-functional-verification-design.md";
 const HOIST_PLAYBOOK = "docs/triage/2026-05-24-portal-prisma-generate-rebuild-failure.md";
+// The guard PR #2786 added: it derives the build-stage COPY allowlist from the
+// Dockerfile and fails Unit Tests if an apps/web static import escapes into an
+// un-COPYed repo dir. Adding the missing `COPY <dir>/` auto-satisfies it.
+const DOCKER_CONTEXT_PLAYBOOK = "apps/web/lib/verify/dockerfile-build-context.guard.test.ts";
 
 // Docker-only / host-only modules that must never be statically imported into a
 // route/page/action/Inngest bundle. Their presence in a Turbopack/NFT trace is
@@ -71,6 +84,10 @@ const HOST_ONLY_MODULE = /(promoter|self-upgrade|child_process|node:child_proces
 const DUPLICATE_ASSET = /(duplicate\s+emitted\s+asset|multiple\s+assets\s+emit|conflict:.*emit|emit[^\n]*to the same (file|filename))/i;
 const UNEXPECTED_NFT_PROJECT_TRACE = /encountered unexpected file in NFT list|whole project was traced unintentionally/i;
 const MODULE_NOT_FOUND = /(cannot find module ['"]([^'"]+)['"]|module not found:\s*can't resolve ['"]([^'"]+)['"])/i;
+// A relative import climbing OUT of the importing package (one or more "../"),
+// e.g. '../../../../config/seed-content-paths.json'. The first non-".." segment
+// ('config') is the repo-root dir the Docker COPY allowlist is missing.
+const RELATIVE_ESCAPE = /^\.\.\/(?:\.\.\/)*([^/'"]+)/;
 
 // The Dockerfile RUN line for a dependency install that exited non-zero —
 // present even when the builder's step output (pnpm's own error text) was lost.
@@ -96,6 +113,31 @@ export function classifyBuildFailure(
   input: BuildFailureInput,
 ): BuildFailureClassification {
   const log = input.log ?? "";
+
+  // Fatal-marker priority for the most specific case. A "Module not found" whose
+  // missing spec is a RELATIVE path climbing out of the package
+  // ('../../../../config/…') is a Docker build-context miss: the file exists on
+  // the full checkout but its repo-root dir is not COPYed into the image.
+  // Turbopack/NFT "whole project traced unintentionally" WARNINGS routinely
+  // print ABOVE this fatal and fingerprint a host-only module, so the
+  // bundle-boundary heuristic below would otherwise steal the class —
+  // SUR-BCFB72BB was mislabeled `bundle-boundary-static-import` for exactly this
+  // reason, sending its corrective BI to the wrong playbook. Classify the
+  // escaping fatal FIRST. (A bare-specifier miss like 'undici' is NOT this class
+  // and falls through to the bundle-boundary / hoist paths below unchanged.)
+  const earlyMiss = log.match(MODULE_NOT_FOUND);
+  const earlyMissSpec = earlyMiss ? earlyMiss[2] || earlyMiss[3] || "" : "";
+  const escape = earlyMissSpec.match(RELATIVE_ESCAPE);
+  if (escape) {
+    const rootDir = escape[1];
+    return {
+      class: "docker-build-context-missing-path",
+      summary: `Docker build cannot resolve '${earlyMissSpec}' — a relative import climbing out of apps/web into the repo-root '${rootDir}/' directory, which the production Dockerfile's narrow COPY allowlist never copies into the build context (plain \`next build\` on the full checkout stays green; only the Docker image, built at self-upgrade/tag-release, 404s). Add \`COPY ${rootDir}/\` to the build (and init) stage — see PR #2786 and the dockerfile-build-context guard. NOT a bundle-boundary issue.`,
+      playbookLink: DOCKER_CONTEXT_PLAYBOOK,
+      failingTrace: traceAround(log, MODULE_NOT_FOUND),
+      isMainDefectVsEnvironment: "main-defect",
+    };
+  }
 
   // Most specific first: a Turbopack/NFT error whose trace fingerprints a
   // host-only module is a bundle-boundary violation, not a generic NFT cascade

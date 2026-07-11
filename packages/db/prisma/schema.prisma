@@ -4529,6 +4529,10 @@ model UserFact {
   // the memory-scope classifier.
   scope                             String     @default("user")
   sensitivity                       String     @default("normal")
+  // BI-BC37727B (EP-27FD96BC P5): set by the nightly memory→corpus promoter when
+  // a durable org-scoped fact has been enriched into the WWWD corpus. NULL = not
+  // yet promoted; a superseded fact's replacement row starts NULL and re-promotes.
+  corpusPromotedAt                  DateTime?
   createdAt                         DateTime   @default(now())
   updatedAt                         DateTime   @updatedAt
   user                              User       @relation(fields: [userId], references: [id], onDelete: Cascade)

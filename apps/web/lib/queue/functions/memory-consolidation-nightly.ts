@@ -20,6 +20,7 @@ import {
   expireStaleUserFacts,
   pruneSummarizedThreadMessages,
 } from "@/lib/tak/memory-expiry-runner";
+import { promoteOrgFactsToCorpus } from "@/lib/tak/memory-corpus-promotion";
 
 /** 04:20 UTC daily — off-peak, clear of the 03:00 backup + 04:00 retention slots. */
 export const MEMORY_CONSOLIDATION_CRON = "20 4 * * *";
@@ -33,6 +34,7 @@ export interface MemoryConsolidationResult {
   factsExpired: number;
   threadsPruned: number;
   messagesPruned: number;
+  factsPromotedToCorpus: number;
 }
 
 /**
@@ -50,6 +52,7 @@ export async function runMemoryConsolidationSweep(): Promise<MemoryConsolidation
     factsExpired: 0,
     threadsPruned: 0,
     messagesPruned: 0,
+    factsPromotedToCorpus: 0,
   };
 
   // Coworkers with at least one active note.
@@ -82,6 +85,17 @@ export async function runMemoryConsolidationSweep(): Promise<MemoryConsolidation
     } catch (err) {
       console.warn(`[autoDream] user ${userId} sweep failed:`, err);
     }
+  }
+
+  // Promote durable org-scoped facts into the WWWD org corpus (BI-BC37727B).
+  // Runs AFTER dedupe/expire so a promoted fact is the settled, non-duplicate
+  // survivor. Install-wide (one org); lands corpus drafts a human reviews. One
+  // failure inside the pass is logged there and never aborts the sweep.
+  try {
+    const promotion = await promoteOrgFactsToCorpus();
+    result.factsPromotedToCorpus += promotion.promoted;
+  } catch (err) {
+    console.warn("[autoDream] org-fact corpus promotion failed:", err);
   }
 
   // Prune raw messages already folded into a durable checkpoint and older than

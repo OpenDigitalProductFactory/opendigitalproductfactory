@@ -1050,6 +1050,13 @@ export async function runAgenticLoop(params: {
   agentId: string;
   threadId: string;
   taskType?: string;
+  /**
+   * EP-27FD96BC · P1 (BI-DA26BF90). The unified per-turn effort warrant. When
+   * present, its `maxIterations` bounds the loop and its `maxDurationMs` sets the
+   * conversation-phase duration baseline (heavy tool phases still win via max).
+   * Absent = today's exact behavior (MAX_ITERATIONS / MAX_DURATION_MS).
+   */
+  effortWarrant?: import("./effort-warrant").EffortWarrant;
   modelRequirements?: Record<string, unknown>;
   /** @deprecated V2 routing is handled internally by routeAndCall. Ignored. */
   routeDecision?: unknown;
@@ -1148,6 +1155,7 @@ export async function runAgenticLoop(params: {
     agentId,
     threadId,
     taskType,
+    effortWarrant,
     modelRequirements,
     onProgress,
     requireTools,
@@ -1339,7 +1347,21 @@ export async function runAgenticLoop(params: {
     });
   };
 
-  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+  // EP-27FD96BC · P1 — the unified warrant bounds iterations for this turn.
+  // Clamped to the hard MAX_ITERATIONS safety ceiling; absent warrant = 200.
+  const iterationCeiling = Math.min(
+    MAX_ITERATIONS,
+    effortWarrant?.maxIterations ?? MAX_ITERATIONS,
+  );
+  if (effortWarrant) {
+    console.log(
+      `[agentic-loop] effort-warrant level=${effortWarrant.level} ` +
+        `iterations=${iterationCeiling} durationBaselineMs=${effortWarrant.maxDurationMs} ` +
+        `toolBudgetTarget=${effortWarrant.toolBudgetTarget} signals=${effortWarrant.signals.join(",")}`,
+    );
+  }
+
+  for (let iteration = 0; iteration < iterationCeiling; iteration++) {
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
     if (agentEventBus.isCancelled(threadId)) {
       agentEventBus.clearCancel(threadId);
@@ -1438,12 +1460,17 @@ export async function runAgenticLoop(params: {
       t.name === "deploy_feature" || t.name === "execute_promotion" ||
       t.name === "register_digital_product_from_build" || t.name === "schedule_promotion"
     );
+    // EP-27FD96BC · P1 — the effort warrant sets the conversation-phase baseline:
+    // a trivial turn earns less wall-clock, an effortful reasoning turn earns more
+    // even with no heavy tools. A tool-revealed heavy phase (build/ship/plan/
+    // review) still takes its own ceiling. Absent warrant = the prior 120s.
+    const conversationDurationBaseline = effortWarrant?.maxDurationMs ?? MAX_DURATION_MS;
     const durationLimit = hasBuildTools ? MAX_DURATION_BUILD_MS
       : hasShipTools ? MAX_DURATION_SHIP_MS
       : hasPlanTools ? MAX_DURATION_PLAN_MS
       : hasReviewTools ? MAX_DURATION_REVIEW_MS
       : hasIdeateTools ? MAX_DURATION_PLAN_MS
-      : MAX_DURATION_MS;
+      : conversationDurationBaseline;
     if (Date.now() - startTime > durationLimit) {
       console.warn(`[agentic-loop] hit MAX_DURATION (${durationLimit}ms). executedTools=${executedTools.length}.`);
       break;
@@ -1931,7 +1958,7 @@ export async function runAgenticLoop(params: {
       const shouldNudgeNow = result.toolsStripped ? false : shouldNudge({
         continuationNudges,
         iteration,
-        maxIterations: MAX_ITERATIONS,
+        maxIterations: iterationCeiling,
         hasTools: !!(toolsForProvider && toolsForProvider.length > 0) || planEnabled,
         executedToolCount: executedTools.length,
         responseLength: trimmed.length,
@@ -2381,7 +2408,9 @@ export async function runAgenticLoop(params: {
 
   // Safety limit reached — log it so we can tune if needed
   console.warn(
-    `[agentic-loop] hit MAX_ITERATIONS (${MAX_ITERATIONS}). executedTools=${executedTools.length}. ` +
+    `[agentic-loop] hit iteration ceiling (${iterationCeiling}` +
+    `${iterationCeiling !== MAX_ITERATIONS ? `, warranted level=${effortWarrant?.level}` : ""}). ` +
+    `executedTools=${executedTools.length}. ` +
     `This may indicate the model needs more room or is stuck in a loop.`,
   );
   const fallbackContent = lastResult?.content?.trim() ?? "";
