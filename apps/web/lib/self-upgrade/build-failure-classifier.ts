@@ -44,6 +44,12 @@ export type BuildFailureClass =
   // bundle-boundary lazy-import issue; fixed by adding the missing `COPY <dir>/`
   // (see PR #2786 + the dockerfile-build-context guard).
   | "docker-build-context-missing-path"
+  // The promoter subprocess blew its wall-clock budget and runPromoter killed it
+  // (`[promoter-timeout]`). Almost always a transient environment stall — a
+  // `docker build` step hanging on a degraded network fetch (SUR-756751D1: an
+  // `apk add` that crawled 52 min). Retry the upgrade; only dig deeper if it
+  // times out the same way twice. Environment, not a main defect.
+  | "promoter-timeout"
   | "unknown";
 
 export type BuildFailureClassification = {
@@ -99,6 +105,8 @@ const PNPM_OUTDATED_LOCKFILE = /ERR_PNPM_(OUTDATED_)?LOCKFILE|specifiers in the 
 // failures (e.g. prisma migrate unable to reach postgres) and must stay
 // unclassified rather than misdiagnosed as a dependency fetch.
 const PNPM_FETCH_ERROR = /ERR_PNPM_FETCH|ERR_PNPM_META_FETCH_FAIL|GET https:\/\/registry\.npmjs\.org\/[^\s]+: (?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|socket hang up)/i;
+// runPromoter's marker when it kills a promoter that blew its wall-clock budget.
+const PROMOTER_TIMEOUT = /\[promoter-timeout\]/i;
 
 /** Up to ~6 lines around the first matching line, capped, for the agent. */
 function traceAround(log: string, re: RegExp): string {
@@ -113,6 +121,20 @@ export function classifyBuildFailure(
   input: BuildFailureInput,
 ): BuildFailureClassification {
   const log = input.log ?? "";
+
+  // A promoter timeout supersedes whatever build output preceded it: the kill
+  // happened because nothing ever completed, so any half-emitted trace above is
+  // noise, not the cause. Check it first.
+  if (PROMOTER_TIMEOUT.test(log)) {
+    return {
+      class: "promoter-timeout",
+      summary:
+        "The promoter exceeded its wall-clock budget and was killed (its container force-removed). Almost always a transient environment stall — a docker-build step hanging on a degraded network fetch (SUR-756751D1: an `apk add` that crawled 52 min). Retry the upgrade; only dig deeper if it times out the same way twice.",
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, PROMOTER_TIMEOUT),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
 
   // Fatal-marker priority for the most specific case. A "Module not found" whose
   // missing spec is a RELATIVE path climbing out of the package
