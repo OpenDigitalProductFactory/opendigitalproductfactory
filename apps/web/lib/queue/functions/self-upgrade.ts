@@ -594,6 +594,10 @@ export async function runSelfUpgrade(
       healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
       promoterImage: config.promoterImage,
       dryRun: params.dryRun,
+      // Deterministic name so a stalled build can be force-removed by name on
+      // timeout (runPromoter) or by the watchdog backstop. docker names allow
+      // [A-Za-z0-9_.-]; runId (e.g. SUR-756751D1) is already safe.
+      containerName: `dpf-promoter-${run.runId}`,
     });
   } catch (err) {
     // The promoter failed to even spawn (e.g. docker missing). Without this

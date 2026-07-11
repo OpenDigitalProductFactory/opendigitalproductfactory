@@ -53,6 +53,7 @@ import { deliberationRunPack } from "./packs/deliberation-run-pack";
 import { scheduledAgentTaskPack } from "./packs/scheduled-agent-task-pack";
 import { crmSalesPipelinePack } from "./packs/crm-sales-pipeline-pack";
 import { platformUpdatePack } from "./packs/platform-update-pack";
+import { licensingPack } from "./packs/licensing-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
@@ -92,4 +93,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   scheduledAgentTaskPack,
   crmSalesPipelinePack,
   platformUpdatePack,
+  licensingPack,
 ]);

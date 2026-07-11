@@ -158,6 +158,19 @@ describe("classifyBuildFailure", () => {
     expect(c.summary).toContain("lockfile");
   });
 
+  it("classifies a promoter timeout as retryable environment, superseding earlier build noise", () => {
+    // The kill happened because nothing completed, so a half-emitted NFT trace
+    // above the marker is noise — the timeout must win.
+    const log = `#30 [build 66/105] RUN apk add --no-cache docker-cli curl nmap
+#30 40.11 (12/27) Installing docker-cli (29.5.3-r0)
+[promoter-timeout] promoter did not finish within 25m — killed and container force-removed.`;
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("promoter-timeout");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.summary).toContain("Retry the upgrade");
+    expect(c.failingTrace).toContain("[promoter-timeout]");
+  });
+
   it("keeps a non-pnpm ECONNREFUSED (e.g. prisma → postgres) unclassified", () => {
     const c = classifyBuildFailure({ log: UNKNOWN_LOG });
     expect(c.class).toBe("unknown");

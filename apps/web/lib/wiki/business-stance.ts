@@ -6,8 +6,48 @@
 // module is pure: slug derivation + input validation, unit tested. The write
 // itself goes through `saveWikiOverlayEdit` (org overlay, draft by default).
 
+import type { DecisionDomainClass } from "@/lib/decision-perspective/types";
+
 /** WWWD stance overlay pages live under this slug prefix, mirroring the kernel. */
 export const BUSINESS_STANCE_SLUG_PREFIX = "stances";
+
+// ─── Decision areas (BI-002DEB85) ────────────────────────────────────────────
+// The plain-language buckets an owner picks when publishing a stance. Each maps
+// to the gate's domainClass so a published stance becomes GATE-LIVE material in
+// the right class — never exposing the internal taxonomy to the owner.
+
+export const DECISION_AREAS = [
+  {
+    key: "customers-and-money",
+    label: "Customers & money",
+    hint: "Refunds, goodwill, discounts, spending",
+    domainClass: "risk-assessment" as DecisionDomainClass,
+  },
+  {
+    key: "priorities-and-planning",
+    label: "Priorities & planning",
+    hint: "What we take on and in what order",
+    domainClass: "plan-readiness" as DecisionDomainClass,
+  },
+  {
+    key: "quality-and-craft",
+    label: "Quality & how we work",
+    hint: "Standards, rework, commitments",
+    domainClass: "professional-practice" as DecisionDomainClass,
+  },
+  {
+    key: "vendors-and-tools",
+    label: "Vendors & tools",
+    hint: "Suppliers, tooling, structural choices",
+    domainClass: "architecture-tradeoff" as DecisionDomainClass,
+  },
+] as const;
+
+export type DecisionAreaKey = (typeof DECISION_AREAS)[number]["key"];
+
+export function decisionAreaToDomainClass(key: string): DecisionDomainClass | null {
+  return DECISION_AREAS.find((a) => a.key === key)?.domainClass ?? null;
+}
 
 /**
  * Derive a stable, kernel-style slug from a stance title.
