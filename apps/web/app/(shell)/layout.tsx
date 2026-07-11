@@ -16,7 +16,7 @@ import { PlatformBanner } from "@/components/platform/PlatformBanner";
 import { ShellBannerOverlay } from "@/components/shell/ShellBannerOverlay";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
 import { SetupOverlay } from "@/components/setup/SetupOverlay";
-import { getShellNavSections, type PortalAudienceMode } from "@/lib/permissions";
+import { getShellNavSections } from "@/lib/permissions";
 import { cookies } from "next/headers";
 import { getActiveOrgCapabilities } from "@/lib/storefront/civic-surfaces.server";
 import { AppRail } from "@/components/shell/AppRail";
@@ -24,6 +24,7 @@ import { ShellBreadcrumb } from "@/components/shell/ShellBreadcrumb";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveHomePhoneCountry } from "@/lib/phone-country.server";
 import { PhoneCountryProvider } from "@/components/ui/PhoneCountryContext";
+import { NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists.
@@ -137,12 +138,10 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       });
 
   const brandingCss = buildBrandingStyleTag(activeBranding?.tokens ?? null);
-  // Worker/operator rail mode (EP-NAV-COHERENCE P4). Default "operator" = the full rail
-  // (no behavior change); a user opts into the condensed "worker" rail via the rail's mode
-  // toggle, which sets this cookie. Operator is always one toggle away, so worker mode
-  // never strands a user away from a surface their role can reach.
-  const navModeCookie = (await cookies()).get("dpf-nav-mode")?.value;
-  const navMode: PortalAudienceMode = navModeCookie === "worker" ? "worker" : "operator";
+  // Worker/operator rail mode (EP-NAV-COHERENCE P4 / BI-655418A7). Default
+  // "operator" = the full rail; "Simple" writes worker via the rail toggle.
+  // Operator is always one toggle away, so worker mode never strands a user.
+  const navMode = resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value);
   const shellNavSections = activeSetup
     ? []
     : getShellNavSections(

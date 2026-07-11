@@ -96,4 +96,16 @@ describe("PlatformWorkspaceHome", () => {
     expect(html).not.toContain("Domain readiness");
     expect(html).not.toContain("Command Center");
   });
+
+  it("simple density hides the work-area launcher so Simple mode changes the page body (BI-655418A7)", () => {
+    const full = renderToStaticMarkup(<PlatformWorkspaceHome data={fixtureData} density="full" />);
+    const simple = renderToStaticMarkup(<PlatformWorkspaceHome data={fixtureData} density="simple" />);
+
+    expect(full).toContain("Work areas");
+    expect(full).toContain("Show areas");
+    expect(simple).not.toContain("Work areas");
+    expect(simple).not.toContain("Show areas");
+    expect(simple).toContain("Simple view");
+    expect(simple).toContain('data-workspace-density="simple"');
+  });
 });

@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/workspace/page.tsx
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { prisma } from "@dpf/db";
 import { PlatformWorkspaceHome } from "@/components/workspace-home/PlatformWorkspaceHome";
 import { VerticalWorkspaceHome } from "@/components/workspace-home/VerticalWorkspaceHome";
@@ -10,10 +11,19 @@ import { UnconfiguredWorkspaceHomeNotice } from "@/components/workspace-home/Unc
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
 import { resolveWorkspaceHomeContribution } from "@/lib/workspace-home/registry";
 import { recordWorkspaceHomeResolution } from "@/lib/workspace-home/telemetry";
+import {
+  isSimpleNavMode,
+  NAV_MODE_COOKIE,
+  resolveNavModeFromCookie,
+} from "@/lib/navigation/nav-mode";
 
 export default async function WorkspacePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+
+  // BI-655418A7: Simple mode must condense the home body, not only the rail.
+  const navMode = resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value);
+  const simpleHome = isSimpleNavMode(navMode);
 
   const platformHomeData = await loadPlatformWorkspaceHomeData({
     prismaClient: prisma,
@@ -37,7 +47,7 @@ export default async function WorkspacePage() {
   });
 
   return (
-    <div>
+    <div data-nav-mode={navMode}>
       {workspaceHomeResolution.mode === "unconfigured" && <UnconfiguredWorkspaceHomeNotice />}
       {workspaceHomeResolution.mode !== "unconfigured" && !hasCloudProvider && (
         <LocalOnlyProviderNotice />
@@ -52,7 +62,10 @@ export default async function WorkspacePage() {
           data={platformHomeData}
         />
       ) : (
-        <PlatformWorkspaceHome data={platformHomeData} />
+        <PlatformWorkspaceHome
+          data={platformHomeData}
+          density={simpleHome ? "simple" : "full"}
+        />
       )}
     </div>
   );
