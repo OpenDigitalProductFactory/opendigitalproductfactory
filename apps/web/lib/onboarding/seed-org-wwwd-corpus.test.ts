@@ -147,19 +147,30 @@ describe("seedOrgWwwdCorpus", () => {
     expect(fake.versions).toHaveLength(1);
     expect(fake.versions[0]).toMatchObject({ versionId: result.versionId, versionNumber: 1 });
 
-    // Four materials, each linked to a wiki page + the version
-    expect(result.materialCount).toBe(4);
-    expect(fake.materials).toHaveLength(4);
+    // Twelve materials across all four decision classes (BI-70ADC71F)
+    expect(result.materialCount).toBe(12);
+    expect(fake.materials).toHaveLength(12);
     for (const m of fake.materials) {
       expect(m.profileVersionId).toBe(result.versionId);
-      expect(m.domainClass).toBe("plan-readiness");
       expect(m.reviewStatus).toBe("approved");
       expect(m.promotionState).toBe("promoted");
+      expect(m.evidenceGrade).toBe("B");
+      expect(m.confidenceWeight).toBe(0.6);
       expect(m.sourceRef.wikiPageId).toBeTruthy();
     }
+    const byClass = fake.materials.reduce<Record<string, number>>((acc, m) => {
+      acc[m.domainClass] = (acc[m.domainClass] ?? 0) + 1;
+      return acc;
+    }, {});
+    expect(byClass).toEqual({
+      "plan-readiness": 4,
+      "risk-assessment": 3,
+      "professional-practice": 3,
+      "architecture-tradeoff": 2,
+    });
 
-    // Four published, org-scoped, non-kernel wiki pages
-    expect(fake.wikiPages).toHaveLength(4);
+    // Nine published, org-scoped, non-kernel wiki pages (4 identity + 5 vectors)
+    expect(fake.wikiPages).toHaveLength(9);
     for (const p of fake.wikiPages) {
       expect(p.status).toBe("published");
       expect(p.organizationId).toBe(ORG);
@@ -170,6 +181,11 @@ describe("seedOrgWwwdCorpus", () => {
       "org-mission",
       "org-supply-chain",
       "org-who-we-serve",
+      "stances/customer-goodwill",
+      "stances/growth-vs-stability",
+      "stances/pricing-integrity",
+      "stances/quality-bar",
+      "stances/spend-authority",
     ]);
 
     // Captured mission lands in the mission page body
@@ -179,9 +195,9 @@ describe("seedOrgWwwdCorpus", () => {
     expect(mission!.pageKind).toBe("principle");
 
     // Every published page was embedded into Qdrant
-    expect(embed).toHaveBeenCalledTimes(4);
+    expect(embed).toHaveBeenCalledTimes(9);
     expect(result.embedded).toBe(true);
-    expect(result.wikiPageIds).toHaveLength(4);
+    expect(result.wikiPageIds).toHaveLength(9);
   });
 
   it("is idempotent — re-running produces no duplicate profile/version/material/page rows", async () => {
@@ -202,11 +218,11 @@ describe("seedOrgWwwdCorpus", () => {
     // Fallback + org profile, each upserted once (no duplicates on re-run).
     expect(fake.profiles).toHaveLength(2);
     expect(fake.versions).toHaveLength(1);
-    expect(fake.materials).toHaveLength(4);
-    expect(fake.wikiPages).toHaveLength(4);
+    expect(fake.materials).toHaveLength(12);
+    expect(fake.wikiPages).toHaveLength(9);
     // Body unchanged on the 2nd run → no extra revision, no re-embed
-    expect(fake.revisions).toHaveLength(4);
-    expect(embed).toHaveBeenCalledTimes(4);
+    expect(fake.revisions).toHaveLength(9);
+    expect(embed).toHaveBeenCalledTimes(9);
   });
 
   it("still seeds a non-empty corpus when no mission was captured (archetype fallback)", async () => {
@@ -218,7 +234,7 @@ describe("seedOrgWwwdCorpus", () => {
 
     const result = await seedOrgWwwdCorpus({ organizationId: ORG, db: fake.db, embed });
 
-    expect(result.materialCount).toBe(4);
+    expect(result.materialCount).toBe(12);
     const mission = fake.wikiPages.find((p) => p.slug === "org-mission");
     expect(mission).toBeDefined();
     expect(mission!.body.trim().length).toBeGreaterThan(20);
@@ -237,8 +253,8 @@ describe("seedOrgWwwdCorpus", () => {
 
     expect(result.embedded).toBe(false);
     // DB rows still created despite embedding failure
-    expect(fake.wikiPages).toHaveLength(4);
-    expect(fake.materials).toHaveLength(4);
+    expect(fake.wikiPages).toHaveLength(9);
+    expect(fake.materials).toHaveLength(12);
   });
 
   it("seeds an archetype-aware org-supply-chain stance page + material", async () => {
@@ -271,7 +287,8 @@ describe("seedOrgWwwdCorpus", () => {
     const material = fake.materials.find((m) => m.materialId === `${result.profileId}:org-supply-chain`);
     expect(material).toBeDefined();
     expect(material!.sourceType).toBe("stance");
-    expect(material!.domainClass).toBe("plan-readiness");
+    // Retagged (BI-70ADC71F): supplier posture governs structural vendor choices.
+    expect(material!.domainClass).toBe("architecture-tradeoff");
     expect(material!.direction).toBe("support");
     expect(material!.evidenceGrade).toBe("B");
     expect(material!.reviewStatus).toBe("approved");
@@ -296,5 +313,67 @@ describe("seedOrgWwwdCorpus", () => {
     expect(page!.pageKind).toBe("stance");
     // Generic body is intentionally short / honest — no fabricated specifics.
     expect(page!.body.toLowerCase()).not.toMatch(/perish|cold[- ]chain|dropship/);
+  });
+});
+
+describe("seedOrgWwwdCorpus stance vectors (BI-70ADC71F)", () => {
+  it("seeds archetype-aware vector pages with the authority ceiling in the body", async () => {
+    const embed = vi.fn<EmbedFn>(async () => true);
+    const fake = makeFakeDb({
+      businessContext: {
+        mission: "Keep smiles healthy.",
+        description: "A dental practice.",
+        targetMarket: "families",
+        industry: "healthcare-wellness",
+      },
+      archetype: { name: "Dental Practice", category: "healthcare-wellness" },
+      orgName: "Bright Smiles",
+    });
+
+    const result = await seedOrgWwwdCorpus({ organizationId: ORG, db: fake.db, embed });
+
+    const goodwill = fake.wikiPages.find((p) => p.slug === "stances/customer-goodwill");
+    expect(goodwill).toBeDefined();
+    expect(goodwill!.pageKind).toBe("stance");
+    expect(goodwill!.body).toMatch(/patient/i);
+    expect(goodwill!.body).toContain("up to $150");
+
+    // Goodwill bundles into risk-assessment (primary) + professional-practice (echo)
+    const primary = fake.materials.find(
+      (m) => m.materialId === `${result.profileId}:stances/customer-goodwill`,
+    );
+    const echo = fake.materials.find(
+      (m) => m.materialId === `${result.profileId}:stances/customer-goodwill:professional-practice`,
+    );
+    expect(primary).toBeDefined();
+    expect(primary!.domainClass).toBe("risk-assessment");
+    expect(echo).toBeDefined();
+    expect(echo!.domainClass).toBe("professional-practice");
+    expect(echo!.sourceRef.wikiPageId).toBe(goodwill!.id);
+  });
+
+  it("re-seeding never downgrades an owner-confirmed material (update omits grade/weight/review)", async () => {
+    const embed = vi.fn<EmbedFn>(async () => true);
+    const fake = makeFakeDb({
+      businessContext: { mission: "M", description: null, targetMarket: null, industry: "retail-goods" },
+      archetype: { name: "Shop", category: "retail-goods" },
+      orgName: "Shop",
+    });
+
+    const result = await seedOrgWwwdCorpus({ organizationId: ORG, db: fake.db, embed });
+
+    // Simulate the owner confirming the goodwill stance (Phase 2 upgrade).
+    const confirmed = fake.materials.find(
+      (m) => m.materialId === `${result.profileId}:stances/customer-goodwill`,
+    )!;
+    confirmed.evidenceGrade = "A";
+    confirmed.confidenceWeight = 0.9;
+
+    await seedOrgWwwdCorpus({ organizationId: ORG, db: fake.db, embed });
+
+    expect(confirmed.evidenceGrade).toBe("A");
+    expect(confirmed.confidenceWeight).toBe(0.9);
+    // …while retag-relevant fields still refresh.
+    expect(confirmed.freshness).toBe("current");
   });
 });
