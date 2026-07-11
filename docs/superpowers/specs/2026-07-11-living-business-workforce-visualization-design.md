@@ -1,0 +1,142 @@
+# The Living Business — value-stream workforce visualization (design spec)
+
+**Status:** draft · 2026-07-11
+**Epic:** EP-LIVING-BUSINESS-VIZ (to be filed) — the read-side companion to EP-BUSINESS-ACTIVITY-SIM
+**Author:** platform (via Claude Code, operator Mark)
+**Related:**
+- [[living-business-workforce-activity]] concept — this spec *is* the read-side viz that concept named.
+- [Business Activity Simulator](2026-07-04-business-activity-simulator-design.md) — the write-side; its **P4** ("observability + viz") wires into this surface.
+- [Value-stream architecture platform](2026-06-12-value-stream-architecture-platform-design.md) — the OVSM model and the EA `/ea/value-streams` render precedent.
+- [`docs/architecture/archetype-business-value-streams.md`](../../architecture/archetype-business-value-streams.md) — the per-archetype "how this business actually works" narrative.
+- **Interactive prototype:** [`assets/2026-07-11-living-business-workforce-visualization-prototype.html`](assets/2026-07-11-living-business-workforce-visualization-prototype.html) — open it; it is the primary artifact of this spec.
+
+---
+
+## 1. Problem
+
+The main workspace view (`apps/web/app/(shell)/workspace/page.tsx` → `OperatorCockpit` + `PlatformWorkspaceHome`) and the AI-coworker operations view (`/ops`) are **card-and-list surfaces**. They are informationally correct but not *compelling*: they render the business as a backlog, not as a living thing. A non-technical owner cannot look at them and *feel* how their business is running — where demand is entering, where work is piled up, which AI coworker is doing what right now, and what the whole machine is producing.
+
+There is also no surface that renders the platform's central abstraction — the **operational value stream** — as the thing it actually is: a moving production line with humans and AI coworkers working it, supporting activities feeding it, and money, bills, taxes, and market weather all bearing on it.
+
+We already model every piece of this (value stream, coworkers, live activity events, the finance spine, market/competitive intelligence). What is missing is the **read-side composition** that binds them into one animated, game-like paradigm.
+
+## 2. Goal
+
+**"The Living Business"** — a game-like, animated visualization that becomes the centerpiece of the main workspace, rendering the archetype's value stream as a living production line:
+
+- The **primary value stream** is the main "route" (Railroad Tycoon), running left→right through the six canonical stages.
+- **Work flows along it** as animated units — leads, orders, jobs, invoices — that transform as they are processed (SimCity/Factory belt).
+- **Personas** (the human staff of the archetype business) are seated at their home stages; **AI coworkers** dock at stages and visibly perform activities, hand work off, and escalate (Civilization units).
+- **Supporting activities** are the infrastructure underlayer feeding the stages — Trust & Compliance, Operate & Improve, and firm infrastructure (Finance/HR/Procurement), where **bills and taxes** surface as utility meters that fill and must be paid.
+- **Market highlights and competitive news** are the ambient "weather" above the board, shown when relevant.
+- A HUD carries the operator's **"what needs you now"** as quest markers pinned to the stages that raised them.
+
+The paradigm must degrade to a calm, static, accessible state under `prefers-reduced-motion`, follow the `--dpf-*` token system exactly (no hardcoded colors), and support live / replay / speed / zoom controls so it reads at a glance in "City" view and rewards attention in "District" view.
+
+### Design principle (load-bearing)
+**Render real state; animate real events. Never a decorative simulation on live data.** Every moving element maps to a real record or a real event: a unit is an in-flight work item, a docking coworker is an `agent-event-bus` `tool:start`, a filling meter is an accruing `Bill`/`TaxRemittanceRun`. In demo/test, the **Business Activity Simulator** supplies the events through the *same* contract — so demo and production differ only in the event source, never in the rendering.
+
+## 3. The paradigm — five layers
+
+The board composes as five stacked layers, from sky to substrate:
+
+| Layer | Metaphor | What it shows | Real source |
+|---|---|---|---|
+| **1. Sky — market weather** | Weather + news ticker | Demand climate (sunny/storm), competitive moves, supplier/price alerts | `market-research.ts`, `MarketingBattlecard`, attention signals |
+| **2. The stream — primary activities** | Railroad route / assembly line | 6 chevron stage-districts; load-bearing stages glow; per-stage KPI; work-unit tokens flowing; handoff arcs | `deriveOperationalValueStream()` stages, `metricBindings`; work items from the finance spine + field-dispatch lifecycle + `workforce-activity` |
+| **3. The workers** | Civ units + seated townsfolk | AI coworkers docking at a stage with a pulse when active + live activity line; personas seated (muted) at their home stage | `agent_registry.json` / `Agent` (`valueStream`, `kind`, `delegatesTo`) via `CoworkerService`; `agent-event-bus` events; personas from `workspace-home/profiles.ts` |
+| **4. The utility band — support activities** | SimCity utility grid | Trust & Compliance, Operate & Improve, and Finance/HR/Procurement as meters feeding the stages; **bills due** + **tax remittance** as fill-gauges | cross-cutting OVSM stages + `trustGates`; `Bill`, `BillApproval`, `TaxRemittanceRun`, `Invoice` |
+| **5. The HUD — operator cockpit** | Quest log | "What needs you now" as quest markers with one-click actions; archetype identity; time/speed/zoom controls; flow + revenue KPIs | `OperatorCockpit` attention queue (`lib/attention/outside-in.ts`), `business-approvals` |
+
+### Interaction model
+- **Ambient loop** — slow rail energy, gentle station pulse, unit drift. Paused under reduced-motion (static state shown instead).
+- **Event bursts** — a coworker docking, a unit clearing a stage, a handoff arc, a bill meter ticking up: each is a discrete, real event.
+- **Zoom (Civ-like)** — *City* (the whole stream at a glance) → *District* (one stage's coworkers, queue, and metric; the prototype dims non-load-bearing districts). *Unit* view (one work item's journey) is a documented follow-up.
+- **Time (SimCity-like)** — *Live* vs *Replay 24h* with 0.5×–4× speed, driven from the event timeline; in test, driven by the simulator.
+- **Drill-through** — clicking a district routes to that stage's real surface (Settle → `/finance`, Deliver → dispatch/kitchen ops); clicking a coworker opens the coworker panel.
+
+## 4. Data bindings (bind, do not invent)
+
+The visualization is a **projection**, not a new data model. A single read projection — proposed `apps/web/lib/workspace-home/living-business-snapshot.ts` — composes the existing sources into a `LivingBusinessSnapshot`:
+
+```
+LivingBusinessSnapshot {
+  archetype:  { id, name, capacityUnit, demandSignature }        // StorefrontConfig.archetypeId → ArchetypeDefinition
+  stages:     OperationalValueStreamStage[]                        // deriveOperationalValueStream(archetype)
+  workers:    { agentId, displayName, kind, stageKey, state, activity }[]  // Agent + agent-event-bus live state
+  units:      { id, stageKey, kind, state, enteredAt }[]           // finance spine + field-dispatch + workforce-activity
+  utilities:  { billsDue, taxRemittance, compliance, improve }     // Bill/BillApproval, TaxRemittanceRun, trustGates
+  market:     { climate, items[] }                                 // market-research.ts, MarketingBattlecard
+  quests:     AttentionItem[]                                      // OperatorCockpit / outside-in ranking
+}
+```
+
+The **live event plane** is `apps/web/lib/tak/agent-event-bus.ts` (`tool:start`, `plan:update`, `collaboration:*`, `taskrun:stalled`) surfaced to the client over SSE. The snapshot is the initial paint; events animate deltas. This is the exact seam the simulator's P4 targets, so the read-side and write-side converge on one contract.
+
+**Nothing here is net-new domain data.** The one net-new artifact is the *composition* projection + the client rendering. (Confirmed against the schema audit: value stream, agents, activity events, `Bill`/`TaxRemittanceRun`, `MarketingBattlecard`, and market research all already exist.)
+
+## 5. Technology recommendation
+
+**Recommendation: build v1 on the stack already in the repo — `@xyflow/react` for the stream graph + Canvas 2D for the animated unit/energy layer + CSS keyframes, all driven by `--dpf-*` tokens. Add no new rendering dependency.**
+
+Rationale:
+1. **No Tool Evaluation Pipeline tax.** `@xyflow/react` (^12.11.2) and `recharts` are already dependencies; a game engine (PixiJS/Phaser/three) would trigger the §9 tool-evaluation gate for a v1 that does not yet need particle-density rendering.
+2. **Proven in-repo precedent to reuse, not invent:**
+   - `apps/web/components/build/ProcessGraph.tsx` + `AnimatedEdge.tsx` + `process-graph.css` — animated dashed bezier edges (`pg-dash-travel`), running pulse rings (`pg-pulse-ring`), done/error flashes, **already `prefers-reduced-motion`-gated**. This is the motion language; the prototype mirrors it.
+   - `apps/web/components/ea/ValueStreamStageNode.tsx` — chevron value-chain stage nodes (`clipPath`) with layout in `value-stream-layout.ts`. This is the stage geometry.
+   - `apps/web/lib/ea/value-stream-views.ts` + `archetype-value-stream-projection.ts` — the existing "render the OVSM as a graph" surface.
+3. **Theme + accessibility come free** with DOM/SVG + tokens: light/dark/branding via `--dpf-*`, `role`/`aria`, keyboard focus, and a reduced-motion static mode — hard to get right in a pure-canvas game engine.
+4. **The prototype proves the envelope.** The attached prototype runs the full paradigm — flowing units, docking coworkers with live activity, handoff arcs, utility meters, market ticker, quests, City/District zoom, live/replay/speed, light/dark — on Canvas + DOM + tokens with zero new deps, at interactive frame rates for the low-hundreds of units a single install produces.
+
+**Division of labor in v1:**
+- **DOM/`@xyflow/react`** — stage-districts, coworker cards + live activity, HUD, meters, ticker, quests. Accessible, themeable, testable.
+- **Canvas 2D** — the ambient animated layer only: rail energy, unit tokens, handoff arcs, pulse rings. Redrawn from the same world-state the DOM reads.
+
+**Upgrade path (deferred, only on evidence of need):** if a future multi-archetype demo or a high-volume install pushes unit counts past what Canvas 2D holds at 60fps, promote the animated layer to **PixiJS** behind the *same* `LivingBusinessSnapshot` + event contract — a swap of the render layer, not the data plane. PixiJS would then go through the §9 Tool Evaluation Pipeline. Three.js / full isometric 3D is explicitly **not** recommended: the value stream is a legible 2D sequence; 3D adds cost and occlusion without adding meaning.
+
+## 6. Research & Benchmarking
+
+Per §10, comparing data models (not feature lists) of open-source leaders and commercial products.
+
+### Open-source
+- **React Flow / `@xyflow`** (already adopted). Data model: `Node[]` + `Edge[]` with custom node/edge types and a controlled viewport. **Adopt:** node+edge graph as the stage substrate; custom `ValueStreamStageNode`; animated edges for flow. **Reject:** its free-form drag-to-edit editor UX — the value stream is a *curated* sequence, not an operator-drawn canvas; we lock layout and animate, we don't let the owner rewire their business by dragging.
+- **d3 / visx / d3-force.** Data model: data-join + force/layout simulations. **Adopt nothing wholesale** (d3 is not a dep; adding it repeats React Flow's job). **Anti-pattern identified:** force-directed layout for a value stream — force graphs cluster by connectivity and lose sequence; a stream's meaning *is* its order (attract→…→retain), so a settling force layout would actively destroy the read.
+- **PixiJS / Phaser** (game engines). Data model: scene graph + ticker + sprite batching. **Adopt (as the deferred upgrade path only):** ticker-driven ambient sim + a batched sprite layer when unit density demands it. **Reject for v1:** heavy dep, weak theming/a11y story, and a Tool-Eval gate for capability we do not yet need.
+- **OpenTelemetry / Grafana / Jaeger service graphs.** Data model: spans/edges with rate + latency + error attributes animating a topology. **Adopt:** the "live event stream → animated graph, node color = health, edge = traffic" pattern — directly analogous to `agent-event-bus` → docking coworkers + flowing units.
+
+### Commercial
+- **Celonis / UiPath Process Mining** (the closest analog). Data model: an event log projected to a process graph with per-edge throughput, variants, and conformance. **Adopt:** per-stage throughput/metric bindings and the event-log→graph projection idea (our OVSM already carries `metricBindings`). **Reject:** their information density and analyst framing — correct for a process engineer, cognitively hostile to a small-business owner; we keep City view to ≤6 stages + ≤5 quests (progressive disclosure, §12 UX-fit).
+- **Datadog / New Relic service maps.** Data model: live topology, animated request traffic, node health. **Adopt:** animated traffic along the route + node-health coloring semantics kept distinct from the accent.
+- **Salesforce / HubSpot pipeline & Kanban.** Data model: opportunities in ordered stage columns. **Reject as the primary paradigm:** static columns render a *snapshot*, not a *living* machine — no motion, no geography, no supporting-activity substrate, no coworkers. Kanban is a good *District* drill-in, not the City view.
+- **Simulation games — SimCity / Railroad Tycoon / Factorio / Civilization** (the paradigm sources named in the goal). Not products we integrate, but their data-driven idioms are the design language: the **route/belt** (a spatial sequence carrying units), the **utility grid** (supporting activities feeding the primary ones), **units with state** (Civ), and **legible-at-a-glance districts** with drill-down.
+
+### Gaps this design fills
+1. A single surface that renders the OVSM as a *living* thing rather than an ArchiMate diagram (`/ea/value-streams`) or a backlog (`/ops`).
+2. The **read-side** the Business Activity Simulator's P4 was designed to feed but which had no design doc.
+3. The one net-new composition — a `LivingBusinessSnapshot` — aggregating bills/taxes/market/competitive signals that today live in separate models with no unified operator-facing home (the gap the schema audit flagged).
+
+## 7. Phased plan
+
+Aligned to the simulator so read-side and write-side land together.
+
+- **P1 — the board, snapshot-only (static live paint).** `LivingBusinessSnapshot` projection + the DOM/Canvas board component, rendering current state on load. Registers as a workspace-home contribution (`resolveWorkspaceHomeContribution`) so it slots into `VerticalWorkspaceHome` per archetype. Ships with the prototype's City view, stages, coworkers, personas, utility meters, market ticker, and quests bound to real reads. No live event stream yet (poll-refresh). Reduced-motion + light/dark + a11y from day one.
+- **P2 — live events.** Subscribe the board to `agent-event-bus` over SSE; animate deltas (docking, handoffs, unit transitions, stalls). This is the join point with the simulator's P4 emit.
+- **P3 — drill + zoom.** District zoom with per-stage queue + coworker roster; drill-through routing to each stage's real surface; Unit-journey view.
+- **P4 — the demo/test toggle.** The multi-archetype switcher (test-instance-only, gated exactly as the simulator §9 specifies) so one test install can showcase all archetypes; wire the simulator as the driving event source for demos.
+
+## 8. Non-goals
+- Not an editor — the operator does not rewire their value stream by dragging (that is EA's `/ea` surface).
+- No new domain tables — this is a projection + rendering layer.
+- No game engine in v1 — Canvas 2D + `@xyflow/react` + CSS; PixiJS is a deferred, evidence-gated upgrade.
+- No 3D / isometric-3D.
+- Multi-archetype switching is test-only; a real install is exactly one archetype (mirrors the simulator's §9).
+
+## 9. Open questions
+1. **Home placement** — does the Living Business board *replace* `PlatformWorkspaceHome` as the default body, sit *above* the `OperatorCockpit`, or become a dedicated `/workspace` hero with the cockpit as its HUD? (Leaning: hero body of `VerticalWorkspaceHome`, cockpit folded into the HUD rail, so there is still one "what needs you now" surface — consistent with BI-8C3EB52C's single-attention-surface decision.)
+2. **Event volume** — at what live unit count does Canvas 2D need the PixiJS upgrade? Instrument P2 to answer with evidence, not guess.
+3. **Persona fidelity** — seat personas from `workspace-home/profiles.ts` only, or also from `CoworkerService.personas` / route personas? (Start with profiles.ts; it carries the `primaryOperatingQuestion` framing.)
+
+## 10. Verification & docs impact
+- **UX-fit (§12, enforced):** this adds a route/hero + metric components → requires a recorded `UX-Fit-Decision` (run `dpf-ux-fit-review`, score on `human_cognitive_load`) before implementation lands. The City-view ≤6-stage / ≤5-quest progressive-disclosure default is the cognitive-load answer to carry into that decision.
+- **Docs surface:** on implementation, update `docs/user-guide/` (operator "reading your Living Business" help) and `docs/architecture/` (the read-side of the value-stream/activity architecture). This spec + the prototype satisfy the §6 Spec/Plan/Doc gate for the design phase.
+- **Build gate:** implementation phases follow §5 — unit tests for the projection, `next build`, and UX verification of the board against the running app via the shared local-CI sandbox lease.
