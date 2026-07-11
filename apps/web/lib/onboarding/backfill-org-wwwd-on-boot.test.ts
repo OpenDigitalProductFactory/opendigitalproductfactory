@@ -64,10 +64,13 @@ describe("backfillOrgWwwdOnBoot", () => {
     expect(runSeedsMock).toHaveBeenCalledWith("org-1");
   });
 
-  it("does nothing for a healthy org (profile + overlay pages present)", async () => {
+  it("does nothing for a healthy org (profile + overlay pages + all vector pages present)", async () => {
     prismaMock.organizationFindMany.mockResolvedValue([{ id: "org-1" }]);
     resolveOrgProfileIdMock.mockResolvedValue("org-perspective-org-1");
-    prismaMock.wikiPageCount.mockResolvedValue(4);
+    // First count = all overlay pages, second (slug-filtered) = vector pages.
+    prismaMock.wikiPageCount.mockImplementation(async (args: any) =>
+      args?.where?.slug ? 5 : 9,
+    );
 
     const res = await backfillOrgWwwdOnBoot(silent);
 
@@ -75,6 +78,22 @@ describe("backfillOrgWwwdOnBoot", () => {
     expect(runSeedsMock).not.toHaveBeenCalled();
     // Presence path must not even consult the setup-progress guard.
     expect(prismaMock.setupProgressFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("re-seeds a pre-stance-vector install (profile + old pages, but no vector pages)", async () => {
+    // The 2026-07-11 upgrade path (BI-70ADC71F): installs seeded with only the
+    // original 4 plan-readiness pages get the vector redistribution on boot.
+    prismaMock.organizationFindMany.mockResolvedValue([{ id: "org-1" }]);
+    resolveOrgProfileIdMock.mockResolvedValue("org-perspective-org-1");
+    prismaMock.wikiPageCount.mockImplementation(async (args: any) =>
+      args?.where?.slug ? 0 : 4,
+    );
+    prismaMock.setupProgressFindFirst.mockResolvedValue({ id: "setup-1" });
+
+    const res = await backfillOrgWwwdOnBoot(silent);
+
+    expect(res).toEqual({ seeded: 1, present: 0, skipped: 0 });
+    expect(runSeedsMock).toHaveBeenCalledWith("org-1");
   });
 
   it("re-seeds when the profile exists but the overlay pages are missing", async () => {
