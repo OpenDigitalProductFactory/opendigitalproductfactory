@@ -27,6 +27,8 @@ export type ToolPackHandler = (
     routeContext?: string;
     threadId?: string;
     agentId?: string;
+    /** Owning TaskRun id, forwarded for handlers that attribute background work. */
+    taskRunId?: string;
     /** Caller attribution from the MCP route (client UA token + auth identity)
      *  for decision-ledger writers. */
     callerClient?: string;
