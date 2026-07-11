@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveAgentIdentity, deriveAgentDisplayName, AGENT_KINDS } from "./agent-identity.js";
+import {
+  resolveAgentIdentity,
+  deriveAgentDisplayName,
+  AGENT_KINDS,
+  COWORKER_SLUG_TO_CANONICAL_AGENT_ID,
+  resolveCanonicalAgentId,
+} from "./agent-identity.js";
 import { COWORKER_AGENT_SEEDS } from "./workforce-seed.js";
 
 // EP-COWORKER-RT Phase 1 — enforce the canonical coworker naming standard so the
@@ -64,4 +70,42 @@ describe("every coworker seed resolves to a clean identity", () => {
       assertCleanIdentity(displayName, kind);
     });
   }
+});
+
+describe("dual-seed slug → canonical map (BI-74FD6420)", () => {
+  it("maps every dual-seed slug observed on the live install to its AGT-* twin", () => {
+    expect(resolveCanonicalAgentId("coo")).toBe("AGT-ORCH-000");
+    expect(resolveCanonicalAgentId("build-specialist")).toBe("AGT-WS-BUILD");
+    expect(resolveCanonicalAgentId("admin-assistant")).toBe("AGT-WS-ADMIN");
+    expect(resolveCanonicalAgentId("external-catalog-scout")).toBe("AGT-WS-SCOUT");
+    expect(resolveCanonicalAgentId("inventory-specialist")).toBe("AGT-WS-INVENTORY");
+    expect(resolveCanonicalAgentId("onboarding-coo")).toBe("AGT-WS-ONBOARD");
+    // Unmapped seeds pass through unchanged.
+    expect(resolveCanonicalAgentId("storefront-advisor")).toBe("storefront-advisor");
+    expect(resolveCanonicalAgentId("AGT-ORCH-000")).toBe("AGT-ORCH-000");
+  });
+
+  it("maps only known dual-seed slugs (no accidental AGT-* keys)", () => {
+    for (const [slug, canonical] of Object.entries(COWORKER_SLUG_TO_CANONICAL_AGENT_ID)) {
+      expect(slug).not.toMatch(/^AGT-/);
+      expect(canonical).toMatch(/^AGT-/);
+    }
+  });
+
+  it("gives Onboarding COO a consistent Title-Case label", () => {
+    expect(resolveAgentIdentity({ agentId: "AGT-WS-ONBOARD", name: "onboarding-coo" }).displayName).toBe(
+      "Onboarding COO",
+    );
+    expect(resolveAgentIdentity({ agentId: "onboarding-coo", name: "Onboarding COO" }).displayName).toBe(
+      "Onboarding COO",
+    );
+  });
+
+  it("distinguishes the two Portfolio Backlog registry agents", () => {
+    const mgr = resolveAgentIdentity({ agentId: "AGT-102", name: "portfolio-backlog-agent" });
+    const specialist = resolveAgentIdentity({ agentId: "AGT-S2P-PFB", name: "portfolio-backlog-specialist" });
+    expect(mgr.displayName).toBe("Portfolio Backlog Manager");
+    expect(specialist.displayName).toBe("Portfolio Backlog Specialist");
+    expect(mgr.displayName).not.toBe(specialist.displayName);
+  });
 });

@@ -1,0 +1,74 @@
+// BI-74FD6420 — dual-seed alias rows must not appear beside their AGT-* twin.
+import { describe, expect, it } from "vitest";
+import { COWORKER_SLUG_TO_CANONICAL_AGENT_ID } from "@dpf/db/agent-identity";
+import { dropDualSeedAliasAgents } from "./roster";
+
+describe("dropDualSeedAliasAgents (BI-74FD6420)", () => {
+  it("drops known slug alias rows when the canonical AGT-* twin is present", () => {
+    const agents = [
+      { agentId: "AGT-ORCH-000", displayName: "COO" },
+      { agentId: "coo", displayName: "COO" },
+      { agentId: "AGT-WS-BUILD", displayName: "Build Lead" },
+      { agentId: "build-specialist", displayName: "Build Lead" },
+      { agentId: "AGT-WS-ADMIN", displayName: "Platform Admin" },
+      { agentId: "admin-assistant", displayName: "Platform Admin" },
+      { agentId: "AGT-WS-SCOUT", displayName: "External Catalog Scout" },
+      { agentId: "external-catalog-scout", displayName: "External Catalog Scout" },
+      { agentId: "AGT-WS-INVENTORY", displayName: "Digital Product Estate Specialist" },
+      { agentId: "inventory-specialist", displayName: "Digital Product Estate Specialist" },
+      { agentId: "storefront-advisor", displayName: "Storefront Operations Manager" }, // no twin
+    ];
+
+    const kept = dropDualSeedAliasAgents(agents);
+    const ids = kept.map((a) => a.agentId).sort();
+
+    expect(ids).toEqual(
+      [
+        "AGT-ORCH-000",
+        "AGT-WS-ADMIN",
+        "AGT-WS-BUILD",
+        "AGT-WS-INVENTORY",
+        "AGT-WS-SCOUT",
+        "storefront-advisor",
+      ].sort(),
+    );
+    // No residual dual-seed aliases for the known map keys.
+    for (const slug of Object.keys(COWORKER_SLUG_TO_CANONICAL_AGENT_ID)) {
+      if (slug === "onboarding-coo") continue; // not in fixture
+      expect(ids).not.toContain(slug);
+    }
+  });
+
+  it("keeps the slug row when its canonical twin is absent (orphan alias still usable)", () => {
+    const agents = [
+      { agentId: "coo", displayName: "COO" },
+      { agentId: "build-specialist", displayName: "Build Lead" },
+    ];
+    const kept = dropDualSeedAliasAgents(agents);
+    expect(kept.map((a) => a.agentId).sort()).toEqual(["build-specialist", "coo"]);
+  });
+
+  it("is a no-op when the roster already has only canonical rows", () => {
+    const agents = [
+      { agentId: "AGT-ORCH-000", displayName: "COO" },
+      { agentId: "AGT-WS-BUILD", displayName: "Build Lead" },
+    ];
+    expect(dropDualSeedAliasAgents(agents)).toEqual(agents);
+  });
+
+  it("covers every dual-seed pair observed on the live install", () => {
+    // Live evidence 2026-07-11: COO, Build Lead, Platform Admin, Scout,
+    // Inventory, Onboarding COO each had a slug twin beside the AGT-* row.
+    const livePairs: Array<[string, string]> = [
+      ["coo", "AGT-ORCH-000"],
+      ["build-specialist", "AGT-WS-BUILD"],
+      ["admin-assistant", "AGT-WS-ADMIN"],
+      ["external-catalog-scout", "AGT-WS-SCOUT"],
+      ["inventory-specialist", "AGT-WS-INVENTORY"],
+      ["onboarding-coo", "AGT-WS-ONBOARD"],
+    ];
+    for (const [slug, canonical] of livePairs) {
+      expect(COWORKER_SLUG_TO_CANONICAL_AGENT_ID[slug]).toBe(canonical);
+    }
+  });
+});

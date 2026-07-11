@@ -5,7 +5,11 @@ import { join } from "path";
 import { prisma } from "./client.js";
 import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
-import { resolveAgentIdentity } from "./agent-identity.js";
+import {
+  CANONICAL_AGENT_ID_TO_COWORKER_SLUG,
+  resolveAgentIdentity,
+  resolveCanonicalAgentId,
+} from "./agent-identity.js";
 import { loadFingerprintCatalogIntoDb, defaultCatalogPath } from "./discovery-fingerprint-catalog-loader.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
 import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
@@ -140,6 +144,8 @@ interface RegistryAgent {
   delegates_to?: string[];
   escalates_to?: string;
   it4it_sections?: string[];
+  /** Optional slug aliases from agent_registry.json (first becomes Agent.slugId). */
+  aliases?: string[];
   config_profile?: {
     model_binding?: {
       model_id?: string;
@@ -196,9 +202,17 @@ async function seedAgents(): Promise<void> {
     const portfolioSlug = parseAgentPortfolioSlug(a.human_supervisor_id ?? "");
     const portfolioId = portfolioSlug ? (portfolioIdBySlug.get(portfolioSlug) ?? null) : null;
 
+    // Prefer explicit registry aliases[0], then the dual-seed slug map, so the
+    // canonical AGT-* row owns the slug handle used by resolveAgent / routing.
+    const preferredSlug =
+      (Array.isArray(a.aliases) && a.aliases[0] ? a.aliases[0] : null) ??
+      CANONICAL_AGENT_ID_TO_COWORKER_SLUG[a.agent_id] ??
+      null;
+
     const identity = resolveAgentIdentity({
       agentId: a.agent_id,
       name: a.agent_name,
+      slugId: preferredSlug,
       tier: a.tier,
       displayName: a.displayName,
       kind: a.kind,
@@ -221,7 +235,23 @@ async function seedAgents(): Promise<void> {
       escalatesTo: a.escalates_to ?? null,
       delegatesTo: a.delegates_to ?? [],
       sensitivity: "internal" as const,
+      // Only set slugId when free or already ours — never steal another row's unique slug.
+      ...(preferredSlug ? { slugId: preferredSlug } : {}),
+      archived: false,
+      lifecycleStage: "production",
     };
+
+    // If a legacy dual-seed row still holds the slugId, clear it first so the
+    // unique constraint allows the canonical row to own the handle (BI-74FD6420).
+    if (preferredSlug) {
+      await prisma.agent.updateMany({
+        where: {
+          slugId: preferredSlug,
+          NOT: { agentId: a.agent_id },
+        },
+        data: { slugId: null },
+      });
+    }
 
     const agent = await prisma.agent.upsert({
       where: { agentId: a.agent_id },
@@ -1029,12 +1059,41 @@ async function seedCoworkerAgents(): Promise<void> {
 
   const revokedGrants = await loadRevokedGrantSet(); // BI-4FA040D5
   let grantCount = 0;
+  let retiredAliasCount = 0;
   for (const cw of COWORKER_AGENT_SEEDS) {
-    const { agentId, slugId, ...rest } = cw;
-    const identity = resolveAgentIdentity({ agentId, name: rest.name, slugId, displayName: rest.name });
+    const { agentId: seedAgentId, slugId, ...rest } = cw;
+    // Prefer the registry AGT-* twin when this slug is a dual-seed alias
+    // (BI-74FD6420). Fall back to the seed agentId for coworkers that only
+    // exist on the COWORKER_AGENT_SEEDS path (storefront-advisor, etc.).
+    const canonicalAgentId = resolveCanonicalAgentId(seedAgentId);
+    const identity = resolveAgentIdentity({
+      agentId: canonicalAgentId,
+      name: rest.name,
+      slugId,
+      displayName: rest.name,
+    });
+
+    // Free the slug handle from any legacy alias row before attaching it to
+    // the canonical agent (Agent.slugId is unique).
+    if (slugId) {
+      await prisma.agent.updateMany({
+        where: { slugId, NOT: { agentId: canonicalAgentId } },
+        data: { slugId: null },
+      });
+    }
+
     const agent = await prisma.agent.upsert({
-      where: { agentId },
-      create: { agentId, slugId, displayName: identity.displayName, kind: identity.kind, ...rest, lifecycleStage: "production" },
+      where: { agentId: canonicalAgentId },
+      create: {
+        agentId: canonicalAgentId,
+        slugId,
+        displayName: identity.displayName,
+        kind: identity.kind,
+        ...rest,
+        lifecycleStage: "production",
+        archived: false,
+        status: "active",
+      },
       update: {
         slugId,
         name: rest.name,
@@ -1043,10 +1102,29 @@ async function seedCoworkerAgents(): Promise<void> {
         description: rest.description,
         valueStream: rest.valueStream,
         sensitivity: rest.sensitivity,
+        archived: false,
+        status: "active",
+        lifecycleStage: "production",
       },
     });
 
-    const grants = HARDCODED_COWORKER_GRANTS[agentId];
+    // Retire the legacy dual-seed row when it is a different agentId from the
+    // canonical twin. Quarantine (not hard-delete) so historical FKs stay valid.
+    if (canonicalAgentId !== seedAgentId) {
+      const retired = await prisma.agent.updateMany({
+        where: { agentId: seedAgentId, archived: false },
+        data: {
+          archived: true,
+          status: "inactive",
+          lifecycleStage: "retirement",
+          slugId: null,
+        },
+      });
+      retiredAliasCount += retired.count;
+    }
+
+    // Grants are keyed by the seed's declared slug (HARDCODED_COWORKER_GRANTS).
+    const grants = HARDCODED_COWORKER_GRANTS[seedAgentId] ?? HARDCODED_COWORKER_GRANTS[canonicalAgentId];
     if (grants) {
       for (const grantKey of grants) {
         if (revokedGrants.has(`${agent.id}:${grantKey}`)) continue; // BI-4FA040D5: honor durable revocation
@@ -1088,7 +1166,10 @@ async function seedCoworkerAgents(): Promise<void> {
     }
   }
 
-  console.log(`Seeded ${COWORKER_AGENT_SEEDS.length} coworker agents with ${grantCount} tool grants`);
+  console.log(
+    `Seeded ${COWORKER_AGENT_SEEDS.length} coworker agents with ${grantCount} tool grants` +
+      (retiredAliasCount > 0 ? ` (retired ${retiredAliasCount} dual-seed alias row(s))` : ""),
+  );
 }
 
 /** EP-AI-WORKFORCE-001: Seed skills for coworker agents */

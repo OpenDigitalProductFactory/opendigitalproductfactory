@@ -9,6 +9,7 @@
 // RosterView without serialization hazards.
 
 import { prisma } from "@dpf/db";
+import { COWORKER_SLUG_TO_CANONICAL_AGENT_ID } from "@dpf/db/agent-identity";
 import {
   PROFESSION_REGISTRY,
   findProfessionFamilyForAgentIdentity,
@@ -59,6 +60,24 @@ type FamilyCoverage = {
 };
 
 const DECISION_WINDOW_DAYS = 30;
+
+/**
+ * Drop legacy dual-seed alias rows when their canonical AGT-* twin is present
+ * (BI-74FD6420). Pure + exported for unit tests — seed retires the alias rows
+ * long-term; this is the belt-and-suspenders roster filter for installs that
+ * have not re-seeded yet.
+ */
+export function dropDualSeedAliasAgents<T extends { agentId: string }>(
+  agents: T[],
+  slugToCanonical: Readonly<Record<string, string>> = COWORKER_SLUG_TO_CANONICAL_AGENT_ID,
+): T[] {
+  const present = new Set(agents.map((a) => a.agentId));
+  return agents.filter((a) => {
+    const canonical = slugToCanonical[a.agentId];
+    if (canonical && canonical !== a.agentId && present.has(canonical)) return false;
+    return true;
+  });
+}
 
 /** One query over all profession corpus pages, bucketed by family key. */
 async function loadAllCoverage(): Promise<Map<string, FamilyCoverage>> {
@@ -137,8 +156,10 @@ async function loadLastActivity(): Promise<Map<string, Date>> {
 }
 
 export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterFacets }> {
-  const [agents, coverage, modelConfigs, providers, blockerRows, lastActivity] = await Promise.all([
+  const [agentsRaw, coverage, modelConfigs, providers, blockerRows, lastActivity] = await Promise.all([
     prisma.agent.findMany({
+      // Exclude archived / retired dual-seed alias rows (BI-74FD6420).
+      where: { archived: false, lifecycleStage: { not: "retirement" } },
       orderBy: [{ tier: "asc" }, { displayName: "asc" }],
       select: {
         agentId: true,
@@ -163,6 +184,9 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
       .catch(() => [] as Array<{ agentId: string; _count: { _all: number } }>),
     loadLastActivity(),
   ]);
+
+  // Belt-and-suspenders: drop any residual dual-seed alias twin still active.
+  const agents = dropDualSeedAliasAgents(agentsRaw);
 
   const providerStatus = new Map(providers.map((p) => [p.providerId, p.status]));
   const pinnedByAgent = new Map(modelConfigs.map((c) => [c.agentId, c.pinnedProviderId]));
