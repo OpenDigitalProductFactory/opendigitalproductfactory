@@ -8,7 +8,7 @@
 // source); tool-registry.test asserts no drift.
 
 import { prisma } from "@dpf/db";
-import { DEMAND_SCORE_FRAMEWORKS, DEMAND_STAGE_VALUES } from "@/lib/explore/backlog";
+import { DEMAND_SCORE_FRAMEWORKS, DEMAND_STAGE_VALUES, INVESTMENT_BUCKET_VALUES } from "@/lib/explore/backlog";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
 
@@ -30,6 +30,7 @@ const definitions: ToolDefinition[] = [
         riskOpportunity: { type: "integer", description: "WSJF Cost-of-Delay term — relative risk reduction / opportunity enablement." },
         jobSize: { type: "number", description: "Effort denominator (relative points). Falls back to the effortSize t-shirt map (small=1,medium=3,large=8,xlarge=20)." },
         demandStage: { type: "string", enum: [...DEMAND_STAGE_VALUES], description: "Optional explicit funnel stage override (raw|screened|shaped|ready). Normally derived." },
+        investmentBucket: { type: "string", enum: [...INVESTMENT_BUCKET_VALUES], description: "Optional investment bucket (run|grow|transform). Auto-derived from workType when omitted (bug/chore/refactor=run, feature=grow)." },
       },
       required: ["itemId"],
     },
@@ -74,6 +75,13 @@ async function scoreDemandItemHandler(params: Record<string, unknown>): Promise<
   const currentIdx = item.demandStage ? stageOrder.indexOf(item.demandStage) : -1;
   const derivedIdx = stageOrder.indexOf(derivedStage);
   const nextStage = explicitStage ?? (derivedIdx > currentIdx ? derivedStage : item.demandStage ?? derivedStage);
+  // Investment bucket: explicit override, else keep what's set, else derive from
+  // work-type (bug/chore/refactor=run, feature=grow, else unclassified).
+  const { deriveBucket } = await import("@/lib/demand/buckets");
+  const explicitBucket = (INVESTMENT_BUCKET_VALUES as readonly string[]).includes(String(params["investmentBucket"]))
+    ? (params["investmentBucket"] as (typeof INVESTMENT_BUCKET_VALUES)[number])
+    : null;
+  const nextBucket = explicitBucket ?? item.investmentBucket ?? deriveBucket(item.workType);
   await prisma.backlogItem.update({
     where: { itemId },
     data: {
@@ -88,6 +96,7 @@ async function scoreDemandItemHandler(params: Record<string, unknown>): Promise<
       demandScoreFramework: framework,
       demandScoreComputedAt: new Date(),
       demandStage: nextStage,
+      investmentBucket: nextBucket,
     },
   });
   return {

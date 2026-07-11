@@ -20,6 +20,7 @@ export type DemandItemView = {
   effortSize: string | null;
   jobSize: number | null;
   impact: number | null;
+  investmentBucket: string | null;
 };
 
 export type FunnelColumn = {

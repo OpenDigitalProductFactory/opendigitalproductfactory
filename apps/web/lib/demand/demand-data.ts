@@ -21,6 +21,7 @@ export const getDemandItems = cache(async (): Promise<DemandItemView[]> => {
       effortSize: true,
       jobSize: true,
       impact: true,
+      investmentBucket: true,
       epic: { select: { epicId: true } },
     },
   });
@@ -36,5 +37,6 @@ export const getDemandItems = cache(async (): Promise<DemandItemView[]> => {
     effortSize: r.effortSize,
     jobSize: r.jobSize,
     impact: r.impact,
+    investmentBucket: r.investmentBucket,
   }));
 });
