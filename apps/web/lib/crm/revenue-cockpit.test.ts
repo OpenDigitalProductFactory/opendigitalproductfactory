@@ -106,9 +106,17 @@ describe("revenue cockpit summary", () => {
         tone: "warning",
       },
       {
-        id: "marketing-work",
-        label: "5 marketing work products are waiting",
-        href: "/customer/marketing",
+        // Campaign briefs (1) + asset tasks (3) route to the campaigns review queue.
+        id: "marketing-campaign-work",
+        label: "4 campaign work products are waiting for review",
+        href: "/customer/marketing/campaigns",
+        tone: "accent",
+      },
+      {
+        // Automation candidate (1) routes to the automation review queue.
+        id: "marketing-automation-work",
+        label: "1 automation candidate is waiting for review",
+        href: "/customer/marketing/automation",
         tone: "accent",
       },
     ]);
@@ -136,9 +144,9 @@ describe("revenue cockpit summary", () => {
         tone: "warning",
       },
       {
-        id: "marketing-work",
-        label: "1 marketing work product is waiting",
-        href: "/customer/marketing",
+        id: "marketing-campaign-work",
+        label: "1 campaign work product is waiting for review",
+        href: "/customer/marketing/campaigns",
         tone: "accent",
       },
     ]);
@@ -170,6 +178,42 @@ describe("revenue cockpit summary", () => {
     });
     expect(summary.attentionItems[2].label).toBe("3 new leads are waiting for triage");
     expect(summary.attentionItems[3].label).toBe("1 support contract renews within 30 days");
+  });
+
+  it("renders an empty pipeline as a concern, not a neutral zero", () => {
+    const summary = buildRevenueCockpitSummary({
+      engagementCounts: [],
+      opportunityCounts: [{ stage: "closed_won", count: 4, expectedValue: 40000 }],
+      quoteCounts: [],
+      orderCounts: [],
+      staleOpportunityCount: 0,
+      marketingWork: { campaignBriefsOpen: 0, assetTasksOpen: 0, automationCandidatesOpen: 0 },
+    });
+
+    const pipeline = summary.metrics.find((m) => m.id === "pipeline");
+    expect(pipeline).toEqual({
+      id: "pipeline",
+      label: "Pipeline",
+      value: "0",
+      detail: "No open pipeline — nothing in motion",
+      href: "/customer/opportunities",
+      tone: "warning",
+    });
+  });
+
+  it("keeps the pipeline tile neutral-positive when there is open pipeline", () => {
+    const summary = buildRevenueCockpitSummary({
+      engagementCounts: [],
+      opportunityCounts: [{ stage: "proposal", count: 2, expectedValue: 8000 }],
+      quoteCounts: [],
+      orderCounts: [],
+      staleOpportunityCount: 0,
+      marketingWork: { campaignBriefsOpen: 0, assetTasksOpen: 0, automationCandidatesOpen: 0 },
+    });
+
+    const pipeline = summary.metrics.find((m) => m.id === "pipeline");
+    expect(pipeline?.tone).toBe("accent");
+    expect(pipeline?.detail).toBe("$8,000 open");
   });
 
   it("omits inbox items when the optional counts are absent (back-compat)", () => {
