@@ -16,7 +16,7 @@ apps/web/components/workbooks/Grid.tsx	924
 apps/web/instrumentation.test.ts	826
 apps/web/instrumentation.ts	1342
 apps/web/lib/actions/agent-coworker-external.test.ts	866
-apps/web/lib/actions/agent-coworker.ts	2762
+apps/web/lib/actions/agent-coworker.ts	2765
 apps/web/lib/actions/agent-task-scheduler.test.ts	1083
 apps/web/lib/actions/ai-providers.ts	915
 apps/web/lib/actions/build-governed.test.ts	1134
