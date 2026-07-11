@@ -85,7 +85,8 @@
   .shell {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 320px;
-    grid-template-rows: auto 1fr;
+    /* row 1 = top bar, row 2 = market ticker, row 3 = board + HUD */
+    grid-template-rows: auto auto minmax(480px, 1fr);
     gap: 0;
     height: 100vh;
     min-height: 640px;
@@ -158,7 +159,7 @@
   @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
   /* ---- board ---- */
-  .board-wrap { grid-column: 1; grid-row: 3; position: relative; overflow: hidden; background: var(--vs-ground); }
+  .board-wrap { grid-column: 1; grid-row: 3; position: relative; overflow: hidden; background: var(--vs-ground); min-height: 480px; }
   #board { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
   /* station overlay cards */
@@ -876,6 +877,10 @@
   /* ---------- boot ---------- */
   window.addEventListener("resize", () => { clearTimeout(window._rt); window._rt = setTimeout(resize, 120); });
   load("restaurant");
+  // re-measure once the viewer has settled its final size (some embed frames
+  // report a 0px board on the first synchronous paint).
+  requestAnimationFrame(() => { resize(); requestAnimationFrame(resize); });
+  setTimeout(resize, 300);
   raf = requestAnimationFrame(tick);
 })();
 </script>
