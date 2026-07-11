@@ -119,22 +119,39 @@ export type CompactionCaps = {
   textCap: number;
 };
 
+// EP-27FD96BC · P2 (BI-3C8220ED) — overload→trim feedback. The measured pressure
+// zone tightens the window-derived history budget so an already-overloaded turn
+// trims HARDER instead of only logging the overload. Never trims below `floor`.
+// `sharp`/undefined = 1.0 (byte-for-byte the prior behavior — the regression guard).
+const ZONE_TRIM_MULTIPLIER: Record<ContextPressureZone, number> = {
+  sharp: 1.0,
+  warning: 0.6,
+  dumb: 0.4,
+};
+
 /**
  * Size the agentic loop's compaction caps from the real model window when known
  * (BI-9679EB1A), clamped to NEVER go below today's `floor`. Pure.
  *
  * Invariant: an unknown / non-positive window returns `floor` exactly (byte-for-
  * byte identical to pre-window behavior), and any known window only ever RAISES
- * a cap. So a frontier model retains more history; a small/local model and the
- * first dispatch (window not yet learned) are unchanged.
+ * a cap above the floor. So a frontier model retains more history; a small/local
+ * model and the first dispatch (window not yet learned) are unchanged.
+ *
+ * When a live pressure `zone` is supplied (BI-3C8220ED), the window-derived
+ * budget is scaled down for `warning`/`dumb` so a turn measured to be
+ * overloaded trims harder — still never below `floor`, and identical to before
+ * when the zone is `sharp` or omitted.
  */
 export function deriveCompactionCaps(
   maxContextTokens: number | null | undefined,
   floor: CompactionCaps,
+  zone?: ContextPressureZone,
 ): CompactionCaps {
   const win = typeof maxContextTokens === "number" && maxContextTokens > 0 ? maxContextTokens : 0;
   if (win === 0) return floor;
-  const historyTokenBudget = Math.floor(win * HISTORY_WINDOW_FRACTION);
+  const trim = zone ? ZONE_TRIM_MULTIPLIER[zone] : 1;
+  const historyTokenBudget = Math.floor(win * HISTORY_WINDOW_FRACTION * trim);
   const historyBudgetChars = historyTokenBudget * 4;
   const maxHistory = Math.max(floor.maxHistory, Math.floor(historyTokenBudget / AVG_TOKENS_PER_MSG));
   const perMsgChars = Math.floor(historyBudgetChars / Math.max(1, maxHistory));
