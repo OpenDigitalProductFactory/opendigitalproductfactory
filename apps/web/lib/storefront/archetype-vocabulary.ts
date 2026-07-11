@@ -118,6 +118,22 @@ const VOCABULARY: Record<string, ArchetypeVocabulary> = {
     portalLabel: "Buyer Portal", stakeholderLabel: "Home Buyers",
     teamLabel: "Sales Team", inboxLabel: "Appointments", agentName: "New Homes Advisor",
   },
+  // Media & production — project-based content/production work. Per-leaf overrides
+  // (e.g. post-production "Artists") ship with each archetype via customVocabulary.
+  "media-production": {
+    itemsLabel: "Services", singleItemLabel: "Service", addButtonLabel: "Add service",
+    categoryLabel: "Service", priceLabel: "From",
+    portalLabel: "Client Portal", stakeholderLabel: "Clients",
+    teamLabel: "Crew", inboxLabel: "Project Enquiries", agentName: "Production Coordinator",
+  },
+  // Live events & venues — ticketed shows and bookings. Per-leaf overrides
+  // (e.g. venue "Guests", agency "Roster") ship via customVocabulary.
+  "live-events-venues": {
+    itemsLabel: "Events & Tickets", singleItemLabel: "Event", addButtonLabel: "Add event",
+    categoryLabel: "Category", priceLabel: "Price",
+    portalLabel: "Box Office", stakeholderLabel: "Guests",
+    teamLabel: "Team", inboxLabel: "Bookings", agentName: "Box Office Manager",
+  },
 };
 
 const DEFAULT_VOCABULARY: ArchetypeVocabulary = {

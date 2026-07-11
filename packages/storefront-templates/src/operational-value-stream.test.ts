@@ -48,7 +48,7 @@ describe("deriveOperationalValueStream — invariants across all archetypes", ()
   });
 
   it("adds the return-inspect stage only for reservation-and-return archetypes", () => {
-    const rentalIds = ["equipment-rental", "self-storage", "agricultural-cooperative"];
+    const rentalIds = ["equipment-rental", "self-storage", "agricultural-cooperative", "production-equipment-rental"];
     for (const id of rentalIds) {
       expect(ovsmFor(id).stages.map((s) => s.key)).toContain("return-inspect");
     }
