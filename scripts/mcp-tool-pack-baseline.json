@@ -62,8 +62,6 @@
   "get_next_recommended_work",
   "get_release_status",
   "get_thread_result",
-  "grok_signin_start",
-  "grok_signin_status",
   "inspect_build_code_impact",
   "iterate_sandbox",
   "link_backlog_item_to_epic",

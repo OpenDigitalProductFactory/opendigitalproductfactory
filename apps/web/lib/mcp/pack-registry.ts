@@ -55,6 +55,8 @@ import { crmSalesPipelinePack } from "./packs/crm-sales-pipeline-pack";
 import { wikiOverlayPack } from "./packs/wiki-overlay-pack";
 import { licensingPack } from "./packs/licensing-pack";
 
+import { grokSigninPack } from "./packs/grok-signin-pack";
+
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
   runtimeCoordinationPack,
@@ -94,4 +96,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   crmSalesPipelinePack,
   wikiOverlayPack,
   licensingPack,
+  grokSigninPack,
 ]);
