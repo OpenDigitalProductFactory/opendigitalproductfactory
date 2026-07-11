@@ -107,6 +107,18 @@ describe("coworker service catalog seed data", () => {
       expect(args["create"]).not.toHaveProperty("digitalProductId");
       expect(args["update"]).not.toHaveProperty("digitalProductId");
     }
+    // BI-74FD6420 seed-FK contract: providerAgentId stays the slug agentId
+    // (build-specialist), NOT the dual-seed AGT-* twin. Collapsing to AGT-*
+    // here breaks CoworkerService_providerAgentId_fkey when slug rows are the
+    // seeded provider identity.
+    const providerIds = serviceUpserts.map((args) => {
+      const create = args["create"] as { providerAgentId?: string } | undefined;
+      return create?.providerAgentId;
+    });
+    expect(providerIds).toContain("build-specialist");
+    expect(providerIds).toContain("external-catalog-scout");
+    expect(providerIds).not.toContain("AGT-WS-BUILD");
+    expect(providerIds).not.toContain("AGT-WS-SCOUT");
     expect(serviceUpdates).toEqual([
       expect.objectContaining({
         where: expect.objectContaining({ digitalProductId: "dpf-portal" }),
