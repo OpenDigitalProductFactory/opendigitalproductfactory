@@ -49,6 +49,7 @@ import { versionHistoryPack } from "./packs/version-history-pack";
 import { eaOntologyPack } from "./packs/ea-ontology-pack";
 import { discoveryInventoryPack } from "./packs/discovery-inventory-pack";
 import { estatePosturePack } from "./packs/estate-posture-pack";
+import { scheduledAgentTaskPack } from "./packs/scheduled-agent-task-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
@@ -84,4 +85,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   eaOntologyPack,
   discoveryInventoryPack,
   estatePosturePack,
+  scheduledAgentTaskPack,
 ]);
