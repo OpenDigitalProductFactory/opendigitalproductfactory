@@ -37,6 +37,29 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
+  {
+    name: "set_demand_policy",
+    description:
+      "Set the operator-owned demand-management policy: the active scoring framework and/or the org-wide default investment-bucket target allocation. The demand engine and board read this instead of the built-in defaults. Every change is audited. Omitted fields are left unchanged.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        framework: { type: "string", enum: [...DEMAND_SCORE_FRAMEWORKS], description: "Active scoring framework (rice|wsjf|value_effort|weighted). The default applied when an item is scored without an explicit framework." },
+        bucketTargets: {
+          type: "object",
+          description: "Org-wide default investment allocation as percentages, e.g. { run: 70, grow: 20, transform: 10 }. Partial objects merge over the current values.",
+          properties: {
+            run: { type: "number" },
+            grow: { type: "number" },
+            transform: { type: "number" },
+          },
+        },
+      },
+      required: [],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
 ];
 
 async function scoreDemandItemHandler(params: Record<string, unknown>): Promise<ToolResult> {
@@ -48,10 +71,18 @@ async function scoreDemandItemHandler(params: Record<string, unknown>): Promise<
   const { computeDemandScore } = await import("@/lib/demand/scoring");
   const numOrKeep = (key: string, current: number | null): number | null =>
     typeof params[key] === "number" ? (params[key] as number) : current;
-  const f = String(params["framework"] ?? "rice");
+  // Framework: explicit param wins; otherwise the operator-owned demand policy
+  // (PlatformDevConfig), falling back to the built-in default.
+  const { resolveDemandPolicy } = await import("@/lib/demand/policy");
+  const policyConfig = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+    select: { demandFramework: true, demandBucketTargets: true },
+  });
+  const policyFramework = resolveDemandPolicy(policyConfig).framework;
+  const f = typeof params["framework"] === "string" ? String(params["framework"]) : policyFramework;
   const framework = (DEMAND_SCORE_FRAMEWORKS as readonly string[]).includes(f)
     ? (f as (typeof DEMAND_SCORE_FRAMEWORKS)[number])
-    : "rice";
+    : policyFramework;
   // Merge supplied inputs over what's already stored (partial updates).
   const inputs = {
     reach: numOrKeep("reach", item.reach),
@@ -116,13 +147,60 @@ async function scoreDemandItemHandler(params: Record<string, unknown>): Promise<
   };
 }
 
+async function setDemandPolicyHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const data: { demandFramework?: string; demandBucketTargets?: Record<string, number> } = {};
+  const f = params["framework"];
+  if (typeof f === "string" && (DEMAND_SCORE_FRAMEWORKS as readonly string[]).includes(f)) {
+    data.demandFramework = f;
+  }
+  const rawTargets = params["bucketTargets"];
+  if (rawTargets && typeof rawTargets === "object") {
+    // Merge partial targets over whatever is currently stored.
+    const current = await prisma.platformDevConfig.findUnique({
+      where: { id: "singleton" },
+      select: { demandBucketTargets: true },
+    });
+    const merged: Record<string, number> =
+      current?.demandBucketTargets && typeof current.demandBucketTargets === "object"
+        ? { ...(current.demandBucketTargets as Record<string, number>) }
+        : {};
+    for (const b of INVESTMENT_BUCKET_VALUES) {
+      const v = (rawTargets as Record<string, unknown>)[b];
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0) merged[b] = v;
+    }
+    data.demandBucketTargets = merged;
+  }
+  if (Object.keys(data).length === 0) {
+    return { success: false, error: "no_change", message: "Provide framework and/or bucketTargets." };
+  }
+  await prisma.platformDevConfig.upsert({
+    where: { id: "singleton" },
+    update: data,
+    create: { id: "singleton", ...data },
+  });
+  const { resolveDemandPolicy } = await import("@/lib/demand/policy");
+  const fresh = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+    select: { demandFramework: true, demandBucketTargets: true },
+  });
+  const policy = resolveDemandPolicy(fresh);
+  return {
+    success: true,
+    entityId: "singleton",
+    message: `Demand policy updated: framework=${policy.framework}, targets ${policy.bucketTargets.run}/${policy.bucketTargets.grow}/${policy.bucketTargets.transform}.`,
+    data: policy,
+  };
+}
+
 export const demandScoringPack: ToolPack = {
   packId: "demand-scoring",
   definitions,
   handlers: {
     score_demand_item: (params) => scoreDemandItemHandler(params),
+    set_demand_policy: (params) => setDemandPolicyHandler(params),
   },
   grants: {
     score_demand_item: ["backlog_write"],
+    set_demand_policy: ["backlog_write"],
   },
 };

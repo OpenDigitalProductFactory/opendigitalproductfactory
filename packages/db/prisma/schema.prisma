@@ -6420,6 +6420,14 @@ model PlatformDevConfig {
   forkVerifiedAt            DateTime?
   backlogTeeUpDailyCap      Int       @default(3)
   governedBacklogEnabled    Boolean   @default(false)
+  // Demand-management policy (EP-DEMAND-MGMT Phase 4): the operator-owned,
+  // audited scoring policy the demand engine reads instead of a hardcoded
+  // default. demandFramework = active scoring framework (rice|wsjf|value_effort|
+  // weighted); demandBucketTargets = org-wide default investment allocation,
+  // e.g. { "run": 70, "grow": 20, "transform": 10 }. null = built-in defaults
+  // (rice, 70/20/10). §11.
+  demandFramework           String?
+  demandBucketTargets       Json?
   // Hive Contributions consent (spec §6.1). Device-fingerprint contribution is
   // opt-in, DEFAULTED ON because outbound fingerprints are PII-free
   // (redactFingerprintEvidence, fail-closed). The master pause halts ALL

@@ -41,6 +41,7 @@ apps/web/lib/integrate/sandbox/build-branch.ts	854
 apps/web/lib/marketing.ts	1367
 apps/web/lib/mcp-tools-backlog.test.ts	901
 apps/web/lib/mcp-tools.ts	13066
+apps/web/lib/mcp-tools.ts	13165
 apps/web/lib/navigation/portal-navigation-model.ts	937
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1328
@@ -50,7 +51,7 @@ apps/web/lib/self-upgrade/quiescence.test.ts	842
 apps/web/lib/self-upgrade/quiescence.ts	1460
 apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	903
-apps/web/lib/tak/agent-grants.ts	807
+apps/web/lib/tak/agent-grants.ts	808
 apps/web/lib/tak/agent-routing.ts	965
 apps/web/lib/tak/agentic-loop.test.ts	2113
 apps/web/lib/tak/agentic-loop.ts	2484
