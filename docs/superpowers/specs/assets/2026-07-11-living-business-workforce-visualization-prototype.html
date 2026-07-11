@@ -365,7 +365,6 @@
     let html="";
     c.stages.forEach((s,i)=>{
       const [idx,k2,name,vern,load,lead,role,specs,act,jobs,mv,ml,persona]=s;
-      const idle=(act==="idle"||act==="following up"&&i===c.stages.length-1&&false);
       const active=(i<c.stages.length-1); // last stage shown as queued for variety
       const specHtml=specs.map((sp,j)=>`<span class="spec${(active&&j===0)?' on':''}">${sp}</span>`).join("");
       const crewN=1+specs.length;
