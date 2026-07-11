@@ -55,7 +55,21 @@ export type ArchetypeCategory =
    *  routes, incident response — a real-time dispatch variant) and alarm/CCTV
    *  field installation with recurring monitoring. Guard (PSO) and low-voltage
    *  licensing overlays. Gap analysis §4 (B3). */
-  | "security-services";
+  | "security-services"
+  /** Media & production: the businesses that MAKE the content — film / commercial
+   *  / branded-video production companies, post-production & VFX studios, and
+   *  event production / AV / staging houses. Project-based value stream (brief →
+   *  pre-production → shoot/build → post/strike → deliver) billed against
+   *  milestones through the projects module. Distinct from live-events-venues
+   *  (which sells tickets to the show). See
+   *  docs/superpowers/specs/2026-07-11-entertainment-industry-archetypes-design.md. */
+  | "media-production"
+  /** Live events & venues: the businesses that SELL the show — ticketed event
+   *  venues / box offices (theatres, concert halls, live-music clubs), tour /
+   *  concert promoters (arrange tours, book talent + venues, carry box-office
+   *  risk), and talent & booking agencies. Event-driven, ticketed value stream;
+   *  capacity is a physical hard cap (seats/room). Same design doc as above. */
+  | "live-events-venues";
 
 export interface FormField {
   name: string;

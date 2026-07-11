@@ -47,6 +47,7 @@ import { demandScoringPack } from "./packs/demand-scoring-pack";
 import { workforcePack } from "./packs/workforce-pack";
 import { versionHistoryPack } from "./packs/version-history-pack";
 import { eaOntologyPack } from "./packs/ea-ontology-pack";
+import { discoveryInventoryPack } from "./packs/discovery-inventory-pack";
 import { estatePosturePack } from "./packs/estate-posture-pack";
 import { crmSalesPipelinePack } from "./packs/crm-sales-pipeline-pack";
 
@@ -82,6 +83,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   workforcePack,
   versionHistoryPack,
   eaOntologyPack,
+  discoveryInventoryPack,
   estatePosturePack,
   crmSalesPipelinePack,
 ]);

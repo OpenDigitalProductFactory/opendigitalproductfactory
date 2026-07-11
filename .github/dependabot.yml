@@ -63,6 +63,22 @@ updates:
       # mode code. Upgrade deliberately, not through Dependabot.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # react-data-grid has no stable release yet; every version is a
+      # 7.0.0-* prerelease. The maintainer ships the recommended build on
+      # the `beta` channel, while `canary` is the nightly/dev channel and
+      # `alpha` is older still. Raw semver sorts canary > beta > alpha
+      # alphabetically, so Dependabot jumps us onto the nightly channel
+      # (7.0.0-canary.49 broke Typecheck + Prod Build — see closed #2780).
+      # Block the alpha and canary channels so bumps stay on the beta line.
+      #
+      # beta.60 is ALSO blocked: it ships a broken package — lib/index.js
+      # has a bare `import "ecij";` but declares no `dependencies`, so `ecij`
+      # never installs and every consumer's runtime + Production Build fails
+      # ("Cannot find package 'ecij'"). Stay on the working beta.59 until the
+      # maintainer publishes a fixed beta (beta.61+), which Dependabot will
+      # then be free to propose.
+      - dependency-name: "react-data-grid"
+        versions: ["7.0.0-alpha.*", "7.0.0-canary.*", "7.0.0-beta.60"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

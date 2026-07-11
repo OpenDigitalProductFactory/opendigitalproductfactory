@@ -21,12 +21,14 @@ const EXPECTED_SLUGS = [
   "banking_financial_services",
   "fund_accounting",
   "software_platform",
+  "media_production",
+  "live_events_venues",
 ];
 
 describe("financial profile catalog", () => {
-  it("has all 14 profiles", () => {
+  it("has all 16 profiles", () => {
     const all = getAllProfiles();
-    expect(all).toHaveLength(14);
+    expect(all).toHaveLength(16);
     const slugs = all.map((p) => p.slug);
     for (const expected of EXPECTED_SLUGS) {
       expect(slugs, `missing profile: ${expected}`).toContain(expected);

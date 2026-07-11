@@ -98,6 +98,30 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "Perishable goods sit at the centre of our supply chain. We balance local producers (freshness, story) with broadline distributors (consistency, breadth), receive frequently, and treat the cold chain, food safety, and waste discipline as core operations — not back-of-house concerns.",
   },
+  "media-production": {
+    missionTheme:
+      "produce work our clients are proud of and that gets results — on brief, on budget, and on time",
+    businessModel:
+      "Project-based production: each commission runs pre-production → shoot/build → post → delivery, billed against milestones. Reputation, the reel, and repeat clients drive the pipeline.",
+    whoWeServe:
+      "We serve brands, agencies, and organisations who trust us to turn a brief into finished work. The relationship is built shoot by shoot — a project delivered well earns the next one and the referral.",
+    howWeDecide:
+      "We decide for the finished work and the client relationship: creative quality, a realistic plan, and honesty about what a budget and timeline can deliver. We protect the crew's craft and the client's brand, and we never over-promise to win a pitch.",
+    supplyChain:
+      "We run on a flexible network of freelance crew and talent plus equipment-rental houses, studios, and post/software vendors we book per project. Reliability and availability matter more than lowest price — a no-show on a shoot day is unrecoverable.",
+  },
+  "live-events-venues": {
+    missionTheme:
+      "put on unforgettable events and fill the room — great shows, well run, that audiences and artists come back for",
+    businessModel:
+      "Event-driven and ticketed: we announce, go on sale, sell tickets, and run the event. Capacity is finite, so sell-through, on-sale conversion, and a returning audience drive the business.",
+    whoWeServe:
+      "We serve ticket buyers and fans who choose to spend a night with us, and the artists and partners who trust us with their show. A great experience turns a first-timer into a regular.",
+    howWeDecide:
+      "We decide for the audience experience and a safe, well-run event: strong programming, fair pricing, crowd safety without compromise, and clear communication when plans change. We balance the artist deal, the box-office risk, and the room we can fill.",
+    supplyChain:
+      "We buy in artist and talent guarantees, production and staging, staffing and security, and ticketing services — mostly per event. Contracts, insurance, licences, and reliable production partners are core operations; a failed supplier on show day is a public failure.",
+  },
   "professional-services": {
     missionTheme:
       "deliver expert advice and dependable service that helps our clients succeed",

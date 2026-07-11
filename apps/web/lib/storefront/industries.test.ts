@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { INDUSTRY_OPTIONS, INDUSTRY_SLUGS, isIndustrySlug, industryLabel } from "./industries";
 
 describe("industries", () => {
-  it("exposes exactly the 19 canonical industries", () => {
-    expect(INDUSTRY_OPTIONS).toHaveLength(19);
+  it("exposes exactly the 21 canonical industries", () => {
+    expect(INDUSTRY_OPTIONS).toHaveLength(21);
     expect(INDUSTRY_SLUGS).toContain("healthcare-wellness");
     expect(INDUSTRY_SLUGS).toContain("hoa-property-management");
     expect(INDUSTRY_SLUGS).toContain("software-platform");
@@ -14,6 +14,8 @@ describe("industries", () => {
     expect(INDUSTRY_SLUGS).toContain("automotive-services");
     expect(INDUSTRY_SLUGS).toContain("moving-and-logistics");
     expect(INDUSTRY_SLUGS).toContain("security-services");
+    expect(INDUSTRY_SLUGS).toContain("media-production");
+    expect(INDUSTRY_SLUGS).toContain("live-events-venues");
   });
 
   it("slugs are kebab-case, never underscore", () => {

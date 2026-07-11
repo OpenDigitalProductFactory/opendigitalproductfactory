@@ -460,6 +460,54 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     ctaLanguage: ["Request a proposal", "Get a security assessment", "Add monitoring", "Talk to us"],
     agentSkills: ["Contract renewal nurture", "RFP / proposal draft", "Monitoring upsell campaign", "Incident-response case study"],
   },
+
+  "media-production": {
+    primaryGoal: "Win project commissions on the strength of the reel — showcase work, credibility, and repeatable process",
+    stakeholders: "Brands, agencies, marketing teams, artists, producers",
+    campaignTypes: [
+      "New showreel and case-study releases",
+      "Behind-the-scenes and process content",
+      "Client testimonial and results stories",
+      "Capability and service-line announcements",
+      "Awards, festival, and press features",
+      "Seasonal / campaign-cycle outreach to agencies and brands",
+      "Referral and repeat-client nurture",
+    ],
+    contentTone: "Creative, confident, craft-led — let the work speak",
+    keyMetrics: [
+      "Project enquiries",
+      "Proposal-to-win rate",
+      "Average project value",
+      "Reel / portfolio engagement",
+      "Repeat-client rate",
+    ],
+    ctaLanguage: ["Start a project", "See our work", "Request a quote", "Book a discovery call"],
+    agentSkills: ["Showreel launch campaign", "Case-study draft", "Agency outreach sequence", "Proposal follow-up nurture"],
+  },
+
+  "live-events-venues": {
+    primaryGoal: "Sell out shows and grow a returning audience — drive ticket sales at on-sale and fill the room by event date",
+    stakeholders: "Ticket buyers, fans, artists, agents, sponsors, local community",
+    campaignTypes: [
+      "On-sale and presale announcements",
+      "Line-up reveals and event countdowns",
+      "Low-ticket-warning and last-chance pushes",
+      "Membership / season-pass and loyalty campaigns",
+      "Post-event recap and next-event cross-sell",
+      "Private-hire and group-booking promotion",
+      "Sponsor and partner activation",
+    ],
+    contentTone: "Energetic, exciting, community-driven — build anticipation",
+    keyMetrics: [
+      "Tickets sold / sell-through rate",
+      "On-sale conversion",
+      "Average tickets per buyer",
+      "Repeat-attendee rate",
+      "Secondary spend (bar / merch / hospitality)",
+    ],
+    ctaLanguage: ["Buy tickets", "Get on the list", "Reserve your seat", "Book the venue"],
+    agentSkills: ["On-sale announcement campaign", "Countdown / last-chance sequence", "Post-event cross-sell", "Private-hire promotion"],
+  },
 };
 
 // ─── CTA-Based Fallback (for unknown categories) ───────────────────────────
