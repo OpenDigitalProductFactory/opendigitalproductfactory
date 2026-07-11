@@ -13,6 +13,10 @@ import {
   type GapCluster,
   type ReviewFinding,
 } from "@/lib/wiki/decision-review-findings";
+import {
+  OrgDecisionCaptureList,
+  type OpenOrgDecision,
+} from "@/components/wiki/OrgDecisionCaptureList";
 import { GapAnswerForm } from "./gap-answer-form";
 
 export const dynamic = "force-dynamic";
@@ -69,7 +73,7 @@ function toGapClusters(
 }
 
 export default async function DecisionReviewPage() {
-  const [conflictRows, unresolvedRows, staleCount, orgProfile] =
+  const [conflictRows, unresolvedRows, staleCount, orgProfile, openOrgRows] =
     await Promise.all([
       prisma.decisionInteraction.findMany({
         where: { principleConflict: true },
@@ -98,7 +102,34 @@ export default async function DecisionReviewPage() {
         where: { kind: "organization" },
         select: { profileId: true },
       }),
+      // Unresolved WWWD business decisions (no build, unanswered) — the
+      // inline capture loop's inbox (BI-9677364B).
+      prisma.decisionInteraction.findMany({
+        where: {
+          outcomeType: { in: UNRESOLVED },
+          buildId: null,
+          routeContext: "/coworker-business",
+          humanOutcome: { equals: Prisma.DbNull },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: {
+          interactionId: true,
+          question: true,
+          riskTier: true,
+          outcomeType: true,
+          createdAt: true,
+        },
+      }),
     ]);
+
+  const openOrgDecisions: OpenOrgDecision[] = openOrgRows.map((row) => ({
+    interactionId: row.interactionId,
+    question: row.question,
+    riskTier: row.riskTier,
+    outcomeType: row.outcomeType,
+    createdAt: row.createdAt.toISOString(),
+  }));
 
   const findings = buildReviewFindings({
     conflicts: conflictRows as ConflictRow[],
@@ -126,6 +157,8 @@ export default async function DecisionReviewPage() {
           settled answer yet.
         </p>
       </header>
+
+      <OrgDecisionCaptureList decisions={openOrgDecisions} />
 
       {findings.length === 0 ? (
         <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-8 text-center">
