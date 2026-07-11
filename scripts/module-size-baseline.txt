@@ -40,6 +40,7 @@ apps/web/lib/integrate/build-orchestrator.ts	1780
 apps/web/lib/integrate/sandbox/build-branch.ts	854
 apps/web/lib/marketing.ts	1367
 apps/web/lib/mcp-tools-backlog.test.ts	901
+apps/web/lib/mcp-tools.ts	14657
 apps/web/lib/mcp-tools.ts	14435
 apps/web/lib/navigation/portal-navigation-model.ts	937
 apps/web/lib/operate/coworker-regression-detector.ts	935
