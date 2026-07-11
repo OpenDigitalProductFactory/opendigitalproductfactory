@@ -1447,6 +1447,7 @@ model WorkCapsule {
   activities              WorkCapsuleActivity[]
   runtimeTargets          RuntimeTarget[]
   runtimeVerifications    RuntimeVerification[]
+  externalEvidence        ExternalEvidenceRecord[]
 
   @@index([status, updatedAt])
   @@index([backlogItemId])
@@ -5307,24 +5308,35 @@ model ImprovementSignal {
 }
 
 model ExternalEvidenceRecord {
-  id            String   @id @default(cuid())
-  actorUserId   String
-  routeContext  String
-  operationType String
-  target        String
-  provider      String
-  resultSummary String
-  details       Json?
-  buildId       String?
-  taskRunId     String?
-  createdAt     DateTime @default(now())
-  actorUser     User     @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  id                    String       @id @default(cuid())
+  actorUserId           String
+  routeContext          String
+  operationType         String
+  target                String
+  provider              String
+  resultSummary         String
+  details               Json?
+  buildId               String?
+  taskRunId             String?
+  // EP-WORK-CONVERGENCE Phase 1 (BI-D6FA8641): bind external evidence to the
+  // durable WorkCapsule with producer identity, so external Claude/Codex/Grok
+  // work rolls up onto the capsule timeline. All nullable — additive, no
+  // backfill required to migrate. executorKind mirrors WorkCapsule.executorKind;
+  // recordedBy* mirror WorkCapsuleActivity's producer-identity fields.
+  workCapsuleId         String?
+  executorKind          String?
+  recordedByPrincipalId String?
+  recordedByAgentId     String?
+  createdAt             DateTime     @default(now())
+  actorUser             User         @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  workCapsule           WorkCapsule? @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
 
   @@index([actorUserId, createdAt])
   @@index([routeContext, operationType])
   @@index([operationType, createdAt])
   @@index([buildId, createdAt])
   @@index([taskRunId, createdAt])
+  @@index([workCapsuleId, createdAt])
 }
 
 model NonProductionEnvironmentLease {

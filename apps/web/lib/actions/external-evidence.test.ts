@@ -5,6 +5,9 @@ vi.mock("@dpf/db", () => ({
     externalEvidenceRecord: {
       create: vi.fn(),
     },
+    workCapsule: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -16,6 +19,8 @@ const mockPrisma = prisma as any;
 describe("external evidence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: no capsule linked to any build (the buildId-resolve path is a no-op).
+    mockPrisma.workCapsule.findMany.mockResolvedValue([]);
   });
 
   it("writes a normalized external evidence record", async () => {
@@ -74,6 +79,84 @@ describe("external evidence", () => {
       data: expect.objectContaining({
         buildId: "FB-123",
         taskRunId: "TR-123",
+      }),
+    });
+  });
+
+  it("resolves the capsule from buildId and inherits its executorKind when exactly one matches", async () => {
+    mockPrisma.workCapsule.findMany.mockResolvedValue([
+      { id: "WC-1", executorKind: "codex-desktop" },
+    ]);
+    mockPrisma.externalEvidenceRecord.create.mockResolvedValue({ id: "evidence-3" });
+
+    await recordExternalEvidence({
+      actorUserId: "user-1",
+      routeContext: "/build",
+      operationType: "external_development_handoff",
+      target: "codex-session-2",
+      provider: "codex",
+      resultSummary: "Implemented feature.",
+      buildId: "FB-777",
+    });
+
+    expect(mockPrisma.workCapsule.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { featureBuildId: "FB-777" }, take: 2 }),
+    );
+    expect(mockPrisma.externalEvidenceRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        workCapsuleId: "WC-1",
+        executorKind: "codex-desktop",
+      }),
+    });
+  });
+
+  it("leaves the capsule unset when more than one build match is ambiguous", async () => {
+    mockPrisma.workCapsule.findMany.mockResolvedValue([
+      { id: "WC-1", executorKind: "codex-desktop" },
+      { id: "WC-2", executorKind: "claude-desktop" },
+    ]);
+    mockPrisma.externalEvidenceRecord.create.mockResolvedValue({ id: "evidence-4" });
+
+    await recordExternalEvidence({
+      actorUserId: "user-1",
+      routeContext: "/build",
+      operationType: "external_development_handoff",
+      target: "codex-session-3",
+      provider: "codex",
+      resultSummary: "Ambiguous build.",
+      buildId: "FB-DUP",
+    });
+
+    const call = mockPrisma.externalEvidenceRecord.create.mock.calls[0][0];
+    expect(call.data).not.toHaveProperty("workCapsuleId");
+    expect(call.data).not.toHaveProperty("executorKind");
+  });
+
+  it("persists an explicit capsule link and producer identity without re-resolving", async () => {
+    mockPrisma.externalEvidenceRecord.create.mockResolvedValue({ id: "evidence-5" });
+
+    await recordExternalEvidence({
+      actorUserId: "user-1",
+      routeContext: "/build",
+      operationType: "external_development_handoff",
+      target: "grok-session-1",
+      provider: "grok",
+      resultSummary: "Finished the handoff.",
+      buildId: "FB-888",
+      workCapsuleId: "WC-EXPLICIT",
+      executorKind: "grok-desktop",
+      recordedByPrincipalId: "principal-9",
+      recordedByAgentId: "agent-9",
+    });
+
+    // Explicit workCapsuleId short-circuits the buildId resolution.
+    expect(mockPrisma.workCapsule.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.externalEvidenceRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        workCapsuleId: "WC-EXPLICIT",
+        executorKind: "grok-desktop",
+        recordedByPrincipalId: "principal-9",
+        recordedByAgentId: "agent-9",
       }),
     });
   });
