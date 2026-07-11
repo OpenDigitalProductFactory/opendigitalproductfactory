@@ -1,5 +1,8 @@
 # Build Studio — Overseer-Grade Single-Build UX (Solution & Oversight layer)
 
+> **⇢ Coordination — Unified Work Graph.** This spec is a design input to the **Collaborative Work Management × Build Studio convergence**. Before starting work traced here, read the governing memo [`2026-07-11-collaborative-work-management-convergence-memo.md`](./2026-07-11-collaborative-work-management-convergence-memo.md) and backlog epic **EP-WORK-CONVERGENCE** (9 items, write-model-first). The target is one substrate — `WorkCapsule` / `WorkItem` → `WorkCase` projection → plain approve/revise — so efforts stay coordinated and don't diverge.
+
+
 - **Status:** DESIGN-ONLY (no code in this PR). Implementation lands via Build Studio / the normal PR path after the design is accepted.
 - **Date:** 2026-06-22
 - **Epic:** [EP-BUILD-STUDIO-UX](https://example.invalid) — "Build Studio UX Redesign — workflow-primary canvas, anchored inspectors, compact fleet" (extends; no new epic — `check-epic-overlap-before-creating`).

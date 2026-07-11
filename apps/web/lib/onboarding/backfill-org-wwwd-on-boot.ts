@@ -19,6 +19,8 @@
 
 import { prisma } from "@dpf/db";
 import { resolveOrgProfileId } from "@/lib/decision-perspective/material";
+import { STANCE_VECTOR_KEYS } from "./archetype-business-context";
+import { stanceVectorSlug } from "./seed-org-wwwd-corpus";
 import { runSetupCompletionSeeds } from "./setup-completion-seeds";
 
 export type BackfillOrgWwwdResult = {
@@ -64,11 +66,20 @@ export async function backfillOrgWwwdOnBoot(
     for (const org of orgs) {
       try {
         // Cheap presence check — a healthy install does no seed work on boot.
-        const [profileId, overlayPageCount] = await Promise.all([
+        // Shape-aware (BI-70ADC71F): "present" means the profile exists AND
+        // the corpus carries the current shape (all 5 stance-vector pages).
+        // Installs seeded before the stance-vector redistribution re-run the
+        // idempotent chain once — it adds the missing pages/materials, retags
+        // org-supply-chain, and never downgrades an owner-confirmed material.
+        const vectorSlugs = STANCE_VECTOR_KEYS.map((key) => stanceVectorSlug(key));
+        const [profileId, overlayPageCount, vectorPageCount] = await Promise.all([
           resolveOrgProfileId({ db: prisma, organizationId: org.id }),
           prisma.wikiPage.count({ where: { organizationId: org.id } }),
+          prisma.wikiPage.count({
+            where: { organizationId: org.id, slug: { in: vectorSlugs } },
+          }),
         ]);
-        if (profileId && overlayPageCount > 0) {
+        if (profileId && overlayPageCount > 0 && vectorPageCount >= vectorSlugs.length) {
           result.present++;
           continue;
         }
@@ -82,7 +93,7 @@ export async function backfillOrgWwwdOnBoot(
         await runSetupCompletionSeeds(org.id);
         result.seeded++;
         logger.log(
-          `[wwwd-backfill] org ${org.id}: seeded WWWD corpus + profile (was profile=${profileId ?? "none"}, overlayPages=${overlayPageCount})`,
+          `[wwwd-backfill] org ${org.id}: seeded WWWD corpus + profile (was profile=${profileId ?? "none"}, overlayPages=${overlayPageCount}, vectorPages=${vectorPageCount})`,
         );
       } catch (err) {
         result.skipped++;
