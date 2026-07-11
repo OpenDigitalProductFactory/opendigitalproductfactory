@@ -42,7 +42,7 @@
     "@types/react": "^19",
     "jest": "~30.4.2",
     "jest-expo": "~56.0.5",
-    "msw": "^2.14.6",
+    "msw": "^2.14.7",
     "react-test-renderer": "19.2.7",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3"
