@@ -335,6 +335,222 @@ const ARCHETYPE_PROFILES: Record<string, Partial<ArchetypeBusinessProfile>> = {
   },
 };
 
+// ─── Stance vectors (EP-0AF96937 company-stance onboarding, BI-70ADC71F) ─────
+// The 5 coverage vectors that prime the WWWD decision gate: each becomes an
+// org-overlay stance page + PerspectiveMaterial bundle at seeding time
+// (unconfirmed B/0.6 — clears nothing until the owner confirms). Same contract
+// as the profiles above: broad, true, EDITABLE STARTERS in the industry's own
+// vocabulary; never fabricated specifics. Ceilings are rendered into the stance
+// body text (the deliberation layer reads them semantically) — no schema field.
+
+export const STANCE_VECTOR_KEYS = [
+  "customer-goodwill",
+  "pricing-integrity",
+  "growth-vs-stability",
+  "quality-bar",
+  "spend-authority",
+] as const;
+export type StanceVectorKey = (typeof STANCE_VECTOR_KEYS)[number];
+
+export type StanceVectorDefault = {
+  /** Card/page title in plain language (a question the owner recognizes). */
+  title: string;
+  /** The default stance — 1–3 plain sentences, owner-editable starter. */
+  stance: string;
+  /** Authority ceiling in whole USD (goodwill / pricing / spend vectors). */
+  ceilingUsd?: number;
+};
+
+export type ArchetypeStanceVectors = Record<StanceVectorKey, StanceVectorDefault>;
+
+export const GENERIC_STANCE_VECTORS: ArchetypeStanceVectors = {
+  "customer-goodwill": {
+    title: "When something goes wrong on our side",
+    stance:
+      "When a problem is our fault, we make it right quickly — a redo, replacement, refund, or credit — without making the customer fight for it. Within the goodwill ceiling, resolve it on the spot; beyond it, the owner decides.",
+    ceilingUsd: 100,
+  },
+  "pricing-integrity": {
+    title: "Prices, quotes, and discounts",
+    stance:
+      "We honor the prices we quote, including our own mistakes, and fix the source of the error. Discounts are deliberate, not improvised: offer one only when it serves a relationship we want to keep, and never price below what the work costs us.",
+    ceilingUsd: 100,
+  },
+  "growth-vs-stability": {
+    title: "New opportunities vs existing commitments",
+    stance:
+      "When new opportunities compete with commitments to existing customers, existing commitments get first call on our capacity. We take on new work at the pace quality allows, not faster.",
+  },
+  "quality-bar": {
+    title: "Our quality standard",
+    stance:
+      "Work that leaves our hands meets our standard. If something slips below it, we fix it at our cost before it costs us trust — a redo is cheaper than a lost reputation.",
+  },
+  "spend-authority": {
+    title: "Spending without asking",
+    stance:
+      "Routine, budgeted purchases that keep the business running can proceed without the owner, up to the spend ceiling per purchase. Anything novel, recurring, or above the ceiling goes to the owner first.",
+    ceilingUsd: 250,
+  },
+};
+
+/** Industry overrides — only the vectors where the posture genuinely differs. */
+const INDUSTRY_STANCE_VECTORS: Record<string, Partial<ArchetypeStanceVectors>> = {
+  "healthcare-wellness": {
+    "customer-goodwill": {
+      title: "When a patient's experience goes wrong",
+      stance:
+        "A failure in a patient's experience gets a same-day response and a genuine fix — rebook first, waive or comp where we fell short, and tell the owner the same day. Never argue with a patient over a fee we caused.",
+      ceilingUsd: 150,
+    },
+    "quality-bar": {
+      title: "Our care standard",
+      stance:
+        "Patient safety and clinical quality are never traded for speed or margin. If care or service slips below our standard, we correct it at our cost and say so plainly.",
+    },
+    "spend-authority": {
+      title: "Spending without asking",
+      stance:
+        "Recurring clinical and office supplies reorder without the owner up to the ceiling per purchase — a stock-out can delay care. New equipment, new vendors, or anything above the ceiling goes to the owner.",
+      ceilingUsd: 500,
+    },
+  },
+  "food-hospitality": {
+    "customer-goodwill": {
+      title: "When a guest's visit goes wrong",
+      stance:
+        "Fix the visit while the guest is still at the table: remake or comp the dish, not the argument. Staff resolve it on the spot within the ceiling; a comped meal that wins the next three visits is cheap.",
+      ceilingUsd: 60,
+    },
+    "quality-bar": {
+      title: "What leaves the pass",
+      stance:
+        "Food safety and cleanliness are never negotiable. If a plate isn't right, it doesn't leave the pass — and if it did, we remake it without debate.",
+    },
+  },
+  "retail-goods": {
+    "customer-goodwill": {
+      title: "Returns, damage, and our mistakes",
+      stance:
+        "If we shipped it wrong, late, or broken, we replace or refund without friction within the ceiling — the customer should not pay for our mistake. Habitual-abuse cases go to the owner rather than becoming policy.",
+      ceilingUsd: 75,
+    },
+    "spend-authority": {
+      title: "Restocking without asking",
+      stance:
+        "Reorders of proven sellers within budget proceed without the owner up to the ceiling per order. New lines, new suppliers, or bulk buys above it are the owner's call — stock ties up cash.",
+      ceilingUsd: 200,
+    },
+  },
+  "professional-services": {
+    "customer-goodwill": {
+      title: "When our work misses the mark",
+      stance:
+        "When our advice or work falls short, we remediate with more of our own work first, a credit second, and a refund only when trust demands it. The relationship compounds over years; the fix should protect it.",
+      ceilingUsd: 250,
+    },
+    "pricing-integrity": {
+      title: "Fees, scope, and discounts",
+      stance:
+        "We honor quoted fees and absorb our own estimating mistakes on the current engagement while correcting them for the next one. We do not discount below the cost of doing the work well — a cheap engagement done badly costs the reputation.",
+    },
+  },
+  "banking-financial-services": {
+    "customer-goodwill": {
+      title: "When we make an account error",
+      stance:
+        "Fees or charges caused by our error are reversed promptly within the ceiling and documented. Anything touching disclosures, rates, or regulated terms goes to the owner — goodwill never bends compliance.",
+      ceilingUsd: 100,
+    },
+    "pricing-integrity": {
+      title: "Rates, terms, and exceptions",
+      stance:
+        "Rate and term claims always match what we actually offer, and required disclosures stay attached. There are no improvised pricing exceptions — every exception is an owner decision with a record.",
+    },
+  },
+  "trades-maintenance": {
+    "customer-goodwill": {
+      title: "Callbacks and our mistakes",
+      stance:
+        "A callback on our own work is priority scheduling and free within the ceiling — we stand behind the work. If the fault is genuinely not ours, we say so honestly and quote the real job.",
+      ceilingUsd: 150,
+    },
+    "spend-authority": {
+      title: "Parts and van stock without asking",
+      stance:
+        "Parts and materials needed to finish a booked job proceed without the owner up to the ceiling — a second trip costs more than the part. Tools, equipment, and new suppliers are the owner's call.",
+      ceilingUsd: 300,
+    },
+  },
+  "automotive-services": {
+    "customer-goodwill": {
+      title: "When our repair doesn't hold",
+      stance:
+        "If our part or work fails, we return and make it right free within the ceiling, at the customer's location, at the next available slot. Safety-related comebacks jump the queue.",
+      ceilingUsd: 150,
+    },
+  },
+  "software-platform": {
+    "customer-goodwill": {
+      title: "When our product or billing fails a customer",
+      stance:
+        "Outages, bugs, and billing errors on our side are credited or refunded without friction within the ceiling, and we say plainly what went wrong. A long-time customer harmed by our mistake is restored first, reconciled second.",
+      ceilingUsd: 200,
+    },
+    "growth-vs-stability": {
+      title: "New features vs reliability",
+      stance:
+        "Reliability and existing-customer success outrank new-feature velocity — churn from broken trust costs more than a delayed launch. We ship new capability at the pace uptime and support quality allow.",
+    },
+  },
+  "education-training": {
+    "customer-goodwill": {
+      title: "When we fail a learner or family",
+      stance:
+        "If we cancel, misschedule, or under-deliver, we make the learner whole first — a make-up session or credit within the ceiling — and tell the family before they ask.",
+      ceilingUsd: 100,
+    },
+  },
+  "public-sector": {
+    "customer-goodwill": {
+      title: "When we get it wrong with a resident",
+      stance:
+        "Errors are corrected through the published process, equally for every resident — fee waivers and remedies follow the schedule, not discretion. Transparency about the mistake is part of the remedy.",
+    },
+    "pricing-integrity": {
+      title: "Fees and charges",
+      stance:
+        "Fees are set in public session and applied uniformly. There are no discounts or improvised exceptions — changing a fee is a public decision, not a service gesture.",
+    },
+  },
+  "nonprofit-community": {
+    "spend-authority": {
+      title: "Spending donors' money without asking",
+      stance:
+        "Program supplies within the approved budget proceed up to the ceiling per purchase. Anything outside budget or above it goes to the director — every dollar carries a donor's trust.",
+      ceilingUsd: 150,
+    },
+  },
+};
+
+/**
+ * Resolve the stance-vector defaults for an org: industry overrides merged
+ * over the generic set. Pure and deterministic; primary archetype only (no
+ * secondary blending — mixed stances read as mush, and the owner confirms or
+ * adjusts each card anyway).
+ */
+export function resolveStanceVectors(input: {
+  archetypeId?: string | null;
+  industry?: string | null;
+}): ArchetypeStanceVectors {
+  const overrides = (input.industry ? INDUSTRY_STANCE_VECTORS[input.industry] : undefined) ?? {};
+  const merged = {} as Record<StanceVectorKey, StanceVectorDefault>;
+  for (const key of STANCE_VECTOR_KEYS) {
+    merged[key] = overrides[key] ?? GENERIC_STANCE_VECTORS[key];
+  }
+  return merged;
+}
+
 /**
  * Resolve the best business profile for an org: a flagship archetype override
  * (merged over its industry profile) when available, else the industry profile,

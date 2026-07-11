@@ -21,16 +21,51 @@
 // stable ids, wiki pages are upserted by (organizationId, slug), and a new
 // revision + re-embed only happen when the page body actually changes.
 // Safe to re-run on re-completion or replay.
+//
+// 2026-07-11 (BI-70ADC71F, stance-onboarding design): seeding now covers ALL
+// FOUR decision classes, not just plan-readiness — 4 identity pages plus 5
+// archetype-default stance-vector pages (goodwill, pricing, growth-vs-
+// stability, quality bar, spend authority), each landing PerspectiveMaterial
+// in its class bundle at unconfirmed B/0.6. Unconfirmed defaults still clear
+// nothing (effective 0.45 < every band) — the "How you decide" step upgrades
+// confirmed bundles to A/0.9. Re-seeding an existing install retags the
+// org-supply-chain material into architecture-tradeoff and never downgrades
+// an owner-confirmed or human-ruled material.
 
 import { prisma } from "@dpf/db";
 import { upsertWikiPage, appendRevision } from "@dpf/db/wiki-store";
 import { storeWikiPage, type StoreWikiPageInput } from "@/lib/wiki/embeddings";
+import { DECISION_DOMAIN_CLASSES, type DecisionDomainClass } from "@/lib/decision-perspective/types";
 import { suggestMission } from "./mission-suggestion";
-import { resolveBusinessProfile } from "./archetype-business-context";
+import {
+  resolveBusinessProfile,
+  resolveStanceVectors,
+  STANCE_VECTOR_KEYS,
+  type StanceVectorKey,
+} from "./archetype-business-context";
 
 /** Platform fallback our org profile chains to (material.ts:14). */
 export const ORG_PERSPECTIVE_FALLBACK_PROFILE_ID = "dpf-organizational-principles";
 const PLAN_READINESS_DOMAIN_CLASS = "plan-readiness";
+
+/**
+ * Which decision classes each stance vector's material lands in (the "gate
+ * bundle" from the 2026-07-11 stance-onboarding design §3). The FIRST class is
+ * the primary (keeps the legacy `{profileId}:{slug}` materialId so re-seeding
+ * an existing install retags rather than duplicates); the rest are echoes.
+ */
+export const STANCE_VECTOR_BUNDLES: Record<StanceVectorKey, DecisionDomainClass[]> = {
+  "customer-goodwill": ["risk-assessment", "professional-practice"],
+  "pricing-integrity": ["risk-assessment"],
+  "growth-vs-stability": ["plan-readiness"],
+  "quality-bar": ["professional-practice"],
+  "spend-authority": ["risk-assessment", "architecture-tradeoff"],
+};
+
+/** Org-overlay slug for a stance vector page (matches the /wiki/stance prefix). */
+export function stanceVectorSlug(key: StanceVectorKey): string {
+  return `stances/${key}`;
+}
 
 const DEFAULT_AUTONOMY_POLICY = {
   allowRecommendation: true,
@@ -85,6 +120,12 @@ type SeedPage = {
   pageKind: "principle" | "stance";
   body: string;
   abstract: string;
+  /**
+   * The decision classes this page's material lands in. The first entry is the
+   * primary class (legacy `{profileId}:{slug}` materialId); additional entries
+   * become echo materials keyed `{profileId}:{slug}:{class}`.
+   */
+  bundles: DecisionDomainClass[];
   /** Set on the mission principle page so it is well-formed. */
   principle?: {
     principleTier: "core";
@@ -132,6 +173,7 @@ function buildPages(
       slug: "org-mission",
       title: "Our mission",
       pageKind: "principle",
+      bundles: ["plan-readiness"],
       body: [
         "# Our mission",
         "",
@@ -150,6 +192,7 @@ function buildPages(
       slug: "org-who-we-serve",
       title: "Who we serve",
       pageKind: "stance",
+      bundles: ["plan-readiness"],
       body: [
         "# Who we serve",
         "",
@@ -164,6 +207,9 @@ function buildPages(
       slug: "org-how-we-decide",
       title: "How we decide",
       pageKind: "stance",
+      // Echoes into professional-practice: the how-we-decide framing carries
+      // the craft/quality posture for that class alongside quality-bar.
+      bundles: ["plan-readiness", "professional-practice"],
       body: [
         "# How we decide",
         "",
@@ -177,6 +223,10 @@ function buildPages(
       slug: "org-supply-chain",
       title: "How we work with suppliers",
       pageKind: "stance",
+      // Retagged (2026-07-11 design §3): supplier posture governs structural
+      // vendor/tooling choices, not plan-readiness. Re-seeding an existing
+      // install moves the material via the upsert update clause.
+      bundles: ["architecture-tradeoff"],
       body: [
         "# How we work with suppliers",
         "",
@@ -187,6 +237,34 @@ function buildPages(
       abstract: profile.supplyChain,
     },
   ];
+
+  // The 5 coverage vectors (stance-onboarding design §3-4): archetype-default
+  // stance pages whose materials prime every decision class. Unconfirmed
+  // starters — the owner confirms/adjusts them in the "How you decide" step.
+  const vectors = resolveStanceVectors({ archetypeId, industry: industry ?? bc?.industry ?? null });
+  for (const key of STANCE_VECTOR_KEYS) {
+    const v = vectors[key];
+    const ceiling =
+      v.ceilingUsd != null && v.ceilingUsd > 0
+        ? `\nAuthority ceiling: up to $${v.ceilingUsd} per case may be resolved without the owner; above that, the owner decides.`
+        : "";
+    pages.push({
+      slug: stanceVectorSlug(key),
+      title: v.title,
+      pageKind: "stance",
+      bundles: STANCE_VECTOR_BUNDLES[key],
+      body: [
+        `# ${v.title}`,
+        "",
+        v.stance,
+        ceiling,
+        "",
+        `This is ${orgLabel}'s starting stance, derived from how this kind of business tends to operate. Confirm or adjust it — a confirmed stance lets your AI coworkers act on it.`,
+      ].join("\n"),
+      abstract: v.stance,
+    });
+  }
+
   return pages;
 }
 
@@ -249,7 +327,7 @@ export async function seedOrgWwwdCorpus(
     update: {
       name: `${orgName ?? "Organization"} perspective`,
       kind: "organization",
-      scope: { domains: [PLAN_READINESS_DOMAIN_CLASS] },
+      scope: { domains: [...DECISION_DOMAIN_CLASSES] },
       ownerOrganizationId: organizationId,
       fallbackProfileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID,
       defaultResolver: { type: "build-studio-owner" },
@@ -260,7 +338,7 @@ export async function seedOrgWwwdCorpus(
       profileId,
       name: `${orgName ?? "Organization"} perspective`,
       kind: "organization",
-      scope: { domains: [PLAN_READINESS_DOMAIN_CLASS] },
+      scope: { domains: [...DECISION_DOMAIN_CLASSES] },
       ownerOrganizationId: organizationId,
       fallbackProfileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID,
       defaultResolver: { type: "build-studio-owner" },
@@ -286,6 +364,7 @@ export async function seedOrgWwwdCorpus(
   const pages = buildPages(bc, archetypeId, industry, orgName);
   const wikiPageIds: string[] = [];
   let embedded = true;
+  let materialCount = 0;
 
   for (const page of pages) {
     const existing = (await db.wikiPage.findFirst({
@@ -347,35 +426,48 @@ export async function seedOrgWwwdCorpus(
       if (!ok) embedded = false;
     }
 
-    // Material linking the version to the wiki page.
-    const materialId = `${profileId}:${page.slug}`;
-    await db.perspectiveMaterial.upsert({
-      where: { materialId },
-      update: {
-        profileVersionId: versionId,
-        sourceType: page.pageKind,
-        sourceRef: { wikiPageId: saved.id, slug: page.slug, organizationId },
-        summary: page.abstract,
-        freshness: "current",
-      },
-      create: {
-        materialId,
-        profileId,
-        profileVersionId: versionId,
-        sourceType: page.pageKind,
-        sourceRef: { wikiPageId: saved.id, slug: page.slug, organizationId },
-        scope: { domains: [PLAN_READINESS_DOMAIN_CLASS] },
-        domainClass: PLAN_READINESS_DOMAIN_CLASS,
-        direction: "support",
-        domains: [PLAN_READINESS_DOMAIN_CLASS],
-        freshness: "current",
-        evidenceGrade: "B",
-        confidenceWeight: 0.6,
-        reviewStatus: "approved",
-        promotionState: "promoted",
-        summary: page.abstract,
-      },
-    });
+    // Materials linking the version to the wiki page — one per bundle class.
+    // The primary class keeps the legacy `{profileId}:{slug}` id so re-seeding
+    // an existing install RETAGS its row (update sets domainClass) instead of
+    // duplicating; echo classes get `{profileId}:{slug}:{class}` ids.
+    // NOTE: the update clause deliberately does NOT touch evidenceGrade /
+    // confidenceWeight / reviewStatus / promotionState — an owner-confirmed
+    // (A/0.9) or human-ruled (A/1.0) upgrade must survive a re-seed.
+    for (const [bundleIndex, domainClass] of page.bundles.entries()) {
+      const materialId =
+        bundleIndex === 0 ? `${profileId}:${page.slug}` : `${profileId}:${page.slug}:${domainClass}`;
+      materialCount += 1;
+      await db.perspectiveMaterial.upsert({
+        where: { materialId },
+        update: {
+          profileVersionId: versionId,
+          sourceType: page.pageKind,
+          sourceRef: { wikiPageId: saved.id, slug: page.slug, organizationId },
+          scope: { domains: [domainClass] },
+          domainClass,
+          domains: [domainClass],
+          summary: page.abstract,
+          freshness: "current",
+        },
+        create: {
+          materialId,
+          profileId,
+          profileVersionId: versionId,
+          sourceType: page.pageKind,
+          sourceRef: { wikiPageId: saved.id, slug: page.slug, organizationId },
+          scope: { domains: [domainClass] },
+          domainClass,
+          direction: "support",
+          domains: [domainClass],
+          freshness: "current",
+          evidenceGrade: "B",
+          confidenceWeight: 0.6,
+          reviewStatus: "approved",
+          promotionState: "promoted",
+          summary: page.abstract,
+        },
+      });
+    }
   }
 
   // 4. Point the profile at v1.
@@ -388,7 +480,7 @@ export async function seedOrgWwwdCorpus(
     profileId,
     versionId,
     wikiPageIds,
-    materialCount: pages.length,
+    materialCount,
     embedded,
   };
 }
