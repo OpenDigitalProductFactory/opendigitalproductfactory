@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  DECISION_AREAS,
+  decisionAreaToDomainClass,
   buildStanceSlug,
   validateBusinessStance,
   BUSINESS_STANCE_SLUG_PREFIX,
@@ -60,5 +62,21 @@ describe("validateBusinessStance", () => {
     const result = validateBusinessStance({ title: "Refund policy", body: "yes" });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/how your business decides/i);
+  });
+});
+
+describe("decision areas (BI-002DEB85)", () => {
+  it("maps every plain-language area to a valid domainClass, all four classes covered", () => {
+    const classes = DECISION_AREAS.map((a) => decisionAreaToDomainClass(a.key));
+    expect(classes).toEqual([
+      "risk-assessment",
+      "plan-readiness",
+      "professional-practice",
+      "architecture-tradeoff",
+    ]);
+  });
+
+  it("returns null for an unknown area key", () => {
+    expect(decisionAreaToDomainClass("nope")).toBeNull();
   });
 });
