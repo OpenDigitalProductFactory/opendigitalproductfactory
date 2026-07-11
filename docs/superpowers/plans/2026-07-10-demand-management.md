@@ -53,11 +53,13 @@ The keystone. Everything downstream depends on a computed, explainable score exi
 
 **Acceptance:** portfolio views show actual-vs-target investment balance; demand rolls up by theme.
 
-### Phase 4 — Governed scoring policy (BI-5E0995D5)
+### Phase 4 — Governed scoring policy (BI-5E0995D5) — ✅ LANDED (core)
 
-Move the active framework, weights, and bucket targets out of code into an org-overlay WWWD `stance` authored via `/wiki/stance`. Route investment-approval (`screened→ready`) and manual `priority` overrides through `principle_decide` → `DecisionInteraction` ledger. Wire demand gap/conflict/staleness findings into the Decision Review workspace (EP-DECISION-GOV-SURFACE §4.3). Depends on Phases 1 + 3.
+**Landed:** the active scoring framework and org-wide default bucket targets are now **operator-owned, persisted config** (`PlatformDevConfig.demandFramework` + `demandBucketTargets`, migration `20260711130000`) that the engine and board read instead of the hardcoded RICE/70-20-10 defaults. Pure `lib/demand/policy.ts` (`resolveDemandPolicy`, defaults + coercion) unit-tested (5); `score_demand_item` uses the policy framework when no explicit framework is given; a `set_demand_policy` MCP tool sets it (ToolExecution-audited); the Demand board reads the policy targets for the Balance view and shows the active framework. Depends on Phases 1 + 3.
 
-**Acceptance:** scoring policy editable as WWWD doctrine (portal, not code); every funding call auditable in Decision Review.
+**Deferred to a follow-up (the deeper WWWD wiring):** authoring the policy via `/wiki/stance` as semantically-embedded org doctrine, routing per-item investment-approval (`screened→ready`) + manual `priority` overrides through `principle_decide` → `DecisionInteraction`, and surfacing demand gap/conflict/staleness findings in the Decision Review workspace. These depend on a per-item funding-approval flow that does not exist yet; the current slice delivers the "governed, not hardcoded, audited" core.
+
+**Acceptance (core):** scoring policy editable by the operator (config, not code) and audited on change; the board reflects the active policy.
 
 ### Phase 5 — Semantic dedup & merge at ingest (BI-F6B290A8) · *sequenced last*
 
