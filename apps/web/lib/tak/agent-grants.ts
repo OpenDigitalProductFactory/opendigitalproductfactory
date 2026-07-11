@@ -488,6 +488,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   list_opportunities:     ["crm_read"],
   get_opportunity:        ["crm_read"],
   list_quotes:            ["crm_read"],
+  read_operational_record: ["crm_read"],
   create_customer_account: ["crm_write"],
   create_customer_contact: ["crm_write"],
   create_opportunity:      ["crm_write"],
