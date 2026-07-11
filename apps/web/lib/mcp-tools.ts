@@ -9235,21 +9235,11 @@ export async function executeTool(
       const execFileAsync = promisify(execFileCb);
       const execAsync = promisify((lazyChildProcess()).exec);
 
-      // Preflight: the promoter image has to exist locally for `docker run
-      // dpf-promoter` to work. On most installs today it doesn't — the image
-      // is built separately and isn't on the default compose path. Detect
-      // that up front and hand off to the operator UI instead of attempting
-      // the run and returning a scary "Could not start the promoter
-      // container." message. The promotion stays approved; the operator
-      // triggers it from Operations > Promotions.
+      // Missing promoter images are an operator handoff, not a failed deployment.
       try {
         await execAsync("docker image inspect dpf-promoter");
       } catch {
-        // Persist the awaiting_operator state so getBuildFlowState reads it
-        // from the ChangePromotion column directly (no BuildActivity detour)
-        // and the reconciler can treat the fork as dispositioned. The prior
-        // version returned awaiting_operator only in the tool response, which
-        // the fork state machine couldn't see.
+        // Persist the handoff so the fork state machine can reconcile it.
         await prisma.changePromotion.update({
           where: { promotionId },
           data: { status: "awaiting_operator" },
@@ -9286,6 +9276,15 @@ export async function executeTool(
           dockerArgs.push("-e", `DPF_WINDOW_OVERRIDE=${overrideReason}`);
         }
         dockerArgs.push("dpf-promoter");
+        const { guardPromotionPromoterContract } = await import(
+          "@/lib/deploy/promotion-promoter-contract"
+        );
+        const contractFailure = await guardPromotionPromoterContract({
+          dockerArgs,
+          promotionId,
+          buildId: promoBuildId,
+        });
+        if (contractFailure) return contractFailure;
         await execFileAsync("docker", dockerArgs);
       } catch (err) {
         return {

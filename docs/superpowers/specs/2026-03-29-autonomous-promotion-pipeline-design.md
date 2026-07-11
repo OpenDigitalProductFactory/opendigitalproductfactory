@@ -175,6 +175,18 @@ Handler:
 5. Read exit code: 0 = success, 1 = rolled back
 6. Return result to the coworker
 
+> **Current promoter contract guard (2026-07-11).** `Dockerfile.promoter`
+> now exposes the governed `scripts/promote.sh --self-upgrade` entrypoint, which
+> requires `PROMOTE_SOURCE`, `PROMOTE_TARGET_SHA`, `PROMOTE_BACKUP_PATH`, and
+> `PROMOTE_HEALTH_URL`. The older `PROMOTION_ID`/sandbox-container invocation
+> above is not equivalent: it exits before deployment and cannot prove that the
+> built source matches the intended SHA. Until Path A is moved to a purpose-built
+> feature-promotion entrypoint or can supply the complete self-upgrade contract,
+> `execute_promotion` validates argv before `docker run`, persists the exact
+> mismatch on `ChangePromotion.deploymentLog` and `rollbackReason`, and leaves
+> the approved promotion recoverable. It must never surface this condition as
+> `Rolled back: unknown` or start a knowingly invalid container.
+
 **Path B: Operator UI — "Deploy" button in `/ops/promotions`**
 
 Server Action `executePromotionAction(promotionId)`:
