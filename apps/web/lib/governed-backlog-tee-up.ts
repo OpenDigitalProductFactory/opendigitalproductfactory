@@ -13,6 +13,93 @@ const ELIGIBLE_EFFORT_SIZES = new Set(["small", "medium", "large"]);
 const ACTIVE_EPIC_STATUSES = new Set(["open", "in-progress"]);
 const DEFAULT_DAILY_CAP = 3;
 
+/** Structured Fix Context fields carried on FeatureBrief.fixContext for kind=fix. */
+export type ParsedFixContextFields = {
+  reproSteps?: string;
+  expected?: string;
+  actual?: string;
+  rootCause?: string;
+  fixApproach?: string;
+};
+
+/**
+ * Map operator-authored Fix Context labels (markdown headings or `Label:` lines)
+ * onto FixContext keys. BI-E7BB3816: promote must not drop an explicit diagnosis.
+ */
+const FIX_CONTEXT_LABEL_TO_KEY: Record<string, keyof ParsedFixContextFields> = {
+  "reproduction steps": "reproSteps",
+  "reproduction step": "reproSteps",
+  "repro steps": "reproSteps",
+  "repro step": "reproSteps",
+  reprosteps: "reproSteps",
+  repro: "reproSteps",
+  expected: "expected",
+  "expected behavior": "expected",
+  "expected result": "expected",
+  actual: "actual",
+  "actual behavior": "actual",
+  "actual result": "actual",
+  "root cause": "rootCause",
+  rootcause: "rootCause",
+  "fix approach": "fixApproach",
+  fixapproach: "fixApproach",
+  "proposed fix": "fixApproach",
+  remediation: "fixApproach",
+};
+
+const FIX_CONTEXT_LABEL_PATTERN =
+  /^(?:#{1,6}\s*|\*\*|__)?\s*(reproduction steps?|repro steps?|reprosteps|repro|expected(?:\s+behavior|\s+result)?|actual(?:\s+behavior|\s+result)?|root\s*cause|fix\s*approach|proposed fix|remediation)\s*(?:\*\*|__)?\s*:?\s*/i;
+
+/**
+ * Parse a structured Fix Context section from a backlog body into FixContext
+ * fields. Supports markdown headings (`## Root cause`) and label lines
+ * (`Root cause: …` / `**Root cause:** …`). Body text outside recognized
+ * labels is ignored (report description still seeds `actual` as fallback).
+ *
+ * Exported for unit tests (BI-E7BB3816).
+ */
+export function parseFixContextFromBody(body: string | null | undefined): ParsedFixContextFields {
+  if (!body?.trim()) return {};
+
+  const lines = body.replace(/\r\n/g, "\n").split("\n");
+  const out: ParsedFixContextFields = {};
+  let currentKey: keyof ParsedFixContextFields | null = null;
+  const buckets: Partial<Record<keyof ParsedFixContextFields, string[]>> = {};
+
+  const flush = () => {
+    if (!currentKey) return;
+    const text = (buckets[currentKey] ?? []).join("\n").trim();
+    if (text) out[currentKey] = text;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const match = line.match(FIX_CONTEXT_LABEL_PATTERN);
+    if (match) {
+      flush();
+      const label = match[1]!.toLowerCase().replace(/\s+/g, " ").trim();
+      currentKey = FIX_CONTEXT_LABEL_TO_KEY[label] ?? null;
+      if (!currentKey) continue;
+      buckets[currentKey] = buckets[currentKey] ?? [];
+      const remainder = line.slice(match[0].length).trim();
+      if (remainder) buckets[currentKey]!.push(remainder);
+      continue;
+    }
+    // Stop capturing when a new top-level markdown section starts that is not a fix-context label.
+    if (currentKey && /^#{1,3}\s+\S/.test(line) && !FIX_CONTEXT_LABEL_PATTERN.test(line)) {
+      flush();
+      currentKey = null;
+      continue;
+    }
+    if (currentKey) {
+      buckets[currentKey] = buckets[currentKey] ?? [];
+      buckets[currentKey]!.push(line);
+    }
+  }
+  flush();
+  return out;
+}
+
 export type GovernedBacklogTeeUpTrigger = "daily" | "manual";
 
 export type GovernedBacklogTeeUpCandidate = {
@@ -27,12 +114,6 @@ export type GovernedBacklogTeeUpCandidate = {
   digitalProductId: string | null;
   epicId: string | null;
   createdAt: Date;
-  // Demand-management ordering signals. `priority` is the manual operator pin
-  // (lower = higher) that trumps the computed rank; `demandScore` is the
-  // computed value rank (higher = pull first). Optional/nullable — the sweep
-  // query selects both; callers that pre-date scoring simply omit them.
-  priority?: number | null;
-  demandScore?: number | null;
   epic: { status: string } | null;
 };
 
@@ -140,40 +221,15 @@ export function selectGovernedBacklogTeeUpCandidates(
   return items
     .filter(isEligibleCandidate)
     .sort((left, right) => {
-      // 1. Active-epic work floors ahead of unattached work (unchanged).
       const priorityDiff = candidatePriority(left) - candidatePriority(right);
       if (priorityDiff !== 0) return priorityDiff;
 
-      // 2. Manual operator pin (`priority`, lower = higher) trumps the computed
-      //    rank. A pinned item jumps ahead of unpinned ones; among pinned, lower
-      //    wins; unpinned items defer to the value rank below. Equality-guarded
-      //    so two unpinned items (both +Infinity) don't yield NaN.
-      const leftPin = manualPinRank(left);
-      const rightPin = manualPinRank(right);
-      if (leftPin !== rightPin) return leftPin - rightPin;
-
-      // 3. Computed value rank — highest demandScore pulled first (nulls last).
-      const leftScore = demandScoreRank(left);
-      const rightScore = demandScoreRank(right);
-      if (leftScore !== rightScore) return rightScore - leftScore;
-
-      // 4. Oldest first, then stable by id.
       const createdAtDiff = left.createdAt.getTime() - right.createdAt.getTime();
       if (createdAtDiff !== 0) return createdAtDiff;
 
       return left.itemId.localeCompare(right.itemId);
     })
     .slice(0, limit);
-}
-
-/** Manual pins sort ahead of unpinned items; unpinned map to +Infinity. */
-function manualPinRank(item: GovernedBacklogTeeUpCandidate): number {
-  return typeof item.priority === "number" ? item.priority : Number.POSITIVE_INFINITY;
-}
-
-/** demandScore for descending sort; unscored items map to -Infinity (last). */
-function demandScoreRank(item: GovernedBacklogTeeUpCandidate): number {
-  return typeof item.demandScore === "number" ? item.demandScore : Number.NEGATIVE_INFINITY;
 }
 
 export async function promoteBacklogItemToBuildDraft(
@@ -262,7 +318,9 @@ export async function promoteBacklogItemToBuildDraft(
   // For fixes we pull the originating PlatformIssueReport (linked from the
   // triage-created BI body as "Source report: PIR-XXXXX") so the build starts
   // from the real diagnosis (severity, route, error stack) instead of a blank
-  // brief. reproSteps/rootCause/fixApproach are left for ideate to fill.
+  // brief. When the BI body already carries a structured Fix Context section,
+  // map those fields onto fixContext so ideate→plan does not abandon a complete
+  // operator diagnosis (BI-E7BB3816). Remaining gaps stay for ideate to fill.
   const kind = deriveBuildProcessType({ workType: item.workType ?? null, body: item.body });
   let fixBrief: Record<string, unknown> | null = null;
   let originatingReportId: string | null = null;
@@ -287,14 +345,24 @@ export async function promoteBacklogItemToBuildDraft(
       // Non-fatal — proceed with a body-only fix context.
     }
     originatingReportId = report?.id ?? null;
+    const parsed = parseFixContextFromBody(item.body);
+    const fallbackActual = report?.description ?? (parsed.actual ? null : item.body);
     const fixContext: Record<string, unknown> = {
       ...(report?.severity ? { severity: report.severity } : {}),
       ...(report?.id ? { originatingIssueReportId: report.id } : {}),
       ...(report?.reportId ? { originatingIssueReportPublicId: report.reportId } : {}),
       ...(report?.routeContext ? { routeContext: report.routeContext } : {}),
       ...(report?.errorStack ? { errorStackExcerpt: report.errorStack.slice(0, 2000) } : {}),
-      // Seed "actual" from the report/BI body; ideate refines repro/expected/root cause/fix approach.
-      ...((report?.description ?? item.body) ? { actual: (report?.description ?? item.body).slice(0, 2000) } : {}),
+      // Structured body fields win over report/body fallbacks (operator diagnosis).
+      ...(parsed.reproSteps ? { reproSteps: parsed.reproSteps } : {}),
+      ...(parsed.expected ? { expected: parsed.expected } : {}),
+      ...(parsed.actual
+        ? { actual: parsed.actual }
+        : fallbackActual
+          ? { actual: fallbackActual.slice(0, 2000) }
+          : {}),
+      ...(parsed.rootCause ? { rootCause: parsed.rootCause } : {}),
+      ...(parsed.fixApproach ? { fixApproach: parsed.fixApproach } : {}),
     };
     fixBrief = {
       title: item.title,
@@ -487,8 +555,6 @@ export async function runGovernedBacklogTeeUp(input: {
       digitalProductId: true,
       epicId: true,
       createdAt: true,
-      priority: true,
-      demandScore: true,
       epic: {
         select: {
           status: true,
