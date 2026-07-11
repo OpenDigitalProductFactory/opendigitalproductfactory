@@ -48,6 +48,7 @@ import { workforcePack } from "./packs/workforce-pack";
 import { versionHistoryPack } from "./packs/version-history-pack";
 import { eaOntologyPack } from "./packs/ea-ontology-pack";
 import { discoveryInventoryPack } from "./packs/discovery-inventory-pack";
+import { estatePosturePack } from "./packs/estate-posture-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
@@ -82,4 +83,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   versionHistoryPack,
   eaOntologyPack,
   discoveryInventoryPack,
+  estatePosturePack,
 ]);
