@@ -1,7 +1,7 @@
 import { StatCard } from "@/components/ui/report-kit";
 import { can } from "@/lib/govern/permissions";
 import { auth } from "@/lib/auth";
-import { loadMyMemoryAudit, loadOrgMemoryAudit } from "@/lib/actions/memory-audit";
+import { loadMyMemoryAudit, loadOrgMemoryAudit, loadMySpendLine } from "@/lib/actions/memory-audit";
 import { MyMemoryAuditClient } from "./MyMemoryAuditClient";
 
 // Coworker memory transparency (BI-DC8B03AB, EP-8C706944 P4). Self-serve view of
@@ -18,6 +18,7 @@ export default async function CoworkerMemoryPage() {
   );
 
   const mine = await loadMyMemoryAudit();
+  const spendLine = await loadMySpendLine();
   const org = isAdmin ? await loadOrgMemoryAudit() : null;
 
   return (
@@ -43,6 +44,10 @@ export default async function CoworkerMemoryPage() {
           intent={mine.summary.sensitive > 0 ? "warning" : "neutral"}
           hint="Kept private to you"
         />
+      </div>
+
+      <div className="mb-6 text-sm text-[var(--dpf-muted)]">
+        Your AI usage across all conversations: <span className="text-[var(--dpf-text)]">{spendLine}</span>
       </div>
 
       {mine.groups.length === 0 ? (

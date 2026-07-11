@@ -41,6 +41,23 @@ export async function loadMyMemoryAudit(): Promise<MyMemoryAudit> {
 }
 
 /**
+ * BI-CCF1ACBB consumer: the calling user's cumulative AI spend across all their
+ * coworker threads — surfaces the per-thread token/cost ledger on the memory
+ * transparency page. Formatted for display.
+ */
+export async function loadMySpendLine(): Promise<string> {
+  const userId = await requireUserId();
+  const threads = await prisma.agentThread.findMany({
+    where: { userId },
+    select: { id: true },
+  });
+  const { getEffortSpend } = await import("@/lib/tak/thread-cost-ledger-runner");
+  const { formatThreadSpend } = await import("@/lib/tak/thread-cost-ledger");
+  const spend = await getEffortSpend(threads.map((t) => t.id));
+  return formatThreadSpend(spend);
+}
+
+/**
  * Forget one fact the calling user owns (supersede, never a hard delete — the
  * provenance chain survives; it just stops being injected). Ownership is enforced
  * by scoping the update to the caller's userId.

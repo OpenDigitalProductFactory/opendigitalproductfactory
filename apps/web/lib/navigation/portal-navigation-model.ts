@@ -608,6 +608,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   platformAiRoute("platform-ai-assignments", "Priority & Models", "/platform/ai/assignments"),
   platformAiRoute("platform-ai-prompts", "Prompts", "/platform/ai/prompts"),
   platformAiRoute("platform-ai-skills", "Skills", "/platform/ai/skills"),
+  platformAiRoute("platform-ai-memory", "Coworker Memory", "/platform/ai/memory"),
   // Capability needs converged into the Backlog (EP-INTAKE-UNIFY); this route stays
   // known as a redirect shim without rendering an AI Operations tab.
   platformAiRoute("platform-ai-capability-needs", "Capability Needs", "/platform/ai/capability-needs", "legacy-redirect"),
