@@ -70,6 +70,7 @@ import {
   executeAutonomousAgenticLoop,
   findCurrentAutonomousWorkRun,
 } from "@/lib/tak/autonomous-work-run";
+import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
 import { applyLocalDegradationCaveat } from "@/lib/tak/local-degradation-caveat";
 import {
   isConversationalExpansionRequest,
@@ -1850,6 +1851,16 @@ export async function sendMessage(input: {
     // (enabled:false), so behavior elsewhere is unchanged. A failure that
     // survives all retries falls through to the persist-time sanitizer below and
     // the "Retry the AI call" affordance.
+    // EP-27FD96BC · P1 — the unified per-turn effort warrant. Derived once here
+    // from the same task classification that seeds the model path, the attached
+    // tool surface, and the prompt length; the loop co-tunes iterations and
+    // duration from it (and later pillars read its toolBudgetTarget/contextTier).
+    const effortWarrant = deriveEffortWarrant({
+      taskType: taskTypeId,
+      availableToolNames: attachedTools.map((t) => t.name),
+      messageChars: trimmedContent.length,
+    });
+
     const { runWithTransientInferenceRetry } = await import("@/lib/build/inference-retry");
     const agenticResult = await runWithTransientInferenceRetry(
       () => executeAutonomousAgenticLoop({
@@ -1864,6 +1875,7 @@ export async function sendMessage(input: {
         agentId: agent.agentId,
         threadId: input.threadId,
         taskType: taskTypeId,
+        effortWarrant,
         agentDisplayName: agent.agentName,
         buildPhase: activeBuild?.phase ?? null,
         featureBuildId: activeBuild?.id ?? null,
