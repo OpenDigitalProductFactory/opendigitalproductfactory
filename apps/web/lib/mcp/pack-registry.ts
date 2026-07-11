@@ -22,6 +22,7 @@ import { workCapsulesPack } from "./packs/work-capsules-pack";
 import { workbooksPack } from "./packs/workbooks-pack";
 import { feedbackPack } from "./packs/feedback-pack";
 import { orgDecisionPack } from "./packs/org-decision-pack";
+import { founderReviewPack } from "./packs/founder-review-pack";
 import { professionDecisionPack } from "./packs/profession-decision-pack";
 import { optimizationPack } from "./packs/optimization-pack";
 import { marketingPack } from "./packs/marketing-pack";
@@ -52,6 +53,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   workbooksPack,
   feedbackPack,
   orgDecisionPack,
+  founderReviewPack,
   professionDecisionPack,
   optimizationPack,
   marketingPack,

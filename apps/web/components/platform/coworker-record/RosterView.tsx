@@ -28,6 +28,21 @@ type Filters = RosterFilters;
 
 const EMPTY = EMPTY_FILTERS;
 
+// Coarse relative label for the last-activity chip (EP-26E528F5 P2) — same
+// idiom as AsyncOperationsTable. Coarse units keep SSR/client hydration stable.
+function formatRelative(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return "just now";
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
 export function RosterView({ rows, facets }: { rows: RosterRow[]; facets: RosterFacets }) {
   const [filters, setFilters] = useState<Filters>(EMPTY);
   const [groupBy, setGroupBy] = useState<"tier" | "family">("tier");
@@ -185,6 +200,11 @@ function RosterRowCard({ row }: { row: RosterRow }) {
         )}
         {row.openBlockers > 0 && <Badge tone="error">{row.openBlockers} blocker{row.openBlockers !== 1 ? "s" : ""}</Badge>}
         {row.deferRate > 0.25 && <Badge tone="warning">defer {Math.round(row.deferRate * 100)}%</Badge>}
+        {/* Live "what are they doing" signal (BI-CF6D8C12): most recent visible
+            work, so the fleet home reads as activity, not a static HR roster. */}
+        <Badge tone={row.lastActiveAt ? "muted" : "warning"}>
+          {row.lastActiveAt ? `active ${formatRelative(row.lastActiveAt)}` : "never active"}
+        </Badge>
       </span>
     </div>
   );

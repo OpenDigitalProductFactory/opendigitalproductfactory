@@ -35,8 +35,10 @@ describe("CoworkerProfilePanel", () => {
     getProactivityPreference.mockResolvedValue(null);
     render(<CoworkerProfilePanel agent={makeAgent()} onClose={vi.fn()} />);
 
-    expect(screen.getByText("Proactivity")).toBeTruthy();
-    expect(screen.getByText("Balanced")).toBeTruthy();
+    // Two "Proactivity" texts are expected since EP-26E528F5: the section
+    // header plus the shared editable control's own label.
+    expect(screen.getAllByText("Proactivity").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Balanced").length).toBeGreaterThan(0);
     expect(screen.getByText(/Balanced is the default proactivity level/i)).toBeTruthy();
     expect(screen.getByText(/Monitoring: Standard/i)).toBeTruthy();
     expect(screen.getByText(/Approval: Asks first/i)).toBeTruthy();
@@ -50,7 +52,7 @@ describe("CoworkerProfilePanel", () => {
 
     render(<CoworkerProfilePanel agent={makeAgent()} onClose={vi.fn()} />);
 
-    expect(await screen.findByText("Assertive")).toBeTruthy();
+    expect((await screen.findAllByText("Assertive")).length).toBeGreaterThan(0);
     expect(screen.getByText(/Stay on this/i)).toBeTruthy();
     expect(screen.queryByText(/proactivity:scheduled-task:assertive/i)).toBeNull();
   });

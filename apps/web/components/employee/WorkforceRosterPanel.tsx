@@ -11,6 +11,8 @@
 // Presentational and theme-aware (DPF CSS custom properties, dense layout, no
 // hardcoded colors, no nested cards). Server component — no client state.
 
+import Link from "next/link";
+
 import type { WorkforceMember, WorkforceRoster } from "@/lib/workforce/workforce-roster";
 
 function StatPill({ label, value }: { label: string; value: string | number }) {
@@ -76,9 +78,20 @@ function MemberRow({ member }: { member: WorkforceMember }) {
     <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)]">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight truncate">
-            {member.displayName}
-          </p>
+          {/* EP-26E528F5: the HR roster stays the humans+AI altitude, but each
+              coworker deep-links to its ONE record instead of dead-ending here. */}
+          {isAgent ? (
+            <Link
+              href={`/platform/ai/agent/${encodeURIComponent(member.id)}`}
+              className="text-sm font-semibold text-[var(--dpf-text)] leading-tight truncate block hover:text-[var(--dpf-accent)]"
+            >
+              {member.displayName}
+            </Link>
+          ) : (
+            <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight truncate">
+              {member.displayName}
+            </p>
+          )}
           <p className="text-[10px] text-[var(--dpf-muted)] truncate">
             {member.role ?? "—"}
             {member.group ? ` · ${member.group}` : ""}

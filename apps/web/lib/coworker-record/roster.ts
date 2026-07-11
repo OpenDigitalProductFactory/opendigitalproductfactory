@@ -38,6 +38,10 @@ export type RosterRow = {
   deferRate: number;
   /** True when the role binds to no profession family (registry-lint gap). */
   unmapped: boolean;
+  /** ISO timestamp of the coworker's most recent visible work (last assistant
+   *  message or tool execution); null when it has never acted. Plain string so
+   *  the row crosses to the client without serialization hazards. */
+  lastActiveAt: string | null;
 };
 
 export type RosterFacets = {
@@ -105,8 +109,35 @@ async function loadDeferRates(profileIds: string[]): Promise<Map<string, number>
   return rate;
 }
 
+/** Most recent visible work per agent — one grouped query over assistant
+ *  messages plus one over tool executions, folded to the max timestamp. */
+async function loadLastActivity(): Promise<Map<string, Date>> {
+  const [messageRows, toolRows] = await Promise.all([
+    prisma.agentMessage
+      .groupBy({
+        by: ["agentId"],
+        where: { role: "assistant", agentId: { not: null } },
+        _max: { createdAt: true },
+      })
+      .catch(() => [] as Array<{ agentId: string | null; _max: { createdAt: Date | null } }>),
+    prisma.toolExecution
+      .groupBy({
+        by: ["agentId"],
+        _max: { createdAt: true },
+      })
+      .catch(() => [] as Array<{ agentId: string; _max: { createdAt: Date | null } }>),
+  ]);
+  const latest = new Map<string, Date>();
+  for (const row of [...messageRows, ...toolRows]) {
+    if (!row.agentId || !row._max.createdAt) continue;
+    const prev = latest.get(row.agentId);
+    if (!prev || row._max.createdAt > prev) latest.set(row.agentId, row._max.createdAt);
+  }
+  return latest;
+}
+
 export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterFacets }> {
-  const [agents, coverage, modelConfigs, providers, blockerRows] = await Promise.all([
+  const [agents, coverage, modelConfigs, providers, blockerRows, lastActivity] = await Promise.all([
     prisma.agent.findMany({
       orderBy: [{ tier: "asc" }, { displayName: "asc" }],
       select: {
@@ -130,6 +161,7 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
         _count: { _all: true },
       })
       .catch(() => [] as Array<{ agentId: string; _count: { _all: number } }>),
+    loadLastActivity(),
   ]);
 
   const providerStatus = new Map(providers.map((p) => [p.providerId, p.status]));
@@ -178,6 +210,11 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
       openBlockers: blockersByAgent.get(agent.agentId) ?? 0,
       deferRate: profileId ? (deferRates.get(profileId) ?? 0) : 0,
       unmapped: !fam,
+      lastActiveAt:
+        (
+          lastActivity.get(agent.agentId) ??
+          (agent.slugId ? lastActivity.get(agent.slugId) : undefined)
+        )?.toISOString() ?? null,
     };
   });
 
