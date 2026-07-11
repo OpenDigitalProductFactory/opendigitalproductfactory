@@ -1,7 +1,7 @@
 // apps/web/components/ops/EpicCard.tsx
 "use client";
 
-import { useState, useTransition } from "react";
+import { memo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { deleteEpic } from "@/lib/actions/backlog";
@@ -47,12 +47,28 @@ type Props = {
   focusedItemId?: string;
 };
 
-export function EpicCard({ epic, sort, hideDoneItems, onEdit, onItemEdit, focusedItemId }: Props) {
+// How many items to render on first expand. Large epics (Master Data Management,
+// etc.) carry dozens of items; mounting them all synchronously froze the renderer
+// under the full 470-item DOM (BI-9952EA9E). We render a page at a time and let
+// the operator reveal the rest — the freeze was the eager mount, not the data.
+const EXPAND_PAGE_SIZE = 25;
+
+// Memoized: OpsClient re-renders on every filter / panel / triage-band toggle.
+// With hundreds of items across expanded epics, an unmemoized EpicCard re-renders
+// the whole tree each time. Props are stable (epic identity + stable callbacks).
+export const EpicCard = memo(EpicCardImpl);
+
+function EpicCardImpl({ epic, sort, hideDoneItems, onEdit, onItemEdit, focusedItemId }: Props) {
   const router = useRouter();
   const hasFocusedItem = epic.items.some((item) => isFocusedBacklogItem(item, focusedItemId));
   const [expanded, setExpanded] = useState(hasFocusedItem);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // When deep-linked to a focused item, render the whole (single) epic so the
+  // focused row exists to scroll to; otherwise page for render cost.
+  const [visibleCount, setVisibleCount] = useState(
+    hasFocusedItem ? Number.MAX_SAFE_INTEGER : EXPAND_PAGE_SIZE,
+  );
 
   const visibleItems = hideDoneItems
     ? epic.items.filter((item) => !isTerminalBacklogItemStatus(item.status))
@@ -193,16 +209,31 @@ export function EpicCard({ epic, sort, hideDoneItems, onEdit, onItemEdit, focuse
               All {epic.items.length} items in this epic are done or deferred. Uncheck &quot;Hide done&quot; to see them.
             </p>
           ) : (
-            <div className="flex flex-col gap-1.5">
-              {sortedItems(visibleItems, sort).map((item) => (
-                <BacklogItemRow
-                  key={item.id}
-                  item={item}
-                  onEdit={onItemEdit}
-                  focused={isFocusedBacklogItem(item, focusedItemId)}
-                />
-              ))}
-            </div>
+            (() => {
+              const ordered = sortedItems(visibleItems, sort);
+              const shown = ordered.slice(0, visibleCount);
+              const remaining = ordered.length - shown.length;
+              return (
+                <div className="flex flex-col gap-1.5">
+                  {shown.map((item) => (
+                    <BacklogItemRow
+                      key={item.id}
+                      item={item}
+                      onEdit={onItemEdit}
+                      focused={isFocusedBacklogItem(item, focusedItemId)}
+                    />
+                  ))}
+                  {remaining > 0 && (
+                    <button
+                      onClick={() => setVisibleCount((n) => n + EXPAND_PAGE_SIZE)}
+                      className="mt-1 self-start rounded border border-[var(--dpf-border)] px-2 py-1 text-[10px] font-medium text-[var(--dpf-muted)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)]"
+                    >
+                      Show {Math.min(remaining, EXPAND_PAGE_SIZE)} more of {remaining}
+                    </button>
+                  )}
+                </div>
+              );
+            })()
           )}
           {hiddenItemCount > 0 && (
             <p className="mt-1.5 text-[10px] text-[var(--dpf-muted)]">
