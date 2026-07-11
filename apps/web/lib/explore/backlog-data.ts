@@ -39,6 +39,12 @@ export const getBacklogItems = cache(async (): Promise<BacklogItemWithRelations[
       taxonomyNode: { select: { id: true, nodeId: true, name: true } },
       upstreamIssueNumber: true,
       upstreamIssueUrl: true,
+      // Operator-triage inputs (BI-9952EA9E) — existing columns.
+      claimStatus: true,
+      stalenessDetectedAt: true,
+      riskOpportunity: true,
+      businessValue: true,
+      timeCriticality: true,
     },
   });
 });
@@ -88,6 +94,12 @@ export const getEpics = cache(async (): Promise<EpicWithRelations[]> => {
           taxonomyNode: { select: { id: true, nodeId: true, name: true } },
           upstreamIssueNumber: true,
           upstreamIssueUrl: true,
+          // Operator-triage inputs (BI-9952EA9E) — existing columns.
+          claimStatus: true,
+          stalenessDetectedAt: true,
+          riskOpportunity: true,
+          businessValue: true,
+          timeCriticality: true,
         },
       },
     },
