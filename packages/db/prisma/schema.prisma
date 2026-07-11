@@ -659,6 +659,9 @@ model Portfolio {
   createdAt                     DateTime                       @default(now())
   updatedAt                     DateTime                       @updatedAt
   budgetKUsd                    Int?
+  // Target investment-bucket allocation (EP-DEMAND-MGMT Phase 3), e.g.
+  // { "run": 70, "grow": 20, "transform": 10 }. null = use the default split.
+  bucketTargets                 Json?
   agents                        Agent[]
   products                      DigitalProduct[]
   coworkerServices              CoworkerService[]              @relation("CoworkerServicePortfolio")
@@ -1331,6 +1334,10 @@ model BacklogItem {
   demandScore             Float?
   demandScoreFramework    String?
   demandScoreComputedAt   DateTime?
+  // Investment bucket (EP-DEMAND-MGMT Phase 3): run | grow | transform. The
+  // strategic-balance dimension so demand is prioritized against a target
+  // allocation, not a flat list. Default derived from workType. §8.
+  investmentBucket        String?
   activeBuildId           String?                       @unique
   activeEpicId            String?                       @unique
   duplicateOfId           String?
@@ -1548,6 +1555,8 @@ model Epic {
   description              String?
   status                   String                   @default("open")
   priority                 Int?
+  // Investment bucket (EP-DEMAND-MGMT Phase 3): run | grow | transform.
+  investmentBucket         String?
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt
   submittedById            String?
