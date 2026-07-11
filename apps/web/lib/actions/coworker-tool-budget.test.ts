@@ -11,17 +11,16 @@ import {
 } from "./coworker-tool-budget";
 
 describe("deriveCoworkerToolCap", () => {
-  it("keeps the full 48 ceiling at a 32k window (unchanged behavior)", () => {
+  it("keeps the full 48 ceiling at a 32k window (capable-model line)", () => {
     expect(deriveCoworkerToolCap(32_768)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
   });
 
-  it("shrinks the cap on a VRAM-constrained 24,576 window so a long thread fits", () => {
-    // (24576 - 12000 reserve) / 330 ≈ 38 — below 48, leaving room for prompt+history+reply.
+  it("caps a cliff-prone 24,576 window at the 15-tool accuracy cliff (BI-2B2F59EB)", () => {
+    // Window-fit alone would allow ~38 tools ((24576-12000)/330), well past the
+    // ~15-tool cliff where a small local model's selection accuracy collapses.
     const cap = deriveCoworkerToolCap(24_576);
-    expect(cap).toBeLessThan(MAX_COWORKER_ATTACHED_TOOLS);
-    expect(cap).toBe(38);
-    // The observed overflow (49 tools → 24,730 prompt) now fits: 38 tools is ~3.6k
-    // fewer tokens, dropping the prompt well under the 24,576 window.
+    expect(cap).toBe(15);
+    // Still well within the window (prompt+history+reply fit comfortably).
     expect(cap * 330).toBeLessThan(24_576 - 8_000);
   });
 
@@ -38,6 +37,13 @@ describe("deriveCoworkerToolCap", () => {
 
   it("never exceeds the 48 ceiling even for a huge cloud window", () => {
     expect(deriveCoworkerToolCap(200_000)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+  });
+
+  it("applies the accuracy-cliff ceiling only below the capable-model line", () => {
+    // Just below 32k: cliff-prone → bounded at 15 despite window-fit allowing more.
+    expect(deriveCoworkerToolCap(31_999)).toBe(15);
+    // At/above 32k: capable → full window-fit ceiling.
+    expect(deriveCoworkerToolCap(32_768)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
   });
 
   it("is monotonic — a larger window never yields fewer tools", () => {
