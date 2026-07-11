@@ -1,180 +1,128 @@
-<title>The Living Business — value-stream workspace prototype</title>
+<title>The Living Business - value-stream workspace prototype</title>
 <style>
-  /* ============================================================= *
-   * DPF design tokens — mirrored from apps/web/app/globals.css.
-   * Both themes; game tokens are DERIVED, never hardcoded hex.
-   * DOM-first (no canvas) so it renders reliably on any device.
-   * ============================================================= */
+  /* DPF design tokens mirrored from apps/web/app/globals.css. Both themes.
+     STATIC-FIRST: the whole board renders and animates with CSS alone - no
+     JavaScript required (some embed/preview sandboxes strip scripts). JS is
+     optional enhancement (archetype switch). All glyphs use numeric HTML
+     entities so they never mojibake regardless of charset. */
   :root {
-    --dpf-bg: #fafafa;
-    --dpf-surface-1: #ffffff;
-    --dpf-surface-2: #f4f4f6;
-    --dpf-surface-3: #eeeef2;
-    --dpf-text: #1a1a2e;
-    --dpf-text-secondary: #4a4a5e;
-    --dpf-accent: #2563eb;
-    --dpf-border: #d4d4dc;
-    --dpf-border-strong: #c8c8d4;
-    --dpf-muted: #6b7280;
-    --dpf-success: #16a34a;
-    --dpf-warning: #d97706;
-    --dpf-error: #dc2626;
-    --dpf-info: #0284c7;
+    --dpf-bg:#fafafa; --dpf-surface-1:#ffffff; --dpf-surface-2:#f4f4f6; --dpf-surface-3:#eeeef2;
+    --dpf-text:#1a1a2e; --dpf-text-secondary:#4a4a5e; --dpf-accent:#2563eb; --dpf-border:#d4d4dc;
+    --dpf-border-strong:#c8c8d4; --dpf-muted:#6b7280; --dpf-success:#16a34a; --dpf-warning:#d97706;
+    --dpf-error:#dc2626; --dpf-info:#0284c7;
     --vs-ground: color-mix(in srgb, var(--dpf-accent) 4%, var(--dpf-bg));
     --vs-rail: color-mix(in srgb, var(--dpf-accent) 34%, var(--dpf-border-strong));
     --vs-glow: color-mix(in srgb, var(--dpf-accent) 20%, transparent);
     --vs-load: color-mix(in srgb, var(--dpf-accent) 9%, var(--dpf-surface-1));
     --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-    --radius: 10px;
-    --shadow-1: 0 1px 2px color-mix(in srgb, var(--dpf-text) 8%, transparent);
-    --shadow-2: 0 8px 26px color-mix(in srgb, var(--dpf-text) 16%, transparent);
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    --radius:10px; --shadow-1:0 1px 2px color-mix(in srgb, var(--dpf-text) 8%, transparent);
+    --shadow-2:0 8px 26px color-mix(in srgb, var(--dpf-text) 16%, transparent);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --dpf-bg: #0f0f1a; --dpf-surface-1: #1a1a2e; --dpf-surface-2: #161625; --dpf-surface-3: #121220;
-      --dpf-text: #e2e2f0; --dpf-text-secondary: #b8b8cc; --dpf-accent: #7c8cf8; --dpf-border: #2a2a40;
-      --dpf-border-strong: #3a3a55; --dpf-muted: #8888a0; --dpf-success: #4ade80; --dpf-warning: #fbbf24;
-      --dpf-error: #f87171; --dpf-info: #38bdf8;
+      --dpf-bg:#0f0f1a; --dpf-surface-1:#1a1a2e; --dpf-surface-2:#161625; --dpf-surface-3:#121220;
+      --dpf-text:#e2e2f0; --dpf-text-secondary:#b8b8cc; --dpf-accent:#7c8cf8; --dpf-border:#2a2a40;
+      --dpf-border-strong:#3a3a55; --dpf-muted:#8888a0; --dpf-success:#4ade80; --dpf-warning:#fbbf24;
+      --dpf-error:#f87171; --dpf-info:#38bdf8;
     }
   }
-  :root[data-theme="light"] {
-    --dpf-bg: #fafafa; --dpf-surface-1: #ffffff; --dpf-surface-2: #f4f4f6; --dpf-surface-3: #eeeef2;
-    --dpf-text: #1a1a2e; --dpf-text-secondary: #4a4a5e; --dpf-accent: #2563eb; --dpf-border: #d4d4dc;
-    --dpf-border-strong: #c8c8d4; --dpf-muted: #6b7280; --dpf-success: #16a34a; --dpf-warning: #d97706;
-    --dpf-error: #dc2626; --dpf-info: #0284c7;
-  }
-  :root[data-theme="dark"] {
-    --dpf-bg: #0f0f1a; --dpf-surface-1: #1a1a2e; --dpf-surface-2: #161625; --dpf-surface-3: #121220;
-    --dpf-text: #e2e2f0; --dpf-text-secondary: #b8b8cc; --dpf-accent: #7c8cf8; --dpf-border: #2a2a40;
-    --dpf-border-strong: #3a3a55; --dpf-muted: #8888a0; --dpf-success: #4ade80; --dpf-warning: #fbbf24;
-    --dpf-error: #f87171; --dpf-info: #38bdf8;
-  }
+  :root[data-theme="light"]{--dpf-bg:#fafafa;--dpf-surface-1:#ffffff;--dpf-surface-2:#f4f4f6;--dpf-surface-3:#eeeef2;--dpf-text:#1a1a2e;--dpf-text-secondary:#4a4a5e;--dpf-accent:#2563eb;--dpf-border:#d4d4dc;--dpf-border-strong:#c8c8d4;--dpf-muted:#6b7280;--dpf-success:#16a34a;--dpf-warning:#d97706;--dpf-error:#dc2626;--dpf-info:#0284c7;}
+  :root[data-theme="dark"]{--dpf-bg:#0f0f1a;--dpf-surface-1:#1a1a2e;--dpf-surface-2:#161625;--dpf-surface-3:#121220;--dpf-text:#e2e2f0;--dpf-text-secondary:#b8b8cc;--dpf-accent:#7c8cf8;--dpf-border:#2a2a40;--dpf-border-strong:#3a3a55;--dpf-muted:#8888a0;--dpf-success:#4ade80;--dpf-warning:#fbbf24;--dpf-error:#f87171;--dpf-info:#38bdf8;}
 
-  * { box-sizing: border-box; }
-  html, body { margin: 0; }
-  body { background: var(--dpf-bg); color: var(--dpf-text); font-family: var(--font-body); font-size: 15px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
-  .tnum { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
-  .shell { display: flex; flex-direction: column; min-height: 100%; }
+  *{box-sizing:border-box;} html,body{margin:0;}
+  body{background:var(--dpf-bg);color:var(--dpf-text);font-family:var(--font-display);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;}
+  .tnum{font-variant-numeric:tabular-nums;font-family:var(--font-mono);}
+  .shell{display:flex;flex-direction:column;min-height:100%;}
 
-  /* top bar */
-  .topbar { display: flex; align-items: center; gap: 12px 14px; padding: 11px 16px; background: var(--dpf-surface-1); border-bottom: 1px solid var(--dpf-border); flex-wrap: wrap; }
-  .eyebrow { font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dpf-muted); font-weight: 600; }
-  .brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
-  .brand h1 { font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
-  .brand .biz { font-size: 13px; color: var(--dpf-muted); }
-  .spacer { flex: 1 1 auto; }
-  .pill { display: inline-flex; align-items: center; gap: 8px; background: var(--dpf-surface-2); border: 1px solid var(--dpf-border); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--dpf-text); cursor: pointer; }
-  .pill select { background: transparent; border: none; color: var(--dpf-text); font: inherit; outline: none; cursor: pointer; }
-  .pill select option { background: var(--dpf-surface-2); color: var(--dpf-text); }
+  .topbar{display:flex;align-items:center;gap:12px 14px;padding:11px 16px;background:var(--dpf-surface-1);border-bottom:1px solid var(--dpf-border);flex-wrap:wrap;}
+  .eyebrow{font-size:10.5px;letter-spacing:0.16em;text-transform:uppercase;color:var(--dpf-muted);font-weight:600;}
+  .brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0;}
+  .brand h1{font-size:18px;font-weight:700;letter-spacing:-0.02em;margin:0;}
+  .brand .biz{font-size:13px;color:var(--dpf-muted);}
+  .spacer{flex:1 1 auto;}
+  .pill{display:inline-flex;align-items:center;gap:8px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:999px;padding:5px 12px;font-size:13px;color:var(--dpf-text);cursor:pointer;}
+  .pill select{background:transparent;border:none;color:var(--dpf-text);font:inherit;outline:none;cursor:pointer;}
+  .pill select option{background:var(--dpf-surface-2);color:var(--dpf-text);}
 
-  /* market weather ticker */
-  .ticker { display: flex; align-items: center; gap: 12px; background: color-mix(in srgb, var(--dpf-info) 8%, var(--dpf-surface-1)); border-bottom: 1px solid var(--dpf-border); padding: 6px 14px; overflow: hidden; }
-  .ticker .wx { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--dpf-info); white-space: nowrap; flex: 0 0 auto; padding-right: 12px; border-right: 1px solid var(--dpf-border); }
-  .ticker-track { position: relative; flex: 1 1 auto; overflow: hidden; height: 20px; }
-  .ticker-move { position: absolute; white-space: nowrap; animation: ticker 48s linear infinite; top: 0; }
-  .ticker-move .item { display: inline-flex; align-items: center; gap: 7px; margin-right: 42px; font-size: 12.5px; color: var(--dpf-text-secondary); }
-  .ticker-move .item b { color: var(--dpf-text); font-weight: 600; }
-  .ticker-move .up { color: var(--dpf-success); font-weight: 700; }
-  .ticker-move .down { color: var(--dpf-error); font-weight: 700; }
-  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; background: var(--dpf-info); }
-  @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  .ticker{display:flex;align-items:center;gap:12px;background:color-mix(in srgb, var(--dpf-info) 8%, var(--dpf-surface-1));border-bottom:1px solid var(--dpf-border);padding:7px 14px;overflow:hidden;}
+  .ticker .wx{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--dpf-info);white-space:nowrap;flex:0 0 auto;padding-right:12px;border-right:1px solid var(--dpf-border);}
+  .ticker-track{position:relative;flex:1 1 auto;overflow:hidden;height:20px;}
+  .ticker-move{position:absolute;white-space:nowrap;animation:ticker 46s linear infinite;top:0;}
+  .ticker-move .item{display:inline-flex;align-items:center;gap:7px;margin-right:40px;font-size:12.5px;color:var(--dpf-text-secondary);}
+  .ticker-move .item b{color:var(--dpf-text);font-weight:600;}
+  .up{color:var(--dpf-success);font-weight:700;} .down{color:var(--dpf-error);font-weight:700;}
+  .cdot{width:6px;height:6px;border-radius:50%;display:inline-block;background:var(--dpf-info);}
+  @keyframes ticker{from{transform:translateX(0);}to{transform:translateX(-50%);}}
 
-  /* the value-stream board */
-  .board { background: var(--vs-ground); padding: 16px 12px 6px; }
-  .board-head { display: flex; align-items: baseline; gap: 10px; padding: 0 6px 10px; flex-wrap: wrap; }
-  .board-head .lbl { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dpf-muted); font-weight: 700; }
-  .board-head .sub { font-size: 12px; color: var(--dpf-muted); }
-  .scroll-hint { font-size: 11px; color: var(--dpf-muted); }
+  .board{background:var(--vs-ground);padding:16px 12px 8px;}
+  .board-head{display:flex;align-items:baseline;gap:10px;padding:0 6px 12px;flex-wrap:wrap;}
+  .board-head .lbl{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;}
+  .board-head .sub{font-size:12px;color:var(--dpf-muted);}
+  .hint{font-size:11px;color:var(--dpf-muted);}
 
-  /* horizontally scrollable production line */
-  .stream { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding: 4px 6px 14px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
-  .stage {
-    scroll-snap-align: start; flex: 1 0 168px; min-width: 168px; max-width: 260px;
-    background: var(--dpf-surface-1); border: 1px solid var(--dpf-border); border-radius: var(--radius);
-    padding: 10px 12px 11px; box-shadow: var(--shadow-1); cursor: pointer; position: relative;
-    transition: box-shadow .18s, border-color .18s, transform .18s;
-  }
-  .stage:hover, .stage:focus-visible { box-shadow: var(--shadow-2); border-color: var(--dpf-accent); outline: none; transform: translateY(-2px); }
-  .stage.load { background: var(--vs-load); border-color: color-mix(in srgb, var(--dpf-accent) 42%, var(--dpf-border)); }
-  .stage .idx { font-family: var(--font-mono); font-size: 10px; color: var(--dpf-muted); letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px; }
-  .stage .idx .load-tag { color: var(--dpf-accent); font-weight: 700; letter-spacing: 0.02em; }
-  .stage .name { font-family: var(--font-display); font-weight: 650; font-size: 14px; letter-spacing: -0.01em; margin: 3px 0 1px; }
-  .stage .vern { font-size: 11px; color: var(--dpf-muted); }
-  .stage .metric { display: flex; align-items: baseline; gap: 5px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--dpf-border); }
-  .stage .metric .v { font-family: var(--font-mono); font-weight: 700; font-size: 15px; }
-  .stage .metric .l { font-size: 10.5px; color: var(--dpf-muted); }
-  .stage .worker { display: flex; align-items: center; gap: 7px; margin-top: 9px; }
-  .stage .avatar { width: 22px; height: 22px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-size: 9.5px; font-weight: 700; color: var(--dpf-accent); background: color-mix(in srgb, var(--dpf-accent) 16%, var(--dpf-surface-1)); border: 1.5px solid var(--dpf-accent); }
-  .stage .act { font-size: 11px; color: var(--dpf-text-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .stage.active .avatar { animation: pulse 1.3s ease-in-out infinite; }
-  .stage.active .act { color: var(--dpf-accent); font-weight: 600; }
-  .stage .persona { margin-top: 7px; font-size: 10px; color: var(--dpf-muted); display: flex; align-items: center; gap: 5px; }
-  .stage .persona .seat { width: 7px; height: 7px; border-radius: 50%; background: var(--dpf-muted); opacity: .55; }
-  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 var(--vs-glow); } 55% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--dpf-accent) 0%, transparent); } }
+  .stream{display:flex;align-items:stretch;overflow-x:auto;padding:4px 6px 16px;-webkit-overflow-scrolling:touch;}
+  .stage{flex:1 0 170px;min-width:170px;max-width:250px;background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-radius:var(--radius);padding:10px 12px 11px;box-shadow:var(--shadow-1);position:relative;}
+  .stage.load{background:var(--vs-load);border-color:color-mix(in srgb, var(--dpf-accent) 42%, var(--dpf-border));}
+  .stage .idx{font-family:var(--font-mono);font-size:10px;color:var(--dpf-muted);letter-spacing:0.06em;display:flex;gap:6px;align-items:center;}
+  .stage .idx .lb{color:var(--dpf-accent);font-weight:700;}
+  .stage .name{font-weight:650;font-size:14px;letter-spacing:-0.01em;margin:3px 0 1px;}
+  .stage .vern{font-size:11px;color:var(--dpf-muted);}
+  .stage .metric{display:flex;align-items:baseline;gap:5px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--dpf-border);}
+  .stage .metric .v{font-family:var(--font-mono);font-weight:700;font-size:15px;}
+  .stage .metric .l{font-size:10.5px;color:var(--dpf-muted);}
+  .stage .worker{display:flex;align-items:center;gap:7px;margin-top:9px;}
+  .stage .avatar{width:22px;height:22px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-size:9.5px;font-weight:700;color:var(--dpf-accent);background:color-mix(in srgb, var(--dpf-accent) 16%, var(--dpf-surface-1));border:1.5px solid var(--dpf-accent);}
+  .stage .act{font-size:11px;color:var(--dpf-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .stage.active .avatar{animation:pulse 1.4s ease-in-out infinite;}
+  .stage.active .act{color:var(--dpf-accent);font-weight:600;}
+  .stage .persona{margin-top:7px;font-size:10px;color:var(--dpf-muted);display:flex;align-items:center;gap:5px;}
+  .stage .persona .seat{width:7px;height:7px;border-radius:50%;background:var(--dpf-muted);opacity:.55;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 var(--vs-glow);}55%{box-shadow:0 0 0 6px color-mix(in srgb, var(--dpf-accent) 0%, transparent);}}
 
-  /* rail connector between stages, carrying flowing work units */
-  .rail { flex: 0 0 44px; align-self: center; position: relative; height: 26px; min-width: 44px; }
-  .rail .line { position: absolute; top: 50%; left: 0; right: 0; height: 4px; transform: translateY(-50%); border-radius: 999px; background: var(--vs-rail); }
-  .rail .line::after { content: ""; position: absolute; inset: 0; border-radius: 999px; background: repeating-linear-gradient(90deg, var(--dpf-accent) 0 4px, transparent 4px 14px); opacity: .55; animation: railflow 0.9s linear infinite; }
-  .rail .arrow { position: absolute; top: 50%; right: 2px; transform: translateY(-50%); color: var(--vs-rail); font-size: 12px; line-height: 1; }
-  @keyframes railflow { from { background-position: 0 0; } to { background-position: 18px 0; } }
-  .unit { position: absolute; top: 50%; left: 0; width: 11px; height: 11px; margin-top: -5.5px; border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent); color: var(--dpf-accent); background: currentColor; }
-  .unit.run { animation: flow 2.1s linear forwards; }
-  .u-demand { color: var(--dpf-info); }
-  .u-service { color: var(--dpf-accent); }
-  .u-attention { color: var(--dpf-warning); }
-  .u-settled { color: var(--dpf-success); }
-  .u-exception { color: var(--dpf-error); }
-  @keyframes flow { from { left: -4px; } to { left: calc(100% - 4px); } }
+  .rail{flex:0 0 46px;align-self:center;position:relative;height:26px;min-width:46px;}
+  .rail .line{position:absolute;top:50%;left:0;right:0;height:4px;transform:translateY(-50%);border-radius:999px;background:var(--vs-rail);overflow:hidden;}
+  .rail .line::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,var(--dpf-accent) 0 4px,transparent 4px 14px);opacity:.5;animation:railflow .9s linear infinite;}
+  .rail .arrow{position:absolute;top:50%;right:1px;transform:translateY(-50%);color:var(--vs-rail);font-size:12px;line-height:1;}
+  @keyframes railflow{from{background-position:0 0;}to{background-position:18px 0;}}
+  .unit{position:absolute;top:50%;width:11px;height:11px;margin-top:-5.5px;border-radius:50%;color:var(--dpf-accent);background:currentColor;box-shadow:0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);animation:flow 3.4s linear infinite;}
+  .u-demand{color:var(--dpf-info);} .u-service{color:var(--dpf-accent);} .u-attention{color:var(--dpf-warning);}
+  .u-settled{color:var(--dpf-success);} .u-exception{color:var(--dpf-error);}
+  .d1{animation-delay:0s;} .d2{animation-delay:-1.1s;} .d3{animation-delay:-2.3s;}
+  @keyframes flow{from{left:-5px;}to{left:calc(100% - 5px);}}
 
-  /* support / utility band */
-  .band { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; padding: 6px 14px 14px; background: var(--vs-ground); }
-  .meter { background: var(--dpf-surface-1); border: 1px solid var(--dpf-border); border-radius: var(--radius); padding: 9px 12px; box-shadow: var(--shadow-1); }
-  .meter .m-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .meter .m-label { font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--dpf-muted); font-weight: 600; }
-  .meter .m-val { font-family: var(--font-mono); font-weight: 700; font-size: 15px; }
-  .meter .track { height: 7px; border-radius: 999px; background: var(--dpf-surface-3); margin-top: 8px; overflow: hidden; }
-  .meter .fill { height: 100%; border-radius: 999px; transition: width .5s; }
-  .meter .m-sub { font-size: 10.5px; color: var(--dpf-muted); margin-top: 6px; }
-  .meter.warn .fill { background: var(--dpf-warning); } .meter.warn .m-val { color: var(--dpf-warning); }
-  .meter.ok .fill { background: var(--dpf-success); }
-  .meter.info .fill { background: var(--dpf-info); }
+  .band{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;padding:6px 14px 14px;background:var(--vs-ground);}
+  .meter{background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-radius:var(--radius);padding:9px 12px;box-shadow:var(--shadow-1);}
+  .meter .m-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .meter .m-label{font-size:11px;text-transform:uppercase;color:var(--dpf-muted);font-weight:600;letter-spacing:.03em;}
+  .meter .m-val{font-family:var(--font-mono);font-weight:700;font-size:15px;}
+  .meter .track{height:7px;border-radius:999px;background:var(--dpf-surface-3);margin-top:8px;overflow:hidden;}
+  .meter .fill{height:100%;border-radius:999px;}
+  .meter .m-sub{font-size:10.5px;color:var(--dpf-muted);margin-top:6px;}
+  .meter.warn .fill{background:var(--dpf-warning);} .meter.warn .m-val{color:var(--dpf-warning);}
+  .meter.ok .fill{background:var(--dpf-success);} .meter.info .fill{background:var(--dpf-info);}
 
-  /* HUD */
-  .hud { border-top: 1px solid var(--dpf-border); background: var(--dpf-surface-1); }
-  .hud-in { padding: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px 20px; align-items: start; }
-  .kpis { display: flex; gap: 10px; }
-  .kpi { flex: 1; background: var(--dpf-surface-2); border: 1px solid var(--dpf-border); border-radius: var(--radius); padding: 9px 11px; }
-  .kpi .k-val { font-family: var(--font-mono); font-weight: 700; font-size: 20px; }
-  .kpi .k-lbl { font-size: 10.5px; color: var(--dpf-muted); }
-  .hd { display: flex; align-items: center; justify-content: space-between; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dpf-muted); font-weight: 700; margin-bottom: 8px; }
-  .badge { font-family: var(--font-mono); font-size: 11px; font-weight: 700; background: color-mix(in srgb, var(--dpf-warning) 16%, var(--dpf-surface-1)); color: var(--dpf-warning); border-radius: 999px; padding: 1px 8px; }
-  .quest { display: flex; gap: 9px; align-items: flex-start; padding: 9px 10px; border: 1px solid var(--dpf-border); border-left-width: 3px; border-radius: var(--radius); margin-bottom: 8px; }
-  .quest.warn { border-left-color: var(--dpf-warning); } .quest.error { border-left-color: var(--dpf-error); } .quest.info { border-left-color: var(--dpf-info); }
-  .quest .q-body { flex: 1; min-width: 0; }
-  .quest .q-title { font-weight: 600; font-size: 13px; }
-  .quest .q-meta { font-size: 11px; color: var(--dpf-muted); margin-top: 2px; }
-  .quest .q-act { flex: 0 0 auto; align-self: center; font: inherit; font-size: 12px; font-weight: 600; color: #fff; background: var(--dpf-accent); border: none; border-radius: 7px; padding: 5px 10px; cursor: pointer; }
-  .quest.done { opacity: .5; } .quest.done .q-act { background: var(--dpf-success); pointer-events: none; }
-  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; }
-  .legend .li { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--dpf-text-secondary); }
-  .legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
-  .controls { display: flex; flex-direction: column; gap: 10px; }
-  .ctl-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .ctl-row .lbl { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dpf-muted); font-weight: 600; }
-  .seg { display: inline-flex; background: var(--dpf-surface-2); border: 1px solid var(--dpf-border); border-radius: 8px; padding: 2px; }
-  .seg button { font: inherit; font-size: 12px; color: var(--dpf-text-secondary); background: transparent; border: none; border-radius: 6px; padding: 5px 10px; cursor: pointer; }
-  .seg button[aria-pressed="true"] { background: var(--dpf-surface-1); color: var(--dpf-text); box-shadow: var(--shadow-1); font-weight: 600; }
-  .foot { font-size: 11px; color: var(--dpf-muted); padding: 10px 16px 18px; }
-  .foot code { font-family: var(--font-mono); font-size: 10.5px; color: var(--dpf-text-secondary); }
+  .hud{border-top:1px solid var(--dpf-border);background:var(--dpf-surface-1);}
+  .hud-in{padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px 22px;align-items:start;}
+  .kpis{display:flex;gap:10px;}
+  .kpi{flex:1;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:var(--radius);padding:9px 11px;}
+  .kpi .k-val{font-family:var(--font-mono);font-weight:700;font-size:20px;}
+  .kpi .k-lbl{font-size:10.5px;color:var(--dpf-muted);}
+  .hd{display:flex;align-items:center;justify-content:space-between;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;margin-bottom:8px;}
+  .badge{font-family:var(--font-mono);font-size:11px;font-weight:700;background:color-mix(in srgb, var(--dpf-warning) 16%, var(--dpf-surface-1));color:var(--dpf-warning);border-radius:999px;padding:1px 8px;}
+  .quest{display:flex;gap:9px;align-items:flex-start;padding:9px 10px;border:1px solid var(--dpf-border);border-left-width:3px;border-radius:var(--radius);margin-bottom:8px;}
+  .quest.warn{border-left-color:var(--dpf-warning);} .quest.error{border-left-color:var(--dpf-error);} .quest.info{border-left-color:var(--dpf-info);}
+  .quest .q-body{flex:1;min-width:0;} .quest .q-title{font-weight:600;font-size:13px;} .quest .q-meta{font-size:11px;color:var(--dpf-muted);margin-top:2px;}
+  .quest .q-act{flex:0 0 auto;align-self:center;font:inherit;font-size:12px;font-weight:600;color:#fff;background:var(--dpf-accent);border:none;border-radius:7px;padding:5px 10px;cursor:pointer;}
+  .legend{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;}
+  .legend .li{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dpf-text-secondary);}
+  .legend .sw{width:10px;height:10px;border-radius:3px;flex:0 0 auto;}
+  .foot{font-size:11px;color:var(--dpf-muted);padding:10px 16px 18px;background:var(--dpf-surface-1);}
+  .foot code{font-family:var(--font-mono);font-size:10.5px;color:var(--dpf-text-secondary);}
 
-  @media (prefers-reduced-motion: reduce) {
-    .ticker-move { animation: none; }
-    .rail .line::after { animation: none; }
-    .stage.active .avatar { animation: none; box-shadow: 0 0 0 4px var(--vs-glow); }
-    .unit.run { animation-duration: 0.01ms; }
+  @media (prefers-reduced-motion: reduce){
+    .ticker-move,.rail .line::after,.stage.active .avatar,.unit{animation:none;}
+    .unit{left:45%;}
   }
 </style>
 
@@ -183,7 +131,7 @@
     <div class="brand">
       <div class="eyebrow">DPF Workspace</div>
       <h1>The Living Business</h1>
-      <span class="biz" id="bizName">Bella Nonna · Neighborhood Trattoria</span>
+      <span class="biz" id="bizName">Bella Nonna &#183; Neighborhood Trattoria</span>
     </div>
     <div class="spacer"></div>
     <label class="pill" title="Switch the archetype the board renders">
@@ -195,37 +143,107 @@
         <option value="rental">Equipment rental</option>
       </select>
     </label>
-    <button class="pill" id="themeToggle" aria-label="Toggle light or dark theme">◐ Theme</button>
+    <button class="pill" id="themeToggle" aria-label="Toggle light or dark theme">&#9680; Theme</button>
   </header>
 
   <div class="ticker" aria-label="Market highlights and competitive news">
-    <span class="wx" id="wx">☀ Demand: strong</span>
-    <div class="ticker-track"><div class="ticker-move" id="tickerMove"></div></div>
+    <span class="wx" id="wx">&#9728; Demand: strong</span>
+    <div class="ticker-track"><div class="ticker-move" id="tickerMove">
+      <span class="item"><span class="cdot"></span>&#9728; <b>Old-Town Food Festival</b> Sat&#8211;Sun <span class="up">&#9650; +35% covers projected</span></span>
+      <span class="item"><span class="cdot"></span>&#9788; <b>Competitor 'Trattoria Sud'</b> launched $19 lunch <span class="down">&#9660; undercuts lunch 15%</span></span>
+      <span class="item"><span class="cdot"></span>&#9670; <b>Supplier alert</b> olive oil +8% <span class="down">&#9660; margin watch</span></span>
+      <span class="item"><span class="cdot"></span>&#10022; <b>Local paper</b> Friday review slot <span class="up">&#9650; press coverage</span></span>
+      <span class="item"><span class="cdot"></span>&#9728; <b>Old-Town Food Festival</b> Sat&#8211;Sun <span class="up">&#9650; +35% covers projected</span></span>
+      <span class="item"><span class="cdot"></span>&#9788; <b>Competitor 'Trattoria Sud'</b> launched $19 lunch <span class="down">&#9660; undercuts lunch 15%</span></span>
+      <span class="item"><span class="cdot"></span>&#9670; <b>Supplier alert</b> olive oil +8% <span class="down">&#9660; margin watch</span></span>
+      <span class="item"><span class="cdot"></span>&#10022; <b>Local paper</b> Friday review slot <span class="up">&#9650; press coverage</span></span>
+    </div></div>
   </div>
 
   <section class="board" aria-label="Operational value stream">
     <div class="board-head">
       <span class="lbl">The value stream</span>
-      <span class="sub" id="capUnit">flow of work · primary activities</span>
+      <span class="sub" id="capUnit">flow of work &#183; primary activities</span>
       <span class="spacer"></span>
-      <span class="scroll-hint">↔ scroll the line</span>
+      <span class="hint">&#8596; scroll the line</span>
     </div>
-    <div class="stream" id="stream"></div>
+    <div class="stream" id="stream">
+      <div class="stage">
+        <div class="idx">S1 &#183; ATTRACT</div>
+        <div class="name">Attract &amp; Discover</div><div class="vern">&#8220;Get noticed&#8221;</div>
+        <div class="metric"><span class="v tnum">2</span><span class="l">live promos</span></div>
+        <div class="worker"><span class="avatar">MK</span><span class="act">Marketing &#183; idle</span></div>
+        <div class="persona"><span class="seat"></span>Owner + AI coworker</div>
+      </div>
+      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div>
+        <span class="unit u-demand d1"></span><span class="unit u-demand d3"></span></div>
+      <div class="stage">
+        <div class="idx">S2 &#183; CAPTURE</div>
+        <div class="name">Capture Demand</div><div class="vern">&#8220;Take the booking&#8221;</div>
+        <div class="metric"><span class="v tnum">31</span><span class="l">booked tonight</span></div>
+        <div class="worker"><span class="avatar">RS</span><span class="act">Reservations &#183; idle</span></div>
+        <div class="persona"><span class="seat"></span>Server + AI coworker</div>
+      </div>
+      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div>
+        <span class="unit u-demand d2"></span><span class="unit u-service d3"></span></div>
+      <div class="stage load">
+        <div class="idx">S3 &#183; QUALIFY <span class="lb">&#9670; load-bearing</span></div>
+        <div class="name">Qualify &amp; Schedule</div><div class="vern">&#8220;Seat &amp; sequence&#8221;</div>
+        <div class="metric"><span class="v tnum">88%</span><span class="l">seated</span></div>
+        <div class="worker"><span class="avatar">HS</span><span class="act">Host &#183; scheduling</span></div>
+        <div class="persona"><span class="seat"></span>Server + AI coworker</div>
+      </div>
+      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div>
+        <span class="unit u-service d1"></span><span class="unit u-service d3"></span></div>
+      <div class="stage load">
+        <div class="idx">S4 &#183; DELIVER <span class="lb">&#9670; load-bearing</span></div>
+        <div class="name">Deliver the Value</div><div class="vern">&#8220;Cook &amp; serve&#8221;</div>
+        <div class="metric"><span class="v tnum">9</span><span class="l">on the pass</span></div>
+        <div class="worker"><span class="avatar">KO</span><span class="act">Kitchen ops &#183; working the ticket</span></div>
+        <div class="persona"><span class="seat"></span>Chef + AI coworker</div>
+      </div>
+      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div>
+        <span class="unit u-service d2"></span><span class="unit u-attention d3"></span></div>
+      <div class="stage">
+        <div class="idx">S5 &#183; SETTLE</div>
+        <div class="name">Settle &amp; Account</div><div class="vern">&#8220;Bill &amp; bank&#8221;</div>
+        <div class="metric"><span class="v tnum">$4.1k</span><span class="l">today</span></div>
+        <div class="worker"><span class="avatar">FN</span><span class="act">Finance &#183; raising invoice</span></div>
+        <div class="persona"><span class="seat"></span>Owner + AI coworker</div>
+      </div>
+      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div>
+        <span class="unit u-settled d1"></span><span class="unit u-settled d3"></span></div>
+      <div class="stage">
+        <div class="idx">S6 &#183; RETAIN</div>
+        <div class="name">Retain &amp; Grow</div><div class="vern">&#8220;Bring them back&#8221;</div>
+        <div class="metric"><span class="v tnum">42%</span><span class="l">regulars</span></div>
+        <div class="worker"><span class="avatar">GR</span><span class="act">Guest relations &#183; idle</span></div>
+        <div class="persona"><span class="seat"></span>Owner + AI coworker</div>
+      </div>
+    </div>
   </section>
 
-  <div class="band" id="band"></div>
+  <div class="band" id="band">
+    <div class="meter warn"><div class="m-top"><span class="m-label">Supplier bills due</span><span class="m-val tnum">$2,340</span></div><div class="track"><div class="fill" style="width:72%"></div></div><div class="m-sub">3 invoices &#183; produce + linens</div></div>
+    <div class="meter warn"><div class="m-top"><span class="m-label">Sales-tax remittance</span><span class="m-val tnum">in 4 days</span></div><div class="track"><div class="fill" style="width:60%"></div></div><div class="m-sub">State ST-1 &#183; $1,190 accrued</div></div>
+    <div class="meter ok"><div class="m-top"><span class="m-label">Trust &amp; Compliance</span><span class="m-val tnum">OK</span></div><div class="track"><div class="fill" style="width:18%"></div></div><div class="m-sub">Food-safety cert &#183; renews 61d</div></div>
+    <div class="meter info"><div class="m-top"><span class="m-label">Operate &amp; Improve</span><span class="m-val tnum">3 ideas</span></div><div class="track"><div class="fill" style="width:40%"></div></div><div class="m-sub">Backlog throughput steady</div></div>
+  </div>
 
   <aside class="hud">
     <div class="hud-in">
-      <div>
-        <div class="kpis">
-          <div class="kpi"><div class="k-val tnum" id="kpiFlow">0</div><div class="k-lbl">in the stream</div></div>
-          <div class="kpi"><div class="k-val tnum" id="kpiToday">$0</div><div class="k-lbl">booked today</div></div>
-        </div>
+      <div class="kpis">
+        <div class="kpi"><div class="k-val tnum" id="kpiFlow">9</div><div class="k-lbl">in the stream</div></div>
+        <div class="kpi"><div class="k-val tnum" id="kpiToday">$4,120</div><div class="k-lbl">booked today</div></div>
       </div>
       <div>
-        <div class="hd"><span>What needs you now</span><span class="badge" id="questCount">0</span></div>
-        <div id="questList"></div>
+        <div class="hd"><span>What needs you now</span><span class="badge" id="questCount">4</span></div>
+        <div id="questList">
+          <div class="quest warn"><div class="q-body"><div class="q-title">Pay 3 supplier bills</div><div class="q-meta">$2,340 &#183; due Fri</div></div><button class="q-act">Review &amp; pay</button></div>
+          <div class="quest warn"><div class="q-body"><div class="q-title">File sales-tax remittance</div><div class="q-meta">State ST-1 &#183; $1,190 &#183; in 4 days</div></div><button class="q-act">Approve</button></div>
+          <div class="quest error"><div class="q-body"><div class="q-title">Exception on table 14</div><div class="q-meta">Kitchen flagged a comp &#8212; needs a call</div></div><button class="q-act">Resolve</button></div>
+          <div class="quest info"><div class="q-body"><div class="q-title">Festival staffing</div><div class="q-meta">Marketing projects +35% covers Sat</div></div><button class="q-act">Add shift</button></div>
+        </div>
       </div>
       <div>
         <div class="hd"><span>Reading the board</span></div>
@@ -237,270 +255,102 @@
           <div class="li"><span class="sw" style="background:var(--dpf-error)"></span>Exception</div>
           <div class="li"><span class="sw" style="border:1.5px solid var(--dpf-accent);background:transparent"></span>AI coworker</div>
         </div>
-        <div class="controls" style="margin-top:14px">
-          <div class="ctl-row"><span class="lbl">Speed</span>
-            <div class="seg" id="speedSeg" role="group" aria-label="Speed">
-              <button data-sp="0.5" aria-pressed="false">0.5×</button>
-              <button data-sp="1" aria-pressed="true">1×</button>
-              <button data-sp="2" aria-pressed="false">2×</button>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
     <div class="foot">
       Prototype. Binds to <code>deriveOperationalValueStream()</code>, <code>agent-event-bus</code>,
       the finance spine (<code>Bill</code>/<code>TaxRemittanceRun</code>) &amp; the Business Activity Simulator.
+      Archetype switching needs JavaScript &#8212; if this is a preview that blocks scripts, download and open in a browser.
     </div>
   </aside>
 </div>
 
 <script>
+/* Optional enhancement only. The board above is fully rendered and animated
+   without this script; here we add archetype switching, theme toggle, and
+   quest completion. Glyphs injected via innerHTML use numeric entities. */
 (() => {
   "use strict";
-  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  const ARCHETYPES = {
-    restaurant: {
-      biz: "Bella Nonna · Neighborhood Trattoria", cap: "capacity: covers · demand: festival weekend",
-      demand: "☀ Demand: strong (festival weekend)", inc: 62, personas: ["Owner","Chef","Server"],
-      stages: [
-        { key:"attract", name:"Attract & Discover", vern:"Get noticed",     load:false, mv:"2", ml:"live promos",  w:"MK", wn:"Marketing", persona:"Owner" },
-        { key:"capture", name:"Capture Demand",     vern:"Take the booking", load:false, mv:"31", ml:"booked tonight", w:"RS", wn:"Reservations", persona:"Server" },
-        { key:"qualify", name:"Qualify & Schedule", vern:"Seat & sequence",  load:true,  mv:"88%", ml:"seated",     w:"HS", wn:"Host", persona:"Server" },
-        { key:"deliver", name:"Deliver the Value",  vern:"Cook & serve",     load:true,  mv:"9", ml:"on the pass",  w:"KO", wn:"Kitchen ops", persona:"Chef" },
-        { key:"settle",  name:"Settle & Account",   vern:"Bill & bank",      load:false, mv:"$4.1k", ml:"today",    w:"FN", wn:"Finance", persona:"Owner" },
-        { key:"retain",  name:"Retain & Grow",      vern:"Bring them back",  load:false, mv:"42%", ml:"regulars",  w:"GR", wn:"Guest relations", persona:"Owner" },
-      ],
-      meters: [
-        { label:"Supplier bills due", kind:"warn", val:"$2,340", t:0.72, sub:"3 invoices · produce + linens" },
-        { label:"Sales-tax remittance", kind:"warn", val:"in 4 days", t:0.6, sub:"State ST-1 · $1,190 accrued" },
-        { label:"Trust & Compliance", kind:"ok", val:"OK", t:0.18, sub:"Food-safety cert · renews 61d" },
-        { label:"Operate & Improve", kind:"info", val:"3 ideas", t:0.4, sub:"Backlog throughput steady" },
-      ],
-      market: [["☀","Old-Town Food Festival","Sat–Sun","up","+35% covers projected"],["◔","Competitor 'Trattoria Sud'","launched $19 lunch","down","undercuts lunch 15%"],["◆","Supplier alert","olive oil +8%","down","margin watch"],["✦","Local paper","Friday review slot","up","press coverage"]],
-      quests: [
-        { t:"Pay 3 supplier bills", m:"$2,340 · due Fri", k:"warn", a:"Review & pay" },
-        { t:"File sales-tax remittance", m:"State ST-1 · $1,190 · in 4 days", k:"warn", a:"Approve" },
-        { t:"Exception on table 14", m:"Kitchen flagged a comp — needs a call", k:"error", a:"Resolve" },
-        { t:"Festival staffing", m:"Marketing projects +35% covers Sat", k:"info", a:"Add shift" },
-      ],
-    },
-    trades: {
-      biz: "Rapid Response Plumbing · Field Service", cap: "capacity: job-slots · demand: cold snap",
-      demand: "⛈ Demand: spiking (cold snap)", inc: 340, personas: ["Owner","Dispatcher","Tech"],
-      stages: [
-        { key:"attract", name:"Attract & Discover", vern:"Be findable",  load:false, mv:"GMB", ml:"+ 2 ads",   w:"MK", wn:"Marketing", persona:"Owner" },
-        { key:"capture", name:"Capture Demand",     vern:"Take the call", load:true,  mv:"14", ml:"calls today", w:"IN", wn:"Intake", persona:"Dispatcher" },
-        { key:"qualify", name:"Qualify & Schedule", vern:"Dispatch",      load:true,  mv:"2.1h", ml:"avg wait", w:"DS", wn:"Dispatch", persona:"Dispatcher" },
-        { key:"deliver", name:"Deliver the Value",  vern:"On-site work",  load:true,  mv:"6", ml:"en-route",   w:"FT", wn:"Field tech", persona:"Tech" },
-        { key:"settle",  name:"Settle & Account",   vern:"Invoice & collect", load:false, mv:"$8.6k", ml:"today", w:"FN", wn:"Finance", persona:"Owner" },
-        { key:"retain",  name:"Retain & Grow",      vern:"Service plans", load:false, mv:"19", ml:"active plans", w:"AC", wn:"Accounts", persona:"Owner" },
-      ],
-      meters: [
-        { label:"Supplier bills due", kind:"warn", val:"$5,120", t:0.8, sub:"Parts + fuel · 5 invoices" },
-        { label:"Payroll-tax deposit", kind:"warn", val:"in 2 days", t:0.78, sub:"Form 941 · $3,400" },
-        { label:"Trust & Compliance", kind:"warn", val:"1 lapsing", t:0.55, sub:"Van insurance renews 9d" },
-        { label:"Operate & Improve", kind:"info", val:"5 ideas", t:0.5, sub:"Route-density experiment" },
-      ],
-      market: [["⛈","Cold snap forecast","3-day freeze","up","+50% emergency calls"],["◔","New competitor 'FlowFix'","flat-rate pricing","down","pressure on drains"],["◆","Copper price","+4% month","down","re-quote estimates"],["✦","Property-mgr RFP","12-building contract","up","pipeline"]],
-      quests: [
-        { t:"Payroll-tax deposit", m:"Form 941 · $3,400 · in 2 days", k:"warn", a:"Approve" },
-        { t:"Van insurance lapsing", m:"Renews in 9 days — compliance", k:"warn", a:"Renew" },
-        { t:"Emergency backlog", m:"Cold snap: 6 jobs unassigned", k:"error", a:"Dispatch" },
-        { t:"Property-mgr RFP", m:"12-building maintenance contract", k:"info", a:"Draft bid" },
-      ],
-    },
-    saas: {
-      biz: "GridSignal · B2B Analytics SaaS", cap: "capacity: seats · demand: Q3 renewals",
-      demand: "☀ Demand: steady (Q3 renewals)", inc: 180, personas: ["Founder","PM","CSM"],
-      stages: [
-        { key:"attract", name:"Attract & Discover", vern:"Content & SEO", load:false, mv:"8", ml:"posts live",   w:"GR", wn:"Growth", persona:"PM" },
-        { key:"capture", name:"Capture Demand",     vern:"Trials & demos", load:true,  mv:"6.2%", ml:"signup", w:"SD", wn:"SDR", persona:"CSM" },
-        { key:"qualify", name:"Qualify & Onboard",  vern:"Time to value",  load:false, mv:"1.4d", ml:"to value", w:"CS", wn:"Onboarding", persona:"CSM" },
-        { key:"deliver", name:"Deliver the Value",  vern:"Serve the product", load:true, mv:"99.95%", ml:"uptime", w:"PL", wn:"Platform", persona:"Founder" },
-        { key:"settle",  name:"Settle & Account",   vern:"Bill subscriptions", load:true, mv:"$61k", ml:"MRR", w:"FN", wn:"Billing", persona:"Founder" },
-        { key:"retain",  name:"Retain & Grow",      vern:"Renew & expand", load:true, mv:"94%", ml:"net retention", w:"AM", wn:"Success", persona:"CSM" },
-      ],
-      meters: [
-        { label:"Vendor bills due", kind:"warn", val:"$3,900", t:0.5, sub:"Cloud + tooling · 4 invoices" },
-        { label:"Sales-tax nexus filing", kind:"warn", val:"in 6 days", t:0.45, sub:"3 states · $2,050" },
-        { label:"Trust & Compliance", kind:"ok", val:"SOC2 OK", t:0.2, sub:"Next audit window 5mo" },
-        { label:"Operate & Improve", kind:"info", val:"11 ideas", t:0.65, sub:"Backlog throughput high" },
-      ],
-      market: [["☀","Category tailwind","analyst calls it 'hot'","up","inbound +18%"],["◔","Competitor 'Metricly'","raised Series B","down","ad spend incoming"],["◆","Cloud pricing","egress fees rising","down","margin review"],["✦","G2 report","named High Performer","up","social proof"]],
-      quests: [
-        { t:"Sales-tax nexus filing", m:"3 states · $2,050 · in 6 days", k:"warn", a:"Approve" },
-        { t:"Pay 4 vendor bills", m:"$3,900 · cloud + tooling", k:"warn", a:"Review & pay" },
-        { t:"At-risk renewal", m:"Acct 'Northwind' usage down 40%", k:"error", a:"Reach out" },
-        { t:"Expansion signal", m:"3 accounts hit seat limit", k:"info", a:"Offer upgrade" },
-      ],
-    },
-    rental: {
-      biz: "PeakGear · Equipment Rental", cap: "capacity: asset-days · demand: seasonal peak",
-      demand: "☀ Demand: seasonal peak", inc: 96, personas: ["Owner","Counter","Mechanic"],
-      stages: [
-        { key:"attract", name:"Attract & Discover", vern:"List the fleet", load:false, mv:"live", ml:"catalog",  w:"MK", wn:"Marketing", persona:"Owner" },
-        { key:"capture", name:"Capture Demand",     vern:"Reserve",        load:true,  mv:"23", ml:"holds",     w:"RS", wn:"Reservations", persona:"Counter" },
-        { key:"qualify", name:"Hand Out",           vern:"Check out asset", load:false, mv:"81%", ml:"out",     w:"CT", wn:"Counter", persona:"Counter" },
-        { key:"deliver", name:"Deliver (In-Use)",   vern:"On rent",        load:true,  mv:"64", ml:"on rent",   w:"OP", wn:"Fleet ops", persona:"Mechanic" },
-        { key:"return",  name:"Return & Inspect",   vern:"Return & clean", load:true,  mv:"3.2h", ml:"turnaround", w:"IN", wn:"Inspection", persona:"Mechanic" },
-        { key:"settle",  name:"Settle & Account",   vern:"Bill & deposit", load:false, mv:"$5.2k", ml:"today",  w:"FN", wn:"Finance", persona:"Owner" },
-      ],
-      meters: [
-        { label:"Supplier bills due", kind:"warn", val:"$1,780", t:0.4, sub:"Maintenance parts · 2 invoices" },
-        { label:"Sales-tax remittance", kind:"warn", val:"in 8 days", t:0.35, sub:"State ST-1 · $940" },
-        { label:"Trust & Compliance", kind:"warn", val:"2 overdue", t:0.62, sub:"Overdue returns to chase" },
-        { label:"Operate & Improve", kind:"info", val:"4 ideas", t:0.42, sub:"Utilization optimization" },
-      ],
-      market: [["☀","Peak season","weekend surge","up","+40% asset-days"],["◔","New rival yard","opened across town","down","weekday pricing"],["◆","Fuel & freight","delivery +6%","down","review delivery fee"],["✦","Contractor expo","booth confirmed","up","B2B leads"]],
-      quests: [
-        { t:"Chase overdue returns", m:"2 assets overdue — compliance", k:"error", a:"Contact" },
-        { t:"Pay maintenance bills", m:"$1,780 · parts · 2 invoices", k:"warn", a:"Review & pay" },
-        { t:"Sales-tax remittance", m:"State ST-1 · $940 · in 8 days", k:"warn", a:"Approve" },
-        { t:"Peak pricing", m:"Weekend demand +40% — adjust rates?", k:"info", a:"Set pricing" },
-      ],
-    },
+  const E = { sun:"&#9728;", storm:"&#9928;", cloud:"&#9788;", dia:"&#9670;", star:"&#10022;",
+    up:"&#9650;", down:"&#9660;", play:"&#9654;", mid:"&#183;", ldq:"&#8220;", rdq:"&#8221;", dash:"&#8211;", emd:"&#8212;", check:"&#10003;" };
+  const S = ["u-demand","u-service","u-service","u-service","u-settled","u-settled"];
+  const A = {
+    restaurant:{ biz:`Bella Nonna ${E.mid} Neighborhood Trattoria`, cap:"capacity: covers", wx:`${E.sun} Demand: strong (festival weekend)`, flow:9, today:"$4,120",
+      stages:[["S1","ATTRACT","Attract &amp; Discover","Get noticed",0,"2","live promos","MK","Marketing","idle","Owner"],["S2","CAPTURE","Capture Demand","Take the booking",0,"31","booked tonight","RS","Reservations","idle","Server"],["S3","QUALIFY","Qualify &amp; Schedule","Seat &amp; sequence",1,"88%","seated","HS","Host","scheduling","Server"],["S4","DELIVER","Deliver the Value","Cook &amp; serve",1,"9","on the pass","KO","Kitchen ops","working the ticket","Chef"],["S5","SETTLE","Settle &amp; Account","Bill &amp; bank",0,"$4.1k","today","FN","Finance","raising invoice","Owner"],["S6","RETAIN","Retain &amp; Grow","Bring them back",0,"42%","regulars","GR","Guest relations","idle","Owner"]],
+      meters:[["warn","Supplier bills due","$2,340",72,`3 invoices ${E.mid} produce + linens`],["warn","Sales-tax remittance","in 4 days",60,`State ST-1 ${E.mid} $1,190 accrued`],["ok","Trust &amp; Compliance","OK",18,`Food-safety cert ${E.mid} renews 61d`],["info","Operate &amp; Improve","3 ideas",40,"Backlog throughput steady"]],
+      market:[[E.sun,"Old-Town Food Festival","Sat"+E.dash+"Sun","up","+35% covers projected"],[E.cloud,"Competitor 'Trattoria Sud'","launched $19 lunch","down","undercuts lunch 15%"],[E.dia,"Supplier alert","olive oil +8%","down","margin watch"],[E.star,"Local paper","Friday review slot","up","press coverage"]],
+      quests:[["warn","Pay 3 supplier bills",`$2,340 ${E.mid} due Fri`,"Review &amp; pay"],["warn","File sales-tax remittance",`State ST-1 ${E.mid} $1,190 ${E.mid} in 4 days`,"Approve"],["error","Exception on table 14",`Kitchen flagged a comp ${E.emd} needs a call`,"Resolve"],["info","Festival staffing","Marketing projects +35% covers Sat","Add shift"]] },
+    trades:{ biz:`Rapid Response Plumbing ${E.mid} Field Service`, cap:"capacity: job-slots", wx:`${E.storm} Demand: spiking (cold snap)`, flow:12, today:"$8,640",
+      stages:[["S1","ATTRACT","Attract &amp; Discover","Be findable",0,"GMB","+ 2 ads","MK","Marketing","idle","Owner"],["S2","CAPTURE","Capture Demand","Take the call",1,"14","calls today","IN","Intake","logging call","Dispatcher"],["S3","QUALIFY","Qualify &amp; Schedule","Dispatch",1,"2.1h","avg wait","DS","Dispatch","routing tech","Dispatcher"],["S4","DELIVER","Deliver the Value","On-site work",1,"6","en-route","FT","Field tech","on the job","Tech"],["S5","SETTLE","Settle &amp; Account","Invoice &amp; collect",0,"$8.6k","today","FN","Finance","raising invoice","Owner"],["S6","RETAIN","Retain &amp; Grow","Service plans",0,"19","active plans","AC","Accounts","idle","Owner"]],
+      meters:[["warn","Supplier bills due","$5,120",80,`Parts + fuel ${E.mid} 5 invoices`],["warn","Payroll-tax deposit","in 2 days",78,`Form 941 ${E.mid} $3,400`],["warn","Trust &amp; Compliance","1 lapsing",55,"Van insurance renews 9d"],["info","Operate &amp; Improve","5 ideas",50,"Route-density experiment"]],
+      market:[[E.storm,"Cold snap forecast","3-day freeze","up","+50% emergency calls"],[E.cloud,"New competitor 'FlowFix'","flat-rate pricing","down","pressure on drains"],[E.dia,"Copper price","+4% month","down","re-quote estimates"],[E.star,"Property-mgr RFP","12-building contract","up","pipeline"]],
+      quests:[["warn","Payroll-tax deposit",`Form 941 ${E.mid} $3,400 ${E.mid} in 2 days`,"Approve"],["warn","Van insurance lapsing","Renews in 9 days","Renew"],["error","Emergency backlog","Cold snap: 6 jobs unassigned","Dispatch"],["info","Property-mgr RFP","12-building maintenance contract","Draft bid"]] },
+    saas:{ biz:`GridSignal ${E.mid} B2B Analytics SaaS`, cap:"capacity: seats", wx:`${E.sun} Demand: steady (Q3 renewals)`, flow:7, today:"$61,000",
+      stages:[["S1","ATTRACT","Attract &amp; Discover","Content &amp; SEO",0,"8","posts live","GR","Growth","idle","PM"],["S2","CAPTURE","Capture Demand","Trials &amp; demos",1,"6.2%","signup","SD","SDR","qualifying lead","CSM"],["S3","QUALIFY","Qualify &amp; Onboard","Time to value",0,"1.4d","to value","CS","Onboarding","onboarding","CSM"],["S4","DELIVER","Deliver the Value","Serve the product",1,"99.95%","uptime","PL","Platform","serving","Founder"],["S5","SETTLE","Settle &amp; Account","Bill subscriptions",1,"$61k","MRR","FN","Billing","invoicing","Founder"],["S6","RETAIN","Retain &amp; Grow","Renew &amp; expand",1,"94%","net retention","AM","Success","expanding","CSM"]],
+      meters:[["warn","Vendor bills due","$3,900",50,`Cloud + tooling ${E.mid} 4 invoices`],["warn","Sales-tax nexus filing","in 6 days",45,`3 states ${E.mid} $2,050`],["ok","Trust &amp; Compliance","SOC2 OK",20,"Next audit window 5mo"],["info","Operate &amp; Improve","11 ideas",65,"Backlog throughput high"]],
+      market:[[E.sun,"Category tailwind","analyst calls it 'hot'","up","inbound +18%"],[E.cloud,"Competitor 'Metricly'","raised Series B","down","ad spend incoming"],[E.dia,"Cloud pricing","egress fees rising","down","margin review"],[E.star,"G2 report","named High Performer","up","social proof"]],
+      quests:[["warn","Sales-tax nexus filing",`3 states ${E.mid} $2,050 ${E.mid} in 6 days`,"Approve"],["warn","Pay 4 vendor bills",`$3,900 ${E.mid} cloud + tooling`,"Review &amp; pay"],["error","At-risk renewal","Acct 'Northwind' usage down 40%","Reach out"],["info","Expansion signal","3 accounts hit seat limit","Offer upgrade"]] },
+    rental:{ biz:`PeakGear ${E.mid} Equipment Rental`, cap:"capacity: asset-days", wx:`${E.sun} Demand: seasonal peak`, flow:11, today:"$5,240",
+      stages:[["S1","ATTRACT","Attract &amp; Discover","List the fleet",0,"live","catalog","MK","Marketing","idle","Owner"],["S2","CAPTURE","Capture Demand","Reserve",1,"23","holds","RS","Reservations","holding asset","Counter"],["S3","QUALIFY","Hand Out","Check out asset",0,"81%","out","CT","Counter","checking out","Counter"],["S4","DELIVER","Deliver (In-Use)","On rent",1,"64","on rent","OP","Fleet ops","tracking fleet","Mechanic"],["S5","RETURN","Return &amp; Inspect","Return &amp; clean",1,"3.2h","turnaround","IN","Inspection","inspecting","Mechanic"],["S6","SETTLE","Settle &amp; Account","Bill &amp; deposit",0,"$5.2k","today","FN","Finance","settling deposit","Owner"]],
+      meters:[["warn","Supplier bills due","$1,780",40,`Maintenance parts ${E.mid} 2 invoices`],["warn","Sales-tax remittance","in 8 days",35,`State ST-1 ${E.mid} $940`],["warn","Trust &amp; Compliance","2 overdue",62,"Overdue returns to chase"],["info","Operate &amp; Improve","4 ideas",42,"Utilization optimization"]],
+      market:[[E.sun,"Peak season","weekend surge","up","+40% asset-days"],[E.cloud,"New rival yard","opened across town","down","weekday pricing"],[E.dia,"Fuel &amp; freight","delivery +6%","down","review delivery fee"],[E.star,"Contractor expo","booth confirmed","up","B2B leads"]],
+      quests:[["error","Chase overdue returns","2 assets overdue","Contact"],["warn","Pay maintenance bills",`$1,780 ${E.mid} parts ${E.mid} 2 invoices`,"Review &amp; pay"],["warn","Sales-tax remittance",`State ST-1 ${E.mid} $940 ${E.mid} in 8 days`,"Approve"],["info","Peak pricing","Weekend demand +40%","Set pricing"]] },
   };
-
   const $ = id => document.getElementById(id);
-  const stream = $("stream"), band = $("band"), tickerMove = $("tickerMove"), wx = $("wx");
-  const questList = $("questList"), questCount = $("questCount");
-  const kpiFlow = $("kpiFlow"), kpiToday = $("kpiToday"), bizName = $("bizName"), capUnit = $("capUnit");
 
-  let cfg, curKey = "restaurant", speed = 1, rails = [], stageEls = [], inStream = 0, bookedToday = 0;
-  const STATES = ["demand","service","service","service","settled","settled","retain"];
+  function render(key){
+    const c = A[key]; if(!c) return;
+    $("bizName").innerHTML = c.biz;
+    $("capUnit").innerHTML = c.cap + " &#183; primary activities";
+    $("wx").innerHTML = c.wx;
+    $("kpiFlow").textContent = c.flow;
+    $("kpiToday").textContent = c.today;
 
-  function buildStream() {
-    stream.innerHTML = ""; rails = []; stageEls = [];
-    cfg.stages.forEach((s, i) => {
-      const st = document.createElement("div");
-      st.className = "stage" + (s.load ? " load" : "");
-      st.tabIndex = 0;
-      st.innerHTML =
-        `<div class="idx">S${i+1} · ${s.key.toUpperCase()}${s.load ? '<span class="load-tag">◆ load-bearing</span>' : ''}</div>` +
-        `<div class="name">${s.name}</div><div class="vern">“${s.vern}”</div>` +
-        `<div class="metric"><span class="v tnum">${s.mv}</span><span class="l">${s.ml}</span></div>` +
-        `<div class="worker"><span class="avatar">${s.w}</span><span class="act">idle</span></div>` +
-        `<div class="persona"><span class="seat"></span>${s.persona} + AI coworker</div>`;
-      st.querySelector(".name").title = s.wn + " coworker";
-      st.addEventListener("click", () => activate(i, "reviewing " + s.ml, 2400));
-      stream.appendChild(st);
-      stageEls.push(st);
-      if (i < cfg.stages.length - 1) {
-        const rail = document.createElement("div");
-        rail.className = "rail";
-        rail.innerHTML = `<div class="line"></div><div class="arrow">▶</div>`;
-        stream.appendChild(rail);
-        rails.push(rail);
+    let html = "";
+    c.stages.forEach((s,i) => {
+      const [idx,key2,name,vern,load,mv,ml,w,wn,act,persona] = s;
+      const active = (act !== "idle");
+      html += `<div class="stage${load?' load':''}${active?' active':''}">`+
+        `<div class="idx">${idx} ${E.mid} ${key2}${load?` <span class="lb">${E.dia} load-bearing</span>`:''}</div>`+
+        `<div class="name">${name}</div><div class="vern">${E.ldq}${vern}${E.rdq}</div>`+
+        `<div class="metric"><span class="v tnum">${mv}</span><span class="l">${ml}</span></div>`+
+        `<div class="worker"><span class="avatar">${w}</span><span class="act">${wn} ${E.mid} ${act}</span></div>`+
+        `<div class="persona"><span class="seat"></span>${persona} + AI coworker</div></div>`;
+      if(i < c.stages.length-1){
+        const st = S[i]||"u-service";
+        html += `<div class="rail"><div class="line"></div><div class="arrow">${E.play}</div>`+
+          `<span class="unit ${st} d1"></span><span class="unit ${st} d3"></span></div>`;
       }
     });
-  }
+    $("stream").innerHTML = html;
 
-  function activate(i, text, ms) {
-    const el = stageEls[i]; if (!el) return;
-    el.classList.add("active");
-    el.querySelector(".act").textContent = text;
-    clearTimeout(el._t);
-    el._t = setTimeout(() => { el.classList.remove("active"); el.querySelector(".act").textContent = "idle"; }, ms);
-  }
-  const VERBS = { attract:"drafting a promo", capture:"logging the booking", qualify:"scheduling", deliver:"working the ticket", settle:"raising the invoice", retain:"nudging a regular", return:"inspecting the return" };
+    $("band").innerHTML = c.meters.map(m => {
+      const [kind,label,val,pct,sub] = m;
+      return `<div class="meter ${kind}"><div class="m-top"><span class="m-label">${label}</span><span class="m-val tnum">${val}</span></div><div class="track"><div class="fill" style="width:${pct}%"></div></div><div class="m-sub">${sub}</div></div>`;
+    }).join("");
 
-  function journey() {
-    inStream++; updateKpis();
-    let exception = Math.random() < 0.06 ? (2 + Math.floor(Math.random() * 3)) : -1;
-    hop(0);
-    function hop(i) {
-      const s = cfg.stages[i];
-      activate(i, (s ? (s.wn + " · " + (VERBS[s.key] || "handling work")) : ""), 1600);
-      if (i >= rails.length) { // reached the end
-        inStream = Math.max(0, inStream - 1);
-        if (exception < 0) bookedToday += cfg.inc * (0.6 + Math.random() * 0.8);
-        updateKpis();
-        return;
-      }
-      const rail = rails[i];
-      const unit = document.createElement("span");
-      const state = (exception === i) ? "exception" : (STATES[i] || "service");
-      unit.className = "unit u-" + state + " run";
-      unit.style.animationDuration = (2.1 / speed) + "s";
-      rail.appendChild(unit);
-      let advanced = false;
-      const go = () => { if (advanced) return; advanced = true; unit.remove(); hop(i + 1); };
-      unit.addEventListener("animationend", go);
-      setTimeout(go, (2.1 / speed) * 1000 + 400); // fallback if animationend doesn't fire
-    }
-  }
+    let open = 0;
+    $("questList").innerHTML = c.quests.map(q => { open++; const [k,t,m,a]=q;
+      return `<div class="quest ${k}"><div class="q-body"><div class="q-title">${t}</div><div class="q-meta">${m}</div></div><button class="q-act">${a}</button></div>`;
+    }).join("");
+    $("questCount").textContent = open;
 
-  let spawnTimer = null;
-  function startSpawning() {
-    clearInterval(spawnTimer);
-    if (reduceMotion) { for (let i = 0; i < 4; i++) journeyStatic(); updateKpis(); return; }
-    spawnTimer = setInterval(() => { if (inStream < 14) journey(); }, 1400 / speed);
-    journey(); journey();
+    const items = c.market.map(([g,h,d,dir,note]) => `<span class="item"><span class="cdot"></span>${g} <b>${h}</b> ${d} <span class="${dir}">${dir==="up"?E.up:E.down} ${note}</span></span>`).join("");
+    $("tickerMove").innerHTML = items + items;
+    wireQuests();
   }
-  function journeyStatic() { // reduced-motion: place a few static units mid-rail
-    inStream++;
-    rails.forEach((rail, i) => {
-      if (Math.random() < 0.4) {
-        const u = document.createElement("span");
-        u.className = "unit u-" + (STATES[i] || "service");
-        u.style.left = (20 + Math.random() * 60) + "%";
-        rail.appendChild(u);
-      }
-    });
+  function wireQuests(){
+    document.querySelectorAll(".q-act").forEach(btn => btn.addEventListener("click", () => {
+      const q = btn.closest(".quest"); if(q.dataset.done) return;
+      q.dataset.done = "1"; q.style.opacity = ".5"; btn.style.background = "var(--dpf-success)"; btn.innerHTML = E.check + " Done";
+      const c = $("questCount"); c.textContent = Math.max(0, +c.textContent - 1);
+    }));
   }
-  function updateKpis() { kpiFlow.textContent = inStream; kpiToday.textContent = "$" + Math.round(bookedToday).toLocaleString(); }
-
-  function renderMeters() {
-    band.innerHTML = "";
-    cfg.meters.forEach(m => {
-      const el = document.createElement("div");
-      el.className = "meter " + m.kind;
-      el.innerHTML = `<div class="m-top"><span class="m-label">${m.label}</span><span class="m-val tnum">${m.val}</span></div>` +
-        `<div class="track"><div class="fill" style="width:${Math.round(m.t*100)}%"></div></div><div class="m-sub">${m.sub}</div>`;
-      band.appendChild(el);
-    });
-  }
-  function renderQuests() {
-    questList.innerHTML = ""; let open = 0;
-    cfg.quests.forEach(q => {
-      open++;
-      const el = document.createElement("div");
-      el.className = "quest " + q.k;
-      el.innerHTML = `<div class="q-body"><div class="q-title">${q.t}</div><div class="q-meta">${q.m}</div></div><button class="q-act">${q.a}</button>`;
-      const btn = el.querySelector(".q-act");
-      btn.addEventListener("click", () => { if (el.classList.contains("done")) return; el.classList.add("done"); btn.textContent = "✓ Done"; questCount.textContent = Math.max(0, +questCount.textContent - 1); });
-      questList.appendChild(el);
-    });
-    questCount.textContent = open;
-  }
-  function renderTicker() {
-    wx.textContent = cfg.demand;
-    const items = cfg.market.map(([g,h,d,dir,note]) => `<span class="item"><span class="dot"></span>${g} <b>${h}</b> ${d} <span class="${dir}">${dir==="up"?"▲":"▼"} ${note}</span></span>`).join("");
-    tickerMove.innerHTML = items + items;
-  }
-
-  function load(key) {
-    curKey = key; cfg = ARCHETYPES[key];
-    bizName.textContent = cfg.biz; capUnit.textContent = cfg.cap;
-    inStream = 0; bookedToday = 0;
-    buildStream(); renderMeters(); renderQuests(); renderTicker(); updateKpis();
-    startSpawning();
-  }
-
-  $("archetype").addEventListener("change", e => load(e.target.value));
+  $("archetype").addEventListener("change", e => render(e.target.value));
   $("themeToggle").addEventListener("click", () => {
     const cur = document.documentElement.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     document.documentElement.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
   });
-  const speedSeg = $("speedSeg");
-  speedSeg.addEventListener("click", e => {
-    const b = e.target.closest("button"); if (!b) return;
-    speedSeg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
-    speed = parseFloat(b.dataset.sp); startSpawning();
-  });
-
-  load("restaurant");
+  wireQuests(); // wire the static quests without re-rendering
 })();
 </script>
