@@ -5220,6 +5220,29 @@ export async function executeTool(
         );
       }
 
+      // Bind the evidence record to the capsule the capture just resolved so it
+      // rolls up onto the capsule timeline with producer identity
+      // (EP-WORK-CONVERGENCE Phase 1 / BI-D6FA8641). The record was written
+      // before capture (order preserved for back-compat); patch it here.
+      // Best-effort — a link failure must never fail the evidence write.
+      if (capturedCapsuleId) {
+        try {
+          await prisma.externalEvidenceRecord.update({
+            where: { id: evidence.id },
+            data: {
+              workCapsuleId: capturedCapsuleId,
+              executorKind: provider,
+              ...(context?.agentId ? { recordedByAgentId: context.agentId } : {}),
+            },
+          });
+        } catch (linkError) {
+          console.warn(
+            "[record_external_development_evidence] capsule link failed:",
+            getErrorMessage(linkError),
+          );
+        }
+      }
+
       return {
         success: true,
         entityId: evidence.id,
