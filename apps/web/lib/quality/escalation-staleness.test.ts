@@ -9,6 +9,7 @@ function row(over: Partial<EscalationStalenessRow>): EscalationStalenessRow {
     reportId: "PIR-A",
     createdAt: new Date("2026-06-23T00:00:00Z"),
     buildSupersededByEpicId: null,
+    buildPhase: null,
     originatingBacklogItemId: "bi-cuid-1",
     backlogItemStatus: "deferred",
     backlogItemTriageOutcome: "build",
@@ -37,6 +38,19 @@ describe("selectResolvableEscalations", () => {
       row({ buildSupersededByEpicId: "epic-cuid-1", backlogItemStatus: "in-progress" }),
     ]);
     expect(out).toEqual([{ reportId: "PIR-A", reason: "build-superseded-by-epic" }]);
+  });
+
+  it("resolves when the originating build was abandoned (BI-FCAE8154)", () => {
+    const out = selectResolvableEscalations([
+      row({ buildPhase: "abandoned", backlogItemStatus: "open", backlogItemTriageOutcome: "build" }),
+    ]);
+    expect(out).toEqual([{ reportId: "PIR-A", reason: "originating-build-abandoned" }]);
+  });
+
+  it("KEEPS an escalation whose build is still in a live phase", () => {
+    expect(
+      selectResolvableEscalations([row({ buildPhase: "ideate", backlogItemStatus: "in-progress" })]),
+    ).toEqual([]);
   });
 
   it("resolves the older escalation when a newer one exists for the same item", () => {
