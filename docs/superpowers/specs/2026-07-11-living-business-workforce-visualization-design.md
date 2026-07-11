@@ -68,7 +68,36 @@ The two lenses share the **same** `LivingBusinessSnapshot` + event plane; the fl
 - **Reservations queue** — upcoming bookings each get a suggested table *held* for their time, predicted from expected turn times, so an 8:30 six-top isn't stranded behind a full room.
 This is the first instance of a general pattern — the twin surfaces a constraint (a party of 6 with no six-top free), the coworker proposes the resolution (combine T12+T13, or "T5 turns in ~35m"), the operator taps to confirm. The dwell/turn model is `schedulingDefaults` + observed service times; the same shape recurs per archetype (dispatch the next job to the nearest free tech; assign the returned asset to the next reservation).
 
-**Second twin — field-service dispatch** ([`assets/2026-07-11-living-business-field-service-dispatch-prototype.html`](assets/2026-07-11-living-business-field-service-dispatch-prototype.html)) proves the pattern generalizes. It renders a **territory map of where the fleet physically is**: a central **yard** depot, and vans that are **yard-based vs home-garaged** (garaged vans start in their own neighborhood, not the yard — a real dispatch consideration), tech markers colored by status, jobs/emergencies pinned by zone. The **dispatch queue** is the exact analogue of the restaurant waitlist: tap a queued job → the cog suggests the **nearest available tech by travel time** (respecting yard-vs-home basing), or the on-site tech that frees soonest + travel → tap to dispatch; the van animates en-route and a pin drops. Same constraint→proposal→confirm loop, same `LivingBusinessSnapshot`, different entities (`field-dispatch` lifecycle, appointments from `schedulingDefaults`, parts stock on truck vs yard). The rental twin (fleet yard: assets in/out/overdue, maintenance bay, assign-returned-asset-to-next-reservation) is the next to slot into the same frame.
+**Second twin — field-service dispatch** ([`assets/2026-07-11-living-business-field-service-dispatch-prototype.html`](assets/2026-07-11-living-business-field-service-dispatch-prototype.html)) proves the pattern generalizes. It renders a **territory map of where the fleet physically is**: a central **yard** depot, and vans that are **yard-based vs home-garaged** (garaged vans start in their own neighborhood, not the yard — a real dispatch consideration), tech markers colored by status, jobs/emergencies pinned by zone. The **dispatch queue** is the exact analogue of the restaurant waitlist: tap a queued job → the cog suggests the **nearest available tech by travel time** (respecting yard-vs-home basing), or the on-site tech that frees soonest + travel → tap to dispatch; the van animates en-route and a pin drops. Same constraint→proposal→confirm loop, same `LivingBusinessSnapshot`, different entities (`field-dispatch` lifecycle, appointments from `schedulingDefaults`, parts stock on truck vs yard).
+
+**Third twin — rental yard** ([`assets/2026-07-11-living-business-rental-yard-prototype.html`](assets/2026-07-11-living-business-rental-yard-prototype.html)): the physical fleet as bays — **ready in the yard**, **returns & inspection**, **maintenance bay**, and an **out-on-rent** board with due dates/overdue. The **reservations queue** is the same interaction again: tap a reservation → the cog suggests the best asset of that class (ready now, or one clearing inspection by the reservation time) → tap to allocate; tap a returned asset to clear it back to the ready line. Three twins, one interaction grammar.
+
+### 3.2 Physical archetypes get a spatial "now" twin; non-physical get other paradigms
+**Load-bearing principle (operator-directed):** every archetype whose work happens in *physical space* gets an operational twin that is the **representation which best reflects "now"** for that business — a floor, a map, a yard, a board of rooms — defaulting to live current state. Archetypes whose work is **not** physical don't get a spatial twin; they get a paradigm fit to their substrate (a tenant/usage board, a pipeline, a portfolio). Both remain read-side projections of the same `LivingBusinessSnapshot`; only the *primary* facet differs. Classifying the 21 archetype categories:
+
+| Physical → spatial "now" twin | The twin |
+|---|---|
+| food-hospitality | restaurant floor — tables/seats, kitchen pass, waitlist *(built)* |
+| trades-maintenance · moving-and-logistics · security-services | territory/route map — fleet, jobs, dispatch *(field-service built)* |
+| asset-rental | yard — assets in/out/maintenance/returns *(built)* |
+| automotive-services | shop — bays/lifts, work-orders on the ramp |
+| beauty-personal-care · pet-services | stations/chairs (or kennels/grooming) + the appointment book |
+| healthcare-wellness | rooms/exam chairs + patient flow *(PHI-guarded)* |
+| fitness-recreation | floor + class/equipment capacity |
+| retail-goods | store floor + shelves/stock + POS lanes *(hybrid w/ online)* |
+| hoa-property-management · real-estate-construction | property/units or job-sites map + work orders |
+| live-events-venues | venue map — seating/stage + run-of-show |
+| education-training · public-sector | rooms/counters + schedule/queue board *(hybrid w/ online)* |
+
+| Non-physical → other paradigm | The paradigm |
+|---|---|
+| software-platform | tenants/seats/usage + infra-health board |
+| banking-financial-services | accounts/portfolio + transaction/exception board |
+| professional-services | matters/engagements pipeline + utilization |
+| media-production | productions pipeline/timeline (project gantt) |
+| nonprofit-community | programs/donors/impact board |
+
+Hybrids (retail, education, healthcare) run the physical twin for the in-person facet and the board paradigm for the digital one, toggled like the value-stream ⇄ floor lens. The value-stream lens is universal — it applies to *every* archetype, physical or not — and is the shared second lens behind whichever primary one fits.
 
 ## 4. Data bindings (bind, do not invent)
 
