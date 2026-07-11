@@ -2341,46 +2341,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "create_scheduled_agent_task",
-    description: "Create a recurring agent task that runs in the coordination plane (TaskRun/thread/tools/evidence) on a 5-field UTC cron. Owned by the calling user; the supported way for an agent to schedule recurring work instead of a client-local cron.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        agentId: { type: "string", description: "Coworker agent id that runs the task (e.g. AGT-... or a role id like platform-engineer)." },
-        title: { type: "string", description: "Short human title for the task." },
-        prompt: { type: "string", description: "The instruction the agent runs each tick." },
-        schedule: { type: "string", description: "5-field cron expression in UTC, e.g. '0 9 1 * *' = 1st of each month at 09:00 UTC." },
-        routeContext: { type: "string", description: "Route context the task runs under (optional, default /platform)." },
-      },
-      required: ["agentId", "title", "prompt", "schedule"],
-    },
-    requiredCapability: "view_operations",
-    executionMode: "immediate",
-    sideEffect: true,
-  },
-  {
-    name: "list_scheduled_agent_tasks",
-    description: "List the recurring agent tasks owned by the calling user (id, title, schedule, active state, next/last run, last status).",
-    inputSchema: { type: "object", properties: {}, required: [] },
-    requiredCapability: "view_operations",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
-  {
-    name: "cancel_scheduled_agent_task",
-    description: "Deactivate a recurring agent task by id. Only the owning user may cancel it.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        taskId: { type: "string", description: "The scheduled agent task id (agent-task-xxxxxxxx)." },
-      },
-      required: ["taskId"],
-    },
-    requiredCapability: "view_operations",
-    executionMode: "immediate",
-    sideEffect: true,
-  },
-  {
     name: "get_release_status",
     description: "Get the current status of a release bundle or promotion, including deployment window availability and gate check results.",
     inputSchema: {
@@ -12215,41 +12175,6 @@ export async function executeTool(
         },
       };
     }
-
-    case "create_scheduled_agent_task": {
-      const { scheduleAgentTaskFor } = await import("@/lib/operate/scheduled-jobs/agent-task-core");
-      const result = await scheduleAgentTaskFor(userId, {
-        agentId: String(params.agentId ?? ""),
-        title: String(params.title ?? ""),
-        prompt: String(params.prompt ?? ""),
-        routeContext: typeof params.routeContext === "string" ? params.routeContext : "/platform",
-        schedule: String(params.schedule ?? ""),
-        timezone: typeof params.timezone === "string" ? params.timezone : undefined,
-      });
-      return result.success
-        ? { success: true, entityId: result.taskId, message: `Scheduled agent task ${result.taskId} created${result.note ? ` (${result.note})` : ""}.` }
-        : { success: false, error: result.error, message: result.error };
-    }
-
-    case "list_scheduled_agent_tasks": {
-      const { getScheduledAgentTasksFor } = await import("@/lib/operate/scheduled-jobs/agent-task-core");
-      const tasks = await getScheduledAgentTasksFor(userId);
-      // Bound each prompt so a few long tasks can't blow the local context window
-      // (the MCP-route result cap is the backstop).
-      const compact = tasks.map((t) => ({ ...t, prompt: t.prompt.length > 200 ? `${t.prompt.slice(0, 200)}…` : t.prompt }));
-      return { success: true, message: `${tasks.length} scheduled agent task(s).`, data: { tasks: compact } };
-    }
-
-    case "cancel_scheduled_agent_task": {
-      const { cancelAgentTaskFor } = await import("@/lib/operate/scheduled-jobs/agent-task-core");
-      const taskId = String(params.taskId ?? "");
-      if (!taskId) return { success: false, error: "taskId is required.", message: "Provide a scheduled agent task id." };
-      const result = await cancelAgentTaskFor(userId, taskId);
-      return result.success
-        ? { success: true, entityId: taskId, message: `Scheduled agent task ${taskId} cancelled.` }
-        : { success: false, error: result.error, message: result.error ?? "Cancel failed." };
-    }
-
 
     case "apply_platform_update": {
       // Delegates to the shared server action in lib/actions/platform-dev-config.ts.
