@@ -61,9 +61,11 @@ The keystone. Everything downstream depends on a computed, explainable score exi
 
 **Acceptance (core):** scoring policy editable by the operator (config, not code) and audited on change; the board reflects the active policy.
 
-### Phase 5 — Semantic dedup & merge at ingest (BI-F6B290A8) · *sequenced last*
+### Phase 5 — Dedup & merge (BI-F6B290A8) · *sequenced last* — ✅ LANDED (core)
 
-Extend `ingestBacklogItem` with an embedding-based semantic dedup pass (qdrant) over open items in the same portfolio; "merge or link" before write; merge re-parents `occurrenceCount`/evidence/requesters onto the survivor (concentrates reach → higher score) and sets `duplicateOfId` + redirect; suppression writes a `ToolExecution` audit row. Reuses the existing `duplicateOfId`/`duplicates[]` relation. Last because it depends on scoring being live and is the highest-risk change to the intake hot path.
+**Landed:** pure `lib/demand/dedup.ts` — deterministic character-trigram Dice similarity (`itemSimilarity`, title-dominant), `findDuplicateCandidates` (ranked, thresholded), and `computeMerge` (reach summed onto the survivor). Unit-tested (7). Two MCP tools on the demand pack: `find_duplicate_candidates` (read, `backlog_read`) ranks open near-duplicates of an item; `merge_backlog_items` (write, `backlog_write`) merges a duplicate into a canonical item in a transaction — **reach (`occurrenceCount`) is summed onto the survivor**, the duplicate is retired (`status=deferred`, `triageOutcome=duplicate`, `duplicateOfId` set), ToolExecution-audited. Reuses the existing `duplicateOfId`/`duplicates[]` relation.
+
+**Deferred to a follow-up (the risky hot-path part):** the *automatic* semantic dedup pass inside `ingestBacklogItem` (embedding-based, surfacing "merge or link" before write) — kept out of this slice because it modifies the intake hot path and needs the embedding infra wired in there. A deterministic trigram similarity is used instead of embeddings for now; an embedding upgrade (`lib/wiki/embeddings.ts`) is a follow-up. The manual find + merge capability lands the core dedup value safely.
 
 **Acceptance:** near-duplicate demand is merged with reach transferred; suppression is audited.
 
