@@ -975,15 +975,20 @@ function truncateMessageContent(content: string, maxChars: number, label: string
 }
 
 
-function compactAgenticMessages(messages: ChatMessage[], maxContextTokens?: number | null): ChatMessage[] {
+function compactAgenticMessages(
+  messages: ChatMessage[],
+  maxContextTokens?: number | null,
+  zone?: import("./context-pressure").ContextPressureZone,
+): ChatMessage[] {
   // BI-9679EB1A: size the caps from the real model window when known, never
   // below today's floor. Unknown window (incl. iteration 0) -> floor exactly,
   // so the unknown-window path is byte-for-byte identical to before.
+  // BI-3C8220ED: a live overload `zone` tightens the trim (never below floor).
   const caps = deriveCompactionCaps(maxContextTokens, {
     maxHistory: MAX_AGENTIC_HISTORY_MESSAGES,
     toolCap: MAX_TOOL_RESULT_CHARS,
     textCap: MAX_TEXT_MESSAGE_CHARS,
-  });
+  }, zone);
   let scopedMessages: ChatMessage[];
   if (messages.length <= caps.maxHistory) {
     scopedMessages = messages;
@@ -1558,14 +1563,24 @@ export async function runAgenticLoop(params: {
     // only — the array is sent unchanged; this just makes context fill visible
     // per dispatch (the autonomous loop is the run most likely to drift into
     // the dumb zone). See ./context-pressure.
-    const assembledMessages = withPlanReminder(compactAgenticMessages(messages, resolvedMaxContextTokens));
+    // BI-3C8220ED — overload→trim. Measure the pressure BEFORE compaction and
+    // feed the zone into the trim, so a turn already in the warning/dumb zone
+    // compacts harder instead of only being logged after the fact.
+    const preCompactionZone = classifyContextPressure(
+      estimateContextTokens(messages, systemPrompt),
+      resolvedMaxContextTokens,
+    ).zone;
+    const assembledMessages = withPlanReminder(
+      compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone),
+    );
     const ctxPressure = classifyContextPressure(estimateContextTokens(assembledMessages, systemPrompt), resolvedMaxContextTokens);
     if (ctxPressure.estimatedTokens > ctxPeakTokens) ctxPeakTokens = ctxPressure.estimatedTokens;
     if (ctxPressure.zone !== "sharp") {
       console.log(
         sanitizeForLog(
           `[context-pressure] thread=${JSON.stringify(threadId)} iteration=${iteration} ` +
-            `estTokens=${ctxPressure.estimatedTokens} zone=${ctxPressure.zone} messages=${assembledMessages.length}`,
+            `preZone=${preCompactionZone} postZone=${ctxPressure.zone} ` +
+            `estTokens=${ctxPressure.estimatedTokens} messages=${assembledMessages.length}`,
         ),
       );
     }

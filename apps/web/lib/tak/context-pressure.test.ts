@@ -111,3 +111,33 @@ describe("deriveCompactionCaps (BI-9679EB1A)", () => {
     expect(w1m.textCap).toBeGreaterThanOrEqual(FLOOR.textCap);
   });
 });
+
+describe("deriveCompactionCaps — overload→trim zone tightening (BI-3C8220ED)", () => {
+  const FLOOR = { maxHistory: 24, toolCap: 1_500, textCap: 4_000 };
+  const WINDOW = 200_000; // large enough that the window-derived caps sit above the floor
+
+  it("is byte-for-byte identical to the no-zone path when zone is sharp or omitted", () => {
+    const base = deriveCompactionCaps(WINDOW, FLOOR);
+    expect(deriveCompactionCaps(WINDOW, FLOOR, "sharp")).toEqual(base);
+    expect(deriveCompactionCaps(WINDOW, FLOOR, undefined)).toEqual(base);
+  });
+
+  it("tightens the history depth monotonically as measured pressure rises", () => {
+    const sharp = deriveCompactionCaps(WINDOW, FLOOR, "sharp");
+    const warning = deriveCompactionCaps(WINDOW, FLOOR, "warning");
+    const dumb = deriveCompactionCaps(WINDOW, FLOOR, "dumb");
+    expect(warning.maxHistory).toBeLessThan(sharp.maxHistory);
+    expect(dumb.maxHistory).toBeLessThan(warning.maxHistory);
+  });
+
+  it("never trims below the floor, however severe the overload", () => {
+    for (const zone of ["warning", "dumb"] as const) {
+      const caps = deriveCompactionCaps(WINDOW, FLOOR, zone);
+      expect(caps.maxHistory).toBeGreaterThanOrEqual(FLOOR.maxHistory);
+      expect(caps.toolCap).toBeGreaterThanOrEqual(FLOOR.toolCap);
+      expect(caps.textCap).toBeGreaterThanOrEqual(FLOOR.textCap);
+    }
+    // A tiny window already at the floor cannot be tightened below it.
+    expect(deriveCompactionCaps(8_000, FLOOR, "dumb").maxHistory).toBe(FLOOR.maxHistory);
+  });
+});
