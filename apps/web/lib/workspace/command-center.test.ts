@@ -143,7 +143,7 @@ describe("workspace command center readiness", () => {
       .map((cell) => cell.href);
 
     expect(contextHrefs).not.toContain("/platform/wiki");
-    expect(new Set(contextHrefs)).toEqual(new Set(["/wiki"]));
+    expect(new Set(contextHrefs)).toEqual(new Set(["/coworker-decisions"]));
   });
 
   it("routes workspace KPI snapshot tiles to canonical shell destinations", () => {

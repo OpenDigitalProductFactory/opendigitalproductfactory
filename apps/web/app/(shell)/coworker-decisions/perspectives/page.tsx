@@ -61,7 +61,7 @@ export default async function PerspectivesIndexPage() {
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
       <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/wiki" className="hover:text-foreground">Decision governance</Link>
+        <Link href="/coworker-decisions" className="hover:text-foreground">Coworker Decision Engine</Link>
         <span>/</span>
         <span className="text-foreground font-medium">Decision Perspectives</span>
       </nav>
@@ -119,7 +119,7 @@ export default async function PerspectivesIndexPage() {
                     </Link>
                   )}
                   <Link
-                    href={`/wiki/perspectives/${profile.profileId}/voice`}
+                    href={`/coworker-decisions/perspectives/${profile.profileId}/voice`}
                     className="text-sm text-primary hover:underline"
                   >
                     Voice config →

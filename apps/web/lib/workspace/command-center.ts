@@ -184,7 +184,7 @@ const SIX_C_DESCRIPTIONS: Record<SixCKey, string> = {
 };
 
 const SIX_C_HREFS: Record<SixCKey, string> = {
-  context: "/wiki",
+  context: "/coworker-decisions",
   connections: "/platform/tools/integrations",
   capabilities: "/platform/ai",
   cadence: "/workspace/my-queue",
@@ -634,7 +634,7 @@ function buildReadinessMatrix(input: WorkspaceCommandCenterInput): BusinessDomai
           ? good(`${count(m.documentCount, "document")}, ${count(m.eaViewCount, "architecture view")}`)
           : attention("No operating documents or architecture views recorded", {
               label: "Add operating knowledge",
-              href: "/wiki",
+              href: "/coworker-decisions",
             }),
       connections:
         m.activeProviderCount === 0

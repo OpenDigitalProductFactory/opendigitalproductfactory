@@ -262,8 +262,8 @@ export async function saveWikiOverlayEdit(
 
     await syncOutLinks(saved.id, input.body, org.id);
 
-    revalidatePath(`/wiki/${input.slug}`);
-    revalidatePath("/wiki");
+    revalidatePath(`/coworker-decisions/${input.slug}`);
+    revalidatePath("/coworker-decisions");
 
     return {
       ok: true,

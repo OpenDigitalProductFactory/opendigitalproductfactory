@@ -44,7 +44,7 @@ describe("buildGapFindings", () => {
     expect(f.title).toBe("No settled answer for vendor selection");
     expect(f.postureLabel).toBe("9 unresolved");
     expect(f.actionLabel).toBe("Add a stance");
-    expect(f.actionHref).toBe("/wiki/stance");
+    expect(f.actionHref).toBe("/coworker-decisions/stance");
   });
 
   it("drops empty clusters and singularizes a lone unresolved", () => {
@@ -78,7 +78,7 @@ describe("buildGapFindings", () => {
   it("leaves kernel/WWMD gaps pointing at the manual stance editor", () => {
     const [f] = buildGapFindings([gap]);
     expect(f.answer).toBeUndefined();
-    expect(f.actionHref).toBe("/wiki/stance");
+    expect(f.actionHref).toBe("/coworker-decisions/stance");
   });
 });
 

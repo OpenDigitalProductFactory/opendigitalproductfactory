@@ -31,7 +31,7 @@ describe("resolveDocsPath", () => {
 
   it("maps recently added shell surfaces to current operational docs", () => {
     expect(resolveDocsPath("/workspace/documents/DOC-001")).toBe("/docs/workspace/documents");
-    expect(resolveDocsPath("/wiki/entities/digital-product")).toBe("/docs/wiki/index");
+    expect(resolveDocsPath("/coworker-decisions/entities/digital-product")).toBe("/docs/wiki/index");
     expect(resolveDocsPath("/platform/edge-nodes")).toBe("/docs/platform/edge-nodes");
     expect(resolveDocsPath("/platform/ai/operations-map")).toBe("/docs/platform/ai-operations");
     expect(resolveDocsPath("/platform/ai/capacity-continuity")).toBe("/docs/platform/ai-operations");
@@ -83,7 +83,7 @@ describe("mapped docs pages", () => {
   it("keeps high-signal visible workflow routes backed by existing docs pages", () => {
     const visibleRouteDocsExamples = [
       "/workspace/documents",
-      "/wiki",
+      "/coworker-decisions",
       "/platform/edge-nodes",
       "/platform/ai/operations-map",
       "/platform/ai/capacity-continuity",

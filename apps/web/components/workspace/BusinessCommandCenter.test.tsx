@@ -26,7 +26,7 @@ const fixtureView: WorkspaceCommandCenterView = {
       label: "AI workforce",
       href: "/platform/ai/operations-map",
       cells: [
-        { key: "context", label: "Context", description: "Evidence and operating knowledge", state: "good", reason: "5 documents on record", href: "/wiki" },
+        { key: "context", label: "Context", description: "Evidence and operating knowledge", state: "good", reason: "5 documents on record", href: "/coworker-decisions" },
       ],
     },
   ],
@@ -71,7 +71,7 @@ describe("BusinessCommandCenter", () => {
     expect(html).not.toContain("Domain readiness");
     expect(html).not.toContain("Containment");
     // No deep platform-meta drill links leak onto the business home.
-    expect(html).not.toContain('href="/wiki"');
+    expect(html).not.toContain('href="/coworker-decisions"');
     expect(html).not.toContain("AI Operations Map");
   });
 

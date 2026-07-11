@@ -132,7 +132,7 @@ export function buildGapFindings(clusters: GapCluster[]): ReviewFinding[] {
         ...base,
         title: `No settled answer for ${humanDomain(cluster.domainClass)}`,
         actionLabel: "Add a stance",
-        actionHref: "/wiki/stance",
+        actionHref: "/coworker-decisions/stance",
       };
     });
 }
@@ -155,7 +155,7 @@ export function buildStalenessFindings(
       count: summary.count,
       href: null,
       actionLabel: "Review material",
-      actionHref: "/wiki/perspectives",
+      actionHref: "/coworker-decisions/perspectives",
     },
   ];
 }

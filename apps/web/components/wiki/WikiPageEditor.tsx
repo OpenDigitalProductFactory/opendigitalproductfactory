@@ -77,7 +77,7 @@ export function WikiPageEditor(props: WikiPageEditorProps): ReactNode {
         setError(result.error);
         return;
       }
-      router.push(`/wiki/${props.initialSlug}`);
+      router.push(`/coworker-decisions/${props.initialSlug}`);
       router.refresh();
     });
   }
@@ -85,7 +85,7 @@ export function WikiPageEditor(props: WikiPageEditorProps): ReactNode {
   return (
     <article className="max-w-3xl mx-auto py-6 px-4">
       <nav className="mb-3 text-xs text-[var(--dpf-muted)]">
-        <a href={`/wiki/${props.initialSlug}`} className="hover:underline">
+        <a href={`/coworker-decisions/${props.initialSlug}`} className="hover:underline">
           ← Cancel
         </a>
       </nav>
@@ -231,7 +231,7 @@ export function WikiPageEditor(props: WikiPageEditorProps): ReactNode {
             {isPending ? "Saving…" : "Save"}
           </button>
           <a
-            href={`/wiki/${props.initialSlug}`}
+            href={`/coworker-decisions/${props.initialSlug}`}
             className="text-xs text-[var(--dpf-muted)] hover:underline"
           >
             Cancel

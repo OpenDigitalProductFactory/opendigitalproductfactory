@@ -14,7 +14,7 @@ import { CRAFT_OVERRIDE_SLUG_PREFIX } from "@/lib/wiki/craft-override";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Craft (WSID) · Decision governance",
+  title: "Craft (WSID) · Coworker Decision Engine",
 };
 
 /** Second path segment of a `craft/<professionKey>/<slug>` overlay slug. */
@@ -55,8 +55,8 @@ export default async function CraftIndexPage() {
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
       <nav className="mb-6 flex items-center gap-2 text-sm text-[var(--dpf-muted)]">
-        <Link href="/wiki" className="hover:text-[var(--dpf-text)]">
-          Decision governance
+        <Link href="/coworker-decisions" className="hover:text-[var(--dpf-text)]">
+          Coworker Decision Engine
         </Link>
         <span>/</span>
         <span className="text-[var(--dpf-text)] font-medium">Each role&rsquo;s craft (WSID)</span>
@@ -79,7 +79,7 @@ export default async function CraftIndexPage() {
           return (
             <li key={family.professionKey}>
               <Link
-                href={`/wiki/craft/${encodeURIComponent(family.professionKey)}`}
+                href={`/coworker-decisions/craft/${encodeURIComponent(family.professionKey)}`}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--dpf-surface-2)]"
               >
                 <span className="text-sm font-medium text-[var(--dpf-text)] min-w-0 flex-1 truncate">
