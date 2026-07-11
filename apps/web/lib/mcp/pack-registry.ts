@@ -46,6 +46,7 @@ import { knowledgePack } from "./packs/knowledge-pack";
 import { demandScoringPack } from "./packs/demand-scoring-pack";
 import { workforcePack } from "./packs/workforce-pack";
 import { versionHistoryPack } from "./packs/version-history-pack";
+import { eaOntologyPack } from "./packs/ea-ontology-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
@@ -78,4 +79,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   demandScoringPack,
   workforcePack,
   versionHistoryPack,
+  eaOntologyPack,
 ]);
