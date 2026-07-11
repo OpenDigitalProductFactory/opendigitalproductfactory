@@ -62,33 +62,52 @@
   .hint{font-size:11px;color:var(--dpf-muted);}
 
   .stream{display:flex;align-items:stretch;overflow-x:auto;padding:4px 6px 16px;-webkit-overflow-scrolling:touch;}
-  .stage{flex:1 0 170px;min-width:170px;max-width:250px;background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-radius:var(--radius);padding:10px 12px 11px;box-shadow:var(--shadow-1);position:relative;}
+  .stage{flex:1 0 210px;min-width:210px;max-width:280px;background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-radius:var(--radius);padding:10px 12px 11px;box-shadow:var(--shadow-1);position:relative;display:flex;flex-direction:column;}
   .stage.load{background:var(--vs-load);border-color:color-mix(in srgb, var(--dpf-accent) 42%, var(--dpf-border));}
+  .stage.active::before{content:"";position:absolute;top:9px;right:10px;width:7px;height:7px;border-radius:50%;background:var(--dpf-success);box-shadow:0 0 0 0 color-mix(in srgb,var(--dpf-success) 60%,transparent);animation:live 1.6s ease-out infinite;}
+  @keyframes live{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--dpf-success) 55%,transparent);}70%{box-shadow:0 0 0 6px color-mix(in srgb,var(--dpf-success) 0%,transparent);}100%{box-shadow:0 0 0 0 transparent;}}
   .stage .idx{font-family:var(--font-mono);font-size:10px;color:var(--dpf-muted);letter-spacing:0.06em;display:flex;gap:6px;align-items:center;}
   .stage .idx .lb{color:var(--dpf-accent);font-weight:700;}
   .stage .name{font-weight:650;font-size:14px;letter-spacing:-0.01em;margin:3px 0 1px;}
   .stage .vern{font-size:11px;color:var(--dpf-muted);}
-  .stage .metric{display:flex;align-items:baseline;gap:5px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--dpf-border);}
+
+  /* crew: orchestrator + delegating specialist coworkers */
+  .crew{display:flex;align-items:center;gap:4px;margin-top:9px;flex-wrap:wrap;}
+  .crew .lead{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:9px;font-weight:700;color:#fff;background:var(--dpf-accent);border:2px solid var(--dpf-accent);}
+  .crew .spec{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:7.5px;font-weight:700;color:var(--dpf-accent);background:color-mix(in srgb,var(--dpf-accent) 14%,var(--dpf-surface-1));border:1px solid color-mix(in srgb,var(--dpf-accent) 45%,var(--dpf-border));}
+  .crew .lead.on{animation:pulse 1.3s ease-in-out infinite;}
+  .crew .spec.on{border-color:var(--dpf-accent);background:color-mix(in srgb,var(--dpf-accent) 26%,var(--dpf-surface-1));}
+  .crew .crewlbl{font-size:10px;color:var(--dpf-muted);margin-left:2px;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 var(--vs-glow);}55%{box-shadow:0 0 0 5px color-mix(in srgb, var(--dpf-accent) 0%, transparent);}}
+  .stage .lead-act{font-size:10.5px;color:var(--dpf-accent);font-weight:600;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  /* the in-tile work bench: jobs actually being processed at this station */
+  .bench{margin-top:8px;padding-top:8px;border-top:1px dashed var(--dpf-border);display:flex;flex-direction:column;gap:6px;}
+  .bench .blbl{font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--dpf-muted);display:flex;justify-content:space-between;}
+  .job{display:flex;align-items:center;gap:7px;}
+  .job .jn{flex:1;min-width:0;font-size:10.5px;color:var(--dpf-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .job .jbar{flex:0 0 46px;height:5px;border-radius:999px;background:var(--dpf-surface-3);overflow:hidden;}
+  .job .jbar i{display:block;height:100%;border-radius:999px;background:var(--dpf-accent);width:8%;animation:work 2.8s ease-in-out infinite;}
+  .job.attention .jbar i{background:var(--dpf-warning);}
+  .job.settled .jbar i{background:var(--dpf-success);width:100%;animation:none;}
+  .job.j2 .jbar i{animation-delay:-.9s;} .job.j3 .jbar i{animation-delay:-1.9s;}
+  @keyframes work{0%{width:8%}12%{width:26%}60%{width:84%}86%{width:97%}100%{width:8%}}
+
+  .stage .metric{display:flex;align-items:baseline;gap:5px;margin-top:9px;padding-top:8px;border-top:1px dashed var(--dpf-border);}
   .stage .metric .v{font-family:var(--font-mono);font-weight:700;font-size:15px;}
   .stage .metric .l{font-size:10.5px;color:var(--dpf-muted);}
-  .stage .worker{display:flex;align-items:center;gap:7px;margin-top:9px;}
-  .stage .avatar{width:22px;height:22px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-size:9.5px;font-weight:700;color:var(--dpf-accent);background:color-mix(in srgb, var(--dpf-accent) 16%, var(--dpf-surface-1));border:1.5px solid var(--dpf-accent);}
-  .stage .act{font-size:11px;color:var(--dpf-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .stage.active .avatar{animation:pulse 1.4s ease-in-out infinite;}
-  .stage.active .act{color:var(--dpf-accent);font-weight:600;}
-  .stage .persona{margin-top:7px;font-size:10px;color:var(--dpf-muted);display:flex;align-items:center;gap:5px;}
+  .stage .persona{margin-top:6px;font-size:10px;color:var(--dpf-muted);display:flex;align-items:center;gap:5px;}
   .stage .persona .seat{width:7px;height:7px;border-radius:50%;background:var(--dpf-muted);opacity:.55;}
-  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 var(--vs-glow);}55%{box-shadow:0 0 0 6px color-mix(in srgb, var(--dpf-accent) 0%, transparent);}}
 
-  .rail{flex:0 0 46px;align-self:center;position:relative;height:26px;min-width:46px;}
+  .rail{flex:0 0 42px;align-self:center;position:relative;height:26px;min-width:42px;}
   .rail .line{position:absolute;top:50%;left:0;right:0;height:4px;transform:translateY(-50%);border-radius:999px;background:var(--vs-rail);overflow:hidden;}
   .rail .line::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,var(--dpf-accent) 0 4px,transparent 4px 14px);opacity:.5;animation:railflow .9s linear infinite;}
   .rail .arrow{position:absolute;top:50%;right:1px;transform:translateY(-50%);color:var(--vs-rail);font-size:12px;line-height:1;}
   @keyframes railflow{from{background-position:0 0;}to{background-position:18px 0;}}
-  .unit{position:absolute;top:50%;width:11px;height:11px;margin-top:-5.5px;border-radius:50%;color:var(--dpf-accent);background:currentColor;box-shadow:0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);animation:flow 3.4s linear infinite;}
+  .unit{position:absolute;top:50%;width:10px;height:10px;margin-top:-5px;border-radius:50%;color:var(--dpf-accent);background:currentColor;box-shadow:0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);animation:flow 3.4s linear infinite;}
   .u-demand{color:var(--dpf-info);} .u-service{color:var(--dpf-accent);} .u-attention{color:var(--dpf-warning);}
   .u-settled{color:var(--dpf-success);} .u-exception{color:var(--dpf-error);}
-  .d1{animation-delay:0s;} .d2{animation-delay:-1.1s;} .d3{animation-delay:-2.3s;}
+  .d1{animation-delay:0s;} .d3{animation-delay:-2.3s;}
   @keyframes flow{from{left:-5px;}to{left:calc(100% - 5px);}}
 
   .band{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;padding:6px 14px 14px;background:var(--vs-ground);}
@@ -121,8 +140,8 @@
   .foot code{font-family:var(--font-mono);font-size:10.5px;color:var(--dpf-text-secondary);}
 
   @media (prefers-reduced-motion: reduce){
-    .ticker-move,.rail .line::after,.stage.active .avatar,.unit{animation:none;}
-    .unit{left:45%;}
+    .ticker-move,.rail .line::after,.crew .lead.on,.unit,.stage.active::before{animation:none;}
+    .job .jbar i{animation:none;width:62%;} .unit{left:45%;}
   }
 </style>
 
@@ -163,62 +182,76 @@
   <section class="board" aria-label="Operational value stream">
     <div class="board-head">
       <span class="lbl">The value stream</span>
-      <span class="sub" id="capUnit">flow of work &#183; primary activities</span>
+      <span class="sub" id="capUnit">flow of work &#183; primary activities &#183; 21 AI coworkers on shift</span>
       <span class="spacer"></span>
       <span class="hint">&#8596; scroll the line</span>
     </div>
     <div class="stream" id="stream">
-      <div class="stage">
-        <div class="idx">S1 &#183; ATTRACT</div>
-        <div class="name">Attract &amp; Discover</div><div class="vern">&#8220;Get noticed&#8221;</div>
+      <div class="stage active">
+        <div class="idx">S1 &#183; ATTRACT</div><div class="name">Attract &amp; Discover</div><div class="vern">&#8220;Get noticed&#8221;</div>
+        <div class="crew"><span class="lead on">MK</span><span class="spec on">SEO</span><span class="spec">SOC</span><span class="spec">ADS</span><span class="crewlbl">4 coworkers</span></div>
+        <div class="lead-act">Marketing lead &#183; drafting festival promo</div>
+        <div class="bench"><div class="blbl"><span>Working now</span><span>2 active</span></div>
+          <div class="job service j1"><span class="jn">Festival promo post</span><span class="jbar"><i></i></span></div>
+          <div class="job service j2"><span class="jn">Menu photo refresh</span><span class="jbar"><i></i></span></div></div>
         <div class="metric"><span class="v tnum">2</span><span class="l">live promos</span></div>
-        <div class="worker"><span class="avatar">MK</span><span class="act">Marketing &#183; idle</span></div>
-        <div class="persona"><span class="seat"></span>Owner + AI coworker</div>
+        <div class="persona"><span class="seat"></span>Owner + AI crew</div>
       </div>
-      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div>
-        <span class="unit u-demand d1"></span><span class="unit u-demand d3"></span></div>
-      <div class="stage">
-        <div class="idx">S2 &#183; CAPTURE</div>
-        <div class="name">Capture Demand</div><div class="vern">&#8220;Take the booking&#8221;</div>
+      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div><span class="unit u-demand d1"></span><span class="unit u-demand d3"></span></div>
+      <div class="stage active">
+        <div class="idx">S2 &#183; CAPTURE</div><div class="name">Capture Demand</div><div class="vern">&#8220;Take the booking&#8221;</div>
+        <div class="crew"><span class="lead on">RS</span><span class="spec on">PH</span><span class="spec">WEB</span><span class="spec">WL</span><span class="crewlbl">4 coworkers</span></div>
+        <div class="lead-act">Reservations lead &#183; logging a booking</div>
+        <div class="bench"><div class="blbl"><span>Working now</span><span>2 active</span></div>
+          <div class="job service j1"><span class="jn">Table for 4 &#183; 7:30</span><span class="jbar"><i></i></span></div>
+          <div class="job service j2"><span class="jn">Confirm-SMS batch</span><span class="jbar"><i></i></span></div></div>
         <div class="metric"><span class="v tnum">31</span><span class="l">booked tonight</span></div>
-        <div class="worker"><span class="avatar">RS</span><span class="act">Reservations &#183; idle</span></div>
-        <div class="persona"><span class="seat"></span>Server + AI coworker</div>
+        <div class="persona"><span class="seat"></span>Server + AI crew</div>
       </div>
-      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div>
-        <span class="unit u-demand d2"></span><span class="unit u-service d3"></span></div>
-      <div class="stage load">
-        <div class="idx">S3 &#183; QUALIFY <span class="lb">&#9670; load-bearing</span></div>
-        <div class="name">Qualify &amp; Schedule</div><div class="vern">&#8220;Seat &amp; sequence&#8221;</div>
+      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div><span class="unit u-demand d1"></span><span class="unit u-service d3"></span></div>
+      <div class="stage load active">
+        <div class="idx">S3 &#183; QUALIFY <span class="lb">&#9670; load-bearing</span></div><div class="name">Qualify &amp; Schedule</div><div class="vern">&#8220;Seat &amp; sequence&#8221;</div>
+        <div class="crew"><span class="lead on">HS</span><span class="spec on">ST</span><span class="spec">SQ</span><span class="crewlbl">3 coworkers</span></div>
+        <div class="lead-act">Host lead &#183; sequencing the floor</div>
+        <div class="bench"><div class="blbl"><span>Working now</span><span>2 active</span></div>
+          <div class="job service j1"><span class="jn">Seat table 12</span><span class="jbar"><i></i></span></div>
+          <div class="job attention j2"><span class="jn">Waitlist party of 4</span><span class="jbar"><i></i></span></div></div>
         <div class="metric"><span class="v tnum">88%</span><span class="l">seated</span></div>
-        <div class="worker"><span class="avatar">HS</span><span class="act">Host &#183; scheduling</span></div>
-        <div class="persona"><span class="seat"></span>Server + AI coworker</div>
+        <div class="persona"><span class="seat"></span>Server + AI crew</div>
       </div>
-      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div>
-        <span class="unit u-service d1"></span><span class="unit u-service d3"></span></div>
-      <div class="stage load">
-        <div class="idx">S4 &#183; DELIVER <span class="lb">&#9670; load-bearing</span></div>
-        <div class="name">Deliver the Value</div><div class="vern">&#8220;Cook &amp; serve&#8221;</div>
+      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div><span class="unit u-service d1"></span><span class="unit u-service d3"></span></div>
+      <div class="stage load active">
+        <div class="idx">S4 &#183; DELIVER <span class="lb">&#9670; load-bearing</span></div><div class="name">Deliver the Value</div><div class="vern">&#8220;Cook &amp; serve&#8221;</div>
+        <div class="crew"><span class="lead on">KO</span><span class="spec on">LN</span><span class="spec on">EX</span><span class="spec">BR</span><span class="crewlbl">4 coworkers</span></div>
+        <div class="lead-act">Kitchen lead &#183; expediting the pass</div>
+        <div class="bench"><div class="blbl"><span>Working now</span><span>3 active</span></div>
+          <div class="job service j1"><span class="jn">Ticket #82 &#183; pasta</span><span class="jbar"><i></i></span></div>
+          <div class="job service j2"><span class="jn">Ticket #83 &#183; pizza</span><span class="jbar"><i></i></span></div>
+          <div class="job attention j3"><span class="jn">Expo table 14</span><span class="jbar"><i></i></span></div></div>
         <div class="metric"><span class="v tnum">9</span><span class="l">on the pass</span></div>
-        <div class="worker"><span class="avatar">KO</span><span class="act">Kitchen ops &#183; working the ticket</span></div>
-        <div class="persona"><span class="seat"></span>Chef + AI coworker</div>
+        <div class="persona"><span class="seat"></span>Chef + AI crew</div>
       </div>
-      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div>
-        <span class="unit u-service d2"></span><span class="unit u-attention d3"></span></div>
-      <div class="stage">
-        <div class="idx">S5 &#183; SETTLE</div>
-        <div class="name">Settle &amp; Account</div><div class="vern">&#8220;Bill &amp; bank&#8221;</div>
+      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div><span class="unit u-service d1"></span><span class="unit u-attention d3"></span></div>
+      <div class="stage active">
+        <div class="idx">S5 &#183; SETTLE</div><div class="name">Settle &amp; Account</div><div class="vern">&#8220;Bill &amp; bank&#8221;</div>
+        <div class="crew"><span class="lead on">FN</span><span class="spec on">POS</span><span class="spec">TAX</span><span class="crewlbl">3 coworkers</span></div>
+        <div class="lead-act">Finance lead &#183; closing checks</div>
+        <div class="bench"><div class="blbl"><span>Working now</span><span>2 active</span></div>
+          <div class="job settled j1"><span class="jn">Close check #4821</span><span class="jbar"><i></i></span></div>
+          <div class="job service j2"><span class="jn">Accrue sales tax</span><span class="jbar"><i></i></span></div></div>
         <div class="metric"><span class="v tnum">$4.1k</span><span class="l">today</span></div>
-        <div class="worker"><span class="avatar">FN</span><span class="act">Finance &#183; raising invoice</span></div>
-        <div class="persona"><span class="seat"></span>Owner + AI coworker</div>
+        <div class="persona"><span class="seat"></span>Owner + AI crew</div>
       </div>
-      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div>
-        <span class="unit u-settled d1"></span><span class="unit u-settled d3"></span></div>
+      <div class="rail"><div class="line"></div><div class="arrow">&#9654;</div><span class="unit u-settled d1"></span><span class="unit u-settled d3"></span></div>
       <div class="stage">
-        <div class="idx">S6 &#183; RETAIN</div>
-        <div class="name">Retain &amp; Grow</div><div class="vern">&#8220;Bring them back&#8221;</div>
+        <div class="idx">S6 &#183; RETAIN</div><div class="name">Retain &amp; Grow</div><div class="vern">&#8220;Bring them back&#8221;</div>
+        <div class="crew"><span class="lead">GR</span><span class="spec">CRM</span><span class="spec">LOY</span><span class="crewlbl">3 coworkers</span></div>
+        <div class="lead-act" style="color:var(--dpf-muted)">Guest-relations lead &#183; idle</div>
+        <div class="bench"><div class="blbl"><span>Queued</span><span>2 waiting</span></div>
+          <div class="job service j1"><span class="jn">Thank-you to VIP</span><span class="jbar"><i></i></span></div>
+          <div class="job service j2"><span class="jn">Loyalty points run</span><span class="jbar"><i></i></span></div></div>
         <div class="metric"><span class="v tnum">42%</span><span class="l">regulars</span></div>
-        <div class="worker"><span class="avatar">GR</span><span class="act">Guest relations &#183; idle</span></div>
-        <div class="persona"><span class="seat"></span>Owner + AI coworker</div>
+        <div class="persona"><span class="seat"></span>Owner + AI crew</div>
       </div>
     </div>
   </section>
@@ -258,8 +291,9 @@
       </div>
     </div>
     <div class="foot">
-      Prototype. Binds to <code>deriveOperationalValueStream()</code>, <code>agent-event-bus</code>,
-      the finance spine (<code>Bill</code>/<code>TaxRemittanceRun</code>) &amp; the Business Activity Simulator.
+      Prototype. Each tile is a real station: the <b>crew</b> is the value stream's orchestrator + delegating specialist coworkers
+      (<code>agent_registry</code>/<code>Agent</code>), the <b>work bench</b> is live jobs from <code>agent-event-bus</code> +
+      the finance spine (<code>Bill</code>/<code>TaxRemittanceRun</code>), fed by the Business Activity Simulator.
       Archetype switching needs JavaScript &#8212; if this is a preview that blocks scripts, download and open in a browser.
     </div>
   </aside>
@@ -271,86 +305,109 @@
    quest completion. Glyphs injected via innerHTML use numeric entities. */
 (() => {
   "use strict";
-  const E = { sun:"&#9728;", storm:"&#9928;", cloud:"&#9788;", dia:"&#9670;", star:"&#10022;",
-    up:"&#9650;", down:"&#9660;", play:"&#9654;", mid:"&#183;", ldq:"&#8220;", rdq:"&#8221;", dash:"&#8211;", emd:"&#8212;", check:"&#10003;" };
-  const S = ["u-demand","u-service","u-service","u-service","u-settled","u-settled"];
-  const A = {
-    restaurant:{ biz:`Bella Nonna ${E.mid} Neighborhood Trattoria`, cap:"capacity: covers", wx:`${E.sun} Demand: strong (festival weekend)`, flow:9, today:"$4,120",
-      stages:[["S1","ATTRACT","Attract &amp; Discover","Get noticed",0,"2","live promos","MK","Marketing","idle","Owner"],["S2","CAPTURE","Capture Demand","Take the booking",0,"31","booked tonight","RS","Reservations","idle","Server"],["S3","QUALIFY","Qualify &amp; Schedule","Seat &amp; sequence",1,"88%","seated","HS","Host","scheduling","Server"],["S4","DELIVER","Deliver the Value","Cook &amp; serve",1,"9","on the pass","KO","Kitchen ops","working the ticket","Chef"],["S5","SETTLE","Settle &amp; Account","Bill &amp; bank",0,"$4.1k","today","FN","Finance","raising invoice","Owner"],["S6","RETAIN","Retain &amp; Grow","Bring them back",0,"42%","regulars","GR","Guest relations","idle","Owner"]],
+  const E={sun:"&#9728;",storm:"&#9928;",cloud:"&#9788;",dia:"&#9670;",star:"&#10022;",up:"&#9650;",down:"&#9660;",play:"&#9654;",mid:"&#183;",ldq:"&#8220;",rdq:"&#8221;",dash:"&#8211;",emd:"&#8212;",check:"&#10003;"};
+  const US=["u-demand","u-service","u-service","u-service","u-settled","u-settled"];
+  // stage tuple: [idx,key,name,vern,load, lead,leadRole,[specs], leadAct, [ [job,state], ... ], metricVal,metricLabel, persona]
+  const A={
+    restaurant:{biz:`Bella Nonna ${E.mid} Neighborhood Trattoria`,cap:"covers",wx:`${E.sun} Demand: strong (festival weekend)`,flow:9,today:"$4,120",crewTotal:21,
+      stages:[
+        ["S1","ATTRACT","Attract &amp; Discover","Get noticed",0,"MK","Marketing",["SEO","SOC","ADS"],"drafting festival promo",[["Festival promo post","service"],["Menu photo refresh","service"]],"2","live promos","Owner"],
+        ["S2","CAPTURE","Capture Demand","Take the booking",0,"RS","Reservations",["PH","WEB","WL"],"logging a booking",[["Table for 4 "+E.mid+" 7:30","service"],["Confirm-SMS batch","service"]],"31","booked tonight","Server"],
+        ["S3","QUALIFY","Qualify &amp; Schedule","Seat &amp; sequence",1,"HS","Host",["ST","SQ"],"sequencing the floor",[["Seat table 12","service"],["Waitlist party of 4","attention"]],"88%","seated","Server"],
+        ["S4","DELIVER","Deliver the Value","Cook &amp; serve",1,"KO","Kitchen",["LN","EX","BR"],"expediting the pass",[["Ticket #82 "+E.mid+" pasta","service"],["Ticket #83 "+E.mid+" pizza","service"],["Expo table 14","attention"]],"9","on the pass","Chef"],
+        ["S5","SETTLE","Settle &amp; Account","Bill &amp; bank",0,"FN","Finance",["POS","TAX"],"closing checks",[["Close check #4821","settled"],["Accrue sales tax","service"]],"$4.1k","today","Owner"],
+        ["S6","RETAIN","Retain &amp; Grow","Bring them back",0,"GR","Guest-relations",["CRM","LOY"],"following up",[["Thank-you to VIP","service"],["Loyalty points run","service"]],"42%","regulars","Owner"]],
       meters:[["warn","Supplier bills due","$2,340",72,`3 invoices ${E.mid} produce + linens`],["warn","Sales-tax remittance","in 4 days",60,`State ST-1 ${E.mid} $1,190 accrued`],["ok","Trust &amp; Compliance","OK",18,`Food-safety cert ${E.mid} renews 61d`],["info","Operate &amp; Improve","3 ideas",40,"Backlog throughput steady"]],
       market:[[E.sun,"Old-Town Food Festival","Sat"+E.dash+"Sun","up","+35% covers projected"],[E.cloud,"Competitor 'Trattoria Sud'","launched $19 lunch","down","undercuts lunch 15%"],[E.dia,"Supplier alert","olive oil +8%","down","margin watch"],[E.star,"Local paper","Friday review slot","up","press coverage"]],
-      quests:[["warn","Pay 3 supplier bills",`$2,340 ${E.mid} due Fri`,"Review &amp; pay"],["warn","File sales-tax remittance",`State ST-1 ${E.mid} $1,190 ${E.mid} in 4 days`,"Approve"],["error","Exception on table 14",`Kitchen flagged a comp ${E.emd} needs a call`,"Resolve"],["info","Festival staffing","Marketing projects +35% covers Sat","Add shift"]] },
-    trades:{ biz:`Rapid Response Plumbing ${E.mid} Field Service`, cap:"capacity: job-slots", wx:`${E.storm} Demand: spiking (cold snap)`, flow:12, today:"$8,640",
-      stages:[["S1","ATTRACT","Attract &amp; Discover","Be findable",0,"GMB","+ 2 ads","MK","Marketing","idle","Owner"],["S2","CAPTURE","Capture Demand","Take the call",1,"14","calls today","IN","Intake","logging call","Dispatcher"],["S3","QUALIFY","Qualify &amp; Schedule","Dispatch",1,"2.1h","avg wait","DS","Dispatch","routing tech","Dispatcher"],["S4","DELIVER","Deliver the Value","On-site work",1,"6","en-route","FT","Field tech","on the job","Tech"],["S5","SETTLE","Settle &amp; Account","Invoice &amp; collect",0,"$8.6k","today","FN","Finance","raising invoice","Owner"],["S6","RETAIN","Retain &amp; Grow","Service plans",0,"19","active plans","AC","Accounts","idle","Owner"]],
+      quests:[["warn","Pay 3 supplier bills",`$2,340 ${E.mid} due Fri`,"Review &amp; pay"],["warn","File sales-tax remittance",`State ST-1 ${E.mid} $1,190 ${E.mid} in 4 days`,"Approve"],["error","Exception on table 14",`Kitchen flagged a comp ${E.emd} needs a call`,"Resolve"],["info","Festival staffing","Marketing projects +35% covers Sat","Add shift"]]},
+    trades:{biz:`Rapid Response Plumbing ${E.mid} Field Service`,cap:"job-slots",wx:`${E.storm} Demand: spiking (cold snap)`,flow:12,today:"$8,640",crewTotal:19,
+      stages:[
+        ["S1","ATTRACT","Attract &amp; Discover","Be findable",0,"MK","Marketing",["SEO","GMB"],"tuning local ads",[["Emergency ad set","service"],["Review reply batch","service"]],"GMB","+ 2 ads","Owner"],
+        ["S2","CAPTURE","Capture Demand","Take the call",1,"IN","Intake",["PH","CHAT","WEB"],"triaging a call",[["No-heat call intake","attention"],["Web request #77","service"]],"14","calls today","Dispatcher"],
+        ["S3","QUALIFY","Qualify &amp; Schedule","Dispatch",1,"DS","Dispatch",["RTE","SLA"],"routing the next tech",[["Route tech to 5th Ave","service"],["SLA rescue job","attention"]],"2.1h","avg wait","Dispatcher"],
+        ["S4","DELIVER","Deliver the Value","On-site work",1,"FT","Field-tech",["JOB","PART","QA"],"guiding the on-site fix",[["Job #418 water heater","service"],["Parts lookup","service"],["Photo QA sign-off","service"]],"6","en-route","Tech"],
+        ["S5","SETTLE","Settle &amp; Account","Invoice &amp; collect",0,"FN","Finance",["INV","PAY"],"raising invoices",[["Invoice job #415","settled"],["Collect card on file","service"]],"$8.6k","today","Owner"],
+        ["S6","RETAIN","Retain &amp; Grow","Service plans",0,"AC","Accounts",["PLAN","NPS"],"renewing plans",[["Renew maintenance plan","service"],["NPS follow-up","service"]],"19","active plans","Owner"]],
       meters:[["warn","Supplier bills due","$5,120",80,`Parts + fuel ${E.mid} 5 invoices`],["warn","Payroll-tax deposit","in 2 days",78,`Form 941 ${E.mid} $3,400`],["warn","Trust &amp; Compliance","1 lapsing",55,"Van insurance renews 9d"],["info","Operate &amp; Improve","5 ideas",50,"Route-density experiment"]],
       market:[[E.storm,"Cold snap forecast","3-day freeze","up","+50% emergency calls"],[E.cloud,"New competitor 'FlowFix'","flat-rate pricing","down","pressure on drains"],[E.dia,"Copper price","+4% month","down","re-quote estimates"],[E.star,"Property-mgr RFP","12-building contract","up","pipeline"]],
-      quests:[["warn","Payroll-tax deposit",`Form 941 ${E.mid} $3,400 ${E.mid} in 2 days`,"Approve"],["warn","Van insurance lapsing","Renews in 9 days","Renew"],["error","Emergency backlog","Cold snap: 6 jobs unassigned","Dispatch"],["info","Property-mgr RFP","12-building maintenance contract","Draft bid"]] },
-    saas:{ biz:`GridSignal ${E.mid} B2B Analytics SaaS`, cap:"capacity: seats", wx:`${E.sun} Demand: steady (Q3 renewals)`, flow:7, today:"$61,000",
-      stages:[["S1","ATTRACT","Attract &amp; Discover","Content &amp; SEO",0,"8","posts live","GR","Growth","idle","PM"],["S2","CAPTURE","Capture Demand","Trials &amp; demos",1,"6.2%","signup","SD","SDR","qualifying lead","CSM"],["S3","QUALIFY","Qualify &amp; Onboard","Time to value",0,"1.4d","to value","CS","Onboarding","onboarding","CSM"],["S4","DELIVER","Deliver the Value","Serve the product",1,"99.95%","uptime","PL","Platform","serving","Founder"],["S5","SETTLE","Settle &amp; Account","Bill subscriptions",1,"$61k","MRR","FN","Billing","invoicing","Founder"],["S6","RETAIN","Retain &amp; Grow","Renew &amp; expand",1,"94%","net retention","AM","Success","expanding","CSM"]],
+      quests:[["warn","Payroll-tax deposit",`Form 941 ${E.mid} $3,400 ${E.mid} in 2 days`,"Approve"],["warn","Van insurance lapsing","Renews in 9 days","Renew"],["error","Emergency backlog","Cold snap: 6 jobs unassigned","Dispatch"],["info","Property-mgr RFP","12-building maintenance contract","Draft bid"]]},
+    saas:{biz:`GridSignal ${E.mid} B2B Analytics SaaS`,cap:"seats",wx:`${E.sun} Demand: steady (Q3 renewals)`,flow:7,today:"$61,000",crewTotal:20,
+      stages:[
+        ["S1","ATTRACT","Attract &amp; Discover","Content &amp; SEO",0,"GR","Growth",["SEO","CNT","ADS"],"shipping content",[["Launch blog post","service"],["Keyword cluster","service"]],"8","posts live","PM"],
+        ["S2","CAPTURE","Capture Demand","Trials &amp; demos",1,"SD","SDR",["QUAL","DEMO"],"qualifying a lead",[["Qualify inbound lead","service"],["Book demo slot","service"]],"6.2%","signup","CSM"],
+        ["S3","QUALIFY","Qualify &amp; Onboard","Time to value",0,"CS","Onboarding",["SETUP","GUIDE"],"onboarding a workspace",[["Provision workspace","service"],["First-value checklist","service"]],"1.4d","to value","CSM"],
+        ["S4","DELIVER","Deliver the Value","Serve the product",1,"PL","Platform",["SRE","API","DATA"],"holding uptime",[["Ingest pipeline health","service"],["API latency watch","service"],["Nightly ETL","settled"]],"99.95%","uptime","Founder"],
+        ["S5","SETTLE","Settle &amp; Account","Bill subscriptions",1,"FN","Billing",["SUB","DUN"],"running billing",[["Cycle invoices","settled"],["Dunning retry","attention"]],"$61k","MRR","Founder"],
+        ["S6","RETAIN","Retain &amp; Grow","Renew &amp; expand",1,"AM","Success",["HEALTH","EXP"],"expanding accounts",[["Renewal 'Acme'","service"],["Seat-expansion nudge","service"]],"94%","net retention","CSM"]],
       meters:[["warn","Vendor bills due","$3,900",50,`Cloud + tooling ${E.mid} 4 invoices`],["warn","Sales-tax nexus filing","in 6 days",45,`3 states ${E.mid} $2,050`],["ok","Trust &amp; Compliance","SOC2 OK",20,"Next audit window 5mo"],["info","Operate &amp; Improve","11 ideas",65,"Backlog throughput high"]],
       market:[[E.sun,"Category tailwind","analyst calls it 'hot'","up","inbound +18%"],[E.cloud,"Competitor 'Metricly'","raised Series B","down","ad spend incoming"],[E.dia,"Cloud pricing","egress fees rising","down","margin review"],[E.star,"G2 report","named High Performer","up","social proof"]],
-      quests:[["warn","Sales-tax nexus filing",`3 states ${E.mid} $2,050 ${E.mid} in 6 days`,"Approve"],["warn","Pay 4 vendor bills",`$3,900 ${E.mid} cloud + tooling`,"Review &amp; pay"],["error","At-risk renewal","Acct 'Northwind' usage down 40%","Reach out"],["info","Expansion signal","3 accounts hit seat limit","Offer upgrade"]] },
-    rental:{ biz:`PeakGear ${E.mid} Equipment Rental`, cap:"capacity: asset-days", wx:`${E.sun} Demand: seasonal peak`, flow:11, today:"$5,240",
-      stages:[["S1","ATTRACT","Attract &amp; Discover","List the fleet",0,"live","catalog","MK","Marketing","idle","Owner"],["S2","CAPTURE","Capture Demand","Reserve",1,"23","holds","RS","Reservations","holding asset","Counter"],["S3","QUALIFY","Hand Out","Check out asset",0,"81%","out","CT","Counter","checking out","Counter"],["S4","DELIVER","Deliver (In-Use)","On rent",1,"64","on rent","OP","Fleet ops","tracking fleet","Mechanic"],["S5","RETURN","Return &amp; Inspect","Return &amp; clean",1,"3.2h","turnaround","IN","Inspection","inspecting","Mechanic"],["S6","SETTLE","Settle &amp; Account","Bill &amp; deposit",0,"$5.2k","today","FN","Finance","settling deposit","Owner"]],
+      quests:[["warn","Sales-tax nexus filing",`3 states ${E.mid} $2,050 ${E.mid} in 6 days`,"Approve"],["warn","Pay 4 vendor bills",`$3,900 ${E.mid} cloud + tooling`,"Review &amp; pay"],["error","At-risk renewal","Acct 'Northwind' usage down 40%","Reach out"],["info","Expansion signal","3 accounts hit seat limit","Offer upgrade"]]},
+    rental:{biz:`PeakGear ${E.mid} Equipment Rental`,cap:"asset-days",wx:`${E.sun} Demand: seasonal peak`,flow:11,today:"$5,240",crewTotal:18,
+      stages:[
+        ["S1","ATTRACT","Attract &amp; Discover","List the fleet",0,"MK","Marketing",["CAT","SEO"],"publishing the catalog",[["Publish new listing","service"],["Seasonal banner","service"]],"live","catalog","Owner"],
+        ["S2","CAPTURE","Capture Demand","Reserve",1,"RS","Reservations",["HOLD","AVAIL"],"holding an asset",[["Hold skid-steer","service"],["Check availability","service"]],"23","holds","Counter"],
+        ["S3","QUALIFY","Hand Out","Check out asset",0,"CT","Counter",["DEP","ID"],"checking out gear",[["Deposit + ID check","service"],["Damage waiver","service"]],"81%","out","Counter"],
+        ["S4","DELIVER","Deliver (In-Use)","On rent",1,"OP","Fleet-ops",["TRACK","SVC"],"tracking the fleet",[["GPS ping sweep","service"],["Service-due flags","attention"],["Telematics sync","settled"]],"64","on rent","Mechanic"],
+        ["S5","RETURN","Return &amp; Inspect","Return &amp; clean",1,"IN","Inspection",["INSP","CLEAN"],"inspecting returns",[["Inspect return #22","service"],["Clean + re-pool","service"]],"3.2h","turnaround","Mechanic"],
+        ["S6","SETTLE","Settle &amp; Account","Bill &amp; deposit",0,"FN","Finance",["INV","DEP"],"settling deposits",[["Bill final charges","settled"],["Release deposit","service"]],"$5.2k","today","Owner"]],
       meters:[["warn","Supplier bills due","$1,780",40,`Maintenance parts ${E.mid} 2 invoices`],["warn","Sales-tax remittance","in 8 days",35,`State ST-1 ${E.mid} $940`],["warn","Trust &amp; Compliance","2 overdue",62,"Overdue returns to chase"],["info","Operate &amp; Improve","4 ideas",42,"Utilization optimization"]],
       market:[[E.sun,"Peak season","weekend surge","up","+40% asset-days"],[E.cloud,"New rival yard","opened across town","down","weekday pricing"],[E.dia,"Fuel &amp; freight","delivery +6%","down","review delivery fee"],[E.star,"Contractor expo","booth confirmed","up","B2B leads"]],
-      quests:[["error","Chase overdue returns","2 assets overdue","Contact"],["warn","Pay maintenance bills",`$1,780 ${E.mid} parts ${E.mid} 2 invoices`,"Review &amp; pay"],["warn","Sales-tax remittance",`State ST-1 ${E.mid} $940 ${E.mid} in 8 days`,"Approve"],["info","Peak pricing","Weekend demand +40%","Set pricing"]] },
+      quests:[["error","Chase overdue returns","2 assets overdue","Contact"],["warn","Pay maintenance bills",`$1,780 ${E.mid} parts ${E.mid} 2 invoices`,"Review &amp; pay"],["warn","Sales-tax remittance",`State ST-1 ${E.mid} $940 ${E.mid} in 8 days`,"Approve"],["info","Peak pricing","Weekend demand +40%","Set pricing"]]},
   };
-  const $ = id => document.getElementById(id);
+  const $=id=>document.getElementById(id);
 
   function render(key){
-    const c = A[key]; if(!c) return;
-    $("bizName").innerHTML = c.biz;
-    $("capUnit").innerHTML = c.cap + " &#183; primary activities";
-    $("wx").innerHTML = c.wx;
-    $("kpiFlow").textContent = c.flow;
-    $("kpiToday").textContent = c.today;
+    const c=A[key]; if(!c) return;
+    $("bizName").innerHTML=c.biz;
+    $("capUnit").innerHTML=`flow of work ${E.mid} primary activities ${E.mid} ${c.crewTotal} AI coworkers on shift`;
+    $("wx").innerHTML=c.wx; $("kpiFlow").textContent=c.flow; $("kpiToday").textContent=c.today;
 
-    let html = "";
-    c.stages.forEach((s,i) => {
-      const [idx,key2,name,vern,load,mv,ml,w,wn,act,persona] = s;
-      const active = (act !== "idle");
-      html += `<div class="stage${load?' load':''}${active?' active':''}">`+
-        `<div class="idx">${idx} ${E.mid} ${key2}${load?` <span class="lb">${E.dia} load-bearing</span>`:''}</div>`+
+    let html="";
+    c.stages.forEach((s,i)=>{
+      const [idx,k2,name,vern,load,lead,role,specs,act,jobs,mv,ml,persona]=s;
+      const idle=(act==="idle"||act==="following up"&&i===c.stages.length-1&&false);
+      const active=(i<c.stages.length-1); // last stage shown as queued for variety
+      const specHtml=specs.map((sp,j)=>`<span class="spec${(active&&j===0)?' on':''}">${sp}</span>`).join("");
+      const crewN=1+specs.length;
+      const nActive=jobs.filter(j=>j[1]!=="settled").length;
+      const jobsHtml=jobs.map((j,ji)=>`<div class="job ${j[1]} j${ji+1}"><span class="jn">${j[0]}</span><span class="jbar"><i></i></span></div>`).join("");
+      html+=`<div class="stage${load?' load':''}${active?' active':''}">`+
+        `<div class="idx">${idx} ${E.mid} ${k2}${load?` <span class="lb">${E.dia} load-bearing</span>`:''}</div>`+
         `<div class="name">${name}</div><div class="vern">${E.ldq}${vern}${E.rdq}</div>`+
+        `<div class="crew"><span class="lead${active?' on':''}">${lead}</span>${specHtml}<span class="crewlbl">${crewN} coworkers</span></div>`+
+        `<div class="lead-act"${active?'':' style="color:var(--dpf-muted)"'}>${role} lead ${E.mid} ${active?act:'idle'}</div>`+
+        `<div class="bench"><div class="blbl"><span>${active?'Working now':'Queued'}</span><span>${active?nActive+' active':jobs.length+' waiting'}</span></div>${jobsHtml}</div>`+
         `<div class="metric"><span class="v tnum">${mv}</span><span class="l">${ml}</span></div>`+
-        `<div class="worker"><span class="avatar">${w}</span><span class="act">${wn} ${E.mid} ${act}</span></div>`+
-        `<div class="persona"><span class="seat"></span>${persona} + AI coworker</div></div>`;
-      if(i < c.stages.length-1){
-        const st = S[i]||"u-service";
-        html += `<div class="rail"><div class="line"></div><div class="arrow">${E.play}</div>`+
-          `<span class="unit ${st} d1"></span><span class="unit ${st} d3"></span></div>`;
-      }
+        `<div class="persona"><span class="seat"></span>${persona} + AI crew</div></div>`;
+      if(i<c.stages.length-1){const st=US[i]||"u-service";
+        html+=`<div class="rail"><div class="line"></div><div class="arrow">${E.play}</div><span class="unit ${st} d1"></span><span class="unit ${st} d3"></span></div>`;}
     });
-    $("stream").innerHTML = html;
+    $("stream").innerHTML=html;
 
-    $("band").innerHTML = c.meters.map(m => {
-      const [kind,label,val,pct,sub] = m;
-      return `<div class="meter ${kind}"><div class="m-top"><span class="m-label">${label}</span><span class="m-val tnum">${val}</span></div><div class="track"><div class="fill" style="width:${pct}%"></div></div><div class="m-sub">${sub}</div></div>`;
-    }).join("");
+    $("band").innerHTML=c.meters.map(m=>{const [kind,label,val,pct,sub]=m;
+      return `<div class="meter ${kind}"><div class="m-top"><span class="m-label">${label}</span><span class="m-val tnum">${val}</span></div><div class="track"><div class="fill" style="width:${pct}%"></div></div><div class="m-sub">${sub}</div></div>`;}).join("");
 
-    let open = 0;
-    $("questList").innerHTML = c.quests.map(q => { open++; const [k,t,m,a]=q;
-      return `<div class="quest ${k}"><div class="q-body"><div class="q-title">${t}</div><div class="q-meta">${m}</div></div><button class="q-act">${a}</button></div>`;
-    }).join("");
-    $("questCount").textContent = open;
+    let open=0;
+    $("questList").innerHTML=c.quests.map(q=>{open++;const [k,t,m,a]=q;
+      return `<div class="quest ${k}"><div class="q-body"><div class="q-title">${t}</div><div class="q-meta">${m}</div></div><button class="q-act">${a}</button></div>`;}).join("");
+    $("questCount").textContent=open;
 
-    const items = c.market.map(([g,h,d,dir,note]) => `<span class="item"><span class="cdot"></span>${g} <b>${h}</b> ${d} <span class="${dir}">${dir==="up"?E.up:E.down} ${note}</span></span>`).join("");
-    $("tickerMove").innerHTML = items + items;
+    const items=c.market.map(([g,h,d,dir,note])=>`<span class="item"><span class="cdot"></span>${g} <b>${h}</b> ${d} <span class="${dir}">${dir==="up"?E.up:E.down} ${note}</span></span>`).join("");
+    $("tickerMove").innerHTML=items+items;
     wireQuests();
   }
   function wireQuests(){
-    document.querySelectorAll(".q-act").forEach(btn => btn.addEventListener("click", () => {
-      const q = btn.closest(".quest"); if(q.dataset.done) return;
-      q.dataset.done = "1"; q.style.opacity = ".5"; btn.style.background = "var(--dpf-success)"; btn.innerHTML = E.check + " Done";
-      const c = $("questCount"); c.textContent = Math.max(0, +c.textContent - 1);
+    document.querySelectorAll(".q-act").forEach(btn=>btn.addEventListener("click",()=>{
+      const q=btn.closest(".quest"); if(q.dataset.done) return;
+      q.dataset.done="1"; q.style.opacity=".5"; btn.style.background="var(--dpf-success)"; btn.innerHTML=E.check+" Done";
+      const c=$("questCount"); c.textContent=Math.max(0,+c.textContent-1);
     }));
   }
-  $("archetype").addEventListener("change", e => render(e.target.value));
-  $("themeToggle").addEventListener("click", () => {
-    const cur = document.documentElement.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    document.documentElement.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
+  $("archetype").addEventListener("change",e=>render(e.target.value));
+  $("themeToggle").addEventListener("click",()=>{
+    const cur=document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+    document.documentElement.setAttribute("data-theme",cur==="dark"?"light":"dark");
   });
-  wireQuests(); // wire the static quests without re-rendering
+  wireQuests();
 })();
 </script>
