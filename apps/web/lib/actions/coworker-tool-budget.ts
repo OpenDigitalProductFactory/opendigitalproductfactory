@@ -22,6 +22,7 @@
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { CORE_MCP_TOOL_NAMES } from "@/lib/mcp/tool-tier";
+import { LOCAL_TOOL_SELECTION_CLIFF } from "@/lib/tak/context-economy-metrics";
 
 /**
  * Default ceiling on the NON-essential (role/core/breadth) tool schemas attached
@@ -50,26 +51,46 @@ export const COWORKER_NON_TOOL_RESERVE_TOKENS = 12_000;
 export const MIN_COWORKER_ATTACHED_TOOLS = 12;
 
 /**
+ * A small local model's tool-SELECTION accuracy collapses once it is handed more
+ * than ~15 tools (`LOCAL_TOOL_SELECTION_CLIFF`) — a soft quality cliff that the
+ * window-fit math alone doesn't see (a 24,576 window fits ~38 schemas, well past
+ * the cliff). Below this served-context line the model is the cliff-prone small
+ * local class, so the attachment cap is bounded by the cliff, not just the window.
+ * At/above it the model is capable enough to select from the full window-fit set.
+ */
+export const ACCURACY_CLIFF_PRONE_MAX_CONTEXT = 32_768;
+
+/**
  * Derive the per-turn tool-attachment cap from the served context window of the
- * model that will run the turn. The hardcoded 48 was sized for a ~32k window;
- * on a VRAM-constrained local model served at 24,576 tokens, 48 tool schemas
- * (~16k tokens) plus a long conversation overflow `exceed_context_size_error`.
- * This scales the cap down so the tool block always leaves room for the prompt,
- * history, and reply — and back up to the 48 ceiling once the window is large.
+ * model that will run the turn. Two ceilings apply, whichever is smaller:
+ *   1. WINDOW-FIT — the hardcoded 48 was sized for a ~32k window; on a
+ *      VRAM-constrained local model served at 24,576 tokens, 48 tool schemas
+ *      (~16k tokens) plus a long conversation overflow `exceed_context_size_error`.
+ *   2. ACCURACY-CLIFF (BI-2B2F59EB) — for a cliff-prone small local window
+ *      (< 32k), bound the cap at the ~15-tool selection cliff so a small model
+ *      isn't handed a surface it can't select from. Deferred tools stay
+ *      authorized and loadable via load_tools, so this caps accuracy cost, never
+ *      capability.
  *
  * It binds on the LOCAL model's served context even when a cloud provider is
  * preferred, because the cloud→local FALLBACK path is exactly where these
- * overflows happen; the cost on a cloud turn is only a few extra load_tools
- * round-trips, never a failure. `null`/unknown (no small-context local model)
- * → the full 48.
+ * overflows/cliffs happen; the cost on a cloud turn is only a few extra
+ * load_tools round-trips, never a failure. `null`/unknown (no small-context
+ * local model) → the full 48.
  *
- *   32_768 → 48 (ceiling; unchanged)   24_576 → 38   16_000 → 12 (floor)   null → 48
+ *   32_768 → 48 (capable; ceiling)   24_576 → 15 (accuracy cliff)   16_000 → 12 (floor)   null → 48
  */
 export function deriveCoworkerToolCap(servedContextTokens: number | null | undefined): number {
   if (!servedContextTokens || servedContextTokens <= 0) return MAX_COWORKER_ATTACHED_TOOLS;
   const toolBudgetTokens = servedContextTokens - COWORKER_NON_TOOL_RESERVE_TOKENS;
   const fitted = Math.floor(toolBudgetTokens / TOOL_SCHEMA_TOKEN_ESTIMATE);
-  return Math.max(MIN_COWORKER_ATTACHED_TOOLS, Math.min(MAX_COWORKER_ATTACHED_TOOLS, fitted));
+  // A cliff-prone small local model also caps at the selection cliff, not just
+  // the window fit. Larger/capable windows keep the full window-fit ceiling.
+  const ceiling =
+    servedContextTokens < ACCURACY_CLIFF_PRONE_MAX_CONTEXT
+      ? Math.min(MAX_COWORKER_ATTACHED_TOOLS, LOCAL_TOOL_SELECTION_CLIFF)
+      : MAX_COWORKER_ATTACHED_TOOLS;
+  return Math.max(MIN_COWORKER_ATTACHED_TOOLS, Math.min(ceiling, fitted));
 }
 
 /** Name of the meta-tool that lets a coworker pull deferred tools back on demand. */
