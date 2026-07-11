@@ -3,6 +3,7 @@
   /* ============================================================= *
    * DPF design tokens — mirrored from apps/web/app/globals.css.
    * Both themes; game tokens are DERIVED, never hardcoded hex.
+   * DOM-first (no canvas) so it renders reliably on any device.
    * ============================================================= */
   :root {
     --dpf-bg: #fafafa;
@@ -19,43 +20,25 @@
     --dpf-warning: #d97706;
     --dpf-error: #dc2626;
     --dpf-info: #0284c7;
-
-    /* game-world tokens, derived from the DPF palette */
     --vs-ground: color-mix(in srgb, var(--dpf-accent) 4%, var(--dpf-bg));
-    --vs-plot: color-mix(in srgb, var(--dpf-accent) 9%, transparent);
-    --vs-rail: color-mix(in srgb, var(--dpf-accent) 30%, var(--dpf-border-strong));
-    --vs-energy: var(--dpf-accent);
-    --vs-glow: color-mix(in srgb, var(--dpf-accent) 22%, transparent);
-    --vs-station: var(--dpf-surface-1);
-    --vs-station-load: color-mix(in srgb, var(--dpf-accent) 8%, var(--dpf-surface-1));
-
+    --vs-rail: color-mix(in srgb, var(--dpf-accent) 34%, var(--dpf-border-strong));
+    --vs-glow: color-mix(in srgb, var(--dpf-accent) 20%, transparent);
+    --vs-load: color-mix(in srgb, var(--dpf-accent) 9%, var(--dpf-surface-1));
     --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-
     --radius: 10px;
     --shadow-1: 0 1px 2px color-mix(in srgb, var(--dpf-text) 8%, transparent);
-    --shadow-2: 0 6px 24px color-mix(in srgb, var(--dpf-text) 14%, transparent);
+    --shadow-2: 0 8px 26px color-mix(in srgb, var(--dpf-text) 16%, transparent);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --dpf-bg: #0f0f1a;
-      --dpf-surface-1: #1a1a2e;
-      --dpf-surface-2: #161625;
-      --dpf-surface-3: #121220;
-      --dpf-text: #e2e2f0;
-      --dpf-text-secondary: #b8b8cc;
-      --dpf-accent: #7c8cf8;
-      --dpf-border: #2a2a40;
-      --dpf-border-strong: #3a3a55;
-      --dpf-muted: #8888a0;
-      --dpf-success: #4ade80;
-      --dpf-warning: #fbbf24;
-      --dpf-error: #f87171;
-      --dpf-info: #38bdf8;
+      --dpf-bg: #0f0f1a; --dpf-surface-1: #1a1a2e; --dpf-surface-2: #161625; --dpf-surface-3: #121220;
+      --dpf-text: #e2e2f0; --dpf-text-secondary: #b8b8cc; --dpf-accent: #7c8cf8; --dpf-border: #2a2a40;
+      --dpf-border-strong: #3a3a55; --dpf-muted: #8888a0; --dpf-success: #4ade80; --dpf-warning: #fbbf24;
+      --dpf-error: #f87171; --dpf-info: #38bdf8;
     }
   }
-  /* explicit theme toggle wins over the media query, both directions */
   :root[data-theme="light"] {
     --dpf-bg: #fafafa; --dpf-surface-1: #ffffff; --dpf-surface-2: #f4f4f6; --dpf-surface-3: #eeeef2;
     --dpf-text: #1a1a2e; --dpf-text-secondary: #4a4a5e; --dpf-accent: #2563eb; --dpf-border: #d4d4dc;
@@ -70,230 +53,132 @@
   }
 
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
-  body {
-    background: var(--dpf-bg);
-    color: var(--dpf-text);
-    font-family: var(--font-body);
-    font-size: 15px;
-    line-height: 1.45;
-    -webkit-font-smoothing: antialiased;
-  }
+  html, body { margin: 0; }
+  body { background: var(--dpf-bg); color: var(--dpf-text); font-family: var(--font-body); font-size: 15px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
   .tnum { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
-
-  /* ---- shell ---- */
-  /* Simple, embed-proof vertical stack: top bar → ticker → board → HUD.
-     No 100vh / grid-row dependency; the board has an explicit height so it
-     can never collapse regardless of the container. */
   .shell { display: flex; flex-direction: column; min-height: 100%; }
-  .main { display: flex; flex-direction: column; }
-  @media (min-width: 1060px) {
-    /* wide viewers get the HUD beside the board */
-    .main { flex-direction: row; align-items: stretch; }
-    .main .board-wrap { flex: 1 1 auto; }
-    .main .hud { flex: 0 0 320px; border-top: none; border-left: 1px solid var(--dpf-border); }
-  }
 
-  /* ---- top bar ---- */
-  .topbar {
-    display: flex; align-items: center; gap: 14px;
-    padding: 12px 18px;
-    background: var(--dpf-surface-1);
-    border-bottom: 1px solid var(--dpf-border);
-    flex-wrap: wrap;
-  }
-  .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-  .brand h1 {
-    font-family: var(--font-display);
-    font-size: 18px; font-weight: 700; letter-spacing: -0.02em;
-    margin: 0; white-space: nowrap;
-  }
-  .brand .biz {
-    font-size: 13px; color: var(--dpf-muted);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .eyebrow {
-    font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase;
-    color: var(--dpf-muted); font-weight: 600;
-  }
+  /* top bar */
+  .topbar { display: flex; align-items: center; gap: 12px 14px; padding: 11px 16px; background: var(--dpf-surface-1); border-bottom: 1px solid var(--dpf-border); flex-wrap: wrap; }
+  .eyebrow { font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dpf-muted); font-weight: 600; }
+  .brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+  .brand h1 { font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+  .brand .biz { font-size: 13px; color: var(--dpf-muted); }
   .spacer { flex: 1 1 auto; }
-  .pill-select {
-    display: inline-flex; align-items: center; gap: 8px;
-    background: var(--dpf-surface-2); border: 1px solid var(--dpf-border);
-    border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--dpf-text);
-  }
-  .pill-select select {
-    background: transparent; border: none; color: var(--dpf-text);
-    font: inherit; outline: none; cursor: pointer;
-  }
-  .pill-select select option { background: var(--dpf-surface-2); color: var(--dpf-text); }
+  .pill { display: inline-flex; align-items: center; gap: 8px; background: var(--dpf-surface-2); border: 1px solid var(--dpf-border); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--dpf-text); cursor: pointer; }
+  .pill select { background: transparent; border: none; color: var(--dpf-text); font: inherit; outline: none; cursor: pointer; }
+  .pill select option { background: var(--dpf-surface-2); color: var(--dpf-text); }
 
-  /* ---- market weather ticker ---- */
-  .ticker {
-    display: flex; align-items: center; gap: 12px;
-    background: color-mix(in srgb, var(--dpf-info) 8%, var(--dpf-surface-1));
-    border-bottom: 1px solid var(--dpf-border);
-    padding: 6px 14px; overflow: hidden; height: 34px;
-  }
-  .ticker .wx {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
-    color: var(--dpf-info); white-space: nowrap; flex: 0 0 auto;
-    padding-right: 12px; border-right: 1px solid var(--dpf-border);
-  }
+  /* market weather ticker */
+  .ticker { display: flex; align-items: center; gap: 12px; background: color-mix(in srgb, var(--dpf-info) 8%, var(--dpf-surface-1)); border-bottom: 1px solid var(--dpf-border); padding: 6px 14px; overflow: hidden; }
+  .ticker .wx { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--dpf-info); white-space: nowrap; flex: 0 0 auto; padding-right: 12px; border-right: 1px solid var(--dpf-border); }
   .ticker-track { position: relative; flex: 1 1 auto; overflow: hidden; height: 20px; }
-  .ticker-move {
-    position: absolute; white-space: nowrap; will-change: transform;
-    animation: ticker 46s linear infinite; top: 0;
-  }
+  .ticker-move { position: absolute; white-space: nowrap; animation: ticker 48s linear infinite; top: 0; }
   .ticker-move .item { display: inline-flex; align-items: center; gap: 7px; margin-right: 42px; font-size: 12.5px; color: var(--dpf-text-secondary); }
   .ticker-move .item b { color: var(--dpf-text); font-weight: 600; }
   .ticker-move .up { color: var(--dpf-success); font-weight: 700; }
   .ticker-move .down { color: var(--dpf-error); font-weight: 700; }
-  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; background: var(--dpf-info); }
   @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
-  /* ---- board ---- */
-  .board-wrap { position: relative; width: 100%; height: 540px; overflow: hidden; background: var(--vs-ground); }
-  #board { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  /* the value-stream board */
+  .board { background: var(--vs-ground); padding: 16px 12px 6px; }
+  .board-head { display: flex; align-items: baseline; gap: 10px; padding: 0 6px 10px; flex-wrap: wrap; }
+  .board-head .lbl { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dpf-muted); font-weight: 700; }
+  .board-head .sub { font-size: 12px; color: var(--dpf-muted); }
+  .scroll-hint { font-size: 11px; color: var(--dpf-muted); }
 
-  /* station overlay cards */
-  .stations { position: absolute; inset: 0; pointer-events: none; }
-  .station {
-    position: absolute; transform: translate(-50%, 0);
-    width: 150px; pointer-events: auto;
-    background: var(--vs-station); border: 1px solid var(--dpf-border);
-    border-radius: var(--radius); box-shadow: var(--shadow-1);
-    padding: 8px 10px 9px; cursor: pointer;
-    transition: box-shadow .18s ease, border-color .18s ease, transform .18s ease;
+  /* horizontally scrollable production line */
+  .stream { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding: 4px 6px 14px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+  .stage {
+    scroll-snap-align: start; flex: 1 0 168px; min-width: 168px; max-width: 260px;
+    background: var(--dpf-surface-1); border: 1px solid var(--dpf-border); border-radius: var(--radius);
+    padding: 10px 12px 11px; box-shadow: var(--shadow-1); cursor: pointer; position: relative;
+    transition: box-shadow .18s, border-color .18s, transform .18s;
   }
-  .station:hover, .station:focus-visible { box-shadow: var(--shadow-2); border-color: var(--dpf-accent); outline: none; }
-  .station.load { background: var(--vs-station-load); border-color: color-mix(in srgb, var(--dpf-accent) 45%, var(--dpf-border)); }
-  .station .st-idx {
-    font-family: var(--font-mono); font-size: 10px; color: var(--dpf-muted); letter-spacing: .1em;
-  }
-  .station .st-name { font-family: var(--font-display); font-weight: 650; font-size: 13px; letter-spacing: -0.01em; margin: 1px 0 0; }
-  .station .st-vern { font-size: 10.5px; color: var(--dpf-muted); margin-top: 1px; }
-  .station .st-metric {
-    display: flex; align-items: baseline; gap: 5px; margin-top: 6px;
-    padding-top: 6px; border-top: 1px dashed var(--dpf-border);
-  }
-  .station .st-metric .v { font-family: var(--font-mono); font-weight: 700; font-size: 14px; }
-  .station .st-metric .l { font-size: 10px; color: var(--dpf-muted); }
-  .station .worker {
-    display: flex; align-items: center; gap: 6px; margin-top: 7px; min-height: 16px;
-  }
-  .station .worker .avatar {
-    width: 15px; height: 15px; border-radius: 50%; flex: 0 0 auto;
-    background: color-mix(in srgb, var(--dpf-accent) 22%, var(--dpf-surface-1));
-    border: 1.5px solid var(--dpf-accent);
-    display: grid; place-items: center; font-size: 9px; color: var(--dpf-accent); font-weight: 700;
-  }
-  .station .worker .act { font-size: 10.5px; color: var(--dpf-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .station.active .avatar { animation: workerPulse 1.4s ease-in-out infinite; }
-  .station.active .act { color: var(--dpf-accent); }
-  @keyframes workerPulse {
-    0%,100% { box-shadow: 0 0 0 0 var(--vs-glow); }
-    55% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--dpf-accent) 0%, transparent); }
-  }
-  .support-tag {
-    position: absolute; transform: translate(-50%, 0);
-    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
-    color: var(--dpf-muted); background: color-mix(in srgb, var(--dpf-surface-1) 70%, transparent);
-    padding: 2px 8px; border-radius: 999px; border: 1px solid var(--dpf-border); white-space: nowrap;
-  }
+  .stage:hover, .stage:focus-visible { box-shadow: var(--shadow-2); border-color: var(--dpf-accent); outline: none; transform: translateY(-2px); }
+  .stage.load { background: var(--vs-load); border-color: color-mix(in srgb, var(--dpf-accent) 42%, var(--dpf-border)); }
+  .stage .idx { font-family: var(--font-mono); font-size: 10px; color: var(--dpf-muted); letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px; }
+  .stage .idx .load-tag { color: var(--dpf-accent); font-weight: 700; letter-spacing: 0.02em; }
+  .stage .name { font-family: var(--font-display); font-weight: 650; font-size: 14px; letter-spacing: -0.01em; margin: 3px 0 1px; }
+  .stage .vern { font-size: 11px; color: var(--dpf-muted); }
+  .stage .metric { display: flex; align-items: baseline; gap: 5px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--dpf-border); }
+  .stage .metric .v { font-family: var(--font-mono); font-weight: 700; font-size: 15px; }
+  .stage .metric .l { font-size: 10.5px; color: var(--dpf-muted); }
+  .stage .worker { display: flex; align-items: center; gap: 7px; margin-top: 9px; }
+  .stage .avatar { width: 22px; height: 22px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-size: 9.5px; font-weight: 700; color: var(--dpf-accent); background: color-mix(in srgb, var(--dpf-accent) 16%, var(--dpf-surface-1)); border: 1.5px solid var(--dpf-accent); }
+  .stage .act { font-size: 11px; color: var(--dpf-text-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stage.active .avatar { animation: pulse 1.3s ease-in-out infinite; }
+  .stage.active .act { color: var(--dpf-accent); font-weight: 600; }
+  .stage .persona { margin-top: 7px; font-size: 10px; color: var(--dpf-muted); display: flex; align-items: center; gap: 5px; }
+  .stage .persona .seat { width: 7px; height: 7px; border-radius: 50%; background: var(--dpf-muted); opacity: .55; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 var(--vs-glow); } 55% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--dpf-accent) 0%, transparent); } }
 
-  /* ---- support / utility band ---- */
-  .band {
-    position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
-    display: flex; gap: 10px; padding: 10px 14px;
-    background: linear-gradient(to top, var(--dpf-surface-1) 76%, transparent);
-    pointer-events: none;
-  }
-  .meter {
-    pointer-events: auto; flex: 1 1 0; min-width: 0;
-    background: var(--dpf-surface-1); border: 1px solid var(--dpf-border);
-    border-radius: var(--radius); padding: 8px 11px; box-shadow: var(--shadow-1);
-  }
+  /* rail connector between stages, carrying flowing work units */
+  .rail { flex: 0 0 44px; align-self: center; position: relative; height: 26px; min-width: 44px; }
+  .rail .line { position: absolute; top: 50%; left: 0; right: 0; height: 4px; transform: translateY(-50%); border-radius: 999px; background: var(--vs-rail); }
+  .rail .line::after { content: ""; position: absolute; inset: 0; border-radius: 999px; background: repeating-linear-gradient(90deg, var(--dpf-accent) 0 4px, transparent 4px 14px); opacity: .55; animation: railflow 0.9s linear infinite; }
+  .rail .arrow { position: absolute; top: 50%; right: 2px; transform: translateY(-50%); color: var(--vs-rail); font-size: 12px; line-height: 1; }
+  @keyframes railflow { from { background-position: 0 0; } to { background-position: 18px 0; } }
+  .unit { position: absolute; top: 50%; left: 0; width: 11px; height: 11px; margin-top: -5.5px; border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent); color: var(--dpf-accent); background: currentColor; }
+  .unit.run { animation: flow 2.1s linear forwards; }
+  .u-demand { color: var(--dpf-info); }
+  .u-service { color: var(--dpf-accent); }
+  .u-attention { color: var(--dpf-warning); }
+  .u-settled { color: var(--dpf-success); }
+  .u-exception { color: var(--dpf-error); }
+  @keyframes flow { from { left: -4px; } to { left: calc(100% - 4px); } }
+
+  /* support / utility band */
+  .band { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; padding: 6px 14px 14px; background: var(--vs-ground); }
+  .meter { background: var(--dpf-surface-1); border: 1px solid var(--dpf-border); border-radius: var(--radius); padding: 9px 12px; box-shadow: var(--shadow-1); }
   .meter .m-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .meter .m-label { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--dpf-muted); font-weight: 600; }
+  .meter .m-label { font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--dpf-muted); font-weight: 600; }
   .meter .m-val { font-family: var(--font-mono); font-weight: 700; font-size: 15px; }
-  .meter .track { height: 7px; border-radius: 999px; background: var(--dpf-surface-3); margin-top: 7px; overflow: hidden; }
-  .meter .fill { height: 100%; border-radius: 999px; transition: width .5s ease, background-color .3s ease; }
-  .meter .m-sub { font-size: 10.5px; color: var(--dpf-muted); margin-top: 5px; }
-  .meter.warn .fill { background: var(--dpf-warning); }
-  .meter.warn .m-val { color: var(--dpf-warning); }
+  .meter .track { height: 7px; border-radius: 999px; background: var(--dpf-surface-3); margin-top: 8px; overflow: hidden; }
+  .meter .fill { height: 100%; border-radius: 999px; transition: width .5s; }
+  .meter .m-sub { font-size: 10.5px; color: var(--dpf-muted); margin-top: 6px; }
+  .meter.warn .fill { background: var(--dpf-warning); } .meter.warn .m-val { color: var(--dpf-warning); }
   .meter.ok .fill { background: var(--dpf-success); }
   .meter.info .fill { background: var(--dpf-info); }
 
-  /* ---- HUD rail ---- */
-  .hud {
-    width: 100%;
-    background: var(--dpf-surface-1); border-top: 1px solid var(--dpf-border);
-    display: flex; flex-direction: column; min-height: 0;
-  }
-  .hud-scroll { overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 16px; }
-  .hud-sec > .hd {
-    display: flex; align-items: center; justify-content: space-between;
-    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dpf-muted); font-weight: 700;
-    margin-bottom: 8px;
-  }
-  .badge {
-    font-family: var(--font-mono); font-size: 11px; font-weight: 700;
-    background: color-mix(in srgb, var(--dpf-warning) 16%, var(--dpf-surface-1));
-    color: var(--dpf-warning); border-radius: 999px; padding: 1px 8px;
-  }
-  .quest {
-    display: flex; gap: 9px; align-items: flex-start;
-    padding: 9px 10px; border: 1px solid var(--dpf-border); border-radius: var(--radius);
-    background: var(--dpf-surface-1); margin-bottom: 8px;
-    border-left-width: 3px;
-  }
-  .quest.warn { border-left-color: var(--dpf-warning); }
-  .quest.error { border-left-color: var(--dpf-error); }
-  .quest.info { border-left-color: var(--dpf-info); }
-  .quest .q-body { min-width: 0; flex: 1; }
+  /* HUD */
+  .hud { border-top: 1px solid var(--dpf-border); background: var(--dpf-surface-1); }
+  .hud-in { padding: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px 20px; align-items: start; }
+  .kpis { display: flex; gap: 10px; }
+  .kpi { flex: 1; background: var(--dpf-surface-2); border: 1px solid var(--dpf-border); border-radius: var(--radius); padding: 9px 11px; }
+  .kpi .k-val { font-family: var(--font-mono); font-weight: 700; font-size: 20px; }
+  .kpi .k-lbl { font-size: 10.5px; color: var(--dpf-muted); }
+  .hd { display: flex; align-items: center; justify-content: space-between; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dpf-muted); font-weight: 700; margin-bottom: 8px; }
+  .badge { font-family: var(--font-mono); font-size: 11px; font-weight: 700; background: color-mix(in srgb, var(--dpf-warning) 16%, var(--dpf-surface-1)); color: var(--dpf-warning); border-radius: 999px; padding: 1px 8px; }
+  .quest { display: flex; gap: 9px; align-items: flex-start; padding: 9px 10px; border: 1px solid var(--dpf-border); border-left-width: 3px; border-radius: var(--radius); margin-bottom: 8px; }
+  .quest.warn { border-left-color: var(--dpf-warning); } .quest.error { border-left-color: var(--dpf-error); } .quest.info { border-left-color: var(--dpf-info); }
+  .quest .q-body { flex: 1; min-width: 0; }
   .quest .q-title { font-weight: 600; font-size: 13px; }
   .quest .q-meta { font-size: 11px; color: var(--dpf-muted); margin-top: 2px; }
-  .quest .q-act {
-    flex: 0 0 auto; align-self: center; font: inherit; font-size: 12px; font-weight: 600;
-    color: #fff; background: var(--dpf-accent); border: none; border-radius: 7px;
-    padding: 5px 10px; cursor: pointer;
-  }
-  .quest .q-act:hover { filter: brightness(1.06); }
-  .quest.done { opacity: .5; }
-  .quest.done .q-act { background: var(--dpf-success); pointer-events: none; }
-
+  .quest .q-act { flex: 0 0 auto; align-self: center; font: inherit; font-size: 12px; font-weight: 600; color: #fff; background: var(--dpf-accent); border: none; border-radius: 7px; padding: 5px 10px; cursor: pointer; }
+  .quest.done { opacity: .5; } .quest.done .q-act { background: var(--dpf-success); pointer-events: none; }
   .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; }
   .legend .li { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--dpf-text-secondary); }
   .legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
-
-  .controls { border-top: 1px solid var(--dpf-border); padding: 11px 14px; display: flex; flex-direction: column; gap: 10px; }
-  .seg { display: inline-flex; background: var(--dpf-surface-2); border: 1px solid var(--dpf-border); border-radius: 8px; padding: 2px; }
-  .seg button {
-    font: inherit; font-size: 12px; color: var(--dpf-text-secondary); background: transparent;
-    border: none; border-radius: 6px; padding: 4px 10px; cursor: pointer;
-  }
-  .seg button[aria-pressed="true"] { background: var(--dpf-surface-1); color: var(--dpf-text); box-shadow: var(--shadow-1); font-weight: 600; }
+  .controls { display: flex; flex-direction: column; gap: 10px; }
   .ctl-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .ctl-row .lbl { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dpf-muted); font-weight: 600; }
-
-  .kpi-row { display: flex; gap: 10px; }
-  .kpi { flex: 1; background: var(--dpf-surface-2); border: 1px solid var(--dpf-border); border-radius: var(--radius); padding: 8px 10px; }
-  .kpi .k-val { font-family: var(--font-mono); font-weight: 700; font-size: 18px; }
-  .kpi .k-lbl { font-size: 10.5px; color: var(--dpf-muted); letter-spacing: 0.03em; }
-
-  .foot-note { font-size: 11px; color: var(--dpf-muted); padding: 9px 14px; border-top: 1px solid var(--dpf-border); }
-  .foot-note code { font-family: var(--font-mono); font-size: 10.5px; color: var(--dpf-text-secondary); }
+  .seg { display: inline-flex; background: var(--dpf-surface-2); border: 1px solid var(--dpf-border); border-radius: 8px; padding: 2px; }
+  .seg button { font: inherit; font-size: 12px; color: var(--dpf-text-secondary); background: transparent; border: none; border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--dpf-surface-1); color: var(--dpf-text); box-shadow: var(--shadow-1); font-weight: 600; }
+  .foot { font-size: 11px; color: var(--dpf-muted); padding: 10px 16px 18px; }
+  .foot code { font-family: var(--font-mono); font-size: 10.5px; color: var(--dpf-text-secondary); }
 
   @media (prefers-reduced-motion: reduce) {
     .ticker-move { animation: none; }
-    .station.active .avatar { animation: none; box-shadow: 0 0 0 3px var(--vs-glow); }
+    .rail .line::after { animation: none; }
+    .stage.active .avatar { animation: none; box-shadow: 0 0 0 4px var(--vs-glow); }
+    .unit.run { animation-duration: 0.01ms; }
   }
 </style>
 
 <div class="shell">
-  <!-- top bar -->
   <header class="topbar">
     <div class="brand">
       <div class="eyebrow">DPF Workspace</div>
@@ -301,48 +186,48 @@
       <span class="biz" id="bizName">Bella Nonna · Neighborhood Trattoria</span>
     </div>
     <div class="spacer"></div>
-    <label class="pill-select" title="Switch the archetype the board renders">
+    <label class="pill" title="Switch the archetype the board renders">
       <span class="eyebrow">Archetype</span>
       <select id="archetype" aria-label="Business archetype">
-        <option value="restaurant">Restaurant (food-hospitality)</option>
-        <option value="trades">Field service (trades-maintenance)</option>
-        <option value="saas">SaaS (software-platform)</option>
-        <option value="rental">Equipment rental (asset-rental)</option>
+        <option value="restaurant">Restaurant</option>
+        <option value="trades">Field service</option>
+        <option value="saas">SaaS</option>
+        <option value="rental">Equipment rental</option>
       </select>
     </label>
-    <button class="seg" id="themeToggle" style="cursor:pointer" aria-label="Toggle light or dark theme">
-      <span style="padding:4px 10px;font-size:12px">◐ Theme</span>
-    </button>
+    <button class="pill" id="themeToggle" aria-label="Toggle light or dark theme">◐ Theme</button>
   </header>
 
-  <!-- market weather ticker -->
   <div class="ticker" aria-label="Market highlights and competitive news">
     <span class="wx" id="wx">☀ Demand: strong</span>
     <div class="ticker-track"><div class="ticker-move" id="tickerMove"></div></div>
   </div>
 
-  <div class="main">
-  <!-- the board -->
-  <div class="board-wrap" id="boardWrap">
-    <canvas id="board"></canvas>
-    <div class="stations" id="stationLayer"></div>
-    <div class="band" id="band"></div>
-  </div>
+  <section class="board" aria-label="Operational value stream">
+    <div class="board-head">
+      <span class="lbl">The value stream</span>
+      <span class="sub" id="capUnit">flow of work · primary activities</span>
+      <span class="spacer"></span>
+      <span class="scroll-hint">↔ scroll the line</span>
+    </div>
+    <div class="stream" id="stream"></div>
+  </section>
 
-  <!-- HUD rail -->
+  <div class="band" id="band"></div>
+
   <aside class="hud">
-    <div class="hud-scroll">
-      <div class="kpi-row">
-        <div class="kpi"><div class="k-val tnum" id="kpiFlow">0</div><div class="k-lbl">in the stream</div></div>
-        <div class="kpi"><div class="k-val tnum" id="kpiToday">$0</div><div class="k-lbl">booked today</div></div>
+    <div class="hud-in">
+      <div>
+        <div class="kpis">
+          <div class="kpi"><div class="k-val tnum" id="kpiFlow">0</div><div class="k-lbl">in the stream</div></div>
+          <div class="kpi"><div class="k-val tnum" id="kpiToday">$0</div><div class="k-lbl">booked today</div></div>
+        </div>
       </div>
-
-      <section class="hud-sec">
+      <div>
         <div class="hd"><span>What needs you now</span><span class="badge" id="questCount">0</span></div>
         <div id="questList"></div>
-      </section>
-
-      <section class="hud-sec">
+      </div>
+      <div>
         <div class="hd"><span>Reading the board</span></div>
         <div class="legend">
           <div class="li"><span class="sw" style="background:var(--dpf-info)"></span>New demand</div>
@@ -352,40 +237,22 @@
           <div class="li"><span class="sw" style="background:var(--dpf-error)"></span>Exception</div>
           <div class="li"><span class="sw" style="border:1.5px solid var(--dpf-accent);background:transparent"></span>AI coworker</div>
         </div>
-      </section>
-    </div>
-
-    <div class="controls">
-      <div class="ctl-row">
-        <span class="lbl">Time</span>
-        <div class="seg" id="timeSeg" role="group" aria-label="Time mode">
-          <button data-mode="live" aria-pressed="true">● Live</button>
-          <button data-mode="replay" aria-pressed="false">Replay 24h</button>
-        </div>
-      </div>
-      <div class="ctl-row">
-        <span class="lbl">Speed</span>
-        <div class="seg" id="speedSeg" role="group" aria-label="Simulation speed">
-          <button data-sp="0.5" aria-pressed="false">0.5×</button>
-          <button data-sp="1" aria-pressed="true">1×</button>
-          <button data-sp="2" aria-pressed="false">2×</button>
-          <button data-sp="4" aria-pressed="false">4×</button>
-        </div>
-      </div>
-      <div class="ctl-row">
-        <span class="lbl">Zoom</span>
-        <div class="seg" id="zoomSeg" role="group" aria-label="Zoom level">
-          <button data-zoom="city" aria-pressed="true">City</button>
-          <button data-zoom="district" aria-pressed="false">District</button>
+        <div class="controls" style="margin-top:14px">
+          <div class="ctl-row"><span class="lbl">Speed</span>
+            <div class="seg" id="speedSeg" role="group" aria-label="Speed">
+              <button data-sp="0.5" aria-pressed="false">0.5×</button>
+              <button data-sp="1" aria-pressed="true">1×</button>
+              <button data-sp="2" aria-pressed="false">2×</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-    <div class="foot-note">
+    <div class="foot">
       Prototype. Binds to <code>deriveOperationalValueStream()</code>, <code>agent-event-bus</code>,
       the finance spine (<code>Bill</code>/<code>TaxRemittanceRun</code>) &amp; the Business Activity Simulator.
     </div>
   </aside>
-  </div><!-- /main -->
 </div>
 
 <script>
@@ -393,510 +260,247 @@
   "use strict";
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* ---------- archetype value streams (real OVSM backbone) ---------- */
-  // Primary stages are the canonical attract→capture→qualify→deliver→settle→retain
-  // backbone; labels/vernacular/metrics/coworkers are archetype-flavored.
   const ARCHETYPES = {
     restaurant: {
-      biz: "Bella Nonna · Neighborhood Trattoria",
-      capacityUnit: "covers", demand: "☀ Demand: strong (festival weekend)",
+      biz: "Bella Nonna · Neighborhood Trattoria", cap: "capacity: covers · demand: festival weekend",
+      demand: "☀ Demand: strong (festival weekend)", inc: 62, personas: ["Owner","Chef","Server"],
       stages: [
-        { key:"attract",  name:"Attract & Discover", vern:"Get noticed",   load:false, metric:["storefront-published","2 live promos"], worker:["MK","Marketing coworker"] },
-        { key:"capture",  name:"Capture Demand",     vern:"Take the booking", load:false, metric:["bookings","31 tonight"], worker:["RS","Reservations coworker"] },
-        { key:"qualify",  name:"Qualify & Schedule", vern:"Seat & sequence", load:true,  metric:["utilization","88% seated"], worker:["HS","Host coworker"] },
-        { key:"deliver",  name:"Deliver the Value",  vern:"Cook & serve",    load:true,  metric:["tickets","9 on the pass"], worker:["KO","Kitchen ops coworker"] },
-        { key:"settle",   name:"Settle & Account",   vern:"Bill & bank",     load:false, metric:["invoice","$4.1k today"], worker:["FN","Finance coworker"] },
-        { key:"retain",   name:"Retain & Grow",      vern:"Bring them back",  load:false, metric:["repeat-rate","42% regulars"], worker:["GR","Guest-relations coworker"] },
+        { key:"attract", name:"Attract & Discover", vern:"Get noticed",     load:false, mv:"2", ml:"live promos",  w:"MK", wn:"Marketing", persona:"Owner" },
+        { key:"capture", name:"Capture Demand",     vern:"Take the booking", load:false, mv:"31", ml:"booked tonight", w:"RS", wn:"Reservations", persona:"Server" },
+        { key:"qualify", name:"Qualify & Schedule", vern:"Seat & sequence",  load:true,  mv:"88%", ml:"seated",     w:"HS", wn:"Host", persona:"Server" },
+        { key:"deliver", name:"Deliver the Value",  vern:"Cook & serve",     load:true,  mv:"9", ml:"on the pass",  w:"KO", wn:"Kitchen ops", persona:"Chef" },
+        { key:"settle",  name:"Settle & Account",   vern:"Bill & bank",      load:false, mv:"$4.1k", ml:"today",    w:"FN", wn:"Finance", persona:"Owner" },
+        { key:"retain",  name:"Retain & Grow",      vern:"Bring them back",  load:false, mv:"42%", ml:"regulars",  w:"GR", wn:"Guest relations", persona:"Owner" },
       ],
-      personas: ["Owner","Chef","Server"],
       meters: [
-        { id:"bills", label:"Supplier bills due", kind:"warn", val:"$2,340", target:0.72, sub:"3 invoices · produce + linens" },
-        { id:"tax",   label:"Sales-tax remittance", kind:"warn", val:"in 4 days", target:0.6, sub:"State ST-1 · $1,190 accrued" },
-        { id:"comp",  label:"Trust & Compliance", kind:"ok",  val:"OK", target:0.18, sub:"Food-safety cert · renews 61d" },
-        { id:"impr",  label:"Operate & Improve", kind:"info", val:"3 ideas", target:0.4, sub:"Backlog throughput steady" },
+        { label:"Supplier bills due", kind:"warn", val:"$2,340", t:0.72, sub:"3 invoices · produce + linens" },
+        { label:"Sales-tax remittance", kind:"warn", val:"in 4 days", t:0.6, sub:"State ST-1 · $1,190 accrued" },
+        { label:"Trust & Compliance", kind:"ok", val:"OK", t:0.18, sub:"Food-safety cert · renews 61d" },
+        { label:"Operate & Improve", kind:"info", val:"3 ideas", t:0.4, sub:"Backlog throughput steady" },
       ],
-      market: [
-        ["☀","Old-Town Food Festival","Sat–Sun — foot traffic","up","+35% covers projected"],
-        ["◔","Competitor 'Trattoria Sud'","launched a $19 lunch prix-fixe","down","undercuts lunch by 15%"],
-        ["◆","Supplier price alert","olive oil +8% this week","down","margin watch on pasta menu"],
-        ["✦","Local paper","booked a Friday review slot","up","press coverage"],
+      market: [["☀","Old-Town Food Festival","Sat–Sun","up","+35% covers projected"],["◔","Competitor 'Trattoria Sud'","launched $19 lunch","down","undercuts lunch 15%"],["◆","Supplier alert","olive oil +8%","down","margin watch"],["✦","Local paper","Friday review slot","up","press coverage"]],
+      quests: [
+        { t:"Pay 3 supplier bills", m:"$2,340 · due Fri", k:"warn", a:"Review & pay" },
+        { t:"File sales-tax remittance", m:"State ST-1 · $1,190 · in 4 days", k:"warn", a:"Approve" },
+        { t:"Exception on table 14", m:"Kitchen flagged a comp — needs a call", k:"error", a:"Resolve" },
+        { t:"Festival staffing", m:"Marketing projects +35% covers Sat", k:"info", a:"Add shift" },
       ],
     },
     trades: {
-      biz: "Rapid Response Plumbing · Field Service",
-      capacityUnit: "job-slots", demand: "⛈ Demand: spiking (cold snap)",
+      biz: "Rapid Response Plumbing · Field Service", cap: "capacity: job-slots · demand: cold snap",
+      demand: "⛈ Demand: spiking (cold snap)", inc: 340, personas: ["Owner","Dispatcher","Tech"],
       stages: [
-        { key:"attract", name:"Attract & Discover", vern:"Be findable",   load:false, metric:["storefront-published","GMB + 2 ads"], worker:["MK","Marketing coworker"] },
-        { key:"capture", name:"Capture Demand",     vern:"Take the call",  load:true,  metric:["inbound","14 today"], worker:["IN","Intake coworker"] },
-        { key:"qualify", name:"Qualify & Schedule", vern:"Dispatch",       load:true,  metric:["lead-time","2.1h avg"], worker:["DS","Dispatch coworker"] },
-        { key:"deliver", name:"Deliver the Value",  vern:"On-site work",   load:true,  metric:["fulfilment","6 en-route"], worker:["FT","Field-tech coworker"] },
-        { key:"settle",  name:"Settle & Account",   vern:"Invoice & collect", load:false, metric:["invoice","$8.6k today"], worker:["FN","Finance coworker"] },
-        { key:"retain",  name:"Retain & Grow",      vern:"Service plans",  load:false, metric:["renewals","19 active"], worker:["AC","Accounts coworker"] },
+        { key:"attract", name:"Attract & Discover", vern:"Be findable",  load:false, mv:"GMB", ml:"+ 2 ads",   w:"MK", wn:"Marketing", persona:"Owner" },
+        { key:"capture", name:"Capture Demand",     vern:"Take the call", load:true,  mv:"14", ml:"calls today", w:"IN", wn:"Intake", persona:"Dispatcher" },
+        { key:"qualify", name:"Qualify & Schedule", vern:"Dispatch",      load:true,  mv:"2.1h", ml:"avg wait", w:"DS", wn:"Dispatch", persona:"Dispatcher" },
+        { key:"deliver", name:"Deliver the Value",  vern:"On-site work",  load:true,  mv:"6", ml:"en-route",   w:"FT", wn:"Field tech", persona:"Tech" },
+        { key:"settle",  name:"Settle & Account",   vern:"Invoice & collect", load:false, mv:"$8.6k", ml:"today", w:"FN", wn:"Finance", persona:"Owner" },
+        { key:"retain",  name:"Retain & Grow",      vern:"Service plans", load:false, mv:"19", ml:"active plans", w:"AC", wn:"Accounts", persona:"Owner" },
       ],
-      personas: ["Owner","Dispatcher","Tech"],
       meters: [
-        { id:"bills", label:"Supplier bills due", kind:"warn", val:"$5,120", target:0.8, sub:"Parts + fuel · 5 invoices" },
-        { id:"tax",   label:"Payroll-tax deposit", kind:"warn", val:"in 2 days", target:0.78, sub:"941 deposit · $3,400" },
-        { id:"comp",  label:"Trust & Compliance", kind:"warn", val:"1 lapsing", target:0.55, sub:"Van insurance renews 9d" },
-        { id:"impr",  label:"Operate & Improve", kind:"info", val:"5 ideas", target:0.5, sub:"Route-density experiment" },
+        { label:"Supplier bills due", kind:"warn", val:"$5,120", t:0.8, sub:"Parts + fuel · 5 invoices" },
+        { label:"Payroll-tax deposit", kind:"warn", val:"in 2 days", t:0.78, sub:"Form 941 · $3,400" },
+        { label:"Trust & Compliance", kind:"warn", val:"1 lapsing", t:0.55, sub:"Van insurance renews 9d" },
+        { label:"Operate & Improve", kind:"info", val:"5 ideas", t:0.5, sub:"Route-density experiment" },
       ],
-      market: [
-        ["⛈","Cold snap forecast","3-day freeze incoming","up","+50% emergency calls"],
-        ["◔","New competitor","'FlowFix' offering flat-rate","down","price pressure on drain jobs"],
-        ["◆","Copper price","+4% this month","down","re-quote open estimates"],
-        ["✦","Property-mgr RFP","12-building maintenance contract","up","pipeline opportunity"],
+      market: [["⛈","Cold snap forecast","3-day freeze","up","+50% emergency calls"],["◔","New competitor 'FlowFix'","flat-rate pricing","down","pressure on drains"],["◆","Copper price","+4% month","down","re-quote estimates"],["✦","Property-mgr RFP","12-building contract","up","pipeline"]],
+      quests: [
+        { t:"Payroll-tax deposit", m:"Form 941 · $3,400 · in 2 days", k:"warn", a:"Approve" },
+        { t:"Van insurance lapsing", m:"Renews in 9 days — compliance", k:"warn", a:"Renew" },
+        { t:"Emergency backlog", m:"Cold snap: 6 jobs unassigned", k:"error", a:"Dispatch" },
+        { t:"Property-mgr RFP", m:"12-building maintenance contract", k:"info", a:"Draft bid" },
       ],
     },
     saas: {
-      biz: "GridSignal · B2B Analytics SaaS",
-      capacityUnit: "seats", demand: "☀ Demand: steady (Q3 renewals)",
+      biz: "GridSignal · B2B Analytics SaaS", cap: "capacity: seats · demand: Q3 renewals",
+      demand: "☀ Demand: steady (Q3 renewals)", inc: 180, personas: ["Founder","PM","CSM"],
       stages: [
-        { key:"attract", name:"Attract & Discover", vern:"Content & SEO", load:false, metric:["storefront-published","8 posts live"], worker:["GR","Growth coworker"] },
-        { key:"capture", name:"Capture Demand",     vern:"Trials & demos", load:true,  metric:["capture-conversion","6.2% signup"], worker:["SD","SDR coworker"] },
-        { key:"qualify", name:"Qualify & Schedule", vern:"Qualify & onboard", load:false, metric:["lead-time","1.4d to value"], worker:["CS","Onboarding coworker"] },
-        { key:"deliver", name:"Deliver the Value",  vern:"Serve the product", load:true, metric:["fulfilment","99.95% uptime"], worker:["PL","Platform coworker"] },
-        { key:"settle",  name:"Settle & Account",   vern:"Bill subscriptions", load:true, metric:["invoice","$61k MRR"], worker:["FN","Billing coworker"] },
-        { key:"retain",  name:"Retain & Grow",      vern:"Renew & expand", load:true, metric:["renewals","94% net retention"], worker:["AM","Success coworker"] },
+        { key:"attract", name:"Attract & Discover", vern:"Content & SEO", load:false, mv:"8", ml:"posts live",   w:"GR", wn:"Growth", persona:"PM" },
+        { key:"capture", name:"Capture Demand",     vern:"Trials & demos", load:true,  mv:"6.2%", ml:"signup", w:"SD", wn:"SDR", persona:"CSM" },
+        { key:"qualify", name:"Qualify & Onboard",  vern:"Time to value",  load:false, mv:"1.4d", ml:"to value", w:"CS", wn:"Onboarding", persona:"CSM" },
+        { key:"deliver", name:"Deliver the Value",  vern:"Serve the product", load:true, mv:"99.95%", ml:"uptime", w:"PL", wn:"Platform", persona:"Founder" },
+        { key:"settle",  name:"Settle & Account",   vern:"Bill subscriptions", load:true, mv:"$61k", ml:"MRR", w:"FN", wn:"Billing", persona:"Founder" },
+        { key:"retain",  name:"Retain & Grow",      vern:"Renew & expand", load:true, mv:"94%", ml:"net retention", w:"AM", wn:"Success", persona:"CSM" },
       ],
-      personas: ["Founder","PM","CSM"],
       meters: [
-        { id:"bills", label:"Vendor bills due", kind:"warn", val:"$3,900", target:0.5, sub:"Cloud + tooling · 4 invoices" },
-        { id:"tax",   label:"Sales-tax nexus filing", kind:"warn", val:"in 6 days", target:0.45, sub:"3 states · $2,050" },
-        { id:"comp",  label:"Trust & Compliance", kind:"ok", val:"SOC2 OK", target:0.2, sub:"Next audit window 5mo" },
-        { id:"impr",  label:"Operate & Improve", kind:"info", val:"11 ideas", target:0.65, sub:"Backlog throughput high" },
+        { label:"Vendor bills due", kind:"warn", val:"$3,900", t:0.5, sub:"Cloud + tooling · 4 invoices" },
+        { label:"Sales-tax nexus filing", kind:"warn", val:"in 6 days", t:0.45, sub:"3 states · $2,050" },
+        { label:"Trust & Compliance", kind:"ok", val:"SOC2 OK", t:0.2, sub:"Next audit window 5mo" },
+        { label:"Operate & Improve", kind:"info", val:"11 ideas", t:0.65, sub:"Backlog throughput high" },
       ],
-      market: [
-        ["☀","Category tailwind","analyst names the space 'hot'","up","inbound +18%"],
-        ["◔","Competitor 'Metricly'","raised a Series B","down","will spend on ads"],
-        ["◆","Cloud pricing","egress fees rising","down","margin review on free tier"],
-        ["✦","G2 report","named High Performer","up","social proof for demos"],
+      market: [["☀","Category tailwind","analyst calls it 'hot'","up","inbound +18%"],["◔","Competitor 'Metricly'","raised Series B","down","ad spend incoming"],["◆","Cloud pricing","egress fees rising","down","margin review"],["✦","G2 report","named High Performer","up","social proof"]],
+      quests: [
+        { t:"Sales-tax nexus filing", m:"3 states · $2,050 · in 6 days", k:"warn", a:"Approve" },
+        { t:"Pay 4 vendor bills", m:"$3,900 · cloud + tooling", k:"warn", a:"Review & pay" },
+        { t:"At-risk renewal", m:"Acct 'Northwind' usage down 40%", k:"error", a:"Reach out" },
+        { t:"Expansion signal", m:"3 accounts hit seat limit", k:"info", a:"Offer upgrade" },
       ],
     },
     rental: {
-      biz: "PeakGear · Equipment Rental",
-      capacityUnit: "asset-days", demand: "☀ Demand: seasonal peak",
+      biz: "PeakGear · Equipment Rental", cap: "capacity: asset-days · demand: seasonal peak",
+      demand: "☀ Demand: seasonal peak", inc: 96, personas: ["Owner","Counter","Mechanic"],
       stages: [
-        { key:"attract", name:"Attract & Discover", vern:"List the fleet", load:false, metric:["storefront-published","catalog live"], worker:["MK","Marketing coworker"] },
-        { key:"capture", name:"Capture Demand",     vern:"Reserve",        load:true,  metric:["bookings","23 holds"], worker:["RS","Reservations coworker"] },
-        { key:"qualify", name:"Qualify & Schedule", vern:"Hand out",       load:false, metric:["utilization","81% out"], worker:["CT","Counter coworker"] },
-        { key:"deliver", name:"Deliver the Value",  vern:"In-use",         load:true,  metric:["fulfilment","64 on rent"], worker:["OP","Fleet-ops coworker"] },
-        { key:"return",  name:"Return & Inspect",   vern:"Return & inspect", load:true, metric:["turnaround","3.2h clean"], worker:["IN","Inspection coworker"] },
-        { key:"settle",  name:"Settle & Account",   vern:"Bill & deposit", load:false, metric:["invoice","$5.2k today"], worker:["FN","Finance coworker"] },
+        { key:"attract", name:"Attract & Discover", vern:"List the fleet", load:false, mv:"live", ml:"catalog",  w:"MK", wn:"Marketing", persona:"Owner" },
+        { key:"capture", name:"Capture Demand",     vern:"Reserve",        load:true,  mv:"23", ml:"holds",     w:"RS", wn:"Reservations", persona:"Counter" },
+        { key:"qualify", name:"Hand Out",           vern:"Check out asset", load:false, mv:"81%", ml:"out",     w:"CT", wn:"Counter", persona:"Counter" },
+        { key:"deliver", name:"Deliver (In-Use)",   vern:"On rent",        load:true,  mv:"64", ml:"on rent",   w:"OP", wn:"Fleet ops", persona:"Mechanic" },
+        { key:"return",  name:"Return & Inspect",   vern:"Return & clean", load:true,  mv:"3.2h", ml:"turnaround", w:"IN", wn:"Inspection", persona:"Mechanic" },
+        { key:"settle",  name:"Settle & Account",   vern:"Bill & deposit", load:false, mv:"$5.2k", ml:"today",  w:"FN", wn:"Finance", persona:"Owner" },
       ],
-      personas: ["Owner","Counter staff","Mechanic"],
       meters: [
-        { id:"bills", label:"Supplier bills due", kind:"warn", val:"$1,780", target:0.4, sub:"Maintenance parts · 2 invoices" },
-        { id:"tax",   label:"Sales-tax remittance", kind:"warn", val:"in 8 days", target:0.35, sub:"State ST-1 · $940" },
-        { id:"comp",  label:"Trust & Compliance", kind:"warn", val:"2 overdue", target:0.62, sub:"Overdue returns to chase" },
-        { id:"impr",  label:"Operate & Improve", kind:"info", val:"4 ideas", target:0.42, sub:"Utilization optimization" },
+        { label:"Supplier bills due", kind:"warn", val:"$1,780", t:0.4, sub:"Maintenance parts · 2 invoices" },
+        { label:"Sales-tax remittance", kind:"warn", val:"in 8 days", t:0.35, sub:"State ST-1 · $940" },
+        { label:"Trust & Compliance", kind:"warn", val:"2 overdue", t:0.62, sub:"Overdue returns to chase" },
+        { label:"Operate & Improve", kind:"info", val:"4 ideas", t:0.42, sub:"Utilization optimization" },
       ],
-      market: [
-        ["☀","Peak season","weekend bookings surge","up","+40% asset-days"],
-        ["◔","New rival yard","opened across town","down","watch weekday pricing"],
-        ["◆","Fuel & freight","delivery cost +6%","down","review delivery fee"],
-        ["✦","Contractor expo","booth confirmed","up","B2B lead source"],
+      market: [["☀","Peak season","weekend surge","up","+40% asset-days"],["◔","New rival yard","opened across town","down","weekday pricing"],["◆","Fuel & freight","delivery +6%","down","review delivery fee"],["✦","Contractor expo","booth confirmed","up","B2B leads"]],
+      quests: [
+        { t:"Chase overdue returns", m:"2 assets overdue — compliance", k:"error", a:"Contact" },
+        { t:"Pay maintenance bills", m:"$1,780 · parts · 2 invoices", k:"warn", a:"Review & pay" },
+        { t:"Sales-tax remittance", m:"State ST-1 · $940 · in 8 days", k:"warn", a:"Approve" },
+        { t:"Peak pricing", m:"Weekend demand +40% — adjust rates?", k:"info", a:"Set pricing" },
       ],
     },
   };
 
-  /* ---------- element refs ---------- */
-  const canvas = document.getElementById("board");
-  const ctx = canvas.getContext("2d");
-  const wrap = document.getElementById("boardWrap");
-  const stationLayer = document.getElementById("stationLayer");
-  const band = document.getElementById("band");
-  const tickerMove = document.getElementById("tickerMove");
-  const wxEl = document.getElementById("wx");
-  const questList = document.getElementById("questList");
-  const questCount = document.getElementById("questCount");
-  const kpiFlow = document.getElementById("kpiFlow");
-  const kpiToday = document.getElementById("kpiToday");
-  const bizName = document.getElementById("bizName");
+  const $ = id => document.getElementById(id);
+  const stream = $("stream"), band = $("band"), tickerMove = $("tickerMove"), wx = $("wx");
+  const questList = $("questList"), questCount = $("questCount");
+  const kpiFlow = $("kpiFlow"), kpiToday = $("kpiToday"), bizName = $("bizName"), capUnit = $("capUnit");
 
-  /* ---------- world state ---------- */
-  let cfg, stations, units = [], nodes = [], W = 0, H = 0, dpr = 1;
-  let speed = 1, timeMode = "live", zoom = "city";
-  let bookedToday = 0, spawnAcc = 0, lastTs = 0;
-  const UNIT_COLORS = {
-    demand: "--dpf-info", service: "--dpf-accent", attention: "--dpf-warning",
-    settled: "--dpf-success", exception: "--dpf-error",
-  };
-  // Canvas 2D cannot parse color-mix()/var(); our --vs-* tokens are color-mix
-  // expressions, so resolve each to a concrete rgb() via a probe element (the
-  // browser computes color-mix when it computes `color`). Without this the
-  // canvas silently falls back to black — invisible on the dark ground.
-  const _probe = document.createElement("span");
-  _probe.setAttribute("aria-hidden", "true");
-  _probe.style.cssText = "position:absolute;left:-9999px;top:-9999px;width:0;height:0;pointer-events:none";
-  document.body.appendChild(_probe);
-  const _colorCache = new Map();
-  function cssVar(v){
-    const raw = getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-    const themed = document.documentElement.getAttribute("data-theme") || "";
-    const key = v + "|" + themed + "|" + raw;
-    if (_colorCache.has(key)) return _colorCache.get(key);
-    _probe.style.color = "rgb(0,0,0)";
-    _probe.style.color = raw || "rgb(0,0,0)";
-    const resolved = getComputedStyle(_probe).color || raw || "#000";
-    _colorCache.set(key, resolved);
-    return resolved;
-  }
+  let cfg, curKey = "restaurant", speed = 1, rails = [], stageEls = [], inStream = 0, bookedToday = 0;
+  const STATES = ["demand","service","service","service","settled","settled","retain"];
 
-  /* ---------- layout ---------- */
-  function resize() {
-    dpr = Math.min(2, window.devicePixelRatio || 1);
-    const r = wrap.getBoundingClientRect();
-    W = r.width; H = r.height;
-    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    layoutNodes();
-    placeStations();
-  }
-  function layoutNodes() {
-    const n = stations.length;
-    const marginX = Math.max(90, W * 0.09);
-    const usable = W - marginX * 2;
-    const railY = H * 0.42;
-    nodes = stations.map((s, i) => {
-      const x = marginX + (usable * (n === 1 ? 0.5 : i / (n - 1)));
-      // gentle sine dip so the rail reads as a route, not a ruler
-      const y = railY + Math.sin(i / (n - 1) * Math.PI) * -Math.min(46, H * 0.06);
-      return { x, y, s };
+  function buildStream() {
+    stream.innerHTML = ""; rails = []; stageEls = [];
+    cfg.stages.forEach((s, i) => {
+      const st = document.createElement("div");
+      st.className = "stage" + (s.load ? " load" : "");
+      st.tabIndex = 0;
+      st.innerHTML =
+        `<div class="idx">S${i+1} · ${s.key.toUpperCase()}${s.load ? '<span class="load-tag">◆ load-bearing</span>' : ''}</div>` +
+        `<div class="name">${s.name}</div><div class="vern">“${s.vern}”</div>` +
+        `<div class="metric"><span class="v tnum">${s.mv}</span><span class="l">${s.ml}</span></div>` +
+        `<div class="worker"><span class="avatar">${s.w}</span><span class="act">idle</span></div>` +
+        `<div class="persona"><span class="seat"></span>${s.persona} + AI coworker</div>`;
+      st.querySelector(".name").title = s.wn + " coworker";
+      st.addEventListener("click", () => activate(i, "reviewing " + s.ml, 2400));
+      stream.appendChild(st);
+      stageEls.push(st);
+      if (i < cfg.stages.length - 1) {
+        const rail = document.createElement("div");
+        rail.className = "rail";
+        rail.innerHTML = `<div class="line"></div><div class="arrow">▶</div>`;
+        stream.appendChild(rail);
+        rails.push(rail);
+      }
     });
   }
-  function railPoint(t) {
-    // t in [0,1] across the whole rail (piecewise-linear between nodes, eased)
-    if (nodes.length < 2) return { x: nodes[0].x, y: nodes[0].y };
-    const seg = t * (nodes.length - 1);
-    const i = Math.min(nodes.length - 2, Math.floor(seg));
-    const f = seg - i;
-    const ef = f * f * (3 - 2 * f);
-    const a = nodes[i], b = nodes[i + 1];
-    return { x: a.x + (b.x - a.x) * ef, y: a.y + (b.y - a.y) * ef };
+
+  function activate(i, text, ms) {
+    const el = stageEls[i]; if (!el) return;
+    el.classList.add("active");
+    el.querySelector(".act").textContent = text;
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.classList.remove("active"); el.querySelector(".act").textContent = "idle"; }, ms);
+  }
+  const VERBS = { attract:"drafting a promo", capture:"logging the booking", qualify:"scheduling", deliver:"working the ticket", settle:"raising the invoice", retain:"nudging a regular", return:"inspecting the return" };
+
+  function journey() {
+    inStream++; updateKpis();
+    let exception = Math.random() < 0.06 ? (2 + Math.floor(Math.random() * 3)) : -1;
+    hop(0);
+    function hop(i) {
+      const s = cfg.stages[i];
+      activate(i, (s ? (s.wn + " · " + (VERBS[s.key] || "handling work")) : ""), 1600);
+      if (i >= rails.length) { // reached the end
+        inStream = Math.max(0, inStream - 1);
+        if (exception < 0) bookedToday += cfg.inc * (0.6 + Math.random() * 0.8);
+        updateKpis();
+        return;
+      }
+      const rail = rails[i];
+      const unit = document.createElement("span");
+      const state = (exception === i) ? "exception" : (STATES[i] || "service");
+      unit.className = "unit u-" + state + " run";
+      unit.style.animationDuration = (2.1 / speed) + "s";
+      rail.appendChild(unit);
+      let advanced = false;
+      const go = () => { if (advanced) return; advanced = true; unit.remove(); hop(i + 1); };
+      unit.addEventListener("animationend", go);
+      setTimeout(go, (2.1 / speed) * 1000 + 400); // fallback if animationend doesn't fire
+    }
   }
 
-  /* ---------- station cards ---------- */
-  function placeStations() {
-    stationLayer.querySelectorAll(".station,.support-tag").forEach(e => e.remove());
-    nodes.forEach((nd, i) => {
-      const s = nd.s;
-      const el = document.createElement("div");
-      el.className = "station" + (s.load ? " load" : "");
-      el.tabIndex = 0;
-      el.dataset.idx = i;
-      el.style.left = nd.x + "px";
-      el.style.top = (nd.y + 34) + "px";
-      el.innerHTML =
-        `<div class="st-idx">S${i+1} · ${s.key.toUpperCase()}</div>` +
-        `<div class="st-name">${s.name}</div>` +
-        `<div class="st-vern">“${s.vern}”</div>` +
-        `<div class="st-metric"><span class="v tnum">${s.metric[1].split(" ")[0]}</span>` +
-          `<span class="l">${s.metric[1].split(" ").slice(1).join(" ") || s.metric[0]}</span></div>` +
-        `<div class="worker"><span class="avatar">${s.worker[0]}</span><span class="act">idle</span></div>`;
-      el.addEventListener("click", () => flashStation(i));
-      stationLayer.appendChild(el);
-      nd.el = el;
-      nd.actEl = el.querySelector(".act");
-      s._active = false; s._actTimer = 0;
+  let spawnTimer = null;
+  function startSpawning() {
+    clearInterval(spawnTimer);
+    if (reduceMotion) { for (let i = 0; i < 4; i++) journeyStatic(); updateKpis(); return; }
+    spawnTimer = setInterval(() => { if (inStream < 14) journey(); }, 1400 / speed);
+    journey(); journey();
+  }
+  function journeyStatic() { // reduced-motion: place a few static units mid-rail
+    inStream++;
+    rails.forEach((rail, i) => {
+      if (Math.random() < 0.4) {
+        const u = document.createElement("span");
+        u.className = "unit u-" + (STATES[i] || "service");
+        u.style.left = (20 + Math.random() * 60) + "%";
+        rail.appendChild(u);
+      }
     });
-    // support-activity tags under the rail (Porter support / cross-cutting)
-    const tags = ["Trust & Compliance", "Operate & Improve", "Firm infrastructure · Finance · HR · Procurement"];
-    tags.forEach((t, i) => {
-      const el = document.createElement("div");
-      el.className = "support-tag";
-      el.textContent = t;
-      el.style.left = (W * (0.22 + i * 0.28)) + "px";
-      el.style.top = (H * 0.66) + "px";
-      stationLayer.appendChild(el);
-    });
   }
-  function flashStation(i) {
-    const nd = nodes[i]; if (!nd) return;
-    activateWorker(i, "reviewing " + nd.s.metric[0], 2600);
-  }
-  function activateWorker(i, text, ms) {
-    const nd = nodes[i]; if (!nd) return;
-    nd.s._active = true; nd.s._actTimer = ms / 1000;
-    nd.el.classList.add("active");
-    nd.actEl.textContent = text;
-  }
+  function updateKpis() { kpiFlow.textContent = inStream; kpiToday.textContent = "$" + Math.round(bookedToday).toLocaleString(); }
 
-  /* ---------- units ---------- */
-  let uid = 0;
-  function spawnUnit() {
-    const t = timeMode === "replay" ? Math.random() : 0;
-    units.push({ id: ++uid, t, state: "demand", speed: 0.045 + Math.random() * 0.03,
-                 dwell: 0, seg: 0, jitter: (Math.random() - 0.5) * 18 });
-  }
-  function stepUnits(dt) {
-    const reach = 1;
-    for (const u of units) {
-      if (u.dwell > 0) { u.dwell -= dt; continue; }
-      u.t += u.speed * dt * (0.6 + speed * 0.4);
-      const segNow = Math.floor(u.t * (nodes.length - 1) + 0.001);
-      if (segNow !== u.seg && segNow < nodes.length) {
-        u.seg = segNow;
-        // arrival at a station: coworker picks it up
-        const st = stations[segNow];
-        u.dwell = 0.35 + Math.random() * 0.5;
-        u.state = stateForSegment(segNow);
-        activateWorker(segNow, activityText(st, u), 1400 + Math.random() * 1400);
-        // occasional handoff arc to the next station
-        if (segNow < nodes.length - 1 && Math.random() < 0.5) queueHandoff(segNow, segNow + 1);
-        // occasional exception
-        if (Math.random() < 0.06) u.state = "exception";
-      }
-      if (u.t >= reach) {
-        if (u.state !== "exception") { bookedToday += bookIncrement(); }
-        u._done = true;
-      }
-    }
-    units = units.filter(u => !u._done);
-  }
-  function stateForSegment(seg) {
-    const last = nodes.length - 1;
-    if (seg >= last) return "settled";
-    if (seg >= last - 1) return "service";
-    if (seg <= 0) return "demand";
-    return "service";
-  }
-  function bookIncrement() {
-    return ({ restaurant: 62, trades: 340, saas: 180, rental: 96 }[curKey] || 100) * (0.6 + Math.random() * 0.8);
-  }
-  function activityText(st, u) {
-    const verbs = {
-      attract:"drafting a promo", capture:"logging the booking", qualify:"scheduling the slot",
-      deliver:"working the ticket", settle:"raising the invoice", retain:"nudging a regular",
-      return:"inspecting the return",
-    };
-    return (st.worker[1].split(" ")[0]) + " · " + (verbs[st.key] || "handling work");
-  }
-
-  /* ---------- handoff arcs ---------- */
-  let handoffs = [];
-  function queueHandoff(a, b) { handoffs.push({ a, b, t: 0 }); }
-  function stepHandoffs(dt) {
-    for (const h of handoffs) h.t += dt * 1.6;
-    handoffs = handoffs.filter(h => h.t < 1);
-  }
-
-  /* ---------- render ---------- */
-  let railDash = 0;
-  function draw(dt) {
-    ctx.clearRect(0, 0, W, H);
-    drawGround();
-    drawRail();
-    if (!reduceMotion) railDash = (railDash + dt * 46 * (0.5 + speed * 0.5)) % 22;
-    drawHandoffs();
-    drawNodes();
-    drawUnits();
-    if (zoom === "district") drawDistrictVeil();
-  }
-  function drawGround() {
-    const plot = cssVar("--vs-plot");
-    ctx.strokeStyle = plot; ctx.lineWidth = 1;
-    const step = 46;
-    ctx.beginPath();
-    for (let x = (W % step) / 2; x < W; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
-    for (let y = (H % step) / 2; y < H; y += step) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
-    ctx.stroke();
-  }
-  function railPath() {
-    ctx.beginPath();
-    const steps = 120;
-    for (let k = 0; k <= steps; k++) { const p = railPoint(k / steps); k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
-  }
-  function drawRail() {
-    // base rail
-    railPath();
-    ctx.strokeStyle = cssVar("--vs-rail"); ctx.lineWidth = 8; ctx.lineCap = "round";
-    ctx.stroke();
-    // traveling energy
-    railPath();
-    ctx.strokeStyle = cssVar("--vs-energy"); ctx.lineWidth = 3;
-    ctx.setLineDash([5, 17]); ctx.lineDashOffset = -railDash;
-    ctx.globalAlpha = 0.9; ctx.stroke();
-    ctx.setLineDash([]); ctx.globalAlpha = 1;
-  }
-  function drawHandoffs() {
-    for (const h of handoffs) {
-      const a = nodes[h.a], b = nodes[h.b]; if (!a || !b) continue;
-      const midx = (a.x + b.x) / 2, midy = Math.min(a.y, b.y) - 46;
-      const t = h.t;
-      const x = (1-t)*(1-t)*a.x + 2*(1-t)*t*midx + t*t*b.x;
-      const y = (1-t)*(1-t)*a.y + 2*(1-t)*t*midy + t*t*b.y;
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(midx, midy, x, y);
-      ctx.strokeStyle = cssVar("--vs-glow"); ctx.lineWidth = 2; ctx.stroke();
-      ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fillStyle = cssVar("--dpf-accent"); ctx.fill();
-    }
-  }
-  function drawNodes() {
-    for (const nd of nodes) {
-      const s = nd.s;
-      // station platform
-      ctx.beginPath(); ctx.arc(nd.x, nd.y, 15, 0, 7);
-      ctx.fillStyle = s.load ? cssVar("--vs-station-load") : cssVar("--vs-station");
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = s.load ? cssVar("--dpf-accent") : cssVar("--vs-rail");
-      ctx.stroke();
-      // active pulse ring
-      if (s._active && !reduceMotion) {
-        const p = (performance.now() % 1400) / 1400;
-        ctx.beginPath(); ctx.arc(nd.x, nd.y, 15 + p * 16, 0, 7);
-        ctx.strokeStyle = cssVar("--vs-glow"); ctx.lineWidth = 2 * (1 - p); ctx.stroke();
-      }
-      // persona seat (human) below the rail
-      ctx.beginPath(); ctx.arc(nd.x, nd.y + 22, 4, 0, 7);
-      ctx.fillStyle = cssVar("--dpf-muted"); ctx.globalAlpha = .6; ctx.fill(); ctx.globalAlpha = 1;
-    }
-  }
-  function drawUnits() {
-    for (const u of units) {
-      const p = railPoint(Math.min(1, u.t));
-      const y = p.y + (u.dwell > 0 ? 0 : Math.sin(u.t * 40) * 1.2) + u.jitter * 0.15;
-      const c = cssVar(UNIT_COLORS[u.state] || "--dpf-accent");
-      ctx.beginPath(); ctx.arc(p.x, y, 5.5, 0, 7);
-      ctx.fillStyle = c; ctx.fill();
-      ctx.globalAlpha = 0.25; ctx.beginPath(); ctx.arc(p.x, y, 9, 0, 7); ctx.fillStyle = c; ctx.fill(); ctx.globalAlpha = 1;
-    }
-  }
-  function drawDistrictVeil() {
-    // focus the load-bearing districts, dim the rest (Civ-like zoom)
-    ctx.fillStyle = cssVar("--dpf-bg");
-    ctx.globalAlpha = 0.55;
-    for (const nd of nodes) if (!nd.s.load) { ctx.fillRect(nd.x - 90, 0, 180, H); }
-    ctx.globalAlpha = 1;
-  }
-
-  /* ---------- loop ---------- */
-  function tick(ts) {
-    const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0); lastTs = ts;
-    const eff = dt * speed;
-    spawnAcc += eff;
-    const spawnEvery = timeMode === "replay" ? 0.18 : 0.55;
-    while (spawnAcc > spawnEvery) { spawnUnit(); spawnAcc -= spawnEvery; }
-    stepUnits(eff);
-    stepHandoffs(eff);
-    // decay worker activity
-    for (let i = 0; i < stations.length; i++) {
-      const s = stations[i];
-      if (s._active) { s._actTimer -= eff; if (s._actTimer <= 0) { s._active = false; nodes[i]?.el.classList.remove("active"); if (nodes[i]) nodes[i].actEl.textContent = "idle"; } }
-    }
-    draw(dt);
-    kpiFlow.textContent = units.length;
-    kpiToday.textContent = "$" + Math.round(bookedToday).toLocaleString();
-    raf = requestAnimationFrame(tick);
-  }
-  let raf = 0;
-
-  /* ---------- HUD: quests, meters, ticker ---------- */
-  let curKey = "restaurant";
   function renderMeters() {
     band.innerHTML = "";
     cfg.meters.forEach(m => {
       const el = document.createElement("div");
       el.className = "meter " + m.kind;
-      el.innerHTML =
-        `<div class="m-top"><span class="m-label">${m.label}</span><span class="m-val tnum">${m.val}</span></div>` +
-        `<div class="track"><div class="fill" style="width:${Math.round(m.target*100)}%"></div></div>` +
-        `<div class="m-sub">${m.sub}</div>`;
+      el.innerHTML = `<div class="m-top"><span class="m-label">${m.label}</span><span class="m-val tnum">${m.val}</span></div>` +
+        `<div class="track"><div class="fill" style="width:${Math.round(m.t*100)}%"></div></div><div class="m-sub">${m.sub}</div>`;
       band.appendChild(el);
     });
   }
-  const QUESTS = {
-    restaurant: [
-      { t:"Pay 3 supplier bills", m:"$2,340 · produce + linens due Fri", k:"warn", a:"Review & pay" },
-      { t:"File sales-tax remittance", m:"State ST-1 · $1,190 · due in 4 days", k:"warn", a:"Approve filing" },
-      { t:"Exception on table 14 ticket", m:"Kitchen flagged a comp — needs a call", k:"error", a:"Resolve" },
-      { t:"Festival staffing", m:"Marketing projects +35% covers Sat", k:"info", a:"Add shift" },
-    ],
-    trades: [
-      { t:"Payroll-tax deposit", m:"Form 941 · $3,400 · due in 2 days", k:"warn", a:"Approve" },
-      { t:"Van insurance lapsing", m:"Renews in 9 days — compliance", k:"warn", a:"Renew" },
-      { t:"Emergency backlog", m:"Cold snap: 6 jobs unassigned", k:"error", a:"Dispatch" },
-      { t:"Property-mgr RFP", m:"12-building maintenance contract", k:"info", a:"Draft bid" },
-    ],
-    saas: [
-      { t:"Sales-tax nexus filing", m:"3 states · $2,050 · due in 6 days", k:"warn", a:"Approve" },
-      { t:"Pay 4 vendor bills", m:"$3,900 · cloud + tooling", k:"warn", a:"Review & pay" },
-      { t:"At-risk renewal", m:"Acct 'Northwind' usage down 40%", k:"error", a:"Reach out" },
-      { t:"Expansion signal", m:"3 accounts hit seat limit", k:"info", a:"Offer upgrade" },
-    ],
-    rental: [
-      { t:"Chase overdue returns", m:"2 assets overdue — compliance", k:"error", a:"Contact" },
-      { t:"Pay maintenance bills", m:"$1,780 · parts · 2 invoices", k:"warn", a:"Review & pay" },
-      { t:"Sales-tax remittance", m:"State ST-1 · $940 · in 8 days", k:"warn", a:"Approve filing" },
-      { t:"Peak pricing", m:"Weekend demand +40% — adjust rates?", k:"info", a:"Set pricing" },
-    ],
-  };
   function renderQuests() {
-    questList.innerHTML = "";
-    const qs = QUESTS[curKey] || [];
-    let open = 0;
-    qs.forEach(q => {
+    questList.innerHTML = ""; let open = 0;
+    cfg.quests.forEach(q => {
       open++;
       const el = document.createElement("div");
       el.className = "quest " + q.k;
-      el.innerHTML =
-        `<div class="q-body"><div class="q-title">${q.t}</div><div class="q-meta">${q.m}</div></div>` +
-        `<button class="q-act">${q.a}</button>`;
+      el.innerHTML = `<div class="q-body"><div class="q-title">${q.t}</div><div class="q-meta">${q.m}</div></div><button class="q-act">${q.a}</button>`;
       const btn = el.querySelector(".q-act");
-      btn.addEventListener("click", () => {
-        if (el.classList.contains("done")) return;
-        el.classList.add("done"); btn.textContent = "✓ Done";
-        questCount.textContent = Math.max(0, +questCount.textContent - 1);
-      });
+      btn.addEventListener("click", () => { if (el.classList.contains("done")) return; el.classList.add("done"); btn.textContent = "✓ Done"; questCount.textContent = Math.max(0, +questCount.textContent - 1); });
       questList.appendChild(el);
     });
     questCount.textContent = open;
   }
   function renderTicker() {
-    wxEl.textContent = cfg.demand;
-    const items = cfg.market.map(([g,h,d,dir,note]) =>
-      `<span class="item"><span class="dot" style="background:var(--dpf-info)"></span>${g} <b>${h}</b> ${d} <span class="${dir}">${dir==="up"?"▲":"▼"} ${note}</span></span>`
-    ).join("");
-    tickerMove.innerHTML = items + items; // duplicated for seamless scroll
+    wx.textContent = cfg.demand;
+    const items = cfg.market.map(([g,h,d,dir,note]) => `<span class="item"><span class="dot"></span>${g} <b>${h}</b> ${d} <span class="${dir}">${dir==="up"?"▲":"▼"} ${note}</span></span>`).join("");
+    tickerMove.innerHTML = items + items;
   }
 
-  /* ---------- archetype switch ---------- */
   function load(key) {
-    curKey = key;
-    cfg = ARCHETYPES[key];
-    stations = cfg.stages;
-    units = []; bookedToday = 0; spawnAcc = 0;
-    bizName.textContent = cfg.biz;
-    resize();
-    renderMeters(); renderQuests(); renderTicker();
+    curKey = key; cfg = ARCHETYPES[key];
+    bizName.textContent = cfg.biz; capUnit.textContent = cfg.cap;
+    inStream = 0; bookedToday = 0;
+    buildStream(); renderMeters(); renderQuests(); renderTicker(); updateKpis();
+    startSpawning();
   }
 
-  /* ---------- controls ---------- */
-  document.getElementById("archetype").addEventListener("change", e => load(e.target.value));
-  document.getElementById("themeToggle").addEventListener("click", () => {
-    const cur = document.documentElement.getAttribute("data-theme")
-      || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  $("archetype").addEventListener("change", e => load(e.target.value));
+  $("themeToggle").addEventListener("click", () => {
+    const cur = document.documentElement.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     document.documentElement.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
   });
-  function wireSeg(id, apply) {
-    const seg = document.getElementById(id);
-    seg.addEventListener("click", e => {
-      const b = e.target.closest("button"); if (!b) return;
-      seg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
-      apply(b.dataset);
-    });
-  }
-  wireSeg("speedSeg", d => speed = parseFloat(d.sp));
-  wireSeg("timeSeg", d => { timeMode = d.mode; units = []; spawnAcc = 0; });
-  wireSeg("zoomSeg", d => zoom = d.zoom);
+  const speedSeg = $("speedSeg");
+  speedSeg.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    speedSeg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    speed = parseFloat(b.dataset.sp); startSpawning();
+  });
 
-  /* ---------- boot ---------- */
-  window.addEventListener("resize", () => { clearTimeout(window._rt); window._rt = setTimeout(resize, 120); });
   load("restaurant");
-  // re-measure once the viewer has settled its final size (some embed frames
-  // report a 0px board on the first synchronous paint).
-  requestAnimationFrame(() => { resize(); requestAnimationFrame(resize); });
-  setTimeout(resize, 300);
-  raf = requestAnimationFrame(tick);
 })();
 </script>
