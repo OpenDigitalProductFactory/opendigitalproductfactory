@@ -1,9 +1,10 @@
-<title>The Living Business - restaurant operational floor</title>
+<title>The Living Business - restaurant operational floor (interactive)</title>
 <style>
-  /* DPF tokens (globals.css). Both themes. STATIC-FIRST: renders + animates
-     with CSS alone (no JS needed). Glyphs are numeric entities (charset-safe).
-     This is the OPERATIONAL FLOOR lens - a literal digital twin of the
-     restaurant - complementary to the value-stream lens. */
+  /* DPF tokens (globals.css). Both themes. STATIC-FIRST: the floor renders +
+     animates with CSS alone (no JS). Interactivity (seat a waiting party, host
+     suggestions from dwell time) is PROGRESSIVE ENHANCEMENT - it activates only
+     if scripts run; the static floor still shows if they don't. Glyphs are
+     numeric entities (charset-safe). */
   :root{
     --dpf-bg:#fafafa;--dpf-surface-1:#ffffff;--dpf-surface-2:#f4f4f6;--dpf-surface-3:#eeeef2;
     --dpf-text:#1a1a2e;--dpf-text-secondary:#4a4a5e;--dpf-accent:#2563eb;--dpf-border:#d4d4dc;
@@ -40,19 +41,23 @@
   .lens a{font-size:12px;color:var(--dpf-muted);text-decoration:none;padding:4px 11px;border-radius:999px;}
   .lens a.on{background:var(--dpf-surface-1);color:var(--dpf-text);font-weight:600;box-shadow:var(--sh);}
 
-  /* live capacity chips - the actual constraints */
   .caps{display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px;background:var(--dpf-surface-1);border-bottom:1px solid var(--dpf-border);}
   .cap{display:flex;align-items:baseline;gap:6px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:999px;padding:4px 12px;}
   .cap .cv{font-family:var(--font-mono);font-weight:700;font-size:14px;} .cap .cl{font-size:10.5px;color:var(--dpf-muted);text-transform:uppercase;letter-spacing:.04em;}
   .cap.hot .cv{color:var(--dpf-warning);} .cap.good .cv{color:var(--dpf-success);}
 
+  /* seating-mode banner + toast (JS) */
+  .banner{display:none;align-items:center;gap:10px;padding:9px 16px;background:color-mix(in srgb,var(--dpf-accent) 12%,var(--dpf-surface-1));border-bottom:1px solid var(--dpf-border);font-size:13px;}
+  .banner.on{display:flex;} .banner b{font-weight:700;} .banner .x{margin-left:auto;cursor:pointer;color:var(--dpf-muted);font-size:12px;}
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--dpf-text);color:var(--dpf-bg);font-size:13px;font-weight:600;padding:9px 16px;border-radius:999px;box-shadow:var(--sh2);opacity:0;pointer-events:none;transition:opacity .25s;z-index:50;}
+  .toast.on{opacity:1;}
+
   .floor{padding:12px;background:var(--floor);display:flex;flex-direction:column;gap:12px;}
   .zone{background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-radius:var(--radius);box-shadow:var(--sh);}
-  .zone > .zh{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--dpf-border);}
+  .zone > .zh{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--dpf-border);flex-wrap:wrap;}
   .zone .zt{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;}
   .zone .zsub{font-size:11px;color:var(--dpf-muted);}
 
-  /* KITCHEN - the pass */
   .kitchen .stations{display:flex;gap:8px;flex-wrap:wrap;padding:10px 12px 4px;}
   .station{flex:1 1 96px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:8px;padding:7px 9px;min-width:96px;}
   .station .sn{font-size:11px;font-weight:600;display:flex;align-items:center;gap:6px;}
@@ -64,19 +69,15 @@
   @keyframes cook{0%{width:12%}55%{width:88%}100%{width:12%}}
   @keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
   .pass{display:flex;gap:8px;overflow-x:auto;padding:8px 12px 12px;}
-  .ticket{flex:0 0 auto;min-width:120px;background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-left:3px solid var(--dpf-accent);border-radius:8px;padding:7px 9px;}
-  .ticket.online{border-left-color:var(--dpf-info);}
-  .ticket.late{border-left-color:var(--dpf-warning);}
+  .ticket{flex:0 0 auto;min-width:118px;background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-left:3px solid var(--dpf-accent);border-radius:8px;padding:7px 9px;}
+  .ticket.online{border-left-color:var(--dpf-info);} .ticket.late{border-left-color:var(--dpf-warning);}
   .ticket .tt{font-size:11px;font-weight:600;display:flex;justify-content:space-between;gap:8px;}
   .ticket .web{font-family:var(--font-mono);font-size:8.5px;color:var(--dpf-info);border:1px solid color-mix(in srgb,var(--dpf-info) 45%,var(--dpf-border));border-radius:4px;padding:0 4px;}
   .ticket .ti{font-size:10px;color:var(--dpf-muted);margin-top:2px;}
   .ticket .tp{margin-top:5px;height:4px;border-radius:999px;background:var(--dpf-surface-3);overflow:hidden;}
   .ticket .tp i{display:block;height:100%;background:var(--dpf-accent);animation:cook 2.6s ease-in-out infinite;}
   .ticket.online .tp i{background:var(--dpf-info);} .ticket.late .tp i{background:var(--dpf-warning);}
-  .inflow{display:flex;align-items:center;gap:7px;padding:0 12px 10px;font-size:11px;color:var(--dpf-muted);}
-  .inflow .badge{font-family:var(--font-mono);font-weight:700;color:var(--dpf-info);background:color-mix(in srgb,var(--dpf-info) 12%,var(--dpf-surface-1));border-radius:999px;padding:1px 9px;animation:blink 2s ease-in-out infinite;}
 
-  /* AISLE - staff moving to and fro between kitchen and floor */
   .aisle{position:relative;height:44px;background:repeating-linear-gradient(90deg,var(--wood) 0 22px,color-mix(in srgb,var(--dpf-warning) 6%,var(--dpf-surface-1)) 22px 44px);border:1px solid var(--dpf-border);border-radius:var(--radius);overflow:hidden;}
   .aisle .albl{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dpf-muted);z-index:2;background:color-mix(in srgb,var(--dpf-surface-1) 72%,transparent);padding:2px 6px;border-radius:6px;}
   .mover{position:absolute;top:50%;margin-top:-11px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:8px;font-weight:700;color:#fff;background:var(--dpf-accent);box-shadow:var(--sh);}
@@ -86,55 +87,63 @@
   .m3{animation:tofro 6s ease-in-out infinite;animation-delay:-3s;} .m4{animation:tofro 11s ease-in-out infinite reverse;animation-delay:-1s;}
   @keyframes tofro{0%{left:4%}50%{left:92%}100%{left:4%}}
 
-  /* DINING ROOM - tables with real seats + states */
-  .dining .tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(94px,1fr));gap:10px;padding:12px;}
-  .table{border:1.5px solid var(--dpf-border);border-radius:9px;background:var(--dpf-surface-1);padding:6px;display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .dining .tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;padding:12px;}
+  .table{border:1.5px solid var(--dpf-border);border-radius:9px;background:var(--dpf-surface-1);padding:6px;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;transition:transform .12s, box-shadow .12s, border-color .12s;}
   .table .srow{display:flex;gap:4px;justify-content:center;}
   .seat{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--dpf-border-strong);background:transparent;}
   .seat.on{background:var(--dpf-accent);border-color:var(--dpf-accent);}
   .table .body{display:flex;flex-direction:column;align-items:center;gap:2px;width:100%;}
   .table .tn{font-family:var(--font-mono);font-weight:700;font-size:13px;}
   .table .cap{font-size:9px;color:var(--dpf-muted);text-transform:uppercase;letter-spacing:.06em;}
-  .table .course{width:78%;height:4px;border-radius:999px;background:var(--dpf-surface-3);overflow:hidden;}
-  .table .course i{display:block;height:100%;background:var(--dpf-accent);}
   .table .st{font-size:9px;font-weight:600;}
   .table.free{border-style:dashed;} .table.free .tn,.table.free .st{color:var(--dpf-muted);}
   .table.reserved{border-color:color-mix(in srgb,var(--dpf-info) 55%,var(--dpf-border));} .table.reserved .st{color:var(--dpf-info);} .table.reserved .seat.on{background:var(--dpf-info);border-color:var(--dpf-info);}
   .table.seated{border-color:color-mix(in srgb,var(--dpf-accent) 55%,var(--dpf-border));} .table.seated .st{color:var(--dpf-accent);}
-  .table.check{border-color:color-mix(in srgb,var(--dpf-success) 55%,var(--dpf-border));} .table.check .st{color:var(--dpf-success);} .table.check .seat.on{background:var(--dpf-success);border-color:var(--dpf-success);} .table.check .course i{background:var(--dpf-success);}
+  .table.check{border-color:color-mix(in srgb,var(--dpf-success) 55%,var(--dpf-border));} .table.check .st{color:var(--dpf-success);} .table.check .seat.on{background:var(--dpf-success);border-color:var(--dpf-success);}
   .table.bussing{border-color:color-mix(in srgb,var(--dpf-warning) 55%,var(--dpf-border));} .table.bussing .st{color:var(--dpf-warning);} .table.bussing .seat.on{background:var(--dpf-warning);border-color:var(--dpf-warning);}
+  .table .eta{position:absolute;top:4px;right:5px;font-family:var(--font-mono);font-size:8px;color:var(--dpf-muted);}
+  /* interactive states (JS) */
+  .table.pickable{cursor:pointer;border-color:var(--dpf-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--dpf-accent) 25%,transparent);}
+  .table.pickable:hover{transform:translateY(-2px);box-shadow:var(--sh2);}
+  .table.suggest{cursor:pointer;border-color:var(--dpf-success);box-shadow:0 0 0 2px color-mix(in srgb,var(--dpf-success) 35%,transparent);animation:sug 1.3s ease-in-out infinite;}
+  .table.clearable{cursor:pointer;} .table.clearable:hover{border-color:var(--dpf-warning);}
+  @keyframes sug{0%,100%{box-shadow:0 0 0 2px color-mix(in srgb,var(--dpf-success) 35%,transparent);}50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--dpf-success) 0%,transparent);}}
+  .table .flag{position:absolute;top:-7px;left:50%;transform:translateX(-50%);font-size:8px;font-weight:700;background:var(--dpf-success);color:#fff;border-radius:5px;padding:0 5px;white-space:nowrap;}
 
-  /* LOBBY - people waiting for tables */
   .lobby .parties{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;}
-  .party{flex:0 0 auto;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:999px;padding:5px 11px;display:flex;align-items:center;gap:8px;}
+  .party{flex:0 0 auto;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:12px;padding:6px 11px;display:flex;flex-direction:column;gap:4px;min-width:150px;}
+  .party.clickable{cursor:pointer;} .party.clickable:hover{border-color:var(--dpf-accent);}
+  .party.sel{border-color:var(--dpf-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--dpf-accent) 30%,transparent);}
+  .party .prow{display:flex;align-items:center;gap:8px;}
   .party .heads{display:flex;gap:2px;} .party .h{width:8px;height:8px;border-radius:50%;background:var(--dpf-text-secondary);}
-  .party .pn{font-size:11px;font-weight:600;} .party .pw{font-family:var(--font-mono);font-size:10.5px;color:var(--dpf-muted);}
+  .party .pn{font-size:12px;font-weight:600;} .party .pw{font-family:var(--font-mono);font-size:10.5px;color:var(--dpf-muted);margin-left:auto;}
   .party.long .pw{color:var(--dpf-warning);font-weight:700;}
+  .party .sug{font-size:10px;color:var(--dpf-success);font-weight:600;display:flex;align-items:center;gap:4px;}
+  .party .sug.wait{color:var(--dpf-warning);}
+  .cog{font-size:9px;}
 
-  /* PANELS row */
+  .resv .rlist{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;}
+  .resv .r{flex:0 0 auto;min-width:160px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:10px;padding:7px 10px;}
+  .resv .r .rt{font-size:12px;font-weight:600;display:flex;justify-content:space-between;gap:8px;}
+  .resv .r .rtime{font-family:var(--font-mono);color:var(--dpf-muted);font-size:11px;}
+  .resv .r .rs{font-size:10px;color:var(--dpf-success);font-weight:600;margin-top:3px;}
+
   .panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;padding:0 12px 12px;}
   .panel{background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-radius:var(--radius);box-shadow:var(--sh);padding:10px 12px;}
   .panel .ph{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;margin-bottom:9px;display:flex;justify-content:space-between;}
-  .row{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
-  .row .rl{flex:1;min-width:0;font-size:11.5px;color:var(--dpf-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .row .bar{flex:0 0 70px;height:6px;border-radius:999px;background:var(--dpf-surface-3);overflow:hidden;}
-  .row .bar i{display:block;height:100%;border-radius:999px;background:var(--dpf-success);}
-  .row.low .bar i{background:var(--dpf-warning);} .row.out .bar i{background:var(--dpf-error);width:100%;}
-  .row .rv{font-family:var(--font-mono);font-size:11px;color:var(--dpf-muted);min-width:44px;text-align:right;}
+  .prowm{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+  .prowm .rl{flex:1;min-width:0;font-size:11.5px;color:var(--dpf-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .prowm .bar{flex:0 0 70px;height:6px;border-radius:999px;background:var(--dpf-surface-3);overflow:hidden;}
+  .prowm .bar i{display:block;height:100%;border-radius:999px;background:var(--dpf-success);}
+  .prowm.low .bar i{background:var(--dpf-warning);} .prowm.out .bar i{background:var(--dpf-error);width:100%;}
+  .prowm .rv{font-family:var(--font-mono);font-size:11px;color:var(--dpf-muted);min-width:44px;text-align:right;}
   .tag86{font-family:var(--font-mono);font-size:9px;font-weight:700;color:var(--dpf-error);border:1px solid color-mix(in srgb,var(--dpf-error) 45%,var(--dpf-border));border-radius:4px;padding:0 4px;}
 
-  .hud{border-top:1px solid var(--dpf-border);background:var(--dpf-surface-1);padding:12px 16px 18px;}
-  .hud .hd{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;margin-bottom:9px;}
-  .need{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;border:1px solid var(--dpf-border);border-left-width:3px;border-radius:var(--radius);margin-bottom:8px;max-width:640px;}
-  .need.warn{border-left-color:var(--dpf-warning);} .need.error{border-left-color:var(--dpf-error);} .need.info{border-left-color:var(--dpf-info);}
-  .need .nb{flex:1;} .need .nt{font-weight:600;font-size:13px;} .need .nm{font-size:11px;color:var(--dpf-muted);margin-top:2px;}
-  .need .na{flex:0 0 auto;align-self:center;font-size:12px;font-weight:600;color:#fff;background:var(--dpf-accent);border:none;border-radius:7px;padding:5px 10px;cursor:pointer;}
-  .legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;}
-  .legend .li{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dpf-text-secondary);} .legend .sw{width:10px;height:10px;border-radius:3px;}
   .foot{font-size:11px;color:var(--dpf-muted);padding:0 16px 20px;} .foot code{font-family:var(--font-mono);font-size:10.5px;color:var(--dpf-text-secondary);}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:0 16px 12px;} .legend .li{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dpf-text-secondary);} .legend .sw{width:10px;height:10px;border-radius:3px;}
 
   @media (prefers-reduced-motion: reduce){
-    .mover,.station .load i,.ticket .tp i,.station.busy .sd,.inflow .badge{animation:none;}
+    .mover,.station .load i,.ticket .tp i,.station.busy .sd,.table.suggest{animation:none;}
     .mover.m1{left:20%;} .mover.m2{left:55%;} .mover.m3{left:40%;} .mover.m4{left:72%;}
   }
 </style>
@@ -144,19 +153,44 @@
     <div class="brand"><span class="eyebrow">DPF Workspace</span><h1>The Living Business</h1><span class="biz">Bella Nonna &#183; Friday dinner service, 7:42pm</span></div>
     <div class="spacer"></div>
     <span class="lens"><a href="#" class="">Value stream</a><a href="#" class="on">Floor</a></span>
+    <button class="pill" id="seatNext">&#9654; Seat next party</button>
     <button class="pill" id="themeToggle" aria-label="Toggle theme">&#9680; Theme</button>
   </header>
 
-  <div class="caps">
-    <div class="cap hot"><span class="cv tnum">14/18</span><span class="cl">tables seated</span></div>
-    <div class="cap hot"><span class="cv tnum">52/62</span><span class="cl">seats filled</span></div>
-    <div class="cap"><span class="cv tnum">6</span><span class="cl">parties waiting</span></div>
+  <div class="caps" id="caps">
+    <div class="cap hot"><span class="cv tnum" id="capTables">14/18</span><span class="cl">tables seated</span></div>
+    <div class="cap hot"><span class="cv tnum" id="capSeats">52/62</span><span class="cl">seats filled</span></div>
+    <div class="cap"><span class="cv tnum" id="capWait">6</span><span class="cl">parties waiting</span></div>
+    <div class="cap"><span class="cv tnum" id="capSix">0/3</span><span class="cl">six-tops free</span></div>
     <div class="cap"><span class="cv tnum">9</span><span class="cl">tickets on the pass</span></div>
-    <div class="cap"><span class="cv tnum">4</span><span class="cl">online orders</span></div>
     <div class="cap good"><span class="cv tnum">18m</span><span class="cl">avg ticket time</span></div>
   </div>
 
+  <div class="banner" id="banner"><span id="bannerText"></span><span class="x" id="bannerX">cancel (Esc)</span></div>
+
   <div class="floor">
+    <!-- WAITLIST + RESERVATIONS first: the interactive part -->
+    <div class="zone lobby">
+      <div class="zh"><span class="zt">Entrance &#183; waitlist</span><span class="zsub" id="lobbySub">6 parties &#183; tap a party, then a highlighted table</span></div>
+      <div class="parties" id="waitlist">
+        <div class="party long" data-name="Rossi" data-size="2"><div class="prow"><span class="pn">Rossi</span><span class="heads"><span class="h"></span><span class="h"></span></span><span class="pw">28m</span></div><div class="sug">&#9881; suggest &#8212;</div></div>
+        <div class="party" data-name="Chen" data-size="4"><div class="prow"><span class="pn">Chen</span><span class="heads"><span class="h"></span><span class="h"></span><span class="h"></span><span class="h"></span></span><span class="pw">14m</span></div><div class="sug">&#9881; suggest &#8212;</div></div>
+        <div class="party" data-name="Walk-in" data-size="2"><div class="prow"><span class="pn">Walk-in</span><span class="heads"><span class="h"></span><span class="h"></span></span><span class="pw">9m</span></div><div class="sug">&#9881; suggest &#8212;</div></div>
+        <div class="party long" data-name="Okafor" data-size="6"><div class="prow"><span class="pn">Okafor</span><span class="heads"><span class="h"></span><span class="h"></span><span class="h"></span><span class="h"></span><span class="h"></span><span class="h"></span></span><span class="pw">31m</span></div><div class="sug">&#9881; suggest &#8212;</div></div>
+        <div class="party" data-name="Patel" data-size="2"><div class="prow"><span class="pn">Patel</span><span class="heads"><span class="h"></span><span class="h"></span></span><span class="pw">6m</span></div><div class="sug">&#9881; suggest &#8212;</div></div>
+        <div class="party" data-name="Nguyen" data-size="3"><div class="prow"><span class="pn">Nguyen</span><span class="heads"><span class="h"></span><span class="h"></span><span class="h"></span></span><span class="pw">3m</span></div><div class="sug">&#9881; suggest &#8212;</div></div>
+      </div>
+    </div>
+
+    <div class="zone resv">
+      <div class="zh"><span class="zt">Reservations &#183; upcoming</span><span class="zsub">host cog suggests a table from typical staying time</span></div>
+      <div class="rlist" id="resv">
+        <div class="r" data-name="Bianchi" data-size="4" data-time="8:00"><div class="rt"><span>Bianchi &#215;4</span><span class="rtime">8:00</span></div><div class="rs">&#9881; hold &#8212;</div></div>
+        <div class="r" data-name="Kim" data-size="2" data-time="8:15"><div class="rt"><span>Kim &#215;2</span><span class="rtime">8:15</span></div><div class="rs">&#9881; hold &#8212;</div></div>
+        <div class="r" data-name="Alvarez" data-size="6" data-time="8:30"><div class="rt"><span>Alvarez &#215;6</span><span class="rtime">8:30</span></div><div class="rs">&#9881; hold &#8212;</div></div>
+      </div>
+    </div>
+
     <!-- KITCHEN -->
     <div class="zone kitchen">
       <div class="zh"><span class="zt">Kitchen &#183; the pass</span><span class="zsub">4 stations &#183; dine-in + online</span></div>
@@ -167,109 +201,215 @@
         <div class="station"><div class="sn"><span class="sd"></span>Expo</div><div class="load"><i style="width:30%"></i></div></div>
       </div>
       <div class="pass">
-        <div class="ticket"><div class="tt"><span>Table 12</span></div><div class="ti">2&#215; carbonara, 1&#215; branzino</div><div class="tp"><i style="width:60%"></i></div></div>
+        <div class="ticket"><div class="tt"><span>Table 12</span></div><div class="ti">2&#215; carbonara, branzino</div><div class="tp"><i style="width:60%"></i></div></div>
         <div class="ticket late"><div class="tt"><span>Table 14</span></div><div class="ti">running long &#183; 22m</div><div class="tp"><i style="width:90%"></i></div></div>
         <div class="ticket online"><div class="tt"><span>Delivery</span><span class="web">ONLINE</span></div><div class="ti">Ravioli, tiramisu</div><div class="tp"><i style="width:40%"></i></div></div>
         <div class="ticket"><div class="tt"><span>Table 7</span></div><div class="ti">Margherita, salad</div><div class="tp"><i style="width:25%"></i></div></div>
         <div class="ticket online"><div class="tt"><span>Pickup</span><span class="web">ONLINE</span></div><div class="ti">2&#215; lasagna</div><div class="tp"><i style="width:15%"></i></div></div>
       </div>
-      <div class="inflow"><span class="badge">+2</span> new online orders just dropped &#183; routed to the pass alongside dine-in</div>
     </div>
 
-    <!-- AISLE: staff moving to and fro -->
     <div class="aisle" aria-label="Staff on the floor">
       <span class="albl">Floor &#183; 4 servers, 2 runners + AI expo</span>
-      <span class="mover m1">S1</span>
-      <span class="mover m2">R1<span class="plate"></span></span>
-      <span class="mover ai m3">AI</span>
-      <span class="mover m4">S2<span class="plate"></span></span>
+      <span class="mover m1">S1</span><span class="mover m2">R1<span class="plate"></span></span>
+      <span class="mover ai m3">AI</span><span class="mover m4">S2<span class="plate"></span></span>
     </div>
 
-    <!-- DINING ROOM: tables + seats + states -->
+    <!-- DINING ROOM: tables carry data-* so JS can seat/clear/suggest -->
     <div class="zone dining">
-      <div class="zh"><span class="zt">Dining room</span><span class="zsub">18 tables &#183; 62 covers &#183; parties 2&#8211;6</span></div>
-      <div class="tables">
-        <div class="table seated"><div class="srow"><span class="seat on"></span></div><div class="body"><span class="tn">1</span><span class="cap">2-top</span><div class="course"><i style="width:35%"></i></div><span class="st">Mains</span></div><div class="srow"><span class="seat on"></span></div></div>
-        <div class="table check"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">2</span><span class="cap">4-top</span><div class="course"><i style="width:95%"></i></div><span class="st">Check</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span></div></div>
-        <div class="table seated"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">3</span><span class="cap">4-top</span><div class="course"><i style="width:55%"></i></div><span class="st">Mains</span></div><div class="srow"><span class="seat on"></span><span class="seat"></span></div></div>
-        <div class="table free"><div class="srow"><span class="seat"></span></div><div class="body"><span class="tn">4</span><span class="cap">2-top</span><span class="st">Open</span></div><div class="srow"><span class="seat"></span></div></div>
-        <div class="table seated"><div class="srow"><span class="seat on"></span><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">5</span><span class="cap">6-top</span><div class="course"><i style="width:20%"></i></div><span class="st">Apps</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span><span class="seat on"></span></div></div>
-        <div class="table bussing"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">6</span><span class="cap">4-top</span><span class="st">Bussing</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span></div></div>
-        <div class="table seated"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">7</span><span class="cap">4-top</span><div class="course"><i style="width:15%"></i></div><span class="st">Ordered</span></div><div class="srow"><span class="seat on"></span><span class="seat"></span></div></div>
-        <div class="table reserved"><div class="srow"><span class="seat"></span></div><div class="body"><span class="tn">8</span><span class="cap">2-top</span><span class="st">8:00pm</span></div><div class="srow"><span class="seat"></span></div></div>
-        <div class="table seated"><div class="srow"><span class="seat on"></span></div><div class="body"><span class="tn">9</span><span class="cap">2-top</span><div class="course"><i style="width:70%"></i></div><span class="st">Dessert</span></div><div class="srow"><span class="seat on"></span></div></div>
-        <div class="table seated"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">10</span><span class="cap">4-top</span><div class="course"><i style="width:45%"></i></div><span class="st">Mains</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span></div></div>
-        <div class="table seated"><div class="srow"><span class="seat on"></span><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">11</span><span class="cap">6-top</span><div class="course"><i style="width:60%"></i></div><span class="st">Mains</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span><span class="seat"></span></div></div>
-        <div class="table seated"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">12</span><span class="cap">4-top</span><div class="course"><i style="width:40%"></i></div><span class="st">Fired</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span></div></div>
-        <div class="table free"><div class="srow"><span class="seat"></span><span class="seat"></span></div><div class="body"><span class="tn">13</span><span class="cap">4-top</span><span class="st">Open</span></div><div class="srow"><span class="seat"></span><span class="seat"></span></div></div>
-        <div class="table seated"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">14</span><span class="cap">4-top</span><div class="course"><i style="width:80%"></i></div><span class="st">Waiting food</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span></div></div>
+      <div class="zh"><span class="zt">Dining room</span><span class="zsub">18 tables &#183; 62 covers &#183; parties 2&#8211;6 &#183; tap check/bussing tables to clear</span></div>
+      <div class="tables" id="tables">
+        <div class="table seated" data-id="1" data-size="2" data-state="seated" data-filled="2" data-remain="18"><div class="srow"><span class="seat on"></span></div><div class="body"><span class="tn">1</span><span class="cap">2-top</span><span class="st">Mains</span></div><div class="srow"><span class="seat on"></span></div></div>
+        <div class="table check" data-id="2" data-size="4" data-state="check" data-filled="4" data-remain="4"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">2</span><span class="cap">4-top</span><span class="st">Check</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span></div></div>
+        <div class="table seated" data-id="3" data-size="4" data-state="seated" data-filled="3" data-remain="20"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">3</span><span class="cap">4-top</span><span class="st">Mains</span></div><div class="srow"><span class="seat on"></span><span class="seat"></span></div></div>
+        <div class="table free" data-id="4" data-size="2" data-state="free" data-filled="0" data-remain="0"><div class="srow"><span class="seat"></span></div><div class="body"><span class="tn">4</span><span class="cap">2-top</span><span class="st">Open</span></div><div class="srow"><span class="seat"></span></div></div>
+        <div class="table seated" data-id="5" data-size="6" data-state="seated" data-filled="6" data-remain="35"><div class="srow"><span class="seat on"></span><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">5</span><span class="cap">6-top</span><span class="st">Apps</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span><span class="seat on"></span></div></div>
+        <div class="table bussing" data-id="6" data-size="4" data-state="bussing" data-filled="0" data-remain="2"><div class="srow"><span class="seat"></span><span class="seat"></span></div><div class="body"><span class="tn">6</span><span class="cap">4-top</span><span class="st">Bussing</span></div><div class="srow"><span class="seat"></span><span class="seat"></span></div></div>
+        <div class="table seated" data-id="7" data-size="4" data-state="seated" data-filled="3" data-remain="40"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">7</span><span class="cap">4-top</span><span class="st">Ordered</span></div><div class="srow"><span class="seat on"></span><span class="seat"></span></div></div>
+        <div class="table reserved" data-id="8" data-size="2" data-state="reserved" data-filled="0" data-remain="0"><div class="srow"><span class="seat"></span></div><div class="body"><span class="tn">8</span><span class="cap">2-top</span><span class="st">8:00pm</span></div><div class="srow"><span class="seat"></span></div></div>
+        <div class="table seated" data-id="9" data-size="2" data-state="seated" data-filled="2" data-remain="10"><div class="srow"><span class="seat on"></span></div><div class="body"><span class="tn">9</span><span class="cap">2-top</span><span class="st">Dessert</span></div><div class="srow"><span class="seat on"></span></div></div>
+        <div class="table seated" data-id="10" data-size="4" data-state="seated" data-filled="4" data-remain="24"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">10</span><span class="cap">4-top</span><span class="st">Mains</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span></div></div>
+        <div class="table seated" data-id="11" data-size="6" data-state="seated" data-filled="5" data-remain="30"><div class="srow"><span class="seat on"></span><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">11</span><span class="cap">6-top</span><span class="st">Mains</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span><span class="seat"></span></div></div>
+        <div class="table seated" data-id="12" data-size="4" data-state="seated" data-filled="4" data-remain="38"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">12</span><span class="cap">4-top</span><span class="st">Fired</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span></div></div>
+        <div class="table free" data-id="13" data-size="4" data-state="free" data-filled="0" data-remain="0"><div class="srow"><span class="seat"></span><span class="seat"></span></div><div class="body"><span class="tn">13</span><span class="cap">4-top</span><span class="st">Open</span></div><div class="srow"><span class="seat"></span><span class="seat"></span></div></div>
+        <div class="table seated" data-id="14" data-size="4" data-state="seated" data-filled="4" data-remain="26"><div class="srow"><span class="seat on"></span><span class="seat on"></span></div><div class="body"><span class="tn">14</span><span class="cap">4-top</span><span class="st">Waiting food</span></div><div class="srow"><span class="seat on"></span><span class="seat on"></span></div></div>
       </div>
     </div>
 
-    <!-- LOBBY: people waiting for tables -->
-    <div class="zone lobby">
-      <div class="zh"><span class="zt">Entrance &#183; waitlist</span><span class="zsub">6 parties &#183; quoting ~25m</span></div>
-      <div class="parties">
-        <div class="party long"><span class="pn">Rossi</span><span class="heads"><span class="h"></span><span class="h"></span></span><span class="pw">waited 28m</span></div>
-        <div class="party"><span class="pn">Chen</span><span class="heads"><span class="h"></span><span class="h"></span><span class="h"></span><span class="h"></span></span><span class="pw">14m</span></div>
-        <div class="party"><span class="pn">Walk-in</span><span class="heads"><span class="h"></span><span class="h"></span></span><span class="pw">9m</span></div>
-        <div class="party long"><span class="pn">Okafor</span><span class="heads"><span class="h"></span><span class="h"></span><span class="h"></span><span class="h"></span><span class="h"></span><span class="h"></span></span><span class="pw">31m &#183; needs 6-top</span></div>
-        <div class="party"><span class="pn">Patel</span><span class="heads"><span class="h"></span><span class="h"></span></span><span class="pw">6m</span></div>
-        <div class="party"><span class="pn">Nguyen</span><span class="heads"><span class="h"></span><span class="h"></span><span class="h"></span></span><span class="pw">3m</span></div>
-      </div>
-    </div>
-
-    <!-- PANELS: capacity + kitchen load + stock -->
     <div class="panels">
       <div class="panel">
-        <div class="ph"><span>Seating capacity</span><span>84% full</span></div>
-        <div class="row"><span class="rl">Tables in use</span><span class="bar"><i style="width:78%;background:var(--dpf-warning)"></i></span><span class="rv">14/18</span></div>
-        <div class="row"><span class="rl">Seats filled</span><span class="bar"><i style="width:84%;background:var(--dpf-warning)"></i></span><span class="rv">52/62</span></div>
-        <div class="row"><span class="rl">6-tops available</span><span class="bar"><i style="width:0%"></i></span><span class="rv">0/3</span></div>
-        <div class="row"><span class="rl">Turning next</span><span class="bar"><i style="width:95%;background:var(--dpf-success)"></i></span><span class="rv">T2, T6</span></div>
+        <div class="ph"><span>Seating capacity</span><span id="capPct">84% full</span></div>
+        <div class="prowm"><span class="rl">Tables in use</span><span class="bar"><i id="barTables" style="width:78%;background:var(--dpf-warning)"></i></span><span class="rv" id="rvTables">14/18</span></div>
+        <div class="prowm"><span class="rl">Seats filled</span><span class="bar"><i id="barSeats" style="width:84%;background:var(--dpf-warning)"></i></span><span class="rv" id="rvSeats">52/62</span></div>
+        <div class="prowm"><span class="rl">Six-tops free</span><span class="bar"><i id="barSix" style="width:0%"></i></span><span class="rv" id="rvSix">0/3</span></div>
       </div>
       <div class="panel">
         <div class="ph"><span>Kitchen load</span><span>9 on the pass</span></div>
-        <div class="row"><span class="rl">Grill</span><span class="bar"><i style="width:70%"></i></span><span class="rv">3 tix</span></div>
-        <div class="row low"><span class="rl">Pasta</span><span class="bar"><i style="width:82%"></i></span><span class="rv">4 tix</span></div>
-        <div class="row"><span class="rl">Saut&#233;</span><span class="bar"><i style="width:55%"></i></span><span class="rv">2 tix</span></div>
-        <div class="row"><span class="rl">Online queue</span><span class="bar"><i style="width:60%;background:var(--dpf-info)"></i></span><span class="rv">4</span></div>
+        <div class="prowm"><span class="rl">Grill</span><span class="bar"><i style="width:70%"></i></span><span class="rv">3 tix</span></div>
+        <div class="prowm low"><span class="rl">Pasta</span><span class="bar"><i style="width:82%"></i></span><span class="rv">4 tix</span></div>
+        <div class="prowm"><span class="rl">Online queue</span><span class="bar"><i style="width:60%;background:var(--dpf-info)"></i></span><span class="rv">4</span></div>
       </div>
       <div class="panel">
         <div class="ph"><span>Stock &#183; 86 board</span><span>2 limited</span></div>
-        <div class="row low"><span class="rl">Branzino</span><span class="bar"><i style="width:18%"></i></span><span class="rv">2 left</span></div>
-        <div class="row"><span class="rl">Burrata</span><span class="bar"><i style="width:64%"></i></span><span class="rv">OK</span></div>
-        <div class="row low"><span class="rl">Short rib</span><span class="bar"><i style="width:22%"></i></span><span class="rv">3 left</span></div>
-        <div class="row out"><span class="rl">Truffle app <span class="tag86">86</span></span><span class="bar"><i></i></span><span class="rv">out</span></div>
+        <div class="prowm low"><span class="rl">Branzino</span><span class="bar"><i style="width:18%"></i></span><span class="rv">2 left</span></div>
+        <div class="prowm low"><span class="rl">Short rib</span><span class="bar"><i style="width:22%"></i></span><span class="rv">3 left</span></div>
+        <div class="prowm out"><span class="rl">Truffle app <span class="tag86">86</span></span><span class="bar"><i></i></span><span class="rv">out</span></div>
       </div>
     </div>
   </div>
 
-  <div class="hud">
-    <div class="hd">What needs you now</div>
-    <div class="need error"><div class="nb"><div class="nt">Okafor party of 6 has waited 31m</div><div class="nm">No 6-top open &#183; T5 &amp; T11 are 6-tops mid-meal &#183; combine T12+T13?</div></div><button class="na">Seat plan</button></div>
-    <div class="need warn"><div class="nb"><div class="nt">Table 14 kitchen ticket running long (22m)</div><div class="nm">Guests waiting on food &#183; expo flagged it</div></div><button class="na">Expedite</button></div>
-    <div class="need warn"><div class="nb"><div class="nt">86 the truffle app, low on branzino (2)</div><div class="nm">Update the menu + tell servers before next order round</div></div><button class="na">Update menu</button></div>
-    <div class="legend">
-      <span class="li"><span class="sw" style="background:var(--dpf-accent)"></span>Seated / dining</span>
-      <span class="li"><span class="sw" style="background:var(--dpf-info)"></span>Reserved</span>
-      <span class="li"><span class="sw" style="background:var(--dpf-success)"></span>Check / turning</span>
-      <span class="li"><span class="sw" style="background:var(--dpf-warning)"></span>Bussing / attention</span>
-      <span class="li"><span class="sw" style="border:1.5px dashed var(--dpf-border-strong)"></span>Open</span>
-    </div>
+  <div class="legend">
+    <span class="li"><span class="sw" style="background:var(--dpf-accent)"></span>Seated / dining</span>
+    <span class="li"><span class="sw" style="background:var(--dpf-info)"></span>Reserved</span>
+    <span class="li"><span class="sw" style="background:var(--dpf-success)"></span>Check / turning</span>
+    <span class="li"><span class="sw" style="background:var(--dpf-warning)"></span>Bussing</span>
+    <span class="li"><span class="sw" style="border:1.5px dashed var(--dpf-border-strong)"></span>Open</span>
   </div>
-
   <div class="foot">
-    Operational-floor lens (a digital twin), complementary to the value-stream lens. Binds to a light per-archetype
-    floor/capacity model (tables/seats/stations) layered on real data: <code>schedulingDefaults</code> + reservations
-    (waitlist), <code>itemTemplates</code> + inventory (stock / 86), orders (dine-in + online tickets),
-    roster + <code>agent-event-bus</code> (staff &amp; AI coworkers), fed by the Business Activity Simulator.
+    Operational-floor lens (digital twin). <b>Interactive</b> (needs JavaScript): tap a waiting party &#8594; the host <b>cog</b>
+    suggests a table from typical staying time (open now, or which table turns soonest &amp; when) &#8594; tap a highlighted table to seat them;
+    tap a Check/Bussing table to clear it. Binds to a per-archetype floor/capacity model on real
+    <code>schedulingDefaults</code>/reservations/<code>itemTemplates</code>/inventory/orders/roster data.
   </div>
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
-/* Optional: theme toggle only. The floor renders fully without JavaScript. */
-(() => { "use strict"; const b=document.getElementById("themeToggle"); if(!b) return;
-  b.addEventListener("click",()=>{const c=document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",c==="dark"?"light":"dark");});
+(() => {
+  "use strict";
+  const $=id=>document.getElementById(id), $$=s=>Array.prototype.slice.call(document.querySelectorAll(s));
+  // typical staying time (minutes) once a party is seated, by party size
+  const DWELL={2:45,3:55,4:65,5:80,6:90};
+  const CAP_TOTAL_TABLES=18, CAP_TOTAL_SEATS=62, CAP_TOTAL_SIX=3;
+  let sel=null; // selected waiting party element
+
+  const tables=()=>$$("#tables .table");
+  const num=(el,a)=>parseInt(el.dataset[a],10)||0;
+
+  function fmtEta(m){ if(m<=0) return "now"; if(m<60) return "~"+m+"m"; return "~"+(m/60).toFixed(1)+"h"; }
+
+  // host cog: best table for a party of `size`. Prefer an OPEN table that fits
+  // with least wasted seats; else the OCCUPIED table that frees soonest (dwell).
+  function suggest(size){
+    let openBest=null, soon=null;
+    tables().forEach(t=>{
+      const st=t.dataset.state, cap=num(t,"size");
+      if(cap<size) return;
+      if(st==="free"){ if(!openBest||cap<num(openBest,"size")||(cap===num(openBest,"size")&&num(t,"id")<num(openBest,"id"))) openBest=t; }
+      else if(st!=="reserved"){ const r=num(t,"remain"); if(!soon||r<num(soon,"remain")) soon=t; }
+    });
+    if(openBest) return {table:openBest, eta:0, open:true};
+    if(soon) return {table:soon, eta:num(soon,"remain"), open:false};
+    return null;
+  }
+
+  function refreshSuggestions(){
+    $$("#waitlist .party").forEach(p=>{
+      const size=num(p,"size"), s=suggest(size), el=p.querySelector(".sug");
+      if(!el) return;
+      if(!s){ el.className="sug wait"; el.innerHTML='&#9881; no table fits '+size; return; }
+      if(s.open){ el.className="sug"; el.innerHTML='&#9881; seat at T'+s.table.dataset.id+' now'; }
+      else { el.className="sug wait"; el.innerHTML='&#9881; T'+s.table.dataset.id+' frees '+fmtEta(s.eta); }
+    });
+    $$("#resv .r").forEach(r=>{
+      const size=num(r,"size"), s=suggest(size), el=r.querySelector(".rs");
+      if(!el) return;
+      if(s&&s.open) el.innerHTML='&#9881; hold T'+s.table.dataset.id+' for '+r.dataset.time;
+      else if(s) el.innerHTML='&#9881; T'+s.table.dataset.id+' should free by '+r.dataset.time;
+      else el.innerHTML='&#9881; combine tables for '+size;
+    });
+  }
+
+  function setSeats(t,filled){
+    const seats=t.querySelectorAll(".seat"); seats.forEach((s,i)=>s.classList.toggle("on", i<filled));
+  }
+  function setTableState(t,state,filled,remain,label){
+    t.className="table "+state; t.dataset.state=state; t.dataset.filled=filled; t.dataset.remain=remain;
+    setSeats(t,filled); const st=t.querySelector(".st"); if(st) st.textContent=label;
+    let eta=t.querySelector(".eta");
+    if(state!=="free"&&state!=="reserved"&&remain>0){ if(!eta){eta=document.createElement("span");eta.className="eta";t.appendChild(eta);} eta.textContent=fmtEta(remain); }
+    else if(eta){ eta.remove(); }
+  }
+
+  function updateCaps(){
+    let inUse=0, seats=0, sixFree=0;
+    tables().forEach(t=>{ const st=t.dataset.state; if(st!=="free"&&st!=="reserved"){inUse++; seats+=num(t,"filled");} if(st==="free"&&num(t,"size")>=6) sixFree++; });
+    const waiting=$$("#waitlist .party").length;
+    $("capTables").textContent=inUse+"/"+CAP_TOTAL_TABLES; $("capSeats").textContent=seats+"/"+CAP_TOTAL_SEATS;
+    $("capWait").textContent=waiting; $("capSix").textContent=sixFree+"/"+CAP_TOTAL_SIX;
+    $("rvTables").textContent=inUse+"/"+CAP_TOTAL_TABLES; $("rvSeats").textContent=seats+"/"+CAP_TOTAL_SEATS; $("rvSix").textContent=sixFree+"/"+CAP_TOTAL_SIX;
+    const tp=Math.round(inUse/CAP_TOTAL_TABLES*100), sp=Math.round(seats/CAP_TOTAL_SEATS*100);
+    $("barTables").style.width=tp+"%"; $("barSeats").style.width=sp+"%"; $("barSix").style.width=Math.round(sixFree/CAP_TOTAL_SIX*100)+"%";
+    $("capPct").textContent=sp+"% full";
+    $("barTables").style.background=tp>75?"var(--dpf-warning)":"var(--dpf-success)";
+    $("barSeats").style.background=sp>75?"var(--dpf-warning)":"var(--dpf-success)";
+    $("lobbySub").textContent=waiting+" parties - tap a party, then a highlighted table";
+  }
+
+  let toastT=null;
+  function toast(msg){ const el=$("toast"); el.innerHTML=msg; el.classList.add("on"); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove("on"),2600); }
+
+  function clearSelection(){
+    if(sel) sel.classList.remove("sel"); sel=null;
+    $("banner").classList.remove("on");
+    tables().forEach(t=>{ t.classList.remove("pickable","suggest"); const f=t.querySelector(".flag"); if(f) f.remove(); });
+  }
+
+  function selectParty(p){
+    if(sel===p){ clearSelection(); return; }
+    clearSelection(); sel=p; p.classList.add("sel");
+    const size=num(p,"size"), name=p.dataset.name, s=suggest(size);
+    tables().forEach(t=>{ if(t.dataset.state==="free"&&num(t,"size")>=size) t.classList.add("pickable"); });
+    let msg="Seating <b>"+name+"</b> (party of "+size+") &#8212; tap a highlighted table.";
+    if(s&&s.open){ s.table.classList.remove("pickable"); s.table.classList.add("suggest"); const fl=document.createElement("span"); fl.className="flag"; fl.textContent="suggested"; s.table.appendChild(fl); msg+=" Cog suggests <b>T"+s.table.dataset.id+"</b>."; }
+    else if(s){ msg+=" No open table fits &#8212; <b>T"+s.table.dataset.id+"</b> frees "+fmtEta(s.eta)+" (or combine tables)."; }
+    else { msg+=" No single table fits &#8212; combine two."; }
+    $("bannerText").innerHTML=msg; $("banner").classList.add("on");
+  }
+
+  function seatAt(t){
+    if(!sel) return;
+    const size=num(sel,"size"), name=sel.dataset.name;
+    if(t.dataset.state!=="free"||num(t,"size")<size) return;
+    setTableState(t,"seated",size,DWELL[size]||60,"Just seated");
+    sel.remove(); clearSelection(); updateCaps(); refreshSuggestions();
+    toast("Seated "+name+" (party of "+size+") at Table "+t.dataset.id);
+  }
+
+  function clearTable(t){
+    const st=t.dataset.state;
+    if(st!=="check"&&st!=="bussing") return;
+    if(st==="check"){ setTableState(t,"bussing",0,2,"Bussing"); toast("Table "+t.dataset.id+" paid &#8212; bussing"); }
+    else { setTableState(t,"free",0,0,"Open"); toast("Table "+t.dataset.id+" cleared &#8212; now open"); }
+    updateCaps(); refreshSuggestions();
+  }
+
+  // wire waitlist
+  $$("#waitlist .party").forEach(p=>{ p.classList.add("clickable"); p.addEventListener("click",()=>selectParty(p)); });
+  // wire tables (seat when a party is selected + pickable; else clear if check/bussing)
+  tables().forEach(t=>{
+    t.addEventListener("click",()=>{ if(sel){ if(t.classList.contains("pickable")) seatAt(t); } else { clearTable(t); } });
+  });
+  $$("#tables .table").forEach(t=>{ if(t.dataset.state==="check"||t.dataset.state==="bussing") t.classList.add("clearable"); });
+  // reservations: tapping holds the suggested open table
+  $$("#resv .r").forEach(r=>{ r.style.cursor="pointer"; r.addEventListener("click",()=>{
+    const size=num(r,"size"), s=suggest(size);
+    if(s&&s.open){ setTableState(s.table,"reserved",0,0,r.dataset.time); s.table.querySelector(".cap"); updateCaps(); refreshSuggestions(); toast("Held Table "+s.table.dataset.id+" for "+r.dataset.name+" ("+r.dataset.time+")"); }
+    else toast("No open table to hold for "+r.dataset.name+" &#8212; will free by "+r.dataset.time);
+  }); });
+
+  $("seatNext").addEventListener("click",()=>{
+    // seat the longest-waiting party whose cog suggests an OPEN table
+    const parties=$$("#waitlist .party");
+    let best=null,bw=-1;
+    parties.forEach(p=>{ const s=suggest(num(p,"size")); if(s&&s.open){ const w=parseInt((p.querySelector(".pw").textContent||"0"),10)||0; if(w>bw){bw=w;best=p;} } });
+    if(!best){ toast("No party can be seated now &#8212; waiting on a table to free"); return; }
+    selectParty(best); const s=suggest(num(best,"size")); seatAt(s.table);
+  });
+  $("bannerX").addEventListener("click",clearSelection);
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape") clearSelection(); });
+  $("themeToggle").addEventListener("click",()=>{const c=document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",c==="dark"?"light":"dark");});
+
+  refreshSuggestions(); updateCaps();
 })();
 </script>
