@@ -2696,21 +2696,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
     buildPhases: ["ideate", "plan"],
   },
-  // ─── Version Tracking Tools ────────────────────────────────────────────────
-  {
-    name: "query_version_history",
-    description: "List product versions with their git tags, ship dates, change counts, and promotion status. Optionally filter by digital product ID.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        digitalProductId: { type: "string", description: "Filter by product (optional — returns all if omitted)" },
-        limit: { type: "number", description: "Max results (default 20)" },
-      },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
   // ─── Design Intelligence Tools (UI UX Pro Max) ────────────────────────────
   {
     name: "search_design_intelligence",
@@ -2771,68 +2756,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       properties: {
         version: { type: "string", description: "Version to read (default: latest or deployed)" },
       },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
-  // ─── Production Read-Only Tools (git-based) ────────────────────────────────
-  {
-    name: "read_source_at_version",
-    description: "Read a file from the codebase at a specific version tag. Uses git history — works in production without source code. Default version: DEPLOYED_VERSION or HEAD.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Relative file path" },
-        version: { type: "string", description: "Git tag or ref (default: deployed version)" },
-      },
-      required: ["path"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
-  {
-    name: "search_source_at_version",
-    description: "Search the codebase at a specific version for a text pattern. Uses git grep — works in production without source code.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "Text or regex pattern to search" },
-        version: { type: "string", description: "Git tag or ref (default: deployed version)" },
-        glob: { type: "string", description: "File glob filter (e.g., '*.ts')" },
-        maxResults: { type: "number", description: "Max results (default 20)" },
-      },
-      required: ["query"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
-  {
-    name: "list_source_directory",
-    description: "List directory contents at a specific version. Uses git ls-tree — works in production without source code.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Directory path (default: root)" },
-        version: { type: "string", description: "Git tag or ref (default: deployed version)" },
-      },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
-  {
-    name: "compare_versions",
-    description: "Show what changed between two versions — files modified, commit log. Uses git diff.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        from: { type: "string", description: "Starting version tag (e.g., 'v1.0.0')" },
-        to: { type: "string", description: "Ending version tag (default: HEAD)" },
-      },
-      required: ["from"],
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -11238,45 +11161,6 @@ export async function executeTool(
       return { success: true, message: summary, data: { results: result.results } };
     }
 
-    case "query_version_history": {
-      const limit = typeof params.limit === "number" ? Math.min(params.limit, 50) : 20;
-      const where = typeof params.digitalProductId === "string"
-        ? { digitalProductId: params.digitalProductId }
-        : {};
-
-      const versions = await prisma.productVersion.findMany({
-        where,
-        orderBy: { shippedAt: "desc" },
-        take: limit,
-        include: {
-          digitalProduct: { select: { productId: true, name: true } },
-          promotions: { orderBy: { createdAt: "desc" }, take: 1, select: { status: true, promotionId: true } },
-        },
-      });
-
-      const rows = versions.map((v) => ({
-        product: v.digitalProduct?.name ?? "unknown",
-        productId: v.digitalProduct?.productId ?? "unknown",
-        version: v.version,
-        gitTag: v.gitTag,
-        shippedAt: v.shippedAt.toISOString(),
-        changeCount: v.changeCount,
-        changeSummary: v.changeSummary ?? "",
-        promotionStatus: v.promotions[0]?.status ?? "none",
-        promotionId: v.promotions[0]?.promotionId ?? null,
-      }));
-
-      const summary = rows.map((r) =>
-        `${r.product} ${r.version} (${r.gitTag}) — ${r.promotionStatus} — shipped ${r.shippedAt.slice(0, 10)}`
-      ).join("\n");
-
-      return {
-        success: true,
-        message: summary || "No versions found.",
-        data: { versions: rows },
-      };
-    }
-
     // ─── Design Intelligence Tools (UI UX Pro Max) ──────────────────────────
     case "search_design_intelligence": {
       const { searchDesignDomain, formatSearchResults } = await import("@/lib/design-intelligence");
@@ -11360,50 +11244,6 @@ export async function executeTool(
       }
 
       return { success: false, error: "No manifest found. Use generate_codebase_manifest to create one.", message: "No manifest available." };
-    }
-
-    case "read_source_at_version": {
-      const { gitShow, isGitAvailable } = await import("@/lib/git-utils");
-      if (!await isGitAvailable()) return { success: false, error: "Git history is not available in this deployment. Use read_codebase_manifest for codebase orientation.", message: "Git not available." };
-      const ref = typeof params.version === "string" ? params.version : (process.env.DEPLOYED_VERSION ?? "HEAD");
-      const result = await gitShow({ ref, path: String(params.path ?? "") });
-      if ("error" in result) return { success: false, error: result.error, message: result.error };
-      return { success: true, message: result.content, data: { content: result.content } };
-    }
-
-    case "search_source_at_version": {
-      const { gitGrep, isGitAvailable } = await import("@/lib/git-utils");
-      if (!await isGitAvailable()) return { success: false, error: "Git history is not available.", message: "Git not available." };
-      const ref = typeof params.version === "string" ? params.version : (process.env.DEPLOYED_VERSION ?? "HEAD");
-      const grepOpts: Parameters<typeof gitGrep>[0] = { query: String(params.query ?? ""), ref };
-      if (typeof params.glob === "string") grepOpts.glob = params.glob;
-      if (typeof params.maxResults === "number") grepOpts.maxResults = params.maxResults;
-      const result = await gitGrep(grepOpts);
-      const summary = result.results.map((r) => `${r.path}:${r.line}: ${r.text}`).join("\n");
-      return { success: true, message: summary || "No matches found.", data: { results: result.results } };
-    }
-
-    case "list_source_directory": {
-      const { gitLsTree, isGitAvailable } = await import("@/lib/git-utils");
-      if (!await isGitAvailable()) return { success: false, error: "Git history is not available.", message: "Git not available." };
-      const ref = typeof params.version === "string" ? params.version : (process.env.DEPLOYED_VERSION ?? "HEAD");
-      const result = await gitLsTree({ ref, path: typeof params.path === "string" ? params.path : "" });
-      const summary = result.entries.map((e) => `${e.type === "dir" ? "📁" : "📄"} ${e.path}`).join("\n");
-      return { success: true, message: summary || "Empty directory.", data: { entries: result.entries } };
-    }
-
-    case "compare_versions": {
-      const { gitDiffStat, isGitAvailable, gitLog } = await import("@/lib/git-utils");
-      if (!await isGitAvailable()) return { success: false, error: "Git history is not available.", message: "Git not available." };
-      const from = String(params.from ?? "");
-      const to = typeof params.to === "string" ? params.to : "HEAD";
-      const diff = await gitDiffStat({ from, to });
-      const log = await gitLog({ from, to, maxCount: 20 });
-      return {
-        success: true,
-        message: diff.summary,
-        data: { filesChanged: diff.filesChanged, summary: diff.summary, commits: log.commits },
-      };
     }
 
     case "propose_file_change": {
