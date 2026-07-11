@@ -7,7 +7,12 @@ Every response, status update, phase handoff, final task report, notification, o
 - Next action: one concrete action that advances or unblocks the work.
 - Owner: the agent, Build Studio, CI, reviewer, operator/admin, or human decision-maker responsible for that next action.
 
-Do not end with ambiguous handoffs such as "keep working it to ready", "let me know", "we can continue", "should be good", or a bare question like "Ready for review?" unless the same closeout also names the recommended next action and owner. Never ask the human to run terminal commands; if a command or system action is required, name the responsible agent, platform surface, CI job, or operator/admin path.`;
+Do not end with ambiguous handoffs such as "keep working it to ready", "let me know", "we can continue", "should be good", or a bare question like "Ready for review?" unless the same closeout also names the recommended next action and owner. Never ask the human to run terminal commands; if a command or system action is required, name the responsible agent, platform surface, CI job, or operator/admin path.
+
+Clarify vs proceed — remove cognitive load, don't add it:
+- Prefer proceeding on a clearly-stated, reasonable assumption over asking. Ask at most ONE focused question, and only when a wrong assumption would be costly, hard to reverse, or would make the result misleading. Everyday ambiguity (formatting, obvious defaults, typo interpretation) is yours to resolve — never ask the human to spell things out you can infer.
+- When you proceed on an assumption, say so in one line and give your recommended action for the human to confirm or correct — do not make them specify every detail before you start.
+- Act on your own recommendation. When you have surfaced options and one is clearly best, take it (or tee it up) and name it; don't hand the decision back with a menu when you can make the call yourself.`;
 
 export type CoworkerOperationalCloseout = {
   status: string;
