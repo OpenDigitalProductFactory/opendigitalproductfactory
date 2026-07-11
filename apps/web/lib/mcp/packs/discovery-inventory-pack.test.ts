@@ -1,0 +1,232 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const discovery = vi.hoisted(() => ({
+  triggerBootstrapDiscovery: vi.fn(),
+  configureDiscoveryConnection: vi.fn(),
+}));
+vi.mock("@/lib/actions/discovery", () => discovery);
+
+const triageRunner = vi.hoisted(() => ({ runDiscoveryTriageDaily: vi.fn() }));
+vi.mock("@/lib/discovery-triage-runner", () => triageRunner);
+
+const hiveScout = vi.hoisted(() => ({ runHiveScoutIngest: vi.fn() }));
+vi.mock("@/lib/actions/hive-scout/ingest-500-agents", () => hiveScout);
+
+const inventory = vi.hoisted(() => ({
+  reassignTaxonomy: vi.fn(),
+  dismissEntity: vi.fn(),
+  resolvePortfolioQualityIssue: vi.fn(),
+}));
+vi.mock("@/lib/actions/inventory", () => inventory);
+
+const db = vi.hoisted(() => ({
+  DISCOVERY_TRIAGE_AGENT_ID: "agent-discovery-triage",
+  prisma: { taxonomyNode: { findFirst: vi.fn() } },
+}));
+vi.mock("@dpf/db", () => db);
+
+import { discoveryInventoryPack } from "./discovery-inventory-pack";
+import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
+
+const EXPECTED_TOOLS = [
+  "discovery_sweep",
+  "run_discovery_triage",
+  "run_hive_scout_ingest",
+  "attribute_entity_to_product",
+  "dismiss_entity",
+  "resolve_portfolio_quality_issue",
+  "configure_gateway_scan",
+];
+
+const EXPECTED_GRANTS: Record<string, string[]> = {
+  discovery_sweep: ["telemetry_read"],
+  run_discovery_triage: ["registry_write"],
+  run_hive_scout_ingest: ["backlog_write"],
+  attribute_entity_to_product: ["registry_write"],
+  dismiss_entity: ["registry_write"],
+  resolve_portfolio_quality_issue: ["registry_write"],
+  configure_gateway_scan: ["agent_control_read"],
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("discovery-inventory pack — registration", () => {
+  it("exposes exactly the seven discovery/inventory tools", () => {
+    expect(discoveryInventoryPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
+    expect(Object.keys(discoveryInventoryPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
+  });
+
+  it("descriptions are provenance-free (no BI/Phase/path leakage)", () => {
+    for (const d of discoveryInventoryPack.definitions) {
+      expect(d.description).not.toMatch(/\bBI-|Phase \d|EP-|apps\/web\//);
+    }
+  });
+
+  it("preserves requiredCapability and sideEffect metadata verbatim", () => {
+    const byName = Object.fromEntries(discoveryInventoryPack.definitions.map((d) => [d.name, d]));
+    for (const t of EXPECTED_TOOLS) {
+      expect(byName[t].requiredCapability, t).toBe(
+        t === "run_hive_scout_ingest" ? "manage_backlog" : "manage_provider_connections",
+      );
+      expect(byName[t].sideEffect, t).toBe(true);
+    }
+    expect(byName.run_discovery_triage.executionMode).toBe("immediate");
+    expect(byName.run_hive_scout_ingest.executionMode).toBe("immediate");
+  });
+
+  it("grants mirror agent-grants for every tool", () => {
+    for (const t of EXPECTED_TOOLS) {
+      expect(discoveryInventoryPack.grants[t]).toEqual(EXPECTED_GRANTS[t]);
+      expect(isToolAllowedByGrants(t, EXPECTED_GRANTS[t])).toBe(true);
+    }
+  });
+});
+
+describe("discovery-inventory pack — handler behavior (delegation preserved)", () => {
+  it("discovery_sweep summarizes refreshed entities and relationships", async () => {
+    discovery.triggerBootstrapDiscovery.mockResolvedValue({
+      ok: true,
+      summary: { createdEntities: 2, updatedEntities: 3, createdRelationships: 1, updatedRelationships: 4 },
+    });
+    const res = await discoveryInventoryPack.handlers.discovery_sweep({}, "u1");
+    expect(res.success).toBe(true);
+    expect(res.message).toContain("5 entities refreshed");
+    expect(res.message).toContain("5 relationships refreshed");
+  });
+
+  it("discovery_sweep surfaces a failed sweep as an error", async () => {
+    discovery.triggerBootstrapDiscovery.mockResolvedValue({ ok: false, error: "no collectors" });
+    const res = await discoveryInventoryPack.handlers.discovery_sweep({}, "u1");
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("no collectors");
+  });
+
+  it("run_discovery_triage forwards trigger + actor and reports processed counts", async () => {
+    triageRunner.runDiscoveryTriageDaily.mockResolvedValue({
+      skipped: false,
+      metrics: { processed: 7, autoAttributed: 3 },
+    });
+    const res = await discoveryInventoryPack.handlers.run_discovery_triage(
+      { trigger: "volume" },
+      "u1",
+      { agentId: "agent-x" },
+    );
+    expect(res.success).toBe(true);
+    expect(res.message).toContain("processed 7 entities with 3 auto-attributed");
+    expect(triageRunner.runDiscoveryTriageDaily).toHaveBeenCalledWith(undefined, {
+      trigger: "volume",
+      actorType: "agent",
+      actorId: "agent-x",
+      enableAutonomousReview: true,
+    });
+  });
+
+  it("run_discovery_triage falls back to the default triage agent id and cadence trigger", async () => {
+    triageRunner.runDiscoveryTriageDaily.mockResolvedValue({ skipped: true, skipReason: "too soon" });
+    const res = await discoveryInventoryPack.handlers.run_discovery_triage({}, "u1");
+    expect(res.success).toBe(true);
+    expect(res.message).toBe("too soon");
+    const arg = triageRunner.runDiscoveryTriageDaily.mock.calls[0][1];
+    expect(arg.trigger).toBe("cadence");
+    expect(arg.actorId).toBe("agent-discovery-triage");
+  });
+
+  it("run_hive_scout_ingest forwards actor + taskRun context and summarizes the run", async () => {
+    hiveScout.runHiveScoutIngest.mockResolvedValue({
+      catalogEntries: 10, gaps: 2, reviewed: 1, created: 1, duplicates: 0, deferred: 0,
+    });
+    const res = await discoveryInventoryPack.handlers.run_hive_scout_ingest(
+      {},
+      "u1",
+      { agentId: "agent-y", taskRunId: "TR-1" },
+    );
+    expect(res.success).toBe(true);
+    expect(res.message).toContain("Hive Scout parsed 10 entries");
+    expect(hiveScout.runHiveScoutIngest).toHaveBeenCalledWith({
+      actorAgentId: "agent-y",
+      taskRunId: "TR-1",
+      enableAutonomousReview: true,
+    });
+  });
+
+  it("attribute_entity_to_product resolves a taxonomy slug then reassigns", async () => {
+    db.prisma.taxonomyNode.findFirst.mockResolvedValue({ id: "node-cuid" });
+    inventory.reassignTaxonomy.mockResolvedValue({ ok: true });
+    const res = await discoveryInventoryPack.handlers.attribute_entity_to_product(
+      { entityId: "e1", taxonomyNodeSlug: "foundational/compute" },
+      "u1",
+    );
+    expect(res.success).toBe(true);
+    expect(db.prisma.taxonomyNode.findFirst).toHaveBeenCalled();
+    expect(inventory.reassignTaxonomy).toHaveBeenCalledWith("e1", "node-cuid");
+  });
+
+  it("attribute_entity_to_product rejects when neither id nor slug resolves", async () => {
+    const res = await discoveryInventoryPack.handlers.attribute_entity_to_product({ entityId: "e1" }, "u1");
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("missing_taxonomy_target");
+    expect(inventory.reassignTaxonomy).not.toHaveBeenCalled();
+  });
+
+  it("attribute_entity_to_product surfaces an unknown slug", async () => {
+    db.prisma.taxonomyNode.findFirst.mockResolvedValue(null);
+    const res = await discoveryInventoryPack.handlers.attribute_entity_to_product(
+      { entityId: "e1", taxonomyNodeSlug: "nope" },
+      "u1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("taxonomy_node_not_found");
+  });
+
+  it("dismiss_entity delegates and requires an entityId", async () => {
+    const missing = await discoveryInventoryPack.handlers.dismiss_entity({}, "u1");
+    expect(missing.success).toBe(false);
+    expect(missing.error).toBe("missing_entity_id");
+
+    inventory.dismissEntity.mockResolvedValue({ ok: true });
+    const res = await discoveryInventoryPack.handlers.dismiss_entity({ entityId: "e2" }, "u1");
+    expect(res.success).toBe(true);
+    expect(inventory.dismissEntity).toHaveBeenCalledWith("e2");
+  });
+
+  it("resolve_portfolio_quality_issue validates the resolution enum", async () => {
+    const bad = await discoveryInventoryPack.handlers.resolve_portfolio_quality_issue(
+      { issueId: "i1", resolution: "maybe" },
+      "u1",
+    );
+    expect(bad.success).toBe(false);
+    expect(bad.error).toBe("invalid_resolution");
+
+    inventory.resolvePortfolioQualityIssue.mockResolvedValue({ ok: true });
+    const res = await discoveryInventoryPack.handlers.resolve_portfolio_quality_issue(
+      { issueId: "i1", resolution: "resolved" },
+      "u1",
+    );
+    expect(res.success).toBe(true);
+    expect(inventory.resolvePortfolioQualityIssue).toHaveBeenCalledWith("i1", "resolved");
+  });
+
+  it("configure_gateway_scan defaults collectorType and reports activation state", async () => {
+    inventory.reassignTaxonomy.mockClear();
+    discovery.configureDiscoveryConnection.mockResolvedValue({ ok: true, connectionId: "conn-1" });
+    const res = await discoveryInventoryPack.handlers.configure_gateway_scan(
+      { name: "Home LAN", endpointUrl: "arp://192.168.0.0/24" },
+      "u1",
+    );
+    expect(res.success).toBe(true);
+    expect(res.message).toContain("arp_scan");
+    expect(res.message).toContain("Status: unconfigured");
+    const arg = discovery.configureDiscoveryConnection.mock.calls[0][0];
+    expect(arg.collectorType).toBe("arp_scan");
+    expect(arg.apiKey).toBeUndefined();
+  });
+
+  it("configure_gateway_scan requires name and endpointUrl", async () => {
+    const noName = await discoveryInventoryPack.handlers.configure_gateway_scan({ endpointUrl: "x" }, "u1");
+    expect(noName.error).toBe("missing_name");
+    const noUrl = await discoveryInventoryPack.handlers.configure_gateway_scan({ name: "x" }, "u1");
+    expect(noUrl.error).toBe("missing_endpoint_url");
+  });
+});
