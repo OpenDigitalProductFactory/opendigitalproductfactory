@@ -47,9 +47,9 @@ The keystone. Everything downstream depends on a computed, explainable score exi
 
 **Acceptance:** a non-technical operator sees what's asked, how valuable, how big, and what to fund next in one surface, with no raw framework token on the front.
 
-### Phase 3 — Investment buckets & portfolio balance (BI-E5526151)
+### Phase 3 — Investment buckets & portfolio balance (BI-E5526151) — ✅ LANDED
 
-`investmentBucket String?` (`run|grow|transform`, default derived from `workType`: bug/chore/refactor→run, feature→grow) on `BacklogItem`/`Epic`; `Portfolio.bucketTargets Json?` (allocation %). Portfolio-balance tab: actual-vs-target bucket mix, flag when near-term work starves Transform; coarse `jobSize`-summed-vs-`budgetKUsd` capacity read. Lightweight themes via org-overlay WWWD `stance` `WikiPage` (`themePageId`), rolled up per portfolio. Depends on Phase 1.
+**Landed:** `investmentBucket String?` (`run|grow|transform`) on `BacklogItem`/`Epic` + `Portfolio.bucketTargets Json?` (migration `20260711120000`, additive-nullable → fleet-safe); `INVESTMENT_BUCKET_VALUES` enum + pure `lib/demand/buckets.ts` (`deriveBucket` from workType, effort-weighted `computeBucketMix`, `bucketBalance` with Transform-starvation flag against a default 70/20/10 target) unit-tested (7); `score_demand_item` auto-classifies the bucket (explicit override supported); a **Balance** tab on the Demand board (effort-weighted actual-vs-target bars with a target tick + Starved flag). Deferred to follow-ups: per-portfolio target editing UI + `jobSize`-vs-`budgetKUsd` capacity read + WWWD `themePageId` linkage (the balance view is currently platform-wide against the default split).
 
 **Acceptance:** portfolio views show actual-vs-target investment balance; demand rolls up by theme.
 

@@ -12,6 +12,7 @@ import {
   type DemandItemView,
 } from "@/lib/demand/board";
 import type { ValueEffortQuadrant } from "@/lib/demand/scoring";
+import { bucketBalance, BUCKET_LABELS, computeBucketMix } from "@/lib/demand/buckets";
 
 const VALUE_BAND_LABEL: Record<ReturnType<typeof valueBand>, string> = {
   high: "High value",
@@ -148,7 +149,69 @@ function MatrixView({ items }: { items: DemandItemView[] }) {
   );
 }
 
-type Tab = "funnel" | "matrix";
+function BalanceView({ items }: { items: DemandItemView[] }) {
+  const rows = useMemo(() => {
+    const mix = computeBucketMix(
+      items.map((i) => ({
+        investmentBucket: i.investmentBucket,
+        workType: i.workType,
+        weight: itemEffort(i),
+      })),
+    );
+    return { mix, balance: bucketBalance(mix, null) };
+  }, [items]);
+
+  if (rows.mix.total === 0) {
+    return (
+      <p className="text-sm text-[var(--dpf-muted)]">
+        No classified demand yet. Score items (bucket auto-derives from work-type) to see the balance.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        {rows.balance.map((r) => (
+          <div key={r.bucket} className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2">
+            <div className="mb-1 flex items-center gap-2 text-sm">
+              <span className="font-medium text-[var(--dpf-text)]">{BUCKET_LABELS[r.bucket]}</span>
+              {r.starved && (
+                <span className="rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--dpf-warning)]">
+                  Starved
+                </span>
+              )}
+              <span className="ml-auto text-xs text-[var(--dpf-muted)]">
+                {r.actualPct}% actual · {r.targetPct}% target
+              </span>
+            </div>
+            <div className="relative h-2 w-full overflow-hidden rounded bg-[var(--dpf-surface-2)]">
+              <div
+                className="absolute left-0 top-0 h-full rounded"
+                style={{
+                  width: `${Math.min(100, r.actualPct)}%`,
+                  backgroundColor: r.starved ? "var(--dpf-warning)" : "var(--dpf-accent)",
+                }}
+              />
+              <div
+                className="absolute top-0 h-full w-px bg-[var(--dpf-text)]"
+                style={{ left: `${Math.min(100, r.targetPct)}%` }}
+                title={`Target ${r.targetPct}%`}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-[var(--dpf-muted)]">
+        Effort-weighted mix across {rows.mix.total} point(s) of demand vs the default 70/20/10 target (the black
+        tick). A bucket &gt;5% below target is flagged Starved.
+        {rows.mix.unclassified > 0 && ` ${rows.mix.unclassified} point(s) unclassified.`}
+      </p>
+    </div>
+  );
+}
+
+type Tab = "funnel" | "matrix" | "balance";
 
 export function DemandBoard({ items }: { items: DemandItemView[] }) {
   const [tab, setTab] = useState<Tab>("funnel");
@@ -169,7 +232,7 @@ export function DemandBoard({ items }: { items: DemandItemView[] }) {
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <div className="inline-flex rounded-md border border-[var(--dpf-border)] p-0.5">
-          {(["funnel", "matrix"] as const).map((t) => (
+          {(["funnel", "matrix", "balance"] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -180,7 +243,7 @@ export function DemandBoard({ items }: { items: DemandItemView[] }) {
                   : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
               }`}
             >
-              {t === "funnel" ? "Funnel" : "Value × effort"}
+              {t === "funnel" ? "Funnel" : t === "matrix" ? "Value × effort" : "Balance"}
             </button>
           ))}
         </div>
@@ -188,7 +251,13 @@ export function DemandBoard({ items }: { items: DemandItemView[] }) {
           {scored} of {items.length} scored
         </span>
       </div>
-      {tab === "funnel" ? <FunnelView items={items} /> : <MatrixView items={items} />}
+      {tab === "funnel" ? (
+        <FunnelView items={items} />
+      ) : tab === "matrix" ? (
+        <MatrixView items={items} />
+      ) : (
+        <BalanceView items={items} />
+      )}
     </div>
   );
 }
