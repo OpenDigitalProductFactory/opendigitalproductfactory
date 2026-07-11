@@ -249,7 +249,10 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "backlog_read",
     "backlog_write",
   ],
-  "ea-architect": ["ea_graph_read", "ea_graph_write", "architecture_read", "file_read", "registry_read"],
+  // tool_script_exec (EP-27FD96BC BI-9893614D): the EA architect traverses large
+  // graph/architecture reads — a prime case for programmatic filtering in the
+  // sandbox (the script's JWT is read-only-scoped regardless of these grants).
+  "ea-architect": ["ea_graph_read", "ea_graph_write", "architecture_read", "file_read", "registry_read", "tool_script_exec"],
   "hr-specialist": ["registry_read", "consumer_read", "consumer_write"],
   // The Customer Success Manager operates the CRM (accounts, pipeline, quotes),
   // so it needs crm_read/crm_write — NOT backlog_write (which let it retire live
@@ -262,7 +265,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // sweep, merges duplicates, and proposes enrichment. crm_write reaches the
   // mdm-stewardship pack tools (run_mdm_steward_sweep, merge_customer_*,
   // list_mdm_steward_tasks); web_search gates the enrich_customer_account door.
-  "data-steward": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search"],
+  "data-steward": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search", "tool_script_exec"],
   "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read"],
   "storefront-advisor": [
     "consumer_read",
@@ -279,7 +282,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // issues it detects. Its runtime grants resolve from THIS map (not
   // agent_registry.json, which already intends backlog access), so backlog_read/
   // backlog_write must live here to reach its tool surface (BI-CAP-CBC41758).
-  "platform-engineer": ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read", "backlog_read", "backlog_write"],
+  "platform-engineer": ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read", "backlog_read", "backlog_write", "tool_script_exec"],
   "build-specialist": [
     "file_read",
     "code_graph_read",
@@ -296,8 +299,11 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "release_plan_read",
     "coworker_screen_read",
     "coworker_screen_drive",
+    // Already sandbox-native (sandbox_execute); code_graph/file reads are the
+    // canonical read-heavy filtering case (EP-27FD96BC BI-9893614D).
+    "tool_script_exec",
   ],
-  "data-architect": ["file_read", "sandbox_execute", "architecture_read", "registry_read"],
+  "data-architect": ["file_read", "sandbox_execute", "architecture_read", "registry_read", "tool_script_exec"],
   "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
   coo: ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read", "email_config"],
   "doc-specialist": ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
