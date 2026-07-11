@@ -1344,6 +1344,9 @@ export async function sendMessage(input: {
     pageActionNames: new Set(pageActions.map((t) => t.name)),
     alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
     cap: toolCap,
+    // BI-ACE1EBA4 — when the cap forces deferral, keep the tools most relevant to
+    // this turn's intent within each priority tier.
+    intentQuery: trimmedContent,
   });
   // Advertise the load_tools meta-tool only when something was actually deferred.
   const attachedTools = deferredTools.length > 0 ? [LOAD_TOOLS_TOOL, ...budgetedTools] : budgetedTools;
