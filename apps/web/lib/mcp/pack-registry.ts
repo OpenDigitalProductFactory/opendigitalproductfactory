@@ -52,6 +52,7 @@ import { estatePosturePack } from "./packs/estate-posture-pack";
 import { deliberationRunPack } from "./packs/deliberation-run-pack";
 import { scheduledAgentTaskPack } from "./packs/scheduled-agent-task-pack";
 import { crmSalesPipelinePack } from "./packs/crm-sales-pipeline-pack";
+import { wikiOverlayPack } from "./packs/wiki-overlay-pack";
 import { licensingPack } from "./packs/licensing-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
@@ -91,5 +92,6 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationRunPack,
   scheduledAgentTaskPack,
   crmSalesPipelinePack,
+  wikiOverlayPack,
   licensingPack,
 ]);
