@@ -281,7 +281,10 @@
   // typical staying time (minutes) once a party is seated, by party size
   const DWELL={2:45,3:55,4:65,5:80,6:90};
   const CAP_TOTAL_TABLES=18, CAP_TOTAL_SEATS=62, CAP_TOTAL_SIX=3;
+  const GEAR=String.fromCharCode(9881); // cog, charset-safe, no innerHTML needed
   let sel=null; // selected waiting party element
+  // All dynamic, DOM-sourced text (party names, times, ids) is written via
+  // textContent, never innerHTML - text is never reinterpreted as HTML (XSS-safe).
 
   const tables=()=>$$("#tables .table");
   const num=(el,a)=>parseInt(el.dataset[a],10)||0;
@@ -307,16 +310,16 @@
     $$("#waitlist .party").forEach(p=>{
       const size=num(p,"size"), s=suggest(size), el=p.querySelector(".sug");
       if(!el) return;
-      if(!s){ el.className="sug wait"; el.innerHTML='&#9881; no table fits '+size; return; }
-      if(s.open){ el.className="sug"; el.innerHTML='&#9881; seat at T'+s.table.dataset.id+' now'; }
-      else { el.className="sug wait"; el.innerHTML='&#9881; T'+s.table.dataset.id+' frees '+fmtEta(s.eta); }
+      if(!s){ el.className="sug wait"; el.textContent=GEAR+' no table fits '+size; return; }
+      if(s.open){ el.className="sug"; el.textContent=GEAR+' seat at T'+num(s.table,"id")+' now'; }
+      else { el.className="sug wait"; el.textContent=GEAR+' T'+num(s.table,"id")+' frees '+fmtEta(s.eta); }
     });
     $$("#resv .r").forEach(r=>{
       const size=num(r,"size"), s=suggest(size), el=r.querySelector(".rs");
       if(!el) return;
-      if(s&&s.open) el.innerHTML='&#9881; hold T'+s.table.dataset.id+' for '+r.dataset.time;
-      else if(s) el.innerHTML='&#9881; T'+s.table.dataset.id+' should free by '+r.dataset.time;
-      else el.innerHTML='&#9881; combine tables for '+size;
+      if(s&&s.open) el.textContent=GEAR+' hold T'+num(s.table,"id")+' for '+r.dataset.time;
+      else if(s) el.textContent=GEAR+' T'+num(s.table,"id")+' should free by '+r.dataset.time;
+      else el.textContent=GEAR+' combine tables for '+size;
     });
   }
 
@@ -347,7 +350,7 @@
   }
 
   let toastT=null;
-  function toast(msg){ const el=$("toast"); el.innerHTML=msg; el.classList.add("on"); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove("on"),2600); }
+  function toast(msg){ const el=$("toast"); el.textContent=msg; el.classList.add("on"); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove("on"),2600); }
 
   function clearSelection(){
     if(sel) sel.classList.remove("sel"); sel=null;
@@ -360,11 +363,11 @@
     clearSelection(); sel=p; p.classList.add("sel");
     const size=num(p,"size"), name=p.dataset.name, s=suggest(size);
     tables().forEach(t=>{ if(t.dataset.state==="free"&&num(t,"size")>=size) t.classList.add("pickable"); });
-    let msg="Seating <b>"+name+"</b> (party of "+size+") &#8212; tap a highlighted table.";
-    if(s&&s.open){ s.table.classList.remove("pickable"); s.table.classList.add("suggest"); const fl=document.createElement("span"); fl.className="flag"; fl.textContent="suggested"; s.table.appendChild(fl); msg+=" Cog suggests <b>T"+s.table.dataset.id+"</b>."; }
-    else if(s){ msg+=" No open table fits &#8212; <b>T"+s.table.dataset.id+"</b> frees "+fmtEta(s.eta)+" (or combine tables)."; }
-    else { msg+=" No single table fits &#8212; combine two."; }
-    $("bannerText").innerHTML=msg; $("banner").classList.add("on");
+    let msg="Seating "+name+" (party of "+size+") - tap a highlighted table.";
+    if(s&&s.open){ s.table.classList.remove("pickable"); s.table.classList.add("suggest"); const fl=document.createElement("span"); fl.className="flag"; fl.textContent="suggested"; s.table.appendChild(fl); msg+=" Cog suggests T"+num(s.table,"id")+"."; }
+    else if(s){ msg+=" No open table fits - T"+num(s.table,"id")+" frees "+fmtEta(s.eta)+" (or combine tables)."; }
+    else { msg+=" No single table fits - combine two."; }
+    $("bannerText").textContent=msg; $("banner").classList.add("on");
   }
 
   function seatAt(t){
@@ -373,14 +376,14 @@
     if(t.dataset.state!=="free"||num(t,"size")<size) return;
     setTableState(t,"seated",size,DWELL[size]||60,"Just seated");
     sel.remove(); clearSelection(); updateCaps(); refreshSuggestions();
-    toast("Seated "+name+" (party of "+size+") at Table "+t.dataset.id);
+    toast("Seated "+name+" (party of "+size+") at Table "+num(t,"id"));
   }
 
   function clearTable(t){
     const st=t.dataset.state;
     if(st!=="check"&&st!=="bussing") return;
-    if(st==="check"){ setTableState(t,"bussing",0,2,"Bussing"); toast("Table "+t.dataset.id+" paid &#8212; bussing"); }
-    else { setTableState(t,"free",0,0,"Open"); toast("Table "+t.dataset.id+" cleared &#8212; now open"); }
+    if(st==="check"){ setTableState(t,"bussing",0,2,"Bussing"); toast("Table "+num(t,"id")+" paid - bussing"); }
+    else { setTableState(t,"free",0,0,"Open"); toast("Table "+num(t,"id")+" cleared - now open"); }
     updateCaps(); refreshSuggestions();
   }
 
@@ -394,8 +397,8 @@
   // reservations: tapping holds the suggested open table
   $$("#resv .r").forEach(r=>{ r.style.cursor="pointer"; r.addEventListener("click",()=>{
     const size=num(r,"size"), s=suggest(size);
-    if(s&&s.open){ setTableState(s.table,"reserved",0,0,r.dataset.time); s.table.querySelector(".cap"); updateCaps(); refreshSuggestions(); toast("Held Table "+s.table.dataset.id+" for "+r.dataset.name+" ("+r.dataset.time+")"); }
-    else toast("No open table to hold for "+r.dataset.name+" &#8212; will free by "+r.dataset.time);
+    if(s&&s.open){ setTableState(s.table,"reserved",0,0,r.dataset.time); updateCaps(); refreshSuggestions(); toast("Held Table "+num(s.table,"id")+" for "+r.dataset.name+" ("+r.dataset.time+")"); }
+    else toast("No open table to hold for "+r.dataset.name+" - will free by "+r.dataset.time);
   }); });
 
   $("seatNext").addEventListener("click",()=>{
@@ -403,7 +406,7 @@
     const parties=$$("#waitlist .party");
     let best=null,bw=-1;
     parties.forEach(p=>{ const s=suggest(num(p,"size")); if(s&&s.open){ const w=parseInt((p.querySelector(".pw").textContent||"0"),10)||0; if(w>bw){bw=w;best=p;} } });
-    if(!best){ toast("No party can be seated now &#8212; waiting on a table to free"); return; }
+    if(!best){ toast("No party can be seated now - waiting on a table to free"); return; }
     selectParty(best); const s=suggest(num(best,"size")); seatAt(s.table);
   });
   $("bannerX").addEventListener("click",clearSelection);
