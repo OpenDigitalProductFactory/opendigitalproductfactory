@@ -1517,20 +1517,15 @@ export async function runAgenticLoop(params: {
     // converge and return a diagnostic rather than burning the full 200
     // iterations. See FB-71FB3A53 thread, 2026-05-22.
     if (lastResult?.providerId === "local" && executedTools.length >= 8) {
-      // Defect-B safety net (BI-C145F650): if a correct answer was captured
-      // before a nudge, return it rather than discarding it for the canned
-      // diagnostic — the guard should never throw away an answer already in hand.
-      if (bestPreNudgeContent.length > 0) {
-        console.warn(
-          `[agentic-loop] local model spun through ${executedTools.length} tool calls; recovering preserved pre-nudge answer (${bestPreNudgeContent.length} chars) instead of the diagnostic. ` +
-          `agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
-        );
-      } else {
-        console.warn(
-          `[agentic-loop] local model spun through ${executedTools.length} tool calls without converging on a text answer. ` +
-          `Exiting early with diagnostic. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
-        );
-      }
+      // Defect-B safety net (BI-C145F650): a correct answer captured before a
+      // nudge is returned rather than discarded for the canned diagnostic.
+      console.warn(
+        `[agentic-loop] local model spun through ${executedTools.length} tool calls without converging` +
+        (bestPreNudgeContent.length > 0
+          ? `; recovering preserved pre-nudge answer (${bestPreNudgeContent.length} chars).`
+          : ` on a text answer. Exiting early with diagnostic.`) +
+        ` agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
+      );
       return {
         content: bestPreNudgeContent || buildLocalToolCallFailureMessage(lastResult),
         providerId: lastResult.providerId,
