@@ -9,7 +9,9 @@ import { NewEmployeeButton } from "@/components/employee/NewEmployeeButton";
 import { OrgAssignmentPanel } from "@/components/employee/OrgAssignmentPanel";
 import { OrgChartView } from "@/components/employee/OrgChartView";
 import { WorkforceRosterPanel } from "@/components/employee/WorkforceRosterPanel";
+import { WorkforceActivityPanel } from "@/components/employee/WorkforceActivityPanel";
 import { loadWorkforceRoster } from "@/lib/workforce/workforce-roster";
+import { loadWorkforceActivity } from "@/lib/workforce/workforce-activity";
 import { TimesheetGrid } from "@/components/employee/TimesheetGrid";
 import { TimesheetApprovalPanel } from "@/components/employee/TimesheetApprovalPanel";
 import { MyPoliciesView } from "@/components/employee/MyPoliciesView";
@@ -97,7 +99,10 @@ export default async function EmployeePage({ searchParams }: Props) {
   const pendingTimesheets = view === "timesheets" && currentUserProfile
     ? await getPendingTimesheetsForManager(currentUserProfile.id)
     : [];
-  const workforceRoster = view === "workforce" ? await loadWorkforceRoster() : null;
+  const [workforceRoster, workforceActivity] =
+    view === "workforce"
+      ? await Promise.all([loadWorkforceRoster(), loadWorkforceActivity()])
+      : [null, null];
 
   // Billable time is archetype-gated (labour financial profiles only); when
   // off, the timesheet shows no billing controls at all.
@@ -214,7 +219,15 @@ export default async function EmployeePage({ searchParams }: Props) {
         {view === "grid" ? (
           <SurfacePlatformGrid entityType="employee_profile" view="grid" />
         ) : view === "workforce" && workforceRoster ? (
-          <WorkforceRosterPanel roster={workforceRoster} />
+          <div className="space-y-8">
+            {workforceActivity && <WorkforceActivityPanel activity={workforceActivity} />}
+            <div className="pt-2 border-t border-[var(--dpf-border)]">
+              <p className="text-[10px] uppercase tracking-wide text-[var(--dpf-muted)] mb-3">
+                Directory — who makes up the workforce
+              </p>
+              <WorkforceRosterPanel roster={workforceRoster} />
+            </div>
+          </div>
         ) : view === "timesheets" ? (
           <div className="space-y-4">
             {pendingTimesheets.length > 0 && (
