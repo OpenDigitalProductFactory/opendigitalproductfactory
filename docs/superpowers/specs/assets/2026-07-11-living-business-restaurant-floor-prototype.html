@@ -144,8 +144,28 @@
   .foot{font-size:11px;color:var(--dpf-muted);padding:0 16px 20px;} .foot code{font-family:var(--font-mono);font-size:10.5px;color:var(--dpf-text-secondary);}
   .legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:0 16px 12px;} .legend .li{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dpf-text-secondary);} .legend .sw{width:10px;height:10px;border-radius:3px;}
 
+  /* presence: humans + AI coworkers co-inhabiting the operating twin */
+  .presence{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 16px;background:var(--dpf-surface-1);border-bottom:1px solid var(--dpf-border);}
+  .presence .plbl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;}
+  .who{display:flex;align-items:center;gap:7px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:999px;padding:3px 11px 3px 4px;}
+  .who .wa{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:8px;font-weight:700;color:#fff;background:var(--dpf-muted);position:relative;}
+  .who.human .wa{background:var(--dpf-accent);} .who.ai .wa{background:color-mix(in srgb,var(--dpf-accent) 18%,var(--dpf-surface-1));color:var(--dpf-accent);border:2px solid var(--dpf-accent);}
+  .who .wa::after{content:"";position:absolute;right:-1px;bottom:-1px;width:7px;height:7px;border-radius:50%;background:var(--dpf-success);border:1.5px solid var(--dpf-surface-2);}
+  .who .wt{min-width:0;} .who .wn{font-size:11px;font-weight:600;} .who .ww{font-size:9.5px;color:var(--dpf-text-secondary);white-space:nowrap;}
+
+  /* shared attributed activity feed - who did what, human or AI, live */
+  .feed .flist{padding:6px 12px 10px;max-height:180px;overflow-y:auto;}
+  .fitem{display:flex;gap:9px;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--dpf-border);}
+  .fitem:last-child{border-bottom:none;}
+  .fitem .fa{flex:0 0 auto;font-size:8.5px;font-weight:700;border-radius:5px;padding:1px 6px;white-space:nowrap;}
+  .fitem.human .fa{color:#fff;background:var(--dpf-accent);} .fitem.ai .fa{color:var(--dpf-accent);border:1px solid var(--dpf-accent);}
+  .fitem.staff .fa{color:var(--dpf-text-secondary);border:1px solid var(--dpf-border-strong);}
+  .fitem .fx{flex:1;min-width:0;font-size:12px;} .fitem .ft{flex:0 0 auto;font-family:var(--font-mono);font-size:9.5px;color:var(--dpf-muted);}
+  .fitem.fresh{animation:flash 1s ease-out;}
+  @keyframes flash{from{background:color-mix(in srgb,var(--dpf-accent) 12%,transparent);}to{background:transparent;}}
+
   @media (prefers-reduced-motion: reduce){
-    .station .load i,.ticket .tp i,.station.busy .sd,.table.suggest{animation:none;}
+    .station .load i,.ticket .tp i,.station.busy .sd,.table.suggest,.fitem.fresh{animation:none;}
   }
 </style>
 
@@ -165,6 +185,15 @@
     <div class="cap"><span class="cv tnum" id="capSix">0/3</span><span class="cl">six-tops free</span></div>
     <div class="cap"><span class="cv tnum">9</span><span class="cl">tickets on the pass</span></div>
     <div class="cap good"><span class="cv tnum">18m</span><span class="cl">avg ticket time</span></div>
+  </div>
+
+  <div class="presence" aria-label="Who is in this twin now">
+    <span class="plbl">In this twin now</span>
+    <span class="who human"><span class="wa">YOU</span><span class="wt"><span class="wn">You</span><span class="ww">operator &#183; on the floor</span></span></span>
+    <span class="who ai"><span class="wa">AI</span><span class="wt"><span class="wn">AI Host</span><span class="ww">watching seating &amp; turn times</span></span></span>
+    <span class="who ai"><span class="wa">AI</span><span class="wt"><span class="wn">AI Expo</span><span class="ww">watching the pass</span></span></span>
+    <span class="who human"><span class="wa">MAR</span><span class="wt"><span class="wn">Maria</span><span class="ww">server &#183; T1/T3/T9</span></span></span>
+    <span class="who human"><span class="wa">KIT</span><span class="wt"><span class="wn">Kitchen</span><span class="ww">Marco &#183; Sam &#183; Lea</span></span></span>
   </div>
 
   <div class="banner" id="banner"><span id="bannerText"></span><span class="x" id="bannerX">cancel (Esc)</span></div>
@@ -263,6 +292,17 @@
         <div class="prowm out"><span class="rl">Truffle app <span class="tag86">86</span></span><span class="bar"><i></i></span><span class="rv">out</span></div>
       </div>
     </div>
+
+    <div class="zone feed">
+      <div class="zh"><span class="zt">Live activity &#183; who did what</span><span class="zsub">humans and AI coworkers acting on the same twin, in real time</span></div>
+      <div class="flist" id="feed">
+        <div class="fitem ai"><span class="fa">AI HOST</span><span class="fx">No 6-top free for Okafor (6) &#8212; proposed combining T12 + T13</span><span class="ft">just now</span></div>
+        <div class="fitem ai"><span class="fa">AI EXPO</span><span class="fx">Flagged T14's ticket running long (22m) to the pass</span><span class="ft">1m</span></div>
+        <div class="fitem staff"><span class="fa">MARIA</span><span class="fx">Fired T7's order to the kitchen</span><span class="ft">2m</span></div>
+        <div class="fitem human"><span class="fa">YOU</span><span class="fx">Seated the 7:30 booking at T2</span><span class="ft">3m</span></div>
+        <div class="fitem ai"><span class="fa">AI HOST</span><span class="fx">Suggested T4 for Rossi (2) from turn times</span><span class="ft">4m</span></div>
+      </div>
+    </div>
   </div>
 
   <div class="legend">
@@ -359,6 +399,22 @@
   let toastT=null;
   function toast(msg){ const el=$("toast"); el.textContent=msg; el.classList.add("on"); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove("on"),2600); }
 
+  // shared, attributed activity feed: humans AND AI coworkers acting on the twin.
+  // Dynamic text via textContent only (no innerHTML) - XSS-safe.
+  function logFeed(kind, actor, text){
+    const feed=$("feed"); if(!feed) return;
+    const it=document.createElement("div"); it.className="fitem "+kind+" fresh";
+    const fa=document.createElement("span"); fa.className="fa"; fa.textContent=actor;
+    const fx=document.createElement("span"); fx.className="fx"; fx.textContent=text;
+    const ft=document.createElement("span"); ft.className="ft"; ft.textContent="just now";
+    it.appendChild(fa); it.appendChild(fx); it.appendChild(ft);
+    feed.querySelectorAll(".ft").forEach((e,i)=>{ if(i>0&&e.textContent==="just now") e.textContent="1m"; });
+    feed.insertBefore(it, feed.firstChild);
+    while(feed.children.length>9) feed.removeChild(feed.lastChild);
+  }
+  // the AI coworker reacts to a human action - the two are mutually aware
+  function aiReact(text){ setTimeout(()=>logFeed("ai","AI HOST",text), 600); }
+
   function clearSelection(){
     if(sel) sel.classList.remove("sel"); sel=null;
     $("banner").classList.remove("on");
@@ -381,16 +437,19 @@
     if(!sel) return;
     const size=num(sel,"size"), name=sel.dataset.name;
     if(t.dataset.state!=="free"||num(t,"size")<size) return;
+    const tid=num(t,"id");
     setTableState(t,"seated",size,DWELL[size]||60,"Just seated");
     sel.remove(); clearSelection(); updateCaps(); refreshSuggestions();
-    toast("Seated "+name+" (party of "+size+") at Table "+num(t,"id"));
+    toast("Seated "+name+" (party of "+size+") at Table "+tid);
+    logFeed("human","YOU","Seated "+name+" (party of "+size+") at Table "+tid);
+    aiReact("Recomputed turn times after seating "+name+" - waitlist suggestions updated");
   }
 
   function clearTable(t){
-    const st=t.dataset.state;
+    const st=t.dataset.state, tid=num(t,"id");
     if(st!=="check"&&st!=="bussing") return;
-    if(st==="check"){ setTableState(t,"bussing",0,2,"Bussing"); toast("Table "+num(t,"id")+" paid - bussing"); }
-    else { setTableState(t,"free",0,0,"Open"); toast("Table "+num(t,"id")+" cleared - now open"); }
+    if(st==="check"){ setTableState(t,"bussing",0,2,"Bussing"); toast("Table "+tid+" paid - bussing"); logFeed("human","YOU","Closed the check on Table "+tid); aiReact("Table "+tid+" will free in ~2m - holding it for the next best-fit party"); }
+    else { setTableState(t,"free",0,0,"Open"); toast("Table "+tid+" cleared - now open"); logFeed("human","YOU","Cleared Table "+tid+" - back in the open pool"); aiReact("Table "+tid+" open - re-checked the waitlist for a fit"); }
     updateCaps(); refreshSuggestions();
   }
 
