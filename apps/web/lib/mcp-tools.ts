@@ -39,36 +39,7 @@ import {
 // BI-ARCH-TOOLPACKS: deliberation + SIEM are fully owned by the first scoped tool
 // pack — their definitions compose into PLATFORM_TOOLS and their handlers dispatch
 // through the registry (no per-tool handler imports or switch cases here anymore).
-import { deliberationSiemPack } from "@/lib/mcp/packs/deliberation-siem-pack";
-import { runtimeCoordinationPack } from "@/lib/mcp/packs/runtime-coordination-pack";
-import { workCapsulesPack } from "@/lib/mcp/packs/work-capsules-pack";
-import { workbooksPack } from "@/lib/mcp/packs/workbooks-pack";
-import { feedbackPack } from "@/lib/mcp/packs/feedback-pack";
-import { marketingPack } from "@/lib/mcp/packs/marketing-pack";
-import { workCapturePack } from "@/lib/mcp/packs/work-capture-pack";
-import { orgDecisionPack } from "@/lib/mcp/packs/org-decision-pack";
-import { founderReviewPack } from "@/lib/mcp/packs/founder-review-pack";
-import { professionDecisionPack } from "@/lib/mcp/packs/profession-decision-pack";
-import { optimizationPack } from "@/lib/mcp/packs/optimization-pack";
-import { activityRoutingPack } from "@/lib/mcp/packs/activity-routing-pack";
-import { mdmStewardshipPack } from "@/lib/mcp/packs/mdm-stewardship-pack";
-import { crmContactsPack } from "@/lib/mcp/packs/crm-contacts-pack";
-import { selfUpgradePack } from "@/lib/mcp/packs/self-upgrade-pack";
-import { coworkerServiceCatalogPack } from "@/lib/mcp/packs/coworker-service-catalog-pack";
-import { coworkerToolGrantPack } from "@/lib/mcp/packs/coworker-tool-grant-pack";
-import { coworkerEstablishPack } from "@/lib/mcp/packs/coworker-establish-pack";
-import { coworkerMemoryPack } from "@/lib/mcp/packs/coworker-memory-pack";
-import { effortContextPack } from "@/lib/mcp/packs/effort-context-pack";
-import { coworkerGoalPack } from "@/lib/mcp/packs/coworker-goal-pack";
-import { subagentFanoutPack } from "@/lib/mcp/packs/subagent-fanout-pack";
-import { queueAwarenessPack } from "@/lib/mcp/packs/queue-awareness-pack";
-import { documentPack } from "@/lib/mcp/packs/document-pack";
-import { screenPack } from "@/lib/mcp/packs/screen-pack";
-import { nonprodLeasePack } from "@/lib/mcp/packs/nonprod-lease-pack";
-import { knowledgePack } from "@/lib/mcp/packs/knowledge-pack";
-import { demandScoringPack } from "@/lib/mcp/packs/demand-scoring-pack";
-import { workforcePack } from "@/lib/mcp/packs/workforce-pack";
-import { composeToolPacks } from "@/lib/mcp/tool-registry";
+import { TOOL_PACK_REGISTRY } from "@/lib/mcp/pack-registry";
 import {
   createLicenseReadinessIssue,
   saveLicensingInvestigationFinding,
@@ -454,7 +425,6 @@ function stringArray(value: unknown): string[] {
 // ─── Tool Registry ───────────────────────────────────────────────────────────
 // Scoped tool packs compose into the registry; mcp-tools.ts is the thin layer
 // over them (definitions spread into PLATFORM_TOOLS below; dispatch in executeTool).
-const TOOL_PACK_REGISTRY = composeToolPacks([deliberationSiemPack, runtimeCoordinationPack, workCapsulesPack, workbooksPack, feedbackPack, orgDecisionPack, founderReviewPack, professionDecisionPack, optimizationPack, marketingPack, workCapturePack, activityRoutingPack, selfUpgradePack, coworkerServiceCatalogPack, coworkerToolGrantPack, coworkerEstablishPack, coworkerMemoryPack, effortContextPack, coworkerGoalPack, subagentFanoutPack, mdmStewardshipPack, crmContactsPack, queueAwarenessPack, documentPack, screenPack, nonprodLeasePack, knowledgePack, demandScoringPack, workforcePack]);
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,

@@ -1,0 +1,79 @@
+// apps/web/lib/mcp/pack-registry.ts — EP-8DC217EB BET-4
+//
+// The single tool-pack registry, extracted from mcp-tools.ts so that ADDING a
+// pack no longer conflicts on one shared line. Each pack is ONE import line +
+// ONE array entry; this file is `merge=union` (see .gitattributes), so two
+// branches that each add a pack merge cleanly instead of colliding — the
+// cascade-killer pattern (BI-3B0AD9CF) applied to the pack registry.
+//
+// RULES (enforced by pack-registry.test.ts):
+//   - one pack per line, trailing comma, so additions are union-mergeable;
+//   - every imported pack appears in the array and vice-versa;
+//   - no duplicate packId (a union merge that duplicated a line, or a human
+//     double-add, fails the test rather than shipping a broken registry).
+//
+// Adding a pack: add its `import { xPack } from "./packs/x-pack";` line and a
+// `xPack,` line in the array. Nothing in mcp-tools.ts changes.
+
+import { composeToolPacks } from "./tool-registry";
+import { deliberationSiemPack } from "./packs/deliberation-siem-pack";
+import { runtimeCoordinationPack } from "./packs/runtime-coordination-pack";
+import { workCapsulesPack } from "./packs/work-capsules-pack";
+import { workbooksPack } from "./packs/workbooks-pack";
+import { feedbackPack } from "./packs/feedback-pack";
+import { orgDecisionPack } from "./packs/org-decision-pack";
+import { founderReviewPack } from "./packs/founder-review-pack";
+import { professionDecisionPack } from "./packs/profession-decision-pack";
+import { optimizationPack } from "./packs/optimization-pack";
+import { marketingPack } from "./packs/marketing-pack";
+import { workCapturePack } from "./packs/work-capture-pack";
+import { activityRoutingPack } from "./packs/activity-routing-pack";
+import { selfUpgradePack } from "./packs/self-upgrade-pack";
+import { coworkerServiceCatalogPack } from "./packs/coworker-service-catalog-pack";
+import { coworkerToolGrantPack } from "./packs/coworker-tool-grant-pack";
+import { coworkerEstablishPack } from "./packs/coworker-establish-pack";
+import { coworkerMemoryPack } from "./packs/coworker-memory-pack";
+import { effortContextPack } from "./packs/effort-context-pack";
+import { coworkerGoalPack } from "./packs/coworker-goal-pack";
+import { subagentFanoutPack } from "./packs/subagent-fanout-pack";
+import { mdmStewardshipPack } from "./packs/mdm-stewardship-pack";
+import { crmContactsPack } from "./packs/crm-contacts-pack";
+import { queueAwarenessPack } from "./packs/queue-awareness-pack";
+import { documentPack } from "./packs/document-pack";
+import { screenPack } from "./packs/screen-pack";
+import { nonprodLeasePack } from "./packs/nonprod-lease-pack";
+import { knowledgePack } from "./packs/knowledge-pack";
+import { demandScoringPack } from "./packs/demand-scoring-pack";
+import { workforcePack } from "./packs/workforce-pack";
+
+export const TOOL_PACK_REGISTRY = composeToolPacks([
+  deliberationSiemPack,
+  runtimeCoordinationPack,
+  workCapsulesPack,
+  workbooksPack,
+  feedbackPack,
+  orgDecisionPack,
+  founderReviewPack,
+  professionDecisionPack,
+  optimizationPack,
+  marketingPack,
+  workCapturePack,
+  activityRoutingPack,
+  selfUpgradePack,
+  coworkerServiceCatalogPack,
+  coworkerToolGrantPack,
+  coworkerEstablishPack,
+  coworkerMemoryPack,
+  effortContextPack,
+  coworkerGoalPack,
+  subagentFanoutPack,
+  mdmStewardshipPack,
+  crmContactsPack,
+  queueAwarenessPack,
+  documentPack,
+  screenPack,
+  nonprodLeasePack,
+  knowledgePack,
+  demandScoringPack,
+  workforcePack,
+]);

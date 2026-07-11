@@ -41,3 +41,9 @@ docs/Reference/mcp/schema/** text eol=lf
 scripts/module-size-baseline.txt merge=union
 
 scripts/route-error-baseline.txt merge=union
+
+# The tool-pack registry is one-pack-per-line precisely so concurrent PRs that
+# each add a pack merge with the built-in union driver instead of colliding on
+# a shared line (BI-3B0AD9CF pattern applied to composeToolPacks). The
+# pack-registry.test.ts asserts no duplicate packId survives a union merge.
+apps/web/lib/mcp/pack-registry.ts merge=union
