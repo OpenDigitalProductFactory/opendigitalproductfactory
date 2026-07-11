@@ -108,4 +108,23 @@ describe("dual-seed slug → canonical map (BI-74FD6420)", () => {
     expect(specialist.displayName).toBe("Portfolio Backlog Specialist");
     expect(mgr.displayName).not.toBe(specialist.displayName);
   });
+
+  it("keeps slug agentIds as first-class seed identities for FK consumers", () => {
+    // CoworkerService.providerAgentId, hive-scout tasks, and model defaults key
+    // Agent.agentId by slug. Dual-seed map is for roster display only until a
+    // full FK migration; seed must still create the slug row.
+    for (const cw of COWORKER_AGENT_SEEDS) {
+      const mapped = resolveCanonicalAgentId(cw.agentId);
+      if (mapped !== cw.agentId) {
+        expect(mapped).toMatch(/^AGT-/);
+        // Seed still upserts by the slug agentId (not only the AGT-* twin).
+        expect(cw.agentId).toBe(cw.slugId);
+      }
+    }
+    // Catalog provider ids must remain slug keys present in COWORKER_AGENT_SEEDS.
+    const seedIds = new Set(COWORKER_AGENT_SEEDS.map((c) => c.agentId));
+    for (const slug of ["build-specialist", "external-catalog-scout", "marketing-specialist", "customer-advisor"]) {
+      expect(seedIds.has(slug)).toBe(true);
+    }
+  });
 });

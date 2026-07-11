@@ -50,12 +50,15 @@ export const AGENT_IDENTITY_OVERRIDES: Record<string, { displayName?: string; ki
 
 /**
  * Coworker slug handles (legacy seed `agentId` / `slugId`) → canonical registry
- * `agentId` (AGT-*). Dual seed paths historically created BOTH rows, so the AI
- * Workforce roster showed two COO / Build Lead / Platform Admin / etc. while
- * naming-health still read clean (same displayName on both). BI-74FD6420.
+ * `agentId` (AGT-*). Dual seed paths create BOTH rows, so the AI Workforce
+ * roster would show two COO / Build Lead / Platform Admin / etc. while
+ * naming-health still reads clean (same displayName on both). BI-74FD6420.
  *
- * Seed attaches the slug to the canonical row and retires the alias row;
- * roster load drops any residual alias twin.
+ * IMPORTANT: slug agentId rows remain first-class seed identities — many FK
+ * consumers key `Agent.agentId` by slug (`CoworkerService.providerAgentId`,
+ * hive-scout scheduled task, agent-model-defaults, skill assignTo). Do NOT
+ * retire slug rows in seed until those consumers are remapped. Roster display
+ * collapses dual-seed pairs via `dropDualSeedAliasAgents` (prefer AGT-*).
  */
 export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string>> = {
   coo: "AGT-ORCH-000",
@@ -73,14 +76,17 @@ export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string
   "onboarding-coo": "AGT-WS-ONBOARD",
 };
 
-/** Reverse map: canonical AGT-* → preferred slug handle for Agent.slugId. */
+/** Reverse map: canonical AGT-* → preferred slug handle. */
 export const CANONICAL_AGENT_ID_TO_COWORKER_SLUG: Readonly<Record<string, string>> = Object.freeze(
   Object.fromEntries(
     Object.entries(COWORKER_SLUG_TO_CANONICAL_AGENT_ID).map(([slug, canonical]) => [canonical, slug]),
   ),
 );
 
-/** Resolve a slug or agentId to the canonical registry agentId when known. */
+/**
+ * Resolve a slug or agentId to the canonical registry agentId when known.
+ * Use for roster/display collapse — not as a substitute for seed FK remapping.
+ */
 export function resolveCanonicalAgentId(agentIdOrSlug: string): string {
   return COWORKER_SLUG_TO_CANONICAL_AGENT_ID[agentIdOrSlug] ?? agentIdOrSlug;
 }

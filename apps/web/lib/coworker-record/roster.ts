@@ -17,6 +17,9 @@ import {
 } from "@/lib/decision-perspective/resolve-profession-profile";
 import { normalizeVariantAxes } from "./variant-axes";
 
+// BI-74FD6420: roster collapses dual-seed slug + AGT-* pairs for display only.
+// Seed still creates slug agentId rows for FK consumers (service catalog, etc.).
+
 export type RosterRow = {
   agentId: string;
   slugId: string | null;
