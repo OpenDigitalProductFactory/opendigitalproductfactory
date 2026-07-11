@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "../generated/client/client";
+import { resolveCanonicalAgentId } from "./agent-identity";
 import { AI_WORKFORCE_PRODUCT_ID } from "./workforce-portfolio";
 
 type CoworkerServiceSeed = {
@@ -345,10 +346,14 @@ export const COWORKER_SERVICE_CATALOG_OFFER_SEEDS: readonly CoworkerOfferSeed[] 
 
 export async function seedCoworkerServiceCatalog(prisma: PrismaClient): Promise<void> {
   for (const service of COWORKER_SERVICE_CATALOG_SERVICE_SEEDS) {
+    const canonicalService = {
+      ...service,
+      providerAgentId: resolveCanonicalAgentId(service.providerAgentId),
+    };
     await prisma.coworkerService.upsert({
       where: { serviceId: service.serviceId },
-      create: service,
-      update: service,
+      create: canonicalService,
+      update: canonicalService,
     });
   }
 

@@ -6,6 +6,7 @@ import {
   seedCoworkerServiceCatalog,
 } from "./coworker-service-catalog-seed";
 import { COWORKER_AGENT_SEEDS } from "./workforce-seed";
+import { resolveCanonicalAgentId } from "./agent-identity";
 
 function unique(values: readonly string[]) {
   return new Set(values).size === values.length;
@@ -107,6 +108,14 @@ describe("coworker service catalog seed data", () => {
       expect(args["create"]).not.toHaveProperty("digitalProductId");
       expect(args["update"]).not.toHaveProperty("digitalProductId");
     }
+    expect(serviceUpserts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          create: expect.objectContaining({ providerAgentId: resolveCanonicalAgentId("build-specialist") }),
+          update: expect.objectContaining({ providerAgentId: resolveCanonicalAgentId("build-specialist") }),
+        }),
+      ]),
+    );
     expect(serviceUpdates).toEqual([
       expect.objectContaining({
         where: expect.objectContaining({ digitalProductId: "dpf-portal" }),
