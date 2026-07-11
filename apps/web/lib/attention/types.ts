@@ -26,6 +26,19 @@ export type AttentionSource =
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";
 
+/** The four canonical Portfolios, keyed for the OUTSIDE-IN operator cockpit
+ *  (BI-8C3EB52C). The cockpit organizes attention from the customer inward:
+ *  products/services (customer-facing) and workforce (for-employees) are the
+ *  PRIMARY perspective; manufacturing-and-delivery and foundational sit deeper
+ *  inside and are secondary — an inner item only jumps the primary queue when it
+ *  is flagged as blocking a customer/business outcome. Mirrors the canonical
+ *  roots in packages/db/data/portfolio_registry.json. */
+export type AttentionPortfolio =
+  | "products-and-services-sold" // revenue-generating, external customers (PRIMARY, outermost)
+  | "for-employees" // the workforce — people + AI coworkers (PRIMARY)
+  | "manufacturing-and-delivery" // build/CI/CD/release pipeline (secondary)
+  | "foundational"; // infra, platform services, back-office (secondary, deepest inside)
+
 /** The primary, objective triage key. Deadline-bearing sources (bills/expenses/
  *  compliance, BI-AS-4) populate the imminent tiers; the keystone sources have no
  *  hard deadline, so they resolve to "none" and are ordered by risk→blast→age. */
@@ -100,6 +113,11 @@ export type AttentionItem = {
   triage: AttentionTriage;
   /** ISO creation time — drives the age tie-break and the relative-age label. */
   createdAtIso: string;
+  /** The Portfolio this item is classified under, for the OUTSIDE-IN cockpit
+   *  (BI-8C3EB52C). Optional: when absent, the cockpit derives a default from the
+   *  item's source (see portfolioForSource). A source may set it explicitly when it
+   *  knows better than the source-level default. */
+  portfolio?: AttentionPortfolio;
   actions: AttentionAction[];
   /** To the owning surface for heavy context; never reimplemented in the inbox. */
   deepLink: string;

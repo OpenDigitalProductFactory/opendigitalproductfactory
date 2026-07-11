@@ -1,11 +1,16 @@
 // apps/web/components/workspace/BusinessCommandCenter.tsx
 //
-// The business day-to-day surface for the default workspace home: the
-// "needs attention" critical strip, an at-a-glance StatCard snapshot, and the
-// human + AI "work in motion" list. The 6×6 Six-Cs readiness matrix that used
+// The SECONDARY at-a-glance surface for the workspace home: a "platform posture"
+// watch strip (metrics-derived exceptions), an at-a-glance StatCard snapshot, and
+// the human + AI "work in motion" list. The 6×6 Six-Cs readiness matrix that used
 // to live here is an operator/governance view and now renders on the platform
 // surface (see PlatformReadinessMatrix and
 // docs/superpowers/specs/2026-06-06-main-portal-workspace-home-redesign-design.md §7).
+//
+// The single "what needs you now" surface is the OperatorCockpit (BI-2651043B /
+// BI-D35DE119 F2 fix): this strip is deliberately posture/watch, NOT a competing
+// "needs attention" claim — so it never says "nothing needs you" while the cockpit
+// shows a count. When it is empty it reports clear POSTURE, not clear attention.
 //
 // Real data only — every block renders from the command-center loader and shows
 // an empty state when there is nothing, never synthesized rows.
@@ -27,13 +32,15 @@ export function BusinessCommandCenter({ view }: Props) {
   return (
     <section aria-labelledby="business-command-center-title" className="space-y-4">
       <h2 id="business-command-center-title" className="sr-only">
-        Needs attention and at-a-glance
+        Platform posture and at-a-glance
       </h2>
 
-      {/* Critical strip — exceptions that need action now */}
+      {/* Posture watch strip — metrics-derived exceptions to keep an eye on. This is
+          SECONDARY to the OperatorCockpit's "what needs you now"; it never competes as
+          an attention claim (BI-D35DE119 F2). */}
       <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
         <div className="border-b border-[var(--dpf-border)] px-4 py-3">
-          <p className="text-xs font-semibold uppercase text-[var(--dpf-muted)]">Needs attention</p>
+          <p className="text-xs font-semibold uppercase text-[var(--dpf-muted)]">Platform posture</p>
         </div>
         <div className="grid gap-0 md:grid-cols-2 xl:grid-cols-3">
           {view.commandStrip.length > 0 ? (
@@ -54,7 +61,7 @@ export function BusinessCommandCenter({ view }: Props) {
             ))
           ) : (
             <div className="px-4 py-6 text-sm text-[var(--dpf-muted)]">
-              Nothing needs your attention right now.
+              Platform posture is clear.
             </div>
           )}
         </div>
