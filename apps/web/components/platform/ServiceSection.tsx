@@ -11,10 +11,12 @@ type Props = {
   providers: ProviderWithCredential[];
   /** Per-provider routing eligibility, keyed by providerId. Drives the counts. */
   eligibilityById: Record<string, RoutingEligibility>;
+  /** F11: a provider in this group would resolve a blocked phase — open it so the badge shows. */
+  hasResolver?: boolean;
   children: React.ReactNode;
 };
 
-export function ServiceSection({ endpointType, displayName, providers, eligibilityById, children }: Props) {
+export function ServiceSection({ endpointType, displayName, providers, eligibilityById, hasResolver, children }: Props) {
   // Summarize by routing eligibility (the operator question), not raw lifecycle.
   const states = providers.map(
     (pw) => eligibilityById[pw.provider.providerId]?.state ?? "unconfigured",
@@ -28,7 +30,7 @@ export function ServiceSection({ endpointType, displayName, providers, eligibili
   ).length;
 
   // Open the section when something is usable or needs attention.
-  const [expanded, setExpanded] = useState(routableCount > 0 || attentionCount > 0);
+  const [expanded, setExpanded] = useState(routableCount > 0 || attentionCount > 0 || !!hasResolver);
 
   const typeLabel = endpointType === "service"
     ? "MCP"

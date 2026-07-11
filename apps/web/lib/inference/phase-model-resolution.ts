@@ -32,6 +32,12 @@
 
 import { prisma } from "@dpf/db";
 import { previewRoute, type RouteAndCallOptions } from "@/lib/inference/routed-inference";
+import type { RequestContract } from "@/lib/routing/request-contract";
+import {
+  loadPhaseEnableCandidateProviders,
+  selectEnableCandidatesForContract,
+  type EnableCandidate,
+} from "@/lib/inference/phase-enable-candidates";
 import {
   compileBuildStudioPhaseActivity,
   routeContextFromActivity,
@@ -98,6 +104,12 @@ export interface PhaseResolution {
   /** One-line rationale (route reason or config explanation). */
   rationale: string;
   flags: PhaseFlag[];
+  /**
+   * F10/F11: when this phase is blocked with `no-eligible-endpoint`, the
+   * currently-off provider(s) whose capabilities WOULD satisfy its routing
+   * contract if enabled — ordered one-click-first. Absent/empty otherwise.
+   */
+  enableCandidates?: EnableCandidate[];
 }
 
 export type RuntimeVerdict =
@@ -158,6 +170,12 @@ export function buildEngineLabel(provider: BuildStudioDispatchConfig["provider"]
 
 // ─── Routed-phase resolution (the shared dry-run) ──────────────────────────────
 
+// The routing contract previewRoute inferred for each routed phase, keyed by the
+// resolution it produced. Kept off the public PhaseResolution shape (it is a
+// heavy internal type); the top-level resolver reads it to compute
+// enable-candidates for any phase blocked with `no-eligible-endpoint`.
+const phaseContracts = new WeakMap<PhaseResolution, RequestContract>();
+
 async function resolveRoutedPhase(args: {
   phase: BuildPhaseId;
   label: string;
@@ -183,13 +201,13 @@ async function resolveRoutedPhase(args: {
     engine: args.engine,
   };
   try {
-    const { decision, selectedManifest } = await previewRoute(
+    const { decision, selectedManifest, contract } = await previewRoute(
       [{ role: "user", content: args.sample }],
       "internal",
       routeOptions,
     );
     if (!decision.selectedEndpoint || !selectedManifest) {
-      return {
+      const blocked: PhaseResolution = {
         ...base,
         providerId: null,
         modelId: decision.selectedModelId,
@@ -207,6 +225,10 @@ async function resolveRoutedPhase(args: {
           },
         ],
       };
+      // Keep the contract so the top-level resolver can name the disabled
+      // provider(s) that would satisfy it if enabled (F10/F11).
+      phaseContracts.set(blocked, contract);
+      return blocked;
     }
     return {
       ...base,
@@ -510,6 +532,28 @@ export async function resolveModelSelectionByPhase(): Promise<ModelSelectionOver
             "Make the local model win routing for this phase in Providers & Routing — note a user-configured cloud provider always outranks the bundled local model — or accept that only the build phase runs locally.",
         });
       }
+    }
+  }
+
+  // F10/F11: for any phase blocked with `no-eligible-endpoint`, name the
+  // currently-off provider(s) whose capabilities would satisfy its routing
+  // contract if enabled — so the operator gets a one-click action, not a dead
+  // pointer. Candidate providers are loaded ONCE and scored per blocked phase.
+  const blockedPhases = phases.filter(
+    (p) => phaseContracts.has(p) && p.flags.some((f) => f.code === "no-eligible-endpoint"),
+  );
+  if (blockedPhases.length > 0) {
+    try {
+      const candidateProviders = await loadPhaseEnableCandidateProviders();
+      if (candidateProviders.length > 0) {
+        for (const p of blockedPhases) {
+          const contract = phaseContracts.get(p)!;
+          const cands = selectEnableCandidatesForContract(contract, candidateProviders);
+          if (cands.length > 0) p.enableCandidates = cands;
+        }
+      }
+    } catch {
+      // Candidate discovery is best-effort; the text remediation still renders.
     }
   }
 
