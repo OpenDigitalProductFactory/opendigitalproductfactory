@@ -66,7 +66,7 @@ const CANDIDATE_LIMIT = 10;
 export const GATED_CREATE_PATHS: Readonly<Record<DedupGatedDomain, readonly string[]>> = {
   "customer-account": [
     "apps/web/lib/actions/crm.ts#createCustomerAccount",
-    "apps/web/lib/mcp-tools.ts#create_customer_account",
+    "apps/web/lib/mcp/packs/crm-sales-pipeline-pack.ts#create_customer_account",
     "apps/web/app/api/v1/customer/accounts/[id]/route.ts#PATCH",
   ],
   "customer-site": ["apps/web/lib/actions/crm.ts#createCustomerSite"],
