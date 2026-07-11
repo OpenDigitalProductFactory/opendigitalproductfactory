@@ -47,6 +47,7 @@ import {
   getSkillsForAgent,
   toSkillSummariesForPrompt,
 } from "@/lib/skills/runtime";
+import { rankSkillsByRelevance } from "@/lib/skills/skill-relevance";
 import { recordSkillUsageEvents } from "@/lib/skills/usage-events";
 import { recallWikiContext } from "@/lib/wiki/recall";
 import { recordCoverageGap } from "@/lib/wiki/coverage-gap";
@@ -939,7 +940,10 @@ export async function sendMessage(input: {
     // each eligible skill (and again as `loaded` once the skills block is
     // included in the composed prompt). Telemetry failures are swallowed
     // inside recordSkillUsageEvents — they must never break the response.
-    const coworkerSkills = await getSkillsForAgent(agent.agentId);
+    const coworkerSkills = rankSkillsByRelevance(
+      await getSkillsForAgent(agent.agentId),
+      trimmedContent,
+    );
     const skillSummaries = toSkillSummariesForPrompt(coworkerSkills);
     const eligibleSkillIds = skillSummaries.map((s) => s.skillId);
     if (eligibleSkillIds.length > 0) {
@@ -1189,7 +1193,10 @@ export async function sendMessage(input: {
     // skills (dpf-decision-via-kernel, dpf-retrieve-decision-context,
     // dpf-record-decision-outcome) the governance block above tells the coworker
     // to run. Telemetry mirrors the unified path so eligibility is observable.
-    const legacyCoworkerSkills = await getSkillsForAgent(agent.agentId);
+    const legacyCoworkerSkills = rankSkillsByRelevance(
+      await getSkillsForAgent(agent.agentId),
+      trimmedContent,
+    );
     const legacySkillSummaries = toSkillSummariesForPrompt(legacyCoworkerSkills);
     if (legacySkillSummaries.length > 0) {
       let skillsBlock = "Available coworker skills:";
