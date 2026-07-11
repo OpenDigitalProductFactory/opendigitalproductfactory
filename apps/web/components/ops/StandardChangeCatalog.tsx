@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useTransition } from "react";
+import { ExpandableCard } from "@/components/ui/report-kit";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -153,29 +154,23 @@ export function StandardChangeCatalog({
             : "Unknown");
 
         return (
-          <div key={entry.id}>
-            <button
-              type="button"
-              onClick={() =>
-                setExpandedKey(expanded ? null : entry.catalogKey)
-              }
-              className={`w-full text-left p-4 rounded-lg border transition-colors ${
-                expanded
-                  ? "bg-[var(--dpf-surface-2)] border-[var(--dpf-accent)]/40"
-                  : "bg-[var(--dpf-surface-1)] border-[var(--dpf-border)] hover:border-[var(--dpf-accent)]/30"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
+          <ExpandableCard
+            key={entry.id}
+            id={`catalog-${entry.catalogKey}`}
+            open={expanded}
+            onOpenChange={(open) => setExpandedKey(open ? entry.catalogKey : null)}
+            summary={
+              <span className="flex items-start justify-between gap-4">
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-xs text-[var(--dpf-accent)]">
                       {entry.catalogKey}
                     </span>
                     <span className="font-semibold text-[var(--dpf-text)] truncate">
                       {entry.title}
                     </span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  </span>
+                  <span className="mt-1.5 flex items-center gap-2 flex-wrap">
                     <Badge
                       label={CATEGORY_LABELS[entry.category] ?? entry.category}
                       color="var(--dpf-muted-foreground)"
@@ -188,17 +183,16 @@ export function StandardChangeCatalog({
                       label={entry.approvalPolicy === "auto" ? "Auto-approve" : "Delegated"}
                       color="var(--dpf-info)"
                     />
-                  </div>
-                  <p className="text-xs text-[var(--dpf-muted)] mt-1.5 line-clamp-2">
+                  </span>
+                  <span className="mt-1.5 block text-xs text-[var(--dpf-muted)] line-clamp-2">
                     {entry.description}
-                  </p>
-                </div>
-              </div>
-            </button>
-
-            {/* Expanded detail */}
+                  </span>
+                </span>
+              </span>
+            }
+          >
             {expanded && (
-              <div className="mt-1 p-4 rounded-lg bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
+              <div>
                 {/* Template items */}
                 <h4 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-2">
                   Template Items ({entry.templateItems.length})
@@ -246,7 +240,7 @@ export function StandardChangeCatalog({
                 </button>
               </div>
             )}
-          </div>
+          </ExpandableCard>
         );
       })}
     </div>

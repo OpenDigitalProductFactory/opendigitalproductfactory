@@ -28,6 +28,8 @@ import {
 | `EmptyState` | ✅ (pure) | "No … found" / nothing-here-yet placeholders |
 | `Skeleton` | ✅ (pure) | loading shimmer bars (the one place `animate-pulse` lives) |
 | `Notice` | ✅ (pure) | inline callouts / banners (info · warn · success · error) |
+| `CollapsibleList` | client | preview a long list, then reveal its remaining rows |
+| `ExpandableCard` | client | reveal one peer record's subordinate detail inline |
 | `DataTable` | client¹ | tabular lists with sort, paging, empty/loading states |
 | `FilterBar` | client¹ | search + select + pill facets above a table |
 | `ExportButton` / `toCsv` | client | CSV export of rows (papaparse-backed) |
@@ -213,6 +215,34 @@ through the one registry.
 Variants: `info · warn · success · error`. The left border + heading take the
 intent color; the background is a soft wash of the same token. Pass
 `icon={false}` to drop the leading glyph, or any node to override it.
+
+## ExpandableCard
+
+Use `ExpandableCard` for a list of peer records where one record's subordinate
+detail is revealed in place. The summary is rendered once and remains the same
+open/close trigger. A parent owns the controlled state, which makes single-open
+accordion behavior explicit.
+
+```tsx
+const [openId, setOpenId] = useState<string | null>(null);
+
+<ExpandableCard
+  id={`invoice-${invoice.id}`}
+  open={openId === invoice.id}
+  onOpenChange={(open) => setOpenId(open ? invoice.id : null)}
+  summary={<InvoiceSummary invoice={invoice} />}
+>
+  <InvoiceDetail invoice={invoice} />
+</ExpandableCard>
+```
+
+The primitive owns the native button, heading, visible disclosure indicator,
+`aria-expanded`, `aria-controls`, labelled region, focus treatment, and connected
+card styling. The caller owns domain content, data loading, errors, and actions.
+
+Do not use it to truncate one long list (`CollapsibleList`), hide one short piece
+of secondary prose (`<details>`), host a separate workspace (drawer), or replace
+a durable detail URL.
 
 ## ExportButton
 

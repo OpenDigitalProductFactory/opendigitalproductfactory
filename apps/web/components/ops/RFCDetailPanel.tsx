@@ -43,7 +43,6 @@ type Props = {
   rfc: RFC;
   isPending: boolean;
   onActionComplete: () => void;
-  onClose: () => void;
 };
 
 // ─── Colour Maps ────────────────────────────────────────────────────────────
@@ -67,12 +66,6 @@ const RISK_COLORS: Record<string, string> = {
   medium: "var(--dpf-warning)",
   high: "var(--dpf-destructive)",
   critical: "var(--dpf-destructive)",
-};
-
-const TYPE_BADGES: Record<string, string> = {
-  standard: "STD",
-  normal: "NRM",
-  emergency: "EMG",
 };
 
 const ITEM_STATUS_COLORS: Record<string, string> = {
@@ -158,7 +151,7 @@ function Badge({ label, color }: { label: string; color: string }) {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export function RFCDetailPanel({ rfc, isPending: parentPending, onActionComplete, onClose }: Props) {
+export function RFCDetailPanel({ rfc, isPending: parentPending, onActionComplete }: Props) {
   const [isPending, startTransition] = useTransition();
   const [confirmRollback, setConfirmRollback] = useState(false);
   const [rationale, setRationale] = useState("");
@@ -290,46 +283,13 @@ export function RFCDetailPanel({ rfc, isPending: parentPending, onActionComplete
   }
 
   return (
-    <div className="p-4 rounded-lg bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-xs text-[var(--dpf-accent)]">
-              {rfc.rfcId}
-            </span>
-            <span className="font-semibold text-[var(--dpf-text)]">{rfc.title}</span>
-          </div>
-          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            <Badge
-              label={TYPE_BADGES[rfc.type] ?? rfc.type.toUpperCase()}
-              color={rfc.type === "emergency" ? "var(--dpf-destructive)" : "var(--dpf-muted-foreground)"}
-            />
-            <Badge
-              label={rfc.riskLevel}
-              color={RISK_COLORS[rfc.riskLevel] ?? "var(--dpf-muted-foreground)"}
-            />
-            <Badge
-              label={rfc.status}
-              color={STATUS_COLORS[rfc.status] ?? "var(--dpf-muted-foreground)"}
-            />
-          </div>
-          {rfc.description && (
-            <p className="text-xs text-[var(--dpf-muted)] mt-2 line-clamp-3">
-              {rfc.description}
-            </p>
-          )}
-        </div>
-        <button
-          onClick={onClose}
-          className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors shrink-0"
-        >
-          Close
-        </button>
-      </div>
+    <div>
+      {rfc.description && (
+        <p className="text-xs text-[var(--dpf-muted)]">{rfc.description}</p>
+      )}
 
       {/* Approval Chain Timeline */}
-      <div className="mt-4">
+      <div className={rfc.description ? "mt-4" : ""}>
         <h4 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-2">
           Approval Chain
         </h4>
