@@ -77,6 +77,8 @@
   .ticket .tp{margin-top:5px;height:4px;border-radius:999px;background:var(--dpf-surface-3);overflow:hidden;}
   .ticket .tp i{display:block;height:100%;background:var(--dpf-accent);animation:cook 2.6s ease-in-out infinite;}
   .ticket.online .tp i{background:var(--dpf-info);} .ticket.late .tp i{background:var(--dpf-warning);}
+  .ticket .own{display:flex;align-items:center;gap:5px;margin-top:6px;font-size:9.5px;color:var(--dpf-muted);}
+  .ticket .own .oav{width:15px;height:15px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;font-size:7px;font-weight:700;color:var(--dpf-accent);background:color-mix(in srgb,var(--dpf-accent) 16%,var(--dpf-surface-1));border:1px solid var(--dpf-accent);}
 
   /* Floor team: staff shown by the WORK they own, not decorative movement. */
   .team .crew-row{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;}
@@ -200,11 +202,11 @@
         <div class="station"><div class="sn"><span class="sd"></span>Expo</div><div class="load"><i style="width:30%"></i></div></div>
       </div>
       <div class="pass">
-        <div class="ticket"><div class="tt"><span>Table 12</span></div><div class="ti">2&#215; carbonara, branzino</div><div class="tp"><i style="width:60%"></i></div></div>
-        <div class="ticket late"><div class="tt"><span>Table 14</span></div><div class="ti">running long &#183; 22m</div><div class="tp"><i style="width:90%"></i></div></div>
-        <div class="ticket online"><div class="tt"><span>Delivery</span><span class="web">ONLINE</span></div><div class="ti">Ravioli, tiramisu</div><div class="tp"><i style="width:40%"></i></div></div>
-        <div class="ticket"><div class="tt"><span>Table 7</span></div><div class="ti">Margherita, salad</div><div class="tp"><i style="width:25%"></i></div></div>
-        <div class="ticket online"><div class="tt"><span>Pickup</span><span class="web">ONLINE</span></div><div class="ti">2&#215; lasagna</div><div class="tp"><i style="width:15%"></i></div></div>
+        <div class="ticket"><div class="tt"><span>Table 12</span></div><div class="ti">2&#215; carbonara, branzino</div><div class="tp"><i style="width:60%"></i></div><div class="own"><span class="oav">MAR</span>Pasta &#183; Marco</div></div>
+        <div class="ticket late"><div class="tt"><span>Table 14</span></div><div class="ti">running long &#183; 22m</div><div class="tp"><i style="width:90%"></i></div><div class="own"><span class="oav">SAM</span>Grill &#183; Sam &#183; expo watching</div></div>
+        <div class="ticket online"><div class="tt"><span>Delivery</span><span class="web">ONLINE</span></div><div class="ti">Ravioli, tiramisu</div><div class="tp"><i style="width:40%"></i></div><div class="own"><span class="oav">MAR</span>Pasta &#183; Marco</div></div>
+        <div class="ticket"><div class="tt"><span>Table 7</span></div><div class="ti">Margherita, salad</div><div class="tp"><i style="width:25%"></i></div><div class="own"><span class="oav">SAM</span>Grill &#183; Sam</div></div>
+        <div class="ticket online"><div class="tt"><span>Pickup</span><span class="web">ONLINE</span></div><div class="ti">2&#215; lasagna</div><div class="tp"><i style="width:15%"></i></div><div class="own"><span class="oav">LEA</span>Saut&#233; &#183; Lea</div></div>
       </div>
     </div>
 
