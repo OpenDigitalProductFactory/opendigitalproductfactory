@@ -12,7 +12,10 @@ export const OPS_NAV_GROUPS: ReadonlyArray<{
 }> = [
   {
     label: "Delivery",
-    tabs: [{ label: "Backlog", href: "/ops" }],
+    tabs: [
+      { label: "Backlog", href: "/ops" },
+      { label: "Demand", href: "/ops/demand" },
+    ],
   },
   {
     label: "Runtime & Releases",

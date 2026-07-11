@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   resolveBusinessProfile,
   GENERIC_BUSINESS_PROFILE,
+  resolveStanceVectors,
+  GENERIC_STANCE_VECTORS,
 } from "./archetype-business-context";
 
 describe("resolveBusinessProfile", () => {
@@ -120,5 +122,42 @@ describe("resolveBusinessProfile", () => {
       const industry = resolveBusinessProfile({ industry: "healthcare-wellness" });
       expect(dental.supplyChain).toBe(industry.supplyChain);
     });
+  });
+});
+
+describe("resolveStanceVectors (BI-70ADC71F)", () => {
+  it("returns the generic set for an unknown industry, with all 5 vectors present", () => {
+    const v = resolveStanceVectors({ archetypeId: null, industry: "no-such-industry" });
+    expect(Object.keys(v).sort()).toEqual([
+      "customer-goodwill",
+      "growth-vs-stability",
+      "pricing-integrity",
+      "quality-bar",
+      "spend-authority",
+    ]);
+    expect(v["customer-goodwill"].ceilingUsd).toBe(100);
+    expect(v["spend-authority"].ceilingUsd).toBe(250);
+    for (const key of Object.keys(v) as (keyof typeof v)[]) {
+      expect(v[key].stance.length).toBeGreaterThan(40);
+      expect(v[key].title.length).toBeGreaterThan(5);
+    }
+  });
+
+  it("merges industry overrides over the generic set (healthcare)", () => {
+    const v = resolveStanceVectors({ archetypeId: "dental-practice", industry: "healthcare-wellness" });
+    // Overridden vectors carry the healthcare posture…
+    expect(v["customer-goodwill"].ceilingUsd).toBe(150);
+    expect(v["customer-goodwill"].stance).toMatch(/patient/i);
+    expect(v["quality-bar"].stance).toMatch(/safety|clinical/i);
+    expect(v["spend-authority"].ceilingUsd).toBe(500);
+    // …vectors without an override fall back to generic.
+    expect(v["growth-vs-stability"]).toEqual(GENERIC_STANCE_VECTORS["growth-vs-stability"]);
+    expect(v["pricing-integrity"]).toEqual(GENERIC_STANCE_VECTORS["pricing-integrity"]);
+  });
+
+  it("public-sector goodwill carries no discretionary ceiling", () => {
+    const v = resolveStanceVectors({ industry: "public-sector" });
+    expect(v["customer-goodwill"].ceilingUsd).toBeUndefined();
+    expect(v["customer-goodwill"].stance).toMatch(/resident|process|equal/i);
   });
 });
