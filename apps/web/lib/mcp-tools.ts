@@ -126,6 +126,21 @@ export type ToolDefinition = {
    * memory; this flag only exempts it from the advise-mode runtime filter.
    */
   coworkerArtifact?: boolean;
+  /**
+   * Tool hands a scoped sub-task to a NAMED peer coworker (delegation /
+   * summon). Like `coworkerArtifact`, this is an advise-safe exemption: it
+   * remains `sideEffect: true` for MCP annotations and tool-execution memory,
+   * but is NOT stripped by the advise-mode runtime filter. Rationale
+   * (BI-7EB4AE2C): naming the right peer and handing off a scoped sub-task —
+   * with a visible handoff card the user sees inline — is COORDINATION, not an
+   * irreversible action on the outside world. The advise/act line guards
+   * against acting externally; routing work to a teammate is how an advisor
+   * gets the user a better answer. Without this flag an advise-mode coworker
+   * can NAME the right peer but the delegation is muzzled, so the sub-task
+   * dead-ends back to the human. Genuinely destructive writes stay
+   * `sideEffect: true` WITHOUT this flag and remain stripped in advise mode.
+   */
+  adviseCoordination?: boolean;
   /** When set, tool is only available during these build phases.
    *  Null/undefined = available in all phases (non-build tools). */
   buildPhases?: BuildPhaseTag[] | null;
@@ -3148,6 +3163,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null,
     sideEffect: true,
+    // Delegation is advise-safe coordination — an advisor may route a scoped
+    // sub-task to a named peer with a visible handoff without leaving advise
+    // mode. Kept sideEffect:true for annotations; adviseCoordination exempts it
+    // from the advise-mode runtime filter (BI-7EB4AE2C).
+    adviseCoordination: true,
   },
   {
     name: "summon_coworker",
@@ -3164,6 +3184,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null,
     sideEffect: true,
+    // Bringing a named peer into the conversation is advise-safe coordination —
+    // the advisor decides which teammate to pull in; the handoff is visible and
+    // reversible. Kept sideEffect:true for annotations; adviseCoordination
+    // exempts it from the advise-mode runtime filter (BI-7EB4AE2C).
+    adviseCoordination: true,
   },
   {
     name: "trigger_contributor_inventory_sync",
@@ -4905,6 +4930,29 @@ export async function executeTool(
           "[record_external_development_evidence] auto-capsule capture failed:",
           getErrorMessage(captureError),
         );
+      }
+
+      // Bind the evidence record to the capsule the capture just resolved so it
+      // rolls up onto the capsule timeline with producer identity
+      // (EP-WORK-CONVERGENCE Phase 1 / BI-D6FA8641). The record was written
+      // before capture (order preserved for back-compat); patch it here.
+      // Best-effort — a link failure must never fail the evidence write.
+      if (capturedCapsuleId) {
+        try {
+          await prisma.externalEvidenceRecord.update({
+            where: { id: evidence.id },
+            data: {
+              workCapsuleId: capturedCapsuleId,
+              executorKind: provider,
+              ...(context?.agentId ? { recordedByAgentId: context.agentId } : {}),
+            },
+          });
+        } catch (linkError) {
+          console.warn(
+            "[record_external_development_evidence] capsule link failed:",
+            getErrorMessage(linkError),
+          );
+        }
       }
 
       return {
