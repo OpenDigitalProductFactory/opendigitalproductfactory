@@ -638,6 +638,18 @@ export function shouldNudge(params: {
    */
   isSetupTourTurn?: boolean;
   allowFirstTurnTextOnlyReply?: boolean;
+  /**
+   * True when this turn is on a conversational (non-/build) coworker route. On
+   * such routes there is no ideate→plan→build→review→ship phase-transition
+   * contract, so the permission-seeking nudge — which exists to push a BUILD
+   * agent past a mid-phase "should I proceed?" stall — does not apply. A
+   * substantive answer that merely ends with a helpful offer ("…would you like
+   * me to…?") is a COMPLETE conversational reply, not a stall. Without this,
+   * such an answer was nudged away after tools had run and (paired with the
+   * local-spinning guard) surfaced the misleading "not strong enough"
+   * diagnostic while a correct answer was already in hand. See BI-C145F650.
+   */
+  isConversationalRoute?: boolean;
 }): boolean {
   // One nudge maximum. Extra nudges multiply cost — if the model doesn't respond
   // to one targeted nudge, it won't respond to more and will just burn tokens.
@@ -661,6 +673,22 @@ export function shouldNudge(params: {
     && params.isSetupTourTurn === true
   ) {
     return false;
+  }
+
+  // Conversational (non-/build) route: a substantive answer is FINAL even if it
+  // ends with a helpful offer ("…would you like me to…?"). The permission-seeking
+  // and narration nudges below enforce the BUILD phase-transition contract, which
+  // has no analogue on a conversational coworker turn — so nudging a complete
+  // answer there discards it and, with the local-spinning guard, surfaces the
+  // misleading "not strong enough" diagnostic. This lifts the iteration-0
+  // substantive-reply rule (below) to every iteration on conversational routes.
+  // See BI-C145F650.
+  if (params.isConversationalRoute) {
+    const text = params.responseText?.trim() ?? "";
+    const isSubstantiveReply = text.length >= 100
+      && !COMPLETION_CLAIM_PATTERN.test(text)
+      && !NARRATION_PATTERN.test(text);
+    if (isSubstantiveReply) return false;
   }
 
   // First iteration with no tools called — nudge UNLESS the response is a
@@ -1489,12 +1517,22 @@ export async function runAgenticLoop(params: {
     // converge and return a diagnostic rather than burning the full 200
     // iterations. See FB-71FB3A53 thread, 2026-05-22.
     if (lastResult?.providerId === "local" && executedTools.length >= 8) {
-      console.warn(
-        `[agentic-loop] local model spun through ${executedTools.length} tool calls without converging on a text answer. ` +
-        `Exiting early with diagnostic. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
-      );
+      // Defect-B safety net (BI-C145F650): if a correct answer was captured
+      // before a nudge, return it rather than discarding it for the canned
+      // diagnostic — the guard should never throw away an answer already in hand.
+      if (bestPreNudgeContent.length > 0) {
+        console.warn(
+          `[agentic-loop] local model spun through ${executedTools.length} tool calls; recovering preserved pre-nudge answer (${bestPreNudgeContent.length} chars) instead of the diagnostic. ` +
+          `agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
+        );
+      } else {
+        console.warn(
+          `[agentic-loop] local model spun through ${executedTools.length} tool calls without converging on a text answer. ` +
+          `Exiting early with diagnostic. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
+        );
+      }
       return {
-        content: buildLocalToolCallFailureMessage(lastResult),
+        content: bestPreNudgeContent || buildLocalToolCallFailureMessage(lastResult),
         providerId: lastResult.providerId,
         modelId: lastResult.modelId,
         downgraded: lastResult.downgraded,
@@ -1984,6 +2022,7 @@ export async function runAgenticLoop(params: {
           ),
         ),
         isSetupTourTurn: isSetupTourTurn(messages),
+        isConversationalRoute: !BUILD_ROUTE_PATTERN.test(routeContext ?? ""),
         allowFirstTurnTextOnlyReply: shouldAllowProviderStatusTextReply({
           routeContext,
           taskType,
@@ -2469,7 +2508,9 @@ export async function runAgenticLoop(params: {
               executedTools,
               routeContext,
             }))
-      : (lastResult?.content?.trim() ? lastResult.content : exhaustedMessage),
+      // Defect-B safety net (BI-C145F650): before the canned exhausted message,
+      // prefer a correct answer preserved before a nudge over discarding it.
+      : (lastResult?.content?.trim() ? lastResult.content : (bestPreNudgeContent || exhaustedMessage)),
     providerId: lastResult?.providerId ?? "unknown",
     modelId: lastResult?.modelId ?? "unknown",
     downgraded: lastResult?.downgraded ?? false,

@@ -185,6 +185,34 @@ describe("shouldNudge", () => {
       hasTools: true, executedToolCount: 0, responseLength: 44,
     })).toBe(false);
   });
+
+  // BI-C145F650 defect A — the exact /workspace COO "where are the archetypes?"
+  // failure. After tools have run, a substantive conversational answer that
+  // merely ENDS with a helpful offer ("…would you like me to…?") must be
+  // accepted as final. Before the fix it fell through to the permission-seeking
+  // catch-all and was nudged away, then the local-spinning guard surfaced the
+  // misleading "not strong enough" diagnostic while a correct answer was in hand.
+  it("does not nudge a substantive conversational answer that ends with a helpful offer (post-tool-call)", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 4, maxIterations: 200,
+      hasTools: true, executedToolCount: 5, responseLength: 260,
+      responseText:
+        "The archetype selector is DPF's onboarding screen — it's where you choose the business archetype that defines your industry model (plumber, restaurant, gym, consultant, nonprofit, and others). Since it's already set for your business, would you like me to walk you there?",
+      isConversationalRoute: true,
+    })).toBe(false);
+  });
+
+  // Guard against over-broadening: on a BUILD route the phase-transition contract
+  // still applies, so a mid-phase permission-seeking stall must still be nudged.
+  it("still nudges a permission-seeking answer on a build route (phase contract preserved)", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 4, maxIterations: 200,
+      hasTools: true, executedToolCount: 5, responseLength: 260,
+      responseText:
+        "I have reviewed the design in full and mapped out the complete implementation approach across the affected modules, including the rollout order. Should I proceed with applying the fix now?",
+      isConversationalRoute: false,
+    })).toBe(true);
+  });
 });
 
 describe("buildRepeatedToolStopMessage", () => {
@@ -634,6 +662,48 @@ describe("runAgenticLoop", () => {
     // the actual fix (connect a stronger provider).
     expect(result.content.toLowerCase()).toMatch(/local ai|local model/);
     expect(result.content).toMatch(/Platform > AI > Providers/);
+  });
+
+  // BI-C145F650 defect B — safety net. Even when a nudge legitimately fired and
+  // the local model then spun to the spinning guard, a correct answer preserved
+  // before the nudge (bestPreNudgeContent) must be returned instead of the canned
+  // "not strong enough" diagnostic.
+  it("returns the preserved pre-nudge answer instead of the local diagnostic when the spinning guard fires", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const PRESERVED =
+      "I have reviewed the design in full and mapped out the complete implementation approach across the affected modules, including the rollout order and the risks. Should I proceed with applying the fix now?";
+    let call = 0;
+    mockRoute.mockImplementation(async () => {
+      call++;
+      if (call === 1) {
+        // iter 0: a real tool call so the next iteration is past iteration 0
+        // (avoids the iteration-0 local text-only diagnostic guard).
+        return mockResult({
+          content: "Looking into it.", providerId: "local", modelId: "docker.io/ai/qwen3.6:latest",
+          toolCalls: [{ id: "t0", name: "search_project_files", arguments: { query: "seed" } }],
+        });
+      }
+      if (call === 2) {
+        // iter 1: substantive answer ending in a permission offer → nudged on a
+        // /build route and PRESERVED into bestPreNudgeContent.
+        return mockResult({ content: PRESERVED, providerId: "local", modelId: "docker.io/ai/qwen3.6:latest", toolCalls: [] });
+      }
+      // iter 2+: keep emitting distinct successful tool calls until the spinning
+      // guard (executedTools >= 8) trips.
+      return mockResult({
+        content: "Still working.", providerId: "local", modelId: "docker.io/ai/qwen3.6:latest",
+        toolCalls: [{ id: `t${call}`, name: "search_project_files", arguments: { query: `q-${call}` } }],
+      });
+    });
+    vi.mocked(governedExecuteTool).mockResolvedValue({ success: true, message: "ok", data: {} } as never);
+
+    const result = await runAgenticLoop({ ...baseParams, routeContext: "/build", agentId: "build-specialist" });
+
+    // The preserved answer is returned, NOT the local-model diagnostic.
+    expect(result.content).toContain("Should I proceed with applying the fix");
+    expect(result.content).not.toMatch(/Platform > AI > Providers/);
+    expect(result.content.toLowerCase()).not.toContain("wasn't strong enough");
+    expect(result.providerId).toBe("local");
   });
 
   it("returns the same local-model diagnostic on Build Studio routes (FB-71FB3A53)", async () => {
