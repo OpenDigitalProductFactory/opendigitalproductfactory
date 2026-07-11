@@ -78,14 +78,14 @@
   .ticket .tp i{display:block;height:100%;background:var(--dpf-accent);animation:cook 2.6s ease-in-out infinite;}
   .ticket.online .tp i{background:var(--dpf-info);} .ticket.late .tp i{background:var(--dpf-warning);}
 
-  .aisle{position:relative;height:44px;background:repeating-linear-gradient(90deg,var(--wood) 0 22px,color-mix(in srgb,var(--dpf-warning) 6%,var(--dpf-surface-1)) 22px 44px);border:1px solid var(--dpf-border);border-radius:var(--radius);overflow:hidden;}
-  .aisle .albl{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dpf-muted);z-index:2;background:color-mix(in srgb,var(--dpf-surface-1) 72%,transparent);padding:2px 6px;border-radius:6px;}
-  .mover{position:absolute;top:50%;margin-top:-11px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:8px;font-weight:700;color:#fff;background:var(--dpf-accent);box-shadow:var(--sh);}
-  .mover.ai{background:color-mix(in srgb,var(--dpf-accent) 20%,var(--dpf-surface-1));color:var(--dpf-accent);border:2px solid var(--dpf-accent);}
-  .mover .plate{position:absolute;right:-9px;top:6px;width:9px;height:9px;border-radius:50%;background:var(--dpf-warning);border:1px solid var(--dpf-surface-1);}
-  .m1{animation:tofro 7s ease-in-out infinite;} .m2{animation:tofro 9s ease-in-out infinite reverse;animation-delay:-2s;}
-  .m3{animation:tofro 6s ease-in-out infinite;animation-delay:-3s;} .m4{animation:tofro 11s ease-in-out infinite reverse;animation-delay:-1s;}
-  @keyframes tofro{0%{left:4%}50%{left:92%}100%{left:4%}}
+  /* Floor team: staff shown by the WORK they own, not decorative movement. */
+  .team .crew-row{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;}
+  .mate{flex:0 0 auto;min-width:172px;display:flex;align-items:center;gap:9px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:10px;padding:7px 10px;}
+  .mate .av{width:24px;height:24px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;font-size:8.5px;font-weight:700;color:#fff;background:var(--dpf-accent);}
+  .mate.ai .av{background:color-mix(in srgb,var(--dpf-accent) 18%,var(--dpf-surface-1));color:var(--dpf-accent);border:2px solid var(--dpf-accent);}
+  .mate.idle .av{background:var(--dpf-muted);}
+  .mate .mt{min-width:0;} .mate .mr{font-size:11.5px;font-weight:600;} .mate .mw{font-size:10.5px;color:var(--dpf-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .mate.idle .mw{color:var(--dpf-muted);}
 
   .dining .tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;padding:12px;}
   .table{border:1.5px solid var(--dpf-border);border-radius:9px;background:var(--dpf-surface-1);padding:6px;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;transition:transform .12s, box-shadow .12s, border-color .12s;}
@@ -143,8 +143,7 @@
   .legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:0 16px 12px;} .legend .li{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dpf-text-secondary);} .legend .sw{width:10px;height:10px;border-radius:3px;}
 
   @media (prefers-reduced-motion: reduce){
-    .mover,.station .load i,.ticket .tp i,.station.busy .sd,.table.suggest{animation:none;}
-    .mover.m1{left:20%;} .mover.m2{left:55%;} .mover.m3{left:40%;} .mover.m4{left:72%;}
+    .station .load i,.ticket .tp i,.station.busy .sd,.table.suggest{animation:none;}
   }
 </style>
 
@@ -209,10 +208,16 @@
       </div>
     </div>
 
-    <div class="aisle" aria-label="Staff on the floor">
-      <span class="albl">Floor &#183; 4 servers, 2 runners + AI expo</span>
-      <span class="mover m1">S1</span><span class="mover m2">R1<span class="plate"></span></span>
-      <span class="mover ai m3">AI</span><span class="mover m4">S2<span class="plate"></span></span>
+    <div class="zone team">
+      <div class="zh"><span class="zt">Floor team &#183; on shift</span><span class="zsub">each one anchored to live work &#183; staff = work owned</span></div>
+      <div class="crew-row">
+        <div class="mate"><span class="av">HOST</span><div class="mt"><div class="mr">Host</div><div class="mw">seating &#183; sequencing the waitlist</div></div></div>
+        <div class="mate"><span class="av">MAR</span><div class="mt"><div class="mr">Server &#183; Maria</div><div class="mw">T1, T3, T9 &#183; refire T9 dessert</div></div></div>
+        <div class="mate"><span class="av">DEV</span><div class="mt"><div class="mr">Server &#183; Devi</div><div class="mw">T10, T12, T14 &#183; taking T7 order</div></div></div>
+        <div class="mate"><span class="av">LINE</span><div class="mt"><div class="mr">Line &#183; pasta</div><div class="mw">tickets #82, #14 on the pass</div></div></div>
+        <div class="mate ai"><span class="av">AI</span><div class="mt"><div class="mr">AI expo</div><div class="mw">flagged T14 late (22m) &#183; QAs the pass</div></div></div>
+        <div class="mate ai"><span class="av">AI</span><div class="mt"><div class="mr">AI host</div><div class="mw">suggests seats from turn times</div></div></div>
+      </div>
     </div>
 
     <!-- DINING ROOM: tables carry data-* so JS can seat/clear/suggest -->
