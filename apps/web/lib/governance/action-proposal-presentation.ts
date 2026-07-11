@@ -35,7 +35,6 @@ export function projectActionProposalPresentation(
     const whyNow = readString(parameters?.whyNow);
     const proactivity = asRecord(parameters?.proactivity);
     const level = readString(proactivity?.resolvedLevel);
-    const boundary = readString(proactivity?.actionBoundary);
 
     return {
       title: recommendedAction ?? "Send customer update",
@@ -43,7 +42,9 @@ export function projectActionProposalPresentation(
       summary: `Why now: ${whyNow ?? "A customer-visible dispatch commitment needs attention."}`,
       details: [
         { label: "Proactivity", value: level ? readableProactivityLevel(level) : "Balanced" },
-        { label: "Approval", value: readableActionBoundary(boundary) },
+        // BI-AB7CD55B: every proposal is human-gated regardless of the plan's
+        // actionBoundary — say the truth instead of "Pre-approved actions".
+        { label: "Approval", value: "Requires your approval" },
       ],
     };
   }
@@ -105,12 +106,6 @@ function readableProactivityLevel(level: string): string {
     return getProactivityLevelCopy(level).label;
   }
   return humanizeActionType(level);
-}
-
-function readableActionBoundary(boundary: string | null): string {
-  if (boundary === "advise") return "Advises only";
-  if (boundary === "preauthorized") return "Pre-approved actions";
-  return "Asks first";
 }
 
 function readableScope(scope: string, scopeRef?: string | null): string {
