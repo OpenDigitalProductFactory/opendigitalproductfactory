@@ -62,6 +62,7 @@ import { projectFilesPack } from "./packs/project-files-pack";
 import { sorReadPack } from "./packs/sor-read-pack";
 import { workThreadPack } from "./packs/work-thread-pack";
 import { codeIntelligencePack } from "./packs/code-intelligence-pack";
+import { taxonomyArchetypePack } from "./packs/taxonomy-archetype-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
 
@@ -113,4 +114,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   sorReadPack,
   workThreadPack,
   codeIntelligencePack,
+  taxonomyArchetypePack,
 ]);
