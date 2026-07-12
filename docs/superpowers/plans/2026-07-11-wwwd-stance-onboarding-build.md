@@ -19,7 +19,7 @@
 - Result: fresh org = 9 pages / 12 materials over all 4 classes (plan-readiness 4,
   risk-assessment 3, professional-practice 3, architecture-tradeoff 2).
 
-## Phase 2 — Stance capture & promotion loop (BI-9677364B + BI-002DEB85) ✅ this PR
+## Phase 2 — Stance capture & promotion loop (BI-9677364B + BI-002DEB85) ✅ shipped (PR #2812)
 
 - `lib/decision-perspective/stance-promotion.ts`: `promoteStanceMaterial` — the ONE write path that
   makes a stance gate-live; tiers `confirmed` A/0.9 and `ruled` A/1.0; never downgrades.
@@ -32,7 +32,7 @@
 - `/wiki/review`: "Waiting on your call" section listing unresolved org-business decisions with the
   inline answer + make-standing control; stance form gains the decision-area picker + Publish.
 
-## Phase 3 — "How you decide" setup step (BI-D6DC2432) — after Phase 2
+## Phase 3 — "How you decide" setup step (BI-D6DC2432) ✅ this PR
 
 - `SETUP_STEPS` entry `how-you-decide` after `business-context`; 5 archetype-prefilled scenario
   cards (resolveStanceVectors), Confirm-all fast path; confirm upgrades the vector's bundle via

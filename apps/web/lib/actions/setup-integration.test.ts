@@ -79,9 +79,12 @@ describe("setup flow integration", () => {
     const step3 = await advanceStep(progress.id);
     expect(step3.currentStep).toBe("business-context");
 
-    // Advance step 3 → step 4
+    // Advance step 3 → step 4 (the stance-confirmation step, BI-D6DC2432)
     const step4 = await advanceStep(progress.id);
-    expect(step4.currentStep).toBe("operating-hours");
+    expect(step4.currentStep).toBe("how-you-decide");
+
+    const step4b = await advanceStep(progress.id);
+    expect(step4b.currentStep).toBe("operating-hours");
 
     const step5 = await advanceStep(progress.id);
     expect(step5.currentStep).toBe("storefront");
