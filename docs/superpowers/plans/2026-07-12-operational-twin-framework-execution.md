@@ -26,6 +26,14 @@ The pure, DB-free foundation: `deriveTwinProfile(archetype)` picks a template an
 ### Non-physical coverage (this PR)
 The derivation covers all non-physical categories via the board family, and a **board-twin prototype** demonstrates them with the same operating-twin grammar (presence + cog + queues + attributed feed): `docs/superpowers/specs/assets/2026-07-12-living-business-board-twin-prototype.html` — SaaS (TENANTS), professional-services (PIPELINE), nonprofit (PROGRAMS), banking (TENANTS/portfolio), media (PIPELINE/timeline). Tap a queue item → the cog routes it to the best owner by the archetype's signal (health-score/CSM-load, utilization, engagement, banker workload, editor availability) → tap to confirm; humans and AI coworkers act on one shared board with an attributed feed.
 
+## P1.5 — Archetype Catalog admin view · DONE
+
+The first product surface to *consume* `deriveTwinProfile`: a read-only
+`/admin/archetypes` catalog (admin Configuration family) that lists every installed
+archetype configuration — including the ones **not enabled**, which the
+setup-wizard redirect otherwise hides — with each row's derived operational-twin
+template. Plan: [2026-07-12-archetype-catalog-admin-view-execution.md](2026-07-12-archetype-catalog-admin-view-execution.md). Composed from report-kit; no render kit yet (that is P2).
+
 ## P2 — the grammar kit · NEXT
 The ten primitives as React components on the token/report-kit substrate (`apps/web/components/twin/`), lifted from the four prototypes: capacity chips, zone, resource unit, work item (with blocked-on-external state), queue, cog banner, utility band, presence row, attributed feed, needs-you quests. Each rendered through `--dpf-*` tokens, reduced-motion-safe, dynamic text via a safe helper (no innerHTML). A fixture page per primitive. Requires a recorded `UX-Fit-Decision` (§12) for the metric/status components.
 
