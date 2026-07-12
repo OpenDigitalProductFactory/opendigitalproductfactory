@@ -71,6 +71,8 @@ import { platformUtilitiesPack } from "./packs/platform-utilities-pack";
 import { backlogPack } from "./packs/backlog-pack";
 import { adminPack } from "./packs/admin-pack";
 import { decompositionPack } from "./packs/decomposition-pack";
+import { buildVisibilityPack } from "./packs/build-visibility-pack";
+import { buildEvidenceExtraPack } from "./packs/build-evidence-extra-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
 import { releasePack } from "./packs/release-pack";
@@ -137,4 +139,6 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   buildChangePack,
   adminPack,
   decompositionPack,
+  buildVisibilityPack,
+  buildEvidenceExtraPack,
 ]);
