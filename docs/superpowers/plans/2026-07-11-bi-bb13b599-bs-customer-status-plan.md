@@ -1,6 +1,6 @@
 # Implementation Plan — BI-BB13B599: Build Studio customer-mode status from the capsule projection
 
-**BI:** BI-BB13B599 (epic EP-WORK-CONVERGENCE) · **Date:** 2026-07-11 · **Status:** Pure projection slice implemented; render wiring deferred (live-portal).
+**BI:** BI-BB13B599 (epic EP-WORK-CONVERGENCE) · **Date:** 2026-07-11 (render delivered 2026-07-12) · **Status:** DELIVERED — pure projection slice (#2857) + render wiring (this PR).
 
 ## Gap
 Build Studio's bands read `FeatureBuild.phase` directly (`BuildStudio.tsx`) and are blind to the WorkCapsule projection, so external Claude/Codex/Grok progress carried on the capsule is invisible in customer mode.
@@ -12,6 +12,10 @@ Build Studio's bands read `FeatureBuild.phase` directly (`BuildStudio.tsx`) and 
 ## Verification
 - 7 unit tests (capsule status → plain state/needsYou; phase-only fallback; failed→needs-you; business-safety guard). Typecheck clean (0 errors post-typegen). No DB, no React.
 
-## Deferred (needs live-portal verification, per operator — validate at epic completion)
-- The server-side fetch `workCapsule.findFirst({ where: { featureBuildId: build.id } })` (join precedent: `evidence-timeline.ts:168`).
-- Rendering the customer status in `BuildStudio.tsx` (band/rail).
+## Render slice (delivered 2026-07-12)
+- `apps/web/lib/build/customer-status-loader.ts` — `loadBuildStudioCustomerStatuses(db, builds)` fetches every linked capsule in one `workCapsule.findMany({ where: { featureBuildId: { in } }})` (the capsule is attached to every build via `attachBuildStudioWorkCapsule`, `build.ts:112`) and projects each build into its plain status, keyed by the build's cuid `id`. Server-side so the projection never enters the client bundle. 5 unit tests (capsule path, phase-only fallback, empty, dedupe, needsYou-from-blocked).
+- `apps/web/components/build/BuildCustomerStatusBand.tsx` — the plain first-viewport band: lifecycle line + business-safe worker phrasing + a "Needs you" pill. Always visible (not behind engineer view). 3 render tests (renderToStaticMarkup; needs-you pill conditional; no executor-name leak).
+- `app/(shell)/build/page.tsx` — computes `customerStatuses` server-side and passes it to `<BuildStudio>`; `BuildStudio.tsx` renders `<BuildCustomerStatusBand>` for the active build right below the header.
+
+## Verification
+- Pure/loader/band: 15 unit tests total across projection + loader + band. `apps/web` typecheck clean (0 errors post-typegen). Live-validated on the Contributor preview (:3001): the customer status band renders the plain lifecycle line + business-safe worker phrasing for the active build, with no executor name or raw phase leaking.

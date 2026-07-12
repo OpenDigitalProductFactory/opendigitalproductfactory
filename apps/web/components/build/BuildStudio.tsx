@@ -39,6 +39,8 @@ import { deriveBuildStudioCustodianPrompt, type BuildStudioCustodianPrompt } fro
 import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
 import { BuildChangeSummaryBand } from "./BuildChangeSummaryBand";
 import { BuildSolutionSummaryBand } from "./BuildSolutionSummaryBand";
+import { BuildCustomerStatusBand } from "./BuildCustomerStatusBand";
+import type { BuildStudioCustomerStatus } from "@/lib/build/customer-status-projection";
 import { BuildOperatorHeaderDetails, BuildWorkRequestStrip, formatOperatorPhaseLabel } from "./BuildOperatorContext";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
@@ -89,6 +91,13 @@ type Props = {
   initialBuildId?: string | null;
   portalContext?: PortalContextEnvelope | null;
   initialActiveBuild?: FeatureBuildRow | null;
+  /**
+   * BI-BB13B599: plain, capsule-derived customer-mode status per build, keyed by
+   * the build's cuid `id`. Projected server-side so the active build's status
+   * band reads the WorkCapsule projection (capturing external Claude/Codex/Grok
+   * work) without pulling the projection into the client bundle.
+   */
+  customerStatuses?: Record<string, BuildStudioCustomerStatus>;
 };
 
 const MISSING_BOM_SUMMARY: BomSummary = {
@@ -162,6 +171,7 @@ export function BuildStudio({
   initialBuildId,
   portalContext,
   initialActiveBuild,
+  customerStatuses = {},
 }: Props) {
   const router = useRouter();
   const buildRows = Array.isArray(builds) ? builds : [];
@@ -836,6 +846,15 @@ export function BuildStudio({
                   </div>
                 </div>
               </div>
+
+              {/* BI-BB13B599: plain customer-mode status band — the first-viewport
+                  "wife-test" line. Reads the capsule projection so external
+                  Claude/Codex/Grok work is reflected in one plain lifecycle
+                  status, never a raw phase or executor name. Always visible
+                  (not behind engineer view). */}
+              {customerStatuses[activeBuild.id] && (
+                <BuildCustomerStatusBand status={customerStatuses[activeBuild.id]} />
+              )}
 
               {/* Error banner for failed builds */}
               {activeBuild.phase === "failed" && (
