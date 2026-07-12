@@ -29,7 +29,7 @@ const ALLOWED_EMBEDDING_CALLERS: ReadonlySet<string> = new Set([
   "apps/web/lib/wiki/embeddings.ts", // WWMD/WWWD corpus pages
   "apps/web/lib/wiki/lint.ts", // corpus dedup similarity
   "apps/web/lib/wiki/principle-similarity.ts", // principle-vector similarity
-  "apps/web/lib/mcp-tools.ts", // principle-direction + semantic-decision knowledge
+  "apps/web/lib/mcp/packs/principle-decide-pack.ts", // principle-direction + semantic-decision knowledge
 ]);
 
 function repoRoot(): string {
