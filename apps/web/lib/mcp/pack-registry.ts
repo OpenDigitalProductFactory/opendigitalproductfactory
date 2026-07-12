@@ -69,6 +69,7 @@ import { discoveryPack } from "./packs/discovery-pack";
 import { backlogPack } from "./packs/backlog-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
+import { releasePack } from "./packs/release-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
@@ -123,4 +124,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   wikiPack,
   discoveryPack,
   backlogPack,
+  releasePack,
 ]);
