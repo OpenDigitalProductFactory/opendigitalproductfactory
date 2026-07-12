@@ -2088,21 +2088,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   // ─── Codebase Access Tools ──────────────────────────────────────────────────
   {
-    name: "list_project_directory",
-    description: "List files and directories in a project directory. Use '.' or empty string for project root. Helps discover the project structure.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Relative directory path from project root (use '.' for root)" },
-      },
-      required: ["path"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ideate", "plan"],
-  },
-  {
     name: "start_ideate_research",
     description: "Signal that you have enough context from the user to begin codebase research and draft the design document. Call this AFTER the user answers your questions (intent gate, reusability scope). The system will search the codebase, analyze patterns, and draft the design doc automatically. You do NOT need to call search_project_files or read_project_file yourself — this tool handles all research.",
     inputSchema: {
@@ -2138,67 +2123,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
     buildPhases: ["ideate"],
   },
-  {
-    name: "read_project_file",
-    description: "Read a file from the project codebase. Use a path relative to the project root (forward slashes). Cannot access .env, credentials, or node_modules.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Relative file path from project root" },
-        startLine: { type: "number", description: "Start line (1-based, optional)" },
-        endLine: { type: "number", description: "End line (optional)" },
-      },
-      required: ["path"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ideate", "plan"],
-  },
-  {
-    name: "search_project_files",
-    description: "Search the project codebase for a text pattern. The query parameter is the text to search for (e.g. 'voucher', 'student'). The glob parameter is an OPTIONAL file type filter (e.g. '*.ts'). Do NOT combine them — use query='voucher' and glob='*.prisma' as separate parameters, NOT query='voucher:*.prisma'.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "Text or regex pattern to search for (e.g. 'voucher', 'Student', 'registration'). This is NOT a file path or glob." },
-        glob: { type: "string", description: "Optional file type filter (e.g. '*.ts', '*.prisma', '*.tsx'). Do NOT put search terms here." },
-        maxResults: { type: "number", description: "Maximum results (default 20)" },
-      },
-      required: ["query"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ideate", "plan"],
-  },
   // ─── Manifest Tools ────────────────────────────────────────────────────────
-  {
-    name: "generate_codebase_manifest",
-    description: "Generate or refresh the codebase manifest (SBOM). Reads package.json, schema.prisma, directory structure, and the base manifest template to produce a current snapshot. Dev-only.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        version: { type: "string", description: "Version label (default: 'dev')" },
-      },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: true,
-  },
-  {
-    name: "read_codebase_manifest",
-    description: "Read the codebase manifest (SBOM) for a specific version. Returns the structured JSON with modules, capabilities, dependencies, and statistics. Works in both dev and production.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        version: { type: "string", description: "Version to read (default: latest or deployed)" },
-      },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
   {
     name: "propose_file_change",
     description: "Propose a change to a project file. Shows a diff for human review. Requires approval before the change is applied.",
@@ -9371,24 +9296,6 @@ export async function executeTool(
       }
     }
 
-    case "list_project_directory": {
-      const { listProjectDirectory } = await import("./integrate/codebase-tools");
-      const result = await listProjectDirectory(String(params.path ?? "."));
-      if ("error" in result) return { success: false, error: result.error, message: result.error };
-      const summary = result.entries.map((e) => `${e.type === "dir" ? "[dir]" : "     "} ${e.path}`).join("\n");
-      return { success: true, message: summary || "Empty directory", data: { entries: result.entries } };
-    }
-
-    case "read_project_file": {
-      const { readProjectFile } = await import("./integrate/codebase-tools");
-      const opts: { startLine?: number; endLine?: number } = {};
-      if (typeof params.startLine === "number") opts.startLine = params.startLine;
-      if (typeof params.endLine === "number") opts.endLine = params.endLine;
-      const result = await readProjectFile(String(params.path ?? ""), opts);
-      if ("error" in result) return { success: false, error: result.error, message: result.error };
-      return { success: true, message: result.content, data: { content: result.content } };
-    }
-
     case "start_ideate_research": {
       // This tool is a signal — the actual research dispatch happens in
       // agent-coworker.ts after the agentic loop returns. We just persist
@@ -9505,100 +9412,7 @@ export async function executeTool(
       };
     }
 
-    case "search_project_files": {
-      const { searchProjectFiles } = await import("./integrate/codebase-tools");
-      let query = String(params.query ?? "");
-      const opts: { glob?: string; maxResults?: number } = {};
-
-      // Auto-fix: model often combines query and glob into one string
-      // e.g. "registration:**/*.prisma" or "voucher:*.ts"
-      const colonGlobMatch = query.match(/^([^:]+):(\*\*?\/.+|\*\.[a-z]+)$/);
-      if (colonGlobMatch) {
-        query = colonGlobMatch[1]!.trim();
-        opts.glob = colonGlobMatch[2]!.trim();
-        console.log(`[search_project_files] Auto-split combined query: ${JSON.stringify(params.query)} → query=${JSON.stringify(query)} glob=${JSON.stringify(opts.glob)}`);
-      }
-
-      if (typeof params.glob === "string" && !opts.glob) opts.glob = params.glob;
-      if (typeof params.maxResults === "number") opts.maxResults = params.maxResults;
-      const result = await searchProjectFiles(query, opts);
-      if ("error" in result) return { success: false, error: result.error, message: result.error };
-      const summary = result.results.map((r) => `${r.path}:${r.line}: ${r.text}`).join("\n");
-      if (!summary) {
-        return {
-          success: true,
-          message: `No matches found for "${params.query}"${params.glob ? ` in ${params.glob} files` : ""}. ${params.glob ? "Try searching without a glob filter, or try a different query term. " : ""}If this is a new feature with no existing code, proceed with saveBuildEvidence to save your design — do NOT search again with the same query.`,
-          data: { results: [] },
-        };
-      }
-      return { success: true, message: summary, data: { results: result.results } };
-    }
-
     // ─── Design Intelligence Tools (UI UX Pro Max) ──────────────────────────
-    case "generate_codebase_manifest": {
-      const { isDevInstance } = await import("./integrate/codebase-tools");
-      if (!isDevInstance()) return { success: false, error: "Manifest generation is only available on dev instances.", message: "Dev-only tool." };
-
-      const { generateManifest } = await import("@/lib/manifest-generator");
-      const { getCurrentCommitHash } = await import("@/lib/git-utils");
-
-      const gitRef = await getCurrentCommitHash() ?? "unknown";
-      const version = typeof params.version === "string" ? params.version : "dev";
-
-      const manifest = await generateManifest({ version, gitRef, writeFile: true });
-
-      // Store in DB (best-effort) — delete+create to avoid nullable composite key issues
-      try {
-        await prisma.codebaseManifest.deleteMany({
-          where: { version, digitalProductId: null },
-        });
-        await prisma.codebaseManifest.create({
-          data: { version, gitRef, manifest: manifest as unknown as import("@dpf/db").Prisma.InputJsonValue },
-        });
-      } catch (err) {
-        console.warn("[generate_codebase_manifest] DB store failed:", err);
-      }
-
-      return {
-        success: true,
-        message: `Manifest generated for version "${version}" with ${manifest.statistics.totalFiles} files, ${manifest.statistics.dataModelCount} models, ${manifest.statistics.externalDependencyCount} dependencies.`,
-        data: { manifest },
-      };
-    }
-
-    case "read_codebase_manifest": {
-      const version = typeof params.version === "string" ? params.version : undefined;
-
-      // Try DB first
-      const dbManifest = await prisma.codebaseManifest.findFirst({
-        where: version ? { version } : {},
-        orderBy: { generatedAt: "desc" },
-        select: { version: true, gitRef: true, manifest: true, generatedAt: true },
-      });
-
-      if (dbManifest) {
-        return {
-          success: true,
-          message: `Manifest for version "${dbManifest.version}" (generated ${dbManifest.generatedAt.toISOString().slice(0, 10)})`,
-          data: { manifest: dbManifest.manifest, version: dbManifest.version, gitRef: dbManifest.gitRef },
-        };
-      }
-
-      // Fall back to reading the file (dev instances only)
-      const { isDevInstance, readProjectFile } = await import("./integrate/codebase-tools");
-      if (isDevInstance()) {
-        const result = await readProjectFile("codebase-manifest.json");
-        if ("content" in result) {
-          try {
-            const manifest = JSON.parse(result.content);
-            return { success: true, message: "Manifest loaded from file.", data: { manifest } };
-          } catch { /* fall through */ }
-        }
-      }
-
-      return { success: false, error: "No manifest found. Use generate_codebase_manifest to create one.", message: "No manifest available." };
-    }
-
     case "propose_file_change": {
       const { readProjectFile, writeProjectFile, generateSimpleDiff } = await import("./integrate/codebase-tools");
       const path = String(params.path ?? "");

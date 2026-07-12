@@ -58,6 +58,7 @@ import { licensingPack } from "./packs/licensing-pack";
 import { marketingOpsPack } from "./packs/marketing-ops-pack";
 import { coworkerCapabilityPack } from "./packs/coworker-capability-pack";
 import { publicWebDesignPack } from "./packs/public-web-design-pack";
+import { projectFilesPack } from "./packs/project-files-pack";
 import { sorReadPack } from "./packs/sor-read-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
@@ -105,6 +106,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   marketingOpsPack,
   coworkerCapabilityPack,
   publicWebDesignPack,
+  projectFilesPack,
   grokSigninPack,
   sorReadPack,
 ]);
