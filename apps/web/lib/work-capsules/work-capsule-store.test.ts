@@ -11,6 +11,7 @@ import {
   createWorkCapsule,
   detectScopeConflicts,
   heartbeatWorkCapsule,
+  reassignWorkCapsuleExecutor,
   planCapsuleWorkspace,
   recordWorkCapsuleEvidence,
   ScopeOverlapError,
@@ -981,6 +982,73 @@ describe("work capsule store", () => {
       });
       expect(conflicts).toEqual([]);
       expect(db.workCapsule.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("reassignWorkCapsuleExecutor cross-agent handoff (BI-A443B9CC)", () => {
+    it("changes the executor, transfers the lease, and writes an executor-changed activity with provenance", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({
+        id: "row-1",
+        executorKind: "claude-desktop",
+        executorRef: "claude-session",
+        leaseHolderPrincipalId: "principal-claude",
+      });
+      db.workCapsule.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-HANDOFF" });
+
+      await reassignWorkCapsuleExecutor({
+        db: capsuleDb(),
+        capsuleId: "WC-HANDOFF",
+        toExecutorKind: "grok-desktop",
+        toExecutorRef: "grok-session",
+        reason: "Claude blocked on rate limit",
+        handoffManifest: { nextAction: "finish the migration", openRisks: ["untested edge case"] },
+        actor: { userId: "user-1", agentId: "grok", principalId: "principal-grok" },
+      });
+
+      // executor + lease transferred to the receiving principal
+      expect(db.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { capsuleId: "WC-HANDOFF" },
+        data: expect.objectContaining({
+          executorKind: "grok-desktop",
+          executorRef: "grok-session",
+          leaseHolderPrincipalId: "principal-grok",
+        }),
+      }));
+      // executor-changed activity carries full from/to provenance + manifest
+      expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          kind: "executor-changed",
+          payload: expect.objectContaining({
+            fromExecutorKind: "claude-desktop",
+            toExecutorKind: "grok-desktop",
+            fromLeaseHolderPrincipalId: "principal-claude",
+            toLeaseHolderPrincipalId: "principal-grok",
+            reason: "Claude blocked on rate limit",
+            handoffManifest: { nextAction: "finish the migration", openRisks: ["untested edge case"] },
+          }),
+        }),
+      }));
+    });
+
+    it("rejects an invalid target executor kind before mutating", async () => {
+      await expect(reassignWorkCapsuleExecutor({
+        db: capsuleDb(),
+        capsuleId: "WC-HANDOFF",
+        toExecutorKind: "not-a-real-executor" as never,
+        actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
+      })).rejects.toThrow(/executor kind/i);
+      expect(db.workCapsule.update).not.toHaveBeenCalled();
+    });
+
+    it("throws when the capsule does not exist", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce(null);
+      await expect(reassignWorkCapsuleExecutor({
+        db: capsuleDb(),
+        capsuleId: "WC-MISSING",
+        toExecutorKind: "codex-desktop",
+        actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
+      })).rejects.toThrow(/not found/i);
+      expect(db.workCapsule.update).not.toHaveBeenCalled();
     });
   });
 });
