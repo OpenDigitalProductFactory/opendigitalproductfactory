@@ -214,9 +214,8 @@
       bind:"productions/versions/bookings; timeline cog routes edits by editor availability + deadline, with a waiting-on-client state" },
   };
 
-  function esc(){} // (unused) - all dynamic writes use textContent
   function render(key){
-    const c=A[key]; if(!c) return; clearSel();
+    const c=A[key]; if(!c) return; clearSel(); _cfg=c;
     $("biz").textContent=c.biz;
     // caps
     $("caps").textContent="";
@@ -243,12 +242,13 @@
     // needs
     const nd=$("needs");nd.textContent="";
     c.need.forEach(([kind,t,m,a])=>{const e=document.createElement("div");e.className="need "+kind;const nb=document.createElement("div");nb.className="nb";const nt=document.createElement("div");nt.className="nt";nt.textContent=t;const nm=document.createElement("div");nm.className="nm";nm.textContent=m;nb.appendChild(nt);nb.appendChild(nm);const na=document.createElement("button");na.className="na";na.textContent=a;na.addEventListener("click",()=>$("routeNext").click());e.appendChild(nb);e.appendChild(na);nd.appendChild(e);});
+    // cog suggestion on each queue card (roster is now in the DOM)
+    refreshQueueSuggestions();
     // foot
     $("foot").textContent="Board twin (operating twin for non-physical archetypes). Template: "+c.template+". Interactive: tap a queue item -> the cog ("+c.cog+") suggests the best owner -> tap the owner to route it. Binds to "+c.bind+".";
     // seed feed
     const feed=$("feed");feed.textContent="";
     [["ai","AI HOST","cog ready - suggestions computed from live "+c.cog,"just now"],["human","YOU","reviewing the "+c.template+" board","1m"]].forEach(([k,who,text,t])=>logSeed(k,who,text,t));
-    _cfg=c;
   }
   let _cfg=null;
 
@@ -261,6 +261,9 @@
   // cog: lowest-load eligible owner (proxy for the archetype's real signal:
   // CSM book / utilization / staff capacity / banker workload / editor availability).
   function suggest(){const owners=$$("#roster .owner");let best=null,bl=1e9;owners.forEach(o=>{const l=parseFloat(o.dataset.load)||0;if(l<bl){bl=l;best=o;}});return best;}
+
+  // show the cog's proposed owner on each queued item (textContent - XSS-safe).
+  function refreshQueueSuggestions(){const s=suggest();$$("#queue .qcard").forEach(card=>{const el=card.querySelector(".sug");if(el)el.textContent=s?GEAR+" route to "+s.dataset.name+" ("+(_cfg?_cfg.cog:"best fit")+")":"";});}
 
   function clearSel(){if(sel)sel.classList.remove("sel");sel=null;$("banner").classList.remove("on");$$("#roster .owner").forEach(o=>o.classList.remove("eligible","suggest"));}
   function selectItem(card){
