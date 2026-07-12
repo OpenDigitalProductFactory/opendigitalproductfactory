@@ -192,12 +192,27 @@ export const getRecentMessages = cache(
         attachments: {
           select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
         },
+        // BI-867263F4: join the proposal so its Approve/Reject card survives a
+        // reload AND so proposals minted by propose-interception (a coworker in
+        // advise mode recommending N actions) render as selectable cards — the
+        // history loader previously always passed `undefined`, so any proposal
+        // card vanished on reload and interception proposals never surfaced.
+        proposal: {
+          select: {
+            proposalId: true,
+            actionType: true,
+            parameters: true,
+            status: true,
+            resultEntityId: true,
+            resultError: true,
+          },
+        },
       },
     });
     const providerInfo = await loadProviderInfo(messages);
     return messages
       .reverse()
-      .map((m) => serializeMessage(m, undefined, providerInfo.get(m.id)));
+      .map((m) => serializeMessage(m, m.proposal, providerInfo.get(m.id)));
   },
 );
 

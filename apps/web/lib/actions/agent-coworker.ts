@@ -88,7 +88,7 @@ import {
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
-import { filterToolsForCoworkerRuntime, adviseHeldBackTools } from "./coworker-tool-filter";
+import { filterToolsForCoworkerRuntime, buildAdvisePromptSuffix } from "./coworker-tool-filter";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { requireUser } from "./shared/guards";
 export { filterToolsForCoworkerRuntime };
@@ -1309,8 +1309,15 @@ export async function sendMessage(input: {
     }
   }
 
+  // BI-867263F4: in Advise mode, keep the side-effecting tools and let the loop
+  // capture each call as an AgentActionProposal, so the coworker's recommended
+  // actions surface as selectable Approve/Reject cards instead of prose that
+  // asks the employee to flip a global toggle. Off in Act mode (tools run) and
+  // during a build phase (phase gating owns the surface).
+  const surfaceAsProposals = input.coworkerMode === "advise" && !activeBuildPhase;
   const availableTools = filterToolsForCoworkerRuntime(mergedTools, {
     coworkerMode: input.coworkerMode,
+    surfaceAsProposals,
     activeBuildPhase,
   });
 
@@ -1547,29 +1554,14 @@ export async function sendMessage(input: {
     }
   }
 
-  // Advise mode holds back the coworker's side-effecting tools. Tell it exactly
-  // which authority is being held back — this is NOT a missing permission — so it
-  // proposes switching to Act mode and names the specific capability per the
-  // limitation-response contract, instead of misdiagnosing a mode muzzle as a
-  // missing grant or deflecting the employee to an administrator. Mirrors the
-  // external-access block below. Covers both prompt paths (they converge here).
-  if (input.coworkerMode === "advise") {
-    const heldBack = adviseHeldBackTools(mergedTools);
-    if (heldBack.length > 0) {
-      const ADVISE_HELD_BACK_CAP = 10;
-      const shown = heldBack.slice(0, ADVISE_HELD_BACK_CAP);
-      const toolList = shown.map((t) => `- ${t.name}: ${t.description}`).join("\n");
-      const moreLine = heldBack.length > shown.length ? `- (+${heldBack.length - shown.length} more)` : "";
-      populatedPrompt += [
-        "",
-        "",
-        "ADVISE MODE — AUTHORITY HELD BACK (NOT A MISSING PERMISSION).",
-        "You already hold permission for the actions below; they are disabled ONLY because you are in Advise mode. Do not tell the employee you lack access to these, and do not send them to an administrator. When the request needs one, follow the limitation-response contract: say you can do it and ask to switch to Act mode.",
-        toolList,
-        moreLine,
-      ].filter(Boolean).join("\n");
-    }
-  }
+  // Advise-mode prompt suffix: either "your recommendations become approval
+  // cards" (surfaceAsProposals, BI-867263F4) or the legacy held-back muzzle note
+  // (build-phase advise). Extracted to coworker-tool-filter for testability.
+  populatedPrompt += buildAdvisePromptSuffix({
+    coworkerMode: input.coworkerMode,
+    surfaceAsProposals,
+    mergedTools,
+  });
 
   // When external access is enabled, tell the agent about its web tools
   if (input.externalAccessEnabled) {
@@ -1927,6 +1919,10 @@ export async function sendMessage(input: {
         // conversational reply ("yes do the truck list first") does not
         // false-positive into a PlatformIssueReport.
         interactionMode: "chat",
+        // BI-867263F4: Advise mode surfaces recommended actions as proposals —
+        // the loop diverts each side-effecting non-artifact call to an
+        // AgentActionProposal card instead of executing it.
+        proposeSideEffects: surfaceAsProposals,
         ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
         onProgress: (event) => agentEventBus.emit(input.threadId, event),
       }),

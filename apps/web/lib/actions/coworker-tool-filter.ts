@@ -44,11 +44,24 @@ const TERMINAL_BUILD_TOOLS = new Set<string>([
  */
 export function filterToolsForCoworkerRuntime(
   tools: ToolDefinition[],
-  input: { coworkerMode?: "advise" | "act"; activeBuildPhase: string | null },
+  input: {
+    coworkerMode?: "advise" | "act";
+    activeBuildPhase: string | null;
+    /**
+     * BI-867263F4: when true, advise mode KEEPS its side-effecting tools instead
+     * of stripping them — the agentic loop captures each call as an
+     * AgentActionProposal (propose-interception) so the coworker's recommended
+     * actions render as selectable Approve/Reject cards rather than prose. The
+     * default (false) preserves the original strip-in-advise behavior for every
+     * other caller.
+     */
+    surfaceAsProposals?: boolean;
+  },
 ): ToolDefinition[] {
   return tools.filter((tool) => {
     if (
       input.coworkerMode === "advise" &&
+      !input.surfaceAsProposals &&
       tool.sideEffect &&
       !tool.coworkerArtifact &&
       !tool.adviseCoordination
@@ -85,4 +98,45 @@ export function adviseHeldBackTools(mergedTools: ToolDefinition[]): ToolDefiniti
   return mergedTools.filter(
     (tool) => tool.sideEffect && !tool.coworkerArtifact && !tool.adviseCoordination,
   );
+}
+
+/**
+ * The advise-mode prompt suffix appended to a coworker's system prompt.
+ *
+ * BI-867263F4: when `surfaceAsProposals` is on, Advise mode PROPOSES — it tells
+ * the coworker to call the relevant tools (each is captured as an approval card)
+ * rather than describe them in prose or ask to switch to Act mode. When it is
+ * off (e.g. an advise turn inside a build phase), the legacy held-back note
+ * fires: name the exact authority being muzzled so the coworker asks to switch
+ * to Act mode instead of misdiagnosing a mode muzzle as a missing permission.
+ * Returns "" when nothing applies. Pass the FULL merged (authorized) tool set.
+ */
+export function buildAdvisePromptSuffix(input: {
+  coworkerMode?: "advise" | "act";
+  surfaceAsProposals?: boolean;
+  mergedTools: ToolDefinition[];
+}): string {
+  if (input.coworkerMode !== "advise") return "";
+  if (input.surfaceAsProposals) {
+    return [
+      "",
+      "",
+      "ADVISE MODE — YOUR RECOMMENDATIONS BECOME APPROVAL CARDS.",
+      "When the request calls for a side-effecting action, DO call the relevant tool. In Advise mode the platform does not execute it — it captures the call as a proposal card the employee can approve with one click. So surface your recommended actions by calling the tools (each becomes a card); do NOT just describe them in prose, and do NOT ask the employee to switch to Act mode. Read-only tools run normally.",
+    ].join("\n");
+  }
+  const heldBack = adviseHeldBackTools(input.mergedTools);
+  if (heldBack.length === 0) return "";
+  const ADVISE_HELD_BACK_CAP = 10;
+  const shown = heldBack.slice(0, ADVISE_HELD_BACK_CAP);
+  const toolList = shown.map((t) => `- ${t.name}: ${t.description}`).join("\n");
+  const moreLine = heldBack.length > shown.length ? `- (+${heldBack.length - shown.length} more)` : "";
+  return [
+    "",
+    "",
+    "ADVISE MODE — AUTHORITY HELD BACK (NOT A MISSING PERMISSION).",
+    "You already hold permission for the actions below; they are disabled ONLY because you are in Advise mode. Do not tell the employee you lack access to these, and do not send them to an administrator. When the request needs one, follow the limitation-response contract: say you can do it and ask to switch to Act mode.",
+    toolList,
+    moreLine,
+  ].filter(Boolean).join("\n");
 }
