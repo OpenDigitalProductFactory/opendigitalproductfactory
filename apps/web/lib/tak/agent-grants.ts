@@ -190,6 +190,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   start_external_work: ["work_capsule_adopt"],
   claim_capsule_scope: ["work_capsule_write"],
   record_capsule_evidence: ["work_capsule_write"],
+  record_agent_activity: ["work_capsule_write"],
   heartbeat_capsule: ["work_capsule_write"],
   update_work_capsule_status: ["work_capsule_write"],
   release_capsule_scope: ["work_capsule_write"],

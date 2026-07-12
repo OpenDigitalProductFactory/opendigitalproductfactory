@@ -322,15 +322,19 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     ];
 
-    // BI-754C9E82: the proactivity plan's actionBoundary is ENFORCED here, not
-    // just displayed. boundary=advise (quiet level, regulated contexts) strips
-    // side-effecting tools from the autonomous run. boundary=propose keeps act
-    // tools: registry self-tasks are curated, idempotent, pre-authorized writes
-    // (COWORKER_SELF_TASKS); full propose-interception (side-effects diverted to
-    // AgentActionProposal) is the deferred remainder of BI-754C9E82.
+    // The proactivity plan's actionBoundary is ENFORCED here, not just displayed
+    // (BI-754C9E82). Three rungs:
+    //   advise  — side-effecting tools stripped from the run (recommend only)
+    //   propose — side-effecting NON-artifact tool calls are diverted to
+    //             AgentActionProposal for the owner to approve (BI-80532D5C);
+    //             curated artifact writes still run directly
+    //   act     — side-effecting tools run directly
+    // Tools are resolved in "act" mode for propose so the model can still CALL
+    // them; the loop's propose-interception captures the call as a proposal.
+    const boundary = proactivity.actionBoundary;
     const { tools, toolsForProvider } = await resolveAutonomousWorkTools({
       userContext,
-      mode: proactivity.actionBoundary === "advise" ? "advise" : "act",
+      mode: boundary === "advise" ? "advise" : "act",
       agentId: task.agentId,
     });
 
@@ -364,6 +368,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       agentId: task.agentId,
       threadId: thread.id,
       taskRunId: taskRunRef.taskRunId,
+      proposeSideEffects: boundary === "propose",
       ...(Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
     });
     const executedTools = [...(result.executedTools ?? [])];

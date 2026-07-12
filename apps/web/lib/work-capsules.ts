@@ -107,9 +107,32 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   "promotion-rolled-back",
   "archived",
   "superseded",
+  // BI-C41AB195: human-legible agent-session activities (Linear AgentActivity
+  // pattern). The WorkCapsule IS the teammate session; these are what the
+  // executor is thinking/doing/asking, rolled up onto one item's timeline.
+  "thought",
+  "action",
+  "question",
+  "response",
+  "error",
 ] as const;
 
 export type WorkCapsuleActivityKind = (typeof WORK_CAPSULE_ACTIVITY_KINDS)[number];
+
+/**
+ * The subset of activity kinds an executor emits as a human-legible session
+ * feed (thought / action / question / response / error) — as distinct from the
+ * lifecycle/plumbing kinds above (created, lease-renewed, executor-changed…).
+ */
+export const AGENT_ACTIVITY_KINDS = [
+  "thought",
+  "action",
+  "question",
+  "response",
+  "error",
+] as const;
+
+export type AgentActivityKind = (typeof AGENT_ACTIVITY_KINDS)[number];
 
 export const WORK_CAPSULE_BRANCH_TAXONOMIES = [
   "feat",
@@ -200,6 +223,12 @@ export function isWorkCapsuleExecutorKind(value: unknown): value is WorkCapsuleE
 
 export function isWorkCapsuleActivityKind(value: unknown): value is WorkCapsuleActivityKind {
   return typeof value === "string" && ACTIVITY_SET.has(value);
+}
+
+const AGENT_ACTIVITY_SET = new Set<string>(AGENT_ACTIVITY_KINDS);
+
+export function isAgentActivityKind(value: unknown): value is AgentActivityKind {
+  return typeof value === "string" && AGENT_ACTIVITY_SET.has(value);
 }
 
 export function isWorkCapsuleBranchTaxonomy(value: unknown): value is WorkCapsuleBranchTaxonomy {
