@@ -12,14 +12,8 @@ import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } 
 import { slugify } from "@/lib/shared/slugify";
 import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
 import { BACKLOG_SOURCE_VALUES, BACKLOG_STATUS_VALUES, BACKLOG_WORK_TYPE_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
-import {
-  analyzePublicWebsiteBranding,
-  fetchPublicWebsiteEvidence,
-  searchPublicWeb,
-} from "@/lib/public-web-tools";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
-import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 // BI-ARCH-TOOLPACKS: deliberation + SIEM are fully owned by the first scoped tool
 // pack — their definitions compose into PLATFORM_TOOLS and their handlers dispatch
@@ -1012,53 +1006,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   {
-    name: "search_public_web",
-    description: "Search the public web for relevant pages or facts",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "Search query" },
-      },
-      required: ["query"],
-    },
-    requiredCapability: null,
-    requiresExternalAccess: true,
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ideate"],
-  },
-  {
-    name: "fetch_public_website",
-    description: "Fetch a public website and summarize visible branding and metadata",
-    inputSchema: {
-      type: "object",
-      properties: {
-        url: { type: "string", description: "Public http or https URL" },
-      },
-      required: ["url"],
-    },
-    requiredCapability: null,
-    requiresExternalAccess: true,
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ideate"],
-  },
-  {
-    name: "analyze_public_website_branding",
-    description: "Analyze a public website and propose branding values such as company name, logo, and accent color",
-    inputSchema: {
-      type: "object",
-      properties: {
-        url: { type: "string", description: "Public http or https URL" },
-      },
-      required: ["url"],
-    },
-    requiredCapability: "manage_branding",
-    requiresExternalAccess: true,
-    executionMode: "immediate",
-    sideEffect: false,
-  },
-  {
     name: "drive_browser_task",
     description:
       "Drive an authenticated browser to perform a bounded task on an auth-walled site (supplier portal, Substack, ad dashboard) that has no usable API. Picks the means by a governed decision, runs against a provisioned service-account profile (or the operator's attended session), and audits every action. Outward irreversible actions (publish/submit/send/order/configure) are NOT executed directly — they return awaiting-approval with an envelope the human approves first. Returns needs-provisioning when the site has no service-account profile yet (set one up in Service Account Browser Setup).",
@@ -1079,22 +1026,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["task", "siteKey", "targetDomains"],
     },
     requiredCapability: null,
-    requiresExternalAccess: true,
-    executionMode: "immediate",
-    sideEffect: true,
-  },
-  {
-    name: "extract_brand_design_system",
-    description: "Kick off a background brand extraction for the organization. Reads any combination of a public website URL, the platform codebase, and uploaded brand assets, merges them into a BrandDesignSystem (palette, typography, component inventory, tokens), and writes the result to Organization.designSystem. Returns a taskRunId immediately; progress is streamed through the agent panel and the coworker re-surfaces with a summary when done. Use when the user asks to refresh the brand, build a design system, or analyze an existing site.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        url: { type: "string", description: "Public http or https URL to extract brand signals from." },
-        includeCodebase: { type: "boolean", description: "When true, also read the installed platform codebase for tokens. Defaults to false." },
-        uploadIds: { type: "array", items: { type: "string" }, description: "IDs of AgentAttachment records to include (logos, brand kit PDFs, style decks)." },
-      },
-    },
-    requiredCapability: "manage_branding",
     requiresExternalAccess: true,
     executionMode: "immediate",
     sideEffect: true,
@@ -2135,20 +2066,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
   },
   {
-    name: "evaluate_page",
-    description: "Evaluate a live page for UX and accessibility issues using AI-powered browser automation (browser-use). Navigates to the page, analyzes layout, interactions, and accessibility, and returns structured findings. Works on production pages (default) or sandbox pages (if URL provided).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        url: { type: "string", description: "URL to evaluate. Defaults to the current route if not specified." },
-      },
-    },
-    requiredCapability: null,
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["review"],
-  },
-  {
     name: "run_ux_test",
     description: "Run natural-language UX test cases against the sandbox using AI-powered browser automation (browser-use). Each test case is a plain English assertion that the AI agent verifies by driving a real browser. Returns structured pass/fail results with screenshots. NOTE: UX verification runs automatically on review-phase entry via build/review.verify — this tool is retained for ad-hoc manual invocations only and is not in the review phase's tool allowlist.",
     inputSchema: {
@@ -2254,44 +2171,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
     buildPhases: ["ideate", "plan"],
-  },
-  // ─── Design Intelligence Tools (UI UX Pro Max) ────────────────────────────
-  {
-    name: "search_design_intelligence",
-    description: "Search the design intelligence database for UI/UX recommendations. Returns style guides, color palettes, typography pairings, UX best practices, landing page patterns, chart types, or product-type recommendations based on keyword matching.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "Search keywords (e.g., 'SaaS dashboard', 'glassmorphism dark mode', 'elegant luxury serif')" },
-        domain: {
-          type: "string",
-          enum: ["style", "color", "typography", "ux", "landing", "chart", "product", "reasoning"],
-          description: "Which design domain to search: style (67 UI styles), color (palettes by industry), typography (57 font pairings), ux (99 guidelines), landing (page patterns), chart (25 chart types), product (industry recommendations), reasoning (161 design rules)",
-        },
-        max_results: { type: "number", description: "Maximum results to return (default 5)" },
-      },
-      required: ["query", "domain"],
-    },
-    requiredCapability: null, // Read-only design reference — no capability gate
-    sideEffect: false,
-    buildPhases: ["ideate", "plan", "build", "review"],
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  },
-  {
-    name: "generate_design_system",
-    description: "Generate a complete design system recommendation for a product. Searches across product types, styles, colors, typography, and landing page patterns, then applies industry-specific reasoning rules. Returns: recommended pattern, style, color palette, font pairing, effects, anti-patterns to avoid, and a pre-delivery checklist. This is a pure data lookup — no LLM call, works at any model tier.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "Product description and keywords (e.g., 'beauty spa wellness service', 'fintech banking dashboard', 'SaaS analytics tool')" },
-        project_name: { type: "string", description: "Optional project name for the design system header" },
-      },
-      required: ["query"],
-    },
-    requiredCapability: null, // Read-only design reference — no capability gate
-    sideEffect: false,
-    buildPhases: ["ideate", "plan", "build", "review"],
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   // ─── Manifest Tools ────────────────────────────────────────────────────────
   {
@@ -2433,21 +2312,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
-  },
-  {
-    name: "analyze_brand_document",
-    description: "Analyze an uploaded brand guidelines document (PDF or image) and extract brand assets: logo, colors, and fonts",
-    inputSchema: {
-      type: "object",
-      properties: {
-        fileName: { type: "string", description: "Original filename" },
-        fileContent: { type: "string", description: "Base64-encoded file content" },
-        fileType: { type: "string", enum: ["pdf", "png", "jpg", "svg"], description: "File type" },
-      },
-      required: ["fileName", "fileContent", "fileType"],
-    },
-    requiredCapability: "manage_branding" as CapabilityKey,
-    executionMode: "immediate",
   },
   {
     name: "submit_feedback",
@@ -5006,56 +4870,6 @@ export async function executeTool(
       };
     }
 
-    case "search_public_web": {
-      const query = String(params["query"] ?? "").trim();
-      let results: Awaited<ReturnType<typeof searchPublicWeb>>;
-      try {
-        results = await searchPublicWeb(query);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Web search failed";
-        return { success: false, error: msg, message: msg };
-      }
-      if (context?.routeContext) {
-        await recordExternalEvidence({
-          actorUserId: userId,
-          routeContext: context.routeContext,
-          operationType: "public_web_search",
-          target: query,
-          provider: "brave_search",
-          resultSummary: `Found ${results.length} public search result(s)`,
-          details: results as import("@dpf/db").Prisma.InputJsonValue,
-        });
-      }
-      return {
-        success: true,
-        message: results.length > 0
-          ? `Found ${results.length} public search result(s). Top result: ${results[0]!.title} (${results[0]!.url})`
-          : "No public search results were found.",
-        data: { results },
-      };
-    }
-
-    case "fetch_public_website": {
-      const url = String(params["url"] ?? "").trim();
-      const evidence = await fetchPublicWebsiteEvidence(url);
-      if (context?.routeContext) {
-        await recordExternalEvidence({
-          actorUserId: userId,
-          routeContext: context.routeContext,
-          operationType: "public_web_fetch",
-          target: evidence.finalUrl,
-          provider: "public_fetch",
-          resultSummary: `Fetched public website evidence for ${evidence.finalUrl}`,
-          details: evidence as unknown as import("@dpf/db").Prisma.InputJsonValue,
-        });
-      }
-      return {
-        success: true,
-        message: `Fetched ${evidence.finalUrl}${evidence.title ? ` (${evidence.title})` : ""}.`,
-        data: evidence,
-      };
-    }
-
     case "drive_browser_task": {
       // Dynamic import: drive → select-means → mcp-tools forms a static cycle;
       // importing here breaks it (same pattern as agent-grants / mcp-server-tools).
@@ -5089,119 +4903,6 @@ export async function executeTool(
         success: result.status === "completed" || result.status === "awaiting-approval",
         message: messages[result.status] ?? result.status,
         data: result,
-      };
-    }
-
-    case "extract_brand_design_system": {
-      // Resolve THE single Organization (single-org-per-install architecture;
-      // see memory project_single_org_per_install). No explicit org id is
-      // threaded through executeTool, and there's only one Org per DPF install.
-      const org = await prisma.organization.findFirst({ select: { id: true } });
-      if (!org) {
-        return {
-          success: false,
-          message: "Could not resolve an organization. Complete Setup first.",
-          error: "Could not resolve an organization. Complete Setup first.",
-        };
-      }
-
-      // Concurrency guard (AD-7): return early if another extraction is already
-      // running for this user, so the coworker doesn't fire duplicate jobs.
-      const active = await prisma.taskRun.findFirst({
-        where: activeBrandExtractionWhere(userId),
-        select: { taskRunId: true },
-      });
-      if (active) {
-        return {
-          success: true,
-          message: "An extraction is already running — I'll ping you when it finishes.",
-          data: { taskRunId: active.taskRunId, status: "already-in-progress" },
-        };
-      }
-
-      const url = typeof params["url"] === "string" && params["url"].trim().length > 0
-        ? String(params["url"]).trim()
-        : undefined;
-      const includeCodebase = params["includeCodebase"] === true;
-      const uploadIdsRaw = params["uploadIds"];
-      const uploadIds = Array.isArray(uploadIdsRaw)
-        ? uploadIdsRaw.filter((id): id is string => typeof id === "string")
-        : undefined;
-
-      // DPF is single-org-per-install, so the installed org can always read
-      // the local platform codebase when includeCodebase is requested.
-      const codebasePath = includeCodebase ? "/app" : undefined;
-
-      if (!url && !codebasePath && (!uploadIds || uploadIds.length === 0)) {
-        return {
-          success: false,
-          message: "Provide at least one source: a URL, includeCodebase, or uploadIds.",
-          error: "Provide at least one source: a URL, includeCodebase, or uploadIds.",
-        };
-      }
-
-      const taskRunId = `TR-BRAND-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      await prisma.taskRun.create({
-        data: {
-          taskRunId,
-          userId,
-          threadId: context?.threadId ?? null,
-          routeContext: context?.routeContext ?? null,
-          title: "Extract brand design system",
-          objective: url
-            ? `Extract brand from ${url}`
-            : "Extract brand from supplied sources",
-          source: "coworker",
-          status: "active",
-        },
-      });
-
-      const { inngest } = await import("@/lib/queue/inngest-client");
-      await inngest.send({
-        name: "brand/extract.run",
-        data: {
-          organizationId: org.id,
-          taskRunId,
-          userId,
-          threadId: context?.threadId ?? null,
-          sources: { url, codebasePath, uploadIds },
-        },
-      });
-
-      return {
-        success: true,
-        message: "Working on it — I'll ping you when the brand is ready.",
-        data: { taskRunId, status: "queued" },
-      };
-    }
-
-    case "analyze_public_website_branding": {
-      const url = String(params["url"] ?? "").trim();
-      const evidence = await fetchPublicWebsiteEvidence(url);
-      const branding = analyzePublicWebsiteBranding(evidence);
-      if (context?.routeContext) {
-        await recordExternalEvidence({
-          actorUserId: userId,
-          routeContext: context.routeContext,
-          operationType: "branding_analysis",
-          target: evidence.finalUrl,
-          provider: "public_fetch",
-          resultSummary: `Derived branding proposal for ${evidence.finalUrl}`,
-          details: {
-            evidence,
-            branding,
-          } as import("@dpf/db").Prisma.InputJsonValue,
-        });
-      }
-      return {
-        success: true,
-        message: `Derived branding suggestions for ${branding.companyName ?? evidence.finalUrl}.`,
-        data: {
-          companyName: branding.companyName,
-          logoUrl: branding.logoUrl,
-          paletteAccent: branding.paletteAccent,
-          notes: branding.notes,
-        },
       };
     }
 
@@ -9571,136 +9272,6 @@ export async function executeTool(
       };
     }
 
-    case "evaluate_page": {
-      const url = typeof params["url"] === "string" ? params["url"] : null;
-      const targetUrl = url || (context?.routeContext ? `http://localhost:3000${context.routeContext}` : null);
-      if (!targetUrl) return { success: false, error: "No URL to evaluate.", message: "Provide a URL or navigate to a page first." };
-
-      try {
-        const BROWSER_USE_URL = process.env.BROWSER_USE_URL || "http://browser-use:8500/mcp";
-
-        // Use browser-use to evaluate the page with AI-powered analysis
-        const extractRes = await fetch(BROWSER_USE_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/call",
-            params: {
-              name: "browse_open",
-              arguments: { url: targetUrl },
-            },
-          }),
-          signal: AbortSignal.timeout(60000),
-        });
-        const openResult = await extractRes.json();
-        const openContent = JSON.parse(openResult?.result?.content?.[0]?.text ?? "{}");
-        const sessionId = openContent.session_id;
-        if (!sessionId) throw new Error("Failed to open browser session");
-
-        // Extract accessibility and UX findings using AI analysis
-        const evalRes = await fetch(BROWSER_USE_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 2,
-            method: "tools/call",
-            params: {
-              name: "browse_extract",
-              arguments: {
-                session_id: sessionId,
-                query: "Analyze this page for UX and accessibility issues. Check for: missing alt text, low contrast text, missing form labels, heading hierarchy issues, keyboard navigation problems, focus indicators, semantic HTML usage. Return a JSON array of findings, each with: severity (critical/important/minor), category (contrast/accessibility/focus/semantic-html/responsive), element (CSS selector or description), issue (what's wrong), recommendation (how to fix), wcagRef (WCAG guideline reference if applicable).",
-              },
-            },
-          }),
-          signal: AbortSignal.timeout(120000),
-        });
-        const evalResult = await evalRes.json();
-        const evalContent = JSON.parse(evalResult?.result?.content?.[0]?.text ?? "{}");
-
-        // Get screenshot
-        const ssRes = await fetch(BROWSER_USE_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 3,
-            method: "tools/call",
-            params: {
-              name: "browse_screenshot",
-              arguments: { session_id: sessionId },
-            },
-          }),
-          signal: AbortSignal.timeout(30000),
-        });
-        const ssResult = await ssRes.json();
-        const ssContent = JSON.parse(ssResult?.result?.content?.[0]?.text ?? "{}");
-
-        // Close session
-        await fetch(BROWSER_USE_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 4,
-            method: "tools/call",
-            params: { name: "browse_close", arguments: { session_id: sessionId } },
-          }),
-          signal: AbortSignal.timeout(10000),
-        });
-
-        // Parse findings — the AI extraction returns structured data
-        let findings: Array<Record<string, unknown>> = [];
-        try {
-          const rawData = typeof evalContent.data === "string" ? JSON.parse(evalContent.data) : evalContent.data;
-          findings = Array.isArray(rawData) ? rawData : [];
-        } catch {
-          findings = [];
-        }
-
-        // Visual cognitive-load assessment — feed the rendered screenshot to a
-        // vision-capable model (capability-routed; local Gemma 4 when configured)
-        // so the structural findings above are joined by a MEASURED visual signal
-        // that flows into the WWMD human_cognitive_load rubric. Best-effort: a
-        // null (no vision endpoint / parse miss) never fails the evaluation.
-        let visualCognitiveLoad:
-          | import("@/lib/decision/visual-cognitive-load").VisualCognitiveLoad
-          | null = null;
-        const screenshotB64 = ssContent.screenshot_base64 ?? null;
-        if (screenshotB64) {
-          try {
-            const { assessVisualCognitiveLoad } = await import("@/lib/decision/visual-cognitive-load");
-            visualCognitiveLoad = await assessVisualCognitiveLoad(screenshotB64);
-          } catch {
-            visualCognitiveLoad = null;
-          }
-        }
-
-        return {
-          success: true,
-          message: `Found ${findings.length} UX/accessibility issues on ${targetUrl}.`
-            + (visualCognitiveLoad
-              ? ` Visual cognitive load: ${visualCognitiveLoad.cognitiveLoad.toFixed(2)}.`
-              : ""),
-          data: {
-            url: targetUrl,
-            screenshot: screenshotB64,
-            findingCount: findings.length,
-            findings,
-            visualCognitiveLoad,
-          },
-        };
-      } catch (e) {
-        return {
-          success: false,
-          error: getErrorMessage(e),
-          message: "UX verification service (browser-use) is unreachable. Run 'docker compose up -d browser-use' or check the browser-use container logs. You can fall back to code-only analysis using read_project_file.",
-        };
-      }
-    }
-
     case "run_ux_test": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
@@ -9964,26 +9535,6 @@ export async function executeTool(
     }
 
     // ─── Design Intelligence Tools (UI UX Pro Max) ──────────────────────────
-    case "search_design_intelligence": {
-      const { searchDesignDomain, formatSearchResults } = await import("@/lib/design-intelligence");
-      const query = String(params.query ?? "");
-      const domain = String(params.domain ?? "style") as import("@/lib/design-intelligence").DesignDomain;
-      const maxResults = Number(params.max_results ?? 5);
-      if (!query) return { success: false, error: "Query is required.", message: "Provide search keywords." };
-      const results = searchDesignDomain(query, domain, maxResults);
-      const formatted = formatSearchResults(results, query, domain);
-      return { success: true, message: formatted };
-    }
-
-    case "generate_design_system": {
-      const { generateDesignSystem } = await import("@/lib/design-intelligence");
-      const query = String(params.query ?? "");
-      const projectName = params.project_name ? String(params.project_name) : undefined;
-      if (!query) return { success: false, error: "Query is required.", message: "Provide product description and keywords." };
-      const designSystem = generateDesignSystem(query, projectName);
-      return { success: true, message: designSystem };
-    }
-
     case "generate_codebase_manifest": {
       const { isDevInstance } = await import("./integrate/codebase-tools");
       if (!isDevInstance()) return { success: false, error: "Manifest generation is only available on dev instances.", message: "Dev-only tool." };
@@ -10305,21 +9856,6 @@ export async function executeTool(
       };
     }
 
-
-    case "analyze_brand_document": {
-      const { fileName, fileType } = params as { fileName: string; fileContent: string; fileType: string };
-      return {
-        success: true,
-        message: `Analyzing brand document: ${fileName} (${fileType})`,
-        data: {
-          companyName: null,
-          logoDataUrl: null,
-          colors: [],
-          fonts: [],
-          notes: `Document "${fileName}" received for brand analysis. The AI agent should analyze the base64 content to extract brand assets.`,
-        },
-      };
-    }
 
     case "submit_feedback": {
       const fromProfile = await prisma.employeeProfile.findUnique({
