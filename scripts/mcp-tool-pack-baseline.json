@@ -1,17 +1,6 @@
 [
-  "create_build_epic",
-  "create_portal_pr",
-  "deploy_feature",
-  "register_digital_product_from_build",
+  "iterate_sandbox",
   "reviewBuildPlan",
   "reviewDesignDoc",
-  "run_ux_test",
-  "saveBuildEvidence",
-  "set_change_disposition",
-  "start_build",
-  "start_ideate_research",
-  "start_scout_research",
-  "update_feature_brief",
-  "validate_schema",
-  "verification_preflight"
+  "saveBuildEvidence"
 ]
