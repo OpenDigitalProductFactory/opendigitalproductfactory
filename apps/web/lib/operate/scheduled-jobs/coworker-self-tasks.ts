@@ -152,6 +152,32 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
   },
 };
 
+/** Friendly cadence label from a registry cron — "daily", "weekly", or
+ *  "twice weekly" by the day-of-week field. Feeds the honest what-this-dial-
+ *  changes lines (BI-AB7CD55B); a wrong guess degrades to a label, not behavior. */
+function friendlyCadence(cron: string): string {
+  const dayOfWeek = cron.trim().split(/\s+/)[4] ?? "*";
+  if (dayOfWeek === "*") return "daily";
+  return dayOfWeek.includes(",") ? "twice weekly" : "weekly";
+}
+
+/** Whether this coworker self-drives, and at what per-level cadence — the
+ *  truthful self-task line for the proactivity control's effects list. */
+export function coworkerSelfTaskCadenceInfo(agentId: string): {
+  registered: boolean;
+  cadence: { balanced: string; assertive: string } | null;
+} {
+  const entry = COWORKER_SELF_TASKS[agentId];
+  if (!entry) return { registered: false, cadence: null };
+  return {
+    registered: true,
+    cadence: {
+      balanced: friendlyCadence(entry.cadence.balanced),
+      assertive: friendlyCadence(entry.cadence.assertive),
+    },
+  };
+}
+
 /** Deterministic per-(agent, owner) taskId so reconcile is idempotent. */
 export function coworkerSelfTaskId(agentId: string, userId: string): string {
   return `self-${agentId}-${userId}`;

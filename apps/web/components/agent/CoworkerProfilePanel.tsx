@@ -2,9 +2,17 @@
 
 import { useEffect, useState } from "react";
 import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";
-import { getCoworkerProactivityPreference, saveCoworkerProactivityPreference } from "@/lib/actions/proactivity";
+import {
+  getCoworkerProactivityPreference,
+  getCoworkerSelfTaskCadenceInfo,
+  saveCoworkerProactivityPreference,
+} from "@/lib/actions/proactivity";
 import { ProactivityLevelControl } from "@/components/proactivity/ProactivityLevelControl";
 import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "@/lib/proactivity/proactivity-resolver";
+import {
+  describeProactivityEffects,
+  type CoworkerSelfTaskCadenceInfo,
+} from "@/lib/proactivity/proactivity-effects";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 
 type Props = {
@@ -63,30 +71,15 @@ const categoryLabels: Record<string, string> = {
   general: "General",
 };
 
-function formatProactivitySpend(spendClass: string): string {
-  if (spendClass === "minimal") return "Light";
-  if (spendClass === "elevated") return "Elevated";
-  return "Standard";
-}
-
-function formatProactivityBoundary(actionBoundary: string): string {
-  if (actionBoundary === "advise") return "Advises only";
-  if (actionBoundary === "preauthorized") return "Pre-approved actions";
-  return "Asks first";
-}
-
-function formatProactivityEscalation(escalationTarget: string): string {
-  if (escalationTarget === "attention-surface") return "Needs you";
-  if (escalationTarget === "platform-operator") return "Platform operator";
-  if (escalationTarget === "dispatcher") return "Dispatcher";
-  if (escalationTarget === "owner") return "Owner";
-  if (escalationTarget === "role") return "Responsible role";
-  return "Needs you";
-}
-
 export function CoworkerProfilePanel({ agent, onClose }: Props) {
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
   const [savedProactivityLevel, setSavedProactivityLevel] = useState<ProactivityLevel | null>(null);
+  // BI-AB7CD55B: whether this coworker actually self-drives (curated registry)
+  // — the effects list must not promise scheduled work that doesn't exist.
+  const [selfTaskInfo, setSelfTaskInfo] = useState<CoworkerSelfTaskCadenceInfo>({
+    registered: false,
+    cadence: null,
+  });
   const grouped = groupSkillsByCategory(agent.skills);
   const proactivityInput = {
     activityFamily: "scheduled-task",
@@ -95,12 +88,18 @@ export function CoworkerProfilePanel({ agent, onClose }: Props) {
   const proactivityPlan = savedProactivityLevel
     ? resolveProactivityPlanForLevel(proactivityInput, savedProactivityLevel, "user-override")
     : resolveProactivityPlan(proactivityInput);
+  const proactivityEffects = describeProactivityEffects(proactivityPlan.resolvedLevel, selfTaskInfo);
 
   useEffect(() => {
     let alive = true;
     getCoworkerProactivityPreference(agent.agentId)
       .then((level) => {
         if (alive) setSavedProactivityLevel(level);
+      })
+      .catch(() => {});
+    getCoworkerSelfTaskCadenceInfo(agent.agentId)
+      .then((info) => {
+        if (alive) setSelfTaskInfo(info);
       })
       .catch(() => {});
     return () => {
@@ -215,16 +214,17 @@ export function CoworkerProfilePanel({ agent, onClose }: Props) {
             <div style={{ fontSize: 10, color: "var(--dpf-muted)", marginTop: 6, lineHeight: 1.45 }}>
               {proactivityPlan.explanation}
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
-              <span style={{ ...tagStyle, fontSize: 10 }}>
-                Monitoring: {formatProactivitySpend(proactivityPlan.spendClass)}
-              </span>
-              <span style={{ ...tagStyle, fontSize: 10 }}>
-                Approval: {formatProactivityBoundary(proactivityPlan.actionBoundary)}
-              </span>
-              <span style={{ ...tagStyle, fontSize: 10 }}>
-                Escalates to: {formatProactivityEscalation(proactivityPlan.escalationTarget)}
-              </span>
+            {/* BI-AB7CD55B: list ONLY what the dial actually changes at runtime
+                (chat effort, opening briefing, registered self-tasks, failed-task
+                urgency). The old Monitoring/Approval/Escalates-to chips promised
+                enforcement no code performs — enforcement is tracked on the epic. */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 8 }}>
+              {proactivityEffects.map((effect) => (
+                <div key={effect.label} style={{ display: "flex", gap: 6, fontSize: 10, lineHeight: 1.4 }}>
+                  <span style={{ color: "var(--dpf-muted)", flex: "0 0 auto", minWidth: 118 }}>{effect.label}</span>
+                  <span style={{ color: "var(--dpf-text-secondary)" }}>{effect.value}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

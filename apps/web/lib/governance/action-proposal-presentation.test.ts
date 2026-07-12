@@ -30,7 +30,7 @@ describe("projectActionProposalPresentation", () => {
     expect(presentation.shortLabel).toBe("Customer update");
     expect(presentation.summary).toBe("Why now: Customer appointment timing is operationally load-bearing.");
     expect(presentation.details).toContainEqual({ label: "Proactivity", value: "Assertive" });
-    expect(presentation.details).toContainEqual({ label: "Approval", value: "Asks first" });
+    expect(presentation.details).toContainEqual({ label: "Approval", value: "Requires your approval" });
     expect(presentation.summary).not.toMatch(/AP-|queue|diagnostic/i);
   });
 
