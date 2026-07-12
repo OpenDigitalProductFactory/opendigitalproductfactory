@@ -2,7 +2,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { type FeatureBrief, type BuildPhase, type FeatureBuildRow } from "@/lib/feature-build-types";
+import { type FeatureBrief, type BuildPhase, type FeatureBuildRow, type BuildChangeNarrative } from "@/lib/feature-build-types";
+import { customerChangeSummaryText } from "@/lib/build/customer-change-summary";
 import type { AttachmentInfo } from "@/lib/agent-coworker-types";
 import { AgentAttachmentCard } from "@/components/agent/AgentAttachmentCard";
 import { DeliberationSummaryCard } from "@/components/deliberation/DeliberationSummaryCard";
@@ -13,13 +14,19 @@ import { Skeleton } from "@/components/ui/report-kit";
 type Props = {
   brief: FeatureBrief | null;
   phase: BuildPhase;
-  diffSummary: string | null;
+  /**
+   * BI-5EA94BD1: the plain-language change narrative (Band 2). The Build Summary
+   * shows customerChangeSummaryText(this) — NEVER diffSummary, which is a raw
+   * diff prefix (fullDiff.slice(0, 500)) mislabeled as a summary. The truncated
+   * patch can no longer leak into the customer view by construction.
+   */
+  changeNarrative?: BuildChangeNarrative | null;
   attachments?: AttachmentInfo[];
   build?: FeatureBuildRow;
   loading?: boolean;
 };
 
-export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, build, loading }: Props) {
+export function FeatureBriefPanel({ brief, phase, changeNarrative, attachments, build, loading }: Props) {
   // Track incremental progress messages emitted by ideate-dispatch
   const [progressMsg, setProgressMsg] = useState<string | null>(null);
   const deliberationPhase =
@@ -66,13 +73,16 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
             <DeliberationSummaryCard phase={deliberationPhase} summary={phaseSummary} />
           </div>
         )}
-        {diffSummary ? (
-          <pre className="text-xs text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed bg-[var(--dpf-surface-2)] p-3 rounded-md border border-[var(--dpf-border)]">
-            {diffSummary}
-          </pre>
-        ) : (
-          <p className="text-sm text-[var(--dpf-muted)]">No changes recorded.</p>
-        )}
+        {(() => {
+          const changeSummary = customerChangeSummaryText({ changeNarrative });
+          return changeSummary ? (
+            <p className="text-sm text-[var(--dpf-text-secondary)] leading-relaxed whitespace-pre-wrap">
+              {changeSummary}
+            </p>
+          ) : (
+            <p className="text-sm text-[var(--dpf-muted)]">No plain summary yet.</p>
+          );
+        })()}
         {phase === "review" && build && (
           <div className="mt-4">
             <EvidenceSummary build={build} />
