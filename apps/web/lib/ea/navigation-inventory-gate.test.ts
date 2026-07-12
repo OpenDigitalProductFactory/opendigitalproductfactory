@@ -37,7 +37,7 @@ const KNOWN_NAV_TOPLEVEL = new Set<string>([
   "finance", "forgot-password", "governance", "inventory", "knowledge", "login",
   "member-equity", "ops", "platform", "portal", "portfolio", "rental", "reset-password",
   "s", "sandbox-restricted", "service-requests", "setup", "storefront", "welcome",
-  "wiki", "workbooks", "workspace",
+  "coworker-decisions", "workbooks", "workspace",
 ]);
 
 describe("navigation inventory gate (EP-NAV-COHERENCE P7)", () => {

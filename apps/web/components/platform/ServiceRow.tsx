@@ -124,9 +124,16 @@ type Props = {
    * status dot + "needs credentials" badge + a billing "Not connected" label.
    */
   eligibility: RoutingEligibility;
+  /**
+   * F11 (BI-1A75E068): labels of the currently-blocked build phase(s) this
+   * (disabled) provider would resolve if enabled — computed by the SAME
+   * phase-eligibility resolver runtime-health uses. Renders a "Resolves …" badge
+   * so the operator can see, on the providers list, which one to turn on.
+   */
+  resolvesPhases?: string[];
 };
 
-export function ServiceRow({ pw, modelSummary, eligibility }: Props) {
+export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases }: Props) {
   const { provider, credential } = pw;
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -211,6 +218,28 @@ export function ServiceRow({ pw, modelSummary, eligibility }: Props) {
             uppercase={false}
           />
         </span>
+
+        {/* F11: "would resolve a blocked phase if enabled" badge */}
+        {resolvesPhases && resolvesPhases.length > 0 && (
+          <span
+            title={`Enabling this provider would resolve the currently-blocked ${resolvesPhases.join(
+              ", ",
+            )} phase${resolvesPhases.length > 1 ? "s" : ""}.`}
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              letterSpacing: "0.04em",
+              color: "var(--dpf-success)",
+              background: "color-mix(in srgb, var(--dpf-success) 14%, transparent)",
+              padding: "1px 6px",
+              borderRadius: 3,
+              flexShrink: 0,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Resolves {resolvesPhases.join(", ")}
+          </span>
+        )}
 
         {/* Type badge */}
         <span

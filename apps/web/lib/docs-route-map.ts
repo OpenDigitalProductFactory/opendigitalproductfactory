@@ -82,7 +82,7 @@ const DOCS_ROUTE_MAP: DocsRouteEntry[] = [
 
   { routePrefix: "/customer/marketing", docsPath: "/docs/customers/marketing" },
   { routePrefix: "/customer", docsPath: "/docs/customers/index" },
-  { routePrefix: "/wiki", docsPath: "/docs/wiki/index" },
+  { routePrefix: "/coworker-decisions", docsPath: "/docs/wiki/index" },
   { routePrefix: "/build", docsPath: "/docs/build-studio/index" },
   { routePrefix: "/ops", docsPath: "/docs/operations/index" },
   { routePrefix: "/portfolio/product", docsPath: "/docs/products/index" },
@@ -107,7 +107,7 @@ const VISIBLE_DOCS_PREFIXES = [
   "/storefront",
   "/admin/storefront",
   "/customer",
-  "/wiki",
+  "/coworker-decisions",
   "/portfolio",
   "/inventory",
   "/ea",

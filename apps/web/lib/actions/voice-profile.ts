@@ -8,7 +8,7 @@ export async function setVoiceEnabled(profileId: string, enabled: boolean) {
     where: { profileId },
     data: { voiceEnabled: enabled },
   })
-  revalidatePath(`/wiki/perspectives/${profileId}/voice`)
+  revalidatePath(`/coworker-decisions/perspectives/${profileId}/voice`)
 }
 
 export async function getVoiceProfileData(profileId: string) {
@@ -59,7 +59,7 @@ export async function saveVoiceSettings(profileId: string, settings: VoiceSettin
     where: { profileId },
     data: { voiceSettings: clean },
   })
-  revalidatePath(`/wiki/perspectives/${profileId}/voice`)
+  revalidatePath(`/coworker-decisions/perspectives/${profileId}/voice`)
   return clean
 }
 
@@ -69,7 +69,7 @@ export async function resetVoiceProfile(profileId: string) {
     where: { profileId },
     data: { status: "pending", providerVoiceId: null, sampleCount: 0 },
   })
-  revalidatePath(`/wiki/perspectives/${profileId}/voice`)
+  revalidatePath(`/coworker-decisions/perspectives/${profileId}/voice`)
 }
 
 export async function listVoiceProfiles() {

@@ -12,7 +12,11 @@ import {
 } from "@/lib/proactivity/proactivity-override-preferences";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
-import { reconcileCoworkerSelfTask } from "@/lib/operate/scheduled-jobs/coworker-self-tasks";
+import {
+  coworkerSelfTaskCadenceInfo,
+  reconcileCoworkerSelfTask,
+} from "@/lib/operate/scheduled-jobs/coworker-self-tasks";
+import type { CoworkerSelfTaskCadenceInfo } from "@/lib/proactivity/proactivity-effects";
 
 type ManualProactivityPreferenceValue = {
   scope: "agent";
@@ -22,6 +26,16 @@ type ManualProactivityPreferenceValue = {
   acknowledgedByUserId: string;
   acknowledgedAt: string;
 };
+
+/** Whether this coworker has a registered autonomous self-task and its
+ *  per-level cadence — feeds the truthful effects list (BI-AB7CD55B). */
+export async function getCoworkerSelfTaskCadenceInfo(
+  agentId: string,
+): Promise<CoworkerSelfTaskCadenceInfo> {
+  const user = await currentUser();
+  if (!user || !agentId) return { registered: false, cadence: null };
+  return coworkerSelfTaskCadenceInfo(agentId);
+}
 
 export async function getCoworkerProactivityPreference(agentId: string): Promise<ProactivityLevel | null> {
   const user = await currentUser();

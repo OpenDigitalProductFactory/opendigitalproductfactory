@@ -148,6 +148,20 @@ jobs:
       - name: Run guard
         run: node scripts/check-mobile-jest-pin.mjs
 
+  diagram-dependency-pin-guard:
+    name: Diagram Dependency Pin Guard
+    runs-on: ubuntu-latest
+    # BI-72E0A27B. Prevent a lock refresh from advancing Mermaid/ZenUML's
+    # transitive Floating UI graph inside the release-age quarantine window.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/check-diagram-dependency-pins.mjs
+
   bundle-boundary-guard:
     name: Bundle Boundary Guard
     runs-on: ubuntu-latest

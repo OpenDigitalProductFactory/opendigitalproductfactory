@@ -1,6 +1,6 @@
 // EP-WIKI-001 Phase 6a: wiki page body renderer.
 // Renders markdown with one wiki-specific extension: `[[slug]]` and
-// `[[slug|label]]` tokens become internal links to `/wiki/<slug>`.
+// `[[slug|label]]` tokens become internal links to `/coworker-decisions/<slug>`.
 // Other markdown features (headings, lists, code, links) flow through
 // react-markdown with theme-aware tokens per AGENTS.md §12.
 //
@@ -53,7 +53,7 @@ function renderWikilinkSpans(text: string): ReactNode[] {
     return (
       <Link
         key={i}
-        href={`/wiki/${p.slug}`}
+        href={`/coworker-decisions/${p.slug}`}
         className="text-[var(--dpf-accent)] hover:underline"
       >
         {p.label}

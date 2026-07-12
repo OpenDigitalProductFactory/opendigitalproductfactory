@@ -43,7 +43,7 @@ const fixtureData: Omit<PlatformWorkspaceHomeData, "storefrontConfig"> = {
               description: "Evidence, docs, and operating knowledge",
               state: "good",
               reason: "5 documents on record",
-              href: "/wiki",
+              href: "/coworker-decisions",
             },
           ],
         },

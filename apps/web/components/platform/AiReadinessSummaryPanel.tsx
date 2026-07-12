@@ -171,13 +171,19 @@ function ReadinessDomainRow({ domain }: { domain: AiReadinessDomain }) {
             {domain.blocker.primaryActionLabel}
           </Link>
         )}
-        <Link
-          href={domain.diagnosticsHref}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]"
-        >
-          Diagnostics
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-        </Link>
+        {/* F12 (BI-1A75E068): the primary blocker action and the "Diagnostics"
+            link often point to the SAME page (e.g. Routing Confidence → runtime
+            health). Render the secondary link only when it goes somewhere else,
+            so a row never shows two controls to one destination. */}
+        {domain.blocker?.href !== domain.diagnosticsHref && (
+          <Link
+            href={domain.diagnosticsHref}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]"
+          >
+            Diagnostics
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
+        )}
       </div>
     </div>
   );

@@ -80,6 +80,42 @@ describe("AiReadinessSummaryPanel", () => {
     expect(html).toContain("Issue development token");
   });
 
+  it("does not render a redundant Diagnostics link when it duplicates the primary action (F12)", () => {
+    const html = renderToStaticMarkup(<AiReadinessSummaryPanel summary={summary} />);
+
+    // Tool Access blocker.href === diagnosticsHref, so its row shows ONLY the
+    // primary action. The three rows whose diagnostics target differs from (or
+    // has no) blocker still render the secondary "Diagnostics" link.
+    expect(html.match(/>Diagnostics</g)).toHaveLength(3);
+  });
+
+  it("renders a single control on a routing-confidence blocker whose diagnostics is the same page", () => {
+    const single: AiReadinessSummary = {
+      ...summary,
+      domains: [
+        {
+          id: "routing-confidence",
+          label: "Routing Confidence",
+          state: "blocked",
+          summary: "1 routing blocker found in phase preview.",
+          evidence: [{ label: "Phase flags", value: "1" }],
+          blocker: {
+            code: "no-eligible-endpoint",
+            message: "A build phase has no eligible AI endpoint.",
+            primaryActionLabel: "Open runtime diagnostics",
+            href: "/platform/ai/runtime-health",
+          },
+          diagnosticsHref: "/platform/ai/runtime-health",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(<AiReadinessSummaryPanel summary={single} />);
+
+    expect(html).toContain("Open runtime diagnostics");
+    expect(html.match(/>Diagnostics</g)).toBeNull();
+    expect(html.match(/href="\/platform\/ai\/runtime-health"/g)).toHaveLength(1);
+  });
+
   it("links each diagnostics target to the existing AI setup pages", () => {
     const html = renderToStaticMarkup(<AiReadinessSummaryPanel summary={summary} />);
 
