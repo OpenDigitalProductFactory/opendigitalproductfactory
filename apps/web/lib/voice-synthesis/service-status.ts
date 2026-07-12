@@ -45,7 +45,14 @@ export async function resolveTtsServiceUp(): Promise<TtsServiceStatus> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS)
   try {
-    const res = await fetch(healthUrl, { signal: controller.signal })
+    let res = await fetch(healthUrl, { signal: controller.signal })
+    if (res.status === 404) {
+      // Sidecars provisioned before /health existed serve their health check
+      // at "/" only (BI-7988DAD8). A 404 means "reachable but wrong path",
+      // not "down" — retry at the base URL instead of firing a phantom
+      // VoiceServiceDown on a healthy service.
+      res = await fetch(new URL("/", healthUrl), { signal: controller.signal })
+    }
     if (!res.ok) {
       return { provider, up: false, reason: "The text-to-speech service is reachable but not ready." }
     }
