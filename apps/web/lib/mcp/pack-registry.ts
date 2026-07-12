@@ -58,6 +58,8 @@ import { licensingPack } from "./packs/licensing-pack";
 import { coworkerCapabilityPack } from "./packs/coworker-capability-pack";
 import { sorReadPack } from "./packs/sor-read-pack";
 
+import { grokSigninPack } from "./packs/grok-signin-pack";
+
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
   runtimeCoordinationPack,
@@ -99,5 +101,6 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   wikiOverlayPack,
   licensingPack,
   coworkerCapabilityPack,
+  grokSigninPack,
   sorReadPack,
 ]);
