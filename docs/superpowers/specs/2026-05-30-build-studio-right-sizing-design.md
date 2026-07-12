@@ -22,6 +22,16 @@ externalReferences:
   - https://docs.microsoft.com/en-us/azure/devops/boards/work-items/guidance/agile-process
 ---
 
+> **⚠️ SUPERSEDED (2026-07-12).** The `(work-type, size)` matrix landed and is authoritative in code
+> (`apps/web/lib/explore/build-process-matrix.ts`), but the *defaults and axes* described here were
+> reversed and extended by [`2026-06-23-quality-first-risk-aware-build-rightsizing-design.md`](2026-06-23-quality-first-risk-aware-build-rightsizing-design.md):
+> this draft leans **cheap-by-default**; the quality-first spec makes **quality the default** and
+> adds the **deliverable-sensitivity** and **golden-triangle** axes. Model-tier routing (once its own
+> [`2026-06-22-build-studio-model-tier-routing-design.md`](2026-06-22-build-studio-model-tier-routing-design.md))
+> is folded into `getModelTier` under the quality-first flag. Read this spec for the matrix *mechanism*
+> only; for current defaults and axes, follow the quality-first spec and the code. Narrative map:
+> [`2026-07-12-dpf-development-model-and-frontier-harness-positioning-design.md`](2026-07-12-dpf-development-model-and-frontier-harness-positioning-design.md) §11.
+
 # Build Studio Right-Sizing — Lifecycle as a Function of (Work Type, Size)
 
 | Field | Value |
