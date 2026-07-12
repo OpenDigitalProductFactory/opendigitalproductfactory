@@ -62,6 +62,9 @@ type CapsuleCreateInput = {
   featureBuildId?: string | null;
   workspaceState?: Record<string, unknown>;
   scope?: WorkCapsuleScopeInput | null;
+  // BI-B24F96D0: principal who commissioned the work (Requester), distinct from
+  // the creating actor. Optional.
+  requestedByPrincipalId?: string | null;
 };
 
 type CapsuleAdoptionInput = {
@@ -199,6 +202,7 @@ export async function createWorkCapsule(args: {
             : null,
           leaseExpiresAt: isExternalLeaseExecutor(args.input.executorKind) ? leaseUntil(now) : null,
           createdByPrincipalId: args.actor.principalId,
+          requestedByPrincipalId: args.input.requestedByPrincipalId ?? null,
           status: args.input.status ?? (args.input.executorKind ? "ready" : "draft"),
         },
       });

@@ -38,6 +38,29 @@ describe("voice service-status helper", () => {
     )
   })
 
+  it("falls back to the base URL when /health 404s (legacy sidecar) — BI-7988DAD8", async () => {
+    global.fetch = vi.fn(async (url: RequestInfo | URL) =>
+      String(url).endsWith("/health")
+        ? new Response("Not Found", { status: 404 })
+        : new Response(JSON.stringify({ status: "ok", model: "chatterbox" }), { status: 200 }),
+    ) as typeof fetch
+    const s = await resolveTtsServiceUp()
+    expect(s).toEqual({ provider: "chatterbox", up: true, reason: null })
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+    expect(String(vi.mocked(global.fetch).mock.calls[1][0])).toBe("http://dpf-tts:8000/")
+  })
+
+  it("still reports not-ready when both /health and the base URL fail", async () => {
+    global.fetch = vi.fn(async (url: RequestInfo | URL) =>
+      String(url).endsWith("/health")
+        ? new Response("Not Found", { status: 404 })
+        : new Response("boom", { status: 500 }),
+    ) as typeof fetch
+    const s = await resolveTtsServiceUp()
+    expect(s.up).toBe(false)
+    expect(s.reason).toMatch(/not ready/i)
+  })
+
   it("reports down when the sidecar is unreachable", async () => {
     global.fetch = vi.fn(async () => {
       throw new Error("ECONNREFUSED")

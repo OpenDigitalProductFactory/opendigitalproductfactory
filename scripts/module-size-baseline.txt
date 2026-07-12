@@ -59,6 +59,8 @@ apps/web/lib/tak/route-context.ts	1363
 apps/web/lib/work-capsules/mcp-handlers.ts	802
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1011
 apps/web/lib/work-capsules/work-capsule-store.ts	999
+apps/web/lib/work-capsules/work-capsule-store.test.ts	987
+apps/web/lib/work-capsules/work-capsule-store.ts	936
 apps/web/lib/workbooks/platform-tables.ts	892
 apps/web/lib/workforce/calendar-data.ts	1134
 apps/web/lib/workspace/command-center.ts	1118

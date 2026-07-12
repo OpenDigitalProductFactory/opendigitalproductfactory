@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 
 import type { ToolResult } from "@/lib/mcp-tools";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   WORK_CAPSULE_ACTIVITY_KINDS,
   WORK_CAPSULE_BRANCH_TAXONOMIES,
@@ -725,7 +726,7 @@ export async function reassignCapsuleExecutorTool(
     return {
       success: false,
       error: "reassign_failed",
-      message: error instanceof Error ? error.message : String(error),
+      message: getErrorMessage(error),
     };
   }
 }
