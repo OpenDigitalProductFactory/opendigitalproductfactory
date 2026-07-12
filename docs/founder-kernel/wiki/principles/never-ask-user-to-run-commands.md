@@ -61,7 +61,6 @@ When drafting a response, check: does any sentence start with "you can run", "op
 
 ## Related principles
 
-- [`never-ask-about-infra-state`](never-ask-about-infra-state.md) — agent inspects state, user doesn't touch DB/docker
-- [`actionable-coworker-responses`](actionable-coworker-responses.md) — end with user choices, not internal status
-- [`drive-100-percent-means-dont-ask`](drive-100-percent-means-dont-ask.md) — autonomous directives = blanket approval
-- [`agent-as-work-conduit`](agent-as-work-conduit.md) — long-running work runs through agent, not user CLI
+- [`do-the-work-dont-task-the-operator`](do-the-work-dont-task-the-operator.md) — agent inspects state and acts; the user doesn't touch DB/docker
+- [`state-results-directly`](state-results-directly.md) — end with results and user choices, not internal status
+- [`autonomous-directives-are-blanket-approval`](autonomous-directives-are-blanket-approval.md) — autonomous directives = blanket approval
