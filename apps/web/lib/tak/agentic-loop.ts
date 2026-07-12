@@ -11,7 +11,11 @@ import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
 import type { ChatMessage } from "@/lib/ai-inference";
-import { prisma } from "@dpf/db";
+import { prisma, Prisma } from "@dpf/db";
+import {
+  divertToolCallToProposal,
+  shouldProposeToolCall,
+} from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
 import {
@@ -1135,6 +1139,13 @@ export async function runAgenticLoop(params: {
    */
   interactionMode?: "chat" | "autonomous";
   /**
+   * BI-80532D5C — when true, a side-effecting non-artifact tool the model calls
+   * is diverted to an AgentActionProposal (status "proposed") instead of being
+   * executed. Set by the scheduler when the run's proactivity actionBoundary is
+   * "propose". Default false preserves the act path for every existing caller.
+   */
+  proposeSideEffects?: boolean;
+  /**
    * Optional active FeatureBuild.id for attribution on guard-written
    * PlatformIssueReport rows. Caller should look this up alongside buildPhase.
    */
@@ -1199,6 +1210,7 @@ export async function runAgenticLoop(params: {
     agentMessageId,
   } = params;
   const interactionMode: "chat" | "autonomous" = params.interactionMode ?? "autonomous";
+  const proposeSideEffects = params.proposeSideEffects ?? false;
 
   const userContext = await resolveUserContext(userId);
 
@@ -2372,6 +2384,63 @@ export async function runAgenticLoop(params: {
             message: `The tool \`${tc.name}\` ${reason}.${hint}`,
           },
         });
+        continue;
+      }
+
+      // Propose-interception (BI-80532D5C): under a propose boundary, a
+      // side-effecting non-artifact tool is captured as an AgentActionProposal
+      // for the owner to approve instead of running now. Curated artifacts and
+      // read-only tools fall through and execute normally.
+      if (shouldProposeToolCall(toolDef, proposeSideEffects)) {
+        const proposalResult = await divertToolCallToProposal({
+          persistence: {
+            createAssistantMessage: (m) =>
+              prisma.agentMessage.create({
+                data: {
+                  threadId: m.threadId,
+                  role: "assistant",
+                  content: m.content,
+                  agentId: m.agentId,
+                  routeContext: m.routeContext,
+                  ...(m.taskRunId ? { taskRunId: m.taskRunId } : {}),
+                },
+                select: { id: true },
+              }),
+            createProposal: (p) =>
+              prisma.agentActionProposal.create({
+                data: {
+                  proposalId: p.proposalId,
+                  threadId: p.threadId,
+                  messageId: p.messageId,
+                  ...(p.taskRunId ? { taskRunId: p.taskRunId } : {}),
+                  agentId: p.agentId,
+                  actionType: p.actionType,
+                  parameters: p.parameters as Prisma.InputJsonValue,
+                  status: "proposed",
+                },
+                select: { proposalId: true },
+              }),
+          },
+          toolName: tc.name,
+          args: tc.arguments,
+          agentId,
+          threadId,
+          routeContext,
+          taskRunId: taskRunId ?? null,
+        }).catch((err): ToolResult => {
+          console.warn(`[agentic-tool] propose-divert failed iter=${iteration} tool=${tc.name}:`, err);
+          // Fail closed: on a persistence error, do NOT execute the side effect —
+          // report it so the model summarizes rather than acting unapproved.
+          return {
+            success: false,
+            error: "propose_divert_failed",
+            message: `Could not queue \`${tc.name}\` for approval; it was not run. Continue without it.`,
+          };
+        });
+        console.log(`[agentic-tool] PROPOSED iter=${iteration} tool=${tc.name} (propose boundary)`);
+        executedTools.push({ name: tc.name, args: tc.arguments, result: proposalResult });
+        iterationResults.push({ tc, toolResult: proposalResult });
+        onProgress?.({ type: "tool:complete", tool: tc.name, success: proposalResult.success });
         continue;
       }
 
