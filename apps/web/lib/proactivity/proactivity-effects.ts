@@ -59,15 +59,18 @@ export function describeProactivityEffects(
     });
   }
 
-  // Consumer: attention source for failed scheduled tasks — urgency of the alert.
+  // Consumers: the scheduler's retry policy (followUpCadenceMinutes/maxAttempts,
+  // enforced per BI-754C9E82) + the attention source's urgency and routing.
+  // Copy is kept aligned with DEFAULTS_BY_LEVEL in proactivity-resolver.ts by a
+  // drift test in proactivity-effects.test.ts.
   lines.push({
     label: "If its task fails",
     value:
       level === "quiet"
-        ? "Stays out of your attention list"
+        ? "No retries; stays out of your attention list"
         : level === "assertive"
-          ? "Flags it urgently, due today"
-          : "Shows in your attention list",
+          ? "Retries after 30 and 60 minutes, then flags you urgently"
+          : "Retries once after 2 hours, then shows in your attention list",
   });
 
   return lines;

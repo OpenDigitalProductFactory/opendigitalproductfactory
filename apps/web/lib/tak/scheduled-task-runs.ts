@@ -3,6 +3,7 @@ import {
   type AutonomousWorkRunRef,
 } from "@/lib/tak/autonomous-work-run";
 import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
 
 export type ScheduledTaskRunRef = AutonomousWorkRunRef;
 
@@ -15,6 +16,8 @@ export async function createTaskRunForScheduledTask(input: {
   title: string;
   prompt: string;
   proactivity?: ProactivityPlan;
+  /** BI-754C9E82: auditable effective posture the scheduler delegates with. */
+  delegatedPosture?: ResolvedDelegatedPosture;
 }): Promise<ScheduledTaskRunRef> {
   return createAutonomousWorkRun({
     trigger: "scheduled",
@@ -30,5 +33,6 @@ export async function createTaskRunForScheduledTask(input: {
       id: input.taskId,
     },
     proactivity: input.proactivity,
+    delegatedPosture: input.delegatedPosture,
   });
 }

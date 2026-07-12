@@ -253,6 +253,33 @@ describe("scheduledTaskToAttentionItem", () => {
     expect(item.context).not.toMatch(/TR-|customer-follow-up-daily|Provider timeout|queue|diagnostic/i);
   });
 
+  it("routes the audience by the plan's escalationTarget (BI-754C9E82)", () => {
+    const planFor = (escalationTarget: "attention-surface" | "owner" | "platform-operator" | "dispatcher") => ({
+      resolvedLevel: "assertive" as const,
+      policyId: "proactivity:scheduled-task:assertive",
+      attentionWindowMinutes: 15,
+      followUpCadenceMinutes: [15, 30],
+      maxAttempts: 3,
+      spendClass: "elevated" as const,
+      channelPolicy: "preferred-channel" as const,
+      escalationTarget,
+      actionBoundary: "propose" as const,
+      explanation: "Escalation routing check.",
+      evidenceRefs: [],
+    });
+
+    // Personal targets carry the owner as assignee.
+    for (const target of ["attention-surface", "owner"] as const) {
+      const item = scheduledTaskToAttentionItem({ row: base, proactivity: planFor(target) });
+      expect(item?.audience).toEqual({ operator: true, assigneePrincipalId: "user-1" });
+    }
+    // Operator-level targets drop the personal assignee but never hide the item.
+    for (const target of ["platform-operator", "dispatcher"] as const) {
+      const item = scheduledTaskToAttentionItem({ row: base, proactivity: planFor(target) });
+      expect(item?.audience).toEqual({ operator: true });
+    }
+  });
+
   it("does not project quiet failed scheduled work into attention", () => {
     expect(
       scheduledTaskToAttentionItem({

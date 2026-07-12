@@ -7274,6 +7274,11 @@ model ScheduledAgentTask {
   lastThreadId String?
   // Autonomous coworker runtime Slice 1: latest TaskRun spawned by this schedule.
   taskRunId    String?
+  // BI-754C9E82: consecutive failed attempts in the CURRENT retry cycle. The
+  // proactivity plan's followUpCadenceMinutes/maxAttempts drive short-cadence
+  // retries after a failure; reset on success or when the budget is exhausted
+  // (each cron cycle gets a fresh budget).
+  attempts     Int       @default(0)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
