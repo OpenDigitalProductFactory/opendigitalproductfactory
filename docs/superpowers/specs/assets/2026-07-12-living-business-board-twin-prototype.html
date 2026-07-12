@@ -1,0 +1,294 @@
+<title>The Living Business - board twin (non-physical archetypes)</title>
+<style>
+  /* DPF tokens (globals.css). Both themes. STATIC-FIRST (renders without JS).
+     Interactivity (route a queued item to the best owner) is progressive
+     enhancement. Dynamic text via textContent only (never innerHTML - XSS-safe).
+     Glyphs are numeric entities (charset-safe). The BOARD twin - the operating
+     twin for NON-PHYSICAL archetypes (TENANTS / PIPELINE / PROGRAMS templates),
+     complement to the physical floor/map/yard twins. Same grammar. */
+  :root{
+    --dpf-bg:#fafafa;--dpf-surface-1:#ffffff;--dpf-surface-2:#f4f4f6;--dpf-surface-3:#eeeef2;
+    --dpf-text:#1a1a2e;--dpf-text-secondary:#4a4a5e;--dpf-accent:#2563eb;--dpf-border:#d4d4dc;
+    --dpf-border-strong:#c8c8d4;--dpf-muted:#6b7280;--dpf-success:#16a34a;--dpf-warning:#d97706;
+    --dpf-error:#dc2626;--dpf-info:#0284c7;
+    --board: color-mix(in srgb, var(--dpf-accent) 4%, var(--dpf-bg));
+    --font-display:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --font-mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;
+    --radius:10px;--sh:0 1px 2px color-mix(in srgb,var(--dpf-text) 8%,transparent);
+    --sh2:0 8px 26px color-mix(in srgb,var(--dpf-text) 16%,transparent);
+  }
+  @media (prefers-color-scheme: dark){:root{
+    --dpf-bg:#0f0f1a;--dpf-surface-1:#1a1a2e;--dpf-surface-2:#161625;--dpf-surface-3:#121220;
+    --dpf-text:#e2e2f0;--dpf-text-secondary:#b8b8cc;--dpf-accent:#7c8cf8;--dpf-border:#2a2a40;
+    --dpf-border-strong:#3a3a55;--dpf-muted:#8888a0;--dpf-success:#4ade80;--dpf-warning:#fbbf24;
+    --dpf-error:#f87171;--dpf-info:#38bdf8;}}
+  :root[data-theme="light"]{--dpf-bg:#fafafa;--dpf-surface-1:#ffffff;--dpf-surface-2:#f4f4f6;--dpf-surface-3:#eeeef2;--dpf-text:#1a1a2e;--dpf-text-secondary:#4a4a5e;--dpf-accent:#2563eb;--dpf-border:#d4d4dc;--dpf-border-strong:#c8c8d4;--dpf-muted:#6b7280;--dpf-success:#16a34a;--dpf-warning:#d97706;--dpf-error:#dc2626;--dpf-info:#0284c7;}
+  :root[data-theme="dark"]{--dpf-bg:#0f0f1a;--dpf-surface-1:#1a1a2e;--dpf-surface-2:#161625;--dpf-surface-3:#121220;--dpf-text:#e2e2f0;--dpf-text-secondary:#b8b8cc;--dpf-accent:#7c8cf8;--dpf-border:#2a2a40;--dpf-border-strong:#3a3a55;--dpf-muted:#8888a0;--dpf-success:#4ade80;--dpf-warning:#fbbf24;--dpf-error:#f87171;--dpf-info:#38bdf8;}
+
+  *{box-sizing:border-box;} html,body{margin:0;}
+  body{background:var(--dpf-bg);color:var(--dpf-text);font-family:var(--font-display);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;}
+  .tnum{font-variant-numeric:tabular-nums;font-family:var(--font-mono);}
+  .shell{display:flex;flex-direction:column;min-height:100%;}
+  .topbar{display:flex;align-items:center;gap:10px 14px;padding:11px 16px;background:var(--dpf-surface-1);border-bottom:1px solid var(--dpf-border);flex-wrap:wrap;}
+  .eyebrow{font-size:10.5px;letter-spacing:0.16em;text-transform:uppercase;color:var(--dpf-muted);font-weight:600;}
+  .brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;} .brand h1{font-size:18px;font-weight:700;letter-spacing:-0.02em;margin:0;} .brand .biz{font-size:13px;color:var(--dpf-muted);}
+  .spacer{flex:1 1 auto;}
+  .pill{display:inline-flex;align-items:center;gap:7px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:999px;padding:5px 11px;font-size:12.5px;color:var(--dpf-text);cursor:pointer;}
+  .pill select{background:transparent;border:none;color:var(--dpf-text);font:inherit;outline:none;cursor:pointer;} .pill select option{background:var(--dpf-surface-2);color:var(--dpf-text);}
+
+  .caps{display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px;background:var(--dpf-surface-1);border-bottom:1px solid var(--dpf-border);}
+  .cap{display:flex;align-items:baseline;gap:6px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:999px;padding:4px 12px;}
+  .cap .cv{font-family:var(--font-mono);font-weight:700;font-size:14px;} .cap .cl{font-size:10.5px;color:var(--dpf-muted);text-transform:uppercase;letter-spacing:.04em;}
+  .cap.hot .cv{color:var(--dpf-warning);} .cap.bad .cv{color:var(--dpf-error);} .cap.good .cv{color:var(--dpf-success);}
+
+  /* presence: humans + AI coworkers co-inhabiting the operating twin */
+  .presence{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 16px;background:var(--dpf-surface-1);border-bottom:1px solid var(--dpf-border);}
+  .presence .plbl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;}
+  .who{display:flex;align-items:center;gap:7px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:999px;padding:3px 11px 3px 4px;}
+  .who .wa{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:8px;font-weight:700;color:#fff;background:var(--dpf-accent);position:relative;}
+  .who.ai .wa{background:color-mix(in srgb,var(--dpf-accent) 18%,var(--dpf-surface-1));color:var(--dpf-accent);border:2px solid var(--dpf-accent);}
+  .who .wa::after{content:"";position:absolute;right:-1px;bottom:-1px;width:7px;height:7px;border-radius:50%;background:var(--dpf-success);border:1.5px solid var(--dpf-surface-2);}
+  .who .wn{font-size:11px;font-weight:600;} .who .ww{font-size:9.5px;color:var(--dpf-text-secondary);white-space:nowrap;}
+
+  .banner{display:none;align-items:center;gap:10px;padding:9px 16px;background:color-mix(in srgb,var(--dpf-accent) 12%,var(--dpf-surface-1));border-bottom:1px solid var(--dpf-border);font-size:13px;}
+  .banner.on{display:flex;} .banner .x{margin-left:auto;cursor:pointer;color:var(--dpf-muted);font-size:12px;}
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--dpf-text);color:var(--dpf-bg);font-size:13px;font-weight:600;padding:9px 16px;border-radius:999px;box-shadow:var(--sh2);opacity:0;pointer-events:none;transition:opacity .25s;z-index:50;}
+  .toast.on{opacity:1;}
+
+  .wrap{padding:12px;display:flex;flex-direction:column;gap:12px;background:var(--board);}
+  .zone{background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-radius:var(--radius);box-shadow:var(--sh);}
+  .zone > .zh{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--dpf-border);flex-wrap:wrap;}
+  .zone .zt{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;} .zone .zsub{font-size:11px;color:var(--dpf-muted);}
+
+  /* the work queue (interactive) - items needing an owner */
+  .qlist{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;}
+  .qcard{flex:0 0 auto;min-width:210px;background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-left:3px solid var(--dpf-warning);border-radius:10px;padding:8px 11px;cursor:pointer;}
+  .qcard.crit{border-left-color:var(--dpf-error);} .qcard.info{border-left-color:var(--dpf-info);}
+  .qcard.sel{box-shadow:0 0 0 2px color-mix(in srgb,var(--dpf-accent) 30%,transparent);border-color:var(--dpf-accent);}
+  .qcard .qt{font-size:12.5px;font-weight:600;display:flex;justify-content:space-between;gap:8px;}
+  .qcard .qtag{font-family:var(--font-mono);font-size:8.5px;font-weight:700;border-radius:4px;padding:0 5px;color:var(--dpf-warning);border:1px solid color-mix(in srgb,var(--dpf-warning) 45%,var(--dpf-border));}
+  .qcard.crit .qtag{color:var(--dpf-error);border-color:color-mix(in srgb,var(--dpf-error) 45%,var(--dpf-border));}
+  .qcard .qm{font-size:10.5px;color:var(--dpf-muted);margin-top:3px;} .qcard .sug{font-size:10px;color:var(--dpf-success);font-weight:600;margin-top:5px;}
+
+  /* the board: lanes of cards */
+  .lanes{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;padding:11px;}
+  .lane{background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:9px;padding:8px;min-height:60px;}
+  .lane .lh{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;display:flex;justify-content:space-between;margin-bottom:7px;}
+  .lane.risk .lh{color:var(--dpf-error);} .lane.watch .lh{color:var(--dpf-warning);} .lane.ok .lh{color:var(--dpf-success);}
+  .item{background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-radius:7px;padding:6px 8px;margin-bottom:6px;}
+  .item .in{font-size:12px;font-weight:600;} .item .im{font-size:10px;color:var(--dpf-muted);margin-top:1px;}
+  .item .own{font-size:9.5px;color:var(--dpf-accent);font-weight:600;margin-top:3px;display:flex;align-items:center;gap:4px;}
+  .item .own .od{width:6px;height:6px;border-radius:50%;background:var(--dpf-accent);} .item .own.none{color:var(--dpf-muted);} .item .own.none .od{background:var(--dpf-muted);}
+  .item .meter{height:4px;border-radius:999px;background:var(--dpf-surface-3);margin-top:4px;overflow:hidden;} .item .meter i{display:block;height:100%;}
+  .item.g .meter i{background:var(--dpf-success);width:82%;} .item.a .meter i{background:var(--dpf-warning);width:52%;} .item.r .meter i{background:var(--dpf-error);width:26%;}
+
+  /* roster (owners) - assignment targets */
+  .roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;padding:10px 12px;}
+  .owner{display:flex;align-items:center;gap:9px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:10px;padding:7px 10px;}
+  .owner .oav{width:26px;height:26px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;font-size:8.5px;font-weight:700;color:#fff;background:var(--dpf-accent);}
+  .owner.ai .oav{background:color-mix(in srgb,var(--dpf-accent) 18%,var(--dpf-surface-1));color:var(--dpf-accent);border:2px solid var(--dpf-accent);}
+  .owner .oi{min-width:0;flex:1;} .owner .on{font-size:12px;font-weight:600;} .owner .ow{font-size:10px;color:var(--dpf-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .owner .load{flex:0 0 54px;height:6px;border-radius:999px;background:var(--dpf-surface-3);overflow:hidden;} .owner .load i{display:block;height:100%;background:var(--dpf-accent);}
+  .owner.eligible{border-color:var(--dpf-success);box-shadow:0 0 0 2px color-mix(in srgb,var(--dpf-success) 25%,transparent);cursor:pointer;}
+  .owner.suggest{border-color:var(--dpf-success);box-shadow:0 0 0 2px color-mix(in srgb,var(--dpf-success) 45%,transparent);cursor:pointer;}
+
+  .feed .flist{padding:6px 12px 10px;max-height:170px;overflow-y:auto;}
+  .fitem{display:flex;gap:9px;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--dpf-border);} .fitem:last-child{border-bottom:none;}
+  .fitem .fa{flex:0 0 auto;font-size:8.5px;font-weight:700;border-radius:5px;padding:1px 6px;white-space:nowrap;}
+  .fitem.human .fa{color:#fff;background:var(--dpf-accent);} .fitem.ai .fa{color:var(--dpf-accent);border:1px solid var(--dpf-accent);} .fitem.staff .fa{color:var(--dpf-text-secondary);border:1px solid var(--dpf-border-strong);}
+  .fitem .fx{flex:1;min-width:0;font-size:12px;} .fitem .ft{flex:0 0 auto;font-family:var(--font-mono);font-size:9.5px;color:var(--dpf-muted);}
+
+  .hud{border-top:1px solid var(--dpf-border);background:var(--dpf-surface-1);padding:12px 16px 18px;}
+  .hud .hd{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;margin-bottom:9px;}
+  .need{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;border:1px solid var(--dpf-border);border-left-width:3px;border-radius:var(--radius);margin-bottom:8px;max-width:660px;}
+  .need.warn{border-left-color:var(--dpf-warning);} .need.error{border-left-color:var(--dpf-error);} .need.info{border-left-color:var(--dpf-info);}
+  .need .nb{flex:1;} .need .nt{font-weight:600;font-size:13px;} .need .nm{font-size:11px;color:var(--dpf-muted);margin-top:2px;}
+  .need .na{flex:0 0 auto;align-self:center;font-size:12px;font-weight:600;color:#fff;background:var(--dpf-accent);border:none;border-radius:7px;padding:5px 10px;cursor:pointer;}
+  .foot{font-size:11px;color:var(--dpf-muted);padding:0 16px 20px;} .foot code{font-family:var(--font-mono);font-size:10.5px;color:var(--dpf-text-secondary);}
+</style>
+
+<div class="shell">
+  <header class="topbar">
+    <div class="brand"><span class="eyebrow">DPF Workspace</span><h1>The Living Business</h1><span class="biz" id="biz">GridSignal &#183; B2B Analytics SaaS</span></div>
+    <div class="spacer"></div>
+    <label class="pill" title="Non-physical archetype (board twin)"><span class="eyebrow">Archetype</span>
+      <select id="archetype" aria-label="Archetype">
+        <option value="saas">SaaS &#183; TENANTS board</option>
+        <option value="prosvc">Professional services &#183; PIPELINE</option>
+        <option value="nonprofit">Nonprofit &#183; PROGRAMS</option>
+        <option value="banking">Banking &#183; TENANTS portfolio</option>
+        <option value="media">Media production &#183; PIPELINE timeline</option>
+      </select>
+    </label>
+    <button class="pill" id="routeNext">&#9654; Route next</button>
+    <button class="pill" id="themeToggle" aria-label="Toggle theme">&#9680; Theme</button>
+  </header>
+
+  <div class="caps" id="caps"></div>
+  <div class="presence" id="presence"></div>
+  <div class="banner" id="banner"><span id="bannerText"></span><span class="x" id="bannerX">cancel (Esc)</span></div>
+
+  <div class="wrap">
+    <div class="zone">
+      <div class="zh"><span class="zt" id="queueTitle">Work queue</span><span class="zsub" id="queueSub">tap an item &#8594; the cog suggests the best owner &#8594; tap the owner to route it</span></div>
+      <div class="qlist" id="queue"></div>
+    </div>
+    <div class="zone">
+      <div class="zh"><span class="zt" id="boardTitle">Board</span><span class="zsub" id="boardSub"></span></div>
+      <div class="lanes" id="lanes"></div>
+    </div>
+    <div class="zone">
+      <div class="zh"><span class="zt" id="rosterTitle">Team &#183; on shift</span><span class="zsub">each anchored to live work &#183; staff = work owned</span></div>
+      <div class="roster" id="roster"></div>
+    </div>
+    <div class="zone feed">
+      <div class="zh"><span class="zt">Live activity &#183; who did what</span><span class="zsub">humans and AI coworkers acting on the same twin, in real time</span></div>
+      <div class="flist" id="feed"></div>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div class="hd">What needs you now</div>
+    <div id="needs"></div>
+  </div>
+
+  <div class="foot" id="foot"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+  const $=id=>document.getElementById(id), $$=s=>Array.prototype.slice.call(document.querySelectorAll(s));
+  const GEAR=String.fromCharCode(9881), ARR=String.fromCharCode(8594);
+  let sel=null; // selected queue item element
+
+  // Board-twin data per non-physical archetype. Same grammar (caps, presence,
+  // queue, lanes, roster, cog, feed) - different nouns. TENANTS = health lanes;
+  // PIPELINE/PROGRAMS = stage lanes. Cog = route by the archetype's signal.
+  const A = {
+    saas:{ biz:"GridSignal - B2B Analytics SaaS", template:"TENANTS", itemNoun:"account", ownerNoun:"CSM",
+      caps:[["bad","3","at-risk accounts"],["hot","11","renewals in 90d"],["good","94%","net retention"],["","61","accounts / CSM"]],
+      presence:[["ai","AI Success","watching health scores"],["ai","AI Renewals","tracking 90-day window"],["human","You","operator"],["human","Priya","CSM lead"]],
+      lanes:[["ok","Healthy","g"],["watch","Watch","a"],["risk","At risk","r"]],
+      board:{Healthy:[["Contoso","$48k ARR","Priya","g"],["Globex","$31k ARR","Devon","g"],["Initech","$22k ARR","Priya","g"]],Watch:[["Umbrella","usage -18%","Devon","a"],["Soylent","champion left","Priya","a"]],"At risk":[["Northwind","usage -40%","","r"],["Acme Co","renewal 12d, no exec","","r"]]},
+      queue:[["crit","Northwind","usage down 40% - renews in 21d","route-at-risk"],["crit","Acme Co","renewal in 12 days, no exec sponsor","route-at-risk"],["","Umbrella","champion left - re-engage","route-at-risk"]],
+      owners:[["Priya","CSM lead",70],["Devon","CSM",55],["AI Success","auto-playbook",30]],
+      cog:"health-score + CSM load", need:[["error","Northwind renewal at risk","usage -40%, renews in 21d - assign a CSM + exec playbook","Route"],["warn","11 renewals in the 90-day window","3 lack a success plan","Review"]],
+      bind:"agent-event-bus + usage signals (LivingBusinessSnapshot); route-at-risk cog reasons over health-score drop + CSM book-of-business" },
+    prosvc:{ biz:"Meridian - Accounting & Advisory", template:"PIPELINE", itemNoun:"engagement", ownerNoun:"accountant",
+      caps:[["bad","4","unassigned matters"],["hot","6","deadlines this week"],["","68%","utilization"],["","$41k","unbilled WIP"]],
+      presence:[["ai","AI Resourcing","balancing utilization"],["ai","AI Review","queuing work for review"],["human","You","partner"],["human","Sam","senior"]],
+      lanes:[["","Intake",""],["","Active",""],["watch","Awaiting review",""],["ok","Delivered",""]],
+      board:{Intake:[["Lattice LLC","year-end close","",""],["Volt Retail","R&D credit","",""]],Active:[["Cedar Homes","audit","Sam",""],["Nimbus Inc","advisory","Ava",""]],"Awaiting review":[["Orion Ltd","tax return","Sam",""]],Delivered:[["Pine & Co","payroll","Ava",""]]},
+      queue:[["crit","Volt Retail R&D credit","filing deadline in 3 days","assign-by-utilization"],["","Lattice year-end close","10-day turnaround","assign-by-utilization"],["","Harbor Freight review","awaiting senior review","assign-by-utilization"]],
+      owners:[["Sam","senior - 82% util",82],["Ava","manager - 61% util",61],["Wei","staff - 44% util",44]],
+      cog:"utilization + skill + deadline", need:[["error","R&D credit filing due in 3 days","unassigned - lowest-utilization qualified: Wei (44%)","Assign"],["warn","$41k unbilled WIP aging","2 engagements >30d unbilled","Bill"]],
+      bind:"matters/engagements + timesheets; assign-by-utilization cog reasons over fee-earner utilization, skill, and deadline" },
+    nonprofit:{ biz:"Open Table - Community Meals", template:"PROGRAMS", itemNoun:"donor", ownerNoun:"development staff",
+      caps:[["good","$182k","of $250k goal"],["bad","23","lapsing donors"],["hot","2","grant deadlines"],["","140","volunteer hrs/wk"]],
+      presence:[["ai","AI Development","scoring lapse risk"],["ai","AI Grants","tracking report deadlines"],["human","You","ED"],["human","Rosa","dev director"]],
+      lanes:[["","Identify",""],["","Cultivate",""],["watch","Ask",""],["ok","Steward",""]],
+      board:{Identify:[["New donor pool","42 first-gifts","",""]],Cultivate:[["Harding Fdn","site visit set","Rosa",""],["A. Chen","event guest","Rosa",""]],Ask:[["Bell Trust","$50k proposal","Rosa",""],["Major-gift list","8 ready","",""]],Steward:[["Legacy circle","thank-yous due","",""]]},
+      queue:[["crit","23 lapsing donors","gave last year, silent 13mo","allocate-to-program"],["crit","City grant report","due in 6 days","allocate-to-program"],["","Bell Trust proposal","$50k ask ready to send","allocate-to-program"]],
+      owners:[["Rosa","dev director",65],["Marcus","grants",40],["AI Development","auto-stewardship",25]],
+      cog:"engagement score + staff capacity", need:[["error","City grant report due in 6 days","unassigned - Marcus (grants) has capacity","Assign"],["warn","23 donors lapsing","batch a re-engagement series before the gala","Launch"]],
+      bind:"donors/gifts/grants/programs; allocate-to-program cog reasons over engagement score and staff capacity" },
+    banking:{ biz:"Cedar Ridge Credit Union", template:"TENANTS", itemNoun:"member household", ownerNoun:"banker",
+      caps:[["bad","5","apps awaiting decision"],["hot","9","maturities in 30d"],["","1,240","households / banker"],["good","OK","exceptions"]],
+      presence:[["ai","AI Underwriting","pre-screening apps"],["ai","AI Maturities","tracking the tickler"],["human","You","branch lead"],["human","Tom","loan officer"]],
+      lanes:[["","Application",""],["watch","Underwriting",""],["","Closing",""],["ok","Booked",""]],
+      board:{Application:[["Ruiz household","auto loan","",""],["Okafor LLC","LOC","",""]],Underwriting:[["Chen mortgage","docs outstanding","Tom",""]],Closing:[["Bell HELOC","funds Fri","Tom",""]],Booked:[["Diaz refi","complete","Ana",""]]},
+      queue:[["crit","Okafor LLC line of credit","member since 2011, decision SLA today","route-at-risk"],["","Ruiz auto loan","clean file, ready to decision","route-at-risk"],["","9 CDs maturing in 30d","retention calls needed","route-at-risk"]],
+      owners:[["Tom","loan officer",75],["Ana","loan officer",50],["AI Underwriting","auto pre-screen",35]],
+      cog:"workload + licensing authority", need:[["error","Okafor LOC decision SLA today","route to a licensed officer - Ana (50%) has authority","Route"],["warn","9 maturities in 30 days","assign retention outreach","Assign"]],
+      bind:"households/loans/policies + maturity ticklers; portfolio cog routes by banker workload + licensing authority ('Members' vocabulary)" },
+    media:{ biz:"Rooftop Films - Production Co.", template:"PIPELINE", itemNoun:"production", ownerNoun:"editor",
+      caps:[["bad","3","cuts awaiting client"],["hot","4","delivery deadlines"],["","2","edit suites free"],["","5","shoot days this wk"]],
+      presence:[["ai","AI Post","routing cuts to editors"],["ai","AI Delivery","tracking deadlines"],["human","You","EP"],["human","Kai","lead editor"]],
+      lanes:[["","Shoot",""],["","Edit",""],["watch","Client review",""],["ok","Deliver",""]],
+      board:{Shoot:[["Acme spot","2-day shoot","",""]],Edit:[["Nova doc","rough cut","Kai",""],["Lumen ad","v3","Mara",""]],"Client review":[["Vertex promo","v2 - waiting on client","Kai",""]],Deliver:[["Halo trailer","master out","Mara",""]]},
+      queue:[["crit","Vertex promo v3","client notes in, deadline Fri","assign-by-utilization"],["","Acme spot edit","footage ingested, ready to cut","assign-by-utilization"],["","Nova doc review","rough cut awaiting EP review","assign-by-utilization"]],
+      owners:[["Kai","lead editor",80],["Mara","editor",55],["Jo","assistant",40]],
+      cog:"editor availability + deadline", need:[["error","Vertex promo due Fri","client notes in, unassigned - Mara (55%) free","Assign"],["warn","3 cuts waiting on client","nudge for approvals before the weekend","Nudge"]],
+      bind:"productions/versions/bookings; timeline cog routes edits by editor availability + deadline, with a waiting-on-client state" },
+  };
+
+  function esc(){} // (unused) - all dynamic writes use textContent
+  function render(key){
+    const c=A[key]; if(!c) return; clearSel();
+    $("biz").textContent=c.biz;
+    // caps
+    $("caps").textContent="";
+    c.caps.forEach(([kind,v,l])=>{const e=document.createElement("div");e.className="cap "+kind;const cv=document.createElement("span");cv.className="cv tnum";cv.textContent=v;const cl=document.createElement("span");cl.className="cl";cl.textContent=l;e.appendChild(cv);e.appendChild(cl);$("caps").appendChild(e);});
+    // presence
+    const pres=$("presence");pres.textContent="";const pl=document.createElement("span");pl.className="plbl";pl.textContent="In this twin now";pres.appendChild(pl);
+    c.presence.forEach(([kind,name,doing])=>{const w=document.createElement("span");w.className="who "+kind;const wa=document.createElement("span");wa.className="wa";wa.textContent=kind==="ai"?"AI":name.slice(0,3).toUpperCase();const wt=document.createElement("span");const wn=document.createElement("span");wn.className="wn";wn.textContent=name;const ww=document.createElement("span");ww.className="ww";ww.textContent=" "+doing;wt.appendChild(wn);wt.appendChild(ww);w.appendChild(wa);w.appendChild(wt);pres.appendChild(w);});
+    // titles
+    $("boardTitle").textContent=c.template==="TENANTS"?"Account health board":"Pipeline";
+    $("boardSub").textContent=c.template+" template";
+    $("queueTitle").textContent=c.template==="TENANTS"?"Attention queue":c.template==="PROGRAMS"?"Moves & deadlines":"Work queue";
+    $("rosterTitle").textContent="Team - on shift";
+    // lanes + items
+    const lanes=$("lanes");lanes.textContent="";
+    c.lanes.forEach(([kind,label])=>{const L=document.createElement("div");L.className="lane "+kind;const lh=document.createElement("div");lh.className="lh";const ls=document.createElement("span");ls.textContent=label;const lc=document.createElement("span");const items=c.board[label]||[];lc.textContent=String(items.length);lh.appendChild(ls);lh.appendChild(lc);L.appendChild(lh);
+      items.forEach(([name,meta,owner,tier])=>{const it=document.createElement("div");it.className="item "+(tier||"");const inn=document.createElement("div");inn.className="in";inn.textContent=name;const im=document.createElement("div");im.className="im";im.textContent=meta;const ow=document.createElement("div");ow.className="own"+(owner?"":" none");const od=document.createElement("span");od.className="od";const ot=document.createElement("span");ot.textContent=owner?owner:"unassigned";ow.appendChild(od);ow.appendChild(ot);it.appendChild(inn);it.appendChild(im);it.appendChild(ow);if(tier){const mt=document.createElement("div");mt.className="meter";mt.appendChild(document.createElement("i"));it.appendChild(mt);}L.appendChild(it);});
+      lanes.appendChild(L);});
+    // queue
+    const q=$("queue");q.textContent="";
+    c.queue.forEach((row,idx)=>{const [kind,title,meta]=row;const card=document.createElement("div");card.className="qcard "+kind;card.dataset.idx=String(idx);const qt=document.createElement("div");qt.className="qt";const qn=document.createElement("span");qn.textContent=title;const tag=document.createElement("span");tag.className="qtag";tag.textContent=kind==="crit"?"URGENT":"QUEUED";qt.appendChild(qn);qt.appendChild(tag);const qm=document.createElement("div");qm.className="qm";qm.textContent=meta;const sug=document.createElement("div");sug.className="sug";card.appendChild(qt);card.appendChild(qm);card.appendChild(sug);card.addEventListener("click",()=>selectItem(card));q.appendChild(card);});
+    // roster
+    const r=$("roster");r.textContent="";
+    c.owners.forEach((o,idx)=>{const [name,role,load]=o;const isAi=/^AI/.test(name);const el=document.createElement("div");el.className="owner"+(isAi?" ai":"");el.dataset.idx=String(idx);el.dataset.name=name;el.dataset.load=String(load);const av=document.createElement("span");av.className="oav";av.textContent=isAi?"AI":name.slice(0,2).toUpperCase();const oi=document.createElement("div");oi.className="oi";const on=document.createElement("div");on.className="on";on.textContent=name;const ow=document.createElement("div");ow.className="ow";ow.textContent=role;oi.appendChild(on);oi.appendChild(ow);const ld=document.createElement("span");ld.className="load";const li=document.createElement("i");li.style.width=load+"%";li.style.background=load>75?"var(--dpf-warning)":"var(--dpf-accent)";ld.appendChild(li);el.appendChild(av);el.appendChild(oi);el.appendChild(ld);el.addEventListener("click",()=>assign(el));r.appendChild(el);});
+    // needs
+    const nd=$("needs");nd.textContent="";
+    c.need.forEach(([kind,t,m,a])=>{const e=document.createElement("div");e.className="need "+kind;const nb=document.createElement("div");nb.className="nb";const nt=document.createElement("div");nt.className="nt";nt.textContent=t;const nm=document.createElement("div");nm.className="nm";nm.textContent=m;nb.appendChild(nt);nb.appendChild(nm);const na=document.createElement("button");na.className="na";na.textContent=a;na.addEventListener("click",()=>$("routeNext").click());e.appendChild(nb);e.appendChild(na);nd.appendChild(e);});
+    // foot
+    $("foot").textContent="Board twin (operating twin for non-physical archetypes). Template: "+c.template+". Interactive: tap a queue item -> the cog ("+c.cog+") suggests the best owner -> tap the owner to route it. Binds to "+c.bind+".";
+    // seed feed
+    const feed=$("feed");feed.textContent="";
+    [["ai","AI HOST","cog ready - suggestions computed from live "+c.cog,"just now"],["human","YOU","reviewing the "+c.template+" board","1m"]].forEach(([k,who,text,t])=>logSeed(k,who,text,t));
+    _cfg=c;
+  }
+  let _cfg=null;
+
+  function logSeed(kind,actor,text,t){const feed=$("feed");const it=document.createElement("div");it.className="fitem "+kind;const fa=document.createElement("span");fa.className="fa";fa.textContent=actor;const fx=document.createElement("span");fx.className="fx";fx.textContent=text;const ft=document.createElement("span");ft.className="ft";ft.textContent=t;it.appendChild(fa);it.appendChild(fx);it.appendChild(ft);feed.appendChild(it);}
+  function logFeed(kind,actor,text){const feed=$("feed");const it=document.createElement("div");it.className="fitem "+kind;const fa=document.createElement("span");fa.className="fa";fa.textContent=actor;const fx=document.createElement("span");fx.className="fx";fx.textContent=text;const ft=document.createElement("span");ft.className="ft";ft.textContent="just now";it.appendChild(fa);it.appendChild(fx);it.appendChild(ft);feed.insertBefore(it,feed.firstChild);while(feed.children.length>8)feed.removeChild(feed.lastChild);}
+
+  let toastT=null;
+  function toast(m){const el=$("toast");el.textContent=m;el.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("on"),2600);}
+
+  // cog: lowest-load eligible owner (proxy for the archetype's real signal:
+  // CSM book / utilization / staff capacity / banker workload / editor availability).
+  function suggest(){const owners=$$("#roster .owner");let best=null,bl=1e9;owners.forEach(o=>{const l=parseFloat(o.dataset.load)||0;if(l<bl){bl=l;best=o;}});return best;}
+
+  function clearSel(){if(sel)sel.classList.remove("sel");sel=null;$("banner").classList.remove("on");$$("#roster .owner").forEach(o=>o.classList.remove("eligible","suggest"));}
+  function selectItem(card){
+    if(sel===card){clearSel();return;}
+    clearSel();sel=card;card.classList.add("sel");
+    const owners=$$("#roster .owner");owners.forEach(o=>o.classList.add("eligible"));
+    const s=suggest();const title=card.querySelector(".qt span").textContent;
+    if(s){s.classList.remove("eligible");s.classList.add("suggest");}
+    $("bannerText").textContent="Routing "+title+" - tap an owner."+(s?" Cog suggests "+s.dataset.name+" (lowest load).":"");
+    $("banner").classList.add("on");
+  }
+  function assign(owner){
+    if(!sel||!(owner.classList.contains("eligible")||owner.classList.contains("suggest")))return;
+    const title=sel.querySelector(".qt span").textContent, who=owner.dataset.name;
+    sel.remove();clearSel();
+    logFeed("human","YOU","Routed "+title+" to "+who);
+    setTimeout(()=>logFeed("ai","AI HOST","Updated the "+ (_cfg?_cfg.template:"") +" board and re-ranked the queue"),600);
+    toast("Routed "+title+" "+ARR+" "+who);
+    const remaining=$$("#queue .qcard").length; $("queueSub").textContent = remaining? "tap an item, then an owner to route it" : "queue clear - all routed";
+  }
+
+  $$("#queue .qcard"); // no-op to satisfy linters on first paint
+  $("routeNext").addEventListener("click",()=>{const cards=$$("#queue .qcard");if(!cards.length){toast("Queue is clear");return;}const crit=cards.find(c=>c.classList.contains("crit"))||cards[0];selectItem(crit);const s=suggest();if(s)assign(s);});
+  $("archetype").addEventListener("change",e=>render(e.target.value));
+  $("bannerX").addEventListener("click",clearSel);
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")clearSel();});
+  $("themeToggle").addEventListener("click",()=>{const cur=document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",cur==="dark"?"light":"dark");});
+
+  render("saas");
+})();
+</script>

@@ -8,4 +8,5 @@ export * from "./composition";
 export * from "./archetypes/index";
 export * from "./media-profile";
 export * from "./operational-value-stream";
+export * from "./twin-profile";
 export * from "./sections/schemas";
