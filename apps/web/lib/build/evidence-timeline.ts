@@ -5,12 +5,14 @@
 // lane on the timeline was FAKED from FeatureBuild.codingProvider (the in-sandbox
 // engine Build Studio itself ran) — genuinely external-agent work was invisible.
 // This module reads the real records keyed to the build and merges them:
-//   - ExternalEvidenceRecord  (record_external_development_evidence) — keyed by FB- buildId
+//   - ExternalEvidenceRecord  (record_external_development_evidence) — by buildId OR workCapsuleId
 //   - RuntimeVerification     (record_runtime_verification)         — keyed by FeatureBuild.id (cuid)
 //   - WorkCapsuleActivity     (record_capsule_evidence)             — via the build's linked capsule
 //
-// Read-only: no write-model change. Phase 2 (BI-6357B975) populates the
-// ExternalEvidenceRecord -> capsule/build links that this projection reads.
+// Read-only: no write-model change here. The ExternalEvidenceRecord -> capsule
+// link this projection reads is populated by EP-WORK-CONVERGENCE Phase 1
+// (BI-D6FA8641), which lets capsule-bound external-agent work (no FeatureBuild
+// required) surface on the timeline, not just build-keyed records.
 //
 // Spec: docs/superpowers/specs/2026-06-19-unified-build-studio-tracking-all-surfaces-design.md §6.1
 
@@ -150,9 +152,19 @@ export async function loadBuildEvidenceTimelineEvents(args: {
 }): Promise<UnifiedEvidenceTimelineEvent[]> {
   const take = args.limitPerSource ?? 25;
 
+  // Resolve the capsule first so external evidence can be matched by capsule
+  // link as well as by build id — external-agent work is bound to the capsule
+  // and may carry no FeatureBuild, so a buildId-only read would miss it.
+  const capsule = (await args.db.workCapsule.findFirst({
+    where: { featureBuildId: args.build.id },
+    select: { id: true },
+  })) as { id: string } | null;
+
   const [externalRecords, runtimeVerifications] = await Promise.all([
     args.db.externalEvidenceRecord.findMany({
-      where: { buildId: args.build.buildId },
+      where: capsule
+        ? { OR: [{ buildId: args.build.buildId }, { workCapsuleId: capsule.id }] }
+        : { buildId: args.build.buildId },
       orderBy: { createdAt: "desc" },
       take,
       select: { id: true, provider: true, resultSummary: true, createdAt: true },
@@ -164,11 +176,6 @@ export async function loadBuildEvidenceTimelineEvents(args: {
       select: { verificationId: true, kind: true, status: true, completedAt: true, result: true },
     }) as Promise<RuntimeVerificationRow[]>,
   ]);
-
-  const capsule = (await args.db.workCapsule.findFirst({
-    where: { featureBuildId: args.build.id },
-    select: { id: true },
-  })) as { id: string } | null;
 
   const capsuleEvidence = capsule
     ? ((await args.db.workCapsuleActivity.findMany({

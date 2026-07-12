@@ -66,7 +66,7 @@ function OneClickEnable({ candidate }: { candidate: EnableCandidate }) {
           disabled={isPending}
           style={{
             background: "var(--dpf-accent)",
-            color: "#fff",
+            color: "var(--dpf-on-accent, white)",
             fontSize: 11,
             fontWeight: 600,
             padding: "3px 10px",

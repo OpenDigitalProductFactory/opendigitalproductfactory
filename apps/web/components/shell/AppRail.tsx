@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { PortalAudienceMode, ShellNavSection } from "@/lib/permissions";
+import { NAV_MODE_COOKIE } from "@/lib/navigation/nav-mode";
 
 type Props = {
   sections: ShellNavSection[];
@@ -12,8 +13,6 @@ type Props = {
 function matchesPath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
-
-const MODE_COOKIE = "dpf-nav-mode";
 
 export function AppRail({ sections, mode = "operator" }: Props) {
   const pathname = usePathname();
@@ -29,12 +28,12 @@ export function AppRail({ sections, mode = "operator" }: Props) {
   // user away from a surface their role can reach. Persisted in a cookie the shell reads.
   function setMode(next: PortalAudienceMode) {
     if (next === mode) return;
-    document.cookie = `${MODE_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
+    document.cookie = `${NAV_MODE_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
     router.refresh();
   }
 
   return (
-    <nav aria-label="Primary" className="flex flex-col gap-3 p-3 lg:p-4">
+    <nav aria-label="Primary" data-nav-mode={mode} className="flex flex-col gap-3 p-3 lg:p-4">
       <div
         role="group"
         aria-label="Navigation detail"

@@ -804,19 +804,19 @@ services:
     # validated on a throwaway DB copy (v7→v10, clean). Pin to keep :latest
     # from silently regressing again. BI-C8164664.
     #
+    # BI-915C40C6 (2026-07-11): bump pin 1.30 → 1.36 for orphan-reconciliation
+    # / dup-span handling improvements in newer releases. Redis {estate} TTL is
+    # still server-internal (~12–16h observed); DPF bounds corpses via the
+    # retention/orphan janitor (ORPHAN_REAP_AGE_HOURS=24), not by setting Redis.
+    #
     # IMPORTANT (2026-06-18): the version bump only stops NEW poison items from
     # being enqueued (1.28+ sets envID). It does NOT drain items already enqueued
     # by the 1.26-era bug — those live in the Redis queue store (INNGEST_REDIS_URI
     # below), not Postgres, so the goose history migration never touched them.
-    # v1.30 still rejects them at the lease-constraint check (nil wsID/envID), and
-    # because the failure is PRE-attempt the items never increment `atts`, never
-    # exhaust maxAtts, and never dead-letter — the scanner re-reads them forever.
-    # A backlog of ~22k such items re-scanned at ~135 lines/sec grew the container
-    # log to 5.8 GB ("logs scrolling like crazy"). One-time remediation after this
-    # pin: drain the stuck `{queue}:queue:sorted:<fnID>` partitions from the
-    # Inngest-dedicated Redis (see scripts/drain-inngest-poison-queue.sh). The
-    # `<<: *default-logging` cap below bounds the blast radius if it ever recurs.
-    image: inngest/inngest:v1.30.0
+    # Pre-1.28 poison items still need a one-time drain of stuck
+    # `{queue}:queue:sorted:<fnID>` partitions (scripts/drain-inngest-poison-queue.sh).
+    # The `<<: *default-logging` cap below bounds the blast radius if it ever recurs.
+    image: inngest/inngest:v1.36.0
     restart: unless-stopped
     logging: *default-logging
     command: "inngest start"
@@ -864,7 +864,7 @@ services:
   # No profile gate — voice ships working on `docker compose up`.
   dpf-stt:
     # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest
-    # resolved on 2026-07-05 (the prior 10af319a… digest was deleted from the
+    # resolved on 2026-07-11 (the prior 44d7690a… digest was deleted from the
     # registry — Release Image Manifest Guard caught it again). The registry
     # owner re-pushes :latest periodically and prunes the previous index, so
     # this digest must be re-resolved every time the guard fails. Bump
@@ -874,7 +874,7 @@ services:
     # the sidecar won't start, set DPF_STT_IMAGE in .env to a reachable ref
     # (e.g. hwdsl2/whisper-server:latest) then `docker compose up -d dpf-stt`,
     # and open a PR re-resolving the digest here (this is that PR's pattern).
-    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:44d7690a05787f76d001a097513e578c51624def64e9dbc4a61132d739851e6b}
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:3ee18f84149389e886829e31ea4bec40b1919682d8fff7f2f0d447a278f196a6}
     restart: unless-stopped
     logging: *default-logging
     environment:

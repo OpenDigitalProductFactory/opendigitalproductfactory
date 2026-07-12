@@ -78,11 +78,11 @@ const fixtureData: Omit<PlatformWorkspaceHomeData, "storefrontConfig"> = {
 };
 
 describe("PlatformWorkspaceHome", () => {
-  it("leads with day-to-day work (needs attention + today's agenda) before work-area launchers", () => {
+  it("leads with day-to-day work (platform posture + today's agenda) before work-area launchers", () => {
     const html = renderToStaticMarkup(<PlatformWorkspaceHome data={fixtureData} />);
 
-    // Critical strip and the business agenda come before the demoted launcher.
-    expect(html.indexOf("Needs attention")).toBeLessThan(html.indexOf("Work areas"));
+    // Posture strip and the business agenda come before the demoted launcher.
+    expect(html.indexOf("Platform posture")).toBeLessThan(html.indexOf("Work areas"));
     expect(html).toContain("Today &amp; next");
     expect(html).toContain("Show areas");
     // Launcher stays collapsed: its tiles/links are not in the first render.
@@ -95,5 +95,17 @@ describe("PlatformWorkspaceHome", () => {
 
     expect(html).not.toContain("Domain readiness");
     expect(html).not.toContain("Command Center");
+  });
+
+  it("simple density hides the work-area launcher so Simple mode changes the page body (BI-655418A7)", () => {
+    const full = renderToStaticMarkup(<PlatformWorkspaceHome data={fixtureData} density="full" />);
+    const simple = renderToStaticMarkup(<PlatformWorkspaceHome data={fixtureData} density="simple" />);
+
+    expect(full).toContain("Work areas");
+    expect(full).toContain("Show areas");
+    expect(simple).not.toContain("Work areas");
+    expect(simple).not.toContain("Show areas");
+    expect(simple).toContain("Simple view");
+    expect(simple).toContain('data-workspace-density="simple"');
   });
 });

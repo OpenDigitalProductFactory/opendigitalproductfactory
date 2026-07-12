@@ -280,7 +280,7 @@ describe("coworker memory pack", () => {
 
 describe("demand-scoring tool pack", () => {
   it("bundles the score_demand_item door with a handler", () => {
-    expect(demandScoringPack.definitions.map((t) => t.name)).toEqual(["score_demand_item", "set_demand_policy"]);
+    expect(demandScoringPack.definitions.map((t) => t.name)).toEqual(["score_demand_item", "set_demand_policy", "find_duplicate_candidates", "merge_backlog_items", "sweep_duplicate_demand", "approve_demand_for_funding"]);
     for (const def of demandScoringPack.definitions) {
       expect(demandScoringPack.handlers[def.name], def.name).toBeTypeOf("function");
     }

@@ -27,7 +27,9 @@ The backlog is raw: DPF sizes the *cost* of work (`effortSize`) but never its *v
 
 ### Phase 1 — Scoring foundation (BI-0D49B4D8) · *thin end-to-end vertical, no new UI* — ✅ LANDED
 
-The keystone. Everything downstream depends on a computed, explainable score existing. **Landed** in migration `20260710120000_add_demand_management_scoring` (additive/nullable — fleet-safe), `apps/web/lib/demand/scoring.ts` (pure engine, RICE default), the `score_demand_item` MCP tool, `demandScore`/`demandStage` on `list_backlog_items`, and the value-ranked promote sweep in `governed-backlog-tee-up.ts` (active-epic → manual pin → `demandScore` desc → recency). Unit-tested: 10 scoring + 2 ordering cases. Note: `recommend.ts` retune and `create/update_backlog_item` input passthrough are folded forward into a follow-up (score is settable via `score_demand_item` today).
+The keystone. Everything downstream depends on a computed, explainable score existing. **Landed** in migration `20260710120000_add_demand_management_scoring` (additive/nullable — fleet-safe), `apps/web/lib/demand/scoring.ts` (pure engine, RICE default), the `score_demand_item` MCP tool, `demandScore`/`demandStage` on `list_backlog_items`, and the value-ranked promote sweep in `governed-backlog-tee-up.ts` (active-epic → manual pin → `demandScore` desc → recency). Unit-tested: 10 scoring + 2 ordering cases.
+
+**Follow-up resolved (FUP-A):** `recommend.ts` now folds a batch-relative `demandScore` term (framework-agnostic, capped so it cannot outweigh spec+plan readiness) into the pick-next scorer, replacing the old flat `priority present +2`; `priority` stays the tie-break. The `create/update_backlog_item` scoring-input passthrough is intentionally consolidated into `score_demand_item` (the single door that sets inputs + computes score + advances stage + classifies bucket in one call) rather than duplicating that logic across two more tools -- per the tool-surface economy standard (`docs/architecture/context-engineering-standards.md`).
 
 1. **Schema (additive, fleet-safe).** Add nullable columns to `BacklogItem`: `reach Int?`, `impact Float?`, `confidence Float?`, `businessValue Int?`, `timeCriticality Int?`, `riskOpportunity Int?`, `jobSize Float?`, `demandScore Float?`, `demandScoreFramework String?`, `demandScoreComputedAt DateTime?`, `demandStage String?`. One migration; all nullable → passes the migration-safety guard (no tightening on existing rows). `prisma migrate dev` on a throwaway Postgres, trim to these columns.
 2. **Enums.** Add `DEMAND_STAGE_VALUES` (`raw|screened|shaped|ready`) and `DEMAND_SCORE_FRAMEWORKS` (`rice|wsjf|value_effort|weighted`) to `apps/web/lib/explore/backlog.ts`, mirrored in the `mcp-tools.ts` tool schemas in the **same commit** (AGENTS.md §3).
@@ -61,9 +63,11 @@ The keystone. Everything downstream depends on a computed, explainable score exi
 
 **Acceptance (core):** scoring policy editable by the operator (config, not code) and audited on change; the board reflects the active policy.
 
-### Phase 5 — Semantic dedup & merge at ingest (BI-F6B290A8) · *sequenced last*
+### Phase 5 — Dedup & merge (BI-F6B290A8) · *sequenced last* — ✅ LANDED (core)
 
-Extend `ingestBacklogItem` with an embedding-based semantic dedup pass (qdrant) over open items in the same portfolio; "merge or link" before write; merge re-parents `occurrenceCount`/evidence/requesters onto the survivor (concentrates reach → higher score) and sets `duplicateOfId` + redirect; suppression writes a `ToolExecution` audit row. Reuses the existing `duplicateOfId`/`duplicates[]` relation. Last because it depends on scoring being live and is the highest-risk change to the intake hot path.
+**Landed:** pure `lib/demand/dedup.ts` — deterministic character-trigram Dice similarity (`itemSimilarity`, title-dominant), `findDuplicateCandidates` (ranked, thresholded), and `computeMerge` (reach summed onto the survivor). Unit-tested (7). Two MCP tools on the demand pack: `find_duplicate_candidates` (read, `backlog_read`) ranks open near-duplicates of an item; `merge_backlog_items` (write, `backlog_write`) merges a duplicate into a canonical item in a transaction — **reach (`occurrenceCount`) is summed onto the survivor**, the duplicate is retired (`status=deferred`, `triageOutcome=duplicate`, `duplicateOfId` set), ToolExecution-audited. Reuses the existing `duplicateOfId`/`duplicates[]` relation.
+
+**Deferred to a follow-up (the risky hot-path part):** the *automatic* semantic dedup pass inside `ingestBacklogItem` (embedding-based, surfacing "merge or link" before write) — kept out of this slice because it modifies the intake hot path and needs the embedding infra wired in there. A deterministic trigram similarity is used instead of embeddings for now; an embedding upgrade (`lib/wiki/embeddings.ts`) is a follow-up. The manual find + merge capability lands the core dedup value safely.
 
 **Acceptance:** near-duplicate demand is merged with reach transferred; suppression is audited.
 
@@ -79,9 +83,14 @@ Extend `ingestBacklogItem` with an embedding-based semantic dedup pass (qdrant) 
 - **Reuse, don't rebuild:** `occurrenceCount`→reach, `effortSize`→jobSize, `duplicateOfId`/`duplicates[]`, `Portfolio.budgetKUsd`, the product-dependency cascade ([2026-06-22 plan](2026-06-22-portfolio-prioritization-cascade.md)), the WWWD stance corpus, `principle_decide`/`DecisionInteraction`.
 - **Completes the shelved WSJF engine** BI-30EE393B (designed, never built) as a seeded preset — not a green-field reinvention.
 
-## Deferred (own BIs, not this epic)
+## Follow-ups — resolved (post-epic pass)
 
-Full capacity-vs-demand resource modeling; first-class OKR/Objective model (only if the lightweight theme-link proves insufficient — open question Q3); completing the **Innovation Radar** intake (`InnovationProposal` model, designed [2026-05-10](../specs/2026-05-10-build-studio-business-intake-innovation-radar-design.md), never shipped) as the market-signal demand source; Kano / Opportunity-scoring presets.
+- **FUP-A ✅** — `recommend.ts` pick-next scorer now folds a batch-relative `demandScore` term (framework-agnostic, capped so it can't outweigh spec+plan readiness); the create/update scoring-input passthrough is intentionally consolidated into `score_demand_item` (single scoring door, avoids tool-surface bloat).
+- **FUP-B ✅ (partial)** — `set_demand_policy` extended with an optional `portfolioId` to set **per-portfolio** `bucketTargets` (org-wide default when omitted). *Still deferred:* the `jobSize`-summed-vs-`budgetKUsd` **capacity read** — genuinely blocked on a $/effort-point rate the org doesn't record (apples-to-oranges without it); and per-portfolio grouping *on the board* (currently platform-wide).
+- **FUP-C ✅** — shipped `sweep_duplicate_demand` (read-only all-pairs dedup sweep over the open backlog, reusing the trigram similarity) + `findDuplicatePairs` helper. This delivers the "automatic detection" value **safely on-demand** rather than as a per-ingest hot-path hook (the plan's flagged highest-risk item); pairs with the shipped `merge_backlog_items`.
+- **FUP-D ✅** — shipped `approve_demand_for_funding`: routes the investment-approval (screened/shaped → `ready`) through the org's **WWWD** stance via `evaluateOrgBusinessDecisionGate`, which records a `DecisionInteraction` (so it auto-feeds the Decision Review workspace) and only advances the item when the org's stance recommends/arbitrates.
+
+**Genuinely deferred (own BIs, not this epic):** WWWD-`themePageId` strategic-theme linkage (a separate mini-feature: migration + link + rollup, lower marginal value than the above); the capacity read above (needs a rate input); first-class OKR/Objective model (open question Q3); completing the **Innovation Radar** intake (`InnovationProposal` model, designed [2026-05-10](../specs/2026-05-10-build-studio-business-intake-innovation-radar-design.md), never shipped); Kano / Opportunity-scoring presets.
 
 ## Open questions for the operator (from spec §14)
 
