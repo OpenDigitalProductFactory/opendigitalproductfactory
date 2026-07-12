@@ -1024,6 +1024,7 @@ export function BuildStudio({
                       progressVisibility,
                       drawerInitialSectionId,
                       supervisedBuildRows,
+                      changeNarrative,
                     )}
                   />
                 </div>
@@ -1078,6 +1079,7 @@ function buildDetailsDrawerSections(
   progressVisibility: BuildProgressVisibility | null,
   initialSectionId: string | null,
   allBuilds: readonly FeatureBuildRow[],
+  changeNarrative: BuildChangeNarrative | null,
 ): DetailsDrawerSection[] {
   // Default-open section depends on phase + explicit operator intent.
   // - When the queue header opened the drawer, BS-Queue is the explicit pick.
@@ -1112,7 +1114,7 @@ function buildDetailsDrawerSections(
         <FeatureBriefPanel
           brief={activeBuild.brief}
           phase={activeBuild.phase}
-          diffSummary={activeBuild.diffSummary}
+          changeNarrative={changeNarrative}
           build={activeBuild}
         />
       ),
