@@ -71,6 +71,9 @@ import { coworkerPack } from "./packs/coworker-pack";
 import { platformUtilitiesPack } from "./packs/platform-utilities-pack";
 import { backlogPack } from "./packs/backlog-pack";
 import { adminPack } from "./packs/admin-pack";
+import { buildEnginePack } from "./packs/build-engine-pack";
+import { buildEvidencePack } from "./packs/build-evidence-pack";
+import { buildOpsPack } from "./packs/build-ops-pack";
 import { decompositionPack } from "./packs/decomposition-pack";
 import { buildVisibilityPack } from "./packs/build-visibility-pack";
 import { buildEvidenceExtraPack } from "./packs/build-evidence-extra-pack";
@@ -137,6 +140,9 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   backlogPack,
   releasePack,
   adminPack,
+  buildEnginePack,
+  buildEvidencePack,
+  buildOpsPack,
   decompositionPack,
   buildVisibilityPack,
   buildEvidenceExtraPack,

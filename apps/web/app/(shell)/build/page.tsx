@@ -7,6 +7,7 @@ import { businessBuildBriefFromRecord } from "@/lib/build/business-build-brief";
 import { BuildStudio } from "@/components/build/BuildStudio";
 import { BuildStudioV2 } from "@/components/build-studio/BuildStudioV2";
 import { loadBuildStudioCapability } from "@/lib/build/build-studio-capability";
+import { loadBuildStudioCustomerStatuses } from "@/lib/build/customer-status-loader";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import { can } from "@/lib/govern/permissions";
 import { EnableRunnerButton } from "@/components/build/EnableRunnerButton";
@@ -229,6 +230,18 @@ export default async function BuildPage({ searchParams }: PageProps) {
   const initialActiveBuild = buildId && !builds.some((build) => build.buildId === buildId)
     ? await getFeatureBuildById(buildId)
     : null;
+  // BI-BB13B599: project each build (+ any out-of-list initial build) into its
+  // plain, capsule-derived customer-mode status so BuildStudio can render the
+  // first-viewport "wife-test" status band without pulling the projection into
+  // the client bundle.
+  const customerStatuses = await loadBuildStudioCustomerStatuses(
+    prisma,
+    [...builds, ...(initialActiveBuild ? [initialActiveBuild] : [])].map((build) => ({
+      id: build.id,
+      title: build.title,
+      phase: build.phase,
+    })),
+  );
   const portalContext = await resolvePortalContextEnvelope(
     {
       pathname: "/build",
@@ -272,6 +285,7 @@ export default async function BuildPage({ searchParams }: PageProps) {
         initialBuildId={buildId}
         portalContext={portalContext}
         initialActiveBuild={initialActiveBuild}
+        customerStatuses={customerStatuses}
       />
     </section>
   );
